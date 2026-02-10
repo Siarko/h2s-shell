@@ -3,16 +3,31 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 
+// Creates a panel instance for each connected screen
 Variants {
+    id: root
     model: Quickshell.screens
 
+    // Tracks which screen currently has an open popup, so others can close theirs
+    property var activeScreen: null
+
     delegate: Component {
+        // Top-anchored horizontal bar spanning the full screen width
         PanelWindow {
             id: bar
             required property var modelData
 
             screen: modelData
-            property int popupPosition
+
+            // Close this screen's popup when another screen's popup opens
+            Connections {
+                target: root
+                function onActiveScreenChanged() {
+                    if (root.activeScreen !== bar.modelData) {
+                        popupLoader.active = false;
+                    }
+                }
+            }
 
             anchors {
                 top: true
@@ -23,6 +38,7 @@ Variants {
 
             implicitHeight: 40
 
+            // Main horizontal layout distributing children evenly
             FlexboxLayout {
                 id: flexLayout
 
@@ -34,6 +50,7 @@ Variants {
                 alignItems: FlexboxLayout.AlignCenter
                 gap: 5
 
+                // Live clock display
                 Text {
                     id: helloText
                     text: Time.time
@@ -44,75 +61,48 @@ Variants {
                     Layout.leftMargin: 20
                 }
 
+                // Interactive cells — hovering opens a popup aligned to the cell
                 Cell {
                     cellColor: "#3b3b3b"
-                    onPlonked: c => popupLoader.toggle(this)
                     onHover: s => {
                         if (s) {
-                            popupLoader.toggle(this);
+                            popupLoader.toggle(this, true);
                         }
                     }
                 }
                 Cell {
                     cellColor: "#3b3b3b"
-                    onPlonked: c => popupLoader.toggle(this)
+                    onHover: s => {
+                        if (s) {
+                            popupLoader.toggle(this, true);
+                        }
+                    }
                 }
                 Cell {
                     cellColor: "green"
-                    onPlonked: c => popupLoader.toggle(this)
+                    onHover: s => {
+                        if (s) {
+                            popupLoader.toggle(this, true);
+                        }
+                    }
                 }
                 Cell {
                     cellColor: "#3b3b3b"
-                    onPlonked: c => popupLoader.toggle(this)
+                    onHover: s => {
+                        if (s) {
+                            popupLoader.toggle(this, true);
+                        }
+                    }
                 }
             }
 
-            LazyLoader {
+            // Popup panel that appears below the hovered cell
+            Popup {
                 id: popupLoader
-                active: false
-
-                function toggle(element, state = null) {
-                    if (element.x == bar.popupPosition) {
-                        if (state !== null) {
-                            popupLoader.active = state;
-                        } else {
-                            popupLoader.active = !popupLoader.active;
-                        }
-                    } else {
-                        bar.popupPosition = element.x;
-                        popupLoader.active = true;
-                    }
-                }
-                PanelWindow {
-                    id: popup
-
-                    anchors {
-                        top: true
-                        left: true
-                    }
-
-                    implicitWidth: rect.width
-                    implicitHeight: rect.height
-
-                    margins.top: 0
-                    margins.left: bar.popupPosition
-                    color: "transparent"
-
-                    Rectangle {
-                        id: rect
-                        anchors.fill: parent
-                        implicitWidth: 500
-                        height: 400
-                        color: '#4b4b4b'
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-
-                            onExited: popupLoader.active = false
-                        }
-                    }
-                }
+                popupPosition: 0
+                popupWidth: 0
+                // Notify root so other screens close their popups
+                onOpened: root.activeScreen = bar.modelData
             }
         }
     }

@@ -1,10 +1,13 @@
 import QtQuick
 import QtQuick.Layouts
 
+// Reusable interactive bar widget with click and hover signals
 Item {
     id: container
     property alias cellColor: rectangle.color
+    // Emitted on click, carries the cell's color
     signal plonked(cellColor: color)
+    // Emitted on mouse enter (true) and exit (false)
     signal hover(status: bool)
 
     Layout.fillHeight: true
@@ -20,6 +23,7 @@ Item {
         anchors.fill: parent
     }
 
+    // Extends 5px below the cell to prevent hover gaps between bar and popup
     MouseArea {
         anchors.top: parent.top
         anchors.left: parent.left

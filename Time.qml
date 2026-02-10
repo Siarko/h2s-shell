@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
+// Shared time provider — exposes a formatted clock string updated every second
 Singleton {
     id: time
     readonly property string time: {

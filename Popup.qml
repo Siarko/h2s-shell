@@ -11,7 +11,7 @@ LazyLoader {
     required property int popupPosition
     required property int popupWidth
     // Emitted when the popup becomes visible, used for cross-screen coordination
-    signal opened()
+    signal opened
 
     // Toggle popup for the given element.
     // If the same element triggers again, toggle or apply explicit state.
