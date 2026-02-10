@@ -16,9 +16,11 @@ Quickshell looks for `shell.qml` in the current directory as its entry point. Te
 
 ## Architecture
 
-Three QML files compose the entire shell:
+Four QML files compose the entire shell:
 
-- **shell.qml** — Entry point. Uses `Variants` with `Quickshell.screens` to instantiate a `PanelWindow` (top-anchored, 40px bar) on every monitor. Contains a `FlexboxLayout` with a time display and four `Cell` widgets. Includes a `LazyLoader`-managed popup that toggles on cell interaction, positioned at the clicked cell's x-coordinate.
+- **shell.qml** — Entry point. Uses `Variants` with `Quickshell.screens` to instantiate a `Bar` on every monitor. Tracks `activeScreen` so only one popup is open at a time.
+
+- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and four `Cell` widgets. Includes a popup that toggles on cell interaction, positioned at the hovered cell's x-coordinate.
 
 - **Cell.qml** — Reusable interactive widget. A colored rectangle with `MouseArea` that emits `plonked(color)` on click and `hover(bool)` on enter/exit. Uses flexible layout properties to fill available space.
 
