@@ -8,14 +8,14 @@ PanelWindow {
     id: bar
     required property var modelData
     property var activeScreen: null
-    signal popupOpened()
+    signal popupOpened
 
     screen: modelData
 
     // Close this screen's popup when another screen's popup opens
     onActiveScreenChanged: {
         if (activeScreen !== bar.modelData) {
-            popupLoader.active = false;
+            popupLoader.close();
         }
     }
 
@@ -25,6 +25,7 @@ PanelWindow {
         right: true
     }
     color: "#4b4b4b"
+    // color: 'black'
 
     implicitHeight: 40
 
@@ -39,17 +40,6 @@ PanelWindow {
         justifyContent: FlexboxLayout.JustifySpaceAround
         alignItems: FlexboxLayout.AlignCenter
         gap: 5
-
-        // Live clock display
-        Text {
-            id: helloText
-            text: Time.time
-            font.pixelSize: 20
-            color: "white"
-
-            // Layout.rightMargin: 20
-            Layout.leftMargin: 20
-        }
 
         // Interactive cells — hovering opens a popup aligned to the cell
         Cell {
@@ -83,6 +73,16 @@ PanelWindow {
                     popupLoader.toggle(this, true);
                 }
             }
+        }
+
+        Text {
+            id: helloText
+            text: Time.time
+            font.pixelSize: 20
+            color: "white"
+
+            // Layout.rightMargin: 20
+            Layout.leftMargin: 20
         }
     }
 
