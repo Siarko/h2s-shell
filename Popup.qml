@@ -19,6 +19,8 @@ LazyLoader {
     property bool closing: false
     // When true, the popup stays open until explicitly toggled (click-to-close)
     property bool persistent: false
+    // Which content to display in the popup ("calendar" or "power")
+    property string contentType: "calendar"
 
     // Start the close animation instead of immediately deactivating
     function close() {
@@ -28,8 +30,9 @@ LazyLoader {
     }
 
     // Open the popup aligned to the given element
-    function open(element, persistent = false) {
+    function open(element, persistent = false, contentType = "calendar") {
         popupLoader.persistent = persistent;
+        popupLoader.contentType = contentType;
         popupLoader.popupPosition = element.x;
         popupLoader.popupWidth = element.width;
         popupLoader.closing = false;
@@ -48,9 +51,11 @@ LazyLoader {
         }
 
         property int panelRadius: 20
-        property int popupHeight: 400
+        property int contentWidth: contentLoader.item ? contentLoader.item.implicitWidth : 0
+        property int contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
+        property int popupHeight: contentHeight + 16
 
-        implicitWidth: popupLoader.popupWidth + panelRadius * 2
+        implicitWidth: contentWidth + 20 + panelRadius * 2
         implicitHeight: popupHeight
 
         property bool showPopup: false
@@ -183,10 +188,29 @@ LazyLoader {
 
                     color: "#4d4d4d"
 
-                    Calendar {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        anchors.topMargin: 6
+                    Loader {
+                        id: contentLoader
+                        anchors.centerIn: parent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent
+                            : popupLoader.contentType === "notifications" ? notificationsComponent
+                            : calendarComponent
+                    }
+
+                    Component {
+                        id: calendarComponent
+                        Calendar {}
+                    }
+
+                    Component {
+                        id: powerMenuComponent
+                        PowerMenu {}
+                    }
+
+                    Component {
+                        id: notificationsComponent
+                        NotificationPanel {
+                            screenHeight: popup.screen.height
+                        }
                     }
                 }
             }

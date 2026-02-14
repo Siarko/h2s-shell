@@ -46,28 +46,55 @@ PanelWindow {
         // Interactive cells — hovering opens a popup aligned to the cell
         Cell {
             cellColor: "#3b3b3b"
+            Layout.preferredWidth: 30
             onHover: s => {
                 if (s) {
-                    popupLoader.open(this);
+                    popupLoader.open(this, false, "power");
                 }
+            }
+
+            Text {
+                text: "⏻"
+                font.pixelSize: 20
+                color: "white"
+                anchors.centerIn: parent
             }
         }
         Cell {
             cellColor: "#3b3b3b"
             onHover: s => {
                 if (s) {
-                    popupLoader.open(this);
+                    popupLoader.open(this, false, "calendar");
                 }
             }
         }
         Cell {
             cellColor: "green"
             onPlonked: {
-                popupLoader.open(this);
+                popupLoader.open(this, false, "calendar");
             }
         }
         Cell {
+            cellColor: "gray"
+            Layout.preferredWidth: 20
+            onPlonked: {
+                if (popupLoader.active && popupLoader.contentType === "notifications") {
+                    popupLoader.close();
+                } else {
+                    popupLoader.open(this, true, "notifications");
+                }
+            }
+
+            Text {
+                text: "󰂚"
+                color: "white"
+                anchors.centerIn: parent
+            }
+        }
+
+        Cell {
             cellColor: "#3b3b3b"
+            Layout.preferredWidth: 100
             onHover: s => {
                 if (s) {
                     popupLoader.open(this);

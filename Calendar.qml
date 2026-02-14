@@ -3,6 +3,8 @@ import QtQuick
 // Monthly calendar with navigation arrows
 Item {
     id: root
+    implicitWidth: 280
+    implicitHeight: 340
 
     property int displayMonth: new Date().getMonth()
     property int displayYear: new Date().getFullYear()
@@ -48,16 +50,19 @@ Item {
             height: 30
 
             Text {
+                id: prevArrow
                 width: 30
                 height: parent.height
                 text: "<"
-                color: "#aaaaaa"
+                color: prevArea.containsMouse ? "white" : "#aaaaaa"
                 font.pixelSize: 18
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
 
                 MouseArea {
+                    id: prevArea
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root._prevMonth()
                 }
@@ -75,16 +80,19 @@ Item {
             }
 
             Text {
+                id: nextArrow
                 width: 30
                 height: parent.height
                 text: ">"
-                color: "#aaaaaa"
+                color: nextArea.containsMouse ? "white" : "#aaaaaa"
                 font.pixelSize: 18
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
 
                 MouseArea {
+                    id: nextArea
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root._nextMonth()
                 }

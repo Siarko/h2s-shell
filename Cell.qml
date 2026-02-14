@@ -15,7 +15,7 @@ Item {
     Layout.topMargin: 5
     Layout.bottomMargin: 5
     Layout.minimumWidth: 40
-    Layout.fillWidth: true
+    // Layout.fillWidth: true
     // Layout.preferredWidth: 100
 
     default property alias content: rectangle.data
