@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 Item {
@@ -38,38 +39,35 @@ Item {
                 radius: 8
                 color: buttonArea.containsMouse ? "#5a5a5a" : "#3b3b3b"
 
-                Row {
-                    anchors.centerIn: parent
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    spacing: 10
-
-                    Text {
-                        text: modelData.icon
-                        font.pixelSize: 18
-                        color: "white"
-                    }
-
-                    Text {
-                        text: modelData.label
-                        font.pixelSize: 16
-                        color: "white"
-                    }
-                }
-
                 MouseArea {
                     id: buttonArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        proc.command = ["bash", modelData.script];
-                        proc.startDetached();
+                    onClicked: proc.running = true
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 10
+
+                        Text {
+                            text: modelData.icon
+                            font.pixelSize: 18
+                            color: "white"
+                        }
+
+                        Text {
+                            text: modelData.label
+                            font.pixelSize: 16
+                            color: "white"
+                        }
                     }
                 }
 
                 Process {
                     id: proc
+                    command: ["bash", modelData.script]
+                    workingDirectory: Quickshell.shellDir
                 }
             }
         }
