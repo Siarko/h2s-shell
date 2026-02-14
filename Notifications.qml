@@ -15,9 +15,9 @@ Singleton {
         }
     }
 
+    signal dismissAllRequested()
+
     function dismissAll() {
-        while (server.trackedNotifications.count > 0) {
-            server.trackedNotifications.objectAt(0).dismiss();
-        }
+        dismissAllRequested();
     }
 }

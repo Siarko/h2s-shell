@@ -47,61 +47,98 @@ Item {
             spacing: 6
             model: Notifications.notifications
 
-            delegate: Rectangle {
+            delegate: Item {
+                id: delegateRoot
                 required property var modelData
 
                 width: ListView.view.width
-                implicitHeight: delegateCol.implicitHeight + 16
-                radius: 8
-                color: "#3b3b3b"
+                implicitHeight: card.implicitHeight
+                clip: true
 
-                ColumnLayout {
-                    id: delegateCol
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 8
-                    spacing: 2
+                Connections {
+                    target: Notifications
+                    function onDismissAllRequested() { slideOut.start() }
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: true
+                SequentialAnimation {
+                    id: slideOut
 
-                        Text {
-                            text: modelData.appName
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: "#bbbbbb"
+                    NumberAnimation {
+                        target: card
+                        property: "x"
+                        to: delegateRoot.width
+                        duration: 200
+                        easing.type: Easing.InCubic
+                    }
+
+                    NumberAnimation {
+                        target: delegateRoot
+                        property: "implicitHeight"
+                        to: 0
+                        duration: 150
+                        easing.type: Easing.InOutQuad
+                    }
+
+                    ScriptAction {
+                        script: delegateRoot.modelData.tracked = false
+                    }
+                }
+
+                Rectangle {
+                    id: card
+                    width: parent.width
+                    implicitHeight: delegateCol.implicitHeight + 16
+                    radius: 8
+                    color: "#3b3b3b"
+
+                    ColumnLayout {
+                        id: delegateCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 8
+                        spacing: 2
+
+                        RowLayout {
                             Layout.fillWidth: true
-                        }
 
-                        Text {
-                            text: "dismiss"
-                            font.pixelSize: 11
-                            color: "#888888"
+                            Text {
+                                text: delegateRoot.modelData.appName
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: "#bbbbbb"
+                                Layout.fillWidth: true
+                            }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: modelData.dismiss()
+                            Text {
+                                text: "dismiss"
+                                font.pixelSize: 11
+                                color: "#888888"
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: slideOut.start()
+                                }
                             }
                         }
-                    }
 
-                    Text {
-                        text: modelData.summary
-                        font.pixelSize: 14
-                        font.bold: true
-                        color: "white"
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                    }
+                        Text {
+                            text: delegateRoot.modelData.summary
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: "white"
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
 
-                    Text {
-                        text: modelData.body
-                        font.pixelSize: 12
-                        color: "#cccccc"
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
+                        Text {
+                            text: delegateRoot.modelData.body
+                            font.pixelSize: 12
+                            color: "#cccccc"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
             }
@@ -112,7 +149,7 @@ Item {
                 text: "No notifications"
                 font.pixelSize: 14
                 color: "#888888"
-                visible: Notifications.notifications.count === 0
+                visible: Notifications.notifications.rowCount() === 0
             }
         }
     }
