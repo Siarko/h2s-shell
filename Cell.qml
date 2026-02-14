@@ -16,6 +16,9 @@ Item {
     Layout.bottomMargin: 5
     Layout.minimumWidth: 40
     Layout.fillWidth: true
+    // Layout.preferredWidth: 100
+
+    default property alias content: rectangle.data
 
     Rectangle {
         id: rectangle
@@ -25,11 +28,12 @@ Item {
 
     // Extends 5px below the cell to prevent hover gaps between bar and popup
     MouseArea {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-
-        height: parent.height + 5
+        // anchors.top: parent.top
+        // anchors.left: parent.left
+        // anchors.right: parent.right
+        //
+        // height: parent.height + 5
+        anchors.fill: parent
         hoverEnabled: true
 
         onClicked: container.plonked(container.cellColor)

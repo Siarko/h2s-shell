@@ -34,6 +34,8 @@ PanelWindow {
         id: flexLayout
 
         anchors.fill: parent
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
 
         wrap: FlexboxLayout.NoWrap
         direction: FlexboxLayout.Row
@@ -46,7 +48,7 @@ PanelWindow {
             cellColor: "#3b3b3b"
             onHover: s => {
                 if (s) {
-                    popupLoader.toggle(this, true);
+                    popupLoader.open(this);
                 }
             }
         }
@@ -54,35 +56,30 @@ PanelWindow {
             cellColor: "#3b3b3b"
             onHover: s => {
                 if (s) {
-                    popupLoader.toggle(this, true);
+                    popupLoader.open(this);
                 }
             }
         }
         Cell {
             cellColor: "green"
-            onHover: s => {
-                if (s) {
-                    popupLoader.toggle(this, true);
-                }
+            onPlonked: {
+                popupLoader.open(this);
             }
         }
         Cell {
             cellColor: "#3b3b3b"
             onHover: s => {
                 if (s) {
-                    popupLoader.toggle(this, true);
+                    popupLoader.open(this);
                 }
             }
-        }
 
-        Text {
-            id: helloText
-            text: Time.time
-            font.pixelSize: 20
-            color: "white"
-
-            // Layout.rightMargin: 20
-            Layout.leftMargin: 20
+            Text {
+                text: Time.time
+                font.pixelSize: 20
+                color: "white"
+                anchors.centerIn: parent
+            }
         }
     }
 

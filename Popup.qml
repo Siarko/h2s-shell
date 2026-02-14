@@ -17,6 +17,8 @@ LazyLoader {
 
     // True while the close animation is running; prevents immediate destruction
     property bool closing: false
+    // When true, the popup stays open until explicitly toggled (click-to-close)
+    property bool persistent: false
 
     // Start the close animation instead of immediately deactivating
     function close() {
@@ -25,35 +27,14 @@ LazyLoader {
         }
     }
 
-    // Toggle popup for the given element.
-    // If the same element triggers again, toggle or apply explicit state.
-    // If a different element triggers, reposition and open.
-    function toggle(element, state = null) {
-        if (element.x == popupLoader.popupPosition) {
-            if (state !== null) {
-                if (state) {
-                    popupLoader.closing = false;
-                    popupLoader.active = true;
-                } else {
-                    popupLoader.close();
-                }
-            } else {
-                if (popupLoader.active && !popupLoader.closing) {
-                    popupLoader.close();
-                } else {
-                    popupLoader.closing = false;
-                    popupLoader.active = true;
-                }
-            }
-        } else {
-            popupLoader.popupPosition = element.x;
-            popupLoader.popupWidth = element.width;
-            popupLoader.closing = false;
-            popupLoader.active = true;
-        }
-        if (popupLoader.active && !popupLoader.closing) {
-            popupLoader.opened();
-        }
+    // Open the popup aligned to the given element
+    function open(element, persistent = false) {
+        popupLoader.persistent = persistent;
+        popupLoader.popupPosition = element.x;
+        popupLoader.popupWidth = element.width;
+        popupLoader.closing = false;
+        popupLoader.active = true;
+        popupLoader.opened();
     }
 
     // Popup window positioned at the top-left, offset by popupPosition
@@ -76,7 +57,7 @@ LazyLoader {
         Component.onCompleted: popup.showPopup = true
 
         margins.top: 0
-        margins.left: popupLoader.popupPosition - panelRadius
+        margins.left: popupLoader.popupPosition - panelRadius + 5
         color: "transparent"
 
         Behavior on margins.left {
@@ -201,15 +182,21 @@ LazyLoader {
                     bottomRightRadius: popup.panelRadius
 
                     color: "#4d4d4d"
+
+                    Calendar {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        anchors.topMargin: 6
+                    }
                 }
             }
 
             // Close the popup when the mouse leaves the visible area
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-
-                onExited: popupLoader.close()
+            HoverHandler {
+                onHoveredChanged: {
+                    if (!hovered && !popupLoader.persistent)
+                        popupLoader.close();
+                }
             }
         }
     }
