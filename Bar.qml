@@ -81,6 +81,11 @@ PanelWindow {
         Cell {
             cellColor: Theme.cellDefault
 
+            onMiddleClicked: {
+                if (Audio.sink?.audio) {
+                    Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                }
+            }
             onScrolled: delta => {
                 if (Audio.sink?.audio) {
                     const amount = Audio.sink.audio.volume + delta * 0.01;

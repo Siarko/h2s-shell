@@ -11,6 +11,8 @@ Item {
     signal hover(status: bool)
     // Emitted on scroll wheel: delta in notches (±1, ±2, …); shift indicates shift key held
     signal scrolled(delta: real)
+    // Emitted on middle mouse button click
+    signal middleClicked()
 
     Layout.fillHeight: true
     Layout.preferredHeight: 20
@@ -37,8 +39,12 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 
-        onClicked: container.plonked(container.cellColor)
+        onClicked: event => {
+            if (event.button === Qt.MiddleButton) container.middleClicked();
+            else container.plonked(container.cellColor);
+        }
         onEntered: container.hover(true)
         onExited: container.hover(false)
         onWheel: event => container.scrolled(event.angleDelta.y * (1 / 8) / 14)
