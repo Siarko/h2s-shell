@@ -80,7 +80,6 @@ PanelWindow {
 
         Cell {
             cellColor: Theme.cellDefault
-            Layout.preferredWidth: 100
             onHover: s => {
                 if (s) {
                     popupLoader.open(this);

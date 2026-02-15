@@ -15,13 +15,20 @@ Item {
     Layout.topMargin: 5
     Layout.bottomMargin: 5
     Layout.minimumWidth: 40
+    implicitWidth: contentItem.childrenRect.width + 16
 
-    default property alias content: rectangle.data
+    default property alias content: contentItem.data
 
     Rectangle {
         id: rectangle
         radius: 5
         anchors.fill: parent
+    }
+
+    // Free-standing item for measuring content size without anchoring loops
+    Item {
+        id: contentItem
+        anchors.centerIn: parent
     }
 
     // Extends 5px below the cell to prevent hover gaps between bar and popup
