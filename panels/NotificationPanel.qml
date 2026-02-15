@@ -127,6 +127,12 @@ Item {
                             }
 
                             Text {
+                                text: Notifications.timestamps[delegateRoot.modelData.id] ?? ""
+                                font.pixelSize: 11
+                                color: Theme.textTertiary
+                            }
+
+                            Text {
                                 text: "dismiss"
                                 font.pixelSize: 11
                                 color: Theme.textTertiary
