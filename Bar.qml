@@ -74,23 +74,6 @@ PanelWindow {
                 popupLoader.open(this, false, "calendar");
             }
         }
-        Cell {
-            cellColor: "gray"
-            Layout.preferredWidth: 20
-            onPlonked: {
-                if (popupLoader.active && popupLoader.contentType === "notifications") {
-                    popupLoader.close();
-                } else {
-                    popupLoader.open(this, true, "notifications");
-                }
-            }
-
-            Text {
-                text: "󰂚"
-                color: "white"
-                anchors.centerIn: parent
-            }
-        }
 
         Cell {
             cellColor: "#3b3b3b"
@@ -104,6 +87,24 @@ PanelWindow {
             Text {
                 text: Time.time
                 font.pixelSize: 20
+                color: "white"
+                anchors.centerIn: parent
+            }
+        }
+
+        Cell {
+            cellColor: "gray"
+            Layout.preferredWidth: 20
+            onPlonked: {
+                if (popupLoader.active && popupLoader.contentType === "notifications") {
+                    popupLoader.close();
+                } else {
+                    popupLoader.open(this, true, "notifications");
+                }
+            }
+
+            Text {
+                text: "󰂚"
                 color: "white"
                 anchors.centerIn: parent
             }

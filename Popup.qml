@@ -51,18 +51,27 @@ LazyLoader {
         }
 
         property int panelRadius: 20
+        property int paddingSide: 10
+        property int paddingTop: 10
+        property int paddingBottom: 10
         property int contentWidth: contentLoader.item ? contentLoader.item.implicitWidth : 0
         property int contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
-        property int popupHeight: contentHeight + 16
+        property int popupHeight: contentHeight + paddingTop + paddingBottom
+        property bool roundingLeft: margins.left > 0
+        property bool roundingRight: margins.left < popup.screen.width - popup.implicitWidth
 
-        implicitWidth: contentWidth + 20 + panelRadius * 2
+        implicitWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
         implicitHeight: popupHeight
 
         property bool showPopup: false
         Component.onCompleted: popup.showPopup = true
 
         margins.top: 0
-        margins.left: popupLoader.popupPosition - panelRadius + 5
+        margins.left: {
+            var raw = popupLoader.popupPosition - panelRadius + 5;
+            var maxLeft = popup.screen.width - popup.implicitWidth;
+            return Math.max(0, Math.min(raw, maxLeft));
+        }
         color: "transparent"
 
         Behavior on margins.left {
@@ -108,6 +117,7 @@ LazyLoader {
                     implicitWidth: popup.panelRadius
                     implicitHeight: popup.panelRadius
                     color: "transparent"
+                    visible: popup.roundingLeft
 
                     Shape {
                         width: parent.width
@@ -144,6 +154,7 @@ LazyLoader {
                     implicitWidth: popup.panelRadius
                     implicitHeight: popup.panelRadius
                     color: "transparent"
+                    visible: popup.roundingRight
 
                     Shape {
                         width: parent.width
@@ -179,21 +190,19 @@ LazyLoader {
                 Rectangle {
                     id: content
                     anchors.top: parent.top
-                    anchors.left: leftCurve.right
-                    anchors.right: rightCurve.left
+                    anchors.left: popup.roundingLeft ? leftCurve.right : parent.left
+                    anchors.right: popup.roundingRight ? rightCurve.left : parent.right
                     implicitHeight: popup.popupHeight
 
-                    bottomLeftRadius: popup.panelRadius
-                    bottomRightRadius: popup.panelRadius
+                    bottomLeftRadius: popup.roundingLeft ? popup.panelRadius : 0
+                    bottomRightRadius: popup.roundingRight ? popup.panelRadius : 0
 
                     color: "#4d4d4d"
 
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent
-                            : popupLoader.contentType === "notifications" ? notificationsComponent
-                            : calendarComponent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : calendarComponent
                     }
 
                     Component {
