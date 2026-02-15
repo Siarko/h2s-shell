@@ -1,4 +1,6 @@
 import QtQuick
+import qs.components
+import qs.singletons
 
 // Monthly calendar with navigation arrows
 Item {

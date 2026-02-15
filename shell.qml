@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import qs.singletons
 
 // Creates a panel instance for each connected screen
 Variants {

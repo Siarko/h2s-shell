@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import qs.singletons
 
 Rectangle {
     id: root

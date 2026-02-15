@@ -16,15 +16,35 @@ Quickshell looks for `shell.qml` in the current directory as its entry point. Te
 
 ## Architecture
 
-Four QML files compose the entire shell:
+QML files are organized into subdirectories by role. Quickshell auto-exposes uppercase QML files in subdirectories as types via `import qs.<dirname>`.
+
+### Root (entry point + top-level shell)
 
 - **shell.qml** — Entry point. Uses `Variants` with `Quickshell.screens` to instantiate a `Bar` on every monitor. Tracks `activeScreen` so only one popup is open at a time.
+- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and interactive `Cell` widgets. Includes a popup that toggles on cell interaction.
 
-- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and four `Cell` widgets. Includes a popup that toggles on cell interaction, positioned at the hovered cell's x-coordinate.
+### `components/` (reusable building blocks)
 
-- **Cell.qml** — Reusable interactive widget. A colored rectangle with `MouseArea` that emits `plonked(color)` on click and `hover(bool)` on enter/exit. Uses flexible layout properties to fill available space.
+- **Cell.qml** — Reusable interactive bar widget. A colored rectangle with `MouseArea` that emits `plonked(color)` on click and `hover(bool)` on enter/exit.
+- **ArrowButton.qml** — Small clickable arrow used for calendar month navigation.
+- **PopupCurve.qml** — Draws the curved corners connecting the popup to the bar edge.
 
-- **Time.qml** — `pragma Singleton`. Wraps `SystemClock` to expose a `time` property formatted as `"hh:mm:ss"` with second precision.
+### `panels/` (popup content widgets)
+
+- **Popup.qml** — Lazily-loaded popup container. Manages open/close animations and delegates to content panels.
+- **Calendar.qml** — Monthly calendar with day grid and month navigation arrows.
+- **PowerMenu.qml** — Shutdown/restart/logout buttons that invoke shell scripts.
+- **NotificationPanel.qml** — Scrollable list of desktop notifications with dismiss animations.
+
+### `singletons/` (global shared state, `pragma Singleton`)
+
+- **Theme.qml** — Centralized color palette for the entire shell.
+- **Time.qml** — Wraps `SystemClock` to expose a `time` property formatted as `"hh:mm:ss"`.
+- **Notifications.qml** — DBus notification server exposing a notification list.
+
+### `scripts/` (shell scripts)
+
+- **logout.sh**, **restart.sh**, **shutdown.sh** — Hyprland power management scripts.
 
 ## Key Patterns
 

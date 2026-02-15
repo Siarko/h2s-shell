@@ -2,6 +2,9 @@ import Quickshell
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
+import qs.components
+import qs.panels
+import qs.singletons
 
 // Top-anchored horizontal bar spanning the full screen width
 PanelWindow {

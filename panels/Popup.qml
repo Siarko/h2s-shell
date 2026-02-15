@@ -1,6 +1,8 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import qs.components
+import qs.singletons
 
 // Lazily-loaded popup panel that appears below a triggering element.
 // Matches the width and horizontal position of the element that triggered it.
