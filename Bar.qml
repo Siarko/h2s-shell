@@ -80,6 +80,38 @@ PanelWindow {
 
         Cell {
             cellColor: Theme.cellDefault
+
+            onScrolled: delta => {
+                if (Audio.sink?.audio) {
+                    const amount = Audio.sink.audio.volume + delta * 0.01;
+                    Audio.sink.audio.volume = Math.max(0, amount);
+                }
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 4
+
+                Text {
+                    text: Audio.volume + "%"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 14
+                    color: Audio.muted ? Theme.textDim : Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: Audio.muted ? "󰖁" : "󰕾"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 18
+                    color: Audio.muted ? Theme.textDim : Theme.textPrimary
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
+
+        Cell {
+            cellColor: Theme.cellDefault
             onHover: s => {
                 if (s) {
                     popupLoader.open(this);

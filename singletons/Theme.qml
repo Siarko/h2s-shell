@@ -22,6 +22,7 @@ QtObject {
     readonly property color textSubtle: "#bbbbbb"       // notification app name
     readonly property color textBody: "#cccccc"         // notification body text
     readonly property color textTertiary: "#888888"     // "dismiss" link, timestamp, empty-state text
+    readonly property color textWarning: "#e8a854"       // volume above 100%
     readonly property color textDim: "#777777"          // previous/next month day numbers
 
     // Calendar
