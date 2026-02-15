@@ -21,6 +21,7 @@ Item {
 
             Text {
                 text: "Notifications"
+                font.family: Theme.fontFamily
                 font.pixelSize: 16
                 font.bold: true
                 color: Theme.textPrimary
@@ -29,6 +30,7 @@ Item {
 
             Text {
                 text: "Clear all"
+                font.family: Theme.fontFamily
                 font.pixelSize: 13
                 color: Theme.textSecondary
 
@@ -120,6 +122,7 @@ Item {
 
                             Text {
                                 text: delegateRoot.modelData.appName
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 font.bold: true
                                 color: Theme.textSubtle
@@ -128,12 +131,14 @@ Item {
 
                             Text {
                                 text: Notifications.timestamps[delegateRoot.modelData.id] ?? ""
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textTertiary
                             }
 
                             Text {
                                 text: "dismiss"
+                                font.family: Theme.fontFamily
                                 font.pixelSize: 11
                                 color: Theme.textTertiary
 
@@ -147,6 +152,7 @@ Item {
 
                         Text {
                             text: delegateRoot.modelData.summary
+                            font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: true
                             color: Theme.textPrimary
@@ -156,6 +162,7 @@ Item {
 
                         Text {
                             text: delegateRoot.modelData.body
+                            font.family: Theme.fontFamily
                             font.pixelSize: 12
                             color: Theme.textBody
                             Layout.fillWidth: true
@@ -169,6 +176,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: "No notifications"
+                font.family: Theme.fontFamily
                 font.pixelSize: 14
                 color: Theme.textTertiary
                 visible: notificationList.count === 0

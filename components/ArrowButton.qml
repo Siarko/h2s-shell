@@ -7,6 +7,7 @@ Text {
 
     width: 30
     height: parent.height
+    font.family: Theme.fontFamily
     font.pixelSize: 18
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter

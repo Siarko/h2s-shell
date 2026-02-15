@@ -57,6 +57,7 @@ PanelWindow {
 
             Text {
                 text: "⏻"
+                font.family: Theme.fontFamily
                 font.pixelSize: 20
                 color: Theme.textPrimary
                 anchors.centerIn: parent
@@ -88,6 +89,7 @@ PanelWindow {
 
             Text {
                 text: Time.time
+                font.family: Theme.fontFamily
                 font.pixelSize: 20
                 color: Theme.textPrimary
                 anchors.centerIn: parent
@@ -107,6 +109,7 @@ PanelWindow {
 
             Text {
                 text: "󰂚"
+                font.family: Theme.fontFamily
                 color: Theme.textPrimary
                 anchors.centerIn: parent
             }

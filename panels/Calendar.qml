@@ -61,6 +61,7 @@ Item {
                 height: parent.height
                 text: root._monthNames[root.displayMonth] + " " + root.displayYear
                 color: Theme.textPrimary
+                font.family: Theme.fontFamily
                 font.pixelSize: 16
                 font.bold: true
                 horizontalAlignment: Text.AlignHCenter
@@ -86,6 +87,7 @@ Item {
                     height: parent.height
                     text: modelData
                     color: Theme.textSecondary
+                    font.family: Theme.fontFamily
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -129,6 +131,7 @@ Item {
                         anchors.centerIn: parent
                         text: dayNum
                         color: isCurrent ? Theme.textPrimary : Theme.textDim
+                        font.family: Theme.fontFamily
                         font.pixelSize: 14
                         font.bold: isToday
                     }
