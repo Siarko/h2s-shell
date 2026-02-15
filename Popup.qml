@@ -1,7 +1,6 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import QtQuick.Shapes
 
 // Lazily-loaded popup panel that appears below a triggering element.
 // Matches the width and horizontal position of the element that triggered it.
@@ -107,84 +106,24 @@ LazyLoader {
                 id: rect
                 width: parent.width
                 height: popup.popupHeight
-                color: 'transparent'
+                color: "transparent"
 
-                Rectangle {
+                PopupCurve {
                     id: leftCurve
+                    side: "left"
+                    radius: popup.panelRadius
                     anchors.top: parent.top
                     anchors.left: parent.left
-
-                    implicitWidth: popup.panelRadius
-                    implicitHeight: popup.panelRadius
-                    color: "transparent"
                     visible: popup.roundingLeft
-
-                    Shape {
-                        width: parent.width
-                        height: parent.height
-                        preferredRendererType: Shape.CurveRenderer
-
-                        ShapePath {
-                            strokeWidth: 0
-                            fillColor: "#4d4d4d"
-
-                            startX: 0
-                            startY: 0
-
-                            PathArc {
-                                x: popup.panelRadius
-                                y: popup.panelRadius
-                                radiusX: popup.panelRadius
-                                radiusY: popup.panelRadius
-                                direction: PathArc.Clockwise
-                            }
-                            PathLine {
-                                x: popup.panelRadius
-                                y: 0
-                            }
-                        }
-                    }
                 }
 
-                Rectangle {
+                PopupCurve {
                     id: rightCurve
+                    side: "right"
+                    radius: popup.panelRadius
                     anchors.top: parent.top
                     anchors.right: parent.right
-
-                    implicitWidth: popup.panelRadius
-                    implicitHeight: popup.panelRadius
-                    color: "transparent"
                     visible: popup.roundingRight
-
-                    Shape {
-                        width: parent.width
-                        height: parent.height
-                        preferredRendererType: Shape.CurveRenderer
-
-                        ShapePath {
-                            strokeWidth: 0
-                            fillColor: "#4d4d4d"
-
-                            startX: 0
-                            startY: popup.panelRadius
-
-                            PathArc {
-                                x: popup.panelRadius
-                                y: 0
-                                radiusX: popup.panelRadius
-                                radiusY: popup.panelRadius
-                                direction: PathArc.Clockwise
-                            }
-                            PathLine {
-                                x: 0
-                                y: 0
-                            }
-                            PathLine {
-                                x: 0
-                                y: popup.panelRadius
-                            }
-                        }
-                    }
                 }
 
                 Rectangle {
@@ -197,7 +136,7 @@ LazyLoader {
                     bottomLeftRadius: popup.roundingLeft ? popup.panelRadius : 0
                     bottomRightRadius: popup.roundingRight ? popup.panelRadius : 0
 
-                    color: "#4d4d4d"
+                    color: Theme.popupBackground
 
                     Loader {
                         id: contentLoader

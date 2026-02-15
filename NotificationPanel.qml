@@ -22,14 +22,14 @@ Item {
                 text: "Notifications"
                 font.pixelSize: 16
                 font.bold: true
-                color: "white"
+                color: Theme.textPrimary
                 Layout.fillWidth: true
             }
 
             Text {
                 text: "Clear all"
                 font.pixelSize: 13
-                color: "#aaaaaa"
+                color: Theme.textSecondary
 
                 MouseArea {
                     anchors.fill: parent
@@ -41,6 +41,7 @@ Item {
 
         // Notification list
         ListView {
+            id: notificationList
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -57,7 +58,9 @@ Item {
 
                 Connections {
                     target: Notifications
-                    function onDismissAllRequested() { slideOut.start() }
+                    function onDismissAllRequested() {
+                        slideOut.start();
+                    }
                 }
 
                 SequentialAnimation {
@@ -86,10 +89,22 @@ Item {
 
                 Rectangle {
                     id: card
+                    x: -delegateRoot.width
                     width: parent.width
+                    Component.onCompleted: slideIn.start()
+
+                    NumberAnimation {
+                        id: slideIn
+                        target: card
+                        property: "x"
+                        from: -delegateRoot.width
+                        to: 0
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
                     implicitHeight: delegateCol.implicitHeight + 16
                     radius: 8
-                    color: "#3b3b3b"
+                    color: Theme.cellDefault
 
                     ColumnLayout {
                         id: delegateCol
@@ -106,14 +121,14 @@ Item {
                                 text: delegateRoot.modelData.appName
                                 font.pixelSize: 11
                                 font.bold: true
-                                color: "#bbbbbb"
+                                color: Theme.textSubtle
                                 Layout.fillWidth: true
                             }
 
                             Text {
                                 text: "dismiss"
                                 font.pixelSize: 11
-                                color: "#888888"
+                                color: Theme.textTertiary
 
                                 MouseArea {
                                     anchors.fill: parent
@@ -127,7 +142,7 @@ Item {
                             text: delegateRoot.modelData.summary
                             font.pixelSize: 14
                             font.bold: true
-                            color: "white"
+                            color: Theme.textPrimary
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
@@ -135,7 +150,7 @@ Item {
                         Text {
                             text: delegateRoot.modelData.body
                             font.pixelSize: 12
-                            color: "#cccccc"
+                            color: Theme.textBody
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                         }
@@ -148,8 +163,8 @@ Item {
                 anchors.centerIn: parent
                 text: "No notifications"
                 font.pixelSize: 14
-                color: "#888888"
-                visible: Notifications.notifications.rowCount() === 0
+                color: Theme.textTertiary
+                visible: notificationList.count === 0
             }
         }
     }

@@ -37,7 +37,7 @@ Item {
                 width: powerMenu.width
                 height: 44
                 radius: 8
-                color: buttonArea.containsMouse ? "#5a5a5a" : "#3b3b3b"
+                color: buttonArea.containsMouse ? Theme.buttonHover : Theme.cellDefault
 
                 MouseArea {
                     id: buttonArea
@@ -53,13 +53,13 @@ Item {
                         Text {
                             text: modelData.icon
                             font.pixelSize: 18
-                            color: "white"
+                            color: Theme.textPrimary
                         }
 
                         Text {
                             text: modelData.label
                             font.pixelSize: 16
-                            color: "white"
+                            color: Theme.textPrimary
                         }
                     }
                 }

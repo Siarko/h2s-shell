@@ -49,53 +49,25 @@ Item {
             width: parent.width
             height: 30
 
-            Text {
-                id: prevArrow
-                width: 30
-                height: parent.height
+            ArrowButton {
                 text: "<"
-                color: prevArea.containsMouse ? "white" : "#aaaaaa"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-
-                MouseArea {
-                    id: prevArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root._prevMonth()
-                }
+                onClicked: root._prevMonth()
             }
 
             Text {
                 width: parent.width - 60
                 height: parent.height
                 text: root._monthNames[root.displayMonth] + " " + root.displayYear
-                color: "white"
+                color: Theme.textPrimary
                 font.pixelSize: 16
                 font.bold: true
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
 
-            Text {
-                id: nextArrow
-                width: 30
-                height: parent.height
+            ArrowButton {
                 text: ">"
-                color: nextArea.containsMouse ? "white" : "#aaaaaa"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-
-                MouseArea {
-                    id: nextArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root._nextMonth()
-                }
+                onClicked: root._nextMonth()
             }
         }
 
@@ -111,7 +83,7 @@ Item {
                     width: parent.width / 7
                     height: parent.height
                     text: modelData
-                    color: "#aaaaaa"
+                    color: Theme.textSecondary
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -148,13 +120,13 @@ Item {
 
                     width: dateGrid.width / 7
                     height: dateGrid.height / 6
-                    color: isToday ? "#666666" : "transparent"
+                    color: isToday ? Theme.todayHighlight : "transparent"
                     radius: 4
 
                     Text {
                         anchors.centerIn: parent
                         text: dayNum
-                        color: isCurrent ? "white" : "#777777"
+                        color: isCurrent ? Theme.textPrimary : Theme.textDim
                         font.pixelSize: 14
                         font.bold: isToday
                     }

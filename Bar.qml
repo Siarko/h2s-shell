@@ -24,8 +24,7 @@ PanelWindow {
         left: true
         right: true
     }
-    color: "#4b4b4b"
-    // color: 'black'
+    color: Theme.barBackground
 
     implicitHeight: 40
 
@@ -45,7 +44,7 @@ PanelWindow {
 
         // Interactive cells — hovering opens a popup aligned to the cell
         Cell {
-            cellColor: "#3b3b3b"
+            cellColor: Theme.cellDefault
             Layout.preferredWidth: 30
             onHover: s => {
                 if (s) {
@@ -56,12 +55,12 @@ PanelWindow {
             Text {
                 text: "⏻"
                 font.pixelSize: 20
-                color: "white"
+                color: Theme.textPrimary
                 anchors.centerIn: parent
             }
         }
         Cell {
-            cellColor: "#3b3b3b"
+            cellColor: Theme.cellDefault
             onHover: s => {
                 if (s) {
                     popupLoader.open(this, false, "calendar");
@@ -69,14 +68,14 @@ PanelWindow {
             }
         }
         Cell {
-            cellColor: "green"
+            cellColor: Theme.cellAccent
             onPlonked: {
                 popupLoader.open(this, false, "calendar");
             }
         }
 
         Cell {
-            cellColor: "#3b3b3b"
+            cellColor: Theme.cellDefault
             Layout.preferredWidth: 100
             onHover: s => {
                 if (s) {
@@ -87,13 +86,13 @@ PanelWindow {
             Text {
                 text: Time.time
                 font.pixelSize: 20
-                color: "white"
+                color: Theme.textPrimary
                 anchors.centerIn: parent
             }
         }
 
         Cell {
-            cellColor: "gray"
+            cellColor: Theme.cellMuted
             Layout.preferredWidth: 20
             onPlonked: {
                 if (popupLoader.active && popupLoader.contentType === "notifications") {
@@ -105,7 +104,7 @@ PanelWindow {
 
             Text {
                 text: "󰂚"
-                color: "white"
+                color: Theme.textPrimary
                 anchors.centerIn: parent
             }
         }
