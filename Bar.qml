@@ -81,6 +81,13 @@ PanelWindow {
         Cell {
             cellColor: Theme.cellDefault
 
+            onPlonked: {
+                if (popupLoader.active && popupLoader.contentType === "sound") {
+                    popupLoader.close();
+                } else {
+                    popupLoader.open(this, true, "sound");
+                }
+            }
             onMiddleClicked: {
                 if (Audio.sink?.audio) {
                     Audio.sink.audio.muted = !Audio.sink.audio.muted;

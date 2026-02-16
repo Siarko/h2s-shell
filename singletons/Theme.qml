@@ -25,6 +25,10 @@ QtObject {
     readonly property color textWarning: "#e8a854"       // volume above 100%
     readonly property color textDim: "#777777"          // previous/next month day numbers
 
+    // Sliders
+    readonly property color sliderAccent: "#5b9bf5"       // active track fill
+    readonly property color sliderAccentHover: "#7db3ff"   // active track fill on hover
+
     // Calendar
     readonly property color todayHighlight: "#666666"   // background circle on today's date
 }

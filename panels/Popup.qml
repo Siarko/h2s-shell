@@ -92,6 +92,8 @@ LazyLoader {
             clip: true
 
             Behavior on height {
+                // Only animate for popup open/close, not content resizes
+                enabled: !popup.showPopup || popupLoader.closing
                 NumberAnimation {
                     duration: 100
                     easing.type: popupLoader.closing ? Easing.InQuad : Easing.OutQuad
@@ -143,7 +145,10 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : calendarComponent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent
+                            : popupLoader.contentType === "notifications" ? notificationsComponent
+                            : popupLoader.contentType === "sound" ? soundComponent
+                            : calendarComponent
                     }
 
                     Component {
@@ -161,6 +166,11 @@ LazyLoader {
                         NotificationPanel {
                             screenHeight: popup.screen.height
                         }
+                    }
+
+                    Component {
+                        id: soundComponent
+                        SoundPanel {}
                     }
                 }
             }
