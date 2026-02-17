@@ -185,13 +185,27 @@ PanelWindow {
                     Music.previous();
             }
 
-            Text {
-                text: Music.hasPlayer ? Music.title : "󰎈"
-                font.family: Theme.fontFamily
-                font.pixelSize: Music.hasPlayer ? 14 : 18
-                color: Theme.textPrimary
+            Row {
                 anchors.centerIn: parent
-                elide: Text.ElideRight
+                spacing: 4
+
+                Text {
+                    text: Music.playing ? "󰐊" : "󰏤"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 18
+                    color: Theme.textPrimary
+                    visible: Music.hasPlayer
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: Music.hasPlayer ? (Music.activePlayer.identity || "Player") : "󰎈"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Music.hasPlayer ? 14 : 18
+                    color: Theme.textPrimary
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                }
             }
         }
 
