@@ -148,7 +148,7 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : calendarComponent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : calendarComponent
                     }
 
                     Component {
@@ -171,6 +171,11 @@ LazyLoader {
                     Component {
                         id: soundComponent
                         SoundPanel {}
+                    }
+
+                    Component {
+                        id: musicComponent
+                        MusicPanel {}
                     }
                 }
             }

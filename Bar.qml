@@ -124,6 +124,35 @@ PanelWindow {
 
         Cell {
             cellColor: Theme.cellDefault
+
+            onPlonked: {
+                if (popupLoader.active && popupLoader.contentType === "music") {
+                    popupLoader.close();
+                } else {
+                    popupLoader.open(this, true, "music");
+                }
+            }
+            onMiddleClicked: Music.togglePlay()
+            onScrolled: delta => {
+                if (delta > 0)
+                    Music.next();
+                else
+                    Music.previous();
+            }
+
+            Text {
+                text: Music.hasPlayer ? Music.title : "󰎈"
+                font.family: Theme.fontFamily
+                font.pixelSize: Music.hasPlayer ? 14 : 18
+                color: Theme.textPrimary
+                anchors.centerIn: parent
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, parent.width - 8)
+            }
+        }
+
+        Cell {
+            cellColor: Theme.cellDefault
             onHover: s => {
                 if (s) {
                     popupLoader.open(this);
