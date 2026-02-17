@@ -79,7 +79,7 @@ LazyLoader {
         Item {
             id: clipWrapper
             x: {
-                var raw = popupLoader.popupPosition - popup.panelRadius + 5;
+                var raw = popupLoader.popupPosition + (popupLoader.popupWidth / 2) - (popup.totalWidth / 2);
                 var maxLeft = popup.screen.width - popup.totalWidth;
                 return Math.max(0, Math.min(raw, maxLeft));
             }
