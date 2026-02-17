@@ -58,42 +58,43 @@ LazyLoader {
         property int contentWidth: contentLoader.item ? contentLoader.item.implicitWidth : 0
         property int contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
         property int popupHeight: contentHeight + paddingTop + paddingBottom
-        property bool roundingLeft: margins.left > 0
-        property bool roundingRight: margins.left < popup.screen.width - popup.implicitWidth
+        property int totalWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
+        property bool roundingLeft: clipWrapper.x > 0
+        property bool roundingRight: clipWrapper.x < popup.screen.width - popup.totalWidth
 
-        implicitWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
-        implicitHeight: popupHeight
+        implicitWidth: popup.screen.width
+        implicitHeight: popup.screen.height
 
         property bool showPopup: false
         Component.onCompleted: popup.showPopup = true
 
         margins.top: 0
-        margins.left: {
-            var raw = popupLoader.popupPosition - panelRadius + 5;
-            var maxLeft = popup.screen.width - popup.implicitWidth;
-            return Math.max(0, Math.min(raw, maxLeft));
-        }
+        margins.left: 0
         color: "transparent"
 
-        Behavior on margins.left {
-            enabled: popup.showPopup
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutQuad
-            }
-        }
 
-        // Clip wrapper — animates height without resizing the Wayland surface
+        // Clip wrapper — animates height; the window itself never resizes
         Item {
             id: clipWrapper
-            anchors.top: parent.top
-            width: parent.width
+            x: {
+                var raw = popupLoader.popupPosition - popup.panelRadius + 5;
+                var maxLeft = popup.screen.width - popup.totalWidth;
+                return Math.max(0, Math.min(raw, maxLeft));
+            }
+            width: popup.totalWidth
             height: popup.showPopup && !popupLoader.closing ? popup.popupHeight : 0
             clip: true
 
+            Behavior on x {
+                enabled: popup.showPopup
+                NumberAnimation {
+                    duration: 100
+                    easing.type: Easing.OutQuad
+                }
+            }
+
             Behavior on height {
-                // Only animate for popup open/close, not content resizes
-                enabled: !popup.showPopup || popupLoader.closing
+                enabled: true
                 NumberAnimation {
                     duration: 100
                     easing.type: popupLoader.closing ? Easing.InQuad : Easing.OutQuad
@@ -108,7 +109,7 @@ LazyLoader {
 
             Rectangle {
                 id: rect
-                width: parent.width
+                width: popup.totalWidth
                 height: popup.popupHeight
                 color: "transparent"
 
@@ -145,10 +146,7 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent
-                            : popupLoader.contentType === "notifications" ? notificationsComponent
-                            : popupLoader.contentType === "sound" ? soundComponent
-                            : calendarComponent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : calendarComponent
                     }
 
                     Component {
