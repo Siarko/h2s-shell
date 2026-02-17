@@ -72,6 +72,8 @@ LazyLoader {
         margins.left: 0
         color: "transparent"
 
+        mask: Region { item: clipWrapper }
+
 
         // Clip wrapper — animates height; the window itself never resizes
         Item {
