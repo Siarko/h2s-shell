@@ -225,7 +225,7 @@ PanelWindow {
             }
 
             Cell {
-                cellColor: Theme.cellMuted
+                cellColor: Theme.cellDefault
                 onPlonked: {
                     if (popupLoader.active && popupLoader.contentType === "notifications") {
                         popupLoader.close();
