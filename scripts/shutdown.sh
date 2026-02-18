@@ -1,2 +1,2 @@
 #!/bin/bash
-systemctl poweroff
+hyprshutdown -t 'Shutting down...' --post-cmd 'shutdown -P 0'

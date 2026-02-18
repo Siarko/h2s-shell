@@ -1,2 +1,2 @@
 #!/bin/bash
-systemctl reboot
+hyprshutdown -t 'Shutting down...' --post-cmd 'systemctl poweroff'
