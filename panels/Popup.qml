@@ -150,7 +150,7 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : calendarComponent
+                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : popupLoader.contentType === "bluetooth" ? bluetoothComponent : calendarComponent
                     }
 
                     Component {
@@ -178,6 +178,11 @@ LazyLoader {
                     Component {
                         id: musicComponent
                         MusicPanel {}
+                    }
+
+                    Component {
+                        id: bluetoothComponent
+                        BluetoothPanel {}
                     }
                 }
             }

@@ -2,6 +2,7 @@ import Quickshell
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
+import Quickshell.Bluetooth
 import qs.components
 import qs.panels
 import qs.singletons
@@ -219,6 +220,41 @@ PanelWindow {
                         font.family: Theme.fontFamily
                         font.pixelSize: 18
                         color: Audio.muted ? Theme.textDim : Theme.textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            Cell {
+                cellColor: Theme.cellDefault
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "bluetooth") {
+                        popupLoader.close();
+                    } else {
+                        popupLoader.open(this, true, "bluetooth");
+                    }
+                }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Text {
+                        property bool powered: Bluetooth.defaultAdapter?.enabled ?? false
+                        text: !powered ? "󰂲" : Bluetooth.devices.count > 0 ? "󰂱" : "󰂯"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        color: powered ? Theme.textPrimary : Theme.textDim
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        visible: (Bluetooth.defaultAdapter?.enabled ?? false)
+                            && Bluetooth.devices.count > 0
+                        text: Bluetooth.devices.count
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                        color: Theme.textPrimary
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
