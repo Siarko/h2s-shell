@@ -34,7 +34,8 @@ LazyLoader {
     function open(element, persistent = false, contentType = "calendar") {
         popupLoader.persistent = persistent;
         popupLoader.contentType = contentType;
-        popupLoader.popupPosition = element.x;
+        const mapped = element.mapToItem(null, 0, 0);
+        popupLoader.popupPosition = mapped.x;
         popupLoader.popupWidth = element.width;
         popupLoader.closing = false;
         popupLoader.active = true;
@@ -72,8 +73,9 @@ LazyLoader {
         margins.left: 0
         color: "transparent"
 
-        mask: Region { item: clipWrapper }
-
+        mask: Region {
+            item: clipWrapper
+        }
 
         // Clip wrapper — animates height; the window itself never resizes
         Item {

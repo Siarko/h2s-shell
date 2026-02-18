@@ -31,217 +31,215 @@ PanelWindow {
 
     implicitHeight: 40
 
-    // Main horizontal layout distributing children evenly
-    FlexboxLayout {
-        id: flexLayout
-
+    // Three-section bar layout: left-aligned, centered, right-aligned
+    Item {
         anchors.fill: parent
         anchors.leftMargin: 5
         anchors.rightMargin: 5
 
-        wrap: FlexboxLayout.NoWrap
-        direction: FlexboxLayout.Row
-        justifyContent: FlexboxLayout.JustifySpaceAround
-        alignItems: FlexboxLayout.AlignCenter
-        gap: 5
+        // Left section: power button + workspaces
+        RowLayout {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            spacing: 5
 
-        // Interactive cells — hovering opens a popup aligned to the cell
-        Cell {
-            cellColor: Theme.cellDefault
-            Layout.preferredWidth: 30
-            onHover: s => {
-                if (s) {
-                    popupLoader.open(this, false, "power");
+            Cell {
+                cellColor: Theme.cellDefault
+                onHover: s => {
+                    if (s) {
+                        popupLoader.open(this, false, "power");
+                    }
+                }
+
+                Text {
+                    text: "⏻"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 20
+                    color: Theme.textPrimary
+                    anchors.centerIn: parent
                 }
             }
 
-            Text {
-                text: "⏻"
-                font.family: Theme.fontFamily
-                font.pixelSize: 20
-                color: Theme.textPrimary
-                anchors.centerIn: parent
-            }
-        }
+            // Workspace indicator — all workspaces in a single cell
+            Item {
+                Layout.fillHeight: true
+                Layout.topMargin: 5
+                Layout.bottomMargin: 5
+                implicitWidth: wsRow.width + 16
 
-        // Workspace indicator — all workspaces in a single cell
-        Item {
-            Layout.fillHeight: true
-            Layout.topMargin: 5
-            Layout.bottomMargin: 5
-            implicitWidth: wsRow.width + 16
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 5
+                    color: Theme.cellDefault
+                }
 
-            Rectangle {
-                anchors.fill: parent
-                radius: 5
-                color: Theme.cellDefault
-            }
+                Row {
+                    id: wsRow
+                    anchors.centerIn: parent
+                    spacing: 4
 
-            Row {
-                id: wsRow
-                anchors.centerIn: parent
-                spacing: 4
+                    Repeater {
+                        model: Workspaces.workspaces
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: Math.max(22, wsText.implicitWidth + 8)
+                            height: 22
+                            radius: 4
+                            color: modelData.focused ? Theme.cellAccent : (modelData.active ? Theme.cellAccentSecondary : "transparent")
 
-                Repeater {
-                    model: Workspaces.workspaces
-                    delegate: Rectangle {
-                        required property var modelData
-                        width: Math.max(22, wsText.implicitWidth + 8)
-                        height: 22
-                        radius: 4
-                        color: modelData.focused ? Theme.cellAccent : (modelData.active ? Theme.cellAccentSecondary : "transparent")
+                            Text {
+                                id: wsText
+                                text: modelData.name || modelData.id
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                color: Theme.textPrimary
+                                anchors.centerIn: parent
+                            }
 
-                        Text {
-                            id: wsText
-                            text: modelData.name || modelData.id
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 14
-                            color: Theme.textPrimary
-                            anchors.centerIn: parent
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: Workspaces.activate(modelData)
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: Workspaces.activate(modelData)
+                            }
                         }
                     }
                 }
             }
         }
-        Cell {
-            cellColor: Theme.cellDefault
-            onHover: s => {
-                if (s) {
-                    popupLoader.open(this, false, "calendar");
-                }
-            }
-        }
-        Cell {
-            cellColor: Theme.cellAccent
-            onPlonked: {
-                popupLoader.open(this, false, "calendar");
-            }
-        }
 
-        Cell {
-            cellColor: Theme.cellDefault
+        // Center section: clock
+        RowLayout {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
 
-            onPlonked: {
-                if (popupLoader.active && popupLoader.contentType === "sound") {
-                    popupLoader.close();
-                } else {
-                    popupLoader.open(this, true, "sound");
-                }
-            }
-            onMiddleClicked: {
-                if (Audio.sink?.audio) {
-                    Audio.sink.audio.muted = !Audio.sink.audio.muted;
-                }
-            }
-            onScrolled: delta => {
-                if (Audio.sink?.audio) {
-                    const amount = Audio.sink.audio.volume + delta * 0.01;
-                    Audio.sink.audio.volume = Math.max(0, amount);
-                }
-            }
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 4
-
-                Text {
-                    text: Audio.volume + "%"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 14
-                    color: Audio.muted ? Theme.textDim : Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
-                    anchors.verticalCenter: parent.verticalCenter
+            Cell {
+                cellColor: Theme.cellDefault
+                onHover: s => {
+                    if (s) {
+                        popupLoader.open(this);
+                    }
                 }
 
                 Text {
-                    text: Audio.muted ? "󰖁" : "󰕾"
+                    text: Time.time
                     font.family: Theme.fontFamily
-                    font.pixelSize: 18
-                    color: Audio.muted ? Theme.textDim : Theme.textPrimary
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-        }
-
-        Cell {
-            cellColor: Theme.cellDefault
-
-            onPlonked: {
-                if (popupLoader.active && popupLoader.contentType === "music") {
-                    popupLoader.close();
-                } else {
-                    popupLoader.open(this, true, "music");
-                }
-            }
-            onMiddleClicked: Music.togglePlay()
-            onScrolled: delta => {
-                if (delta > 0)
-                    Music.next();
-                else
-                    Music.previous();
-            }
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 4
-
-                Text {
-                    text: Music.playing ? "󰐊" : "󰏤"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 18
+                    font.pixelSize: 20
                     color: Theme.textPrimary
-                    visible: Music.hasPlayer
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: parent
+                }
+            }
+        }
+
+        // Right section: player + volume + notifications
+        RowLayout {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            spacing: 5
+
+            Cell {
+                cellColor: Theme.cellDefault
+
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "music") {
+                        popupLoader.close();
+                    } else {
+                        popupLoader.open(this, true, "music");
+                    }
+                }
+                onMiddleClicked: Music.togglePlay()
+                onScrolled: delta => {
+                    if (delta > 0)
+                        Music.next();
+                    else
+                        Music.previous();
+                }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Text {
+                        text: Music.playing ? "󰐊" : "󰏤"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        color: Theme.textPrimary
+                        visible: Music.hasPlayer
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: Music.hasPlayer ? (Music.activePlayer.identity || "Player") : "󰎈"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Music.hasPlayer ? 14 : 18
+                        color: Theme.textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
+            Cell {
+                cellColor: Theme.cellDefault
+
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "sound") {
+                        popupLoader.close();
+                    } else {
+                        popupLoader.open(this, true, "sound");
+                    }
+                }
+                onMiddleClicked: {
+                    if (Audio.sink?.audio) {
+                        Audio.sink.audio.muted = !Audio.sink.audio.muted;
+                    }
+                }
+                onScrolled: delta => {
+                    if (Audio.sink?.audio) {
+                        const amount = Audio.sink.audio.volume + delta * 0.01;
+                        Audio.sink.audio.volume = Math.max(0, amount);
+                    }
+                }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    Text {
+                        text: Audio.volume + "%"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        color: Audio.muted ? Theme.textDim : Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Text {
+                        text: Audio.muted ? "󰖁" : "󰕾"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        color: Audio.muted ? Theme.textDim : Theme.textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            Cell {
+                cellColor: Theme.cellMuted
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "notifications") {
+                        popupLoader.close();
+                    } else {
+                        popupLoader.open(this, true, "notifications");
+                    }
                 }
 
                 Text {
-                    text: Music.hasPlayer ? (Music.activePlayer.identity || "Player") : "󰎈"
+                    text: "󰂚"
                     font.family: Theme.fontFamily
-                    font.pixelSize: Music.hasPlayer ? 14 : 18
                     color: Theme.textPrimary
-                    anchors.verticalCenter: parent.verticalCenter
-                    elide: Text.ElideRight
+                    anchors.centerIn: parent
                 }
-            }
-        }
-
-        Cell {
-            cellColor: Theme.cellDefault
-            onHover: s => {
-                if (s) {
-                    popupLoader.open(this);
-                }
-            }
-
-            Text {
-                text: Time.time
-                font.family: Theme.fontFamily
-                font.pixelSize: 20
-                color: Theme.textPrimary
-                anchors.centerIn: parent
-            }
-        }
-
-        Cell {
-            cellColor: Theme.cellMuted
-            Layout.preferredWidth: 20
-            onPlonked: {
-                if (popupLoader.active && popupLoader.contentType === "notifications") {
-                    popupLoader.close();
-                } else {
-                    popupLoader.open(this, true, "notifications");
-                }
-            }
-
-            Text {
-                text: "󰂚"
-                font.family: Theme.fontFamily
-                color: Theme.textPrimary
-                anchors.centerIn: parent
             }
         }
     }
