@@ -62,6 +62,15 @@ Item {
         onTriggered: slideOut.start()
     }
 
+    HoverHandler {
+        onHoveredChanged: {
+            if (hovered)
+                autoCloseTimer.stop();
+            else
+                autoCloseTimer.restart();
+        }
+    }
+
     Rectangle {
         width: root.cardWidth
         height: root.cardHeight
