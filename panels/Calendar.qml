@@ -3,14 +3,15 @@ import QtQuick.Layouts
 import qs.components
 import qs.singletons
 
-// Monthly calendar with navigation arrows
+// Monthly calendar with navigation arrows and day events panel
 Item {
     id: root
-    implicitWidth: 280
+    implicitWidth: 481   // 200 events + 1 separator + 280 calendar
     implicitHeight: 340
 
     property int displayMonth: new Date().getMonth()
     property int displayYear: new Date().getFullYear()
+    property int selectedDay: _today.getDate()
 
     property real _monthScrollAccum: 0
     property real _yearScrollAccum: 0
@@ -28,6 +29,9 @@ Item {
     readonly property int _daysInMonth: new Date(displayYear, displayMonth + 1, 0).getDate()
     readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
 
+    // Recomputes whenever displayYear/displayMonth/selectedDay change
+    readonly property var _dayEvents: CalendarEvents.eventsForDate(displayYear, displayMonth, selectedDay)
+
     function _prevMonth() {
         if (displayMonth === 0) {
             displayMonth = 11;
@@ -35,6 +39,7 @@ Item {
         } else {
             displayMonth--;
         }
+        selectedDay = Math.min(selectedDay, _daysInMonth);
     }
 
     function _nextMonth() {
@@ -44,178 +49,307 @@ Item {
         } else {
             displayMonth++;
         }
+        selectedDay = Math.min(selectedDay, _daysInMonth);
     }
 
-    ColumnLayout {
+    Row {
         anchors.fill: parent
-        spacing: 4
+        spacing: 0
 
-        // Header: < Month Year >
-        Row {
-            Layout.fillWidth: true
-            height: 30
-
-            ArrowButton {
-                text: "<"
-                onClicked: root._prevMonth()
-            }
-
-            Item {
-                width: parent.width - 60
-                height: parent.height
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 6
-
-                    Text {
-                        id: monthText
-                        text: root._monthNames[root.displayMonth]
-                        color: monthArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 16
-                        font.bold: true
-
-                        MouseArea {
-                            id: monthArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onWheel: event => {
-                                root._monthScrollAccum += event.angleDelta.y;
-                                while (root._monthScrollAccum >= 120) {
-                                    root._nextMonth();
-                                    root._monthScrollAccum -= 120;
-                                }
-                                while (root._monthScrollAccum <= -120) {
-                                    root._prevMonth();
-                                    root._monthScrollAccum += 120;
-                                }
-                            }
-                        }
-                    }
-
-                    Text {
-                        id: yearText
-                        text: root.displayYear
-                        color: yearArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 16
-                        font.bold: true
-
-                        MouseArea {
-                            id: yearArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onWheel: event => {
-                                root._yearScrollAccum += event.angleDelta.y;
-                                while (root._yearScrollAccum >= 120) {
-                                    root.displayYear++;
-                                    root._yearScrollAccum -= 120;
-                                }
-                                while (root._yearScrollAccum <= -120) {
-                                    root.displayYear--;
-                                    root._yearScrollAccum += 120;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            ArrowButton {
-                text: ">"
-                onClicked: root._nextMonth()
-            }
-        }
-
-        // "Today" button — visible only when not viewing the current month/year
+        // Events panel (left, 200px)
         Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 18
-            visible: root.displayMonth !== root._today.getMonth()
-                  || root.displayYear  !== root._today.getFullYear()
+            width: 200
+            height: parent.height
 
-            Text {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: "↩ Today"
-                font.family: Theme.fontFamily
-                font.pixelSize: 12
-                color: todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-
-                MouseArea {
-                    id: todayArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.displayMonth = root._today.getMonth();
-                        root.displayYear  = root._today.getFullYear();
-                    }
+            ColumnLayout {
+                anchors {
+                    fill: parent
+                    margins: 10
                 }
-            }
-        }
+                spacing: 6
 
-        // Day-of-week labels
-        Row {
-            Layout.fillWidth: true
-            height: 20
-
-            Repeater {
-                model: root._dayNames
+                // Selected date label
                 Text {
-                    required property string modelData
-                    width: parent.width / 7
-                    height: parent.height
-                    text: modelData
+                    text: {
+                        var d = new Date(root.displayYear, root.displayMonth, root.selectedDay);
+                        var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                        return days[d.getDay()] + ", " + root.selectedDay + " " + root._monthNames[root.displayMonth].substring(0, 3);
+                    }
                     color: Theme.textSecondary
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    font.bold: true
+                }
+
+                // Event cards
+                ListView {
+                    id: eventsList
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 6
+                    model: root._dayEvents
+
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 50
+                        radius: 6
+                        color: Theme.cellDefault
+
+                        // Accent bar
+                        Rectangle {
+                            width: 3
+                            radius: 2
+                            color: parent.modelData.color
+                            anchors {
+                                left: parent.left
+                                top: parent.top
+                                bottom: parent.bottom
+                                leftMargin: 5
+                                topMargin: 5
+                                bottomMargin: 5
+                            }
+                        }
+
+                        // Title + time
+                        Column {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                leftMargin: 14
+                                rightMargin: 6
+                                verticalCenter: parent.verticalCenter
+                            }
+                            spacing: 2
+
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 13
+                                font.bold: true
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                text: modelData.time
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+
+                    // Empty state
+                    Text {
+                        anchors.centerIn: parent
+                        text: "No events"
+                        color: Theme.textTertiary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        visible: eventsList.count === 0
+                    }
                 }
             }
         }
 
-        // 6-row date grid
-        Grid {
-            id: dateGrid
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            columns: 7
-            rows: 6
+        // Separator
+        Rectangle {
+            width: 1
+            height: parent.height
+            color: Theme.textDim
+            opacity: 0.3
+        }
 
-            Repeater {
-                model: 42
+        // Calendar panel (right, 280px)
+        Item {
+            width: 280
+            height: parent.height
 
-                Rectangle {
-                    required property int index
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 4
 
-                    // Compute day number and whether it belongs to the current month
-                    property bool isCurrent: index >= root._startDow
-                        && index < root._startDow + root._daysInMonth
-                    property int dayNum: isCurrent
-                        ? index - root._startDow + 1
-                        : (index < root._startDow
-                            ? root._prevMonthDays - root._startDow + index + 1
-                            : index - root._startDow - root._daysInMonth + 1)
-                    property bool isToday: isCurrent
-                        && dayNum === root._today.getDate()
-                        && root.displayMonth === root._today.getMonth()
-                        && root.displayYear === root._today.getFullYear()
+                // Header: < Month Year >
+                Row {
+                    Layout.fillWidth: true
+                    height: 30
 
-                    width: dateGrid.width / 7
-                    height: dateGrid.height / 6
-                    color: isToday ? Theme.todayHighlight : "transparent"
-                    radius: 4
+                    ArrowButton {
+                        text: "<"
+                        onClicked: root._prevMonth()
+                    }
+
+                    Item {
+                        width: parent.width - 60
+                        height: parent.height
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Text {
+                                id: monthText
+                                text: root._monthNames[root.displayMonth]
+                                color: monthArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 16
+                                font.bold: true
+
+                                MouseArea {
+                                    id: monthArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onWheel: event => {
+                                        root._monthScrollAccum += event.angleDelta.y;
+                                        while (root._monthScrollAccum >= 120) {
+                                            root._nextMonth();
+                                            root._monthScrollAccum -= 120;
+                                        }
+                                        while (root._monthScrollAccum <= -120) {
+                                            root._prevMonth();
+                                            root._monthScrollAccum += 120;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                id: yearText
+                                text: root.displayYear
+                                color: yearArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 16
+                                font.bold: true
+
+                                MouseArea {
+                                    id: yearArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onWheel: event => {
+                                        root._yearScrollAccum += event.angleDelta.y;
+                                        while (root._yearScrollAccum >= 120) {
+                                            root.displayYear++;
+                                            root._yearScrollAccum -= 120;
+                                        }
+                                        while (root._yearScrollAccum <= -120) {
+                                            root.displayYear--;
+                                            root._yearScrollAccum += 120;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ArrowButton {
+                        text: ">"
+                        onClicked: root._nextMonth()
+                    }
+                }
+
+                // "Today" button — visible only when not viewing the current month/year
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 18
+                    visible: root.displayMonth !== root._today.getMonth()
+                          || root.displayYear  !== root._today.getFullYear()
 
                     Text {
-                        anchors.centerIn: parent
-                        text: dayNum
-                        color: isCurrent ? Theme.textPrimary : Theme.textDim
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "↩ Today"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 14
-                        font.bold: isToday
+                        font.pixelSize: 12
+                        color: todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+
+                        MouseArea {
+                            id: todayArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.displayMonth = root._today.getMonth();
+                                root.displayYear  = root._today.getFullYear();
+                            }
+                        }
+                    }
+                }
+
+                // Day-of-week labels
+                Row {
+                    Layout.fillWidth: true
+                    height: 20
+
+                    Repeater {
+                        model: root._dayNames
+                        Text {
+                            required property string modelData
+                            width: parent.width / 7
+                            height: parent.height
+                            text: modelData
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                // 6-row date grid
+                Grid {
+                    id: dateGrid
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    columns: 7
+                    rows: 6
+
+                    Repeater {
+                        model: 42
+
+                        Rectangle {
+                            required property int index
+
+                            // Compute day number and whether it belongs to the current month
+                            property bool isCurrent: index >= root._startDow
+                                && index < root._startDow + root._daysInMonth
+                            property int dayNum: isCurrent
+                                ? index - root._startDow + 1
+                                : (index < root._startDow
+                                    ? root._prevMonthDays - root._startDow + index + 1
+                                    : index - root._startDow - root._daysInMonth + 1)
+                            property bool isToday: isCurrent
+                                && dayNum === root._today.getDate()
+                                && root.displayMonth === root._today.getMonth()
+                                && root.displayYear === root._today.getFullYear()
+                            property bool isSelected: isCurrent && dayNum === root.selectedDay
+
+                            width: dateGrid.width / 7
+                            height: dateGrid.height / 6
+                            color: isToday ? Theme.todayHighlight : "transparent"
+                            radius: 4
+                            border.width: isSelected && !isToday ? 1 : 0
+                            border.color: Theme.sliderAccent
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: dayNum
+                                color: isCurrent ? Theme.textPrimary : Theme.textDim
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: isToday
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: parent.isCurrent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.selectedDay = parent.dayNum
+                            }
+                        }
                     }
                 }
             }
