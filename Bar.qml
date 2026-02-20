@@ -17,6 +17,10 @@ PanelWindow {
 
     screen: modelData
 
+    // True when the notifications popup is the active panel — suppresses HUD toasts
+    property bool notifPanelOpen: popupLoader.active && popupLoader.contentType === "notifications"
+    onNotifPanelOpenChanged: Notifications.setHudPanelOpen(notifPanelOpen)
+
     // Close this screen's popup when another screen's popup opens
     onActiveScreenChanged: {
         if (activeScreen !== bar.modelData) {

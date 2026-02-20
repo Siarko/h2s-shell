@@ -3,10 +3,9 @@ import Quickshell
 import QtQuick
 import qs.singletons
 
-// Creates a panel instance for each connected screen
-Variants {
+// Top-level shell root: one Bar and one Hud per screen
+QtObject {
     id: root
-    model: Quickshell.screens
 
     // Tracks which screen currently has an open popup, so others can close theirs
     property var activeScreen: null
@@ -14,10 +13,20 @@ Variants {
     // Force the notification server to register on DBus at startup
     property var _notifications: Notifications.notifications
 
-    delegate: Component {
-        Bar {
-            activeScreen: root.activeScreen
-            onPopupOpened: root.activeScreen = modelData
+    property var _bars: Variants {
+        model: Quickshell.screens
+        delegate: Component {
+            Bar {
+                activeScreen: root.activeScreen
+                onPopupOpened: root.activeScreen = modelData
+            }
+        }
+    }
+
+    property var _huds: Variants {
+        model: Quickshell.screens
+        delegate: Component {
+            Hud {}
         }
     }
 }
