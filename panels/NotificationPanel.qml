@@ -38,6 +38,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
                 color: Theme.textSecondary
+                visible: notificationList.count > 0
 
                 MouseArea {
                     anchors.fill: parent
