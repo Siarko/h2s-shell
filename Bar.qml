@@ -313,6 +313,7 @@ PanelWindow {
             }
 
             Cell {
+                id: notifCell
                 cellColor: Theme.cellDefault
                 onPlonked: {
                     if (popupLoader.active && popupLoader.contentType === "notifications") {
@@ -328,6 +329,15 @@ PanelWindow {
                     color: Theme.textPrimary
                     anchors.centerIn: parent
                 }
+            }
+        }
+    }
+
+    Connections {
+        target: Notifications
+        function onOpenPanelRequested() {
+            if (!popupLoader.active || popupLoader.contentType !== "notifications") {
+                popupLoader.open(notifCell, true, "notifications")
             }
         }
     }

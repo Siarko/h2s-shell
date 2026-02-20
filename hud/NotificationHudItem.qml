@@ -16,6 +16,10 @@ Item {
     property var currentNotif: null
     readonly property int cardWidth: 360
 
+    // Resting x: shift left by an extra 28px (badge 36px - existing 16px gap) when
+    // the queue badge is visible so the toast doesn't overlap it.
+    readonly property int restX: screenWidth - cardWidth - (Notifications.hudQueue.length > 0 ? 44 : 16)
+
     // Start off-screen to the right; animations move it in and out
     x: screenWidth
     y: 56   // 40px bar + 16px gap
@@ -49,8 +53,13 @@ Item {
         function onHudQueueChanged() {
             // Only the screen that owns the focused workspace shows toasts
             if (Workspaces.focused?.monitor?.name !== root.screenModelData.name) return;
-            // Already showing something — wait for it to finish
-            if (root.currentNotif !== null) return;
+            if (root.currentNotif !== null) {
+                // Toast already visible — nudge its x to account for badge appearing/disappearing
+                if (!slideIn.running && !slideOut.running) {
+                    nudge.restart();
+                }
+                return;
+            }
             // Don't interrupt an ongoing slide-out
             if (slideOut.running) return;
             root.showNext();
@@ -69,7 +78,7 @@ Item {
         target: root
         property: "x"
         from: root.screenWidth
-        to: root.screenWidth - root.cardWidth - 16
+        to: root.restX
         duration: 250
         easing.type: Easing.OutCubic
     }
@@ -78,11 +87,20 @@ Item {
         id: slideOut
         target: root
         property: "x"
-        from: root.screenWidth - root.cardWidth - 16
         to: root.screenWidth
         duration: 200
         easing.type: Easing.InCubic
         onStopped: root.showNext()
+    }
+
+    // Nudge the resting toast when the badge appears/disappears mid-show.
+    NumberAnimation {
+        id: nudge
+        target: root
+        property: "x"
+        to: root.restX
+        duration: 200
+        easing.type: Easing.OutCubic
     }
 
     Timer {

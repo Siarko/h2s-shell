@@ -24,6 +24,7 @@ Singleton {
     }
 
     signal dismissAllRequested()
+    signal openPanelRequested()
 
     function dismissAll() {
         dismissAllRequested();

@@ -28,12 +28,45 @@ PanelWindow {
     // notifItem.x starts at screenWidth (off-screen) so the region covers nothing
     // until the toast slides in, at which point it covers the card exactly.
     mask: Region {
-        item: notifItem
+        Region { item: notifItem }
+        Region { item: queueBadge }
     }
 
     NotificationHudItem {
         id: notifItem
         screenWidth: hud.implicitWidth
         screenModelData: hud.modelData
+    }
+
+    // Badge showing how many notifications are waiting in the queue.
+    // Positioned flush to the right screen edge, just below the bar.
+    Rectangle {
+        id: queueBadge
+        x: hud.implicitWidth - width
+        y: 56
+        width: 36
+        height: notifItem.height
+        topLeftRadius: 6
+        bottomLeftRadius: 6
+        color: Theme.cellDefault
+
+        opacity: Notifications.hudQueue.length > 0 ? 1.0 : 0.0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+
+        Text {
+            anchors.centerIn: parent
+            text: Notifications.hudQueue.length
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+            font.bold: true
+            color: Theme.textPrimary
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Notifications.openPanelRequested()
+        }
     }
 }
