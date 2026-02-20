@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 import Quickshell.Bluetooth
+import Quickshell.Services.SystemTray
 import qs.components
 import qs.panels
 import qs.singletons
@@ -251,11 +252,57 @@ PanelWindow {
                     Text {
                         visible: (Bluetooth.defaultAdapter?.enabled ?? false)
                             && Bluetooth.devices.count > 0
-                        text: Bluetooth.devices.count
+                        text: Bluetooth.devices?.count ?? ""
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
                         color: Theme.textPrimary
                         anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+            }
+
+            // System tray icons
+            Row {
+                spacing: 4
+                Layout.fillHeight: true
+
+                Repeater {
+                    model: SystemTray.items
+
+                    delegate: Item {
+                        id: trayDelegate
+                        required property SystemTrayItem modelData
+
+                        width: 24
+                        height: parent.height
+
+                        Image {
+                            anchors.centerIn: parent
+                            source: trayDelegate.modelData.icon
+                            width: 18
+                            height: 18
+                            sourceSize: Qt.size(18, 18)
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                            onClicked: event => {
+                                const item = trayDelegate.modelData
+                                const wantsMenu = event.button === Qt.RightButton
+                                    || item.onlyMenu
+                                if (wantsMenu && item.hasMenu) {
+                                    if (popupLoader.active && popupLoader.contentType === "tray-menu") {
+                                        popupLoader.close()
+                                    } else {
+                                        popupLoader.open(trayDelegate, true, "tray-menu", item.menu)
+                                    }
+                                } else if (!item.onlyMenu) {
+                                    item.activate()
+                                }
+                            }
+                        }
                     }
                 }
             }

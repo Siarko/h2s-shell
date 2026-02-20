@@ -22,6 +22,8 @@ LazyLoader {
     property bool persistent: false
     // Which content to display in the popup ("calendar" or "power")
     property string contentType: "calendar"
+    // Menu handle passed to TrayMenu when contentType === "tray-menu"
+    property var menuHandle: null
 
     // Start the close animation instead of immediately deactivating
     function close() {
@@ -31,9 +33,10 @@ LazyLoader {
     }
 
     // Open the popup aligned to the given element
-    function open(element, persistent = false, contentType = "calendar") {
+    function open(element, persistent = false, contentType = "calendar", menuHandle = null) {
         popupLoader.persistent = persistent;
         popupLoader.contentType = contentType;
+        popupLoader.menuHandle = menuHandle;
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = mapped.x;
         popupLoader.popupWidth = element.width;
@@ -150,7 +153,15 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : popupLoader.contentType === "bluetooth" ? bluetoothComponent : calendarComponent
+                        sourceComponent: popupLoader.contentType === "tray-menu" ? trayMenuComponent : popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : popupLoader.contentType === "bluetooth" ? bluetoothComponent : calendarComponent
+                    }
+
+                    Component {
+                        id: trayMenuComponent
+                        TrayMenu {
+                            menuHandle: popupLoader.menuHandle
+                            onCloseRequested: popupLoader.close()
+                        }
                     }
 
                     Component {
