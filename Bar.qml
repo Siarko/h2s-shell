@@ -48,8 +48,10 @@ PanelWindow {
 
             Cell {
                 cellColor: Theme.cellDefault
-                onHover: s => {
-                    if (s) {
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "power") {
+                        popupLoader.close();
+                    } else {
                         popupLoader.open(this, false, "power");
                     }
                 }
@@ -143,11 +145,9 @@ PanelWindow {
             Cell {
                 cellColor: Theme.cellDefault
 
-                onPlonked: {
-                    if (popupLoader.active && popupLoader.contentType === "music") {
-                        popupLoader.close();
-                    } else {
-                        popupLoader.open(this, true, "music");
+                onHover: state => {
+                    if (states) {
+                        popupLoader.open(this, false, "music");
                     }
                 }
                 onMiddleClicked: Music.togglePlay()
@@ -250,8 +250,7 @@ PanelWindow {
                     }
 
                     Text {
-                        visible: (Bluetooth.defaultAdapter?.enabled ?? false)
-                            && Bluetooth.devices.count > 0
+                        visible: (Bluetooth.defaultAdapter?.enabled ?? false) && Bluetooth.devices.count > 0
                         text: Bluetooth.devices?.count ?? ""
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
@@ -272,6 +271,7 @@ PanelWindow {
                     delegate: Item {
                         id: trayDelegate
                         required property SystemTrayItem modelData
+                        required property int index
 
                         width: 24
                         height: parent.height
@@ -289,17 +289,18 @@ PanelWindow {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                             onClicked: event => {
-                                const item = trayDelegate.modelData
-                                const wantsMenu = event.button === Qt.RightButton
-                                    || item.onlyMenu
+                                const item = trayDelegate.modelData;
+                                const wantsMenu = event.button === Qt.RightButton || item.onlyMenu;
                                 if (wantsMenu && item.hasMenu) {
-                                    if (popupLoader.active && popupLoader.contentType === "tray-menu") {
-                                        popupLoader.close()
+                                    if (popupLoader.active && popupLoader.contentType === "tray-menu" && Tray.menuHandle === item.menu) {
+                                        popupLoader.close();
                                     } else {
-                                        popupLoader.open(trayDelegate, true, "tray-menu", item.menu)
+                                        Tray.calculateDirection(trayDelegate.index);
+                                        Tray.menuHandle = item.menu;
+                                        popupLoader.open(trayDelegate, true, "tray-menu");
                                     }
                                 } else if (!item.onlyMenu) {
-                                    item.activate()
+                                    item.activate();
                                 }
                             }
                         }

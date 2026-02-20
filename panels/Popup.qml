@@ -22,8 +22,6 @@ LazyLoader {
     property bool persistent: false
     // Which content to display in the popup ("calendar" or "power")
     property string contentType: "calendar"
-    // Menu handle passed to TrayMenu when contentType === "tray-menu"
-    property var menuHandle: null
 
     // Start the close animation instead of immediately deactivating
     function close() {
@@ -33,10 +31,9 @@ LazyLoader {
     }
 
     // Open the popup aligned to the given element
-    function open(element, persistent = false, contentType = "calendar", menuHandle = null) {
+    function open(element, persistent = false, contentType = "calendar") {
         popupLoader.persistent = persistent;
         popupLoader.contentType = contentType;
-        popupLoader.menuHandle = menuHandle;
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = mapped.x;
         popupLoader.popupWidth = element.width;
@@ -48,7 +45,6 @@ LazyLoader {
     // Popup window positioned at the top-left, offset by popupPosition
     PanelWindow {
         id: popup
-        WlrLayershell.namespace: "bar"
 
         anchors {
             top: true
@@ -159,7 +155,6 @@ LazyLoader {
                     Component {
                         id: trayMenuComponent
                         TrayMenu {
-                            menuHandle: popupLoader.menuHandle
                             onCloseRequested: popupLoader.close()
                         }
                     }
