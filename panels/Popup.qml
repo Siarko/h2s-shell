@@ -146,10 +146,20 @@ LazyLoader {
 
                     color: Theme.popupBackground
 
+                    readonly property var _componentMap: ({
+                        "tray-menu":     trayMenuComponent,
+                        "power":         powerMenuComponent,
+                        "notifications": notificationsComponent,
+                        "sound":         soundComponent,
+                        "music":         musicComponent,
+                        "bluetooth":     bluetoothComponent,
+                        "calendar":      calendarComponent
+                    })
+
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: popupLoader.contentType === "tray-menu" ? trayMenuComponent : popupLoader.contentType === "power" ? powerMenuComponent : popupLoader.contentType === "notifications" ? notificationsComponent : popupLoader.contentType === "sound" ? soundComponent : popupLoader.contentType === "music" ? musicComponent : popupLoader.contentType === "bluetooth" ? bluetoothComponent : calendarComponent
+                        sourceComponent: content._componentMap[popupLoader.contentType] ?? calendarComponent
                     }
 
                     Component {

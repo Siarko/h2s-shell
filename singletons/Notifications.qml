@@ -20,6 +20,11 @@ Singleton {
             var s = String(now.getSeconds()).padStart(2, '0');
             timestamps[notification.id] = h + ":" + m + ":" + s;
             if (!hudPanelOpen) enqueueHudNotification(notification);
+            // Remove timestamp when this notification is dismissed
+            notification.trackedChanged.connect(function() {
+                if (!notification.tracked)
+                    delete timestamps[notification.id];
+            });
         }
     }
 

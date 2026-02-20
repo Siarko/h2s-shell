@@ -10,14 +10,14 @@ Item {
     signal closeRequested
 
     implicitWidth: 220
-    // Track whichever column is incoming so height follows new content immediately
-    implicitHeight: activeSlot === 0 ? col0.implicitHeight : col1.implicitHeight
+    // Track whichever slot is incoming so height follows new content immediately
+    implicitHeight: activeSlot === 0 ? slot0.implicitHeight : slot1.implicitHeight
     clip: true
 
     property var menuStack: []
 
     // Which slot is currently the "active" (fully visible) one.
-    // 0 → col0/opener0 is showing, 1 → col1/opener1 is showing.
+    // 0 → slot0/opener0 is showing, 1 → slot1/opener1 is showing.
     property int activeSlot: 0
 
     // Reset when a new top-level menu is opened
@@ -39,8 +39,8 @@ Item {
         next.menu = Tray.menuHandle;
         root.beginTransition(Tray.slideDirection);
     }
+
     // Navigate into a submenu entry.
-    // Lives on root so opener IDs are always in scope.
     function navigateToSubmenu(entry) {
         const curr = root.activeSlot === 0 ? opener0 : opener1;
         const next = root.activeSlot === 0 ? opener1 : opener0;
@@ -49,25 +49,33 @@ Item {
         root.beginTransition(1);
     }
 
+    // Navigate back to the previous menu level.
+    function navigateBack() {
+        const next = root.activeSlot === 0 ? opener1 : opener0;
+        next.menu = root.menuStack[root.menuStack.length - 1];
+        root.menuStack = root.menuStack.slice(0, root.menuStack.length - 1);
+        root.beginTransition(-1);
+    }
+
     // direction: +1 = new slides in from right, -1 = new slides in from left
     function beginTransition(direction) {
-        const currCol = root.activeSlot === 0 ? col0 : col1;
-        const nextCol = root.activeSlot === 0 ? col1 : col0;
+        const currSlot = root.activeSlot === 0 ? slot0 : slot1;
+        const nextSlot = root.activeSlot === 0 ? slot1 : slot0;
 
-        // Position next column off-screen before the first frame renders
-        nextCol.x = direction * root.implicitWidth;
+        // Position next slot off-screen before the first frame renders
+        nextSlot.x = direction * root.implicitWidth;
 
         // Switch activeSlot so implicitHeight immediately tracks new content
         root.activeSlot = 1 - root.activeSlot;
 
         outAnim.stop();
         inAnim.stop();
-        outAnim.target = currCol;
+        outAnim.target = currSlot;
         outAnim.from = 0;
         outAnim.to = -direction * root.implicitWidth;
         outAnim.restart();
 
-        inAnim.target = nextCol;
+        inAnim.target = nextSlot;
         inAnim.from = direction * root.implicitWidth;
         inAnim.to = 0;
         inAnim.restart();
@@ -86,7 +94,7 @@ Item {
         id: opener1
     }
 
-    // Outgoing column slides out
+    // Outgoing slot slides out
     NumberAnimation {
         id: outAnim
         property: "x"
@@ -94,7 +102,7 @@ Item {
         easing.type: Easing.OutCubic
     }
 
-    // Incoming column slides in
+    // Incoming slot slides in
     NumberAnimation {
         id: inAnim
         property: "x"
@@ -201,153 +209,97 @@ Item {
         }
     }
 
-    // Slot 0
-    Column {
-        id: col0
-        width: parent.width
-        x: 0
-        spacing: 0
+    // Menu slot template — instantiated twice (slot0/slot1) for slide transitions.
+    // `opener` is set from the Loader's onLoaded handler.
+    Component {
+        id: menuSlotComponent
 
-        Item {
-            visible: root.menuStack.length > 0
-            width: col0.width
-            height: 30
+        Column {
+            property var opener: null
+            width: root.width
+            spacing: 0
 
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 2
-                radius: 4
-                color: backArea0.containsMouse ? Theme.buttonHover : "transparent"
+            // Back button — visible when inside a submenu
+            Item {
+                visible: root.menuStack.length > 0
+                width: parent.width
+                height: 30
 
-                RowLayout {
+                Rectangle {
                     anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 4
+                    anchors.margins: 2
+                    radius: 4
+                    color: backArea.containsMouse ? Theme.buttonHover : "transparent"
 
-                    Text {
-                        text: "‹"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 16
-                        color: Theme.textSecondary
-                    }
-                    Text {
-                        text: "Back"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        color: Theme.textSecondary
-                        Layout.fillWidth: true
-                    }
-                }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        spacing: 4
 
-                MouseArea {
-                    id: backArea0
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        const next = root.activeSlot === 0 ? opener1 : opener0;
-                        next.menu = root.menuStack[root.menuStack.length - 1];
-                        root.menuStack = root.menuStack.slice(0, root.menuStack.length - 1);
-                        root.beginTransition(-1);
+                        Text {
+                            text: "‹"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 16
+                            color: Theme.textSecondary
+                        }
+                        Text {
+                            text: "Back"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                            color: Theme.textSecondary
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    MouseArea {
+                        id: backArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.navigateBack()
                     }
                 }
             }
-        }
 
-        Item {
-            visible: root.menuStack.length > 0
-            width: col0.width
-            height: 9
+            // Separator below back button
+            Item {
+                visible: root.menuStack.length > 0
+                width: parent.width
+                height: 9
 
-            Rectangle {
-                x: 8
-                width: col0.width - 16
-                height: 1
-                anchors.verticalCenter: parent.verticalCenter
-                color: Theme.textDim
-                opacity: 0.2
+                Rectangle {
+                    x: 8
+                    width: parent.width - 16
+                    height: 1
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Theme.textDim
+                    opacity: 0.2
+                }
             }
-        }
 
-        Repeater {
-            model: opener0.children
-            delegate: menuDelegate
+            Repeater {
+                model: opener ? opener.children : null
+                delegate: menuDelegate
+            }
         }
     }
 
-    // Slot 1
-    Column {
-        id: col1
-        width: parent.width
+    // Slot 0
+    Loader {
+        id: slot0
+        sourceComponent: menuSlotComponent
+        width: root.width
         x: 0
-        spacing: 0
+        onLoaded: item.opener = opener0
+    }
 
-        Item {
-            visible: root.menuStack.length > 0
-            width: col1.width
-            height: 30
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 2
-                radius: 4
-                color: backArea1.containsMouse ? Theme.buttonHover : "transparent"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 4
-
-                    Text {
-                        text: "‹"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 16
-                        color: Theme.textSecondary
-                    }
-                    Text {
-                        text: "Back"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 13
-                        color: Theme.textSecondary
-                        Layout.fillWidth: true
-                    }
-                }
-
-                MouseArea {
-                    id: backArea1
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        const next = root.activeSlot === 0 ? opener1 : opener0;
-                        next.menu = root.menuStack[root.menuStack.length - 1];
-                        root.menuStack = root.menuStack.slice(0, root.menuStack.length - 1);
-                        root.beginTransition(-1);
-                    }
-                }
-            }
-        }
-
-        Item {
-            visible: root.menuStack.length > 0
-            width: col1.width
-            height: 9
-
-            Rectangle {
-                x: 8
-                width: col1.width - 16
-                height: 1
-                anchors.verticalCenter: parent.verticalCenter
-                color: Theme.textDim
-                opacity: 0.2
-            }
-        }
-
-        Repeater {
-            model: opener1.children
-            delegate: menuDelegate
-        }
+    // Slot 1
+    Loader {
+        id: slot1
+        sourceComponent: menuSlotComponent
+        width: root.width
+        x: 0
+        onLoaded: item.opener = opener1
     }
 }

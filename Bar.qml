@@ -150,7 +150,7 @@ PanelWindow {
                 cellColor: Theme.cellDefault
 
                 onHover: state => {
-                    if (states) {
+                    if (state) {
                         popupLoader.open(this, false, "music");
                     }
                 }
@@ -204,7 +204,7 @@ PanelWindow {
                 onScrolled: delta => {
                     if (Audio.sink?.audio) {
                         const amount = Audio.sink.audio.volume + delta * 0.01;
-                        Audio.sink.audio.volume = Math.max(0, amount);
+                        Audio.sink.audio.volume = Math.max(0, Math.min(1.5, amount));
                     }
                 }
 
@@ -337,7 +337,7 @@ PanelWindow {
         target: Notifications
         function onOpenPanelRequested() {
             if (!popupLoader.active || popupLoader.contentType !== "notifications") {
-                popupLoader.open(notifCell, true, "notifications")
+                popupLoader.open(notifCell, true, "notifications");
             }
         }
     }
