@@ -69,6 +69,19 @@ PanelWindow {
                 }
             }
 
+            Cell {
+                cellColor: Theme.cellDefault
+                onPlonked: settingsWindow.visible = !settingsWindow.visible
+
+                Text {
+                    text: "⚙"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 18
+                    color: Theme.textPrimary
+                    anchors.centerIn: parent
+                }
+            }
+
             // Workspace indicator — all workspaces in a single cell
             Item {
                 Layout.fillHeight: true
@@ -340,6 +353,10 @@ PanelWindow {
                 popupLoader.open(notifCell, true, "notifications");
             }
         }
+    }
+
+    SettingsWindow {
+        id: settingsWindow
     }
 
     // Popup panel that appears below the hovered cell
