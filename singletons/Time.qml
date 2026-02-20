@@ -7,7 +7,7 @@ import QtQuick
 Singleton {
     id: time
     readonly property string time: {
-        Qt.formatDateTime(clock.date, "hh:mm:ss dd-MM-yyyy");
+        Qt.formatDateTime(clock.date, Config.datetimeFormat);
     }
 
     SystemClock {
