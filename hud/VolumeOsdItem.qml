@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
 // Self-contained volume OSD. Slides in from the right edge at screen center
@@ -100,85 +101,15 @@ Item {
             }
 
             // Vertical slider
-            Item {
-                id: sliderItem
+            VerticalSlider {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-
-                readonly property real maxVolume: 1.5
-                readonly property real rawVolume: Audio.volume / 100.0
-                // Clamp to 1.0 so the fill never exceeds the track
-                readonly property real normalized: Math.min(rawVolume / maxVolume, 1.0)
-                // Leave 6 px top + 6 px bottom for the thumb to overhang
-                readonly property real trackH: height - 12
-                readonly property real fillH: normalized * trackH
-                // Y-offset on the track where 100% volume sits
-                readonly property real markPos: trackH * (1.0 / maxVolume)
-
-                // Track background
-                Rectangle {
-                    id: trackBg
-                    x: (parent.width - width) / 2
-                    y: 6
-                    width: 6
-                    height: sliderItem.trackH
-                    radius: 3
-                    color: Theme.textDim
-
-                    // Normal fill (0 – 100%)
-                    Rectangle {
-                        id: normalFill
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Math.min(sliderItem.fillH, sliderItem.markPos)
-                        radius: parent.radius
-                        color: Theme.sliderAccent
-                    }
-
-                    // Over fill (>100%), stacked above the normal fill
-                    Rectangle {
-                        anchors.bottom: normalFill.top
-                        width: parent.width
-                        height: Math.max(0, sliderItem.fillH - sliderItem.markPos)
-                        radius: parent.radius
-                        color: Theme.textWarning
-                    }
-                }
-
-                // Thumb
-                Rectangle {
-                    x: (parent.width - width) / 2
-                    y: 6 + sliderItem.trackH - sliderItem.fillH - height / 2
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: dragArea.pressed ? Theme.textSecondary : Theme.textPrimary
-                }
-
-                MouseArea {
-                    id: dragArea
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-
-                    onPressed: mouse => setVol(mouse.y)
-                    onPositionChanged: mouse => {
-                        if (pressed)
-                            setVol(mouse.y);
-                    }
-                    onWheel: event => {
-                        if (!Audio.sink?.audio)
-                            return;
-                        var delta = event.angleDelta.y / 120 * 0.02;
-                        Audio.sink.audio.volume = Math.max(0, Math.min(sliderItem.maxVolume, Audio.sink.audio.volume + delta));
-                    }
-
-                    function setVol(mouseY) {
-                        if (!Audio.sink?.audio)
-                            return;
-                        // mouseY within the track (y=6 … y=6+trackH)
-                        var frac = 1.0 - Math.max(0, Math.min(1, (mouseY - 6) / sliderItem.trackH));
-                        Audio.sink.audio.volume = frac * sliderItem.maxVolume;
-                    }
+                value: Audio.volume / 100.0
+                maxValue: 1.5
+                warningThreshold: 1.0
+                onMoved: newValue => {
+                    if (Audio.sink?.audio)
+                        Audio.sink.audio.volume = newValue;
                 }
             }
         }
