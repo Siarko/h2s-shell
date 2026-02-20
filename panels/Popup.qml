@@ -183,6 +183,7 @@ LazyLoader {
                         id: notificationsComponent
                         NotificationPanel {
                             screenHeight: popup.screen.height
+                            onCloseRequested: popupLoader.close()
                         }
                     }
 

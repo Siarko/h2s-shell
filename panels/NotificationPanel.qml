@@ -6,8 +6,13 @@ Item {
     id: root
     required property int screenHeight
 
+    signal closeRequested
+
     implicitWidth: 350
     implicitHeight: screenHeight - 40 - 16
+
+    // Set when "Clear all" is clicked; triggers success animation once list empties
+    property bool clearing: false
 
     ColumnLayout {
         anchors.fill: parent
@@ -37,7 +42,12 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Notifications.dismissAll()
+                    onClicked: {
+                        if (notificationList.count > 0) {
+                            root.clearing = true;
+                            Notifications.dismissAll();
+                        }
+                    }
                 }
             }
         }
@@ -50,6 +60,13 @@ Item {
             clip: true
             spacing: 6
             model: Notifications.notifications
+
+            onCountChanged: {
+                if (count === 0 && root.clearing) {
+                    root.clearing = false;
+                    successAnim.start();
+                }
+            }
 
             delegate: Item {
                 id: delegateRoot
@@ -150,22 +167,26 @@ Item {
                             }
                         }
 
-                        Text {
+                        TextEdit {
                             text: delegateRoot.modelData.summary
                             font.family: Theme.fontFamily
                             font.pixelSize: 14
                             font.bold: true
                             color: Theme.textPrimary
                             Layout.fillWidth: true
-                            elide: Text.ElideRight
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: Text.NoWrap
                         }
 
-                        Text {
+                        TextEdit {
                             text: delegateRoot.modelData.body
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             color: Theme.textBody
                             Layout.fillWidth: true
+                            readOnly: true
+                            selectByMouse: true
                             wrapMode: Text.WordWrap
                         }
                     }
@@ -179,7 +200,93 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: 14
                 color: Theme.textTertiary
-                visible: notificationList.count === 0
+                visible: notificationList.count === 0 && successOverlay.opacity === 0
+            }
+        }
+    }
+
+    // Success overlay — shown after "Clear all" empties the list
+    Item {
+        id: successOverlay
+        anchors.fill: parent
+        visible: opacity > 0
+        opacity: 0
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.popupBackground
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 10
+
+            Text {
+                id: checkIcon
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "✓"
+                font.family: Theme.fontFamily
+                font.pixelSize: 52
+                color: Theme.textPrimary
+                scale: 0
+                transformOrigin: Item.Center
+            }
+
+            Text {
+                id: successLabel
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "All caught up"
+                font.family: Theme.fontFamily
+                font.pixelSize: 14
+                color: Theme.textSecondary
+                opacity: 0
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: successAnim
+
+        // Fade in panel + scale up checkmark
+        ParallelAnimation {
+            NumberAnimation {
+                target: successOverlay
+                property: "opacity"
+                from: 0; to: 1
+                duration: 180
+            }
+            NumberAnimation {
+                target: checkIcon
+                property: "scale"
+                from: 0; to: 1
+                duration: 380
+                easing.type: Easing.OutBack
+            }
+        }
+
+        // Fade in subtitle
+        NumberAnimation {
+            target: successLabel
+            property: "opacity"
+            from: 0; to: 1
+            duration: 200
+        }
+
+        PauseAnimation { duration: 750 }
+
+        // Fade everything out
+        NumberAnimation {
+            target: successOverlay
+            property: "opacity"
+            from: 1; to: 0
+            duration: 200
+        }
+
+        ScriptAction {
+            script: {
+                checkIcon.scale = 0;
+                successLabel.opacity = 0;
+                root.closeRequested();
             }
         }
     }
