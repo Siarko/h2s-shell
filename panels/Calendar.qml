@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import qs.components
 import qs.singletons
 
@@ -10,6 +11,9 @@ Item {
 
     property int displayMonth: new Date().getMonth()
     property int displayYear: new Date().getFullYear()
+
+    property real _monthScrollAccum: 0
+    property real _yearScrollAccum: 0
 
     readonly property var _today: new Date()
     readonly property var _monthNames: [
@@ -42,13 +46,13 @@ Item {
         }
     }
 
-    Column {
+    ColumnLayout {
         anchors.fill: parent
         spacing: 4
 
         // Header: < Month Year >
         Row {
-            width: parent.width
+            Layout.fillWidth: true
             height: 30
 
             ArrowButton {
@@ -56,16 +60,66 @@ Item {
                 onClicked: root._prevMonth()
             }
 
-            Text {
+            Item {
                 width: parent.width - 60
                 height: parent.height
-                text: root._monthNames[root.displayMonth] + " " + root.displayYear
-                color: Theme.textPrimary
-                font.family: Theme.fontFamily
-                font.pixelSize: 16
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Text {
+                        id: monthText
+                        text: root._monthNames[root.displayMonth]
+                        color: monthArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 16
+                        font.bold: true
+
+                        MouseArea {
+                            id: monthArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onWheel: event => {
+                                root._monthScrollAccum += event.angleDelta.y;
+                                while (root._monthScrollAccum >= 120) {
+                                    root._nextMonth();
+                                    root._monthScrollAccum -= 120;
+                                }
+                                while (root._monthScrollAccum <= -120) {
+                                    root._prevMonth();
+                                    root._monthScrollAccum += 120;
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        id: yearText
+                        text: root.displayYear
+                        color: yearArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 16
+                        font.bold: true
+
+                        MouseArea {
+                            id: yearArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onWheel: event => {
+                                root._yearScrollAccum += event.angleDelta.y;
+                                while (root._yearScrollAccum >= 120) {
+                                    root.displayYear++;
+                                    root._yearScrollAccum -= 120;
+                                }
+                                while (root._yearScrollAccum <= -120) {
+                                    root.displayYear--;
+                                    root._yearScrollAccum += 120;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             ArrowButton {
@@ -74,9 +128,37 @@ Item {
             }
         }
 
+        // "Today" button — visible only when not viewing the current month/year
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 18
+            visible: root.displayMonth !== root._today.getMonth()
+                  || root.displayYear  !== root._today.getFullYear()
+
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: "↩ Today"
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                color: todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+
+                MouseArea {
+                    id: todayArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.displayMonth = root._today.getMonth();
+                        root.displayYear  = root._today.getFullYear();
+                    }
+                }
+            }
+        }
+
         // Day-of-week labels
         Row {
-            width: parent.width
+            Layout.fillWidth: true
             height: 20
 
             Repeater {
@@ -98,8 +180,8 @@ Item {
         // 6-row date grid
         Grid {
             id: dateGrid
-            width: parent.width
-            height: parent.height - 54
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             columns: 7
             rows: 6
 
