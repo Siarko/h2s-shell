@@ -14,13 +14,19 @@ Singleton {
 
     // ── Internal reactive maps (reassigned on update for QML binding) ───
     property var _cache: ({})       // "YYYY-MM-DD" → merged event array
+    property var eventFetch: false
     property var _loading: ({})     // "YYYY-MM-DD" → int (count of in-flight XHRs)
     property var _rawCache: ({})    // "YYYY-MM-DD" → { calId: [events] }
     property var _calendars: []     // [{id, name, color}] — fetched from calendarList API
+    property var calendarFetch: false
 
     // Reactive array of enabled calendar IDs (parsed from Config)
     property var enabledCalendarIds: {
-        try { return JSON.parse(Config.gcal.enabledCalendarIds); } catch (e) { return []; }
+        try {
+            return JSON.parse(Config.gcal.enabledCalendarIds);
+        } catch (e) {
+            return [];
+        }
     }
 
     property string _authBuf: ""
@@ -49,6 +55,7 @@ Singleton {
     // Fetch colors and calendar list on startup (if already authorized)
     Component.onCompleted: {
         if (isAuthorized) {
+            console.log("Component init complete");
             _ensureToken(function () {
                 _fetchColors();
                 _fetchCalendars();
@@ -172,6 +179,9 @@ Singleton {
 
     function _getEnabledIds() {
         try {
+            if (_calendars.length == 0) {
+                _fetchCalendars();
+            }
             return JSON.parse(Config.gcal.enabledCalendarIds) || [];
         } catch (e) {
             return [];
@@ -196,9 +206,12 @@ Singleton {
         merged.sort(function (a, b) {
             var aAllDay = a.time === "All day";
             var bAllDay = b.time === "All day";
-            if (aAllDay && !bAllDay) return -1;
-            if (!aAllDay && bAllDay) return 1;
-            if (!aAllDay && !bAllDay) return a.time.localeCompare(b.time);
+            if (aAllDay && !bAllDay)
+                return -1;
+            if (!aAllDay && bAllDay)
+                return 1;
+            if (!aAllDay && !bAllDay)
+                return a.time.localeCompare(b.time);
             return 0;
         });
         var nc = Object.assign({}, _cache);
@@ -228,6 +241,7 @@ Singleton {
                     map[id] = eventColors[id].background;
                 }
                 _colorMap = map;
+                console.log("Colors received");
             } else {
                 console.warn("GoogleCalendar: failed to fetch colors:", xhr.status);
             }
@@ -236,6 +250,10 @@ Singleton {
     }
 
     function _fetchCalendars() {
+        if (calendarFetch)
+            return;
+        calendarFetch = true;
+        console.log("Fetching calendars");
         var xhr = new XMLHttpRequest();
         xhr.open("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList");
         xhr.setRequestHeader("Authorization", "Bearer " + Config.gcal.accessToken);
@@ -249,19 +267,24 @@ Singleton {
                     return {
                         id: item.id,
                         name: item.summary || item.id,
-                        color: item.backgroundColor || "#5b9bf5"
+                        color: item.backgroundColor || "#5b9bf5",
+                        primary: item.primary
                     };
                 });
                 _calendars = cals;
+                console.log("Calendars received");
                 // Auto-enable all calendars on first login (when list is still empty)
                 var currentEnabled = _getEnabledIds();
                 if (currentEnabled.length === 0) {
-                    var allIds = cals.map(function (c) { return c.id; });
+                    var allIds = cals.map(function (c) {
+                        return c.id;
+                    });
                     _setEnabledIds(allIds);
                 }
             } else {
                 console.warn("GoogleCalendar: failed to fetch calendar list:", xhr.status);
             }
+            calendarFetch = false;
         };
         xhr.send();
     }
@@ -297,10 +320,12 @@ Singleton {
     }
 
     function _fetchCalendarEvents(key, year, month, day, calId, retried) {
+        console.log("Started fetching events for calId: " + calId);
+        let calendar = _calendars.filter(calendar => calendar.id === calId)[0];
+        let calendarColor = calendar?.primary ? null : calendar?.color;
         var timeMin = encodeURIComponent(key + "T00:00:00Z");
         var timeMax = encodeURIComponent(key + "T23:59:59Z");
-        var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events"
-                + "?timeMin=" + timeMin + "&timeMax=" + timeMax + "&singleEvents=true" + "&orderBy=startTime";
+        var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(calId) + "/events" + "?timeMin=" + timeMin + "&timeMax=" + timeMax + "&singleEvents=true" + "&orderBy=startTime";
 
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url);
@@ -326,26 +351,29 @@ Singleton {
                         description: item.description,
                         eventType: item.eventType,
                         time: timeStr,
-                        color: color
+                        color: color,
+                        calendarColor: calendarColor ?? null
                     };
                 });
 
                 // Update rawCache
                 var nr = Object.assign({}, _rawCache);
-                if (!nr[key]) nr[key] = {};
+                if (!nr[key])
+                    nr[key] = {};
                 nr[key] = Object.assign({}, nr[key]);
                 nr[key][calId] = events;
                 _rawCache = nr;
+                console.log("Event Cache updated (Received data)");
 
                 // Decrement loading count
                 var nl = Object.assign({}, _loading);
                 nl[key] = Math.max(0, (nl[key] || 0) - 1);
-                if (nl[key] === 0) delete nl[key];
+                if (nl[key] === 0)
+                    delete nl[key];
                 _loading = nl;
 
                 // Merge all enabled calendars for this date
                 _mergeCalendars(key);
-
             } else if (xhr.status === 401 && !retried) {
                 // Token expired — refresh once and retry (don't decrement loading yet)
                 _refreshToken(function () {
@@ -356,7 +384,8 @@ Singleton {
 
                 // Store empty so we don't keep retrying
                 var nr2 = Object.assign({}, _rawCache);
-                if (!nr2[key]) nr2[key] = {};
+                if (!nr2[key])
+                    nr2[key] = {};
                 nr2[key] = Object.assign({}, nr2[key]);
                 nr2[key][calId] = [];
                 _rawCache = nr2;
@@ -364,7 +393,8 @@ Singleton {
                 // Decrement loading count
                 var nl2 = Object.assign({}, _loading);
                 nl2[key] = Math.max(0, (nl2[key] || 0) - 1);
-                if (nl2[key] === 0) delete nl2[key];
+                if (nl2[key] === 0)
+                    delete nl2[key];
                 _loading = nl2;
 
                 // Merge

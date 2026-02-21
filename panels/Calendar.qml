@@ -55,11 +55,23 @@ Item {
     }
 
     // Fetch events whenever the viewed date changes
-    onSelectedDayChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
-    onDisplayMonthChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
-    onDisplayYearChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onSelectedDayChanged: {
+        console.log("Selected day change");
+        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+    }
+    onDisplayMonthChanged: {
+        console.log("Selected month change");
+        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+    }
+    onDisplayYearChanged: {
+        console.log("Selected Year change");
+        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+    }
 
-    Component.onCompleted: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    Component.onCompleted: {
+        console.log("Calendar component completed - fetch events");
+        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+    }
 
     Row {
         anchors.fill: parent
@@ -131,6 +143,11 @@ Item {
                         radius: 6
                         color: Theme.cellDefault
                         clip: true
+
+                        border {
+                            color: modelData.calendarColor
+                            width: modelData.calendarColor ? 2 : 0
+                        }
 
                         Behavior on height {
                             NumberAnimation {
