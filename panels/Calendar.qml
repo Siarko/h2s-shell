@@ -126,17 +126,27 @@ Item {
                     model: root._dayEvents
 
                     delegate: Rectangle {
+                        id: _card
                         required property var modelData
+                        property bool expanded: false
+
                         width: ListView.view.width
-                        height: 50
+                        height: (expanded && !!modelData.description)
+                                ? 50 + _desc.implicitHeight + 8
+                                : 50
                         radius: 6
                         color: Theme.cellDefault
+                        clip: true
 
-                        // Accent bar
+                        Behavior on height {
+                            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                        }
+
+                        // Accent bar (stretches full card height)
                         Rectangle {
                             width: 3
                             radius: 2
-                            color: parent.modelData.color
+                            color: _card.modelData.color
                             anchors {
                                 left: parent.left
                                 top: parent.top
@@ -147,32 +157,64 @@ Item {
                             }
                         }
 
-                        // Title + time
-                        Column {
+                        // Summary row — always 50px, content vertically centred inside
+                        Item {
+                            width: parent.width
+                            height: 50
+
+                            Column {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.leftMargin: 14
+                                anchors.rightMargin: 6
+                                spacing: 2
+
+                                Text {
+                                    width: parent.width
+                                    text: _card.modelData.title
+                                    color: Theme.textPrimary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    text: _card.modelData.time
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+
+                        // Description (anchored just below the 50px summary row)
+                        Text {
+                            id: _desc
                             anchors {
+                                top: parent.top
+                                topMargin: 50
                                 left: parent.left
                                 right: parent.right
                                 leftMargin: 14
                                 rightMargin: 6
-                                verticalCenter: parent.verticalCenter
                             }
-                            spacing: 2
+                            text: _card.modelData.description || ""
+                            visible: _card.expanded
+                            color: Theme.textSecondary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
 
-                            Text {
-                                width: parent.width
-                                text: modelData.title
-                                color: Theme.textPrimary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 13
-                                font.bold: true
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                text: modelData.time
-                                color: Theme.textSecondary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: _card.modelData.description
+                                         ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (_card.modelData.description)
+                                    _card.expanded = !_card.expanded;
                             }
                         }
                     }
