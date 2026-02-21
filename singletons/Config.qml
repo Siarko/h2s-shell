@@ -29,6 +29,7 @@ Singleton {
                 property string accessToken: ""
                 property string refreshToken: ""
                 property real   tokenExpiry: 0
+                property string enabledCalendarIds: "[]"
             }
         }
     }

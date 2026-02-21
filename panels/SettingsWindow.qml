@@ -8,7 +8,7 @@ FloatingWindow {
     id: root
     title: "Settings"
     implicitWidth: 520
-    implicitHeight: 520
+    implicitHeight: 640
     minimumSize: Qt.size(400, 300)
     visible: false
 
@@ -388,6 +388,94 @@ FloatingWindow {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: GoogleCalendar.logout()
+                    }
+                }
+            }
+
+            // ── My Calendars section ──────────────────────────────────────
+
+            Text {
+                visible: GoogleCalendar.isAuthorized
+                text: "My Calendars"
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                font.bold: true
+                color: Theme.textSecondary
+                Layout.topMargin: 6
+                Layout.bottomMargin: 4
+            }
+
+            Rectangle {
+                visible: GoogleCalendar.isAuthorized
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(150, GoogleCalendar._calendars.length * 32)
+                clip: true
+                color: "transparent"
+
+                Flickable {
+                    anchors.fill: parent
+                    contentHeight: _calColumn.implicitHeight
+                    clip: true
+
+                    Column {
+                        id: _calColumn
+                        width: parent.width
+
+                        Repeater {
+                            model: GoogleCalendar._calendars
+
+                            delegate: Item {
+                                required property var modelData
+                                width: _calColumn.width
+                                height: 32
+
+                                RowLayout {
+                                    anchors {
+                                        fill: parent
+                                        leftMargin: 2
+                                        rightMargin: 2
+                                    }
+                                    spacing: 8
+
+                                    Rectangle {
+                                        width: 8; height: 8; radius: 4
+                                        color: modelData.color
+                                    }
+
+                                    Text {
+                                        text: modelData.name
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        color: Theme.textPrimary
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Rectangle {
+                                        id: _calCheckbox
+                                        property bool checked: GoogleCalendar.enabledCalendarIds.indexOf(modelData.id) !== -1
+                                        width: 16; height: 16; radius: 3
+                                        color: checked ? Theme.sliderAccent : "transparent"
+                                        border.color: Theme.sliderAccent
+                                        border.width: 1
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "✓"
+                                            visible: _calCheckbox.checked
+                                            font.pixelSize: 10
+                                            color: Theme.textPrimary
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: GoogleCalendar.setCalendarEnabled(modelData.id, !_calCheckbox.checked)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
