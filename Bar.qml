@@ -76,7 +76,7 @@ PanelWindow {
                 Text {
                     text: "⚙"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 18
+                    font.pixelSize: 30
                     color: Theme.textPrimary
                     anchors.centerIn: parent
                 }
