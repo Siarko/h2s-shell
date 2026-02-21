@@ -18,20 +18,8 @@ Singleton {
 
     property string _authBuf: ""
 
-    // ── Google Calendar colorId → hex ───────────────────────────────────
-    readonly property var _colorMap: ({
-        "1":  "#d50000",
-        "2":  "#e67c73",
-        "3":  "#f6b26b",
-        "4":  "#f6c026",
-        "5":  "#33b679",
-        "6":  "#0b8043",
-        "7":  "#039be5",
-        "8":  "#3f51b5",
-        "9":  "#7986cb",
-        "10": "#8e24aa",
-        "11": "#616161"
-    })
+    // ── colorId → background hex (populated from /colors API) ───────────
+    property var _colorMap: ({})
 
     // ── OAuth process ───────────────────────────────────────────────────
     Process {
@@ -51,6 +39,13 @@ Singleton {
                 root.isBusy = false;
                 root._handleAuthResult();
             }
+        }
+    }
+
+    // Fetch event colors from API on startup (if already authorized)
+    Component.onCompleted: {
+        if (isAuthorized) {
+            _ensureToken(function() { _fetchColors(); });
         }
     }
 
@@ -107,6 +102,27 @@ Singleton {
         var m = ("0" + (month + 1)).slice(-2);
         var d = ("0"  + day).slice(-2);
         return year + "-" + m + "-" + d;
+    }
+
+    function _fetchColors() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "https://www.googleapis.com/calendar/v3/colors");
+        xhr.setRequestHeader("Authorization", "Bearer " + Config.gcal.accessToken);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText);
+                var eventColors = data.event || {};
+                var map = {};
+                for (var id in eventColors) {
+                    map[id] = eventColors[id].background;
+                }
+                _colorMap = map;
+            } else {
+                console.warn("GoogleCalendar: failed to fetch colors:", xhr.status);
+            }
+        };
+        xhr.send();
     }
 
     function _ensureToken(callback) {
@@ -208,6 +224,9 @@ Singleton {
             Config.gcal.accessToken  = result.access_token  || "";
             Config.gcal.refreshToken = result.refresh_token || "";
             Config.gcal.tokenExpiry  = result.expiry        || 0;
+            if (Config.gcal.accessToken) {
+                _fetchColors();
+            }
         } catch(e) {
             console.warn("GoogleCalendar: failed to parse auth result:", e, _authBuf);
         }
