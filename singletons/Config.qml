@@ -9,6 +9,7 @@ Singleton {
     id: root
 
     property alias datetimeFormat: _calendar.datetimeFormat
+    property alias gcal: _gcal
 
     FileView {
         id: _file
@@ -19,6 +20,15 @@ Singleton {
             property JsonObject calendar: JsonObject {
                 id: _calendar
                 property string datetimeFormat: "hh:mm:ss"
+            }
+
+            property JsonObject gcal: JsonObject {
+                id: _gcal
+                property string clientId: ""
+                property string clientSecret: ""
+                property string accessToken: ""
+                property string refreshToken: ""
+                property real   tokenExpiry: 0
             }
         }
     }

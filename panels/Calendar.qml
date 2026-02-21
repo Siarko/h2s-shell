@@ -29,8 +29,13 @@ Item {
     readonly property int _daysInMonth: new Date(displayYear, displayMonth + 1, 0).getDate()
     readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
 
-    // Recomputes whenever displayYear/displayMonth/selectedDay change
-    readonly property var _dayEvents: CalendarEvents.eventsForDate(displayYear, displayMonth, selectedDay)
+    // Live data from GoogleCalendar singleton
+    readonly property var  _dayEvents:  GoogleCalendar._cache[_dateKey(displayYear, displayMonth, selectedDay)]  || []
+    readonly property bool _dayLoading: !!GoogleCalendar._loading[_dateKey(displayYear, displayMonth, selectedDay)]
+
+    function _dateKey(y, m, d) {
+        return y + "-" + ("0" + (m + 1)).slice(-2) + "-" + ("0" + d).slice(-2);
+    }
 
     function _prevMonth() {
         if (displayMonth === 0) {
@@ -52,6 +57,13 @@ Item {
         selectedDay = Math.min(selectedDay, _daysInMonth);
     }
 
+    // Fetch events whenever the viewed date changes
+    onSelectedDayChanged:   GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onDisplayMonthChanged:  GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onDisplayYearChanged:   GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+
+    Component.onCompleted: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+
     Row {
         anchors.fill: parent
         spacing: 0
@@ -68,17 +80,40 @@ Item {
                 }
                 spacing: 6
 
-                // Selected date label
-                Text {
-                    text: {
-                        var d = new Date(root.displayYear, root.displayMonth, root.selectedDay);
-                        var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-                        return days[d.getDay()] + ", " + root.selectedDay + " " + root._monthNames[root.displayMonth].substring(0, 3);
+                // Selected date label + refresh button
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: {
+                            var d = new Date(root.displayYear, root.displayMonth, root.selectedDay);
+                            var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                            return days[d.getDay()] + ", " + root.selectedDay + " " + root._monthNames[root.displayMonth].substring(0, 3);
+                        }
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.bold: true
+                        Layout.fillWidth: true
                     }
-                    color: Theme.textSecondary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    font.bold: true
+
+                    Text {
+                        text: "↻"
+                        color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        visible: GoogleCalendar.isAuthorized
+
+                        MouseArea {
+                            id: _refreshArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: GoogleCalendar.invalidateAndRefetch(
+                                root.displayYear, root.displayMonth, root.selectedDay)
+                        }
+                    }
                 }
 
                 // Event cards
@@ -142,15 +177,32 @@ Item {
                         }
                     }
 
-                    // Empty state
+                    // Empty state (hidden while loading)
                     Text {
                         anchors.centerIn: parent
                         text: "No events"
                         color: Theme.textTertiary
                         font.family: Theme.fontFamily
                         font.pixelSize: 12
-                        visible: eventsList.count === 0
+                        visible: eventsList.count === 0 && !root._dayLoading
                     }
+                }
+            }
+
+            // Loading spinner overlay (centered over events area)
+            Text {
+                visible: root._dayLoading
+                text: "↻"
+                font.pixelSize: 22
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                anchors.centerIn: parent
+
+                RotationAnimator on rotation {
+                    running: root._dayLoading
+                    from: 0; to: 360
+                    duration: 800
+                    loops: Animation.Infinite
                 }
             }
         }

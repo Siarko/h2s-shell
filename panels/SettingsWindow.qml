@@ -8,7 +8,7 @@ FloatingWindow {
     id: root
     title: "Settings"
     implicitWidth: 520
-    implicitHeight: 400
+    implicitHeight: 520
     minimumSize: Qt.size(400, 300)
     visible: false
 
@@ -63,6 +63,7 @@ FloatingWindow {
     component SettingInputRow: RowLayout {
         property string label
         property string value
+        property int    echoMode: TextInput.Normal
 
         Layout.fillWidth: true
         Layout.preferredHeight: 44
@@ -82,12 +83,13 @@ FloatingWindow {
             TextInput {
                 anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                 text: value
+                echoMode: parent.parent.echoMode
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 color: Theme.textPrimary
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
-                onTextEdited: value = text
+                onTextEdited: parent.parent.value = text
             }
         }
     }
@@ -256,6 +258,138 @@ FloatingWindow {
                 label: "Datetime format"
                 value: Config.datetimeFormat
                 onValueChanged: Config.datetimeFormat = value
+            }
+
+            // ── Google Calendar subsection ─────────────────────────────
+
+            // Divider
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.topMargin: 10
+                color: Theme.textDim
+                opacity: 0.3
+            }
+
+            Text {
+                text: "Google Calendar"
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                font.bold: true
+                color: Theme.textSecondary
+                Layout.topMargin: 10
+                Layout.bottomMargin: 4
+            }
+
+            // Connection status row
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 28
+                spacing: 8
+
+                Rectangle {
+                    width: 8; height: 8; radius: 4
+                    color: GoogleCalendar.isAuthorized ? "#33b679" : "#e87c5b"
+                }
+
+                Text {
+                    text: GoogleCalendar.isBusy        ? "Connecting…"
+                        : GoogleCalendar.isAuthorized  ? "Connected"
+                        :                                "Not connected"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 13
+                    color: Theme.textPrimary
+                    Layout.fillWidth: true
+                }
+            }
+
+            // Connecting… message (shown while OAuth process runs)
+            Text {
+                visible: GoogleCalendar.isBusy
+                text: "Opening browser for authorization…"
+                font.family: Theme.fontFamily
+                font.pixelSize: 11
+                color: Theme.textSecondary
+                Layout.bottomMargin: 4
+            }
+
+            // Not-authorized inputs (hidden while busy or connected)
+            ColumnLayout {
+                visible: !GoogleCalendar.isAuthorized && !GoogleCalendar.isBusy
+                Layout.fillWidth: true
+                spacing: 0
+
+                SettingInputRow {
+                    label: "Client ID"
+                    value: Config.gcal.clientId
+                    onValueChanged: Config.gcal.clientId = value
+                }
+
+                SettingInputRow {
+                    label: "Client Secret"
+                    value: Config.gcal.clientSecret
+                    onValueChanged: Config.gcal.clientSecret = value
+                    echoMode: TextInput.Password
+                }
+
+                // Connect button
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 44
+
+                    Rectangle {
+                        readonly property bool _enabled: Config.gcal.clientId !== ""
+                                                      && Config.gcal.clientSecret !== ""
+                        width: 90; height: 28; radius: 6
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: _enabled ? Theme.sliderAccent : Theme.cellDefault
+                        opacity: _enabled ? 1.0 : 0.5
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Connect"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: Theme.textPrimary
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: parent._enabled
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: GoogleCalendar.login()
+                        }
+                    }
+                }
+            }
+
+            // Disconnect button (shown when authorized)
+            Item {
+                visible: GoogleCalendar.isAuthorized
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+
+                Rectangle {
+                    width: 100; height: 28; radius: 6
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: "#c0392b"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Disconnect"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: Theme.textPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: GoogleCalendar.logout()
+                    }
+                }
             }
 
             Item {
