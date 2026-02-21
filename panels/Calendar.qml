@@ -17,10 +17,7 @@ Item {
     property real _yearScrollAccum: 0
 
     readonly property var _today: new Date()
-    readonly property var _monthNames: [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ]
+    readonly property var _monthNames: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     readonly property var _dayNames: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
 
     // Derived properties that QML can track for bindings
@@ -30,7 +27,7 @@ Item {
     readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
 
     // Live data from GoogleCalendar singleton
-    readonly property var  _dayEvents:  GoogleCalendar._cache[_dateKey(displayYear, displayMonth, selectedDay)]  || []
+    readonly property var _dayEvents: GoogleCalendar._cache[_dateKey(displayYear, displayMonth, selectedDay)] || []
     readonly property bool _dayLoading: !!GoogleCalendar._loading[_dateKey(displayYear, displayMonth, selectedDay)]
 
     function _dateKey(y, m, d) {
@@ -58,9 +55,9 @@ Item {
     }
 
     // Fetch events whenever the viewed date changes
-    onSelectedDayChanged:   GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
-    onDisplayMonthChanged:  GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
-    onDisplayYearChanged:   GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onSelectedDayChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onDisplayMonthChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
+    onDisplayYearChanged: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
 
     Component.onCompleted: GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay)
 
@@ -88,7 +85,7 @@ Item {
                     Text {
                         text: {
                             var d = new Date(root.displayYear, root.displayMonth, root.selectedDay);
-                            var days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                            var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
                             return days[d.getDay()] + ", " + root.selectedDay + " " + root._monthNames[root.displayMonth].substring(0, 3);
                         }
                         color: Theme.textSecondary
@@ -110,8 +107,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: GoogleCalendar.invalidateAndRefetch(
-                                root.displayYear, root.displayMonth, root.selectedDay)
+                            onClicked: GoogleCalendar.invalidateAndRefetch(root.displayYear, root.displayMonth, root.selectedDay)
                         }
                     }
                 }
@@ -131,15 +127,16 @@ Item {
                         property bool expanded: false
 
                         width: ListView.view.width
-                        height: (expanded && !!modelData.description)
-                                ? 50 + _desc.implicitHeight + 8
-                                : 50
+                        height: (expanded && !!modelData.description) ? 50 + _desc.implicitHeight + 8 : 50
                         radius: 6
                         color: Theme.cellDefault
                         clip: true
 
                         Behavior on height {
-                            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutQuad
+                            }
                         }
 
                         // Accent bar (stretches full card height)
@@ -165,9 +162,9 @@ Item {
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left
-                                anchors.right: parent.right
+                                anchors.right: _birthdayIcon.left
                                 anchors.leftMargin: 14
-                                anchors.rightMargin: 6
+                                anchors.rightMargin: 4
                                 spacing: 2
 
                                 Text {
@@ -186,6 +183,17 @@ Item {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                 }
+                            }
+
+                            Text {
+                                id: _birthdayIcon
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.rightMargin: 8
+                                text: "🎂"
+                                font.pixelSize: 16
+                                visible: _card.modelData.eventType === 'birthday'
+                                width: visible ? implicitWidth : 6
                             }
                         }
 
@@ -210,8 +218,7 @@ Item {
 
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: _card.modelData.description
-                                         ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            cursorShape: _card.modelData.description ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
                                 if (_card.modelData.description)
                                     _card.expanded = !_card.expanded;
@@ -242,7 +249,8 @@ Item {
 
                 RotationAnimator on rotation {
                     running: root._dayLoading
-                    from: 0; to: 360
+                    from: 0
+                    to: 360
                     duration: 800
                     loops: Animation.Infinite
                 }
@@ -348,8 +356,7 @@ Item {
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 18
-                    visible: root.displayMonth !== root._today.getMonth()
-                          || root.displayYear  !== root._today.getFullYear()
+                    visible: root.displayMonth !== root._today.getMonth() || root.displayYear !== root._today.getFullYear()
 
                     Text {
                         anchors.right: parent.right
@@ -366,7 +373,7 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 root.displayMonth = root._today.getMonth();
-                                root.displayYear  = root._today.getFullYear();
+                                root.displayYear = root._today.getFullYear();
                             }
                         }
                     }
@@ -408,17 +415,9 @@ Item {
                             required property int index
 
                             // Compute day number and whether it belongs to the current month
-                            property bool isCurrent: index >= root._startDow
-                                && index < root._startDow + root._daysInMonth
-                            property int dayNum: isCurrent
-                                ? index - root._startDow + 1
-                                : (index < root._startDow
-                                    ? root._prevMonthDays - root._startDow + index + 1
-                                    : index - root._startDow - root._daysInMonth + 1)
-                            property bool isToday: isCurrent
-                                && dayNum === root._today.getDate()
-                                && root.displayMonth === root._today.getMonth()
-                                && root.displayYear === root._today.getFullYear()
+                            property bool isCurrent: index >= root._startDow && index < root._startDow + root._daysInMonth
+                            property int dayNum: isCurrent ? index - root._startDow + 1 : (index < root._startDow ? root._prevMonthDays - root._startDow + index + 1 : index - root._startDow - root._daysInMonth + 1)
+                            property bool isToday: isCurrent && dayNum === root._today.getDate() && root.displayMonth === root._today.getMonth() && root.displayYear === root._today.getFullYear()
                             property bool isSelected: isCurrent && dayNum === root.selectedDay
 
                             width: dateGrid.width / 7
