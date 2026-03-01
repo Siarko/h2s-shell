@@ -202,11 +202,9 @@ PanelWindow {
             Cell {
                 cellColor: Theme.cellDefault
 
-                onPlonked: {
-                    if (popupLoader.active && popupLoader.contentType === "sound") {
-                        popupLoader.close();
-                    } else {
-                        popupLoader.open(this, true, "sound");
+                onHover: state => {
+                    if (state) {
+                        popupLoader.open(this, false, "sound");
                     }
                 }
                 onMiddleClicked: {
@@ -245,11 +243,10 @@ PanelWindow {
 
             Cell {
                 cellColor: Theme.cellDefault
-                onPlonked: {
-                    if (popupLoader.active && popupLoader.contentType === "bluetooth") {
-                        popupLoader.close();
-                    } else {
-                        popupLoader.open(this, true, "bluetooth");
+
+                onHover: state => {
+                    if (state) {
+                        popupLoader.open(this, false, "bluetooth");
                     }
                 }
 
