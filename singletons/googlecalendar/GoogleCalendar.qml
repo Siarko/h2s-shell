@@ -105,7 +105,7 @@ Singleton {
 
     function fetchColorMappings(invalidateCache = false) {
         return Promises.create((resolve, reject) => {
-            if (!invalidateCache && Object.keys(root._colorMapEvents).length === 0) {
+            if (!invalidateCache && Object.keys(root._colorMapEvents).length > 0) {
                 resolve();
                 return;
             }
@@ -129,7 +129,7 @@ Singleton {
 
     function fetchAllCalendars(invalidateCache = false) {
         return Promises.create((resolve, reject) => {
-            if (!invalidateCache && Object.keys(root.calendars).length === 0) {
+            if (!invalidateCache && Object.keys(root.calendars).length > 0) {
                 return resolve();
             }
             return GoogleCalendarAuth.ensureAuthorized(() => {
