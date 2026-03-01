@@ -153,7 +153,8 @@ LazyLoader {
                         "sound":         soundComponent,
                         "music":         musicComponent,
                         "bluetooth":     bluetoothComponent,
-                        "calendar":      calendarComponent
+                        "calendar":      calendarComponent,
+                        "network":       networkComponent
                     })
 
                     Loader {
@@ -200,6 +201,11 @@ LazyLoader {
                     Component {
                         id: bluetoothComponent
                         BluetoothPanel {}
+                    }
+
+                    Component {
+                        id: networkComponent
+                        NetworkPanel {}
                     }
                 }
             }

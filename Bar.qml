@@ -323,6 +323,33 @@ PanelWindow {
             }
 
             Cell {
+                cellColor: Theme.cellDefault
+                onPlonked: {
+                    if (popupLoader.active && popupLoader.contentType === "network") {
+                        popupLoader.close();
+                    } else {
+                        popupLoader.open(this, true, "network");
+                    }
+                }
+
+                Text {
+                    text: {
+                        if (NetworkManager.activeDeviceType === "ethernet") return "󰈀";
+                        if (!NetworkManager.wifiEnabled) return "󰤭";
+                        if (!NetworkManager.isConnected) return "󰤮";
+                        if (NetworkManager.wifiSignal >= 75) return "󰤨";
+                        if (NetworkManager.wifiSignal >= 50) return "󰤤";
+                        if (NetworkManager.wifiSignal >= 25) return "󰤢";
+                        return "󰤟";
+                    }
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 18
+                    color: NetworkManager.isConnected ? Theme.textPrimary : Theme.textDim
+                    anchors.centerIn: parent
+                }
+            }
+
+            Cell {
                 id: notifCell
                 cellColor: Theme.cellDefault
                 onPlonked: {
