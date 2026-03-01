@@ -12,6 +12,8 @@ Singleton {
     property alias gcal: _gcal
     property alias general: _general
 
+    signal saved
+
     FileView {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
@@ -35,7 +37,7 @@ Singleton {
                 property string accessToken: ""
                 property string refreshToken: ""
                 property real tokenExpiry: 0
-                property string enabledCalendarIds: "[]"
+                property list<string> enabledCalendarIds: []
                 property bool debug: false
             }
         }
@@ -46,6 +48,7 @@ Singleton {
         interval: 1000
         onTriggered: {
             _file.writeAdapter();
+            root.saved();
             console.log("[CONFIG] Saved");
         }
     }

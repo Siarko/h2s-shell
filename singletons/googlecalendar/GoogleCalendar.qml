@@ -29,13 +29,9 @@ Singleton {
     property var _colorMapCalendars: ({})
     property var _busyRequests: ({})
 
-    property var _enabledCalendarIds: {
-        try {
-            return JSON.parse(Config.gcal.enabledCalendarIds);
-        } catch (e) {
-            return [];
-        }
-    }
+    property var enabledCalendarIds: Config.gcal.enabledCalendarIds
+
+    property var calendarsArray: Object.values(calendars)
 
     function init() {
         logger.log("Init");
@@ -92,11 +88,22 @@ Singleton {
     }
 
     function _getConfigEnabledCalendarIds() {
-        return JSON.parse(Config.gcal.enabledCalendarIds) || [];
+        return Config.gcal.enabledCalendarIds;
     }
 
     function setEnabledCalendarIds(idArray) {
-        Config.gcal.enabledCalendarIds = JSON.stringify(idArray);
+        Config.gcal.enabledCalendarIds = idArray;
+    }
+
+    function setCalendarEnabled(id, enabled) {
+        let ids = enabledCalendarIds.slice();
+        let idx = ids.indexOf(id);
+        if (enabled && idx === -1) {
+            ids.push(id);
+        } else if (!enabled && idx !== -1) {
+            ids.splice(idx, 1);
+        }
+        setEnabledCalendarIds(ids);
     }
 
     function fetchColorMappings(invalidateCache = false) {

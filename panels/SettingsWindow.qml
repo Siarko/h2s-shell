@@ -307,7 +307,7 @@ FloatingWindow {
 
             // Not-authorized inputs (hidden while busy or connected)
             ColumnLayout {
-                visible: !GoogleCalendarAuth.isAuthorized && !GoogleCalendar.isBusy
+                visible: !GoogleCalendarAuth.isAuthorized && !GoogleCalendarAuth.isBusy
                 Layout.fillWidth: true
                 spacing: 0
 
@@ -391,7 +391,7 @@ FloatingWindow {
 
             Text {
                 visible: GoogleCalendarAuth.isAuthorized
-                text: "My Calendars " + GoogleCalendar.calendars
+                text: "My Calendars "
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.bold: true
@@ -403,7 +403,7 @@ FloatingWindow {
             Rectangle {
                 visible: GoogleCalendarAuth.isAuthorized
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(150, GoogleCalendar.calendars.length * 32)
+                Layout.preferredHeight: Math.min(150, GoogleCalendar.calendarsArray.length * 32)
                 clip: true
                 color: "transparent"
 
@@ -417,9 +417,10 @@ FloatingWindow {
                         width: parent.width
 
                         Repeater {
-                            model: GoogleCalendar.calendars
+                            model: GoogleCalendar.calendarsArray
 
                             delegate: Item {
+                                id: calendarRow
                                 required property var modelData
                                 width: _calColumn.width
                                 height: 32
@@ -436,11 +437,11 @@ FloatingWindow {
                                         width: 8
                                         height: 8
                                         radius: 4
-                                        color: modelData.color
+                                        color: calendarRow.modelData.color
                                     }
 
                                     Text {
-                                        text: modelData.name
+                                        text: calendarRow.modelData.name
                                         font.family: Theme.fontFamily
                                         font.pixelSize: 12
                                         color: Theme.textPrimary
@@ -450,7 +451,7 @@ FloatingWindow {
 
                                     Rectangle {
                                         id: _calCheckbox
-                                        //property bool checked: GoogleCalendar.enabledCalendarIds.indexOf(modelData.id) !== -1
+                                        property bool checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.modelData.id)
                                         width: 16
                                         height: 16
                                         radius: 3
@@ -469,7 +470,7 @@ FloatingWindow {
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            //onClicked: GoogleCalendar.setCalendarEnabled(modelData.id, !_calCheckbox.checked)
+                                            onClicked: GoogleCalendar.setCalendarEnabled(calendarRow.modelData.id, !_calCheckbox.checked)
                                         }
                                     }
                                 }
