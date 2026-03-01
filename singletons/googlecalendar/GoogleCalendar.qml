@@ -76,11 +76,12 @@ Singleton {
         return Promises.create((resolve, reject) => {
             try {
                 if (calendars.length == 0) {
-                    fetchAllCalendars();
+                    fetchAllCalendars().then(() => {
+                        resolve(_getConfigEnabledCalendarIds());
+                    });
                 } else {
-                    resolve();
+                    resolve(_getConfigEnabledCalendarIds());
                 }
-                return _getConfigEnabledCalendarIds();
             } catch (e) {
                 reject(e);
             }
@@ -144,7 +145,6 @@ Singleton {
                             let item = _prepareCalendarData(json.items[index]);
                             cals[item.id] = item;
                         });
-                        console.log(root.calendars.length);
                         root.calendars = cals;
                         if (_getConfigEnabledCalendarIds().length === 0) {
                             let allIds = cals.map(c => c.id);
@@ -168,18 +168,21 @@ Singleton {
         if (!invalidateCache && cachedEvents !== undefined) {
             return;
         }
+        root.setDayLoading(dateKey, true);
         logger.log("Events for ", dateKey, " len: ", cachedEvents?.length);
 
         let exec = function () {
             logger.log("Entered exec of event fetching");
             let fetches = [];
-            for (const [key, data] of Object.entries(root.calendars)) {
-                logger.log("Fetching events for calendar", data.id, "Date: ", year, month, day);
-                fetches.push(fetchCalendarEvents(data.id, year, month, day));
+            let enabledCalendars = Promises.await(getEnabledCalendarIds()).resolved ?? [];
+            for (const id of enabledCalendars) {
+                logger.log("Fetching events for calendar", id, "Date: ", year, month, day);
+                fetches.push(fetchCalendarEvents(id, year, month, day));
             }
             return Promises.allSettled(fetches).then(() => {
                 logger.log("All calendars fetched, merging events");
                 _mergeEvents(year, month, day);
+                root.setDayLoading(dateKey, false);
             }).catch(e => {
                 logger.error("Caught error while fetching events: ", e);
                 logger.error("Stack: ", e.stack);
@@ -280,7 +283,7 @@ Singleton {
             }
         }
         result.sort(function (a, b) {
-            return (a.startTime === null || a.startTime > b.startTime) ? 1 : -1;
+            return (a.startTime === null || a.startTime > b.startTime) ? -1 : 1;
         });
         root.events[dateKey] = result;
         root.eventsChanged();
@@ -320,5 +323,10 @@ Singleton {
                 "Authorization": "Bearer " + Config.gcal.accessToken
             }
         });
+    }
+
+    function setDayLoading(day, state) {
+        root.eventsLoading[day] = state;
+        root.eventsLoadingChanged();
     }
 }
