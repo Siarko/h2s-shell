@@ -242,6 +242,7 @@ Singleton {
             timeStr += " - " + ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
         }
         return {
+            id: data.id,
             title: data.summary || "(No title)",
             description: data.description,
             eventType: data.eventType,
@@ -259,6 +260,19 @@ Singleton {
             color: item.backgroundColor || "#5b9bf5",
             primary: item.primary
         };
+    }
+
+    // month is 0-indexed (same as fetchDayEvents)
+    function createEvent(year, month, day, title, description, startTime, endTime, calendarId) {
+        logger.log("TODO createEvent:", year, month, day, title, description, startTime, endTime, calendarId)
+    }
+
+    function deleteEvent(year, month, day, eventId) {
+        logger.log("TODO deleteEvent:", year, month, day, eventId)
+    }
+
+    function updateEvent(year, month, day, eventId, title, description, startTime, endTime) {
+        logger.log("TODO updateEvent:", year, month, day, eventId, title, description, startTime, endTime)
     }
 
     function _dateKey(year: int, month: int, day: int): string {
