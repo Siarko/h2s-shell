@@ -71,7 +71,7 @@ Singleton {
     function getEnabledCalendarIds() {
         return Promises.create((resolve, reject) => {
             try {
-                if (calendars.length == 0) {
+                if (Object.keys(calendars).length === 0) {
                     fetchAllCalendars().then(() => {
                         resolve(_getConfigEnabledCalendarIds());
                     });
@@ -105,7 +105,7 @@ Singleton {
 
     function fetchColorMappings(invalidateCache = false) {
         return Promises.create((resolve, reject) => {
-            if (!invalidateCache && root._colorMapEvents.length === 0) {
+            if (!invalidateCache && Object.keys(root._colorMapEvents).length === 0) {
                 resolve();
                 return;
             }
@@ -129,7 +129,7 @@ Singleton {
 
     function fetchAllCalendars(invalidateCache = false) {
         return Promises.create((resolve, reject) => {
-            if (!invalidateCache && root.calendars.length === 0) {
+            if (!invalidateCache && Object.keys(root.calendars).length === 0) {
                 return resolve();
             }
             return GoogleCalendarAuth.ensureAuthorized(() => {
@@ -143,7 +143,7 @@ Singleton {
                         });
                         root.calendars = cals;
                         if (_getConfigEnabledCalendarIds().length === 0) {
-                            let allIds = cals.map(c => c.id);
+                            let allIds = Object.values(cals).map(c => c.id);
                             setEnabledCalendarIds(allIds);
                         }
                         return resolve();
@@ -154,7 +154,7 @@ Singleton {
     }
 
     function fetchDayEvents(year, month, day, invalidateCache = false) {
-        if (month > 12 || month < 1 || day < 1) {
+        if (month > 11 || month < 0 || day < 1) {
             logger.error("Requested incorrect day: ", year, month, day);
             return;
         }
@@ -201,7 +201,7 @@ Singleton {
     function fetchCalendarEvents(calendarId: string, year, month, day) {
         return Promises.create((resolve, reject) => {
             logger.log("Entry to fetching events of calendar ", calendarId);
-            if (!GoogleCalendarAuth.isAuthorized || day <= 0 || root.calendars.length === 0) {
+            if (!GoogleCalendarAuth.isAuthorized || day <= 0 || Object.keys(root.calendars).length === 0) {
                 return resolve(null);
             }
             let dateKey = _dateKey(year, month, day);
@@ -209,11 +209,12 @@ Singleton {
 
             logger.log("Requesting events for calendar: ", calendarId, " Date: ", dateKey);
             let calendar = root.calendars[calendarId] ?? null;
+            let tz = _tzOffset();
             return GoogleCalendarAuth.ensureAuthorized(() => {
                 return _requestEvents({
                     calendarId: calendarId,
-                    timeMin: dateKey + "T00:00:00Z",
-                    timeMax: dateKey + "T23:59:59Z",
+                    timeMin: dateKey + "T00:00:00" + tz,
+                    timeMax: dateKey + "T23:59:59" + tz,
                     id: dateKey + calendarId
                 });
             }).then(response => {
@@ -231,15 +232,18 @@ Singleton {
 
     function _prepareEventData(data, calendar) {
         let timeStr = "All day";
+        let startTimeStr = "";
+        let endTimeStr = "";
         let color = data.colorId ? (root._colorMapEvents[data.colorId] || Theme.cellAccent) : calendar.color;
         let calendarColor = calendar ? (calendar?.primary ? null : calendar.color) : null;
 
         let startTime = null;
         if (data.start && data.start.dateTime) {
             startTime = new Date(data.start.dateTime);
-            timeStr = ("0" + startTime.getHours()).slice(-2) + ":" + ("0" + startTime.getMinutes()).slice(-2);
+            startTimeStr = ("0" + startTime.getHours()).slice(-2) + ":" + ("0" + startTime.getMinutes()).slice(-2);
             let dt = new Date(data.end.dateTime);
-            timeStr += " - " + ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
+            endTimeStr = ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
+            timeStr = startTimeStr + " - " + endTimeStr;
         }
         return {
             id: data.id,
@@ -247,6 +251,8 @@ Singleton {
             description: data.description,
             eventType: data.eventType,
             startTime: startTime,
+            startTimeStr: startTimeStr,
+            endTimeStr: endTimeStr,
             time: timeStr,
             color: color,
             calendarColor: calendarColor ?? null
@@ -275,6 +281,14 @@ Singleton {
         logger.log("TODO updateEvent:", year, month, day, eventId, title, description, startTime, endTime)
     }
 
+    function _tzOffset(): string {
+        let off = -(new Date().getTimezoneOffset());
+        let sign = off >= 0 ? "+" : "-";
+        let h = ("0" + Math.floor(Math.abs(off) / 60)).slice(-2);
+        let m = ("0" + (Math.abs(off) % 60)).slice(-2);
+        return sign + h + ":" + m;
+    }
+
     function _dateKey(year: int, month: int, day: int): string {
         // month is 0-indexed; returns "YYYY-MM-DD"
         var m = ("0" + (month + 1)).slice(-2);
@@ -293,7 +307,10 @@ Singleton {
             }
         }
         result.sort(function (a, b) {
-            return (a.startTime === null || a.startTime > b.startTime) ? -1 : 1;
+            if (a.startTime === b.startTime) return 0;
+            if (a.startTime === null) return -1;
+            if (b.startTime === null) return 1;
+            return a.startTime > b.startTime ? -1 : 1;
         });
         root.events[dateKey] = result;
         root.eventsChanged();

@@ -19,10 +19,6 @@ Item {
 
     readonly property var _monthNames: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
-    function _dateKey(y, m, d) {
-        return y + "-" + ("0" + (m + 1)).slice(-2) + "-" + ("0" + d).slice(-2);
-    }
-
     ColumnLayout {
         anchors {
             fill: parent
@@ -127,7 +123,7 @@ Item {
             Layout.fillHeight: true
             clip: true
             spacing: 6
-            model: GoogleCalendar.events[_dateKey(root.displayYear, root.displayMonth, root.selectedDay)] || []
+            model: GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, root.selectedDay)] || []
 
             delegate: EventCard {
                 // required property var modelData
@@ -148,7 +144,7 @@ Item {
     }
 
     // Loading spinner overlay
-    property bool _loading: GoogleCalendar.eventsLoading[_dateKey(displayYear, displayMonth, selectedDay)] ?? false
+    property bool _loading: GoogleCalendar.eventsLoading[GoogleCalendar._dateKey(displayYear, displayMonth, selectedDay)] ?? false
 
     Text {
         visible: root._loading

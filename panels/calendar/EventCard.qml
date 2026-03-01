@@ -17,12 +17,14 @@ Rectangle {
     property bool editing: false
     property bool confirmingDelete: false
 
+    readonly property real _cardHeight: {
+        if (root.editing) return _editForm.implicitHeight + 16
+        if (root.confirmingDelete) return 50
+        return (expanded && modelData.description) ? 50 + _desc.implicitHeight + 8 : 50
+    }
+
     width: ListView.view.width
-    height: root.editing
-        ? (_editForm.implicitHeight + 16)
-        : (root.confirmingDelete
-            ? 50
-            : ((expanded && !!modelData.description) ? 50 + _desc.implicitHeight + 8 : 50))
+    height: _cardHeight
     radius: 6
     color: Theme.cellDefault
     clip: true
@@ -112,7 +114,7 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         enabled: !root.editing && !root.confirmingDelete
-        cursorShape: !!root.modelData.description ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: root.modelData.description ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: {
             if (root.modelData.description)
                 root.expanded = !root.expanded
@@ -140,19 +142,15 @@ Rectangle {
     }
 
     // Pre-fill edit form when editing begins
-    Connections {
-        target: root
-        function onEditingChanged() {
-            if (root.editing) {
-                var parts = root.modelData.time.split(" - ")
-                _editForm.populate(
-                    root.modelData.title !== "(No title)" ? root.modelData.title : "",
-                    (parts[0] !== "All day") ? parts[0] : "",
-                    parts.length > 1 ? parts[1] : "",
-                    root.modelData.description || "",
-                    parts[0] === "All day"
-                )
-            }
+    onEditingChanged: {
+        if (editing) {
+            _editForm.populate(
+                modelData.title !== "(No title)" ? modelData.title : "",
+                modelData.startTimeStr,
+                modelData.endTimeStr,
+                modelData.description || "",
+                modelData.startTimeStr === ""
+            )
         }
     }
 

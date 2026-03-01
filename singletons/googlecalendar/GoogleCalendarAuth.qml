@@ -10,7 +10,7 @@ import qs.components
 Singleton {
     id: root
 
-    readonly property string _TOKEN_ENDPONT: "https://oauth2.googleapis.com/token"
+    readonly property string _TOKEN_ENDPOINT: "https://oauth2.googleapis.com/token"
 
     property bool isAuthorized: Config.gcal.refreshToken !== ""
     property bool isBusy: authProcess.running
@@ -58,13 +58,13 @@ Singleton {
 
     function _handleAuthResult(result: string) {
         try {
-            var result = JSON.parse(result.trim());
-            Config.gcal.accessToken = result.access_token || "";
-            Config.gcal.refreshToken = result.refresh_token || "";
-            Config.gcal.tokenExpiry = result.expiry || 0;
+            let json = JSON.parse(result.trim());
+            Config.gcal.accessToken = json.access_token || "";
+            Config.gcal.refreshToken = json.refresh_token || "";
+            Config.gcal.tokenExpiry = json.expiry || 0;
             root.authorized(!!Config.gcal.accessToken);
         } catch (e) {
-            logger.error("Failed to parse auth result:", e, _authBuf);
+            logger.error("Failed to parse auth result:", e, result);
             root.authorized(false);
         }
     }
@@ -76,7 +76,7 @@ Singleton {
         body += "&client_secret=" + encodeURIComponent(Config.gcal.clientSecret);
 
         return Promises.create((resolve, reject) => {
-            return Fetch.request(root._TOKEN_ENDPONT, {
+            return Fetch.request(root._TOKEN_ENDPOINT, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
