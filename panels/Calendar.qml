@@ -53,14 +53,14 @@ Item {
 
         Rectangle {
             width: 1
-            height: parent.height
+            height: 340
             color: Theme.textDim
             opacity: 0.3
         }
 
         MonthGrid {
             width: 280
-            height: parent.height
+            height: 340
             displayMonth: root.displayMonth
             displayYear:  root.displayYear
             selectedDay:  root.selectedDay

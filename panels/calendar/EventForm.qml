@@ -19,16 +19,16 @@ Item {
 
     function populate(title, startTime, endTime, description, allDay) {
         _titleInput.text = title
-        _startInput.text = startTime
-        _endInput.text   = endTime
+        _startInput.setValue(startTime)
+        _endInput.setValue(endTime)
         _descInput.text  = description
         _allDay = allDay ?? false
     }
 
     function reset() {
         _titleInput.text = ""
-        _startInput.text = ""
-        _endInput.text   = ""
+        _startInput.clear()
+        _endInput.clear()
         _descInput.text  = ""
         _allDay = false
     }
@@ -122,31 +122,10 @@ Item {
                 height: 28
                 spacing: 4
 
-                Rectangle {
+                TimeField {
+                    id: _startInput
                     width: (parent.width - 20) / 2
                     height: 28
-                    color: Theme.popupBackground
-                    border.color: Theme.textDim
-                    radius: 4
-
-                    TextInput {
-                        id: _startInput
-                        anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
-                        color: Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                    }
-                    Text {
-                        anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
-                        text: "HH:MM"
-                        color: Theme.textTertiary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        verticalAlignment: Text.AlignVCenter
-                        visible: !_startInput.text.length
-                        enabled: false
-                    }
                 }
 
                 Text {
@@ -160,31 +139,10 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                 }
 
-                Rectangle {
+                TimeField {
+                    id: _endInput
                     width: (parent.width - 20) / 2
                     height: 28
-                    color: Theme.popupBackground
-                    border.color: Theme.textDim
-                    radius: 4
-
-                    TextInput {
-                        id: _endInput
-                        anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
-                        color: Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        verticalAlignment: TextInput.AlignVCenter
-                    }
-                    Text {
-                        anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
-                        text: "HH:MM"
-                        color: Theme.textTertiary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        verticalAlignment: Text.AlignVCenter
-                        visible: !_endInput.text.length
-                        enabled: false
-                    }
                 }
             }
         }
