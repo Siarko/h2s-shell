@@ -43,7 +43,7 @@ Item {
             width: parent.width
             height: 28
             color: Theme.popupBackground
-            border.color: Theme.textDim
+            border.color: _titleInput.activeFocus ? Theme.textSecondary : Theme.textDim
             radius: 4
 
             TextInput {
@@ -73,13 +73,16 @@ Item {
             spacing: 6
 
             Rectangle {
+                id: _allDayCheckbox
                 width: 14
                 height: 14
                 radius: 3
                 anchors.verticalCenter: parent.verticalCenter
                 color: root._allDay ? Theme.sliderAccent : "transparent"
-                border.color: root._allDay ? Theme.sliderAccent : Theme.textDim
+                border.color: activeFocus ? Theme.textSecondary
+                              : (root._allDay ? Theme.sliderAccent : Theme.textDim)
                 border.width: 1
+                activeFocusOnTab: true
 
                 Text {
                     anchors.centerIn: parent
@@ -93,6 +96,18 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root._allDay = !root._allDay
+                }
+
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Space) {
+                        root._allDay = !root._allDay
+                        event.accepted = true
+                    } else if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier)) {
+                        if (root._allDay) _descInput.forceActiveFocus()
+                        else              _startInput.focusHours()
+                        event.accepted = true
+                    }
+                    // Shift+Tab handled naturally by Qt via activeFocusOnTab (goes back to _titleInput)
                 }
             }
 
@@ -126,6 +141,8 @@ Item {
                     id: _startInput
                     width: (parent.width - 20) / 2
                     height: 28
+                    onTabOutForward:  _endInput.focusHours()
+                    onTabOutBackward: _allDayCheckbox.forceActiveFocus()
                 }
 
                 Text {
@@ -143,6 +160,8 @@ Item {
                     id: _endInput
                     width: (parent.width - 20) / 2
                     height: 28
+                    onTabOutForward:  _descInput.forceActiveFocus()
+                    onTabOutBackward: _startInput.focusMinutes()
                 }
             }
         }
@@ -152,7 +171,7 @@ Item {
             width: parent.width
             height: Math.max(60, _descInput.implicitHeight + 8)
             color: Theme.popupBackground
-            border.color: Theme.textDim
+            border.color: _descInput.activeFocus ? Theme.textSecondary : Theme.textDim
             radius: 4
 
             TextEdit {
@@ -162,6 +181,14 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 wrapMode: TextEdit.WordWrap
+
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier)) {
+                        if (root._allDay) _allDayCheckbox.forceActiveFocus()
+                        else              _endInput.focusMinutes()
+                        event.accepted = true
+                    }
+                }
             }
             Text {
                 anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 4; topMargin: 4 }

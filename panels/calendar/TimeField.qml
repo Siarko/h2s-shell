@@ -8,6 +8,8 @@ import qs.singletons
 // - Right arrow at end of hours → minutes; Left arrow at start of minutes → hours
 // - Only digit keys are accepted; all other printable keys are suppressed
 // - text: "HH:MM" string, or "" when both segments are empty
+// - Tab in minutes → tabOutForward signal (caller advances to next field)
+// - Shift+Tab in hours → tabOutBackward signal (caller goes to prev field)
 Item {
     id: root
 
@@ -36,10 +38,22 @@ Item {
         _mInput.text = ""
     }
 
+    signal tabOutForward()   // emitted: Tab pressed while in minutes segment
+    signal tabOutBackward()  // emitted: Shift+Tab pressed while in hours segment
+
+    function focusHours() {
+        _hInput.forceActiveFocus()
+        _hInput.selectAll()
+    }
+    function focusMinutes() {
+        _mInput.forceActiveFocus()
+        _mInput.selectAll()
+    }
+
     Rectangle {
         anchors.fill: parent
         color: Theme.popupBackground
-        border.color: Theme.textDim
+        border.color: (_hInput.activeFocus || _mInput.activeFocus) ? Theme.textSecondary : Theme.textDim
         radius: 4
 
         // Clicking anywhere outside the TextInputs (e.g. padding) focuses hours
@@ -77,8 +91,16 @@ Item {
                 }
 
                 Keys.onPressed: (event) => {
+                    // Shift+Tab → escape backward out of TimeField
+                    if (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier)) {
+                        if (text.length < 2) text = ("00" + text).slice(-2)
+                        root.tabOutBackward()
+                        event.accepted = true
+                        return
+                    }
                     // Tab → advance to minutes
                     if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier)) {
+                        if (text.length < 2) text = ("00" + text).slice(-2)
                         _mInput.forceActiveFocus()
                         _mInput.selectAll()
                         event.accepted = true
@@ -146,8 +168,16 @@ Item {
                 onActiveFocusChanged: if (activeFocus) selectAll()
 
                 Keys.onPressed: (event) => {
+                    // Tab → escape forward out of TimeField
+                    if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier)) {
+                        if (text.length < 2) text = ("00" + text).slice(-2)
+                        root.tabOutForward()
+                        event.accepted = true
+                        return
+                    }
                     // Shift+Tab → go back to hours
                     if (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier)) {
+                        if (text.length < 2) text = ("00" + text).slice(-2)
                         _hInput.forceActiveFocus()
                         _hInput.selectAll()
                         event.accepted = true
