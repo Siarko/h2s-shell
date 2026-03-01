@@ -33,10 +33,6 @@ Singleton {
 
     property var calendarsArray: Object.values(calendars)
 
-    function init() {
-        logger.log("Init");
-    }
-
     Logger {
         id: logger
         enabled: Config.gcal.debug
