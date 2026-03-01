@@ -107,7 +107,19 @@ Rectangle {
         wrapMode: Text.WordWrap
     }
 
-    // Inline edit form — top-aligned with 8px padding
+    // Main MouseArea — expand/collapse description on click.
+    // Declared before the edit form so the form's higher z-order lets its buttons receive clicks first.
+    MouseArea {
+        anchors.fill: parent
+        enabled: !root.editing && !root.confirmingDelete
+        cursorShape: !!root.modelData.description ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: {
+            if (root.modelData.description)
+                root.expanded = !root.expanded
+        }
+    }
+
+    // Inline edit form — declared after main MouseArea so it has higher z-order.
     EventForm {
         id: _editForm
         visible: root.editing
@@ -137,19 +149,10 @@ Rectangle {
                     root.modelData.title !== "(No title)" ? root.modelData.title : "",
                     (parts[0] !== "All day") ? parts[0] : "",
                     parts.length > 1 ? parts[1] : "",
-                    root.modelData.description || ""
+                    root.modelData.description || "",
+                    parts[0] === "All day"
                 )
             }
-        }
-    }
-
-    // Main MouseArea — lower z, expand/collapse description on click
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: (!root.editing && !root.confirmingDelete && !!root.modelData.description) ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: {
-            if (!root.editing && !root.confirmingDelete && root.modelData.description)
-                root.expanded = !root.expanded
         }
     }
 

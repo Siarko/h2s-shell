@@ -12,14 +12,17 @@ Item {
     property color submitColor: "#1e3a5f"
     property color submitColorHover: "#2d4a6d"
 
+    property bool _allDay: false
+
     signal submitted(string title, string description, string startTime, string endTime)
     signal cancelled()
 
-    function populate(title, startTime, endTime, description) {
+    function populate(title, startTime, endTime, description, allDay) {
         _titleInput.text = title
         _startInput.text = startTime
         _endInput.text   = endTime
         _descInput.text  = description
+        _allDay = allDay ?? false
     }
 
     function reset() {
@@ -27,6 +30,7 @@ Item {
         _startInput.text = ""
         _endInput.text   = ""
         _descInput.text  = ""
+        _allDay = false
     }
 
     Column {
@@ -62,74 +66,125 @@ Item {
             }
         }
 
-        // Start → End time row
+        // All day toggle
         Row {
             width: parent.width
-            height: 28
-            spacing: 4
+            height: 22
+            spacing: 6
 
             Rectangle {
-                width: (parent.width - 20) / 2
-                height: 28
-                color: Theme.popupBackground
-                border.color: Theme.textDim
-                radius: 4
+                width: 14
+                height: 14
+                radius: 3
+                anchors.verticalCenter: parent.verticalCenter
+                color: root._allDay ? Theme.sliderAccent : "transparent"
+                border.color: root._allDay ? Theme.sliderAccent : Theme.textDim
+                border.width: 1
 
-                TextInput {
-                    id: _startInput
-                    anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
-                    color: Theme.textPrimary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    verticalAlignment: TextInput.AlignVCenter
-                }
                 Text {
-                    anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
-                    text: "HH:MM"
-                    color: Theme.textTertiary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    verticalAlignment: Text.AlignVCenter
-                    visible: !_startInput.text.length
-                    enabled: false
+                    anchors.centerIn: parent
+                    text: "✓"
+                    color: Theme.textPrimary
+                    font.pixelSize: 9
+                    visible: root._allDay
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root._allDay = !root._allDay
                 }
             }
 
             Text {
-                text: "→"
-                color: Theme.textTertiary
+                text: "All day"
+                color: Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
-                width: 12
-                height: 28
-                verticalAlignment: Text.AlignVCenter
-                horizontalAlignment: Text.AlignHCenter
-            }
+                anchors.verticalCenter: parent.verticalCenter
 
-            Rectangle {
-                width: (parent.width - 20) / 2
-                height: 28
-                color: Theme.popupBackground
-                border.color: Theme.textDim
-                radius: 4
-
-                TextInput {
-                    id: _endInput
-                    anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
-                    color: Theme.textPrimary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    verticalAlignment: TextInput.AlignVCenter
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root._allDay = !root._allDay
                 }
+            }
+        }
+
+        // Start → End time row — hidden when all day
+        Item {
+            width: parent.width
+            height: root._allDay ? 0 : 28
+            clip: true
+
+            Row {
+                width: parent.width
+                height: 28
+                spacing: 4
+
+                Rectangle {
+                    width: (parent.width - 20) / 2
+                    height: 28
+                    color: Theme.popupBackground
+                    border.color: Theme.textDim
+                    radius: 4
+
+                    TextInput {
+                        id: _startInput
+                        anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                    }
+                    Text {
+                        anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
+                        text: "HH:MM"
+                        color: Theme.textTertiary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: Text.AlignVCenter
+                        visible: !_startInput.text.length
+                        enabled: false
+                    }
+                }
+
                 Text {
-                    anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
-                    text: "HH:MM"
+                    text: "→"
                     color: Theme.textTertiary
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
+                    width: 12
+                    height: 28
                     verticalAlignment: Text.AlignVCenter
-                    visible: !_endInput.text.length
-                    enabled: false
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Rectangle {
+                    width: (parent.width - 20) / 2
+                    height: 28
+                    color: Theme.popupBackground
+                    border.color: Theme.textDim
+                    radius: 4
+
+                    TextInput {
+                        id: _endInput
+                        anchors { fill: parent; leftMargin: 6; rightMargin: 6; topMargin: 4; bottomMargin: 4 }
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                    }
+                    Text {
+                        anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
+                        text: "HH:MM"
+                        color: Theme.textTertiary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: Text.AlignVCenter
+                        visible: !_endInput.text.length
+                        enabled: false
+                    }
                 }
             }
         }
@@ -187,7 +242,9 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.submitted(_titleInput.text, _descInput.text, _startInput.text, _endInput.text)
+                    onClicked: root.submitted(_titleInput.text, _descInput.text,
+                        root._allDay ? "" : _startInput.text,
+                        root._allDay ? "" : _endInput.text)
                 }
             }
 

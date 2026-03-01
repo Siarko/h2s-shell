@@ -68,6 +68,8 @@ LazyLoader {
         property bool showPopup: false
         Component.onCompleted: popup.showPopup = true
 
+        focusable: true
+
         margins.top: 0
         margins.left: 0
         color: "transparent"
@@ -147,15 +149,15 @@ LazyLoader {
                     color: Theme.popupBackground
 
                     readonly property var _componentMap: ({
-                        "tray-menu":     trayMenuComponent,
-                        "power":         powerMenuComponent,
-                        "notifications": notificationsComponent,
-                        "sound":         soundComponent,
-                        "music":         musicComponent,
-                        "bluetooth":     bluetoothComponent,
-                        "calendar":      calendarComponent,
-                        "network":       networkComponent
-                    })
+                            "tray-menu": trayMenuComponent,
+                            "power": powerMenuComponent,
+                            "notifications": notificationsComponent,
+                            "sound": soundComponent,
+                            "music": musicComponent,
+                            "bluetooth": bluetoothComponent,
+                            "calendar": calendarComponent,
+                            "network": networkComponent
+                        })
 
                     Loader {
                         id: contentLoader
