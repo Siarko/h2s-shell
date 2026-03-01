@@ -27,8 +27,8 @@ QtObject {
     readonly property color textDim: "#777777"          // previous/next month day numbers
 
     // Sliders
-    readonly property color sliderAccent: "#5b9bf5"       // active track fill
-    readonly property color sliderAccentHover: "#7db3ff"   // active track fill on hover
+    readonly property color sliderAccent: "#44d47a"      // active track fill
+    readonly property color sliderAccentHover: "#92db7a"   // active track fill on hover
 
     // Calendar
     readonly property color todayHighlight: "#666666"   // background circle on today's date

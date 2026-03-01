@@ -3,6 +3,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import qs.singletons
+import qs.singletons.googlecalendar
 
 FloatingWindow {
     id: root
@@ -14,9 +15,9 @@ FloatingWindow {
 
     property int selectedCategory: 0  // 0=General, 1=Calendar
 
-    component SettingRow: RowLayout {
+    component SettingBool: RowLayout {
         property string label
-        property bool defaultChecked: false
+        property bool value: false
 
         Layout.fillWidth: true
         Layout.preferredHeight: 44
@@ -31,7 +32,7 @@ FloatingWindow {
 
         Rectangle {
             id: toggle
-            property bool checked: defaultChecked
+            property bool checked: value
             width: 36
             height: 20
             radius: 10
@@ -55,7 +56,7 @@ FloatingWindow {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: toggle.checked = !toggle.checked
+                onClicked: toggle.parent.value = !toggle.parent.value
             }
         }
     }
@@ -63,7 +64,7 @@ FloatingWindow {
     component SettingInputRow: RowLayout {
         property string label
         property string value
-        property int    echoMode: TextInput.Normal
+        property int echoMode: TextInput.Normal
 
         Layout.fillWidth: true
         Layout.preferredHeight: 44
@@ -77,11 +78,17 @@ FloatingWindow {
         }
 
         Rectangle {
-            width: 130; height: 26; radius: 6
+            width: 130
+            height: 26
+            radius: 6
             color: Theme.cellDefault
 
             TextInput {
-                anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                anchors {
+                    fill: parent
+                    leftMargin: 8
+                    rightMargin: 8
+                }
                 text: value
                 echoMode: parent.parent.echoMode
                 font.family: Theme.fontFamily
@@ -202,17 +209,15 @@ FloatingWindow {
                 Layout.bottomMargin: 8
             }
 
-            SettingRow {
-                label: "Show seconds in clock"
-                defaultChecked: true
+            SettingBool {
+                label: "Debug Mode"
+                value: Config.general.debug ?? false
+                onValueChanged: Config.general.debug = value
             }
-            SettingRow {
-                label: "Compact mode"
-                defaultChecked: false
-            }
-            SettingRow {
-                label: "Animations"
-                defaultChecked: true
+            SettingBool {
+                label: "Debug Mode | Fetch"
+                value: Config.general.fetch_debug ?? false
+                onValueChanged: Config.general.fetch_debug = value
             }
 
             Item {
@@ -239,19 +244,6 @@ FloatingWindow {
                 font.bold: true
                 color: Theme.textSecondary
                 Layout.bottomMargin: 8
-            }
-
-            SettingRow {
-                label: "Start week on Monday"
-                defaultChecked: true
-            }
-            SettingRow {
-                label: "Show week numbers"
-                defaultChecked: false
-            }
-            SettingRow {
-                label: "24-hour time format"
-                defaultChecked: true
             }
 
             SettingInputRow {
@@ -288,14 +280,14 @@ FloatingWindow {
                 spacing: 8
 
                 Rectangle {
-                    width: 8; height: 8; radius: 4
-                    color: GoogleCalendar.isAuthorized ? "#33b679" : "#e87c5b"
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: GoogleCalendarAuth.isAuthorized ? "#33b679" : "#e87c5b"
                 }
 
                 Text {
-                    text: GoogleCalendar.isBusy        ? "Connecting…"
-                        : GoogleCalendar.isAuthorized  ? "Connected"
-                        :                                "Not connected"
+                    text: GoogleCalendarAuth.isBusy ? "Connecting…" : GoogleCalendar.isAuthorized ? "Connected" : "Not connected"
                     font.family: Theme.fontFamily
                     font.pixelSize: 13
                     color: Theme.textPrimary
@@ -305,7 +297,7 @@ FloatingWindow {
 
             // Connecting… message (shown while OAuth process runs)
             Text {
-                visible: GoogleCalendar.isBusy
+                visible: GoogleCalendarAuth.isBusy
                 text: "Opening browser for authorization…"
                 font.family: Theme.fontFamily
                 font.pixelSize: 11
@@ -315,7 +307,7 @@ FloatingWindow {
 
             // Not-authorized inputs (hidden while busy or connected)
             ColumnLayout {
-                visible: !GoogleCalendar.isAuthorized && !GoogleCalendar.isBusy
+                visible: !GoogleCalendarAuth.isAuthorized && !GoogleCalendar.isBusy
                 Layout.fillWidth: true
                 spacing: 0
 
@@ -338,9 +330,10 @@ FloatingWindow {
                     Layout.preferredHeight: 44
 
                     Rectangle {
-                        readonly property bool _enabled: Config.gcal.clientId !== ""
-                                                      && Config.gcal.clientSecret !== ""
-                        width: 90; height: 28; radius: 6
+                        readonly property bool _enabled: Config.gcal.clientId !== "" && Config.gcal.clientSecret !== ""
+                        width: 90
+                        height: 28
+                        radius: 6
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         color: _enabled ? Theme.sliderAccent : Theme.cellDefault
@@ -358,7 +351,7 @@ FloatingWindow {
                             anchors.fill: parent
                             enabled: parent._enabled
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: GoogleCalendar.login()
+                            onClicked: GoogleCalendarAuth.login()
                         }
                     }
                 }
@@ -366,12 +359,14 @@ FloatingWindow {
 
             // Disconnect button (shown when authorized)
             Item {
-                visible: GoogleCalendar.isAuthorized
+                visible: GoogleCalendarAuth.isAuthorized
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
 
                 Rectangle {
-                    width: 100; height: 28; radius: 6
+                    width: 100
+                    height: 28
+                    radius: 6
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     color: "#c0392b"
@@ -387,7 +382,7 @@ FloatingWindow {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: GoogleCalendar.logout()
+                        onClicked: GoogleCalendarAuth.logout()
                     }
                 }
             }
@@ -395,8 +390,8 @@ FloatingWindow {
             // ── My Calendars section ──────────────────────────────────────
 
             Text {
-                visible: GoogleCalendar.isAuthorized
-                text: "My Calendars"
+                visible: GoogleCalendarAuth.isAuthorized
+                text: "My Calendars " + GoogleCalendar.calendars
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
                 font.bold: true
@@ -406,9 +401,9 @@ FloatingWindow {
             }
 
             Rectangle {
-                visible: GoogleCalendar.isAuthorized
+                visible: GoogleCalendarAuth.isAuthorized
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(150, GoogleCalendar._calendars.length * 32)
+                Layout.preferredHeight: Math.min(150, GoogleCalendar.calendars.length * 32)
                 clip: true
                 color: "transparent"
 
@@ -422,7 +417,7 @@ FloatingWindow {
                         width: parent.width
 
                         Repeater {
-                            model: GoogleCalendar._calendars
+                            model: GoogleCalendar.calendars
 
                             delegate: Item {
                                 required property var modelData
@@ -438,7 +433,9 @@ FloatingWindow {
                                     spacing: 8
 
                                     Rectangle {
-                                        width: 8; height: 8; radius: 4
+                                        width: 8
+                                        height: 8
+                                        radius: 4
                                         color: modelData.color
                                     }
 
@@ -453,8 +450,10 @@ FloatingWindow {
 
                                     Rectangle {
                                         id: _calCheckbox
-                                        property bool checked: GoogleCalendar.enabledCalendarIds.indexOf(modelData.id) !== -1
-                                        width: 16; height: 16; radius: 3
+                                        //property bool checked: GoogleCalendar.enabledCalendarIds.indexOf(modelData.id) !== -1
+                                        width: 16
+                                        height: 16
+                                        radius: 3
                                         color: checked ? Theme.sliderAccent : "transparent"
                                         border.color: Theme.sliderAccent
                                         border.width: 1
@@ -470,7 +469,7 @@ FloatingWindow {
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: GoogleCalendar.setCalendarEnabled(modelData.id, !_calCheckbox.checked)
+                                            //onClicked: GoogleCalendar.setCalendarEnabled(modelData.id, !_calCheckbox.checked)
                                         }
                                     }
                                 }
@@ -478,6 +477,20 @@ FloatingWindow {
                         }
                     }
                 }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.topMargin: 10
+                color: Theme.textDim
+                opacity: 0.3
+            }
+
+            SettingBool {
+                label: "Debug Mode"
+                value: Config.gcal.debug ?? false
+                onValueChanged: Config.gcal.debug = value
             }
 
             Item {

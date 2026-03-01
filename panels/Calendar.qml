@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.components
 import qs.singletons
+import qs.singletons.googlecalendar
 
 // Monthly calendar with navigation arrows and day events panel
 Item {
@@ -27,8 +28,9 @@ Item {
     readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
 
     // Live data from GoogleCalendar singleton
-    readonly property var _dayEvents: GoogleCalendar._cache[_dateKey(displayYear, displayMonth, selectedDay)] || []
-    readonly property bool _dayLoading: !!GoogleCalendar._loading[_dateKey(displayYear, displayMonth, selectedDay)]
+    readonly property var _dayEvents: GoogleCalendar.events[_dateKey(displayYear, displayMonth, selectedDay)] || []
+    // readonly property var _dayEvents: GoogleCalendar._cache[_dateKey(displayYear, displayMonth, selectedDay)] || []
+    // readonly property bool _dayLoading: !!GoogleCalendar._loading[_dateKey(displayYear, displayMonth, selectedDay)]
 
     function _dateKey(y, m, d) {
         return y + "-" + ("0" + (m + 1)).slice(-2) + "-" + ("0" + d).slice(-2);
@@ -57,20 +59,22 @@ Item {
     // Fetch events whenever the viewed date changes
     onSelectedDayChanged: {
         console.log("Selected day change");
-        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        // GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay);
     }
     onDisplayMonthChanged: {
         console.log("Selected month change");
-        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        // GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay);
     }
     onDisplayYearChanged: {
         console.log("Selected Year change");
-        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        // GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay);
     }
 
     Component.onCompleted: {
-        console.log("Calendar component completed - fetch events");
-        GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
+        // GoogleCalendar.fetchEventsForDate(displayYear, displayMonth, selectedDay);
     }
 
     Row {
@@ -112,6 +116,7 @@ Item {
                         color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                         font.family: Theme.fontFamily
                         font.pixelSize: 14
+                        // visible: GoogleCalendar.isAuthorized
                         visible: GoogleCalendar.isAuthorized
 
                         MouseArea {
@@ -119,7 +124,8 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: GoogleCalendar.invalidateAndRefetch(root.displayYear, root.displayMonth, root.selectedDay)
+                            // onClicked: GoogleCalendar.invalidateAndRefetch(root.displayyear, root.displaymonth, root.selectedday)
+                            onClicked: GoogleCalendar.fetchDayEvents(root.displayYear, root.displayMonth, root.selectedDay, true)
                         }
                     }
                 }
@@ -257,7 +263,8 @@ Item {
 
             // Loading spinner overlay (centered over events area)
             Text {
-                visible: root._dayLoading
+                // visible: root._dayLoading
+                visible: false
                 text: "↻"
                 font.pixelSize: 22
                 color: Theme.textSecondary
@@ -265,7 +272,8 @@ Item {
                 anchors.centerIn: parent
 
                 RotationAnimator on rotation {
-                    running: root._dayLoading
+                    // running: root._dayLoading
+                    running: false
                     from: 0
                     to: 360
                     duration: 800

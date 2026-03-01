@@ -10,6 +10,7 @@ Singleton {
 
     property alias datetimeFormat: _calendar.datetimeFormat
     property alias gcal: _gcal
+    property alias general: _general
 
     FileView {
         id: _file
@@ -17,6 +18,11 @@ Singleton {
         onAdapterUpdated: _saveTimer.restart()
 
         adapter: JsonAdapter {
+            property JsonObject general: JsonObject {
+                id: _general
+                property bool debug: false
+                property bool fetch_debug: false
+            }
             property JsonObject calendar: JsonObject {
                 id: _calendar
                 property string datetimeFormat: "hh:mm:ss"
@@ -28,8 +34,9 @@ Singleton {
                 property string clientSecret: ""
                 property string accessToken: ""
                 property string refreshToken: ""
-                property real   tokenExpiry: 0
+                property real tokenExpiry: 0
                 property string enabledCalendarIds: "[]"
+                property bool debug: false
             }
         }
     }
@@ -37,6 +44,9 @@ Singleton {
     Timer {
         id: _saveTimer
         interval: 1000
-        onTriggered: _file.writeAdapter()
+        onTriggered: {
+            _file.writeAdapter();
+            console.log("[CONFIG] Saved");
+        }
     }
 }
