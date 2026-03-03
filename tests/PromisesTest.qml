@@ -56,9 +56,9 @@ TestCase {
         // Test 7: error thrown in then propagates to catch
         {
             let caught = null;
-            let p = Promises.create((resolve, reject) => { resolve(1); });
-            p.then(v => { throw "oops"; });
-            p.catch(e => { caught = e; });
+            Promises.create((resolve, reject) => { resolve(1); })
+                .then(v => { throw "oops"; })
+                .catch(e => { caught = e; });
             assertEqual(caught, "oops", "error thrown in then propagates to catch");
         }
 

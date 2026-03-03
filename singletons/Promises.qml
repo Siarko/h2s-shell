@@ -21,6 +21,7 @@ Singleton {
                 }
             },
             _reject: function (reason) {
+                if (promiseResult._value !== null) return;
                 promiseResult._value = {
                     type: false,
                     value: reason
@@ -33,6 +34,7 @@ Singleton {
                 });
             },
             _resolve: function (result) {
+                if (promiseResult._value !== null) return;
                 try {
                     promiseResult._value = {
                         type: true,
@@ -49,22 +51,36 @@ Singleton {
                 }
             },
             then: function (resolveCallback) {
-                this._resolveQueue.push(resolveCallback);
-                try {
-                    if (this._value?.type) {
-                        this._flatten(resolveCallback(this._value.value));
-                    }
-                } catch (e) {
-                    this._flatten(this._reject(e));
-                }
-                return this;
+                let self = this;
+                return root.create((resolve, reject) => {
+                    let handler = function(value) {
+                        try {
+                            resolve(resolveCallback(value));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    };
+                    self._resolveQueue.push(handler);
+                    if (self._value?.type === true) handler(self._value.value);
+                    self._catchQueue.push(reject);
+                    if (self._value?.type === false) reject(self._value.value);
+                });
             },
             catch: function (catchCallback) {
-                this._catchQueue.push(catchCallback);
-                if (this._value?.type === false) {
-                    this._flatten(catchCallback(this._value.value));
-                }
-                return this;
+                let self = this;
+                return root.create((resolve, reject) => {
+                    let handler = function(reason) {
+                        try {
+                            resolve(catchCallback(reason));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    };
+                    self._catchQueue.push(handler);
+                    if (self._value?.type === false) handler(self._value.value);
+                    self._resolveQueue.push(resolve);
+                    if (self._value?.type === true) resolve(self._value.value);
+                });
             },
             finally: function (finalCallback) {
                 this._finalQueue.push(finalCallback);
@@ -82,14 +98,14 @@ Singleton {
     function resolved() {
         let args = arguments;
         return Promises.create(resolve => {
-            return resolve(args);
+            return resolve(args[0]);
         });
     }
 
     function rejected() {
         let args = arguments;
         return Promises.create((resolve, reject) => {
-            return reject(args);
+            return reject(args[0]);
         });
     }
 
@@ -137,6 +153,11 @@ Singleton {
             promiseCount++;
             promiseStack.push(promise);
         });
+
+        if (promiseCount === 0) {
+            resolver(results);
+            return result;
+        }
 
         for (const promise of promiseStack) {
             promise.then(r => {
