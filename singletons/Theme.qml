@@ -9,6 +9,7 @@ QtObject {
     // Bar & cells
     readonly property color barBackground: "#4b4b4b"   // top panel background
     readonly property color cellDefault: "#3b3b3b"      // default cell / notification card background
+    readonly property color cellHover: "#5a5a5a"        // cell background on hover or while popup is open
     readonly property color cellAccent: "green"         // highlighted interactive cell
     readonly property color cellAccentSecondary: "#4a6a4a"  // active but unfocused workspace
     readonly property color cellMuted: "gray"           // de-emphasized cell (e.g. notification bell)

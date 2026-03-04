@@ -68,7 +68,7 @@ LazyLoader {
         property bool showPopup: false
         Component.onCompleted: popup.showPopup = true
 
-        focusable: true
+        focusable: false
 
         margins.top: 0
         margins.left: 0

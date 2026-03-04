@@ -51,7 +51,7 @@ PanelWindow {
             spacing: 5
 
             Cell {
-                cellColor: Theme.cellDefault
+                active: popupLoader.active && popupLoader.contentType === "power"
                 onPlonked: {
                     if (popupLoader.active && popupLoader.contentType === "power") {
                         popupLoader.close();
@@ -70,7 +70,7 @@ PanelWindow {
             }
 
             Cell {
-                cellColor: Theme.cellDefault
+
                 onPlonked: settingsWindow.visible = !settingsWindow.visible
 
                 Text {
@@ -135,7 +135,7 @@ PanelWindow {
             anchors.bottom: parent.bottom
 
             Cell {
-                cellColor: Theme.cellDefault
+
                 onHover: s => {
                     if (s) {
                         popupLoader.open(this);
@@ -160,7 +160,7 @@ PanelWindow {
             spacing: 5
 
             Cell {
-                cellColor: Theme.cellDefault
+
 
                 onHover: state => {
                     if (state) {
@@ -200,7 +200,7 @@ PanelWindow {
             }
 
             Cell {
-                cellColor: Theme.cellDefault
+
 
                 onHover: state => {
                     if (state) {
@@ -242,7 +242,7 @@ PanelWindow {
             }
 
             Cell {
-                cellColor: Theme.cellDefault
+
 
                 onHover: state => {
                     if (state) {
@@ -323,7 +323,7 @@ PanelWindow {
             }
 
             Cell {
-                cellColor: Theme.cellDefault
+                active: popupLoader.active && popupLoader.contentType === "network"
                 onPlonked: {
                     if (popupLoader.active && popupLoader.contentType === "network") {
                         popupLoader.close();
@@ -334,12 +334,18 @@ PanelWindow {
 
                 Text {
                     text: {
-                        if (NetworkManager.activeDeviceType === "ethernet") return "󰈀";
-                        if (!NetworkManager.wifiEnabled) return "󰤭";
-                        if (!NetworkManager.isConnected) return "󰤮";
-                        if (NetworkManager.wifiSignal >= 75) return "󰤨";
-                        if (NetworkManager.wifiSignal >= 50) return "󰤤";
-                        if (NetworkManager.wifiSignal >= 25) return "󰤢";
+                        if (NetworkManager.activeDeviceType === "ethernet")
+                            return "󰈀";
+                        if (!NetworkManager.wifiEnabled)
+                            return "󰤭";
+                        if (!NetworkManager.isConnected)
+                            return "󰤮";
+                        if (NetworkManager.wifiSignal >= 75)
+                            return "󰤨";
+                        if (NetworkManager.wifiSignal >= 50)
+                            return "󰤤";
+                        if (NetworkManager.wifiSignal >= 25)
+                            return "󰤢";
                         return "󰤟";
                     }
                     font.family: Theme.fontFamily
@@ -351,7 +357,7 @@ PanelWindow {
 
             Cell {
                 id: notifCell
-                cellColor: Theme.cellDefault
+                active: popupLoader.active && popupLoader.contentType === "notifications"
                 onPlonked: {
                     if (popupLoader.active && popupLoader.contentType === "notifications") {
                         popupLoader.close();
