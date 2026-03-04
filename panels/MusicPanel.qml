@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell.Services.Mpris
 import qs.components
 import qs.singletons
+import QtQuick.Effects
 
 Item {
     id: root
@@ -57,11 +58,41 @@ Item {
             height: Music.artUrl ? 120 : 0
             visible: Music.artUrl !== ""
 
-            Image {
+            Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 120; height: 120
-                source: Music.artUrl
-                fillMode: Image.PreserveAspectCrop
+                width: 120
+                height: 120
+                radius: 50
+                clip: true
+
+                MultiEffect {
+                    source: image
+                    anchors.fill: image
+                    maskEnabled: true
+                    maskSource: mask
+                    maskSpreadAtMin: 1
+                    maskThresholdMin: 0.5
+                }
+
+                Image {
+                    id: image
+                    anchors.fill: parent
+                    source: Music.artUrl
+                    fillMode: Image.PreserveAspectCrop
+                    visible: false
+                }
+
+                Item {
+                    id: mask
+                    anchors.fill: image
+                    layer.enabled: true
+                    visible: false
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 20
+                    }
+                }
             }
         }
 
