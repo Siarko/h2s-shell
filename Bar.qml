@@ -50,9 +50,9 @@ PanelWindow {
             anchors.bottom: parent.bottom
             spacing: 5
 
-            Cell {
+            BarWidget {
                 active: popupLoader.active && popupLoader.contentType === "power"
-                onPlonked: {
+                onClicked: {
                     if (popupLoader.active && popupLoader.contentType === "power") {
                         popupLoader.close();
                     } else {
@@ -69,9 +69,9 @@ PanelWindow {
                 }
             }
 
-            Cell {
+            BarWidget {
 
-                onPlonked: settingsWindow.visible = !settingsWindow.visible
+                onClicked: settingsWindow.visible = !settingsWindow.visible
 
                 Text {
                     text: "⚙"
@@ -134,7 +134,7 @@ PanelWindow {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
 
-            Cell {
+            BarWidget {
 
                 onHover: s => {
                     if (s) {
@@ -159,7 +159,7 @@ PanelWindow {
             anchors.bottom: parent.bottom
             spacing: 5
 
-            Cell {
+            BarWidget {
 
 
                 onHover: state => {
@@ -199,7 +199,7 @@ PanelWindow {
                 }
             }
 
-            Cell {
+            BarWidget {
 
 
                 onHover: state => {
@@ -241,7 +241,7 @@ PanelWindow {
                 }
             }
 
-            Cell {
+            BarWidget {
 
 
                 onHover: state => {
@@ -322,9 +322,9 @@ PanelWindow {
                 }
             }
 
-            Cell {
+            BarWidget {
                 active: popupLoader.active && popupLoader.contentType === "network"
-                onPlonked: {
+                onClicked: {
                     if (popupLoader.active && popupLoader.contentType === "network") {
                         popupLoader.close();
                     } else {
@@ -355,10 +355,10 @@ PanelWindow {
                 }
             }
 
-            Cell {
+            BarWidget {
                 id: notifCell
                 active: popupLoader.active && popupLoader.contentType === "notifications"
-                onPlonked: {
+                onClicked: {
                     if (popupLoader.active && popupLoader.contentType === "notifications") {
                         popupLoader.close();
                     } else {

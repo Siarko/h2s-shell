@@ -21,11 +21,11 @@ QML files are organized into subdirectories by role. Quickshell auto-exposes upp
 ### Root (entry point + top-level shell)
 
 - **shell.qml** — Entry point. Uses `Variants` with `Quickshell.screens` to instantiate a `Bar` on every monitor. Tracks `activeScreen` so only one popup is open at a time.
-- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and interactive `Cell` widgets. Includes a popup that toggles on cell interaction.
+- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and interactive `BarWidget` widgets. Includes a popup that toggles on widget interaction.
 
 ### `components/` (reusable building blocks)
 
-- **Cell.qml** — Reusable interactive bar widget. A colored rectangle with `MouseArea` that emits `plonked(color)` on click and `hover(bool)` on enter/exit.
+- **BarWidget.qml** — Reusable interactive bar widget. A colored rectangle with `MouseArea` that emits `clicked(color)` on click and `hover(bool)` on enter/exit.
 - **ArrowButton.qml** — Small clickable arrow used for calendar month navigation.
 - **PopupCurve.qml** — Draws the curved corners connecting the popup to the bar edge.
 
@@ -49,7 +49,7 @@ QML files are organized into subdirectories by role. Quickshell auto-exposes upp
 ## Key Patterns
 
 - **Multi-monitor**: `Variants` + `Quickshell.screens` creates per-screen panel instances
-- **Signals**: Cell uses Qt signal/slot pattern (`plonked`, `hover`) for parent communication
+- **Signals**: BarWidget uses Qt signal/slot pattern (`clicked`, `hover`) for parent communication
 - **Lazy loading**: Popup window only instantiates when `LazyLoader.active` is true
 - **Singleton**: Time.qml uses `pragma Singleton` for shared state across components
 

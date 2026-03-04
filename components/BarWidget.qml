@@ -9,7 +9,7 @@ Item {
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)
     property bool active: false
     // Emitted on click, carries the cell's color
-    signal plonked(cellColor: color)
+    signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
     signal hover(status: bool)
     // Emitted on scroll wheel: delta in notches (±1, ±2, …); shift indicates shift key held
@@ -50,7 +50,7 @@ Item {
             if (event.button === Qt.MiddleButton)
                 container.middleClicked();
             else
-                container.plonked(container.cellColor);
+                container.clicked(container.cellColor);
         }
         onEntered: container.hover(true)
         onExited: container.hover(false)
