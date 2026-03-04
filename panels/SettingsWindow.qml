@@ -61,6 +61,66 @@ FloatingWindow {
         }
     }
 
+    component SettingOptions: Item {
+        id: _so
+        property string label: ""
+        property var options: []
+        property var labels: []
+        property string value: ""
+        signal picked(string newValue)
+
+        Layout.fillWidth: true
+        implicitHeight: _soCol.implicitHeight + 8
+
+        Column {
+            id: _soCol
+            width: _so.width
+            spacing: 6
+
+            Text {
+                text: _so.label
+                font.family: Theme.fontFamily
+                font.pixelSize: 13
+                color: Theme.textPrimary
+            }
+
+            Row {
+                spacing: 4
+
+                Repeater {
+                    model: _so.options
+
+                    Rectangle {
+                        required property string modelData
+                        required property int index
+                        property bool selected: modelData === _so.value
+                        width: _pillText.implicitWidth + 16
+                        height: 26
+                        radius: 6
+                        color: selected ? Theme.sliderAccent : "transparent"
+                        border.width: selected ? 0 : 1
+                        border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
+
+                        Text {
+                            id: _pillText
+                            anchors.centerIn: parent
+                            text: _so.labels[index]
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            color: selected ? Theme.textPrimary : Theme.textSecondary
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: _so.picked(modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     component SettingInputRow: RowLayout {
         property string label
         property string value
@@ -131,7 +191,7 @@ FloatingWindow {
                     }
 
                     Repeater {
-                        model: ["General", "Calendar"]
+                        model: ["General", "Calendar", "Media"]
                         Rectangle {
                             required property string modelData
                             required property int index
@@ -183,7 +243,7 @@ FloatingWindow {
 
                 Loader {
                     anchors.fill: parent
-                    sourceComponent: root.selectedCategory === 0 ? generalComp : calendarComp
+                    sourceComponent: root.selectedCategory === 0 ? generalComp : root.selectedCategory === 1 ? calendarComp : mediaComp
                 }
             }
         }
@@ -218,6 +278,48 @@ FloatingWindow {
                 label: "Debug Mode | Fetch"
                 value: Config.general.fetch_debug ?? false
                 onValueChanged: Config.general.fetch_debug = value
+            }
+
+            Item {
+                Layout.fillHeight: true
+            }
+        }
+    }
+
+    // ── Media settings content ────────────────────────────────────────
+    Component {
+        id: mediaComp
+
+        ColumnLayout {
+            anchors {
+                fill: parent
+                margins: 14
+            }
+            spacing: 4
+
+            Text {
+                text: "Media"
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                font.bold: true
+                color: Theme.textSecondary
+                Layout.bottomMargin: 4
+            }
+
+            SettingOptions {
+                label: "Visualizer style"
+                options: ["waveform", "bars", "dots", "none"]
+                labels: ["Waveform", "Bars", "Dots", "None"]
+                value: Config.media.visualizerStyle
+                onPicked: val => Config.media.visualizerStyle = val
+            }
+
+            SettingOptions {
+                label: "Layout"
+                options: ["horizontal", "vertical"]
+                labels: ["Horizontal", "Vertical"]
+                value: Config.media.visualizerLayout
+                onPicked: val => Config.media.visualizerLayout = val
             }
 
             Item {

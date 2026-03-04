@@ -11,6 +11,7 @@ Singleton {
     property alias datetimeFormat: _calendar.datetimeFormat
     property alias gcal: _gcal
     property alias general: _general
+    property alias media: _media
 
     signal saved
 
@@ -28,6 +29,12 @@ Singleton {
             property JsonObject calendar: JsonObject {
                 id: _calendar
                 property string datetimeFormat: "hh:mm:ss"
+            }
+
+            property JsonObject media: JsonObject {
+                id: _media
+                property string visualizerStyle: "waveform"   // "waveform"|"bars"|"dots"|"none"
+                property string visualizerLayout: "horizontal" // "horizontal"|"vertical"
             }
 
             property JsonObject gcal: JsonObject {

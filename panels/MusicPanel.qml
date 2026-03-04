@@ -12,9 +12,135 @@ Item {
     implicitHeight: col.implicitHeight
 
     property bool useCava: false
-    property var visualizerBars: []
+    property var leftBars: []
+    property var rightBars: []
     property real _ambientPhase: 0
     property string _cavaConfig: Qt.resolvedUrl("../scripts/cava.ini").toString().replace("file://", "")
+
+    function _requestAllPaint() {
+        waveCanvas.requestPaint();
+        leftCanvas.requestPaint();
+        rightCanvas.requestPaint();
+    }
+
+    function drawWaveform(ctx, bars, w, h, vertical) {
+        if (bars.length < 2) return;
+        var c = Theme.sliderAccent;
+
+        if (!vertical) {
+            var cx = w / (bars.length - 1);
+            var amp = h / 2 * 0.85;
+            ctx.beginPath();
+            ctx.moveTo(0, h / 2);
+            for (var i = 0; i < bars.length - 1; i++) {
+                var x0 = i * cx, x1 = (i + 1) * cx;
+                var y0 = h / 2 - bars[i] * amp;
+                var y1 = h / 2 - bars[i + 1] * amp;
+                ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+            }
+            ctx.lineTo(w, h / 2);
+            for (var j = bars.length - 2; j >= 0; j--) {
+                var x0b = j * cx, x1b = (j + 1) * cx;
+                var y0b = h / 2 + bars[j] * amp;
+                var y1b = h / 2 + bars[j + 1] * amp;
+                ctx.quadraticCurveTo(x1b, y1b, (x0b + x1b) / 2, (y0b + y1b) / 2);
+            }
+            ctx.closePath();
+        } else {
+            // axes swapped: center is vertical line at w/2, curves go left/right
+            var cy = h / (bars.length - 1);
+            var amp = w / 2 * 0.85;
+            ctx.beginPath();
+            ctx.moveTo(w / 2, 0);
+            for (var i = 0; i < bars.length - 1; i++) {
+                var y0 = i * cy, y1 = (i + 1) * cy;
+                var x0 = w / 2 - bars[i] * amp;
+                var x1 = w / 2 - bars[i + 1] * amp;
+                ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+            }
+            ctx.lineTo(w / 2, h);
+            for (var j = bars.length - 2; j >= 0; j--) {
+                var y0b = j * cy, y1b = (j + 1) * cy;
+                var x0b = w / 2 + bars[j] * amp;
+                var x1b = w / 2 + bars[j + 1] * amp;
+                ctx.quadraticCurveTo(x1b, y1b, (x0b + x1b) / 2, (y0b + y1b) / 2);
+            }
+            ctx.closePath();
+        }
+
+        ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.18);
+        ctx.fill();
+        ctx.strokeStyle = Qt.rgba(c.r, c.g, c.b, 0.6);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    // fromRight: left canvas bars anchor to right edge and grow left
+    function drawBars(ctx, bars, w, h, vertical, fromRight) {
+        if (bars.length === 0) return;
+        var c = Theme.sliderAccent;
+        ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.7);
+
+        var n = bars.length;
+        if (!vertical) {
+            var barW = (w - (n - 1) * 2) / n;
+            var amp = h / 2 * 0.85;
+            for (var i = 0; i < n; i++) {
+                var x = i * (barW + 2);
+                var barH = bars[i] * amp;
+                ctx.fillRect(x, h / 2 - barH, barW, barH);
+                ctx.fillRect(x, h / 2, barW, barH);
+            }
+        } else {
+            var barH = (h - (n - 1) * 2) / n;
+            var amp = w * 0.85;
+            for (var i = 0; i < n; i++) {
+                var y = i * (barH + 2);
+                var barLen = bars[i] * amp;
+                if (fromRight) {
+                    ctx.fillRect(w - barLen, y, barLen, barH);
+                } else {
+                    ctx.fillRect(0, y, barLen, barH);
+                }
+            }
+        }
+    }
+
+    function drawDots(ctx, bars, w, h, vertical) {
+        if (bars.length === 0) return;
+        var c = Theme.sliderAccent;
+        ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.9);
+
+        var n = bars.length;
+        var r = 2.5;
+        if (!vertical) {
+            var cx = w / (n > 1 ? n - 1 : 1);
+            var amp = h / 2 * 0.85;
+            for (var i = 0; i < n; i++) {
+                var x = i * cx;
+                var dy = bars[i] * amp;
+                ctx.beginPath();
+                ctx.arc(x, h / 2 - dy, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(x, h / 2 + dy, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else {
+            var cy = h / (n > 1 ? n - 1 : 1);
+            var amp = w / 2 * 0.85;
+            for (var i = 0; i < n; i++) {
+                var y = i * cy;
+                var dx = bars[i] * amp;
+                ctx.beginPath();
+                ctx.arc(w / 2 - dx, y, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(w / 2 + dx, y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
 
     // Real audio data from cava
     Process {
@@ -24,11 +150,16 @@ Item {
         stdout: SplitParser {
             onRead: line => {
                 var vals = line.split(";").filter(s => s !== "").map(s => parseInt(s) / 100.0);
-                if (vals.length > 0) {
+                if (vals.length >= 48) {
                     root.useCava = true;
-                    root.visualizerBars = vals;
-                    waveCanvas.requestPaint();
+                    root.leftBars = vals.slice(0, 24);
+                    root.rightBars = vals.slice(24, 48);
+                } else if (vals.length > 0) {
+                    root.useCava = true;
+                    root.leftBars = vals;
+                    root.rightBars = vals;
                 }
+                root._requestAllPaint();
             }
         }
     }
@@ -40,15 +171,16 @@ Item {
         repeat: true
         onTriggered: {
             root._ambientPhase += 0.08;
-            var bars = [];
-            for (var i = 0; i < 48; i++) {
-                bars.push(
-                    0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25)
-                        + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6)
-                );
+            var left = [], right = [];
+            for (var i = 0; i < 24; i++) {
+                left.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25)
+                              + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6));
+                right.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25 + 0.8)
+                               + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6 + 0.4));
             }
-            root.visualizerBars = bars;
-            waveCanvas.requestPaint();
+            root.leftBars = left;
+            root.rightBars = right;
+            root._requestAllPaint();
         }
     }
 
@@ -58,10 +190,17 @@ Item {
         running: Music.hasPlayer && !Music.playing
         repeat: true
         onTriggered: {
-            var decayed = root.visualizerBars.map(v => Math.max(0, v - 0.05));
-            root.visualizerBars = decayed;
-            waveCanvas.requestPaint();
+            root.leftBars = root.leftBars.map(v => Math.max(0, v - 0.05));
+            root.rightBars = root.rightBars.map(v => Math.max(0, v - 0.05));
+            root._requestAllPaint();
         }
+    }
+
+    // Repaint when style or layout setting changes
+    Connections {
+        target: Config.media
+        function onVisualizerStyleChanged() { root._requestAllPaint(); }
+        function onVisualizerLayoutChanged() { root._requestAllPaint(); }
     }
 
     Column {
@@ -106,18 +245,41 @@ Item {
             }
         }
 
-        // Album art
+        // Album art row — also hosts the vertical side canvases
         Item {
             width: parent.width
-            height: Music.artUrl ? 120 : 0
-            visible: Music.artUrl !== ""
+            height: 120
+            // In vertical mode: show whenever there's a player (canvases need space even without art).
+            // In horizontal mode: only show when art is available (original behavior).
+            visible: Config.media.visualizerLayout === "vertical" ? Music.hasPlayer : Music.artUrl !== ""
 
+            // Left channel canvas (vertical layout only)
+            Canvas {
+                id: leftCanvas
+                x: 0
+                width: 100
+                height: 120
+                visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+                onVisibleChanged: if (visible) requestPaint()
+
+                onPaint: {
+                    var ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    var style = Config.media.visualizerStyle;
+                    if (style === "waveform") root.drawWaveform(ctx, root.leftBars, width, height, true);
+                    else if (style === "bars") root.drawBars(ctx, root.leftBars, width, height, true, true);
+                    else if (style === "dots") root.drawDots(ctx, root.leftBars, width, height, true);
+                }
+            }
+
+            // Album art (centered, always 120×120)
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 120
                 height: 120
                 radius: 50
                 clip: true
+                visible: Music.artUrl !== ""
 
                 MultiEffect {
                     source: image
@@ -148,48 +310,49 @@ Item {
                     }
                 }
             }
+
+            // Right channel canvas (vertical layout only)
+            Canvas {
+                id: rightCanvas
+                x: 220
+                width: 100
+                height: 120
+                visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+                onVisibleChanged: if (visible) requestPaint()
+
+                onPaint: {
+                    var ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    var style = Config.media.visualizerStyle;
+                    if (style === "waveform") root.drawWaveform(ctx, root.rightBars, width, height, true);
+                    else if (style === "bars") root.drawBars(ctx, root.rightBars, width, height, true, false);
+                    else if (style === "dots") root.drawDots(ctx, root.rightBars, width, height, true);
+                }
+            }
         }
 
-        // Waveform visualizer
+        // Horizontal visualizer canvas
         Canvas {
             id: waveCanvas
             width: parent.width
             height: 36
-            visible: Music.hasPlayer
+            visible: Config.media.visualizerLayout === "horizontal" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+            onVisibleChanged: if (visible) requestPaint()
 
             onPaint: {
                 var ctx = getContext("2d");
-                var bars = root.visualizerBars;
-                var w = width, h = height;
-                ctx.clearRect(0, 0, w, h);
-                if (bars.length < 2) return;
-
-                var cx = w / (bars.length - 1);
-                var amp = h / 2 * 0.85;
-                var c = Theme.sliderAccent;
-
-                ctx.beginPath();
-                ctx.moveTo(0, h / 2);
-                for (var i = 0; i < bars.length - 1; i++) {
-                    var x0 = i * cx, x1 = (i + 1) * cx;
-                    var y0 = h / 2 - bars[i] * amp;
-                    var y1 = h / 2 - bars[i + 1] * amp;
-                    ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+                ctx.clearRect(0, 0, width, height);
+                // Interleave L+R to keep 48 data points (same resolution as original)
+                var bars = [];
+                var n = Math.max(root.leftBars.length, root.rightBars.length);
+                for (var i = 0; i < n; i++) {
+                    bars.push(root.leftBars[i] || 0);
+                    bars.push(root.rightBars[i] || 0);
                 }
-                ctx.lineTo(w, h / 2);
-                for (var j = bars.length - 2; j >= 0; j--) {
-                    var x0b = j * cx, x1b = (j + 1) * cx;
-                    var y0b = h / 2 + bars[j] * amp;
-                    var y1b = h / 2 + bars[j + 1] * amp;
-                    ctx.quadraticCurveTo(x1b, y1b, (x0b + x1b) / 2, (y0b + y1b) / 2);
-                }
-                ctx.closePath();
-
-                ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.18);
-                ctx.fill();
-                ctx.strokeStyle = Qt.rgba(c.r, c.g, c.b, 0.6);
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
+                var style = Config.media.visualizerStyle;
+                if (style === "waveform") root.drawWaveform(ctx, bars, width, height, false);
+                else if (style === "bars") root.drawBars(ctx, bars, width, height, false, false);
+                else if (style === "dots") root.drawDots(ctx, bars, width, height, false, false);
             }
         }
 
