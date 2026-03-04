@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Services.Mpris
+import Quickshell.Io
 import qs.components
 import qs.singletons
 import QtQuick.Effects
@@ -9,6 +10,59 @@ Item {
     id: root
     implicitWidth: 320
     implicitHeight: col.implicitHeight
+
+    property bool useCava: false
+    property var visualizerBars: []
+    property real _ambientPhase: 0
+    property string _cavaConfig: Qt.resolvedUrl("../scripts/cava.ini").toString().replace("file://", "")
+
+    // Real audio data from cava
+    Process {
+        id: cava
+        command: ["cava", "-p", root._cavaConfig]
+        running: Music.hasPlayer
+        stdout: SplitParser {
+            onRead: line => {
+                var vals = line.split(";").filter(s => s !== "").map(s => parseInt(s) / 100.0);
+                if (vals.length > 0) {
+                    root.useCava = true;
+                    root.visualizerBars = vals;
+                    waveCanvas.requestPaint();
+                }
+            }
+        }
+    }
+
+    // Ambient fallback when cava is unavailable
+    Timer {
+        interval: 33
+        running: Music.playing && !root.useCava
+        repeat: true
+        onTriggered: {
+            root._ambientPhase += 0.08;
+            var bars = [];
+            for (var i = 0; i < 48; i++) {
+                bars.push(
+                    0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25)
+                        + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6)
+                );
+            }
+            root.visualizerBars = bars;
+            waveCanvas.requestPaint();
+        }
+    }
+
+    // Decay bars to flat line when paused
+    Timer {
+        interval: 100
+        running: Music.hasPlayer && !Music.playing
+        repeat: true
+        onTriggered: {
+            var decayed = root.visualizerBars.map(v => Math.max(0, v - 0.05));
+            root.visualizerBars = decayed;
+            waveCanvas.requestPaint();
+        }
+    }
 
     Column {
         id: col
@@ -93,6 +147,49 @@ Item {
                         radius: 20
                     }
                 }
+            }
+        }
+
+        // Waveform visualizer
+        Canvas {
+            id: waveCanvas
+            width: parent.width
+            height: 36
+            visible: Music.hasPlayer
+
+            onPaint: {
+                var ctx = getContext("2d");
+                var bars = root.visualizerBars;
+                var w = width, h = height;
+                ctx.clearRect(0, 0, w, h);
+                if (bars.length < 2) return;
+
+                var cx = w / (bars.length - 1);
+                var amp = h / 2 * 0.85;
+                var c = Theme.sliderAccent;
+
+                ctx.beginPath();
+                ctx.moveTo(0, h / 2);
+                for (var i = 0; i < bars.length - 1; i++) {
+                    var x0 = i * cx, x1 = (i + 1) * cx;
+                    var y0 = h / 2 - bars[i] * amp;
+                    var y1 = h / 2 - bars[i + 1] * amp;
+                    ctx.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+                }
+                ctx.lineTo(w, h / 2);
+                for (var j = bars.length - 2; j >= 0; j--) {
+                    var x0b = j * cx, x1b = (j + 1) * cx;
+                    var y0b = h / 2 + bars[j] * amp;
+                    var y1b = h / 2 + bars[j + 1] * amp;
+                    ctx.quadraticCurveTo(x1b, y1b, (x0b + x1b) / 2, (y0b + y1b) / 2);
+                }
+                ctx.closePath();
+
+                ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.18);
+                ctx.fill();
+                ctx.strokeStyle = Qt.rgba(c.r, c.g, c.b, 0.6);
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
             }
         }
 
