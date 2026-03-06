@@ -68,7 +68,7 @@ LazyLoader {
         property bool showPopup: false
         Component.onCompleted: popup.showPopup = true
 
-        focusable: false
+        focusable: hoverHandler.hovered
 
         margins.top: 0
         margins.left: 0
@@ -214,6 +214,7 @@ LazyLoader {
 
             // Close the popup when the mouse leaves the visible area
             HoverHandler {
+                id: hoverHandler
                 onHoveredChanged: {
                     if (!hovered && !popupLoader.persistent)
                         popupLoader.close();
