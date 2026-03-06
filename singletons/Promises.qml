@@ -35,6 +35,11 @@ Singleton {
             },
             _resolve: function (result) {
                 if (promiseResult._value !== null) return;
+                // If result is itself a promise, adopt its state instead of settling immediately.
+                if (result?._isPromiseResult) {
+                    result.then(promiseResult._resolve).catch(promiseResult._reject);
+                    return;
+                }
                 try {
                     promiseResult._value = {
                         type: true,

@@ -146,7 +146,48 @@ TestCase {
             assert(!called, "then does not fire on rejected promise");
         }
 
-        // Test 16: catch does not fire on resolved promise
+        // Test 16: then returning a resolved promise is flattened — immediate path
+        // (promise already resolved when .then() is called)
+        {
+            let received = null;
+            Promises.create((resolve, reject) => { resolve(5); })
+                .then(v => Promises.resolved(v * 2))
+                .then(v => { received = v; });
+            assertEqual(received, 10, "then returning resolved promise is flattened (immediate path)");
+        }
+
+        // Test 17: then returning a resolved promise is flattened — delayed path
+        // (resolve is called after .then() is attached)
+        {
+            let received = null;
+            let resolveFn = null;
+            Promises.create((resolve, reject) => { resolveFn = resolve; })
+                .then(v => Promises.resolved(v * 2))
+                .then(v => { received = v; });
+            resolveFn(5);
+            assertEqual(received, 10, "then returning resolved promise is flattened (delayed path)");
+        }
+
+        // Test 18: deep chain of promise-returning thens resolves to final value
+        {
+            let received = null;
+            Promises.create((resolve, reject) => { resolve(1); })
+                .then(v => Promises.resolved(v + 1))
+                .then(v => Promises.resolved(v + 1))
+                .then(v => { received = v; });
+            assertEqual(received, 3, "deep chain of promise-returning thens resolves correctly");
+        }
+
+        // Test 19: then returning a rejected promise propagates to catch
+        {
+            let caught = null;
+            Promises.create((resolve, reject) => { resolve(1); })
+                .then(v => Promises.rejected("inner error"))
+                .catch(e => { caught = e; });
+            assertEqual(caught, "inner error", "then returning rejected promise propagates to catch");
+        }
+
+        // Test 20: catch does not fire on resolved promise
         {
             let called = false;
             Promises.create((resolve, reject) => { resolve(1); })
@@ -154,7 +195,7 @@ TestCase {
             assert(!called, "catch does not fire on resolved promise");
         }
 
-        // Test 17: finally does not affect resolution value
+        // Test 21: finally does not affect resolution value
         {
             let received = null;
             Promises.create((resolve, reject) => { resolve(5); })
@@ -163,7 +204,7 @@ TestCase {
             assertEqual(received, 5, "finally does not affect resolution value");
         }
 
-        // Test 18: allSettled with a single promise
+        // Test 22: allSettled with a single promise
         {
             let result = null;
             let p = Promises.create((resolve, reject) => { resolve("solo"); });
@@ -175,7 +216,7 @@ TestCase {
             }
         }
 
-        // Test 19: allSettled with zero promises resolves immediately with empty array
+        // Test 23: allSettled with zero promises resolves immediately with empty array
         // BUG: promiseCount starts at 0 and the for loop never runs, so resolver()
         // is never called and the outer promise stays pending forever.
         {

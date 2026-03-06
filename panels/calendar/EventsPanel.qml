@@ -109,7 +109,8 @@ Item {
                     GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
                         title, description, startTime, endTime,
                         calendarId: _addEventForm.selectedCalendarId,
-                        colorId: _addEventForm.selectedColorId || null });
+                        colorId: _addEventForm.selectedColorId || null,
+                        rrule: _addEventForm.rrule || null });
                     root._addingEvent = false;
                     reset();
                 }

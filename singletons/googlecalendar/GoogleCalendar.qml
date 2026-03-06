@@ -258,7 +258,9 @@ Singleton {
             color: color,
             calendarColor: calendarColor ?? null,
             calendarId: calendar?.id ?? null,
-            colorId: data.colorId ?? null
+            colorId: data.colorId ?? null,
+            rrule: (data.recurrence && data.recurrence.length > 0) ? data.recurrence[0] : null,
+            recurringEventId: data.recurringEventId ?? null
         };
     }
 
@@ -305,6 +307,51 @@ Singleton {
         });
     }
 
+    // event: { year, month, day, recurringEventId, calendarId }
+    // Truncates the recurring series so it ends the day before the selected instance.
+    function deleteFromEvent(event) {
+        const calendarId = event.calendarId || "primary";
+        GoogleCalendarAuth.ensureAuthorized(() => {
+            return _requestGetEvent({
+                calendarId: calendarId,
+                eventId: event.recurringEventId
+            }).then(response => {
+                console.log(response.text());
+                return response.json();
+            }).then(masterData => {
+                const recurrence = masterData.recurrence || [];
+                console.log(masterData._isPromiseResult);
+                const rruleIdx = recurrence.findIndex(r => r.startsWith("RRULE:"));
+                if (rruleIdx === -1)
+                    return;
+
+                // UNTIL = day before the selected instance, in iCal format YYYYMMDD
+                const dayBefore = new Date(event.year, event.month, event.day);
+                dayBefore.setDate(dayBefore.getDate() - 1);
+                const until = dayBefore.getFullYear().toString() + ("0" + (dayBefore.getMonth() + 1)).slice(-2) + ("0" + dayBefore.getDate()).slice(-2);
+
+                let rrule = recurrence[rruleIdx].replace(/;UNTIL=[^;]*/g, "").replace(/;COUNT=[^;]*/g, "");
+                rrule += ";UNTIL=" + until;
+
+                const newRecurrence = recurrence.slice();
+                newRecurrence[rruleIdx] = rrule;
+                logger.log("Changing event recurrence", newRecurrence);
+
+                return _requestUpdateEvent({
+                    calendarId: calendarId,
+                    eventId: event.recurringEventId,
+                    body: JSON.stringify({
+                        recurrence: newRecurrence
+                    })
+                });
+            });
+        }).then(() => {
+            fetchDayEvents(event.year, event.month, event.day, true);
+        }).catch(e => {
+            logger.error("deleteFromEvent failed:", e);
+        });
+    }
+
     // event: { year, month, day, eventId, calendarId }
     function deleteEvent(event) {
         const calendarId = event.calendarId || "primary";
@@ -325,29 +372,31 @@ Singleton {
         let body = {
             summary: data.title
         };
-        if (data.description)
+        if (data.description) {
             body.description = data.description;
-        if (data.colorId)
+        }
+        if (data.colorId) {
             body.colorId = data.colorId;
+        }
+        if (data.rrule) {
+            body.recurrence = [data.rrule];
+        }
+
+        body.start = {
+            date: null,
+            dateTime: null
+        };
+        body.end = {
+            date: null,
+            dateTime: null
+        };
         if (data.startTime) {
             const tz = _tzOffset();
-            body.start = {
-                date: null,
-                dateTime: dateStr + "T" + data.startTime + ":00" + tz
-            };
-            body.end = {
-                date: null,
-                dateTime: dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz
-            };
+            body.start.dateTime = dateStr + "T" + data.startTime + ":00" + tz;
+            body.end.dateTime = dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz;
         } else {
-            body.start = {
-                date: dateStr,
-                dateTime: null
-            };
-            body.end = {
-                date: dateStr,
-                dateTime: null
-            };
+            body.start.date = dateStr;
+            body.end.date = dateStr;
         }
         body = JSON.stringify(body);
         logger.log("Event data", body);
@@ -431,6 +480,16 @@ Singleton {
             },
             params: [data.calendarId, data.eventId],
             body: data.body
+        });
+    }
+
+    function _requestGetEvent(data) {
+        return Fetch.request(root._ENDPOINT_EVENT, {
+            method: "GET",
+            headers: {
+                "Authorization": "Bearer " + Config.gcal.accessToken
+            },
+            params: [data.calendarId, data.eventId]
         });
     }
 

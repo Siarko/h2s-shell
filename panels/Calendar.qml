@@ -7,7 +7,7 @@ import qs.panels.calendar
 // implicitHeight grows when the add-event form is open (driven by EventsPanel).
 Item {
     id: root
-    implicitWidth: 481   // 200 events + 1 separator + 280 calendar
+    implicitWidth: 551   // 270 events + 1 separator + 280 calendar
     implicitHeight: 340 + _eventsPanel.addFormExtraHeight
 
     property int displayMonth: new Date().getMonth()
@@ -44,7 +44,7 @@ Item {
 
         EventsPanel {
             id: _eventsPanel
-            width: 200
+            width: 270
             height: parent.height
             displayYear:  root.displayYear
             displayMonth: root.displayMonth

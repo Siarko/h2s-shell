@@ -21,6 +21,28 @@ Item {
     property string selectedColorId: ""
     property bool _allDay: false
 
+    // Recurrence state
+    property bool   _recurring:      false
+    property string _rruleFreq:      "WEEKLY"   // DAILY|WEEKLY|MONTHLY|YEARLY
+    property int    _rruleInterval:  1
+    property var    _rruleDays:      []          // ["MO","WE",...] — weekly only
+    property string _rruleEndType:   "never"     // "never"|"date"|"count"
+    property string _rruleEndDate:   ""          // "YYYY-MM-DD"
+    property int    _rruleCount:     1
+    property bool   _freqPickerOpen: false
+
+    readonly property string rrule: {
+        if (!_recurring) return ""
+        let rule = "RRULE:FREQ=" + _rruleFreq + ";INTERVAL=" + _rruleInterval
+        if (_rruleFreq === "WEEKLY" && _rruleDays.length > 0)
+            rule += ";BYDAY=" + _rruleDays.join(",")
+        if (_rruleEndType === "count")
+            rule += ";COUNT=" + _rruleCount
+        else if (_rruleEndType === "date" && _rruleEndDate.length === 10)
+            rule += ";UNTIL=" + _rruleEndDate.replace(/-/g, "")
+        return rule
+    }
+
     signal submitted(string title, string description, string startTime, string endTime)
     signal cancelled
 
@@ -40,13 +62,38 @@ Item {
                 }));
     }
 
-    function populate(title, startTime, endTime, description, allDay, colorId) {
+    function populate(title, startTime, endTime, description, allDay, colorId, rrule) {
         _titleInput.text = title;
         _startInput.setValue(startTime);
         _endInput.setValue(endTime);
         _descInput.text = description;
         _allDay = allDay ?? false;
         selectedColorId = colorId ?? "";
+        _parseRrule(rrule ?? "");
+    }
+
+    function _parseRrule(rruleStr) {
+        if (!rruleStr) { _recurring = false; return }
+        _recurring = true
+        let params = {}
+        rruleStr.replace("RRULE:", "").split(";").forEach(p => {
+            let eq = p.indexOf("="); params[p.slice(0, eq)] = p.slice(eq + 1)
+        })
+        _rruleFreq     = params["FREQ"]     || "WEEKLY"
+        _rruleInterval = parseInt(params["INTERVAL"]) || 1
+        _rruleDays     = params["BYDAY"] ? params["BYDAY"].split(",") : []
+        if (params["COUNT"]) {
+            _rruleEndType = "count"; _rruleCount = parseInt(params["COUNT"])
+        } else if (params["UNTIL"]) {
+            _rruleEndType = "date"
+            let u = params["UNTIL"]
+            _rruleEndDate = u.slice(0, 4) + "-" + u.slice(4, 6) + "-" + u.slice(6, 8)
+        } else {
+            _rruleEndType = "never"
+        }
+        _intervalInput.text  = _rruleInterval.toString()
+        _countInput.text     = _rruleCount.toString()
+        _endDateInput.text   = _rruleEndDate
     }
 
     function reset() {
@@ -57,6 +104,13 @@ Item {
         _allDay = false;
         _pickerOpen = false;
         selectedColorId = "";
+        _recurring = false;
+        _rruleFreq = "WEEKLY"; _rruleInterval = 1; _rruleDays = []
+        _rruleEndType = "never"; _rruleEndDate = ""; _rruleCount = 1
+        _freqPickerOpen = false
+        _intervalInput.text = "1"
+        _countInput.text    = "1"
+        _endDateInput.text  = ""
     }
 
     Column {
@@ -490,6 +544,419 @@ Item {
                                 root._pickerOpen = false;
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Recurring toggle
+        Row {
+            width: parent.width
+            height: 22
+            spacing: 6
+
+            Rectangle {
+                width: 14
+                height: 14
+                radius: 3
+                anchors.verticalCenter: parent.verticalCenter
+                color: root._recurring ? Theme.sliderAccent : "transparent"
+                border.color: root._recurring ? Theme.sliderAccent : Theme.textDim
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "✓"
+                    color: Theme.textPrimary
+                    font.pixelSize: 9
+                    visible: root._recurring
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root._recurring = !root._recurring
+                }
+            }
+
+            Text {
+                text: "Recurring"
+                color: Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+                anchors.verticalCenter: parent.verticalCenter
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root._recurring = !root._recurring
+                }
+            }
+        }
+
+        // Expandable recurrence section
+        Item {
+            width: parent.width
+            height: root._recurring ? _recurSection.implicitHeight : 0
+            clip: true
+
+            Behavior on height {
+                NumberAnimation {
+                    duration: 150
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            Column {
+                id: _recurSection
+                width: parent.width
+                spacing: 6
+
+                // Frequency row: [Freq ▾]  Every  [N]  unit(s)
+                Row {
+                    width: parent.width
+                    height: 28
+                    spacing: 6
+
+                    readonly property var _freqLabels: ({ "DAILY": "Daily", "WEEKLY": "Weekly", "MONTHLY": "Monthly", "YEARLY": "Yearly" })
+                    readonly property var _unitLabels: ({ "DAILY": "day(s)", "WEEKLY": "week(s)", "MONTHLY": "month(s)", "YEARLY": "year(s)" })
+
+                    // Frequency dropdown button
+                    Rectangle {
+                        width: 76
+                        height: 28
+                        color: Theme.popupBackground
+                        border.color: Theme.textDim
+                        radius: 4
+
+                        Row {
+                            anchors {
+                                fill: parent
+                                leftMargin: 6
+                                rightMargin: 4
+                            }
+                            spacing: 4
+
+                            Text {
+                                text: parent.parent.parent._freqLabels[root._rruleFreq] ?? root._rruleFreq
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 14
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                text: "▾"
+                                color: Theme.textTertiary
+                                font.pixelSize: 10
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root._freqPickerOpen = !root._freqPickerOpen
+                        }
+                    }
+
+                    Text {
+                        text: "Every"
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    // Interval input
+                    Rectangle {
+                        width: 40
+                        height: 28
+                        color: Theme.popupBackground
+                        border.color: _intervalInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                        radius: 4
+
+                        TextInput {
+                            id: _intervalInput
+                            anchors {
+                                fill: parent
+                                leftMargin: 4
+                                rightMargin: 4
+                                topMargin: 4
+                                bottomMargin: 4
+                            }
+                            text: "1"
+                            color: Theme.textPrimary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            horizontalAlignment: TextInput.AlignHCenter
+                            validator: IntValidator { bottom: 1; top: 999 }
+                            onTextEdited: {
+                                let value = parseInt(text)
+                                if (!isNaN(value) && value >= 1) root._rruleInterval = value
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: parent._unitLabels[root._rruleFreq] ?? ""
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                // Frequency dropdown list
+                Rectangle {
+                    width: parent.width
+                    height: root._freqPickerOpen ? _freqList.implicitHeight + 4 : 0
+                    clip: true
+                    color: Theme.popupBackground
+                    border.color: Theme.textDim
+                    radius: 4
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 120
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+
+                    Column {
+                        id: _freqList
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            top: parent.top
+                            margins: 2
+                        }
+
+                        Repeater {
+                            model: ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]
+
+                            Rectangle {
+                                required property string modelData
+                                readonly property var _labels: ({ "DAILY": "Daily", "WEEKLY": "Weekly", "MONTHLY": "Monthly", "YEARLY": "Yearly" })
+
+                                width: _freqList.width
+                                height: 24
+                                color: modelData === root._rruleFreq ? Theme.cellHover : "transparent"
+                                radius: 3
+
+                                Text {
+                                    anchors {
+                                        fill: parent
+                                        leftMargin: 6
+                                    }
+                                    text: parent._labels[modelData] ?? modelData
+                                    color: Theme.textSecondary
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        root._rruleFreq = modelData
+                                        root._freqPickerOpen = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // "Repeat on" days row — weekly only
+                Row {
+                    width: parent.width
+                    height: 22
+                    spacing: 4
+                    visible: root._rruleFreq === "WEEKLY"
+
+                    readonly property var _dayCodes:  ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+                    readonly property var _dayLabels: ["M",  "T",  "W",  "T",  "F",  "S",  "S" ]
+
+                    Repeater {
+                        model: 7
+
+                        Rectangle {
+                            required property int index
+                            readonly property string dayCode: parent._dayCodes[index]
+                            readonly property bool selected: root._rruleDays.indexOf(dayCode) >= 0
+
+                            width: 20
+                            height: 20
+                            radius: 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: selected ? Theme.sliderAccent : "transparent"
+                            border.color: selected ? Theme.sliderAccent : Theme.textDim
+                            border.width: 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.parent._dayLabels[parent.index]
+                                color: parent.selected ? Theme.textPrimary : Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 10
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    let days = root._rruleDays.slice()
+                                    let idx = days.indexOf(parent.dayCode)
+                                    if (idx >= 0) days.splice(idx, 1)
+                                    else days.push(parent.dayCode)
+                                    root._rruleDays = days
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Ends row — radio-style buttons
+                Row {
+                    width: parent.width
+                    height: 22
+                    spacing: 6
+
+                    Text {
+                        text: "Ends:"
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+
+                    Repeater {
+                        model: [
+                            { value: "never", label: "Never"   },
+                            { value: "date",  label: "On date" },
+                            { value: "count", label: "After N" }
+                        ]
+
+                        Rectangle {
+                            required property var modelData
+                            readonly property bool selected: root._rruleEndType === modelData.value
+
+                            height: 22
+                            width: _endBtnText.implicitWidth + 12
+                            radius: 3
+                            color: "transparent"
+                            border.color: selected ? Theme.sliderAccent : Theme.textDim
+                            border.width: 1
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                id: _endBtnText
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: parent.selected ? Theme.sliderAccent : Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 11
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root._rruleEndType = modelData.value
+                            }
+                        }
+                    }
+                }
+
+                // End date input — visible when ends = "date"
+                Rectangle {
+                    width: parent.width
+                    height: 28
+                    visible: root._rruleEndType === "date"
+                    color: Theme.popupBackground
+                    border.color: _endDateInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                    radius: 4
+
+                    TextInput {
+                        id: _endDateInput
+                        anchors {
+                            fill: parent
+                            leftMargin: 6
+                            rightMargin: 6
+                            topMargin: 4
+                            bottomMargin: 4
+                        }
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        onTextEdited: root._rruleEndDate = text
+                    }
+
+                    Text {
+                        anchors {
+                            fill: parent
+                            leftMargin: 6
+                            topMargin: 4
+                            bottomMargin: 4
+                        }
+                        text: "YYYY-MM-DD"
+                        color: Theme.textTertiary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        verticalAlignment: Text.AlignVCenter
+                        visible: !_endDateInput.text.length
+                        enabled: false
+                    }
+                }
+
+                // End count input — visible when ends = "count"
+                Row {
+                    width: parent.width
+                    height: 28
+                    spacing: 6
+                    visible: root._rruleEndType === "count"
+
+                    Rectangle {
+                        width: 50
+                        height: 28
+                        color: Theme.popupBackground
+                        border.color: _countInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                        radius: 4
+
+                        TextInput {
+                            id: _countInput
+                            anchors {
+                                fill: parent
+                                leftMargin: 4
+                                rightMargin: 4
+                                topMargin: 4
+                                bottomMargin: 4
+                            }
+                            text: "1"
+                            color: Theme.textPrimary
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            horizontalAlignment: TextInput.AlignHCenter
+                            validator: IntValidator { bottom: 1; top: 999 }
+                            onTextEdited: {
+                                let value = parseInt(text)
+                                if (!isNaN(value) && value >= 1) root._rruleCount = value
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "times"
+                        color: Theme.textSecondary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
             }

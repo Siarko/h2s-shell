@@ -19,7 +19,8 @@ Rectangle {
 
     readonly property real _cardHeight: {
         if (root.editing) return _editForm.implicitHeight + 16
-        if (root.confirmingDelete) return 50
+        if (root.confirmingDelete)
+            return root.modelData.recurringEventId ? _recurDeleteCol.implicitHeight + 16 : 50
         return (expanded && modelData.description) ? 50 + _desc.implicitHeight + 8 : 50
     }
 
@@ -127,7 +128,7 @@ Rectangle {
         visible: root.editing
         anchors {
             left: parent.left; right: parent.right; top: parent.top
-            topMargin: 8; leftMargin: 6; rightMargin: 6
+            topMargin: 8; leftMargin: 14; rightMargin: 6
         }
         submitLabel: "Save"
         submitColor: "#1e3a5f"
@@ -137,7 +138,8 @@ Rectangle {
                 year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
                 eventId: root.modelData.id, calendarId: root.modelData.calendarId,
                 title, description, startTime, endTime,
-                colorId: _editForm.selectedColorId || null })
+                colorId: _editForm.selectedColorId || null,
+                rrule: _editForm.rrule || null })
             root.editing = false
         }
         onCancelled: root.editing = false
@@ -152,7 +154,8 @@ Rectangle {
                 modelData.endTimeStr,
                 modelData.description || "",
                 modelData.startTimeStr === "",
-                modelData.colorId ?? ""
+                modelData.colorId ?? "",
+                modelData.rrule ?? ""
             )
         }
     }
@@ -200,9 +203,9 @@ Rectangle {
         }
     }
 
-    // Delete confirmation row — higher z than main MouseArea
+    // Delete confirmation — non-recurring: "Delete event? Yes / No"
     RowLayout {
-        visible: root.confirmingDelete
+        visible: root.confirmingDelete && !root.modelData.recurringEventId
         anchors { left: parent.left; right: parent.right; top: parent.top }
         anchors.leftMargin: 14
         anchors.rightMargin: 8
@@ -256,5 +259,100 @@ Rectangle {
         }
 
         Item { Layout.fillWidth: true }
+    }
+
+    // Delete confirmation — recurring: vertical list of options
+    Column {
+        id: _recurDeleteCol
+        visible: root.confirmingDelete && !!root.modelData.recurringEventId
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        anchors.leftMargin: 14
+        anchors.topMargin: 8
+        spacing: 4
+
+        Text {
+            text: "Delete:"
+            color: Theme.textSecondary
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+        }
+
+        Text {
+            text: "- This event"
+            color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+            font.bold: true
+
+            MouseArea {
+                id: _thisEventArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    GoogleCalendar.deleteEvent({
+                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                        eventId: root.modelData.id, calendarId: root.modelData.calendarId })
+                    root.confirmingDelete = false
+                }
+            }
+        }
+
+        Text {
+            text: "- This and following"
+            color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+            font.bold: true
+
+            MouseArea {
+                id: _thisAndFollowingArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    GoogleCalendar.deleteFromEvent({
+                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                        recurringEventId: root.modelData.recurringEventId, calendarId: root.modelData.calendarId })
+                    root.confirmingDelete = false
+                }
+            }
+        }
+
+        Text {
+            text: "- All events"
+            color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+            font.bold: true
+
+            MouseArea {
+                id: _allEventsArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    GoogleCalendar.deleteEvent({
+                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                        eventId: root.modelData.recurringEventId, calendarId: root.modelData.calendarId })
+                    root.confirmingDelete = false
+                }
+            }
+        }
+
+        Text {
+            text: "- Cancel"
+            color: _recurCancelArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+            font.family: Theme.fontFamily
+            font.pixelSize: 11
+
+            MouseArea {
+                id: _recurCancelArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.confirmingDelete = false
+            }
+        }
     }
 }
