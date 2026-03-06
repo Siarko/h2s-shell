@@ -257,7 +257,8 @@ Singleton {
             time: timeStr,
             color: color,
             calendarColor: calendarColor ?? null,
-            calendarId: calendar?.id ?? null
+            calendarId: calendar?.id ?? null,
+            colorId: data.colorId ?? null
         };
     }
 
@@ -326,28 +327,31 @@ Singleton {
         };
         if (data.description)
             body.description = data.description;
+        if (data.colorId)
+            body.colorId = data.colorId;
         if (data.startTime) {
             const tz = _tzOffset();
             body.start = {
+                date: null,
                 dateTime: dateStr + "T" + data.startTime + ":00" + tz
             };
             body.end = {
+                date: null,
                 dateTime: dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz
             };
         } else {
-            const nextDay = new Date(data.year, data.month, data.day + 1);
-            const endDateStr = _dateKey(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
             body.start = {
                 date: dateStr,
                 dateTime: null
             };
             body.end = {
-                date: endDateStr,
+                date: dateStr,
                 dateTime: null
             };
         }
-        console.log(JSON.stringify(body));
-        return JSON.stringify(body);
+        body = JSON.stringify(body);
+        logger.log("Event data", body);
+        return body;
     }
 
     function _tzOffset(): string {

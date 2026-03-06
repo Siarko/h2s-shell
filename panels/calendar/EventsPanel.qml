@@ -107,7 +107,9 @@ Item {
                 showCalendarPicker: true
                 onSubmitted: (title, description, startTime, endTime) => {
                     GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        title, description, startTime, endTime, calendarId: _addEventForm.selectedCalendarId });
+                        title, description, startTime, endTime,
+                        calendarId: _addEventForm.selectedCalendarId,
+                        colorId: _addEventForm.selectedColorId || null });
                     root._addingEvent = false;
                     reset();
                 }

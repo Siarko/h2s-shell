@@ -136,7 +136,8 @@ Rectangle {
             GoogleCalendar.updateEvent({
                 year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
                 eventId: root.modelData.id, calendarId: root.modelData.calendarId,
-                title, description, startTime, endTime })
+                title, description, startTime, endTime,
+                colorId: _editForm.selectedColorId || null })
             root.editing = false
         }
         onCancelled: root.editing = false
@@ -150,7 +151,8 @@ Rectangle {
                 modelData.startTimeStr,
                 modelData.endTimeStr,
                 modelData.description || "",
-                modelData.startTimeStr === ""
+                modelData.startTimeStr === "",
+                modelData.colorId ?? ""
             )
         }
     }
