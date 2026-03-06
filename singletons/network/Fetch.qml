@@ -37,7 +37,7 @@ Singleton {
                 }
                 url += "?" + queryParams.join("&");
             }
-            logger.log("URL: ", url);
+            logger.log(data.method ?? 'GET', "URL: ", url);
 
             xhr.open(data.method || "GET", url);
             if (data.headers) {

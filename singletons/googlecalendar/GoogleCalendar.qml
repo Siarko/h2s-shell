@@ -315,12 +315,8 @@ Singleton {
             return _requestGetEvent({
                 calendarId: calendarId,
                 eventId: event.recurringEventId
-            }).then(response => {
-                console.log(response.text());
-                return response.json();
-            }).then(masterData => {
+            }).then(response => response.json()).then(masterData => {
                 const recurrence = masterData.recurrence || [];
-                console.log(masterData._isPromiseResult);
                 const rruleIdx = recurrence.findIndex(r => r.startsWith("RRULE:"));
                 if (rruleIdx === -1)
                     return;
