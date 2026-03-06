@@ -24,7 +24,8 @@ Item {
     }
 
     function drawWaveform(ctx, bars, w, h, vertical) {
-        if (bars.length < 2) return;
+        if (bars.length < 2)
+            return;
         var c = Theme.sliderAccent;
 
         if (!vertical) {
@@ -77,37 +78,37 @@ Item {
 
     // fromRight: left canvas bars anchor to right edge and grow left
     function drawBars(ctx, bars, w, h, vertical, fromRight) {
-        if (bars.length === 0) return;
+        if (bars.length === 0)
+            return;
         var c = Theme.sliderAccent;
         ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.7);
 
         var n = bars.length;
-        if (!vertical) {
-            var barW = (w - (n - 1) * 2) / n;
-            var amp = h / 2 * 0.85;
-            for (var i = 0; i < n; i++) {
-                var x = i * (barW + 2);
-                var barH = bars[i] * amp;
-                ctx.fillRect(x, h / 2 - barH, barW, barH);
-                ctx.fillRect(x, h / 2, barW, barH);
-            }
-        } else {
+        if (vertical) {
             var barH = (h - (n - 1) * 2) / n;
-            var amp = w * 0.85;
             for (var i = 0; i < n; i++) {
                 var y = i * (barH + 2);
-                var barLen = bars[i] * amp;
+                var barLen = w * bars[i];
                 if (fromRight) {
                     ctx.fillRect(w - barLen, y, barLen, barH);
                 } else {
                     ctx.fillRect(0, y, barLen, barH);
                 }
             }
+        } else {
+            var barW = (w - (n - 1) * 2) / n;
+            for (var i = 0; i < n; i++) {
+                var x = i * (barW + 2);
+                var barH = h / 2 * bars[i];
+                ctx.fillRect(x, h / 2, barW, barH);
+                ctx.fillRect(x, h / 2, barW, -barH);
+            }
         }
     }
 
     function drawDots(ctx, bars, w, h, vertical) {
-        if (bars.length === 0) return;
+        if (bars.length === 0)
+            return;
         var c = Theme.sliderAccent;
         ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.9);
 
@@ -150,15 +151,10 @@ Item {
         stdout: SplitParser {
             onRead: line => {
                 var vals = line.split(";").filter(s => s !== "").map(s => parseInt(s) / 100.0);
-                if (vals.length >= 48) {
-                    root.useCava = true;
-                    root.leftBars = vals.slice(0, 24);
-                    root.rightBars = vals.slice(24, 48);
-                } else if (vals.length > 0) {
-                    root.useCava = true;
-                    root.leftBars = vals;
-                    root.rightBars = vals;
-                }
+                const bars = vals.length;
+                root.useCava = true;
+                root.leftBars = vals.slice(0, bars / 2);
+                root.rightBars = vals.slice(bars / 2);
                 root._requestAllPaint();
             }
         }
@@ -173,10 +169,8 @@ Item {
             root._ambientPhase += 0.08;
             var left = [], right = [];
             for (var i = 0; i < 24; i++) {
-                left.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25)
-                              + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6));
-                right.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25 + 0.8)
-                               + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6 + 0.4));
+                left.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25) + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6));
+                right.push(0.3 + 0.25 * Math.sin(root._ambientPhase + i * 0.25 + 0.8) + 0.12 * Math.sin(root._ambientPhase * 2.3 + i * 0.6 + 0.4));
             }
             root.leftBars = left;
             root.rightBars = right;
@@ -199,8 +193,60 @@ Item {
     // Repaint when style or layout setting changes
     Connections {
         target: Config.media
-        function onVisualizerStyleChanged() { root._requestAllPaint(); }
-        function onVisualizerLayoutChanged() { root._requestAllPaint(); }
+        function onVisualizerStyleChanged() {
+            root._requestAllPaint();
+        }
+        function onVisualizerLayoutChanged() {
+            root._requestAllPaint();
+        }
+    }
+
+    // Left channel canvas — spans full popup height, bars grow from left edge inward
+    Canvas {
+        id: leftCanvas
+        x: 0
+        width: 100
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+        onVisibleChanged: if (visible)
+            requestPaint()
+
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            var style = Config.media.visualizerStyle;
+            if (style === "waveform")
+                root.drawWaveform(ctx, root.leftBars, width, height, true);
+            else if (style === "bars")
+                root.drawBars(ctx, root.leftBars, width, height, true, false);
+            else if (style === "dots")
+                root.drawDots(ctx, root.leftBars, width, height, true);
+        }
+    }
+
+    // Right channel canvas — spans full popup height, bars grow from right edge inward
+    Canvas {
+        id: rightCanvas
+        x: 220
+        width: 100
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+        onVisibleChanged: if (visible)
+            requestPaint()
+
+        onPaint: {
+            var ctx = getContext("2d");
+            ctx.clearRect(0, 0, width, height);
+            var style = Config.media.visualizerStyle;
+            if (style === "waveform")
+                root.drawWaveform(ctx, root.rightBars.reverse(), width, height, true);
+            else if (style === "bars")
+                root.drawBars(ctx, root.rightBars.reverse(), width, height, true, true);
+            else if (style === "dots")
+                root.drawDots(ctx, root.rightBars.reverse(), width, height, true);
+        }
     }
 
     Column {
@@ -245,32 +291,13 @@ Item {
             }
         }
 
-        // Album art row — also hosts the vertical side canvases
+        // Album art row
         Item {
             width: parent.width
             height: 120
             // In vertical mode: show whenever there's a player (canvases need space even without art).
             // In horizontal mode: only show when art is available (original behavior).
             visible: Config.media.visualizerLayout === "vertical" ? Music.hasPlayer : Music.artUrl !== ""
-
-            // Left channel canvas (vertical layout only)
-            Canvas {
-                id: leftCanvas
-                x: 0
-                width: 100
-                height: 120
-                visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
-                onVisibleChanged: if (visible) requestPaint()
-
-                onPaint: {
-                    var ctx = getContext("2d");
-                    ctx.clearRect(0, 0, width, height);
-                    var style = Config.media.visualizerStyle;
-                    if (style === "waveform") root.drawWaveform(ctx, root.leftBars, width, height, true);
-                    else if (style === "bars") root.drawBars(ctx, root.leftBars, width, height, true, true);
-                    else if (style === "dots") root.drawDots(ctx, root.leftBars, width, height, true);
-                }
-            }
 
             // Album art (centered, always 120×120)
             Rectangle {
@@ -310,25 +337,6 @@ Item {
                     }
                 }
             }
-
-            // Right channel canvas (vertical layout only)
-            Canvas {
-                id: rightCanvas
-                x: 220
-                width: 100
-                height: 120
-                visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
-                onVisibleChanged: if (visible) requestPaint()
-
-                onPaint: {
-                    var ctx = getContext("2d");
-                    ctx.clearRect(0, 0, width, height);
-                    var style = Config.media.visualizerStyle;
-                    if (style === "waveform") root.drawWaveform(ctx, root.rightBars, width, height, true);
-                    else if (style === "bars") root.drawBars(ctx, root.rightBars, width, height, true, false);
-                    else if (style === "dots") root.drawDots(ctx, root.rightBars, width, height, true);
-                }
-            }
         }
 
         // Horizontal visualizer canvas
@@ -337,22 +345,20 @@ Item {
             width: parent.width
             height: 36
             visible: Config.media.visualizerLayout === "horizontal" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
-            onVisibleChanged: if (visible) requestPaint()
+            onVisibleChanged: if (visible)
+                requestPaint()
 
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.clearRect(0, 0, width, height);
-                // Interleave L+R to keep 48 data points (same resolution as original)
-                var bars = [];
-                var n = Math.max(root.leftBars.length, root.rightBars.length);
-                for (var i = 0; i < n; i++) {
-                    bars.push(root.leftBars[i] || 0);
-                    bars.push(root.rightBars[i] || 0);
-                }
+                const bars = [...root.leftBars, ...root.rightBars];
                 var style = Config.media.visualizerStyle;
-                if (style === "waveform") root.drawWaveform(ctx, bars, width, height, false);
-                else if (style === "bars") root.drawBars(ctx, bars, width, height, false, false);
-                else if (style === "dots") root.drawDots(ctx, bars, width, height, false, false);
+                if (style === "waveform")
+                    root.drawWaveform(ctx, bars, width, height, false);
+                else if (style === "bars") {
+                    root.drawBars(ctx, bars, width, height, false, false);
+                } else if (style === "dots")
+                    root.drawDots(ctx, bars, width, height, false, false);
             }
         }
 
