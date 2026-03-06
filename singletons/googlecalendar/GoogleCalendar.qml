@@ -274,9 +274,12 @@ Singleton {
     // event: { year, month, day, title, description, startTime, endTime, calendarId }
     function createEvent(event) {
         const calendarId = event.calendarId || "primary";
-        const body = _buildEventBody(event.year, event.month, event.day, event.title, event.description, event.startTime, event.endTime);
+        const body = _buildEventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestCreateEvent({ calendarId: calendarId, body: body });
+            return _requestCreateEvent({
+                calendarId: calendarId,
+                body: body
+            });
         }).then(() => {
             fetchDayEvents(event.year, event.month, event.day, true);
         }).catch(e => {
@@ -287,9 +290,13 @@ Singleton {
     // event: { year, month, day, eventId, calendarId, title, description, startTime, endTime }
     function updateEvent(event) {
         const calendarId = event.calendarId || "primary";
-        const body = _buildEventBody(event.year, event.month, event.day, event.title, event.description, event.startTime, event.endTime);
+        const body = _buildEventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestUpdateEvent({ calendarId: calendarId, eventId: event.eventId, body: body });
+            return _requestUpdateEvent({
+                calendarId: calendarId,
+                eventId: event.eventId,
+                body: body
+            });
         }).then(() => {
             fetchDayEvents(event.year, event.month, event.day, true);
         }).catch(e => {
@@ -301,7 +308,10 @@ Singleton {
     function deleteEvent(event) {
         const calendarId = event.calendarId || "primary";
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestDeleteEvent({ calendarId: calendarId, eventId: event.eventId });
+            return _requestDeleteEvent({
+                calendarId: calendarId,
+                eventId: event.eventId
+            });
         }).then(() => {
             fetchDayEvents(event.year, event.month, event.day, true);
         }).catch(e => {
@@ -309,18 +319,34 @@ Singleton {
         });
     }
 
-    function _buildEventBody(year, month, day, title, description, startTime, endTime) {
-        const dateStr = _dateKey(year, month, day);
-        let body = { summary: title };
-        if (description) body.description = description;
-        if (startTime) {
+    function _buildEventBody(data) {
+        const dateStr = _dateKey(data.year, data.month, data.day);
+        let body = {
+            summary: data.title
+        };
+        if (data.description)
+            body.description = data.description;
+        if (data.startTime) {
             const tz = _tzOffset();
-            body.start = { dateTime: dateStr + "T" + startTime + ":00" + tz };
-            body.end   = { dateTime: dateStr + "T" + (endTime || startTime) + ":00" + tz };
+            body.start = {
+                dateTime: dateStr + "T" + data.startTime + ":00" + tz
+            };
+            body.end = {
+                dateTime: dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz
+            };
         } else {
-            body.start = { date: dateStr };
-            body.end   = { date: dateStr };
+            const nextDay = new Date(data.year, data.month, data.day + 1);
+            const endDateStr = _dateKey(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
+            body.start = {
+                date: dateStr,
+                dateTime: null
+            };
+            body.end = {
+                date: endDateStr,
+                dateTime: null
+            };
         }
+        console.log(JSON.stringify(body));
         return JSON.stringify(body);
     }
 
@@ -350,9 +376,12 @@ Singleton {
             }
         }
         result.sort(function (a, b) {
-            if (a.startTime === b.startTime) return 0;
-            if (a.startTime === null) return -1;
-            if (b.startTime === null) return 1;
+            if (a.startTime === b.startTime)
+                return 0;
+            if (a.startTime === null)
+                return -1;
+            if (b.startTime === null)
+                return 1;
             return a.startTime > b.startTime ? -1 : 1;
         });
         root.events[dateKey] = result;
