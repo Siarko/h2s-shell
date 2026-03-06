@@ -133,9 +133,10 @@ Rectangle {
         submitColor: "#1e3a5f"
         submitColorHover: "#2d4a6d"
         onSubmitted: (title, description, startTime, endTime) => {
-            GoogleCalendar.updateEvent(
-                root.displayYear, root.displayMonth, root.selectedDay,
-                root.modelData.id, title, description, startTime, endTime)
+            GoogleCalendar.updateEvent({
+                year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                eventId: root.modelData.id, calendarId: root.modelData.calendarId,
+                title, description, startTime, endTime })
             root.editing = false
         }
         onCancelled: root.editing = false
@@ -228,7 +229,9 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    GoogleCalendar.deleteEvent(root.displayYear, root.displayMonth, root.selectedDay, root.modelData.id)
+                    GoogleCalendar.deleteEvent({
+                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                        eventId: root.modelData.id, calendarId: root.modelData.calendarId })
                     root.confirmingDelete = false
                 }
             }

@@ -67,7 +67,7 @@ def main():
                 "client_id": client_id,
                 "redirect_uri": redirect_uri,
                 "response_type": "code",
-                "scope": "https://www.googleapis.com/auth/calendar.readonly",
+                "scope": "https://www.googleapis.com/auth/calendar",
                 "access_type": "offline",
                 "prompt": "consent",
             }

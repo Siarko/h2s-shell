@@ -104,8 +104,10 @@ Item {
                 submitLabel: "Add Event"
                 submitColor: "#1e5c1e"
                 submitColorHover: "#2d6a2d"
+                showCalendarPicker: true
                 onSubmitted: (title, description, startTime, endTime) => {
-                    GoogleCalendar.createEvent(root.displayYear, root.displayMonth, root.selectedDay, title, description, startTime, endTime, "");
+                    GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                        title, description, startTime, endTime, calendarId: _addEventForm.selectedCalendarId });
                     root._addingEvent = false;
                     reset();
                 }

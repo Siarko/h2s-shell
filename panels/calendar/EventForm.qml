@@ -1,5 +1,6 @@
 import QtQuick
 import qs.singletons
+import qs.singletons.googlecalendar
 
 // Reusable event form: title, start/end time, description, submit + cancel.
 // implicitHeight = inner Column height (no padding — caller wraps with margins).
@@ -12,10 +13,22 @@ Item {
     property color submitColor: "#1e3a5f"
     property color submitColorHover: "#2d4a6d"
 
+    property bool showCalendarPicker: false
+    property string selectedCalendarId: ""
+    property bool _pickerOpen: false
+
     property bool _allDay: false
 
     signal submitted(string title, string description, string startTime, string endTime)
     signal cancelled()
+
+    Component.onCompleted: {
+        if (showCalendarPicker && selectedCalendarId === "") {
+            let enabled = GoogleCalendar.enabledCalendarIds;
+            if (enabled && enabled.length > 0)
+                selectedCalendarId = enabled[0];
+        }
+    }
 
     function populate(title, startTime, endTime, description, allDay) {
         _titleInput.text = title
@@ -31,6 +44,7 @@ Item {
         _endInput.clear()
         _descInput.text  = ""
         _allDay = false
+        _pickerOpen = false
     }
 
     Column {
@@ -122,6 +136,120 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root._allDay = !root._allDay
+                }
+            }
+        }
+
+        // Calendar picker button — visible only when showCalendarPicker
+        Rectangle {
+            width: parent.width
+            height: 28
+            visible: root.showCalendarPicker
+            color: Theme.popupBackground
+            border.color: Theme.textDim
+            radius: 4
+
+            readonly property var _selectedCal: GoogleCalendar.calendars[root.selectedCalendarId] ?? null
+
+            Row {
+                anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
+                spacing: 6
+
+                Rectangle {
+                    width: 10
+                    height: 10
+                    radius: 5
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: parent.parent._selectedCal?.color ?? Theme.textDim
+                }
+
+                Text {
+                    text: parent.parent._selectedCal?.name ?? "Select calendar"
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - 30
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    text: "▾"
+                    color: Theme.textTertiary
+                    font.pixelSize: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root._pickerOpen = !root._pickerOpen
+            }
+        }
+
+        // Calendar dropdown list
+        Rectangle {
+            width: parent.width
+            height: root._pickerOpen && root.showCalendarPicker ? _pickerList.implicitHeight + 4 : 0
+            visible: root.showCalendarPicker
+            clip: true
+            color: Theme.popupBackground
+            border.color: Theme.textDim
+            radius: 4
+
+            Behavior on height {
+                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+            }
+
+            Column {
+                id: _pickerList
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 2 }
+
+                Repeater {
+                    model: GoogleCalendar.enabledCalendarIds
+
+                    Rectangle {
+                        required property string modelData
+                        readonly property var _cal: GoogleCalendar.calendars[modelData] ?? null
+
+                        width: _pickerList.width
+                        height: 24
+                        color: modelData === root.selectedCalendarId ? Theme.cellHover : "transparent"
+                        radius: 3
+
+                        Row {
+                            anchors { fill: parent; leftMargin: 6 }
+                            spacing: 6
+
+                            Rectangle {
+                                width: 10
+                                height: 10
+                                radius: 5
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: parent.parent._cal?.color ?? Theme.textDim
+                            }
+
+                            Text {
+                                text: parent.parent._cal?.name ?? modelData
+                                color: Theme.textSecondary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 22
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.selectedCalendarId = modelData
+                                root._pickerOpen = false
+                            }
+                        }
+                    }
                 }
             }
         }

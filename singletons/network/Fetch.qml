@@ -48,7 +48,7 @@ Singleton {
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== XMLHttpRequest.DONE)
                     return;
-                if (xhr.status === 200) {
+                if (xhr.status >= 200 && xhr.status < 300) {
                     resolve({
                         responseObject: xhr,
                         text: function () {

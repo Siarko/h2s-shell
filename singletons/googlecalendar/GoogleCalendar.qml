@@ -14,6 +14,7 @@ Singleton {
     readonly property string _ENDPOINT_COLORS: "https://www.googleapis.com/calendar/v3/colors"
     readonly property string _ENDPOINT_CALENDARS: "https://www.googleapis.com/calendar/v3/users/me/calendarList"
     readonly property string _ENDPOINT_EVENTS: "https://www.googleapis.com/calendar/v3/calendars/{0}/events"
+    readonly property string _ENDPOINT_EVENT: "https://www.googleapis.com/calendar/v3/calendars/{0}/events/{1}"
 
     readonly property bool isAuthorized: Config.gcal.refreshToken !== ""
 
@@ -255,7 +256,8 @@ Singleton {
             endTimeStr: endTimeStr,
             time: timeStr,
             color: color,
-            calendarColor: calendarColor ?? null
+            calendarColor: calendarColor ?? null,
+            calendarId: calendar?.id ?? null
         };
     }
 
@@ -269,16 +271,57 @@ Singleton {
     }
 
     // month is 0-indexed (same as fetchDayEvents)
-    function createEvent(year, month, day, title, description, startTime, endTime, calendarId) {
-        logger.log("TODO createEvent:", year, month, day, title, description, startTime, endTime, calendarId)
+    // event: { year, month, day, title, description, startTime, endTime, calendarId }
+    function createEvent(event) {
+        const calendarId = event.calendarId || "primary";
+        const body = _buildEventBody(event.year, event.month, event.day, event.title, event.description, event.startTime, event.endTime);
+        GoogleCalendarAuth.ensureAuthorized(() => {
+            return _requestCreateEvent({ calendarId: calendarId, body: body });
+        }).then(() => {
+            fetchDayEvents(event.year, event.month, event.day, true);
+        }).catch(e => {
+            logger.error("createEvent failed:", e);
+        });
     }
 
-    function deleteEvent(year, month, day, eventId) {
-        logger.log("TODO deleteEvent:", year, month, day, eventId)
+    // event: { year, month, day, eventId, calendarId, title, description, startTime, endTime }
+    function updateEvent(event) {
+        const calendarId = event.calendarId || "primary";
+        const body = _buildEventBody(event.year, event.month, event.day, event.title, event.description, event.startTime, event.endTime);
+        GoogleCalendarAuth.ensureAuthorized(() => {
+            return _requestUpdateEvent({ calendarId: calendarId, eventId: event.eventId, body: body });
+        }).then(() => {
+            fetchDayEvents(event.year, event.month, event.day, true);
+        }).catch(e => {
+            logger.error("updateEvent failed:", e);
+        });
     }
 
-    function updateEvent(year, month, day, eventId, title, description, startTime, endTime) {
-        logger.log("TODO updateEvent:", year, month, day, eventId, title, description, startTime, endTime)
+    // event: { year, month, day, eventId, calendarId }
+    function deleteEvent(event) {
+        const calendarId = event.calendarId || "primary";
+        GoogleCalendarAuth.ensureAuthorized(() => {
+            return _requestDeleteEvent({ calendarId: calendarId, eventId: event.eventId });
+        }).then(() => {
+            fetchDayEvents(event.year, event.month, event.day, true);
+        }).catch(e => {
+            logger.error("deleteEvent failed:", e);
+        });
+    }
+
+    function _buildEventBody(year, month, day, title, description, startTime, endTime) {
+        const dateStr = _dateKey(year, month, day);
+        let body = { summary: title };
+        if (description) body.description = description;
+        if (startTime) {
+            const tz = _tzOffset();
+            body.start = { dateTime: dateStr + "T" + startTime + ":00" + tz };
+            body.end   = { dateTime: dateStr + "T" + (endTime || startTime) + ":00" + tz };
+        } else {
+            body.start = { date: dateStr };
+            body.end   = { date: dateStr };
+        }
+        return JSON.stringify(body);
     }
 
     function _tzOffset(): string {
@@ -331,6 +374,40 @@ Singleton {
                 orderBy: 'startTime'
             },
             id: data.id
+        });
+    }
+
+    function _requestCreateEvent(data) {
+        return Fetch.request(root._ENDPOINT_EVENTS, {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + Config.gcal.accessToken,
+                "Content-Type": "application/json"
+            },
+            params: [data.calendarId],
+            body: data.body
+        });
+    }
+
+    function _requestUpdateEvent(data) {
+        return Fetch.request(root._ENDPOINT_EVENT, {
+            method: "PATCH",
+            headers: {
+                "Authorization": "Bearer " + Config.gcal.accessToken,
+                "Content-Type": "application/json"
+            },
+            params: [data.calendarId, data.eventId],
+            body: data.body
+        });
+    }
+
+    function _requestDeleteEvent(data) {
+        return Fetch.request(root._ENDPOINT_EVENT, {
+            method: "DELETE",
+            headers: {
+                "Authorization": "Bearer " + Config.gcal.accessToken
+            },
+            params: [data.calendarId, data.eventId]
         });
     }
 
