@@ -8,6 +8,13 @@ import qs.singletons.googlecalendar
 FloatingWindow {
     id: root
     title: "Settings"
+
+    Connections {
+        target: Config
+        function onSaved() {
+            Notifier.send("Settings saved", "", "low")
+        }
+    }
     implicitWidth: 520
     implicitHeight: 640
     minimumSize: Qt.size(400, 300)
