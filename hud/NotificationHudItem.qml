@@ -121,6 +121,14 @@ Item {
             NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
         }
 
+        property var _hudReplyAction: (root.currentNotif?.actions ?? []).find(a => a.id === "inline-reply") ?? null
+
+        function _hudSendReply() {
+            if (_hudReplyInput.text.length === 0) return;
+            notifCard._hudReplyAction.invoke(_hudReplyInput.text);
+            root.dismiss();
+        }
+
         HoverHandler { id: hoverHandler }
 
         ColumnLayout {
@@ -136,6 +144,17 @@ Item {
             // Header: app name + close button
             RowLayout {
                 Layout.fillWidth: true
+
+                Image {
+                    visible: (root.currentNotif?.appIcon ?? "") !== ""
+                    source: visible ? "image://icon/" + root.currentNotif.appIcon : ""
+                    Layout.preferredWidth: 16
+                    Layout.preferredHeight: 16
+                    Layout.maximumWidth: 16
+                    Layout.maximumHeight: 16
+                    fillMode: Image.PreserveAspectFit
+                    Layout.alignment: Qt.AlignVCenter
+                }
 
                 Text {
                     text: root.currentNotif?.appName ?? ""
@@ -181,6 +200,105 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 visible: (root.currentNotif?.body ?? "").length > 0
+            }
+
+            Image {
+                visible: (root.currentNotif?.image ?? "") !== ""
+                source: root.currentNotif?.image ?? ""
+                Layout.fillWidth: true
+                Layout.maximumHeight: 120
+                fillMode: Image.PreserveAspectFit
+                Layout.topMargin: 4
+            }
+
+            Row {
+                spacing: 6
+                visible: (root.currentNotif?.actions ?? []).filter(a => a.id !== "inline-reply").length > 0
+                Layout.topMargin: 4
+
+                Repeater {
+                    model: (root.currentNotif?.actions ?? []).filter(a => a.id !== "inline-reply")
+                    delegate: Rectangle {
+                        required property var modelData
+                        implicitWidth: _hudActionLabel.implicitWidth + 16
+                        height: 24
+                        radius: 5
+                        color: Theme.sliderAccent
+
+                        Text {
+                            id: _hudActionLabel
+                            anchors.centerIn: parent
+                            text: modelData.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            color: Theme.textPrimary
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                modelData.invoke();
+                                root.dismiss();
+                            }
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                visible: notifCard._hudReplyAction !== null
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 6
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 28
+                    radius: 5
+                    color: Qt.rgba(0, 0, 0, 0.2)
+
+                    Text {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        text: "Reply…"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: Theme.textTertiary
+                        verticalAlignment: Text.AlignVCenter
+                        visible: _hudReplyInput.text.length === 0
+                    }
+
+                    TextInput {
+                        id: _hudReplyInput
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        color: Theme.textPrimary
+                        verticalAlignment: TextInput.AlignVCenter
+                        onAccepted: notifCard._hudSendReply()
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 48
+                    implicitHeight: 28
+                    radius: 5
+                    color: Theme.sliderAccent
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Send"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        color: Theme.textPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: notifCard._hudSendReply()
+                    }
+                }
             }
         }
     }

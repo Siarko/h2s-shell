@@ -114,6 +114,22 @@ Item {
                     width: parent.width
                     Component.onCompleted: slideIn.start()
 
+                    property var _regularActions: {
+                        const actions = delegateRoot.modelData.actions ?? [];
+                        return actions.filter(a => a.id !== "inline-reply");
+                    }
+
+                    property var _replyAction: {
+                        const actions = delegateRoot.modelData.actions ?? [];
+                        return actions.find(a => a.id === "inline-reply") ?? null;
+                    }
+
+                    function _sendReply() {
+                        if (_replyInput.text.length === 0) return;
+                        card._replyAction.invoke(_replyInput.text);
+                        slideOut.start();
+                    }
+
                     NumberAnimation {
                         id: slideIn
                         target: card
@@ -137,6 +153,17 @@ Item {
 
                         RowLayout {
                             Layout.fillWidth: true
+
+                            Image {
+                                visible: (delegateRoot.modelData.appIcon ?? "") !== ""
+                                source: visible ? "image://icon/" + delegateRoot.modelData.appIcon : ""
+                                Layout.preferredWidth: 16
+                                Layout.preferredHeight: 16
+                                Layout.maximumWidth: 16
+                                Layout.maximumHeight: 16
+                                fillMode: Image.PreserveAspectFit
+                                Layout.alignment: Qt.AlignVCenter
+                            }
 
                             Text {
                                 text: delegateRoot.modelData.appName
@@ -189,6 +216,105 @@ Item {
                             readOnly: true
                             selectByMouse: true
                             wrapMode: Text.WordWrap
+                        }
+
+                        Image {
+                            visible: (delegateRoot.modelData.image ?? "") !== ""
+                            source: delegateRoot.modelData.image ?? ""
+                            Layout.fillWidth: true
+                            Layout.maximumHeight: 160
+                            fillMode: Image.PreserveAspectFit
+                            Layout.topMargin: 4
+                        }
+
+                        Row {
+                            spacing: 6
+                            visible: card._regularActions.length > 0
+                            Layout.topMargin: 4
+
+                            Repeater {
+                                model: card._regularActions
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    implicitWidth: _actionLabel.implicitWidth + 16
+                                    height: 24
+                                    radius: 5
+                                    color: Theme.sliderAccent
+
+                                    Text {
+                                        id: _actionLabel
+                                        anchors.centerIn: parent
+                                        text: modelData.text
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 11
+                                        color: Theme.textPrimary
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            modelData.invoke();
+                                            slideOut.start();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            visible: card._replyAction !== null
+                            Layout.fillWidth: true
+                            Layout.topMargin: 4
+                            spacing: 6
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 28
+                                radius: 5
+                                color: Theme.popupBackground
+
+                                Text {
+                                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                                    text: "Reply…"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    color: Theme.textTertiary
+                                    verticalAlignment: Text.AlignVCenter
+                                    visible: _replyInput.text.length === 0
+                                }
+
+                                TextInput {
+                                    id: _replyInput
+                                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 12
+                                    color: Theme.textPrimary
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    onAccepted: card._sendReply()
+                                }
+                            }
+
+                            Rectangle {
+                                implicitWidth: 48
+                                implicitHeight: 28
+                                radius: 5
+                                color: Theme.sliderAccent
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Send"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    color: Theme.textPrimary
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: card._sendReply()
+                                }
+                            }
                         }
                     }
                 }

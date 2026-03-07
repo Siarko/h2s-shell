@@ -12,7 +12,7 @@ FloatingWindow {
     Connections {
         target: Config
         function onSaved() {
-            Notifier.send("Settings saved", "", "low")
+            Notifier.send("Settings saved", { urgency: "low" })
         }
     }
     implicitWidth: 520
