@@ -12,7 +12,9 @@ FloatingWindow {
     Connections {
         target: Config
         function onSaved() {
-            Notifier.send("Settings saved", { urgency: "low" })
+            Notifier.send("Settings saved", {
+                urgency: "low"
+            });
         }
     }
     implicitWidth: 520
@@ -198,7 +200,7 @@ FloatingWindow {
                     }
 
                     Repeater {
-                        model: ["General", "Calendar", "Media"]
+                        model: ["General", "Calendar", "Media", "Bar"]
                         Rectangle {
                             required property string modelData
                             required property int index
@@ -250,7 +252,15 @@ FloatingWindow {
 
                 Loader {
                     anchors.fill: parent
-                    sourceComponent: root.selectedCategory === 0 ? generalComp : root.selectedCategory === 1 ? calendarComp : mediaComp
+                    sourceComponent: {
+                        if (root.selectedCategory === 0)
+                            return generalComp;
+                        if (root.selectedCategory === 1)
+                            return calendarComp;
+                        if (root.selectedCategory === 2)
+                            return mediaComp;
+                        return barComp;
+                    }
                 }
             }
         }
@@ -331,6 +341,57 @@ FloatingWindow {
 
             Item {
                 Layout.fillHeight: true
+            }
+        }
+    }
+
+
+    // ── Bar settings content ──────────────────────────────────────────
+    Component {
+        id: barComp
+
+        Flickable {
+            anchors.fill: parent
+            contentHeight: _barCol.implicitHeight
+            clip: true
+
+            ColumnLayout {
+                id: _barCol
+                anchors {
+                    fill: parent
+                    margins: 14
+                }
+                spacing: 16
+
+                Text {
+                    text: "Content"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: Theme.textSecondary
+                }
+
+                BarSectionList {
+                    title: "Left section"
+                    model: Config.bar.content.left
+                    onListChanged: newList => Config.bar.content.left = newList
+                }
+
+                BarSectionList {
+                    title: "Center section"
+                    model: Config.bar.content.center
+                    onListChanged: newList => Config.bar.content.center = newList
+                }
+
+                BarSectionList {
+                    title: "Right section"
+                    model: Config.bar.content.right
+                    onListChanged: newList => Config.bar.content.right = newList
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
             }
         }
     }

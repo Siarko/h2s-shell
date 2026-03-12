@@ -9,6 +9,7 @@ Singleton {
     id: root
 
     property alias datetimeFormat: _calendar.datetimeFormat
+    property alias bar: _bar
     property alias gcal: _gcal
     property alias general: _general
     property alias media: _media
@@ -35,6 +36,16 @@ Singleton {
                 id: _media
                 property string visualizerStyle: "waveform"   // "waveform"|"bars"|"dots"|"none"
                 property string visualizerLayout: "horizontal" // "horizontal"|"vertical"
+            }
+
+            property JsonObject bar: JsonObject {
+                id: _bar
+                property JsonObject content: JsonObject {
+                    id: _barContent
+                    property list<string> left: ["power", "settings", "workspaces"]
+                    property list<string> center: ["clock"]
+                    property list<string> right: ["music", "sound", "bluetooth", "tray", "network", "notifications"]
+                }
             }
 
             property JsonObject gcal: JsonObject {
