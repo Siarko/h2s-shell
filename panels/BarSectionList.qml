@@ -303,6 +303,14 @@ Item {
                         topPadding: 4
                         bottomPadding: 4
 
+                        // Called via parent.parent.parent from Repeater delegate handlers
+                        function addWidget(type) {
+                            var list = [..._rowList.workingList, type]
+                            _rowList.workingList = list
+                            _rowList.notifyListChanged(list)
+                            _picker.visible = false
+                        }
+
                         Repeater {
                             model: {
                                 var all = ["power", "settings", "workspaces", "clock", "music", "sound", "bluetooth", "tray", "network", "notifications"]
@@ -338,12 +346,8 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            var list = [..._rowList.workingList, modelData]
-                                            _rowList.workingList = list
-                                            root.listChanged(list)
-                                            _picker.visible = false
-                                        }
+                                        // parent = Rectangle, parent.parent = Item (delegate), parent.parent.parent = _pickerCol
+                                        onClicked: parent.parent.parent.addWidget(modelData)
                                     }
                                 }
                             }
