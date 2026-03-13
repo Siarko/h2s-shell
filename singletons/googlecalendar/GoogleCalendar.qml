@@ -155,6 +155,9 @@ Singleton {
     }
 
     function fetchDayEvents(year, month, day, invalidateCache = false) {
+        if (!GoogleCalendarAuth.isAuthorized) {
+            return;
+        }
         if (month > 11 || month < 0 || day < 1) {
             logger.error("Requested incorrect day: ", year, month, day);
             return;
