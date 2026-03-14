@@ -68,7 +68,6 @@ Item {
             }
             container.scrollBuffer += amount;
             container.lastScrollAmount = amount;
-            console.log(container.scrollBuffer, container.lastScrollAmount);
             if (Math.abs(container.scrollBuffer) >= 1) {
                 container.scrollNotch(direction);
                 container.scrollBuffer -= direction;
