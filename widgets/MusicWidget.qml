@@ -7,14 +7,14 @@ BarWidget {
 
     onHover: state => {
         if (state)
-            popup.open(this, false, "music")
+            popup.open(this, false, "music");
     }
     onMiddleClicked: Music.togglePlay()
-    onScrolled: delta => {
+    onScrollNotch: delta => {
         if (delta > 0)
-            Music.next()
+            Music.next();
         else
-            Music.previous()
+            Music.previous();
     }
 
     Row {

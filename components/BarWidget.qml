@@ -12,8 +12,10 @@ Item {
     signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
     signal hover(status: bool)
-    // Emitted on scroll wheel: delta in notches (±1, ±2, …); shift indicates shift key held
+    // Emitted on scroll wheel
     signal scrolled(delta: real)
+    // Emitted on scroll wheen notch change (only on full scroll clicks)
+    signal scrollNotch(direction: int)
     // Emitted on middle mouse button click
     signal middleClicked
 
@@ -25,6 +27,9 @@ Item {
     implicitWidth: contentItem.childrenRect.width + 16
 
     default property alias content: contentItem.data
+
+    property real scrollBuffer: 0
+    property real lastScrollAmount: 0
 
     Rectangle {
         id: rectangle
@@ -54,6 +59,20 @@ Item {
         }
         onEntered: container.hover(true)
         onExited: container.hover(false)
-        onWheel: event => container.scrolled(event.angleDelta.y * (1 / 8) / 14)
+        onWheel: event => {
+            let amount = event.angleDelta.y * (1 / 8) / 14;
+            let direction = container.scrollBuffer > 0 ? 1 : -1;
+            container.scrolled(amount);
+            if (container.lastScrollAmount != 0 && container.lastScrollAmount * amount < 0) {
+                container.scrollBuffer = 0;
+            }
+            container.scrollBuffer += amount;
+            container.lastScrollAmount = amount;
+            console.log(container.scrollBuffer, container.lastScrollAmount);
+            if (Math.abs(container.scrollBuffer) >= 1) {
+                container.scrollNotch(direction);
+                container.scrollBuffer -= direction;
+            }
+        }
     }
 }
