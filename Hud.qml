@@ -58,7 +58,7 @@ PanelWindow {
     Rectangle {
         id: queueBadge
         x: hud.implicitWidth - width
-        y: 56
+        y: Config.bar.layout.reservedSpace + 16
         width: 36
         height: notifItem.height
         topLeftRadius: 6

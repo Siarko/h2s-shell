@@ -22,7 +22,7 @@ Item {
 
     // Start off-screen to the right; animations move it in and out
     x: screenWidth
-    y: 56   // 40px bar + 16px gap
+    y: Config.bar.layout.reservedSpace + 16
     width: cardWidth
     height: notifCard.implicitHeight
 

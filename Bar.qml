@@ -38,96 +38,165 @@ PanelWindow {
         left: true
         right: true
     }
-    color: Theme.barBackground
+    color: "transparent"
 
-    implicitHeight: 40
+    implicitHeight: Config.bar.layout.reservedSpace
 
     // Widget components — one per widget type
-    Component { id: _powerComp;      PowerWidget       { popup: popupLoader } }
-    Component { id: _settingsComp;   SettingsWidget    { settingsWindow: bar.settingsWindowRef } }
-    Component { id: _workspacesComp; WorkspacesWidget  {} }
-    Component { id: _clockComp;      ClockWidget       { popup: popupLoader } }
-    Component { id: _musicComp;      MusicWidget       { popup: popupLoader } }
-    Component { id: _soundComp;      SoundWidget       { popup: popupLoader } }
-    Component { id: _bluetoothComp;  BluetoothWidget   { popup: popupLoader } }
-    Component { id: _trayComp;       TrayWidget        { popup: popupLoader } }
-    Component { id: _networkComp;    NetworkWidget     { popup: popupLoader } }
-    Component { id: _notifComp;      NotificationsWidget { popup: popupLoader } }
+    Component {
+        id: _powerComp
+        PowerWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _settingsComp
+        SettingsWidget {
+            settingsWindow: bar.settingsWindowRef
+        }
+    }
+    Component {
+        id: _workspacesComp
+        WorkspacesWidget {}
+    }
+    Component {
+        id: _clockComp
+        ClockWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _musicComp
+        MusicWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _soundComp
+        SoundWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _bluetoothComp
+        BluetoothWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _trayComp
+        TrayWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _networkComp
+        NetworkWidget {
+            popup: popupLoader
+        }
+    }
+    Component {
+        id: _notifComp
+        NotificationsWidget {
+            popup: popupLoader
+        }
+    }
 
     readonly property var _widgetMap: ({
-        "power":         _powerComp,
-        "settings":      _settingsComp,
-        "workspaces":    _workspacesComp,
-        "clock":         _clockComp,
-        "music":         _musicComp,
-        "sound":         _soundComp,
-        "bluetooth":     _bluetoothComp,
-        "tray":          _trayComp,
-        "network":       _networkComp,
-        "notifications": _notifComp
-    })
+            "power": _powerComp,
+            "settings": _settingsComp,
+            "workspaces": _workspacesComp,
+            "clock": _clockComp,
+            "music": _musicComp,
+            "sound": _soundComp,
+            "bluetooth": _bluetoothComp,
+            "tray": _trayComp,
+            "network": _networkComp,
+            "notifications": _notifComp
+        })
 
-    // Three-section bar layout: left-aligned, centered, right-aligned
-    Item {
-        anchors.fill: parent
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
+    // Visual bar rectangle — floats within the reserved space
+    Rectangle {
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+            topMargin: Config.bar.layout.topOffset
+            leftMargin: Config.bar.layout.leftMargin
+            rightMargin: Config.bar.layout.rightMargin
+        }
+        height: Config.bar.layout.barHeight
+        color: Theme.barBackground
+        topLeftRadius: Config.bar.layout.radiusTopLeft / 100 * (Config.bar.layout.barHeight / 2)
+        topRightRadius: Config.bar.layout.radiusTopRight / 100 * (Config.bar.layout.barHeight / 2)
+        bottomLeftRadius: Config.bar.layout.radiusBottomLeft / 100 * (Config.bar.layout.barHeight / 2)
+        bottomRightRadius: Config.bar.layout.radiusBottomRight / 100 * (Config.bar.layout.barHeight / 2)
 
-        // Left section
-        RowLayout {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            spacing: 5
+        // Three-section bar layout: left-aligned, centered, right-aligned
+        Item {
+            anchors.fill: parent
+            anchors.leftMargin: 5
+            anchors.rightMargin: 5
 
-            Repeater {
-                model: Config.bar.content.left
-                delegate: Loader {
-                    required property string modelData
-                    Layout.fillHeight: true
-                    Layout.topMargin: 5
-                    Layout.bottomMargin: 5
-                    sourceComponent: bar._widgetMap[modelData]
-                    onLoaded: if (modelData === "notifications") bar.notifWidget = item
+            // Left section
+            RowLayout {
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                spacing: 5
+
+                Repeater {
+                    model: Config.bar.content.left
+                    delegate: Loader {
+                        required property string modelData
+                        Layout.fillHeight: true
+                        Layout.topMargin: 5
+                        Layout.bottomMargin: 5
+                        sourceComponent: bar._widgetMap[modelData]
+                        onLoaded: if (modelData === "notifications")
+                            bar.notifWidget = item
+                    }
                 }
             }
-        }
 
-        // Center section
-        RowLayout {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            // Center section
+            RowLayout {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
 
-            Repeater {
-                model: Config.bar.content.center
-                delegate: Loader {
-                    required property string modelData
-                    Layout.fillHeight: true
-                    Layout.topMargin: 5
-                    Layout.bottomMargin: 5
-                    sourceComponent: bar._widgetMap[modelData]
-                    onLoaded: if (modelData === "notifications") bar.notifWidget = item
+                Repeater {
+                    model: Config.bar.content.center
+                    delegate: Loader {
+                        required property string modelData
+                        Layout.fillHeight: true
+                        Layout.topMargin: 5
+                        Layout.bottomMargin: 5
+                        sourceComponent: bar._widgetMap[modelData]
+                        onLoaded: if (modelData === "notifications")
+                            bar.notifWidget = item
+                    }
                 }
             }
-        }
 
-        // Right section
-        RowLayout {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            spacing: 5
+            // Right section
+            RowLayout {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                spacing: 5
 
-            Repeater {
-                model: Config.bar.content.right
-                delegate: Loader {
-                    required property string modelData
-                    Layout.fillHeight: true
-                    Layout.topMargin: 5
-                    Layout.bottomMargin: 5
-                    sourceComponent: bar._widgetMap[modelData]
-                    onLoaded: if (modelData === "notifications") bar.notifWidget = item
+                Repeater {
+                    model: Config.bar.content.right
+                    delegate: Loader {
+                        required property string modelData
+                        Layout.fillHeight: true
+                        Layout.topMargin: 5
+                        Layout.bottomMargin: 5
+                        sourceComponent: bar._widgetMap[modelData]
+                        onLoaded: if (modelData === "notifications")
+                            bar.notifWidget = item
+                    }
                 }
             }
         }

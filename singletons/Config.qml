@@ -47,6 +47,18 @@ Singleton {
                     property list<string> center: ["clock"]
                     property list<string> right: ["music", "sound", "bluetooth", "tray", "network", "notifications"]
                 }
+                property JsonObject layout: JsonObject {
+                    id: _barLayout
+                    property int reservedSpace: 40
+                    property int barHeight: 36
+                    property int topOffset: 2
+                    property int leftMargin: 0
+                    property int rightMargin: 0
+                    property int radiusTopLeft: 0
+                    property int radiusTopRight: 0
+                    property int radiusBottomLeft: 20
+                    property int radiusBottomRight: 20
+                }
             }
 
             property JsonObject audio: JsonObject {

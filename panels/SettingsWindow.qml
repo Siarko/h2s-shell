@@ -131,6 +131,101 @@ FloatingWindow {
         }
     }
 
+    component SettingSlider: RowLayout {
+        id: _ss
+        property string label
+        property int value
+        property int from: 0
+        property int to: 100
+        property string suffix: ""
+        property int lockedFrom: from   // thumb cannot go below this; region shown as locked
+        property bool disabled: false   // fully disables interaction
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: 36
+        opacity: _ss.disabled ? 0.35 : 1.0
+
+        Text {
+            text: _ss.label
+            font.family: Theme.fontFamily
+            font.pixelSize: 13
+            color: Theme.textPrimary
+            Layout.fillWidth: true
+        }
+
+        Item {
+            Layout.preferredWidth: 120
+            Layout.preferredHeight: 20
+
+            readonly property real _pos: (_ss.value - _ss.from) / Math.max(1, _ss.to - _ss.from)
+            readonly property real _lockedPos: (Math.max(_ss.from, Math.min(_ss.lockedFrom, _ss.to)) - _ss.from) / Math.max(1, _ss.to - _ss.from)
+
+            // Base track
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: 4
+                radius: 2
+                color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDim
+
+                // Locked region overlay (from → lockedFrom)
+                Rectangle {
+                    width: parent.parent._lockedPos * parent.width
+                    height: parent.height
+                    radius: 2
+                    color: Qt.rgba(Theme.sliderAccent.r, Theme.sliderAccent.g, Theme.sliderAccent.b, 0.25)
+                    visible: parent.parent._lockedPos > 0
+                }
+
+                // Fill (lockedFrom → value)
+                Rectangle {
+                    x: parent.parent._lockedPos * parent.width
+                    width: Math.max(0, (parent.parent._pos - parent.parent._lockedPos) * parent.width)
+                    height: parent.height
+                    radius: 2
+                    color: _trackArea.containsMouse ? Theme.sliderAccentHover : Theme.sliderAccent
+                }
+            }
+
+            // Thumb
+            Rectangle {
+                x: parent._pos * (parent.width - width)
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14
+                height: 14
+                radius: 7
+                color: _trackArea.pressed ? Theme.textSecondary : Theme.textPrimary
+            }
+
+            MouseArea {
+                id: _trackArea
+                anchors.fill: parent
+                enabled: !_ss.disabled
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onPressed: mouse => update(mouse.x)
+                onPositionChanged: mouse => {
+                    if (pressed)
+                        update(mouse.x);
+                }
+
+                function update(mouseX) {
+                    var pos = Math.max(parent._lockedPos, Math.min(1, mouseX / width));
+                    _ss.value = Math.round(_ss.from + pos * (_ss.to - _ss.from));
+                }
+            }
+        }
+
+        Text {
+            text: _ss.value + _ss.suffix
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+            color: Theme.textSecondary
+            horizontalAlignment: Text.AlignRight
+            Layout.preferredWidth: 36
+        }
+    }
+
     component SettingInputRow: RowLayout {
         property string label
         property string value
@@ -346,7 +441,6 @@ FloatingWindow {
         }
     }
 
-
     // ── Bar settings content ──────────────────────────────────────────
     Component {
         id: barComp
@@ -365,11 +459,102 @@ FloatingWindow {
                 spacing: 16
 
                 Text {
+                    text: "Geometry"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: Theme.textSecondary
+                }
+
+                SettingSlider {
+                    label: "Bar height"
+                    from: 10; to: 80
+                    value: Config.bar.layout.barHeight
+                    onValueChanged: {
+                        Config.bar.layout.barHeight = value;
+                        if (Config.bar.layout.reservedSpace < value)
+                            Config.bar.layout.reservedSpace = value;
+                        var maxOffset = Config.bar.layout.reservedSpace - value;
+                        if (Config.bar.layout.topOffset > maxOffset)
+                            Config.bar.layout.topOffset = maxOffset;
+                    }
+                }
+                SettingSlider {
+                    label: "Reserved space"
+                    from: 10; to: 80
+                    lockedFrom: Config.bar.layout.barHeight
+                    value: Config.bar.layout.reservedSpace
+                    onValueChanged: {
+                        Config.bar.layout.reservedSpace = value;
+                        var maxOffset = value - Config.bar.layout.barHeight;
+                        if (Config.bar.layout.topOffset > maxOffset)
+                            Config.bar.layout.topOffset = maxOffset;
+                    }
+                }
+                SettingSlider {
+                    label: "Top offset"
+                    from: 0
+                    to: Config.bar.layout.reservedSpace - Config.bar.layout.barHeight
+                    disabled: Config.bar.layout.reservedSpace <= Config.bar.layout.barHeight
+                    value: Config.bar.layout.topOffset
+                    onValueChanged: Config.bar.layout.topOffset = value
+                }
+                SettingSlider {
+                    label: "Left margin"
+                    from: 0
+                    to: 200
+                    value: Config.bar.layout.leftMargin
+                    onValueChanged: Config.bar.layout.leftMargin = value
+                }
+                SettingSlider {
+                    label: "Right margin"
+                    from: 0
+                    to: 200
+                    value: Config.bar.layout.rightMargin
+                    onValueChanged: Config.bar.layout.rightMargin = value
+                }
+
+                Text {
+                    text: "Corners"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: Theme.textSecondary
+                    Layout.topMargin: 4
+                }
+
+                SettingSlider {
+                    label: "Top left"
+                    from: 0; to: 100; suffix: "%"
+                    value: Config.bar.layout.radiusTopLeft
+                    onValueChanged: Config.bar.layout.radiusTopLeft = value
+                }
+                SettingSlider {
+                    label: "Top right"
+                    from: 0; to: 100; suffix: "%"
+                    value: Config.bar.layout.radiusTopRight
+                    onValueChanged: Config.bar.layout.radiusTopRight = value
+                }
+                SettingSlider {
+                    label: "Bottom left"
+                    from: 0; to: 100; suffix: "%"
+                    value: Config.bar.layout.radiusBottomLeft
+                    onValueChanged: Config.bar.layout.radiusBottomLeft = value
+                }
+                SettingSlider {
+                    label: "Bottom right"
+                    from: 0; to: 100; suffix: "%"
+                    value: Config.bar.layout.radiusBottomRight
+                    onValueChanged: Config.bar.layout.radiusBottomRight = value
+                }
+
+                Text {
                     text: "Content"
                     font.family: Theme.fontFamily
                     font.pixelSize: 12
                     font.bold: true
                     color: Theme.textSecondary
+                    Layout.topMargin: 4
                 }
 
                 BarSectionList {

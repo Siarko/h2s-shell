@@ -9,16 +9,15 @@ Item {
     implicitWidth: 300
     implicitHeight: col.implicitHeight
 
-    PwObjectTracker {
-        objects: Audio.nodes.values
-    }
-
     Column {
         id: col
         width: parent.implicitWidth
         spacing: 4
 
-        AudioChannelRow { isSink: true;  width: parent.width }
+        AudioChannelRow {
+            isSink: true
+            width: parent.width
+        }
 
         Rectangle {
             width: parent.width
@@ -26,6 +25,9 @@ Item {
             color: Theme.textDim
         }
 
-        AudioChannelRow { isSink: false; width: parent.width }
+        AudioChannelRow {
+            isSink: false
+            width: parent.width
+        }
     }
 }
