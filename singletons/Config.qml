@@ -13,6 +13,7 @@ Singleton {
     property alias gcal: _gcal
     property alias general: _general
     property alias media: _media
+    property alias audio: _audio
 
     signal saved
 
@@ -46,6 +47,11 @@ Singleton {
                     property list<string> center: ["clock"]
                     property list<string> right: ["music", "sound", "bluetooth", "tray", "network", "notifications"]
                 }
+            }
+
+            property JsonObject audio: JsonObject {
+                id: _audio
+                property string appVolumes: "{}"
             }
 
             property JsonObject gcal: JsonObject {

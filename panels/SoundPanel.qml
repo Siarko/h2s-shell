@@ -10,8 +10,7 @@ Item {
     implicitHeight: col.implicitHeight
 
     PwObjectTracker {
-        id: nodeTracker
-        objects: Audio.nodes
+        objects: Audio.nodes.values
     }
 
     Column {

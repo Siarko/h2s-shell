@@ -10,9 +10,9 @@ Item {
     property bool isSink: true
     implicitHeight: innerCol.implicitHeight
 
-    readonly property bool muted:   isSink ? Audio.muted        : Audio.sourceMuted
-    readonly property int  volume:  isSink ? Audio.volume       : Audio.sourceVolume
-    readonly property var  node:    isSink ? Audio.sink         : Audio.source
+    readonly property bool muted: isSink ? Audio.muted : Audio.sourceMuted
+    readonly property int volume: isSink ? Audio.volume : Audio.sourceVolume
+    readonly property var node: isSink ? Audio.sink : Audio.source
 
     Column {
         id: innerCol
@@ -45,7 +45,10 @@ Item {
                 value: row.node?.audio?.volume ?? 0
                 fillColor: row.volume > 100 ? Theme.textWarning : Theme.sliderAccent
                 fillColorHover: row.volume > 100 ? Theme.textWarning : Theme.sliderAccentHover
-                onMoved: v => { if (row.node?.audio) row.node.audio.volume = v; }
+                onMoved: v => {
+                    if (row.node?.audio)
+                        row.node.audio.volume = v;
+                }
             }
 
             Text {
@@ -58,21 +61,40 @@ Item {
             }
 
             Text {
-                id: expandArrow
+                id: deviceToggle
                 property bool expanded: false
-                text: expanded ? "▲" : "▼"
+                text: "󰒓"
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
-                color: arrowArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                font.pixelSize: 16
+                color: deviceToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
 
                 MouseArea {
-                    id: arrowArea
+                    id: deviceToggleArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: expandArrow.expanded = !expandArrow.expanded
+                    onClicked: deviceToggle.expanded = !deviceToggle.expanded
+                }
+            }
+
+            Text {
+                id: appMixerToggle
+                property bool expanded: false
+                text: "󰎹"
+                font.family: Theme.fontFamily
+                font.pixelSize: 16
+                color: appMixerToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Layout.preferredWidth: 20
+                horizontalAlignment: Text.AlignHCenter
+
+                MouseArea {
+                    id: appMixerToggleArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: appMixerToggle.expanded = !appMixerToggle.expanded
                 }
             }
         }
@@ -80,10 +102,13 @@ Item {
         // Collapsible device list
         Item {
             width: parent.width
-            height: expandArrow.expanded ? deviceCol.implicitHeight : 0
+            height: deviceToggle.expanded ? deviceCol.implicitHeight : 0
             clip: true
             Behavior on height {
-                NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutQuad
+                }
             }
 
             Column {
@@ -137,6 +162,88 @@ Item {
                                     Audio.setDefaultSink(modelData);
                                 else
                                     Audio.setDefaultSource(modelData);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collapsible app mixer list
+        Item {
+            width: parent.width
+            height: appMixerToggle.expanded ? appMixerCol.implicitHeight : 0
+            clip: true
+            Behavior on height {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            Column {
+                id: appMixerCol
+                width: parent.width
+                spacing: 2
+
+                Repeater {
+                    model: Audio.appNodes
+
+                    delegate: Item {
+                        required property var modelData
+                        property bool matches: modelData.isStream && modelData.audio && modelData.isSink === row.isSink
+                        visible: matches && modelData.ready
+                        width: appMixerCol.width
+                        height: matches ? 36 : 0
+
+                        Component.onCompleted: {
+                            if (!matches)
+                                return;
+                            var volumes = JSON.parse(Config.audio.appVolumes || "{}");
+                            var saved = volumes[modelData.name];
+
+                            if (saved !== undefined && modelData.audio) {
+
+                                // modelData.audio.volume = saved;
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 6
+
+                            Text {
+                                text: modelData.description || modelData.name
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                color: Theme.textSecondary
+                                elide: Text.ElideRight
+                                Layout.preferredWidth: 72
+                            }
+
+                            VolumeSlider {
+                                value: modelData.audio?.volume ?? 0
+                                fillColor: Theme.sliderAccent
+                                fillColorHover: Theme.sliderAccentHover
+                                onMoved: v => {
+                                    if (modelData.audio) {
+                                        modelData.audio.volume = v;
+                                        var volumes = JSON.parse(Config.audio.appVolumes || "{}");
+                                        volumes[modelData.name] = v;
+                                        Config.audio.appVolumes = JSON.stringify(volumes);
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: modelData.audio ? Math.round((modelData.audio.volume ?? 0) * 100) + "%" : "0%"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                color: Theme.textSecondary
+                                Layout.preferredWidth: 38
+                                horizontalAlignment: Text.AlignRight
                             }
                         }
                     }
