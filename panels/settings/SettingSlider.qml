@@ -1,9 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.singletons
+import qs.components
 
 RowLayout {
-    id: _ss
+    id: slider
     property string label
     property int value
     property int from: 0
@@ -15,10 +16,16 @@ RowLayout {
 
     Layout.fillWidth: true
     Layout.preferredHeight: 36
-    opacity: _ss.disabled ? 0.35 : 1.0
+    opacity: slider.disabled ? 0.35 : 1.0
+
+    function nudge(delta) {
+        var val = Math.max(from, Math.min(to, value + delta));
+        console.log(value, val);
+        slider.valueEdited(val);
+    }
 
     Text {
-        text: _ss.label
+        text: slider.label
         font.family: Theme.fontFamily
         font.pixelSize: 13
         color: Theme.textPrimary
@@ -29,8 +36,8 @@ RowLayout {
         Layout.preferredWidth: 120
         Layout.preferredHeight: 20
 
-        readonly property real _pos: (_ss.value - _ss.from) / Math.max(1, _ss.to - _ss.from)
-        readonly property real _lockedPos: (Math.max(_ss.from, Math.min(_ss.lockedFrom, _ss.to)) - _ss.from) / Math.max(1, _ss.to - _ss.from)
+        readonly property real _pos: (slider.value - slider.from) / Math.max(1, slider.to - slider.from)
+        readonly property real _lockedPos: (Math.max(slider.from, Math.min(slider.lockedFrom, slider.to)) - slider.from) / Math.max(1, slider.to - slider.from)
 
         // Base track
         Rectangle {
@@ -69,27 +76,32 @@ RowLayout {
             color: _trackArea.pressed ? Theme.textSecondary : Theme.textPrimary
         }
 
-        MouseArea {
+        CustomMouseArea {
             id: _trackArea
             anchors.fill: parent
-            enabled: !_ss.disabled
+            enabled: !slider.disabled
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+
+            property real scrollBuffer: 0
+            property real lastScrollAmount: 0
+
             onPressed: mouse => update(mouse.x)
             onPositionChanged: mouse => {
                 if (pressed)
                     update(mouse.x);
             }
+            onScrollNotchY: direction => slider.nudge(direction)
 
             function update(mouseX) {
                 var pos = Math.max(parent._lockedPos, Math.min(1, mouseX / width));
-                _ss.valueEdited(Math.round(_ss.from + pos * (_ss.to - _ss.from)));
+                slider.valueEdited(Math.round(slider.from + pos * (slider.to - slider.from)));
             }
         }
     }
 
     Text {
-        text: _ss.value + _ss.suffix
+        text: slider.value + slider.suffix
         font.family: Theme.fontFamily
         font.pixelSize: 12
         color: Theme.textSecondary
