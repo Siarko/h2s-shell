@@ -13,7 +13,8 @@ FloatingWindow {
         target: Config
         function onSaved() {
             Notifier.send("Settings saved", {
-                urgency: "low"
+                urgency: "low",
+                category: "x-qs-shell"
             });
         }
     }

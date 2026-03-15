@@ -31,6 +31,7 @@ PanelWindow {
         Region { item: notifItem }
         Region { item: queueBadge }
         Region { item: volumeOsd }
+        Region { item: shellNotifItem }
     }
 
     NotificationHudItem {
@@ -43,6 +44,13 @@ PanelWindow {
         id: volumeOsd
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
+    }
+
+    ShellNotificationHudItem {
+        id: shellNotifItem
+        screenWidth: hud.implicitWidth
+        screenHeight: hud.implicitHeight
+        screenModelData: hud.modelData
     }
 
     // Badge showing how many notifications are waiting in the queue.

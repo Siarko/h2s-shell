@@ -18,8 +18,14 @@ Singleton {
         imageSupported: true
         actionsSupported: true
 
-        // Track all incoming notifications so they appear in the panel
         onNotification: notification => {
+            if (isShellNotification(notification)) {
+                // Copy summary immediately — the notification object is not tracked
+                // and may be freed by Quickshell before ShellNotificationHudItem reads it
+                shellQueue = shellQueue.concat([{ summary: notification.summary }]);
+                return;
+            }
+
             notification.tracked = true;
 
             console.log("Icon", notification.appIcon);
@@ -42,8 +48,28 @@ Singleton {
     signal dismissAllRequested
     signal openPanelRequested
 
+    function isShellNotification(notification) {
+        return (notification.hints["category"] ?? "") === "x-qs-shell";
+    }
+
     function dismissAll() {
         dismissAllRequested();
+    }
+
+    // Shell notification queue (category: x-qs-shell) — bottom pill toast
+    property var shellQueue: []
+    signal shellQueueCleared
+
+    function dequeueShellNotification() {
+        if (shellQueue.length === 0) return null;
+        const item = shellQueue[0];
+        shellQueue = shellQueue.slice(1);
+        return item;
+    }
+
+    function clearShellQueue() {
+        shellQueue = [];
+        shellQueueCleared();
     }
 
     // HUD queue — shared across all HUD instances
