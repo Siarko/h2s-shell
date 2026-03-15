@@ -140,6 +140,7 @@ FloatingWindow {
         property string suffix: ""
         property int lockedFrom: from   // thumb cannot go below this; region shown as locked
         property bool disabled: false   // fully disables interaction
+        signal valueEdited(int newValue)
 
         Layout.fillWidth: true
         Layout.preferredHeight: 36
@@ -211,7 +212,7 @@ FloatingWindow {
 
                 function update(mouseX) {
                     var pos = Math.max(parent._lockedPos, Math.min(1, mouseX / width));
-                    _ss.value = Math.round(_ss.from + pos * (_ss.to - _ss.from));
+                    _ss.valueEdited(Math.round(_ss.from + pos * (_ss.to - _ss.from)));
                 }
             }
         }
@@ -468,25 +469,27 @@ FloatingWindow {
 
                 SettingSlider {
                     label: "Bar height"
-                    from: 10; to: 80
+                    from: 10
+                    to: 80
                     value: Config.bar.layout.barHeight
-                    onValueChanged: {
-                        Config.bar.layout.barHeight = value;
-                        if (Config.bar.layout.reservedSpace < value)
-                            Config.bar.layout.reservedSpace = value;
-                        var maxOffset = Config.bar.layout.reservedSpace - value;
+                    onValueEdited: newValue => {
+                        Config.bar.layout.barHeight = newValue;
+                        if (Config.bar.layout.reservedSpace < newValue)
+                            Config.bar.layout.reservedSpace = newValue;
+                        var maxOffset = Config.bar.layout.reservedSpace - newValue;
                         if (Config.bar.layout.topOffset > maxOffset)
                             Config.bar.layout.topOffset = maxOffset;
                     }
                 }
                 SettingSlider {
                     label: "Reserved space"
-                    from: 10; to: 80
+                    from: 10
+                    to: 80
                     lockedFrom: Config.bar.layout.barHeight
                     value: Config.bar.layout.reservedSpace
-                    onValueChanged: {
-                        Config.bar.layout.reservedSpace = value;
-                        var maxOffset = value - Config.bar.layout.barHeight;
+                    onValueEdited: newValue => {
+                        Config.bar.layout.reservedSpace = newValue;
+                        var maxOffset = newValue - Config.bar.layout.barHeight;
                         if (Config.bar.layout.topOffset > maxOffset)
                             Config.bar.layout.topOffset = maxOffset;
                     }
@@ -497,21 +500,21 @@ FloatingWindow {
                     to: Config.bar.layout.reservedSpace - Config.bar.layout.barHeight
                     disabled: Config.bar.layout.reservedSpace <= Config.bar.layout.barHeight
                     value: Config.bar.layout.topOffset
-                    onValueChanged: Config.bar.layout.topOffset = value
+                    onValueEdited: newValue => Config.bar.layout.topOffset = newValue
                 }
                 SettingSlider {
                     label: "Left margin"
                     from: 0
                     to: 200
                     value: Config.bar.layout.leftMargin
-                    onValueChanged: Config.bar.layout.leftMargin = value
+                    onValueEdited: newValue => Config.bar.layout.leftMargin = newValue
                 }
                 SettingSlider {
                     label: "Right margin"
                     from: 0
                     to: 200
                     value: Config.bar.layout.rightMargin
-                    onValueChanged: Config.bar.layout.rightMargin = value
+                    onValueEdited: newValue => Config.bar.layout.rightMargin = newValue
                 }
 
                 Text {
@@ -525,27 +528,35 @@ FloatingWindow {
 
                 SettingSlider {
                     label: "Top left"
-                    from: 0; to: 100; suffix: "%"
+                    from: 0
+                    to: 100
+                    suffix: "%"
                     value: Config.bar.layout.radiusTopLeft
-                    onValueChanged: Config.bar.layout.radiusTopLeft = value
+                    onValueEdited: newValue => Config.bar.layout.radiusTopLeft = newValue
                 }
                 SettingSlider {
                     label: "Top right"
-                    from: 0; to: 100; suffix: "%"
+                    from: 0
+                    to: 100
+                    suffix: "%"
                     value: Config.bar.layout.radiusTopRight
-                    onValueChanged: Config.bar.layout.radiusTopRight = value
+                    onValueEdited: newValue => Config.bar.layout.radiusTopRight = newValue
                 }
                 SettingSlider {
                     label: "Bottom left"
-                    from: 0; to: 100; suffix: "%"
+                    from: 0
+                    to: 100
+                    suffix: "%"
                     value: Config.bar.layout.radiusBottomLeft
-                    onValueChanged: Config.bar.layout.radiusBottomLeft = value
+                    onValueEdited: newValue => Config.bar.layout.radiusBottomLeft = newValue
                 }
                 SettingSlider {
                     label: "Bottom right"
-                    from: 0; to: 100; suffix: "%"
+                    from: 0
+                    to: 100
+                    suffix: "%"
                     value: Config.bar.layout.radiusBottomRight
-                    onValueChanged: Config.bar.layout.radiusBottomRight = value
+                    onValueEdited: newValue => Config.bar.layout.radiusBottomRight = newValue
                 }
 
                 Text {
