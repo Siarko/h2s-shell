@@ -217,9 +217,11 @@ Item {
                                 fillColorHover: Theme.sliderAccentHover
                                 onMoved: v => {
                                     if (modelData.audio) {
+                                        var rounded = Math.round(v * 100) / 100;
+                                        Audio.targetVolumes[modelData.name] = rounded;
                                         modelData.audio.volume = v;
                                         var volumes = JSON.parse(Config.audio.appVolumes || "{}");
-                                        volumes[modelData.name] = v;
+                                        volumes[modelData.name] = rounded;
                                         Config.audio.appVolumes = JSON.stringify(volumes);
                                     }
                                 }

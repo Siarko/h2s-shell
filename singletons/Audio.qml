@@ -22,6 +22,7 @@ Singleton {
     readonly property var nodes: Pipewire.nodes
     property var appNodes: []
     property var appNodesByIndex: ({})
+    property var targetVolumes: ({})
 
     function setDefaultSink(node) {
         Pipewire.preferredDefaultAudioSink = node;
@@ -30,13 +31,39 @@ Singleton {
         Pipewire.preferredDefaultAudioSource = node;
     }
 
+    Component {
+        id: volumeMonitorComponent
+        Connections {
+            property string nodeName
+
+            function onVolumeChanged() {
+                var current = Math.round(target.volume * 100) / 100;
+                var intended = root.targetVolumes[nodeName];
+                if (intended === undefined)
+                    return;
+                var intendedRounded = Math.round(intended * 100) / 100;
+                if (current !== intendedRounded)
+                    target.volume = intended;
+            }
+        }
+    }
+
+    function monitorNodeVolume(node) {
+        if (!node.audio)
+            return;
+        volumeMonitorComponent.createObject(root, { target: node.audio, nodeName: node.name });
+    }
+
     function applySavedVolume(node) {
         if (!node.ready || !node.audio)
             return;
+        monitorNodeVolume(node);
         var volumes = JSON.parse(Config.audio.appVolumes || "{}");
         var saved = volumes[node.name];
-        if (saved !== undefined)
+        if (saved !== undefined) {
+            root.targetVolumes[node.name] = saved;
             node.audio.volume = saved;
+        }
     }
 
     Connections {
@@ -56,8 +83,10 @@ Singleton {
             }
         }
         function onObjectRemovedPre(object, index) {
-            delete root.appNodesByIndex[index];
-            root.appNodes = Object.values(root.appNodesByIndex);
+            if (index in root.appNodesByIndex) {
+                delete root.appNodesByIndex[index];
+                root.appNodes = Object.values(root.appNodesByIndex);
+            }
         }
     }
 }
