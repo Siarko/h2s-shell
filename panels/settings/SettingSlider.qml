@@ -20,7 +20,6 @@ RowLayout {
 
     function nudge(delta) {
         var val = Math.max(from, Math.min(to, value + delta));
-        console.log(value, val);
         slider.valueEdited(val);
     }
 

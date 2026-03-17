@@ -196,18 +196,6 @@ Item {
                         width: appMixerCol.width
                         height: matches ? 36 : 0
 
-                        Component.onCompleted: {
-                            if (!matches)
-                                return;
-                            var volumes = JSON.parse(Config.audio.appVolumes || "{}");
-                            var saved = volumes[modelData.name];
-
-                            if (saved !== undefined && modelData.audio) {
-
-                                // modelData.audio.volume = saved;
-                            }
-                        }
-
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 8

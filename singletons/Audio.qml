@@ -30,12 +30,29 @@ Singleton {
         Pipewire.preferredDefaultAudioSource = node;
     }
 
+    function applySavedVolume(node) {
+        if (!node.ready || !node.audio)
+            return;
+        var volumes = JSON.parse(Config.audio.appVolumes || "{}");
+        var saved = volumes[node.name];
+        if (saved !== undefined)
+            node.audio.volume = saved;
+    }
+
     Connections {
         target: Pipewire.nodes
         function onObjectInsertedPost(object, index) {
             if (object.type === 21) { //21 is releated to the app source for some reason
                 root.appNodesByIndex[index] = object;
                 root.appNodes = Object.values(root.appNodesByIndex);
+
+                if (object.ready) {
+                    root.applySavedVolume(object);
+                } else {
+                    object.readyChanged.connect(function() {
+                        root.applySavedVolume(object);
+                    });
+                }
             }
         }
         function onObjectRemovedPre(object, index) {
