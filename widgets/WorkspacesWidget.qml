@@ -32,7 +32,7 @@ Item {
                     id: wsText
                     text: modelData.name || modelData.id
                     font.family: Theme.fontFamily
-                    font.pixelSize: 14
+                    font.pixelSize: Theme.fontSizeMedium
                     color: Theme.textPrimary
                     anchors.centerIn: parent
                 }

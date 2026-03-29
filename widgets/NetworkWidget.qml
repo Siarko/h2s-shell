@@ -30,7 +30,7 @@ BarWidget {
             return "󰤟"
         }
         font.family: Theme.fontFamily
-        font.pixelSize: 18
+        font.pixelSize: Theme.fontSizeHeading
         color: NetworkManager.isConnected ? Theme.textPrimary : Theme.textDim
         anchors.centerIn: parent
     }

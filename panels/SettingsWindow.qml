@@ -47,7 +47,7 @@ FloatingWindow {
                     Text {
                         text: "Settings"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeMedium
                         font.bold: true
                         color: Theme.textPrimary
                         Layout.bottomMargin: 6
@@ -73,7 +73,7 @@ FloatingWindow {
                                 }
                                 text: modelData
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBodyLarge
                                 color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary
                             }
 

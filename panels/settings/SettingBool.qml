@@ -12,7 +12,7 @@ RowLayout {
     Text {
         text: label
         font.family: Theme.fontFamily
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeBodyLarge
         color: Theme.textPrimary
         Layout.fillWidth: true
     }

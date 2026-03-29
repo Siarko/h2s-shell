@@ -69,7 +69,7 @@ Rectangle {
                 text: root.modelData.title
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 font.bold: true
                 elide: Text.ElideRight
             }
@@ -78,7 +78,7 @@ Rectangle {
                 text: root.modelData.time
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeSmall
             }
         }
 
@@ -88,7 +88,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             anchors.rightMargin: GoogleCalendar.isAuthorized ? 50 : 8
             text: "🎂"
-            font.pixelSize: 16
+            font.pixelSize: Theme.fontSizeSection
             visible: root.modelData.eventType === 'birthday'
             width: visible ? implicitWidth : 6
         }
@@ -106,7 +106,7 @@ Rectangle {
         visible: root.expanded && !root.editing
         color: Theme.textSecondary
         font.family: Theme.fontFamily
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontSizeSmall
         wrapMode: Text.WordWrap
     }
 
@@ -172,7 +172,7 @@ Rectangle {
         Text {
             text: "✏"
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: _editBtnArea.containsMouse ? Theme.textSecondary : Theme.textTertiary
 
             MouseArea {
@@ -190,7 +190,7 @@ Rectangle {
         Text {
             text: "✕"
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: _deleteBtnArea.containsMouse ? Theme.textSecondary : Theme.textTertiary
 
             MouseArea {
@@ -217,7 +217,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             color: Theme.textSecondary
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
         }
 
         Text {
@@ -225,7 +225,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             color: _yesArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
 
             MouseArea {
@@ -247,7 +247,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             color: _noArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
 
             MouseArea {
                 id: _noArea
@@ -274,14 +274,14 @@ Rectangle {
             text: "Delete:"
             color: Theme.textSecondary
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
         }
 
         Text {
             text: "- This event"
             color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
 
             MouseArea {
@@ -302,7 +302,7 @@ Rectangle {
             text: "- This and following"
             color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
 
             MouseArea {
@@ -323,7 +323,7 @@ Rectangle {
             text: "- All events"
             color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             font.bold: true
 
             MouseArea {
@@ -344,7 +344,7 @@ Rectangle {
             text: "- Cancel"
             color: _recurCancelArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
 
             MouseArea {
                 id: _recurCancelArea

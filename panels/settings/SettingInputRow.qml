@@ -13,7 +13,7 @@ RowLayout {
     Text {
         text: label
         font.family: Theme.fontFamily
-        font.pixelSize: 13
+        font.pixelSize: Theme.fontSizeBodyLarge
         color: Theme.textPrimary
         Layout.fillWidth: true
     }
@@ -33,7 +33,7 @@ RowLayout {
             text: value
             echoMode: parent.parent.echoMode
             font.family: Theme.fontFamily
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeBody
             color: Theme.textPrimary
             verticalAlignment: TextInput.AlignVCenter
             clip: true

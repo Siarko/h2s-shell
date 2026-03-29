@@ -39,7 +39,7 @@ Item {
         Text {
             text: root.title
             font.family: Theme.fontFamily
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeBody
             font.bold: true
             color: Theme.textSecondary
             bottomPadding: 6
@@ -152,7 +152,7 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "⠿"
-                                        font.pixelSize: 14
+                                        font.pixelSize: Theme.fontSizeMedium
                                         color: _handleArea.containsMouse ? Theme.textSecondary : Theme.textDim
                                     }
 
@@ -202,7 +202,7 @@ Item {
                                 Text {
                                     text: _row._lv.getDisplayName(_row.modelData)
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeBody
                                     color: Theme.textPrimary
                                     Layout.fillWidth: true
                                 }
@@ -216,7 +216,7 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "⚙"
-                                        font.pixelSize: 13
+                                        font.pixelSize: Theme.fontSizeBodyLarge
                                         color: Theme.textSecondary
                                     }
 
@@ -238,7 +238,7 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "×"
-                                        font.pixelSize: 14
+                                        font.pixelSize: Theme.fontSizeMedium
                                         color: Theme.textDim
                                     }
 
@@ -276,7 +276,7 @@ Item {
                         anchors.centerIn: parent
                         text: "＋ Add widget"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textSecondary
                     }
 
@@ -337,7 +337,7 @@ Item {
                                         }
                                         text: root.displayName(modelData)
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeBody
                                         color: Theme.textPrimary
                                     }
 

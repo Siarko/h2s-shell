@@ -101,7 +101,7 @@ Item {
             }
             text: root.currentNotif?.summary ?? ""
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignHCenter

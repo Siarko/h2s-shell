@@ -24,7 +24,7 @@ BarWidget {
         Text {
             text: Music.playing ? "󰐊" : "󰏤"
             font.family: Theme.fontFamily
-            font.pixelSize: 18
+            font.pixelSize: Theme.fontSizeHeading
             color: Theme.textPrimary
             visible: Music.hasPlayer
             anchors.verticalCenter: parent.verticalCenter
@@ -33,7 +33,7 @@ BarWidget {
         Text {
             text: Music.hasPlayer ? (Music.activePlayer.identity || "Player") : "󰎈"
             font.family: Theme.fontFamily
-            font.pixelSize: Music.hasPlayer ? 14 : 18
+            font.pixelSize: Music.hasPlayer ? Theme.fontSizeMedium : Theme.fontSizeHeading
             color: Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideRight

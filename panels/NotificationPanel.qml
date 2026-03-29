@@ -27,7 +27,7 @@ Item {
             Text {
                 text: "Notifications"
                 font.family: Theme.fontFamily
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 font.bold: true
                 color: Theme.textPrimary
                 Layout.fillWidth: true
@@ -36,7 +36,7 @@ Item {
             Text {
                 text: "Clear all"
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textSecondary
                 visible: notificationList.count > 0
 
@@ -168,7 +168,7 @@ Item {
                             Text {
                                 text: delegateRoot.modelData.appName
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 font.bold: true
                                 color: Theme.textSubtle
                                 Layout.fillWidth: true
@@ -177,14 +177,14 @@ Item {
                             Text {
                                 text: Notifications.timestamps[delegateRoot.modelData.id] ?? ""
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textTertiary
                             }
 
                             Text {
                                 text: "dismiss"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textTertiary
 
                                 MouseArea {
@@ -198,7 +198,7 @@ Item {
                         TextEdit {
                             text: delegateRoot.modelData.summary
                             font.family: Theme.fontFamily
-                            font.pixelSize: 14
+                            font.pixelSize: Theme.fontSizeMedium
                             font.bold: true
                             color: Theme.textPrimary
                             Layout.fillWidth: true
@@ -210,7 +210,7 @@ Item {
                         TextEdit {
                             text: delegateRoot.modelData.body
                             font.family: Theme.fontFamily
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeBody
                             color: Theme.textBody
                             Layout.fillWidth: true
                             readOnly: true
@@ -246,7 +246,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.text
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontSizeSmall
                                         color: Theme.textPrimary
                                     }
 
@@ -278,7 +278,7 @@ Item {
                                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                                     text: "Reply…"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeBody
                                     color: Theme.textTertiary
                                     verticalAlignment: Text.AlignVCenter
                                     visible: _replyInput.text.length === 0
@@ -288,7 +288,7 @@ Item {
                                     id: _replyInput
                                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeBody
                                     color: Theme.textPrimary
                                     verticalAlignment: TextInput.AlignVCenter
                                     onAccepted: card._sendReply()
@@ -305,7 +305,7 @@ Item {
                                     anchors.centerIn: parent
                                     text: "Send"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textPrimary
                                 }
 
@@ -325,7 +325,7 @@ Item {
                 anchors.centerIn: parent
                 text: "No notifications"
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 color: Theme.textTertiary
                 visible: notificationList.count === 0 && successOverlay.opacity === 0
             }
@@ -353,7 +353,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "✓"
                 font.family: Theme.fontFamily
-                font.pixelSize: 52
+                font.pixelSize: Theme.fontSizeHero
                 color: Theme.textPrimary
                 scale: 0
                 transformOrigin: Item.Center
@@ -364,7 +364,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "All caught up"
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 color: Theme.textSecondary
                 opacity: 0
             }

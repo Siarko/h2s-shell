@@ -159,7 +159,7 @@ Item {
                 Text {
                     text: root.currentNotif?.appName ?? ""
                     font.family: Theme.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeSmall
                     font.bold: true
                     color: Theme.textSubtle
                     Layout.fillWidth: true
@@ -169,7 +169,7 @@ Item {
                 Text {
                     text: "×"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 16
+                    font.pixelSize: Theme.fontSizeSection
                     color: Theme.textSubtle
 
                     MouseArea {
@@ -184,7 +184,7 @@ Item {
             Text {
                 text: root.currentNotif?.summary ?? ""
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 font.bold: true
                 color: Theme.textPrimary
                 Layout.fillWidth: true
@@ -195,7 +195,7 @@ Item {
             Text {
                 text: root.currentNotif?.body ?? ""
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textBody
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -230,7 +230,7 @@ Item {
                             anchors.centerIn: parent
                             text: modelData.text
                             font.family: Theme.fontFamily
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fontSizeSmall
                             color: Theme.textPrimary
                         }
 
@@ -262,7 +262,7 @@ Item {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         text: "Reply…"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textTertiary
                         verticalAlignment: Text.AlignVCenter
                         visible: _hudReplyInput.text.length === 0
@@ -272,7 +272,7 @@ Item {
                         id: _hudReplyInput
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
                         verticalAlignment: TextInput.AlignVCenter
                         onAccepted: notifCard._hudSendReply()
@@ -289,7 +289,7 @@ Item {
                         anchors.centerIn: parent
                         text: "Send"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textPrimary
                     }
 

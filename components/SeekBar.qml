@@ -29,7 +29,7 @@ Item {
         Text {
             text: seekBar._formatTime(seekBar.position)
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             color: Theme.textSecondary
             Layout.preferredWidth: 32
             horizontalAlignment: Text.AlignRight
@@ -82,7 +82,7 @@ Item {
         Text {
             text: seekBar._formatTime(seekBar.duration)
             font.family: Theme.fontFamily
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSmall
             color: Theme.textSecondary
             Layout.preferredWidth: 32
         }

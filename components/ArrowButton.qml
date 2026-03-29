@@ -8,7 +8,7 @@ Text {
     width: 30
     height: parent.height
     font.family: Theme.fontFamily
-    font.pixelSize: 18
+    font.pixelSize: Theme.fontSizeHeading
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
     color: area.containsMouse ? Theme.textPrimary : Theme.textSecondary

@@ -13,7 +13,7 @@ ColumnLayout {
     Text {
         text: "Calendar"
         font.family: Theme.fontFamily
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeHeading
         font.bold: true
         color: Theme.textSecondary
         Layout.bottomMargin: 8
@@ -38,7 +38,7 @@ ColumnLayout {
     Text {
         text: "Google Calendar"
         font.family: Theme.fontFamily
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeHeading
         font.bold: true
         color: Theme.textSecondary
         Layout.topMargin: 10
@@ -61,7 +61,7 @@ ColumnLayout {
         Text {
             text: GoogleCalendarAuth.isBusy ? "Connecting…" : GoogleCalendar.isAuthorized ? "Connected" : "Not connected"
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
             Layout.fillWidth: true
         }
@@ -72,7 +72,7 @@ ColumnLayout {
         visible: GoogleCalendarAuth.isBusy
         text: "Opening browser for authorization…"
         font.family: Theme.fontFamily
-        font.pixelSize: 11
+        font.pixelSize: Theme.fontSizeSmall
         color: Theme.textSecondary
         Layout.bottomMargin: 4
     }
@@ -115,7 +115,7 @@ ColumnLayout {
                     anchors.centerIn: parent
                     text: "Connect"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     color: Theme.textPrimary
                 }
 
@@ -147,7 +147,7 @@ ColumnLayout {
                 anchors.centerIn: parent
                 text: "Disconnect"
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textPrimary
             }
 
@@ -165,7 +165,7 @@ ColumnLayout {
         visible: GoogleCalendarAuth.isAuthorized
         text: "My Calendars "
         font.family: Theme.fontFamily
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeHeading
         font.bold: true
         color: Theme.textSecondary
         Layout.topMargin: 6
@@ -215,7 +215,7 @@ ColumnLayout {
                             Text {
                                 text: calendarRow.modelData.name
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textPrimary
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
@@ -235,7 +235,7 @@ ColumnLayout {
                                     anchors.centerIn: parent
                                     text: "✓"
                                     visible: _calCheckbox.checked
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeXSmall
                                     color: Theme.textPrimary
                                 }
 

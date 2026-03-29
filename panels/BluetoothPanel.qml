@@ -42,7 +42,7 @@ Item {
             visible: !root.adapter
             text: "No Bluetooth adapter found"
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textTertiary
             width: col.width
             horizontalAlignment: Text.AlignHCenter
@@ -56,14 +56,14 @@ Item {
             Text {
                 text: (root.adapter?.enabled ?? false) ? "󰂯" : "󰂲"
                 font.family: Theme.fontFamily
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 color: (root.adapter?.enabled ?? false) ? Theme.textPrimary : Theme.textDim
             }
 
             Text {
                 text: "Bluetooth"
                 font.family: Theme.fontFamily
-                font.pixelSize: 15
+                font.pixelSize: Theme.fontSizeSection
                 color: Theme.textPrimary
                 Layout.fillWidth: true
             }
@@ -126,7 +126,7 @@ Item {
                 Text {
                     text: "Devices"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.fillWidth: true
                 }
@@ -135,7 +135,7 @@ Item {
                     visible: root.adapter?.discovering ?? false
                     text: "Scanning…"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeSmall
                     color: Theme.sliderAccent
                 }
 
@@ -149,7 +149,7 @@ Item {
                         id: scanLabel
                         text: root.adapter?.discovering ? "Stop" : "Scan"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
                         anchors.centerIn: parent
                     }
@@ -198,7 +198,7 @@ Item {
                             Text {
                                 text: modelData.name || modelData.deviceName
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBodyLarge
                                 color: Theme.textPrimary
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -208,7 +208,7 @@ Item {
                                 visible: modelData.batteryAvailable
                                 text: Math.round(modelData.battery * 100) + "%"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.textSecondary
                             }
                         }
@@ -234,7 +234,7 @@ Item {
                                     }
                                 }
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: modelData.state === BluetoothDeviceState.Connected ? Theme.sliderAccent : Theme.textSecondary
                                 Layout.fillWidth: true
                             }
@@ -251,7 +251,7 @@ Item {
                                     id: pairLabel
                                     text: "Pair"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textPrimary
                                     anchors.centerIn: parent
                                 }
@@ -277,7 +277,7 @@ Item {
                                     id: connLabel
                                     text: modelData.state === BluetoothDeviceState.Connected ? "Disconnect" : "Connect"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textPrimary
                                     anchors.centerIn: parent
                                 }
@@ -301,7 +301,7 @@ Item {
                                 Text {
                                     text: "✕"
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textSecondary
                                     anchors.centerIn: parent
                                 }
@@ -324,7 +324,7 @@ Item {
                 visible: (root.adapter?.devices?.count ?? 0) === 0
                 text: (root.adapter?.discovering ?? false) ? "Scanning for devices…" : "No devices"
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textTertiary
                 width: col.width
                 horizontalAlignment: Text.AlignHCenter

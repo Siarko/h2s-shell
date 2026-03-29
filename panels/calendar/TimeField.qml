@@ -77,7 +77,7 @@ Item {
                 maximumLength: 2
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: TextInput.AlignHCenter
                 verticalAlignment: TextInput.AlignVCenter
 
@@ -148,7 +148,7 @@ Item {
                 color: (_hInput.activeFocus || _mInput.activeFocus)
                     ? Theme.textSecondary : Theme.textTertiary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
@@ -161,7 +161,7 @@ Item {
                 maximumLength: 2
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: TextInput.AlignHCenter
                 verticalAlignment: TextInput.AlignVCenter
 
@@ -219,7 +219,7 @@ Item {
             text: "HH:MM"
             color: Theme.textTertiary
             font.family: Theme.fontFamily
-            font.pixelSize: 12
+            font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter
             visible: _hInput.text.length === 0 && _mInput.text.length === 0
                      && !_hInput.activeFocus && !_mInput.activeFocus

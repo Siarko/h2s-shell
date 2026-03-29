@@ -56,7 +56,7 @@ Item {
                         text: root.monthNames[root.displayMonth]
                         color: _monthArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 16
+                        font.pixelSize: Theme.fontSizeSection
                         font.bold: true
 
                         MouseArea {
@@ -81,7 +81,7 @@ Item {
                         text: root.displayYear
                         color: _yearArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 16
+                        font.pixelSize: Theme.fontSizeSection
                         font.bold: true
 
                         MouseArea {
@@ -121,7 +121,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "↩ Today"
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: _todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
 
                 MouseArea {
@@ -148,7 +148,7 @@ Item {
                     text: modelData
                     color: Theme.textSecondary
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -190,7 +190,7 @@ Item {
                         text: dayNum
                         color: isCurrent ? Theme.textPrimary : Theme.textDim
                         font.family: Theme.fontFamily
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeMedium
                         font.bold: isToday
                     }
 

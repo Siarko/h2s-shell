@@ -141,7 +141,7 @@ Item {
                 }
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 verticalAlignment: TextInput.AlignVCenter
             }
             Text {
@@ -154,7 +154,7 @@ Item {
                 text: "Title"
                 color: Theme.textTertiary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 verticalAlignment: Text.AlignVCenter
                 visible: !_titleInput.text.length
                 enabled: false
@@ -210,7 +210,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: "×"
                                 color: "white"
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontSizeXSmall
                                 font.bold: true
                             }
                         }
@@ -294,7 +294,7 @@ Item {
                     anchors.centerIn: parent
                     text: "✓"
                     color: Theme.textPrimary
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontSizeTiny
                     visible: root._allDay
                 }
 
@@ -323,7 +323,7 @@ Item {
                 text: "All day"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -357,7 +357,7 @@ Item {
                     text: "→"
                     color: Theme.textTertiary
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     width: 12
                     height: 28
                     verticalAlignment: Text.AlignVCenter
@@ -390,7 +390,7 @@ Item {
                 }
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 wrapMode: TextEdit.WordWrap
 
                 Keys.onPressed: event => {
@@ -414,7 +414,7 @@ Item {
                 text: "Description"
                 color: Theme.textTertiary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 visible: !_descInput.text.length
                 enabled: false
             }
@@ -451,7 +451,7 @@ Item {
                     text: parent.parent._selectedCal?.name ?? "Select calendar"
                     color: Theme.textSecondary
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 30
                     elide: Text.ElideRight
@@ -460,7 +460,7 @@ Item {
                 Text {
                     text: "▾"
                     color: Theme.textTertiary
-                    font.pixelSize: 10
+                    font.pixelSize: Theme.fontSizeXSmall
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -529,7 +529,7 @@ Item {
                                 text: parent.parent._cal?.name ?? modelData
                                 color: Theme.textSecondary
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeBody
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 22
                                 elide: Text.ElideRight
@@ -568,7 +568,7 @@ Item {
                     anchors.centerIn: parent
                     text: "✓"
                     color: Theme.textPrimary
-                    font.pixelSize: 9
+                    font.pixelSize: Theme.fontSizeTiny
                     visible: root._recurring
                 }
 
@@ -583,7 +583,7 @@ Item {
                 text: "Recurring"
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -641,7 +641,7 @@ Item {
                                 text: parent.parent.parent._freqLabels[root._rruleFreq] ?? root._rruleFreq
                                 color: Theme.textSecondary
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeBody
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 14
                                 elide: Text.ElideRight
@@ -650,7 +650,7 @@ Item {
                             Text {
                                 text: "▾"
                                 color: Theme.textTertiary
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontSizeXSmall
                                 anchors.verticalCenter: parent.verticalCenter
                             }
                         }
@@ -666,7 +666,7 @@ Item {
                         text: "Every"
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
@@ -690,7 +690,7 @@ Item {
                             text: "1"
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeBody
                             verticalAlignment: TextInput.AlignVCenter
                             horizontalAlignment: TextInput.AlignHCenter
                             validator: IntValidator { bottom: 1; top: 999 }
@@ -705,7 +705,7 @@ Item {
                         text: parent._unitLabels[root._rruleFreq] ?? ""
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -755,7 +755,7 @@ Item {
                                     text: parent._labels[modelData] ?? modelData
                                     color: Theme.textSecondary
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fontSizeBody
                                     verticalAlignment: Text.AlignVCenter
                                 }
 
@@ -803,7 +803,7 @@ Item {
                                 text: parent.parent._dayLabels[parent.index]
                                 color: parent.selected ? Theme.textPrimary : Theme.textSecondary
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 10
+                                font.pixelSize: Theme.fontSizeXSmall
                             }
 
                             MouseArea {
@@ -831,7 +831,7 @@ Item {
                         text: "Ends:"
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
@@ -860,7 +860,7 @@ Item {
                                 text: modelData.label
                                 color: parent.selected ? Theme.sliderAccent : Theme.textSecondary
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                             }
 
                             MouseArea {
@@ -892,7 +892,7 @@ Item {
                         }
                         color: Theme.textPrimary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         verticalAlignment: TextInput.AlignVCenter
                         onTextEdited: root._rruleEndDate = text
                     }
@@ -907,7 +907,7 @@ Item {
                         text: "YYYY-MM-DD"
                         color: Theme.textTertiary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         verticalAlignment: Text.AlignVCenter
                         visible: !_endDateInput.text.length
                         enabled: false
@@ -940,7 +940,7 @@ Item {
                             text: "1"
                             color: Theme.textPrimary
                             font.family: Theme.fontFamily
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fontSizeBody
                             verticalAlignment: TextInput.AlignVCenter
                             horizontalAlignment: TextInput.AlignHCenter
                             validator: IntValidator { bottom: 1; top: 999 }
@@ -955,7 +955,7 @@ Item {
                         text: "times"
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
@@ -979,7 +979,7 @@ Item {
                     text: root.submitLabel
                     color: Theme.textPrimary
                     font.family: Theme.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeSmall
                     font.bold: true
                 }
 
@@ -1004,7 +1004,7 @@ Item {
                     text: "Cancel"
                     color: Theme.textSecondary
                     font.family: Theme.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeSmall
                 }
 
                 MouseArea {

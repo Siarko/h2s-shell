@@ -54,14 +54,14 @@ Item {
                         Text {
                             text: modelData.icon
                             font.family: Theme.fontFamily
-                            font.pixelSize: 18
+                            font.pixelSize: Theme.fontSizeHeading
                             color: Theme.textPrimary
                         }
 
                         Text {
                             text: modelData.label
                             font.family: Theme.fontFamily
-                            font.pixelSize: 16
+                            font.pixelSize: Theme.fontSizeSection
                             color: Theme.textPrimary
                         }
                     }

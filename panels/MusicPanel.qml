@@ -275,7 +275,7 @@ Item {
                         anchors.centerIn: parent
                         text: modelData.identity || modelData.desktopEntry || "Player"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeSmall
                         color: modelData === Music.activePlayer ? Theme.textPrimary : Theme.textSecondary
                         elide: Text.ElideRight
                     }
@@ -348,7 +348,7 @@ Item {
                 width: parent.width
                 text: Music.hasPlayer ? (Music.title || "Unknown") : "No media"
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 font.bold: true
                 color: Theme.textPrimary
                 elide: Text.ElideRight
@@ -359,7 +359,7 @@ Item {
                 width: parent.width
                 text: Music.artist
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
@@ -387,7 +387,7 @@ Item {
             Text {
                 text: "󰒮"
                 font.family: Theme.fontFamily
-                font.pixelSize: 24
+                font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canPrev ? Theme.textDim : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -404,7 +404,7 @@ Item {
             Text {
                 text: Music.playing ? "󰏤" : "󰐊"
                 font.family: Theme.fontFamily
-                font.pixelSize: 32
+                font.pixelSize: Theme.fontSizeXXLargeDisplay
                 color: playArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -421,7 +421,7 @@ Item {
             Text {
                 text: "󰒭"
                 font.family: Theme.fontFamily
-                font.pixelSize: 24
+                font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canNext ? Theme.textDim : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 

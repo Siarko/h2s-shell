@@ -27,7 +27,7 @@ BarWidget {
         Text {
             text: Audio.volume + "%"
             font.family: Theme.fontFamily
-            font.pixelSize: 14
+            font.pixelSize: Theme.fontSizeMedium
             color: Audio.muted ? Theme.textDim : Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -35,7 +35,7 @@ BarWidget {
         Text {
             text: Audio.muted ? "󰖁" : "󰕾"
             font.family: Theme.fontFamily
-            font.pixelSize: 18
+            font.pixelSize: Theme.fontSizeHeading
             color: Audio.muted ? Theme.textDim : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }

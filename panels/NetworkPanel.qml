@@ -38,14 +38,14 @@ Item {
             Text {
                 text: "󰈀"
                 font.family: Theme.fontFamily
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 color: Theme.sliderAccent
             }
 
             Text {
                 text: NetworkManager.activeConnection || "Ethernet"
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -54,7 +54,7 @@ Item {
             Text {
                 text: "Connected"
                 font.family: Theme.fontFamily
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.sliderAccent
             }
         }
@@ -66,7 +66,7 @@ Item {
             Text {
                 text: "↓ " + NetworkManager.formatSpeed(NetworkManager.rxSpeed)
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
                 Layout.fillWidth: true
             }
@@ -74,7 +74,7 @@ Item {
             Text {
                 text: "↑ " + NetworkManager.formatSpeed(NetworkManager.txSpeed)
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
             }
         }
@@ -90,7 +90,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Disconnect"
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textPrimary
             }
 
@@ -128,14 +128,14 @@ Item {
                     return "󰤟"
                 }
                 font.family: Theme.fontFamily
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 color: (NetworkManager.activeDeviceType === "wifi" && NetworkManager.isConnected) ? Theme.textPrimary : Theme.textDim
             }
 
             Text {
                 text: "WiFi"
                 font.family: Theme.fontFamily
-                font.pixelSize: 15
+                font.pixelSize: Theme.fontSizeSection
                 color: Theme.textPrimary
                 Layout.fillWidth: true
             }
@@ -185,7 +185,7 @@ Item {
             Text {
                 text: NetworkManager.activeConnection
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -194,14 +194,14 @@ Item {
             Text {
                 text: root.signalBars(NetworkManager.wifiSignal)
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.sliderAccent
             }
 
             Text {
                 text: NetworkManager.wifiSignal + "%"
                 font.family: Theme.fontFamily
-                font.pixelSize: 11
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
             }
         }
@@ -214,7 +214,7 @@ Item {
             Text {
                 text: "↓ " + NetworkManager.formatSpeed(NetworkManager.rxSpeed)
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
                 Layout.fillWidth: true
             }
@@ -222,7 +222,7 @@ Item {
             Text {
                 text: "↑ " + NetworkManager.formatSpeed(NetworkManager.txSpeed)
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
             }
         }
@@ -239,7 +239,7 @@ Item {
                 anchors.centerIn: parent
                 text: "Disconnect"
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 color: Theme.textPrimary
             }
 
@@ -275,7 +275,7 @@ Item {
                 Text {
                     text: "Available Networks"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.fillWidth: true
                 }
@@ -285,7 +285,7 @@ Item {
                     visible: NetworkManager.scanning
                     text: NetworkManager.scanInProgress ? "Scanning…" : "next scan…"
                     font.family: Theme.fontFamily
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fontSizeSmall
                     color: Theme.sliderAccent
                 }
 
@@ -299,7 +299,7 @@ Item {
                         id: rescanLabel
                         text: NetworkManager.scanning ? "Stop" : "Scan"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
                         anchors.centerIn: parent
                     }
@@ -372,7 +372,7 @@ Item {
                                 Text {
                                     text: networkDelegate.modelData.ssid
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 13
+                                    font.pixelSize: Theme.fontSizeBodyLarge
                                     color: networkDelegate.modelData.inUse ? Theme.sliderAccent : Theme.textPrimary
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
@@ -381,7 +381,7 @@ Item {
                                 Text {
                                     text: root.signalBars(networkDelegate.modelData.signal)
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textSecondary
                                 }
 
@@ -389,7 +389,7 @@ Item {
                                     visible: networkDelegate.modelData.security !== "--" && networkDelegate.modelData.security !== ""
                                     text: networkDelegate.modelData.security !== "--" ? networkDelegate.modelData.security : ""
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 10
+                                    font.pixelSize: Theme.fontSizeXSmall
                                     color: Theme.textTertiary
                                 }
                             }
@@ -436,7 +436,7 @@ Item {
                                         }
                                         text: "Password"
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeBody
                                         color: Theme.textDim
                                         visible: pwInput.text === ""
                                     }
@@ -450,7 +450,7 @@ Item {
                                         }
                                         echoMode: TextInput.Password
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeBody
                                         color: Theme.textPrimary
                                         verticalAlignment: TextInput.AlignVCenter
                                         clip: true
@@ -468,7 +468,7 @@ Item {
                                         id: connectBtnLabel
                                         text: "Connect"
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.fontSizeBody
                                         color: Theme.textPrimary
                                         anchors.centerIn: parent
                                     }
@@ -492,7 +492,7 @@ Item {
                 visible: NetworkManager.wifiNetworks.length === 0
                 text: "No networks found"
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textTertiary
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter

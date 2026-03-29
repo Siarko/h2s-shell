@@ -155,7 +155,7 @@ Item {
                             return "";
                         }
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: Theme.textSecondary
                         width: 14
                     }
@@ -173,7 +173,7 @@ Item {
                     Text {
                         text: modelData.text
                         font.family: Theme.fontFamily
-                        font.pixelSize: 13
+                        font.pixelSize: Theme.fontSizeBodyLarge
                         color: modelData.enabled ? Theme.textPrimary : Theme.textDim
                         Layout.fillWidth: true
                         elide: Text.ElideRight
@@ -184,7 +184,7 @@ Item {
                         visible: modelData.hasChildren
                         text: "›"
                         font.family: Theme.fontFamily
-                        font.pixelSize: 14
+                        font.pixelSize: Theme.fontSizeMedium
                         color: Theme.textDim
                     }
                 }
@@ -240,13 +240,13 @@ Item {
                         Text {
                             text: "‹"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 16
+                            font.pixelSize: Theme.fontSizeSection
                             color: Theme.textSecondary
                         }
                         Text {
                             text: "Back"
                             font.family: Theme.fontFamily
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontSizeBodyLarge
                             color: Theme.textSecondary
                             Layout.fillWidth: true
                         }

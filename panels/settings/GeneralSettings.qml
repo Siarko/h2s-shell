@@ -12,7 +12,7 @@ ColumnLayout {
     Text {
         text: "General"
         font.family: Theme.fontFamily
-        font.pixelSize: 12
+        font.pixelSize: Theme.fontSizeHeading
         font.bold: true
         color: Theme.textSecondary
         Layout.bottomMargin: 8

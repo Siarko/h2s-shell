@@ -39,7 +39,7 @@ Item {
                 }
                 color: Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 font.bold: true
                 Layout.fillWidth: true
             }
@@ -48,7 +48,7 @@ Item {
                 text: "+"
                 color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 visible: GoogleCalendar.isAuthorized
 
                 MouseArea {
@@ -64,7 +64,7 @@ Item {
                 text: "↻"
                 color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 visible: GoogleCalendar.isAuthorized
 
                 MouseArea {
@@ -142,7 +142,7 @@ Item {
                 text: "No events"
                 color: Theme.textTertiary
                 font.family: Theme.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: Theme.fontSizeBody
                 visible: _eventsList.count === 0 && !_loading
             }
         }
@@ -154,7 +154,7 @@ Item {
     Text {
         visible: root._loading
         text: "↻"
-        font.pixelSize: 22
+        font.pixelSize: Theme.fontSizeDisplay
         color: Theme.textSecondary
         font.family: Theme.fontFamily
         anchors.centerIn: parent

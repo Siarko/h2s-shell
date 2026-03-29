@@ -19,7 +19,7 @@ BarWidget {
             property bool powered: Bluetooth.defaultAdapter?.enabled ?? false
             text: !powered ? "󰂲" : Bluetooth.devices.count > 0 ? "󰂱" : "󰂯"
             font.family: Theme.fontFamily
-            font.pixelSize: 18
+            font.pixelSize: Theme.fontSizeHeading
             color: powered ? Theme.textPrimary : Theme.textDim
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -28,7 +28,7 @@ BarWidget {
             visible: (Bluetooth.defaultAdapter?.enabled ?? false) && Bluetooth.devices.count > 0
             text: Bluetooth.devices?.count ?? ""
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }

@@ -6,6 +6,22 @@ QtObject {
     // Typography
     readonly property string fontFamily: "JetBrainsMono Nerd Font"
 
+    // Font sizes
+    readonly property int fontSizeTiny: 9           // smallest form labels
+    readonly property int fontSizeXSmall: 10        // very small secondary labels
+    readonly property int fontSizeSmall: 11         // metadata, timestamps, captions
+    readonly property int fontSizeBody: 12          // default body text
+    readonly property int fontSizeBodyLarge: 13     // slightly larger body/labels
+    readonly property int fontSizeMedium: 14        // subheadings, medium text
+    readonly property int fontSizeSection: 16       // panel section icons, calendar headers
+    readonly property int fontSizeHeading: 18       // settings section headers, widget text
+    readonly property int fontSizeTitle: 20         // widget/panel titles, large icons
+    readonly property int fontSizeDisplay: 22       // calendar event display
+    readonly property int fontSizeLargeDisplay: 24  // music panel headers
+    readonly property int fontSizeXLargeDisplay: 30 // settings widget icon
+    readonly property int fontSizeXXLargeDisplay: 32 // music track name
+    readonly property int fontSizeHero: 52          // notification empty-state icon
+
     // Bar & cells
     readonly property color barBackground: "#4b4b4b"   // top panel background
     readonly property color cellDefault: "#3b3b3b"      // default cell / notification card background

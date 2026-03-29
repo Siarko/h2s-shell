@@ -21,7 +21,7 @@ Item {
         Text {
             text: _so.label
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
         }
 
@@ -47,7 +47,7 @@ Item {
                         anchors.centerIn: parent
                         text: _so.labels[index]
                         font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fontSizeBody
                         color: selected ? Theme.textPrimary : Theme.textSecondary
                     }
 

@@ -13,7 +13,7 @@ BarWidget {
     Text {
         text: Time.time
         font.family: Theme.fontFamily
-        font.pixelSize: 20
+        font.pixelSize: Theme.fontSizeTitle
         color: Theme.textPrimary
         anchors.centerIn: parent
     }

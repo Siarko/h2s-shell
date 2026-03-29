@@ -94,7 +94,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 text: Audio.muted ? "󰖁" : "󰕾"
                 font.family: Theme.fontFamily
-                font.pixelSize: 18
+                font.pixelSize: Theme.fontSizeHeading
                 color: Audio.muted ? Theme.textDim : Theme.textPrimary
             }
 
@@ -104,7 +104,7 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 text: Audio.volume + "%"
                 font.family: Theme.fontFamily
-                font.pixelSize: 14
+                font.pixelSize: Theme.fontSizeMedium
                 font.bold: true
                 color: Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
             }

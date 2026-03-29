@@ -10,7 +10,7 @@ BarWidget {
     Text {
         text: "⚙"
         font.family: Theme.fontFamily
-        font.pixelSize: 30
+        font.pixelSize: Theme.fontSizeXLargeDisplay
         color: Theme.textPrimary
         anchors.centerIn: parent
     }

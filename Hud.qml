@@ -73,7 +73,7 @@ PanelWindow {
             anchors.centerIn: parent
             text: Notifications.hudQueue.length
             font.family: Theme.fontFamily
-            font.pixelSize: 13
+            font.pixelSize: Theme.fontSizeBodyLarge
             font.bold: true
             color: Theme.textPrimary
         }

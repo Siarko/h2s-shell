@@ -26,7 +26,7 @@ Item {
             Text {
                 text: row.muted ? (row.isSink ? "󰖁" : "󰍭") : (row.isSink ? "󰕾" : "󰍬")
                 font.family: Theme.fontFamily
-                font.pixelSize: 20
+                font.pixelSize: Theme.fontSizeTitle
                 color: row.muted ? Theme.textDim : Theme.textPrimary
                 Layout.preferredWidth: 24
                 horizontalAlignment: Text.AlignHCenter
@@ -54,7 +54,7 @@ Item {
             Text {
                 text: row.volume + "%"
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontSizeBodyLarge
                 color: row.volume > 100 ? Theme.textWarning : Theme.textPrimary
                 Layout.preferredWidth: 38
                 horizontalAlignment: Text.AlignRight
@@ -65,7 +65,7 @@ Item {
                 property bool expanded: false
                 text: "󰒓"
                 font.family: Theme.fontFamily
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 color: deviceToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
@@ -84,7 +84,7 @@ Item {
                 property bool expanded: false
                 text: "󰎹"
                 font.family: Theme.fontFamily
-                font.pixelSize: 16
+                font.pixelSize: Theme.fontSizeSection
                 color: appMixerToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
@@ -138,14 +138,14 @@ Item {
                                 property var activeNode: row.node
                                 text: modelData === activeNode ? "●" : "○"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBodyLarge
                                 color: modelData === activeNode ? Theme.textPrimary : Theme.textDim
                             }
 
                             Text {
                                 text: modelData.description || modelData.name
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 13
+                                font.pixelSize: Theme.fontSizeBodyLarge
                                 color: Theme.textPrimary
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -205,7 +205,7 @@ Item {
                             Text {
                                 text: modelData.description || modelData.name
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
                                 elide: Text.ElideRight
                                 Layout.preferredWidth: 72
@@ -230,7 +230,7 @@ Item {
                             Text {
                                 text: modelData.audio ? Math.round((modelData.audio.volume ?? 0) * 100) + "%" : "0%"
                                 font.family: Theme.fontFamily
-                                font.pixelSize: 12
+                                font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
                                 Layout.preferredWidth: 38
                                 horizontalAlignment: Text.AlignRight
