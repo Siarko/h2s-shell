@@ -20,6 +20,9 @@ RowLayout {
 
     function nudge(delta) {
         var val = Math.max(from, Math.min(to, value + delta));
+        if (val < slider.lockedFrom) {
+            return;
+        }
         slider.valueEdited(val);
     }
 
