@@ -339,29 +339,6 @@ Item {
             }
         }
 
-        // Horizontal visualizer canvas
-        Canvas {
-            id: waveCanvas
-            width: parent.width
-            height: 36
-            visible: Config.media.visualizerLayout === "horizontal" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
-            onVisibleChanged: if (visible)
-                requestPaint()
-
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.clearRect(0, 0, width, height);
-                const bars = [...root.leftBars, ...root.rightBars];
-                var style = Config.media.visualizerStyle;
-                if (style === "waveform")
-                    root.drawWaveform(ctx, bars, width, height, false);
-                else if (style === "bars") {
-                    root.drawBars(ctx, bars, width, height, false, false);
-                } else if (style === "dots")
-                    root.drawDots(ctx, bars, width, height, false, false);
-            }
-        }
-
         // Track info
         Column {
             width: parent.width
@@ -455,6 +432,29 @@ Item {
                     cursorShape: Music.canNext ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: Music.next()
                 }
+            }
+        }
+
+        // Horizontal visualizer canvas
+        Canvas {
+            id: waveCanvas
+            width: parent.width
+            height: 36
+            visible: Config.media.visualizerLayout === "horizontal" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+            onVisibleChanged: if (visible)
+                requestPaint()
+
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.clearRect(0, 0, width, height);
+                const bars = [...root.leftBars, ...root.rightBars.reverse()];
+                var style = Config.media.visualizerStyle;
+                if (style === "waveform")
+                    root.drawWaveform(ctx, bars, width, height, false);
+                else if (style === "bars") {
+                    root.drawBars(ctx, bars, width, height, false, false);
+                } else if (style === "dots")
+                    root.drawDots(ctx, bars, width, height, false, false);
             }
         }
     }
