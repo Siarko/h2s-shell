@@ -66,6 +66,7 @@ Singleton {
         } catch (e) {
             logger.error("Failed to parse auth result:", e, result);
             root.authorized(false);
+            Notifier.send("Error ocurred while processing google auth result, look into the logs for more detail.");
         }
     }
 

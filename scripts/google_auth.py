@@ -6,6 +6,7 @@ Prints JSON to stdout: {"access_token":"...","refresh_token":"...","expiry":<uni
 Exits 0 on success, 1 on failure (error to stderr).
 """
 
+import os
 import sys
 import json
 import time
@@ -74,7 +75,17 @@ def main():
         )
     )
 
-    webbrowser.open(auth_url)
+    # webbrowser.open() may print informational messages (e.g. "Opening in
+    # existing browser session.") to stdout, which would corrupt the JSON
+    # result we write there later. Redirect stdout → stderr for the duration
+    # of the call so those messages appear as logs instead.
+    old_stdout_fd = os.dup(1)
+    os.dup2(2, 1)
+    try:
+        webbrowser.open(auth_url)
+    finally:
+        os.dup2(old_stdout_fd, 1)
+        os.close(old_stdout_fd)
 
     server = HTTPServer(("127.0.0.1", port), Handler)
     server.handle_request()  # handle exactly one request
