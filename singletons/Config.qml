@@ -54,6 +54,8 @@ Singleton {
                     property int topOffset: 2
                     property int leftMargin: 0
                     property int rightMargin: 0
+                    property int leftPadding: 5
+                    property int rightPadding: 5
                     property int radiusTopLeft: 0
                     property int radiusTopRight: 0
                     property int radiusBottomLeft: 20

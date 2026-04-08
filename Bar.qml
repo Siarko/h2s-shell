@@ -135,8 +135,8 @@ PanelWindow {
         // Three-section bar layout: left-aligned, centered, right-aligned
         Item {
             anchors.fill: parent
-            anchors.leftMargin: 5
-            anchors.rightMargin: 5
+            anchors.leftMargin: Config.bar.layout.leftPadding
+            anchors.rightMargin: Config.bar.layout.rightPadding
 
             // Left section
             RowLayout {

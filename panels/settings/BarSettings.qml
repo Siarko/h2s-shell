@@ -70,16 +70,30 @@ Flickable {
             SettingSlider {
                 label: "Left margin"
                 from: 0
-                to: 200
+                to: 300
                 value: Config.bar.layout.leftMargin
                 onValueEdited: newValue => Config.bar.layout.leftMargin = newValue
             }
             SettingSlider {
                 label: "Right margin"
                 from: 0
-                to: 200
+                to: 300
                 value: Config.bar.layout.rightMargin
                 onValueEdited: newValue => Config.bar.layout.rightMargin = newValue
+            }
+            SettingSlider {
+                label: "Left padding"
+                from: 0
+                to: 300
+                value: Config.bar.layout.leftPadding
+                onValueEdited: newValue => Config.bar.layout.leftPadding = newValue
+            }
+            SettingSlider {
+                label: "Right padding"
+                from: 0
+                to: 300
+                value: Config.bar.layout.rightPadding
+                onValueEdited: newValue => Config.bar.layout.rightPadding = newValue
             }
         }
 
