@@ -254,39 +254,48 @@ Item {
         width: parent.implicitWidth
         spacing: 8
 
-        // Player switcher tabs — hidden when 0 or 1 player
-        Row {
+        // Player switcher list — hidden when 0 or 1 player
+        Item {
             width: parent.width
-            spacing: 4
+            implicitHeight: playerList.implicitHeight
             visible: Music.players.values.length > 1
 
-            Repeater {
-                model: Music.players
+            Column {
+                id: playerList
+                width: parent.width
+                spacing: 2
 
-                delegate: Rectangle {
-                    required property MprisPlayer modelData
-                    width: tabLabel.implicitWidth + 16
-                    height: 24
-                    radius: 4
-                    color: modelData === Music.activePlayer ? Theme.sliderAccent : tabArea.containsMouse ? Theme.buttonHover : "transparent"
+                Repeater {
+                    model: Music.players
 
-                    Text {
-                        id: tabLabel
-                        anchors.centerIn: parent
-                        text: modelData.identity || modelData.desktopEntry || "Player"
+                    delegate: Text {
+                        required property MprisPlayer modelData
+                        width: parent.width
+                        leftPadding: 8
+                        text: "• " + (modelData.identity || modelData.desktopEntry || "Player")
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: modelData === Music.activePlayer ? Theme.textPrimary : Theme.textSecondary
+                        font.pixelSize: Theme.fontSizeBody
+                        font.bold: modelData === Music.activePlayer
+                        color: modelData === Music.activePlayer ? Theme.sliderAccent : Theme.textSecondary
                         elide: Text.ElideRight
-                    }
 
-                    MouseArea {
-                        id: tabArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: Music.selectPlayer(modelData)
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Music.selectPlayer(modelData)
+                        }
                     }
+                }
+            }
+
+            CustomMouseArea {
+                anchors.fill: parent
+                z: -1
+                onScrollNotchY: direction => {
+                    let players = Music.players.values;
+                    let index = players.indexOf(Music.activePlayer);
+                    let next = Math.max(0, Math.min(players.length - 1, index - direction));
+                    Music.selectPlayer(players[next]);
                 }
             }
         }
