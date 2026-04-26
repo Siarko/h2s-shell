@@ -12,6 +12,8 @@ Item {
     implicitHeight: col.implicitHeight
 
     property bool useCava: false
+    property bool _ready: false
+    Component.onCompleted: _ready = true
     property var leftBars: []
     property var rightBars: []
     property real _ambientPhase: 0
@@ -266,7 +268,7 @@ Item {
                 spacing: 2
 
                 Repeater {
-                    model: Music.players
+                    model: root._ready ? Music.players : null
 
                     delegate: Text {
                         required property MprisPlayer modelData
