@@ -66,7 +66,10 @@ LazyLoader {
         implicitHeight: popup.screen.height
 
         property bool showPopup: false
-        Component.onCompleted: popup.showPopup = true
+        Component.onCompleted: Qt.callLater(() => {
+            contentLoader.sourceComponent = content._componentMap[popupLoader.contentType] ?? calendarComponent
+            popup.showPopup = true
+        })
 
         focusable: hoverHandler.hovered
 
@@ -163,7 +166,13 @@ LazyLoader {
                     Loader {
                         id: contentLoader
                         anchors.centerIn: parent
-                        sourceComponent: content._componentMap[popupLoader.contentType] ?? calendarComponent
+                    }
+
+                    Connections {
+                        target: popupLoader
+                        function onContentTypeChanged() {
+                            contentLoader.sourceComponent = content._componentMap[popupLoader.contentType] ?? calendarComponent
+                        }
                     }
 
                     Component {

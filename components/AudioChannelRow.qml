@@ -8,6 +8,8 @@ import qs.singletons
 Item {
     id: row
     property bool isSink: true
+    property bool _ready: false
+    Component.onCompleted: Qt.callLater(() => { _ready = true })
     implicitHeight: innerCol.implicitHeight
 
     readonly property bool muted: isSink ? Audio.muted : Audio.sourceMuted
@@ -117,7 +119,7 @@ Item {
                 spacing: 0
 
                 Repeater {
-                    model: Audio.nodes
+                    model: row._ready ? Audio.nodes : null
 
                     delegate: Rectangle {
                         required property var modelData
@@ -187,7 +189,7 @@ Item {
                 spacing: 2
 
                 Repeater {
-                    model: Audio.appNodes
+                    model: row._ready ? Audio.appNodes : null
 
                     delegate: Item {
                         required property var modelData

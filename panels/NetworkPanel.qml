@@ -8,6 +8,8 @@ Item {
     implicitWidth: 280
     implicitHeight: col.implicitHeight
 
+    property bool _ready: false
+    Component.onCompleted: Qt.callLater(() => { _ready = true })
     Component.onDestruction: NetworkManager.stopScan()
 
     function signalBars(signal) {
@@ -321,7 +323,7 @@ Item {
 
             // Network list
             Repeater {
-                model: NetworkManager.wifiNetworks
+                model: root._ready ? NetworkManager.wifiNetworks : null
 
                 delegate: Rectangle {
                     id: networkDelegate

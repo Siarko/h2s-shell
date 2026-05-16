@@ -11,6 +11,8 @@ Item {
     implicitHeight: col.implicitHeight
 
     property var adapter: Bluetooth.defaultAdapter
+    property bool _ready: false
+    Component.onCompleted: Qt.callLater(() => { _ready = true })
 
     // Discovery is started/stopped via bluetoothctl — the only remaining process usage,
     // since Quickshell exposes adapter.discovering as read-only.
@@ -173,7 +175,7 @@ Item {
 
             // Device rows
             Repeater {
-                model: root.adapter?.devices
+                model: root._ready ? root.adapter?.devices : null
 
                 Rectangle {
                     required property var modelData

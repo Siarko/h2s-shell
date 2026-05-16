@@ -13,7 +13,7 @@ Item {
 
     property bool useCava: false
     property bool _ready: false
-    Component.onCompleted: _ready = true
+    Component.onCompleted: Qt.callLater(() => { _ready = true })
     property var leftBars: []
     property var rightBars: []
     property real _ambientPhase: 0
