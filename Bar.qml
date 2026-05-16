@@ -235,6 +235,7 @@ PanelWindow {
     SettingsWindow {
         id: settingsWindow
         Component.onCompleted: bar.settingsWindowRef = settingsWindow
+        onBackingWindowVisibleChanged: if (!backingWindowVisible) visible = false
     }
 
     // Popup panel that appears below the hovered cell

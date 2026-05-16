@@ -99,7 +99,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Workspaces.activate(modelData)
+                    onClicked: {
+                        if (Workspaces.isSpecial(modelData) && Workspaces.isSpecialVisible(modelData))
+                            Workspaces.toggleSpecial(modelData)
+                        else
+                            Workspaces.activate(modelData)
+                    }
                 }
             }
         }

@@ -18,9 +18,13 @@ Item {
         return data[widgetType] ? Object.keys(data[widgetType]) : []
     }
 
-    readonly property var _settingsComponentMap: ({ "workspaces": _workspacesComp })
+    readonly property var _settingsComponentMap: ({
+        "workspaces": _workspacesComp,
+        "clock": _clockComp
+    })
 
     Component { id: _workspacesComp; WorkspacesWidgetSettings {} }
+    Component { id: _clockComp; ClockWidgetSettings {} }
 
     Column {
         id: _col

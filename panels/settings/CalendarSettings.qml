@@ -19,12 +19,6 @@ ColumnLayout {
         Layout.bottomMargin: 8
     }
 
-    SettingInputRow {
-        label: "Datetime format"
-        value: Config.datetimeFormat
-        onValueChanged: Config.datetimeFormat = value
-    }
-
     // ── Google Calendar subsection ────────────────────────────────────
 
     Rectangle {
