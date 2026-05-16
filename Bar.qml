@@ -115,6 +115,15 @@ PanelWindow {
             "notifications": _notifComp
         })
 
+    function _zipModel(types, profilesJson) {
+        var profs = JSON.parse(profilesJson || "[]")
+        return types.map((t, i) => ({ type: t, profile: profs[i] || "" }))
+    }
+
+    readonly property var _leftModel:   _zipModel(Config.bar.content.left,   Config.bar.content.leftProfiles)
+    readonly property var _centerModel: _zipModel(Config.bar.content.center, Config.bar.content.centerProfiles)
+    readonly property var _rightModel:  _zipModel(Config.bar.content.right,  Config.bar.content.rightProfiles)
+
     // Visual bar rectangle — floats within the reserved space
     Rectangle {
         anchors {
@@ -146,15 +155,19 @@ PanelWindow {
                 spacing: 5
 
                 Repeater {
-                    model: Config.bar.content.left
+                    model: bar._leftModel
                     delegate: Loader {
-                        required property string modelData
+                        required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData]
-                        onLoaded: if (modelData === "notifications")
-                            bar.notifWidget = item
+                        sourceComponent: bar._widgetMap[modelData.type]
+                        onLoaded: {
+                            if (typeof item.profile !== "undefined")
+                                item.profile = Qt.binding(() => modelData.profile)
+                            if (modelData.type === "notifications")
+                                bar.notifWidget = item
+                        }
                     }
                 }
             }
@@ -166,15 +179,19 @@ PanelWindow {
                 anchors.bottom: parent.bottom
 
                 Repeater {
-                    model: Config.bar.content.center
+                    model: bar._centerModel
                     delegate: Loader {
-                        required property string modelData
+                        required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData]
-                        onLoaded: if (modelData === "notifications")
-                            bar.notifWidget = item
+                        sourceComponent: bar._widgetMap[modelData.type]
+                        onLoaded: {
+                            if (typeof item.profile !== "undefined")
+                                item.profile = Qt.binding(() => modelData.profile)
+                            if (modelData.type === "notifications")
+                                bar.notifWidget = item
+                        }
                     }
                 }
             }
@@ -187,15 +204,19 @@ PanelWindow {
                 spacing: 5
 
                 Repeater {
-                    model: Config.bar.content.right
+                    model: bar._rightModel
                     delegate: Loader {
-                        required property string modelData
+                        required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData]
-                        onLoaded: if (modelData === "notifications")
-                            bar.notifWidget = item
+                        sourceComponent: bar._widgetMap[modelData.type]
+                        onLoaded: {
+                            if (typeof item.profile !== "undefined")
+                                item.profile = Qt.binding(() => modelData.profile)
+                            if (modelData.type === "notifications")
+                                bar.notifWidget = item
+                        }
                     }
                 }
             }

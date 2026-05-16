@@ -153,20 +153,29 @@ Flickable {
         SettingsGroup {
             BarSectionList {
                 title: "Left section"
+                section: "left"
                 model: Config.bar.content.left
+                widgetProfiles: JSON.parse(Config.bar.content.leftProfiles || "[]")
                 onListChanged: newList => Config.bar.content.left = newList
+                onProfileListChanged: newProfiles => Config.bar.content.leftProfiles = JSON.stringify(newProfiles)
             }
 
             BarSectionList {
                 title: "Center section"
+                section: "center"
                 model: Config.bar.content.center
+                widgetProfiles: JSON.parse(Config.bar.content.centerProfiles || "[]")
                 onListChanged: newList => Config.bar.content.center = newList
+                onProfileListChanged: newProfiles => Config.bar.content.centerProfiles = JSON.stringify(newProfiles)
             }
 
             BarSectionList {
                 title: "Right section"
+                section: "right"
                 model: Config.bar.content.right
+                widgetProfiles: JSON.parse(Config.bar.content.rightProfiles || "[]")
                 onListChanged: newList => Config.bar.content.right = newList
+                onProfileListChanged: newProfiles => Config.bar.content.rightProfiles = JSON.stringify(newProfiles)
             }
         }
 

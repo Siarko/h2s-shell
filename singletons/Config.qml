@@ -14,6 +14,7 @@ Singleton {
     property alias general: _general
     property alias media: _media
     property alias audio: _audio
+    property alias widgetProfiles: _adapter.widgetProfiles
 
     signal saved
 
@@ -23,6 +24,8 @@ Singleton {
         onAdapterUpdated: _saveTimer.restart()
 
         adapter: JsonAdapter {
+            id: _adapter
+            property string widgetProfiles: "{}"
             property JsonObject general: JsonObject {
                 id: _general
                 property bool debug: false
@@ -46,6 +49,9 @@ Singleton {
                     property list<string> left: ["power", "settings", "workspaces"]
                     property list<string> center: ["clock"]
                     property list<string> right: ["music", "sound", "bluetooth", "tray", "network", "notifications"]
+                    property string leftProfiles:   "[]"
+                    property string centerProfiles: "[]"
+                    property string rightProfiles:  "[]"
                 }
                 property JsonObject layout: JsonObject {
                     id: _barLayout

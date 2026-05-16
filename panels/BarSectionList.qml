@@ -6,15 +6,22 @@ Item {
     id: root
     property string title: ""
     property var model: []
+    property string section: ""
+    property var widgetProfiles: []
 
     signal listChanged(var newList)
     signal widgetSettingsClicked(int index)
+    signal profileListChanged(var newProfiles)
 
     Layout.fillWidth: true
     implicitHeight: _outer.implicitHeight
 
-    Component.onCompleted: _rowList.workingList = model ? model.slice() : []
+    Component.onCompleted: {
+        _rowList.workingList = model ? model.slice() : []
+        _rowList.workingProfiles = widgetProfiles ? widgetProfiles.slice() : []
+    }
     onModelChanged: if (!_rowList.dragging) _rowList.workingList = model ? model.slice() : []
+    onWidgetProfilesChanged: if (!_rowList.dragging) _rowList.workingProfiles = widgetProfiles ? widgetProfiles.slice() : []
 
     function displayName(type) {
         return ({
@@ -81,14 +88,26 @@ Item {
 
                         // All state here — delegates reach it via _row._lv (captured ListView.view)
                         property var workingList: []
+                        property var workingProfiles: []
                         property bool dragging: false
                         property int dragIndex: -1
                         property int dropIndex: -1
                         property Item ghost: _dragGhost
+                        property var expandedSet: ({})
+
+                        function toggleExpanded(idx) {
+                            var s = Object.assign({}, expandedSet)
+                            if (s[idx]) delete s[idx]; else s[idx] = true
+                            expandedSet = s
+                        }
 
                         // Proxy functions called from delegate JS handlers via _row._lv
                         function notifyListChanged(list) { root.listChanged(list) }
-                        function notifySettingsClicked(idx) { root.widgetSettingsClicked(idx) }
+                        function notifyProfilesChanged(profs) { root.profileListChanged(profs) }
+                        function notifySettingsClicked(idx) {
+                            root.widgetSettingsClicked(idx)
+                            toggleExpanded(idx)
+                        }
                         function getDisplayName(type) { return root.displayName(type) }
 
                         delegate: Item {
@@ -99,9 +118,15 @@ Item {
                             // Capture ListView.view on the delegate root — the ONE place it's set.
                             // Children access state via _row._lv (delegate's own id, always reachable).
                             property var _lv: ListView.view
+                            property bool _expanded: _row._lv.expandedSet[_row.index] === true
 
                             width: _rowList.width
-                            height: 32
+                            height: _expanded ? 32 + _pane.implicitHeight : 32
+                            clip: true
+
+                            Behavior on height {
+                                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                            }
 
                             // Drop indicator above this row
                             Rectangle {
@@ -139,10 +164,13 @@ Item {
 
                             RowLayout {
                                 anchors {
-                                    fill: parent
+                                    top: parent.top
+                                    left: parent.left
+                                    right: parent.right
                                     leftMargin: 4
                                     rightMargin: 4
                                 }
+                                height: 32
                                 spacing: 2
 
                                 Item {
@@ -189,9 +217,15 @@ Item {
                                             if (to !== from && to !== from + 1) {
                                                 var list = _row._lv.workingList.slice()
                                                 var moved = list.splice(from, 1)[0]
-                                                list.splice(to > from ? to - 1 : to, 0, moved)
+                                                var adjTo = to > from ? to - 1 : to
+                                                list.splice(adjTo, 0, moved)
                                                 _row._lv.workingList = list
                                                 _row._lv.notifyListChanged(list)
+                                                var profs = _row._lv.workingProfiles.slice()
+                                                var movedProf = profs.splice(from, 1)[0] || ""
+                                                profs.splice(adjTo, 0, movedProf)
+                                                _row._lv.workingProfiles = profs
+                                                _row._lv.notifyProfilesChanged(profs)
                                             }
                                             _row._lv.dragIndex = -1
                                             _row._lv.dropIndex = -1
@@ -217,7 +251,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: "⚙"
                                         font.pixelSize: Theme.fontSizeBodyLarge
-                                        color: Theme.textSecondary
+                                        color: _row._expanded ? Theme.sliderAccent : Theme.textSecondary
                                     }
 
                                     MouseArea {
@@ -252,8 +286,34 @@ Item {
                                             list.splice(_row.index, 1)
                                             _row._lv.workingList = list
                                             _row._lv.notifyListChanged(list)
+                                            var profs = _row._lv.workingProfiles.slice()
+                                            profs.splice(_row.index, 1)
+                                            _row._lv.workingProfiles = profs
+                                            _row._lv.notifyProfilesChanged(profs)
                                         }
                                     }
+                                }
+                            }
+
+                            WidgetSettingsPane {
+                                id: _pane
+                                anchors {
+                                    top: parent.top
+                                    topMargin: 32
+                                    left: parent.left
+                                    right: parent.right
+                                    leftMargin: 4
+                                    rightMargin: 4
+                                }
+                                visible: _row._expanded
+                                widgetType: _row.modelData
+                                currentProfile: _row._lv.workingProfiles[_row.index] || ""
+                                onProfileAssigned: function(newName) {
+                                    var profs = _row._lv.workingProfiles.slice()
+                                    while (profs.length <= _row.index) profs.push("")
+                                    profs[_row.index] = newName
+                                    _row._lv.workingProfiles = profs
+                                    _row._lv.notifyProfilesChanged(profs)
                                 }
                             }
                         }
@@ -308,6 +368,9 @@ Item {
                             var list = [..._rowList.workingList, type]
                             _rowList.workingList = list
                             _rowList.notifyListChanged(list)
+                            var profs = [..._rowList.workingProfiles, ""]
+                            _rowList.workingProfiles = profs
+                            _rowList.notifyProfilesChanged(profs)
                             _picker.visible = false
                         }
 
