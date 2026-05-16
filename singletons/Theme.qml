@@ -28,6 +28,7 @@ QtObject {
     readonly property color cellHover: "#5a5a5a"        // cell background on hover or while popup is open
     readonly property color cellAccent: "green"         // highlighted interactive cell
     readonly property color cellAccentSecondary: "#4a6a4a"  // active but unfocused workspace
+    readonly property color cellAccentSpecial: "#7a1a2a"    // focused special (scratchpad) workspace
     readonly property color cellMuted: "gray"           // de-emphasized cell (e.g. notification bell)
 
     // Popup & buttons

@@ -45,7 +45,6 @@ Item {
         return data["workspaces"]?.[profile]?.showNormal ?? true;
     }
 
-
     Rectangle {
         anchors.fill: parent
         radius: 5
@@ -80,7 +79,11 @@ Item {
                 width: Math.max(22, wsText.implicitWidth + 8)
                 height: 22
                 radius: 4
-                color: modelData.focused ? Theme.cellAccent : (modelData.active ? Theme.cellAccentSecondary : "transparent")
+                color: {
+                    if (Workspaces.isSpecial(modelData))
+                        return Workspaces.isSpecialVisible(modelData) ? Theme.cellAccentSpecial : (_wsHover.containsMouse ? Theme.cellHover : "transparent")
+                    return modelData.focused ? Theme.cellAccent : (modelData.active ? Theme.cellAccentSecondary : (_wsHover.containsMouse ? Theme.cellHover : "transparent"))
+                }
 
                 Text {
                     id: wsText
@@ -92,7 +95,10 @@ Item {
                 }
 
                 MouseArea {
+                    id: _wsHover
                     anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onClicked: Workspaces.activate(modelData)
                 }
             }
