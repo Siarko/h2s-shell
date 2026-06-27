@@ -4,13 +4,22 @@ import qs.singletons
 
 BarWidget {
     property var popup: null
+    property string widgetType: "power"
+
+    readonly property string _popupMode: {
+        var data = JSON.parse(Config.widgetProfiles || "{}")
+        return data["power"]?.["_popupMode"] ?? "click"
+    }
 
     active: popup?.active && popup?.contentType === "power"
     onClicked: {
-        if (popup?.active && popup?.contentType === "power")
-            popup.close()
-        else
-            popup.open(this, false, "power")
+        if (_popupMode !== "click") return
+        if (popup?.active && popup?.contentType === "power") popup.close()
+        else popup.open(this, false, "power")
+    }
+    onHover: state => {
+        if (_popupMode !== "hover") return
+        if (state) popup.open(this, false, "power")
     }
 
     Text {

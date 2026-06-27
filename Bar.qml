@@ -101,6 +101,12 @@ PanelWindow {
             popup: popupLoader
         }
     }
+    Component {
+        id: _hardwareComp
+        HardwareWidget {
+            popup: popupLoader
+        }
+    }
 
     readonly property var _widgetMap: ({
             "power": _powerComp,
@@ -112,7 +118,8 @@ PanelWindow {
             "bluetooth": _bluetoothComp,
             "tray": _trayComp,
             "network": _networkComp,
-            "notifications": _notifComp
+            "notifications": _notifComp,
+            "hardware": _hardwareComp
         })
 
     function _zipModel(types, profilesJson) {

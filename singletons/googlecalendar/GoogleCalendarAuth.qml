@@ -94,7 +94,9 @@ Singleton {
                 }).catch(reject);
             }).catch(e => {
                 logger.error("Error while refreshing token", e);
-                Notifier.send("Google Calendar Token expired! You need to login again :/");
+                Notifier.send("Google Calendar Token expired! You need to login again :/", {
+                    actions: [{ id: "reconnect", label: "Reconnect", onTriggered: () => root.login() }]
+                });
                 logout();
                 return reject(e);
             });

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.singletons
+import qs.singletons.network
 
 // Network management popup: WiFi toggle, connection status, speed, network list
 Item {
@@ -10,7 +11,7 @@ Item {
 
     property bool _ready: false
     Component.onCompleted: Qt.callLater(() => { _ready = true })
-    Component.onDestruction: NetworkManager.stopScan()
+    Component.onDestruction: WifiManager.stopScan()
 
     function signalBars(signal) {
         if (signal >= 75) return "▰▰▰▰"
@@ -30,6 +31,110 @@ Item {
         id: col
         width: parent.width
         spacing: 6
+
+        // ---- VPN section ----
+        Column {
+            visible: VpnManager.vpnConnections.length > 0
+            width: parent.width
+            spacing: 4
+
+            RowLayout {
+                width: parent.width
+                spacing: 8
+
+                Text {
+                    text: "󰒃"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeTitle
+                    color: VpnManager.activeVpn !== "" ? Theme.sliderAccent : Theme.textDim
+                }
+
+                Text {
+                    text: "VPN"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSection
+                    color: Theme.textPrimary
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: VpnManager.activeVpn !== "" ? VpnManager.activeVpn : "Off"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: VpnManager.activeVpn !== "" ? Theme.sliderAccent : Theme.textDim
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 120
+                }
+            }
+
+            Repeater {
+                model: VpnManager.vpnConnections
+
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+
+                    property bool isActive: VpnManager.activeVpn === modelData.name
+
+                    width: col.width
+                    height: 36
+                    radius: 6
+                    color: isActive ? Qt.rgba(0.27, 0.83, 0.48, 0.12) : Theme.cellDefault
+
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        spacing: 6
+
+                        Text {
+                            text: modelData.name
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            color: isActive ? Theme.sliderAccent : Theme.textPrimary
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            implicitWidth: vpnBtnLabel.implicitWidth + 14
+                            implicitHeight: 24
+                            radius: 4
+                            color: vpnBtnArea.containsMouse
+                                ? (isActive ? "#c0392b" : Theme.sliderAccentHover)
+                                : (isActive ? Qt.rgba(0.75, 0.2, 0.2, 0.6) : Theme.sliderAccent)
+
+                            Text {
+                                id: vpnBtnLabel
+                                text: isActive ? "Disconnect" : "Connect"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textPrimary
+                                anchors.centerIn: parent
+                            }
+
+                            MouseArea {
+                                id: vpnBtnArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (isActive)
+                                        VpnManager.disconnectVpn()
+                                    else
+                                        VpnManager.connectVpn(modelData.name)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width
+                height: 1
+                color: Theme.textDim
+                opacity: 0.3
+            }
+        }
 
         // ---- Ethernet section (always at the top) ----
         RowLayout {
@@ -66,7 +171,7 @@ Item {
             width: parent.width
 
             Text {
-                text: "↓ " + NetworkManager.formatSpeed(NetworkManager.rxSpeed)
+                text: "↓ " + NetworkManager.formatSpeed(EthernetManager.rxSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -74,7 +179,7 @@ Item {
             }
 
             Text {
-                text: "↑ " + NetworkManager.formatSpeed(NetworkManager.txSpeed)
+                text: "↑ " + NetworkManager.formatSpeed(EthernetManager.txSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -101,7 +206,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: NetworkManager.disconnect()
+                onClicked: EthernetManager.disconnect()
             }
         }
 
@@ -122,11 +227,11 @@ Item {
 
             Text {
                 text: {
-                    if (!NetworkManager.wifiEnabled) return "󰤭"
+                    if (!WifiManager.wifiEnabled) return "󰤭"
                     if (!NetworkManager.isConnected) return "󰤮"
-                    if (NetworkManager.wifiSignal >= 75) return "󰤨"
-                    if (NetworkManager.wifiSignal >= 50) return "󰤤"
-                    if (NetworkManager.wifiSignal >= 25) return "󰤢"
+                    if (WifiManager.wifiSignal >= 75) return "󰤨"
+                    if (WifiManager.wifiSignal >= 50) return "󰤤"
+                    if (WifiManager.wifiSignal >= 25) return "󰤢"
                     return "󰤟"
                 }
                 font.family: Theme.fontFamily
@@ -150,7 +255,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: NetworkManager.wifiEnabled ? Theme.sliderAccent : Theme.textDim
+                    color: WifiManager.wifiEnabled ? Theme.sliderAccent : Theme.textDim
 
                     Behavior on color {
                         ColorAnimation { duration: 150 }
@@ -162,7 +267,7 @@ Item {
                         radius: 10
                         color: "white"
                         anchors.verticalCenter: parent.verticalCenter
-                        x: NetworkManager.wifiEnabled ? parent.width - width - 2 : 2
+                        x: WifiManager.wifiEnabled ? parent.width - width - 2 : 2
 
                         Behavior on x {
                             NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
@@ -173,7 +278,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: NetworkManager.toggleWifi()
+                    onClicked: WifiManager.toggleWifi()
                 }
             }
         }
@@ -194,14 +299,14 @@ Item {
             }
 
             Text {
-                text: root.signalBars(NetworkManager.wifiSignal)
+                text: root.signalBars(WifiManager.wifiSignal)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.sliderAccent
             }
 
             Text {
-                text: NetworkManager.wifiSignal + "%"
+                text: WifiManager.wifiSignal + "%"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
@@ -214,7 +319,7 @@ Item {
             width: parent.width
 
             Text {
-                text: "↓ " + NetworkManager.formatSpeed(NetworkManager.rxSpeed)
+                text: "↓ " + NetworkManager.formatSpeed(EthernetManager.rxSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -222,7 +327,7 @@ Item {
             }
 
             Text {
-                text: "↑ " + NetworkManager.formatSpeed(NetworkManager.txSpeed)
+                text: "↑ " + NetworkManager.formatSpeed(EthernetManager.txSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -250,13 +355,13 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: NetworkManager.disconnect()
+                onClicked: EthernetManager.disconnect()
             }
         }
 
         // ---- Divider above available networks ----
         Rectangle {
-            visible: NetworkManager.wifiEnabled
+            visible: WifiManager.wifiEnabled
             width: parent.width
             height: 1
             color: Theme.textDim
@@ -265,7 +370,7 @@ Item {
 
         // ---- Available networks section ----
         Column {
-            visible: NetworkManager.wifiEnabled
+            visible: WifiManager.wifiEnabled
             width: parent.width
             spacing: 4
 
@@ -284,8 +389,8 @@ Item {
 
                 // Status indicator while scan loop is active
                 Text {
-                    visible: NetworkManager.scanning
-                    text: NetworkManager.scanInProgress ? "Scanning…" : "next scan…"
+                    visible: WifiManager.scanning
+                    text: WifiManager.scanInProgress ? "Scanning…" : "next scan…"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.sliderAccent
@@ -295,11 +400,11 @@ Item {
                     implicitWidth: rescanLabel.implicitWidth + 14
                     implicitHeight: 22
                     radius: 4
-                    color: rescanArea.containsMouse ? Theme.buttonHover : (NetworkManager.scanning ? Theme.sliderAccent : Theme.cellDefault)
+                    color: rescanArea.containsMouse ? Theme.buttonHover : (WifiManager.scanning ? Theme.sliderAccent : Theme.cellDefault)
 
                     Text {
                         id: rescanLabel
-                        text: NetworkManager.scanning ? "Stop" : "Scan"
+                        text: WifiManager.scanning ? "Stop" : "Scan"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
@@ -312,10 +417,10 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (NetworkManager.scanning)
-                                NetworkManager.stopScan()
+                            if (WifiManager.scanning)
+                                WifiManager.stopScan()
                             else
-                                NetworkManager.startScan()
+                                WifiManager.startScan()
                         }
                     }
                 }
@@ -323,7 +428,7 @@ Item {
 
             // Network list
             Repeater {
-                model: root._ready ? NetworkManager.wifiNetworks : null
+                model: root._ready ? WifiManager.wifiNetworks : null
 
                 delegate: Rectangle {
                     id: networkDelegate
@@ -403,7 +508,7 @@ Item {
                                     if (networkDelegate.modelData.inUse) return
                                     var sec = networkDelegate.modelData.security
                                     if (sec === "--" || sec === "") {
-                                        NetworkManager.connectToWifi(networkDelegate.modelData.ssid, "")
+                                        WifiManager.connectToWifi(networkDelegate.modelData.ssid, "")
                                     } else {
                                         networkDelegate.expanded = !networkDelegate.expanded
                                     }
@@ -480,7 +585,7 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: NetworkManager.connectToWifi(networkDelegate.modelData.ssid, networkDelegate.passwordText)
+                                        onClicked: WifiManager.connectToWifi(networkDelegate.modelData.ssid, networkDelegate.passwordText)
                                     }
                                 }
                             }
@@ -491,7 +596,7 @@ Item {
 
             // Empty state
             Text {
-                visible: NetworkManager.wifiNetworks.length === 0
+                visible: WifiManager.wifiNetworks.length === 0
                 text: "No networks found"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge

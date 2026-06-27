@@ -15,16 +15,35 @@ Item {
 
     readonly property var _knownProfiles: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data[widgetType] ? Object.keys(data[widgetType]) : []
+        if (!data[widgetType]) return []
+        return Object.keys(data[widgetType]).filter(k => !k.startsWith("_"))
+    }
+
+    readonly property var _popupWidgets: ["clock", "network", "hardware", "sound", "bluetooth", "music", "power"]
+    readonly property bool _hasPopup: _popupWidgets.includes(widgetType)
+
+    readonly property string _popupMode: {
+        var data = JSON.parse(Config.widgetProfiles || "{}")
+        var def = ["network", "hardware", "power"].includes(widgetType) ? "click" : "hover"
+        return data[widgetType]?.["_popupMode"] ?? def
+    }
+
+    function _savePopupMode(mode) {
+        var data = JSON.parse(Config.widgetProfiles || "{}")
+        if (!data[widgetType]) data[widgetType] = {}
+        data[widgetType]["_popupMode"] = mode
+        Config.widgetProfiles = JSON.stringify(data)
     }
 
     readonly property var _settingsComponentMap: ({
         "workspaces": _workspacesComp,
-        "clock": _clockComp
+        "clock": _clockComp,
+        "hardware": _hardwareComp
     })
 
     Component { id: _workspacesComp; WorkspacesWidgetSettings {} }
     Component { id: _clockComp; ClockWidgetSettings {} }
+    Component { id: _hardwareComp; HardwareWidgetSettings {} }
 
     Column {
         id: _col
@@ -42,6 +61,58 @@ Item {
             width: parent.width
             height: 1
             color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.3)
+        }
+
+        RowLayout {
+            width: parent.width
+            visible: root._hasPopup
+            spacing: 8
+
+            Text {
+                text: "Popup"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                color: Theme.textSecondary
+                Layout.preferredWidth: 60
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 26
+                radius: 6
+                color: Theme.cellDefault
+                clip: true
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    Repeater {
+                        model: ["click", "hover", "none"]
+
+                        Rectangle {
+                            required property string modelData
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            color: root._popupMode === modelData ? Theme.sliderAccent : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: ({ "click": "Click", "hover": "Hover", "none": "None" })[modelData]
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: root._popupMode === modelData ? Theme.textPrimary : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root._savePopupMode(modelData)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         RowLayout {

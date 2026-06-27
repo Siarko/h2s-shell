@@ -5,10 +5,21 @@ import qs.singletons
 
 BarWidget {
     property var popup: null
+    property string widgetType: "bluetooth"
 
+    readonly property string _popupMode: {
+        var data = JSON.parse(Config.widgetProfiles || "{}")
+        return data["bluetooth"]?.["_popupMode"] ?? "hover"
+    }
+
+    onClicked: {
+        if (_popupMode !== "click") return
+        if (popup?.active && popup?.contentType === "bluetooth") popup.close()
+        else popup.open(this, true, "bluetooth")
+    }
     onHover: state => {
-        if (state)
-            popup.open(this, false, "bluetooth")
+        if (_popupMode !== "hover") return
+        if (state) popup.open(this, false, "bluetooth")
     }
 
     Row {

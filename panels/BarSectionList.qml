@@ -34,7 +34,8 @@ Item {
             "bluetooth": "Bluetooth",
             "tray": "System Tray",
             "network": "Network",
-            "notifications": "Notifications"
+            "notifications": "Notifications",
+            "hardware": "Hardware"
         })[type] ?? type
     }
 
@@ -376,7 +377,7 @@ Item {
 
                         Repeater {
                             model: {
-                                var all = ["power", "settings", "workspaces", "clock", "music", "sound", "bluetooth", "tray", "network", "notifications"]
+                                var all = ["power", "settings", "workspaces", "clock", "music", "sound", "bluetooth", "tray", "network", "notifications", "hardware"]
                                 return all.filter(t => !_rowList.workingList.includes(t))
                             }
 

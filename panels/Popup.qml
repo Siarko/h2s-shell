@@ -160,7 +160,8 @@ LazyLoader {
                             "music": musicComponent,
                             "bluetooth": bluetoothComponent,
                             "calendar": calendarComponent,
-                            "network": networkComponent
+                            "network": networkComponent,
+                            "hardware": hardwareComponent
                         })
 
                     Loader {
@@ -218,6 +219,11 @@ LazyLoader {
                     Component {
                         id: networkComponent
                         NetworkPanel {}
+                    }
+
+                    Component {
+                        id: hardwareComponent
+                        HardwarePanel {}
                     }
                 }
             }

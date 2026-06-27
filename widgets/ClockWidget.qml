@@ -5,6 +5,12 @@ import qs.singletons
 BarWidget {
     property var popup: null
     property string profile: ""
+    property string widgetType: "clock"
+
+    readonly property string _popupMode: {
+        var data = JSON.parse(Config.widgetProfiles || "{}")
+        return data["clock"]?.["_popupMode"] ?? "hover"
+    }
 
     readonly property string _format: {
         if (profile !== "") {
@@ -15,9 +21,14 @@ BarWidget {
         return Config.datetimeFormat;
     }
 
+    onClicked: {
+        if (_popupMode !== "click") return
+        if (popup?.active && popup?.contentType === "calendar") popup.close()
+        else popup.open(this, true, "calendar")
+    }
     onHover: state => {
-        if (state)
-            popup.open(this)
+        if (_popupMode !== "hover") return
+        if (state) popup.open(this, false, "calendar")
     }
 
     Text {
