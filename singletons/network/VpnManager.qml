@@ -56,8 +56,9 @@ Singleton {
             var state = parts[parts.length - 1].trim()
             var type  = parts[parts.length - 2].trim()
             var name  = parts.slice(0, parts.length - 2).join(":")
-            if (type !== "wireguard") continue
-            connections.push({name: name})
+            var isVpn = type === "wireguard" || type === "vpn" || type === "openconnect"
+            if (!isVpn) continue
+            connections.push({ name: name, type: type })
             if (state === "activated") active = name
         }
         root.vpnConnections = connections

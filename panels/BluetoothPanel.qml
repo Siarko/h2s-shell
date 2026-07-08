@@ -12,7 +12,19 @@ Item {
 
     property var adapter: Bluetooth.defaultAdapter
     property bool _ready: false
-    Component.onCompleted: Qt.callLater(() => { _ready = true })
+    property var _deviceModel: null
+
+    // Buffer model updates through Qt.callLater to avoid QQuickRepeater::regenerate()
+    // crashing during incubation when Bluetooth device list changes mid-render.
+    function _refreshDeviceModel() { Qt.callLater(() => { _deviceModel = adapter?.devices ?? null }) }
+
+    Component.onCompleted: Qt.callLater(() => { _ready = true; root._refreshDeviceModel() })
+    onAdapterChanged: root._refreshDeviceModel()
+
+    Connections {
+        target: root.adapter
+        function onDevicesChanged() { root._refreshDeviceModel() }
+    }
 
     // Discovery is started/stopped via bluetoothctl — the only remaining process usage,
     // since Quickshell exposes adapter.discovering as read-only.
@@ -175,7 +187,7 @@ Item {
 
             // Device rows
             Repeater {
-                model: root._ready ? root.adapter?.devices : null
+                model: root._ready ? root._deviceModel : null
 
                 Rectangle {
                     required property var modelData

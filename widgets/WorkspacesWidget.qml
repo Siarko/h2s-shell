@@ -10,6 +10,16 @@ Item {
     implicitWidth: wsRow.width + 16
 
     property string profile: ""
+    property var _workspaceModel: null
+
+    Component.onCompleted: { _workspaceModel = Workspaces.workspaces }
+
+    Connections {
+        target: Workspaces
+        function onWorkspacesChanged() {
+            Qt.callLater(() => { root._workspaceModel = Workspaces.workspaces })
+        }
+    }
 
     readonly property string _title: {
         if (profile === "")
@@ -72,7 +82,7 @@ Item {
         }
 
         Repeater {
-            model: Workspaces.workspaces
+            model: root._workspaceModel
             delegate: Rectangle {
                 required property var modelData
                 visible: (Workspaces.isSpecial(modelData) ? _showSpecial : _showNormal)

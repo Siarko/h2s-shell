@@ -10,6 +10,7 @@ Singleton {
 
     property real rxSpeed: 0
     property real txSpeed: 0
+    property bool ethernetConnected: NetworkManager.activeDeviceType === "ethernet"
 
     property real _rxPrev: -1
     property real _txPrev: -1
@@ -101,8 +102,15 @@ Singleton {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+    function connect() {
+        var device = NetworkManager.ethernetDevice
+        if (actionProcess.running || device === "") return
+        actionProcess.command = ["nmcli", "device", "connect", device]
+        actionProcess.running = true
+    }
+
     function disconnect() {
-        var device = NetworkManager.activeDevice
+        var device = NetworkManager.ethernetDevice
         if (actionProcess.running || device === "") return
         actionProcess.command = ["nmcli", "device", "disconnect", device]
         actionProcess.running = true

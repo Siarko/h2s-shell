@@ -12,6 +12,8 @@ Singleton {
     property string activeConnection: ""
     property bool isConnected: false
     property bool wifiAvailable: false
+    property string ethernetDevice: ""  // first ethernet device found, connected or not
+    property string wifiDevice: ""     // first wifi device found, connected or not
 
     // -------------------------------------------------------------------------
     // Status polling (every 5s) — device/type/state/connection
@@ -48,6 +50,8 @@ Singleton {
     function _processStatus(lines) {
         var found = false
         var hasWifi = false
+        var ethDevice = ""
+        var wifiDev = ""
         for (var i = 0; i < lines.length; i++) {
             var parts = lines[i].trim().split(":")
             if (parts.length < 3) continue
@@ -55,8 +59,12 @@ Singleton {
             var type = parts[1].trim()
             var state = parts[2].trim()
             var connection = parts.slice(3).join(":")
-            if (type === "wifi")
+            if (type === "wifi") {
                 hasWifi = true
+                if (wifiDev === "") wifiDev = device
+            }
+            if (type === "ethernet" && ethDevice === "")
+                ethDevice = device
             if (state === "connected" && !found) {
                 root.activeDevice = device
                 root.activeDeviceType = (type === "ethernet") ? "ethernet" : "wifi"
@@ -66,6 +74,8 @@ Singleton {
             }
         }
         root.wifiAvailable = hasWifi
+        root.ethernetDevice = ethDevice
+        root.wifiDevice = wifiDev
         if (!found) {
             root.activeDevice = ""
             root.activeDeviceType = "none"
