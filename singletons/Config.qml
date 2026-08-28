@@ -82,6 +82,7 @@ Singleton {
 
             property JsonObject gcal: JsonObject {
                 id: _gcal
+                property bool enabled: true
                 property string clientId: ""
                 property string clientSecret: ""
                 property string accessToken: ""

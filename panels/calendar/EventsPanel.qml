@@ -14,6 +14,12 @@ Item {
 
     property bool _addingEvent: false
 
+    readonly property string _statusMessage: {
+        if (Config.gcal.enabled && !GoogleCalendarAuth.isAuthorized)
+            return "Google Calendar connected but not authorized";
+        return "";
+    }
+
     // Used by Calendar.qml to grow implicitHeight when the add form is open.
     // = form content height + 8px (form item margins) + 6px (extra ColumnLayout spacing gap)
     readonly property real addFormExtraHeight: _addingEvent ? _addEventForm.implicitHeight + 14 : 0
@@ -75,6 +81,25 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: GoogleCalendar.fetchDayEvents(root.displayYear, root.displayMonth, root.selectedDay, true)
                 }
+            }
+        }
+
+        // Status / error banner
+        Rectangle {
+            visible: root._statusMessage !== ""
+            Layout.fillWidth: true
+            implicitHeight: _statusText.implicitHeight + 8
+            radius: 4
+            color: Qt.rgba(Theme.textError.r, Theme.textError.g, Theme.textError.b, 0.12)
+
+            Text {
+                id: _statusText
+                anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 4; bottomMargin: 4 }
+                text: root._statusMessage
+                color: Theme.textError
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                wrapMode: Text.WordWrap
             }
         }
 

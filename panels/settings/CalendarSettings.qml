@@ -40,6 +40,12 @@ ColumnLayout {
         Layout.bottomMargin: 4
     }
 
+    SettingBool {
+        label: "Enable Google Calendar"
+        value: Config.gcal.enabled
+        onValueChanged: Config.gcal.enabled = value
+    }
+
     // Connection status row
     RowLayout {
         Layout.fillWidth: true
