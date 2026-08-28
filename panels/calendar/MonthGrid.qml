@@ -25,6 +25,8 @@ Item {
     readonly property int _daysInMonth:   new Date(displayYear, displayMonth + 1, 0).getDate()
     readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
 
+    property string viewMode: "day"
+
     signal prevMonthRequested()
     signal nextMonthRequested()
     signal dayClicked(int day)
@@ -157,60 +159,84 @@ Item {
         }
 
         // 6-row date grid
-        Grid {
-            id: _dateGrid
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            columns: 7
-            rows: 6
 
-            Repeater {
-                model: 42
+            // Week-range border — a single rectangle spanning the full row
+            Rectangle {
+                visible: root.viewMode === "week"
+                x: 0
+                y: {
+                    let selectedIndex = root._startDow + root.selectedDay - 1;
+                    return Math.floor(selectedIndex / 7) * (_dateGrid.height / 6);
+                }
+                width: _dateGrid.width
+                height: _dateGrid.height / 6
+                color: "transparent"
+                border.color: Theme.sliderAccent
+                border.width: 1
+                radius: 4
+                z: 1
+            }
 
-                Rectangle {
-                    required property int index
+            Grid {
+                id: _dateGrid
+                anchors.fill: parent
+                columns: 7
+                rows: 6
 
-                    property bool isCurrent:  index >= root._startDow && index < root._startDow + root._daysInMonth
-                    property int  dayNum:     isCurrent
-                        ? index - root._startDow + 1
-                        : (index < root._startDow
-                            ? root._prevMonthDays - root._startDow + index + 1
-                            : index - root._startDow - root._daysInMonth + 1)
-                    property bool isToday:    isCurrent && dayNum === root.today.getDate() && root.displayMonth === root.today.getMonth() && root.displayYear === root.today.getFullYear()
-                    property bool isSelected: isCurrent && dayNum === root.selectedDay
-
-                    width: _dateGrid.width / 7
-                    height: _dateGrid.height / 6
-                    color: isToday ? Theme.todayHighlight : "transparent"
-                    radius: 4
-                    border.width: isSelected && !isToday ? 1 : 0
-                    border.color: Theme.sliderAccent
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: dayNum
-                        color: isCurrent ? Theme.textPrimary : Theme.textDim
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeMedium
-                        font.bold: isToday
-                    }
+                Repeater {
+                    model: 42
 
                     Rectangle {
-                        visible: isCurrent && (GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
-                        width: 4
-                        height: 4
-                        radius: 2
-                        color: Theme.sliderAccent
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 3
-                    }
+                        required property int index
 
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: parent.isCurrent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.dayClicked(parent.dayNum)
+                        property bool isCurrent:  index >= root._startDow && index < root._startDow + root._daysInMonth
+                        property int  dayNum:     isCurrent
+                            ? index - root._startDow + 1
+                            : (index < root._startDow
+                                ? root._prevMonthDays - root._startDow + index + 1
+                                : index - root._startDow - root._daysInMonth + 1)
+                        property bool isToday:    isCurrent && dayNum === root.today.getDate() && root.displayMonth === root.today.getMonth() && root.displayYear === root.today.getFullYear()
+                        property bool isSelected: isCurrent && dayNum === root.selectedDay
+
+                        width: _dateGrid.width / 7
+                        height: _dateGrid.height / 6
+                        color: isToday    ? Theme.todayHighlight
+                             : isSelected ? Qt.rgba(Theme.sliderAccent.r, Theme.sliderAccent.g, Theme.sliderAccent.b, 0.2)
+                             : "transparent"
+                        radius: 4
+                        // Border shows selected range: day→cell, week→handled by overlay, month→none
+                        border.width: root.viewMode === "day" && isSelected && !isToday ? 1 : 0
+                        border.color: Theme.sliderAccent
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: dayNum
+                            color: isCurrent ? Theme.textPrimary : Theme.textDim
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeMedium
+                            font.bold: isToday
+                        }
+
+                        Rectangle {
+                            visible: isCurrent && (GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
+                            width: 4
+                            height: 4
+                            radius: 2
+                            color: Theme.sliderAccent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 3
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: parent.isCurrent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.dayClicked(parent.dayNum)
+                        }
                     }
                 }
             }

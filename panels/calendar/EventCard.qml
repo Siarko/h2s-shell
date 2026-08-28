@@ -12,6 +12,11 @@ Rectangle {
     property int displayYear
     property int displayMonth
     property int selectedDay
+    property bool showDate: false
+
+    function _dow(date) {
+        return ["sun","mon","tue","wed","thu","fri","sat"][date.getDay()];
+    }
 
     property bool expanded: false
     property bool editing: false
@@ -74,11 +79,33 @@ Rectangle {
                 elide: Text.ElideRight
             }
 
-            Text {
-                text: root.modelData.time
-                color: Theme.textSecondary
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
+            Row {
+                spacing: 6
+
+                Text {
+                    text: root.modelData.time
+                    color: Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+
+                Text {
+                    visible: root.showDate && (root.modelData.startTime !== null || root.modelData.allDayDuration > 0)
+                    text: {
+                        let s = root.modelData.allDayStartDate;
+                        let e = root.modelData.allDayEndDate;
+                        if (root.modelData.allDayDuration > 1)
+                            return root._dow(s) + " " + s.getDate() + " - " + root._dow(e) + " " + e.getDate() + " (" + root.modelData.allDayDuration + " days)";
+                        if (root.modelData.allDayDuration === 1)
+                            return root._dow(s) + " " + s.getDate();
+                        if (!root.modelData.startTime) return "";
+                        let d = root.modelData.startTime;
+                        return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] + " " + d.getDate();
+                    }
+                    color: Theme.textTertiary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                }
             }
         }
 

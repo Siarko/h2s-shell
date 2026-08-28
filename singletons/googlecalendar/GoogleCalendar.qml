@@ -334,13 +334,25 @@ Singleton {
         let calendarColor = calendar ? (calendar?.primary ? null : calendar.color) : null;
 
         let startTime = null;
+        let allDayDuration = 0;
+        let allDayStartDate = null;
+        let allDayEndDate = null;
+
         if (data.start && data.start.dateTime) {
             startTime = new Date(data.start.dateTime);
             startTimeStr = ("0" + startTime.getHours()).slice(-2) + ":" + ("0" + startTime.getMinutes()).slice(-2);
             let dt = new Date(data.end.dateTime);
             endTimeStr = ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
             timeStr = startTimeStr + " - " + endTimeStr;
+        } else if (data.start && data.start.date) {
+            let sp = data.start.date.split("-");
+            let ep = data.end.date.split("-");
+            allDayStartDate = new Date(parseInt(sp[0]), parseInt(sp[1]) - 1, parseInt(sp[2]));
+            let endExclusive = new Date(parseInt(ep[0]), parseInt(ep[1]) - 1, parseInt(ep[2]));
+            allDayEndDate = new Date(endExclusive.getTime() - 86400000);
+            allDayDuration = (endExclusive.getTime() - allDayStartDate.getTime()) / 86400000;
         }
+
         return {
             id: data.id,
             title: data.summary || "(No title)",
@@ -350,6 +362,9 @@ Singleton {
             startTimeStr: startTimeStr,
             endTimeStr: endTimeStr,
             time: timeStr,
+            allDayDuration: allDayDuration,
+            allDayStartDate: allDayStartDate,
+            allDayEndDate: allDayEndDate,
             color: color,
             calendarColor: calendarColor ?? null,
             calendarId: calendar?.id ?? null,

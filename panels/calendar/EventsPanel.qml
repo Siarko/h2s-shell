@@ -13,6 +13,36 @@ Item {
     property int selectedDay
 
     property bool _addingEvent: false
+    property string viewMode: Config.gcal.viewMode
+
+    function _dedupById(events) {
+        let seen = {};
+        return events.filter(e => { if (seen[e.id]) return false; seen[e.id] = true; return true; });
+    }
+
+    readonly property var _displayedEvents: {
+        if (viewMode === "week") {
+            let dow = new Date(displayYear, displayMonth, selectedDay).getDay();
+            let monOffset = (dow + 6) % 7;
+            let weekStart = new Date(displayYear, displayMonth, selectedDay - monOffset);
+            let result = [];
+            for (let i = 0; i < 7; i++) {
+                let d = new Date(weekStart);
+                d.setDate(weekStart.getDate() + i);
+                let key = GoogleCalendar._dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+                result.push(...(GoogleCalendar.events[key] ?? []));
+            }
+            return _dedupById(result);
+        }
+        if (viewMode === "mon") {
+            let days = new Date(displayYear, displayMonth + 1, 0).getDate();
+            let result = [];
+            for (let d = 1; d <= days; d++)
+                result.push(...(GoogleCalendar.events[GoogleCalendar._dateKey(displayYear, displayMonth, d)] ?? []));
+            return _dedupById(result);
+        }
+        return GoogleCalendar.events[GoogleCalendar._dateKey(displayYear, displayMonth, selectedDay)] ?? [];
+    }
 
     readonly property string _statusMessage: {
         if (Config.gcal.enabled && !GoogleCalendarAuth.isAuthorized)
@@ -33,10 +63,10 @@ Item {
         }
         spacing: 6
 
-        // Date header row: label + "+" add button + "↻" refresh button
+        // Date header row: date label (left) | Day/Week/Mon (centre) | +/↻ (right)
         RowLayout {
             Layout.fillWidth: true
-            spacing: 4
+            spacing: 0
 
             Text {
                 text: {
@@ -48,38 +78,86 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 font.bold: true
-                Layout.fillWidth: true
             }
 
-            Text {
-                text: "+"
-                color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSection
-                visible: GoogleCalendar.isAuthorized
+            Item { Layout.fillWidth: true }
 
-                MouseArea {
-                    id: _addArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root._addingEvent = true
+            Row {
+                spacing: 1
+
+                Repeater {
+                    model: ["Day", "Week", "Mon"]
+
+                    Row {
+                        required property string modelData
+                        required property int index
+
+                        Text {
+                            visible: index > 0
+                            text: "/"
+                            color: Theme.textDim
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall
+                            height: _modeLabel.implicitHeight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Text {
+                            id: _modeLabel
+                            text: modelData
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall
+                            font.bold: _modeArea.containsMouse || root.viewMode === modelData.toLowerCase()
+                            color: (root.viewMode === modelData.toLowerCase()) ? Theme.textPrimary
+                                 : _modeArea.containsMouse                     ? Theme.textSubtle
+                                 : Theme.textSecondary
+
+                            MouseArea {
+                                id: _modeArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Config.gcal.viewMode = modelData.toLowerCase()
+                            }
+                        }
+                    }
                 }
             }
 
-            Text {
-                text: "↻"
-                color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeMedium
+            Item { Layout.fillWidth: true }
+
+            Row {
+                spacing: 6
                 visible: GoogleCalendar.isAuthorized
 
-                MouseArea {
-                    id: _refreshArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
+                Text {
+                    text: "+"
+                    color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSection
+
+                    MouseArea {
+                        id: _addArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root._addingEvent = true
+                    }
+                }
+
+                Text {
+                    text: "↻"
+                    color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeMedium
+
+                    MouseArea {
+                        id: _refreshArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
+                    }
                 }
             }
         }
@@ -182,7 +260,7 @@ Item {
             // JS objects on every fetch.
             model: ScriptModel {
                 objectProp: "id"
-                values: GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, root.selectedDay)] || []
+                values: root._displayedEvents
             }
 
             delegate: EventCard {
@@ -190,6 +268,7 @@ Item {
                 displayYear: root.displayYear
                 displayMonth: root.displayMonth
                 selectedDay: root.selectedDay
+                showDate: root.viewMode !== "day"
             }
 
             Text {

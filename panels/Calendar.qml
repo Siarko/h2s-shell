@@ -73,6 +73,7 @@ Item {
             today:        root._today
             monthNames:   root._monthNames
             dayNames:     root._dayNames
+            viewMode:     Config.gcal.viewMode
             onPrevMonthRequested: root._prevMonth()
             onNextMonthRequested: root._nextMonth()
             onDayClicked:         day   => root.selectedDay   = day
