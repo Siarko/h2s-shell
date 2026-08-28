@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Io
 import qs.singletons
@@ -11,20 +12,6 @@ Item {
     implicitHeight: col.implicitHeight
 
     property var adapter: Bluetooth.defaultAdapter
-    property bool _ready: false
-    property var _deviceModel: null
-
-    // Buffer model updates through Qt.callLater to avoid QQuickRepeater::regenerate()
-    // crashing during incubation when Bluetooth device list changes mid-render.
-    function _refreshDeviceModel() { Qt.callLater(() => { _deviceModel = adapter?.devices ?? null }) }
-
-    Component.onCompleted: Qt.callLater(() => { _ready = true; root._refreshDeviceModel() })
-    onAdapterChanged: root._refreshDeviceModel()
-
-    Connections {
-        target: root.adapter
-        function onDevicesChanged() { root._refreshDeviceModel() }
-    }
 
     // Discovery is started/stopped via bluetoothctl — the only remaining process usage,
     // since Quickshell exposes adapter.discovering as read-only.
@@ -187,7 +174,12 @@ Item {
 
             // Device rows
             Repeater {
-                model: root._ready ? root._deviceModel : null
+                // ScriptModel diffs old vs. new values so only changed delegates get
+                // added/removed — see MusicPanel.qml for why binding a plain live-model
+                // array straight to Repeater.model was crashing this app.
+                model: ScriptModel {
+                    values: root.adapter?.devices?.values ?? []
+                }
 
                 Rectangle {
                     required property var modelData

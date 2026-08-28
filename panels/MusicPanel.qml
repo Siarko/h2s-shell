@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Services.Mpris
 import Quickshell.Io
 import qs.components
@@ -12,8 +13,6 @@ Item {
     implicitHeight: col.implicitHeight
 
     property bool useCava: false
-    property bool _ready: false
-    Component.onCompleted: Qt.callLater(() => { _ready = true })
     property var leftBars: []
     property var rightBars: []
     property real _ambientPhase: 0
@@ -268,7 +267,17 @@ Item {
                 spacing: 2
 
                 Repeater {
-                    model: root._ready ? Music.players : null
+                    // Wrapping the live model in ScriptModel makes the Repeater diff
+                    // old vs. new values and only add/remove the changed delegates.
+                    // Binding straight to Music.players.values (or any plain JS array)
+                    // makes QQuickRepeater destroy and re-incubate every delegate on
+                    // every change, which is what was crashing this app in
+                    // QQuickRepeater::regenerate() -> QQmlIncubatorPrivate::incubate().
+                    // Same pattern in BluetoothPanel.qml, AudioChannelRow.qml,
+                    // TrayWidget.qml, NetworkPanel.qml.
+                    model: ScriptModel {
+                        values: Music.players.values
+                    }
 
                     delegate: Text {
                         required property MprisPlayer modelData

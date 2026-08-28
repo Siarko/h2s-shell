@@ -22,7 +22,7 @@ FloatingWindow {
     minimumSize: Qt.size(400, 300)
     visible: false
 
-    property int selectedCategory: 0  // 0=General, 1=Calendar, 2=Media, 3=Bar
+    property int selectedCategory: 0  // 0=General, 1=Calendar, 2=Media, 3=Bar, 4=Notifications
 
     Rectangle {
         anchors.fill: parent
@@ -54,7 +54,7 @@ FloatingWindow {
                     }
 
                     Repeater {
-                        model: ["General", "Calendar", "Media", "Bar"]
+                        model: ["General", "Calendar", "Media", "Bar", "Notifications"]
                         Rectangle {
                             required property string modelData
                             required property int index
@@ -110,15 +110,17 @@ FloatingWindow {
                         if (root.selectedCategory === 0) return generalComp;
                         if (root.selectedCategory === 1) return calendarComp;
                         if (root.selectedCategory === 2) return mediaComp;
-                        return barComp;
+                        if (root.selectedCategory === 3) return barComp;
+                        return notificationsComp;
                     }
                 }
             }
         }
     }
 
-    Component { id: generalComp;  GeneralSettings  {} }
-    Component { id: calendarComp; CalendarSettings {} }
-    Component { id: mediaComp;    MediaSettings    {} }
-    Component { id: barComp;      BarSettings      {} }
+    Component { id: generalComp;       GeneralSettings       {} }
+    Component { id: calendarComp;      CalendarSettings      {} }
+    Component { id: mediaComp;         MediaSettings         {} }
+    Component { id: barComp;           BarSettings           {} }
+    Component { id: notificationsComp; NotificationsSettings {} }
 }

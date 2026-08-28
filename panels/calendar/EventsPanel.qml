@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -128,7 +129,15 @@ Item {
             Layout.fillHeight: true
             clip: true
             spacing: 6
-            model: GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, root.selectedDay)] || []
+            // ScriptModel diffs old vs. new values so only changed delegates get
+            // added/removed — see MusicPanel.qml for why binding a plain live-model
+            // array straight to Repeater/ListView.model was crashing this app.
+            // Keyed by "id" since GoogleCalendar rebuilds the events array as brand-new
+            // JS objects on every fetch.
+            model: ScriptModel {
+                objectProp: "id"
+                values: GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, root.selectedDay)] || []
+            }
 
             delegate: EventCard {
                 // required property var modelData

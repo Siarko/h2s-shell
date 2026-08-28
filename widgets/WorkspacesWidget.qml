@@ -10,16 +10,6 @@ Item {
     implicitWidth: wsRow.width + 16
 
     property string profile: ""
-    property var _workspaceModel: null
-
-    Component.onCompleted: { _workspaceModel = Workspaces.workspaces }
-
-    Connections {
-        target: Workspaces
-        function onWorkspacesChanged() {
-            Qt.callLater(() => { root._workspaceModel = Workspaces.workspaces })
-        }
-    }
 
     readonly property string _title: {
         if (profile === "")
@@ -82,7 +72,14 @@ Item {
         }
 
         Repeater {
-            model: root._workspaceModel
+            // Bound directly to the live Hyprland ObjectModel (not .values, no
+            // ScriptModel needed) — Quickshell's ObjectModel is already a proper
+            // QAbstractListModel that emits incremental insert/remove signals, so
+            // Repeater updates delegates in place instead of tearing everything
+            // down. The crash-prone pattern (see MusicPanel.qml) only happens when
+            // a live model's .values snapshot — a plain JS array — gets reassigned
+            // to Repeater.model directly.
+            model: Workspaces.workspaces
             delegate: Rectangle {
                 required property var modelData
                 visible: (Workspaces.isSpecial(modelData) ? _showSpecial : _showNormal)

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import Quickshell
 import qs.singletons
 import qs.singletons.network
 
@@ -10,9 +11,7 @@ Item {
     implicitWidth: 280
     implicitHeight: col.implicitHeight
 
-
-    property bool _ready: false
-    Component.onCompleted: Qt.callLater(() => { _ready = true; WifiManager.startScan() })
+    Component.onCompleted: WifiManager.startScan()
     Component.onDestruction: WifiManager.stopScan()
 
     function signalBars(signal) {
@@ -70,7 +69,16 @@ Item {
             }
 
             Repeater {
-                model: root._ready ? VpnManager.vpnConnections : null
+                // ScriptModel diffs old vs. new values so only changed delegates get
+                // added/removed — see MusicPanel.qml for why binding a plain live-model
+                // array straight to Repeater.model was crashing this app. VpnManager
+                // rebuilds vpnConnections as brand-new JS objects on every nmcli poll, so
+                // objectProp keys the diff by "name" instead of object identity —
+                // otherwise every poll would look like a full remove+insert.
+                model: ScriptModel {
+                    objectProp: "name"
+                    values: VpnManager.vpnConnections
+                }
 
                 delegate: Rectangle {
                     required property var modelData
@@ -496,7 +504,12 @@ Item {
                     return Math.min(contentHeight, Math.max(80, maxH))
                 }
                 clip: true
-                model: root._ready ? WifiManager.wifiNetworks : null
+                // Same reasoning as the VPN Repeater above: keyed by "ssid" since
+                // WifiManager also rebuilds wifiNetworks fresh on every scan poll.
+                model: ScriptModel {
+                    objectProp: "ssid"
+                    values: WifiManager.wifiNetworks
+                }
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
 

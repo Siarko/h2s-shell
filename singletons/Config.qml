@@ -14,6 +14,7 @@ Singleton {
     property alias general: _general
     property alias media: _media
     property alias audio: _audio
+    property alias notifications: _notifications
     property alias widgetProfiles: _adapter.widgetProfiles
 
     signal saved
@@ -72,6 +73,11 @@ Singleton {
             property JsonObject audio: JsonObject {
                 id: _audio
                 property string appVolumes: "{}"
+            }
+
+            property JsonObject notifications: JsonObject {
+                id: _notifications
+                property list<string> codePatterns: ["\\d{4,8}"]
             }
 
             property JsonObject gcal: JsonObject {

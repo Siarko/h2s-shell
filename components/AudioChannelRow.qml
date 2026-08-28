@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.components
 import qs.singletons
 
@@ -8,8 +9,6 @@ import qs.singletons
 Item {
     id: row
     property bool isSink: true
-    property bool _ready: false
-    Component.onCompleted: Qt.callLater(() => { _ready = true })
     implicitHeight: innerCol.implicitHeight
 
     readonly property bool muted: isSink ? Audio.muted : Audio.sourceMuted
@@ -119,7 +118,12 @@ Item {
                 spacing: 0
 
                 Repeater {
-                    model: row._ready ? Audio.nodes : null
+                    // ScriptModel diffs old vs. new values so only changed delegates
+                    // get added/removed — see MusicPanel.qml for why binding a plain
+                    // live-model array straight to Repeater.model was crashing this app.
+                    model: ScriptModel {
+                        values: Audio.nodes.values
+                    }
 
                     delegate: Rectangle {
                         required property var modelData
@@ -189,7 +193,9 @@ Item {
                 spacing: 2
 
                 Repeater {
-                    model: row._ready ? Audio.appNodes : null
+                    model: ScriptModel {
+                        values: Audio.appNodes
+                    }
 
                     delegate: Item {
                         required property var modelData

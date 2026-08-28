@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -183,7 +184,14 @@ ColumnLayout {
                 width: parent.width
 
                 Repeater {
-                    model: GoogleCalendar.calendarsArray
+                    // ScriptModel diffs old vs. new values so only changed delegates get
+                    // added/removed — see MusicPanel.qml for why binding a plain live-model
+                    // array straight to Repeater.model was crashing this app. Keyed by "id"
+                    // since calendarsArray rebuilds fresh objects on every calendar fetch.
+                    model: ScriptModel {
+                        objectProp: "id"
+                        values: GoogleCalendar.calendarsArray
+                    }
 
                     delegate: Item {
                         id: calendarRow

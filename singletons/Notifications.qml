@@ -7,6 +7,8 @@ Singleton {
     property alias notifications: server.trackedNotifications
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
+    // Map of notification id -> string[] of extracted codes matching Config.notifications.codePatterns
+    property var extractedCodes: ({})
 
     NotificationServer {
         id: server
@@ -37,10 +39,40 @@ Singleton {
             timestamps[notification.id] = h + ":" + m + ":" + s;
             if (!hudPanelOpen)
                 enqueueHudNotification(notification);
-            // Remove timestamp when this notification is dismissed
+
+            // Extract codes from summary + body using configured regex patterns
+            var text = (notification.summary ?? "") + " " + (notification.body ?? "");
+            var codes = [];
+            var patterns = Config.notifications.codePatterns;
+            for (var i = 0; i < patterns.length; i++) {
+                var pat = patterns[i];
+                if (!pat) continue;
+                try {
+                    var matches = text.match(new RegExp(pat, "g"));
+                    if (matches) {
+                        for (var j = 0; j < matches.length; j++) {
+                            if (codes.indexOf(matches[j]) < 0)
+                                codes.push(matches[j]);
+                        }
+                    }
+                } catch(e) {}
+            }
+            if (codes.length > 0) {
+                var updatedCodes = Object.assign({}, extractedCodes);
+                updatedCodes[notification.id] = codes;
+                extractedCodes = updatedCodes;
+            }
+
+            // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
-                if (!notification.tracked)
+                if (!notification.tracked) {
                     delete timestamps[notification.id];
+                    if (extractedCodes[notification.id]) {
+                        var remaining = Object.assign({}, extractedCodes);
+                        delete remaining[notification.id];
+                        extractedCodes = remaining;
+                    }
+                }
             });
         }
     }

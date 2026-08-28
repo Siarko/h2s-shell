@@ -1,16 +1,23 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Quickshell.Services.SystemTray
 import qs.singletons
 
 Row {
+    id: root
     property var popup: null
 
     spacing: 4
     Layout.fillHeight: true
 
     Repeater {
-        model: SystemTray.items
+        // ScriptModel diffs old vs. new values so only changed delegates get
+        // added/removed — see MusicPanel.qml for why binding a plain live-model
+        // array straight to Repeater.model was crashing this app.
+        model: ScriptModel {
+            values: SystemTray.items.values
+        }
 
         delegate: Item {
             id: trayDelegate

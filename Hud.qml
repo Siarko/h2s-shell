@@ -57,7 +57,7 @@ PanelWindow {
     // Positioned flush to the right screen edge, just below the bar.
     Rectangle {
         id: queueBadge
-        x: hud.implicitWidth - width
+        x: visible ? hud.implicitWidth - width : hud.implicitWidth
         y: Config.bar.layout.reservedSpace + 16
         width: 36
         height: notifItem.height

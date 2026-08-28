@@ -1,2 +1,2 @@
 #!/bin/bash
-hyprctl dispatch exit
+hyprctl dispatch 'hl.dsp.exit()'

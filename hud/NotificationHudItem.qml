@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.singletons
+import qs.components
 
 // Self-contained notification toast. Manages its own queue consumption,
 // slide-in/out animations, and auto-dismiss timer.
@@ -9,9 +10,6 @@ Item {
 
     required property int screenWidth
     required property var screenModelData
-
-    // Exposed so Hud.qml can include it in the input-passthrough Region mask
-    readonly property Item card: notifCard
 
     property var currentNotif: null
     readonly property int cardWidth: 360
@@ -109,196 +107,20 @@ Item {
         onTriggered: root.dismiss()
     }
 
-    Rectangle {
+    NotificationCard {
         id: notifCard
+        notification: root.currentNotif
+        compactDismiss: true
+        imageMaxHeight: 120
+        contentPadding: 10
+        replyBackground: Qt.rgba(0, 0, 0, 0.2)
         width: root.cardWidth
-        implicitHeight: contentColumn.implicitHeight + 20
-        radius: 8
-        color: Theme.cellDefault
+        onDismissRequested: root.dismiss()
 
-        opacity: hoverHandler.hovered ? 0.6 : 1.0
-        Behavior on opacity {
-            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
-        }
-
-        property var _hudReplyAction: (root.currentNotif?.actions ?? []).find(a => a.id === "inline-reply") ?? null
-
-        function _hudSendReply() {
-            if (_hudReplyInput.text.length === 0) return;
-            notifCard._hudReplyAction.invoke(_hudReplyInput.text);
-            root.dismiss();
-        }
-
-        HoverHandler { id: hoverHandler }
-
-        ColumnLayout {
-            id: contentColumn
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                margins: 10
-            }
-            spacing: 4
-
-            // Header: app name + close button
-            RowLayout {
-                Layout.fillWidth: true
-
-                Image {
-                    visible: (root.currentNotif?.appIcon ?? "") !== ""
-                    source: visible ? "image://icon/" + root.currentNotif.appIcon : ""
-                    Layout.preferredWidth: 16
-                    Layout.preferredHeight: 16
-                    Layout.maximumWidth: 16
-                    Layout.maximumHeight: 16
-                    fillMode: Image.PreserveAspectFit
-                    Layout.alignment: Qt.AlignVCenter
-                }
-
-                Text {
-                    text: root.currentNotif?.appName ?? ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.bold: true
-                    color: Theme.textSubtle
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    text: "×"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSection
-                    color: Theme.textSubtle
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.dismiss()
-                    }
-                }
-            }
-
-            // Summary
-            Text {
-                text: root.currentNotif?.summary ?? ""
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeMedium
-                font.bold: true
-                color: Theme.textPrimary
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-            }
-
-            // Body (optional — hidden when empty)
-            Text {
-                text: root.currentNotif?.body ?? ""
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textBody
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                visible: (root.currentNotif?.body ?? "").length > 0
-            }
-
-            Image {
-                visible: (root.currentNotif?.image ?? "") !== ""
-                source: root.currentNotif?.image ?? ""
-                Layout.fillWidth: true
-                Layout.maximumHeight: 120
-                fillMode: Image.PreserveAspectFit
-                Layout.topMargin: 4
-            }
-
-            Row {
-                spacing: 6
-                visible: (root.currentNotif?.actions ?? []).filter(a => a.id !== "inline-reply").length > 0
-                Layout.topMargin: 4
-
-                Repeater {
-                    model: (root.currentNotif?.actions ?? []).filter(a => a.id !== "inline-reply")
-                    delegate: Rectangle {
-                        required property var modelData
-                        implicitWidth: _hudActionLabel.implicitWidth + 16
-                        height: 24
-                        radius: 5
-                        color: Theme.sliderAccent
-
-                        Text {
-                            id: _hudActionLabel
-                            anchors.centerIn: parent
-                            text: modelData.text
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textPrimary
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                modelData.invoke();
-                                root.dismiss();
-                            }
-                        }
-                    }
-                }
-            }
-
-            RowLayout {
-                visible: notifCard._hudReplyAction !== null
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                spacing: 6
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 28
-                    radius: 5
-                    color: Qt.rgba(0, 0, 0, 0.2)
-
-                    Text {
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        text: "Reply…"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textTertiary
-                        verticalAlignment: Text.AlignVCenter
-                        visible: _hudReplyInput.text.length === 0
-                    }
-
-                    TextInput {
-                        id: _hudReplyInput
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        verticalAlignment: TextInput.AlignVCenter
-                        onAccepted: notifCard._hudSendReply()
-                    }
-                }
-
-                Rectangle {
-                    implicitWidth: 48
-                    implicitHeight: 28
-                    radius: 5
-                    color: Theme.sliderAccent
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Send"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textPrimary
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: notifCard._hudSendReply()
-                    }
-                }
+        HoverHandler {
+            onHoveredChanged: {
+                if (hovered) autoCloseTimer.stop()
+                else autoCloseTimer.restart()
             }
         }
     }

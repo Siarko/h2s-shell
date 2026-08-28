@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import Quickshell
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -223,7 +224,14 @@ Item {
                     }
 
                     Repeater {
-                        model: root._colorEntries
+                        // ScriptModel diffs old vs. new values so only changed delegates
+                        // get added/removed — see MusicPanel.qml for why binding a plain
+                        // live-model array straight to Repeater.model was crashing this
+                        // app. Keyed by "id" since _colorEntries rebuilds fresh objects.
+                        model: ScriptModel {
+                            objectProp: "id"
+                            values: root._colorEntries
+                        }
 
                         Item {
                             required property var modelData
@@ -499,7 +507,12 @@ Item {
                 }
 
                 Repeater {
-                    model: GoogleCalendar.enabledCalendarIds
+                    // ScriptModel diffs old vs. new values so only changed delegates get
+                    // added/removed — see MusicPanel.qml for why binding a plain live-model
+                    // array straight to Repeater.model was crashing this app.
+                    model: ScriptModel {
+                        values: GoogleCalendar.enabledCalendarIds
+                    }
 
                     Rectangle {
                         required property string modelData
