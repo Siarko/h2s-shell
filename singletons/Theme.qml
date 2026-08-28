@@ -50,4 +50,8 @@ QtObject {
 
     // Calendar
     readonly property color todayHighlight: "#666666"   // background circle on today's date
+
+    // HUD notification timer bar
+    readonly property int   notifTimerHeight: 3
+    readonly property color notifTimerColor:  sliderAccent
 }

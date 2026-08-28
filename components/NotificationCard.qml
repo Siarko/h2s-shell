@@ -13,11 +13,36 @@ Rectangle {
     property int contentPadding: 10
     property color replyBackground: Qt.rgba(0, 0, 0, 0.2)
 
+    property bool timerVisible: false
+    property int  timerDuration: 5000
+    property bool timerRunning: false
+
     signal dismissRequested()
 
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
     radius: 8
     color: Theme.cellDefault
+    clip: true
+
+    property real _timerProgress: 1.0
+
+    onTimerRunningChanged: {
+        if (timerRunning) {
+            _timerProgress = 1.0;
+            _progressAnim.start();
+        } else {
+            _progressAnim.stop();
+        }
+    }
+
+    NumberAnimation {
+        id: _progressAnim
+        target: notifCard
+        property: "_timerProgress"
+        from: 1.0
+        to: 0.0
+        duration: notifCard.timerDuration
+    }
 
     property var _activeEdit: null
     readonly property string _selectedText: _activeEdit ? _activeEdit.selectedText : ""
@@ -285,6 +310,17 @@ Rectangle {
     TextEdit {
         id: _clipHelper
         visible: false
+    }
+
+    // Timer bar — pinned to bottom edge, shrinks as auto-close timer counts down
+    Rectangle {
+        visible: notifCard.timerVisible
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        height: Theme.notifTimerHeight
+        width: parent.width * notifCard._timerProgress
+        color: Theme.notifTimerColor
+        z: 1
     }
 
     // Copy overlay — appears in bottom-right corner when text is manually selected

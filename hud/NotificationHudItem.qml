@@ -116,6 +116,9 @@ Item {
         replyBackground: Qt.rgba(0, 0, 0, 0.2)
         width: root.cardWidth
         onDismissRequested: root.dismiss()
+        timerVisible: true
+        timerDuration: autoCloseTimer.interval
+        timerRunning: autoCloseTimer.running
 
         HoverHandler {
             onHoveredChanged: {
