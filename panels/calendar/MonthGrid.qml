@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.components
 import qs.singletons
+import qs.singletons.googlecalendar
 
 // Right-side monthly date grid: navigation header, day labels, 6-row cell grid.
 Item {
@@ -192,6 +193,17 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeMedium
                         font.bold: isToday
+                    }
+
+                    Rectangle {
+                        visible: isCurrent && (GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
+                        width: 4
+                        height: 4
+                        radius: 2
+                        color: Theme.sliderAccent
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 3
                     }
 
                     MouseArea {

@@ -79,7 +79,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: GoogleCalendar.fetchDayEvents(root.displayYear, root.displayMonth, root.selectedDay, true)
+                    onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
                 }
             }
         }
@@ -204,7 +204,7 @@ Item {
     }
 
     // Loading spinner overlay
-    property bool _loading: GoogleCalendar.eventsLoading[GoogleCalendar._dateKey(displayYear, displayMonth, selectedDay)] ?? false
+    property bool _loading: GoogleCalendar.eventsLoading[GoogleCalendar._monthKey(displayYear, displayMonth)] ?? false
 
     Text {
         visible: root._loading

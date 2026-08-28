@@ -34,9 +34,15 @@ Item {
         selectedDay = Math.min(selectedDay, _daysInMonth)
     }
 
-    onSelectedDayChanged:  GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay)
-    onDisplayMonthChanged: GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay)
-    onDisplayYearChanged:  GoogleCalendar.fetchDayEvents(displayYear, displayMonth, selectedDay)
+    // Qt.callLater deduplicates calls with the same function reference within one
+    // event-loop tick. This prevents a double-fetch when both displayYear and
+    // displayMonth change simultaneously during component initialisation.
+    function _fetchCurrentMonth() {
+        GoogleCalendar.fetchMonthEvents(displayYear, displayMonth);
+    }
+
+    onDisplayMonthChanged: Qt.callLater(_fetchCurrentMonth)
+    onDisplayYearChanged:  Qt.callLater(_fetchCurrentMonth)
 
     Row {
         anchors.fill: parent
