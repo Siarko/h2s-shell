@@ -94,12 +94,33 @@ Item {
 
             Text {
                 id: _statusText
-                anchors { fill: parent; leftMargin: 8; rightMargin: 8; topMargin: 4; bottomMargin: 4 }
+                anchors { fill: parent; leftMargin: 8; rightMargin: 36; topMargin: 4; bottomMargin: 4 }
                 text: root._statusMessage
                 color: Theme.textError
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 wrapMode: Text.WordWrap
+            }
+
+            Text {
+                anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+                text: "→"
+                color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.textError
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeMedium
+            }
+
+            MouseArea {
+                id: _bannerArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (Config.gcal.clientId !== "" && Config.gcal.clientSecret !== "")
+                        GoogleCalendarAuth.login();
+                    else
+                        Shell.openSettings(1);
+                }
             }
         }
 

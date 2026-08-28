@@ -245,6 +245,14 @@ PanelWindow {
         onBackingWindowVisibleChanged: if (!backingWindowVisible) visible = false
     }
 
+    Connections {
+        target: Shell
+        function onOpenSettings(category) {
+            settingsWindow.selectedCategory = category;
+            settingsWindow.visible = true;
+        }
+    }
+
     // Popup panel that appears below the hovered cell
     Popup {
         id: popupLoader

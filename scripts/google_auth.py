@@ -46,8 +46,10 @@ def main():
                 self.send_header("Content-Type", "text/html")
                 self.end_headers()
                 self.wfile.write(
-                    b"<html><body><h2>Authorization successful!"
-                    b" You can close this tab.</h2></body></html>"
+                    b"<html><body>"
+                    b"<h2>Authorization successful! You can close this tab.</h2>"
+                    b"<script>window.open('','_self','');window.close();</script>"
+                    b"</body></html>"
                 )
             else:
                 error = params.get("error", ["unknown"])[0]
