@@ -2,6 +2,7 @@
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.screensaver
 
 // Top-level shell root: one Bar and one Hud per screen
 QtObject {
@@ -28,5 +29,12 @@ QtObject {
         delegate: Component {
             Hud {}
         }
+    }
+
+    property var _lockscreen: Lockscreen
+
+    property var _screensavers: Variants {
+        model: Quickshell.screens
+        delegate: Component { ScreensaverSurface {} }
     }
 }

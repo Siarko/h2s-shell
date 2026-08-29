@@ -5,9 +5,11 @@ import qs.singletons
 RowLayout {
     property string label
     property bool value: false
+    property bool disabled: false
 
     Layout.fillWidth: true
     Layout.preferredHeight: 44
+    opacity: disabled ? 0.35 : 1.0
 
     Text {
         text: label
@@ -42,7 +44,8 @@ RowLayout {
 
         MouseArea {
             anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
+            enabled: !toggle.parent.disabled
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: toggle.parent.value = !toggle.parent.value
         }
     }

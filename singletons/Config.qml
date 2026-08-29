@@ -10,6 +10,7 @@ Singleton {
 
     property alias datetimeFormat: _calendar.datetimeFormat
     property alias bar: _bar
+    property alias lockscreen: _lockscreen
     property alias gcal: _gcal
     property alias general: _general
     property alias media: _media
@@ -78,6 +79,18 @@ Singleton {
             property JsonObject notifications: JsonObject {
                 id: _notifications
                 property list<string> codePatterns: ["\\d{4,8}"]
+            }
+
+            property JsonObject lockscreen: JsonObject {
+                id: _lockscreen
+                property bool screensaverEnabled: false
+                property int  screensaverTimeout: 300
+                property bool lockscreenEnabled: false
+                property int  lockscreenTimeout: 300
+                property int  fadeInDuration: 800
+                property int  fadeOutDuration: 400
+                property bool notificationsOnScreensaver: true
+                property bool notificationsOnLock: true
             }
 
             property JsonObject gcal: JsonObject {
