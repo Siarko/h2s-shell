@@ -12,7 +12,8 @@ Item {
     implicitWidth: 350
     implicitHeight: screenHeight - 40 - 16
 
-    // Set when "Clear all" is clicked; triggers success animation once list empties
+    // Set when the user empties the list — "Clear all", or dismissing the last card;
+    // triggers the success animation, then closes the popup, once the list is empty
     property bool clearing: false
 
     ColumnLayout {
@@ -62,7 +63,12 @@ Item {
             clip: true
             spacing: 6
             model: Notifications.notifications
+            property int _previousCount: 0
             onCountChanged: {
+                // A notification arriving mid-clear means the list will not end up empty
+                if (count > _previousCount)
+                    root.clearing = false;
+                _previousCount = count;
                 if (count === 0 && root.clearing) {
                     root.clearing = false;
                     successAnim.start();
@@ -118,7 +124,12 @@ Item {
                     imageMaxHeight: 160
                     contentPadding: 8
                     replyBackground: Theme.popupBackground
-                    onDismissRequested: slideOut.start()
+                    onDismissRequested: {
+                        // Dismissing the last one ends like "Clear all"
+                        if (notificationList.count === 1)
+                            root.clearing = true;
+                        slideOut.start();
+                    }
                     Component.onCompleted: slideIn.start()
 
                     NumberAnimation {
@@ -145,7 +156,7 @@ Item {
         }
     }
 
-    // Success overlay — shown after "Clear all" empties the list
+    // Success overlay — shown after the user empties the list
     Item {
         id: successOverlay
         anchors.fill: parent
