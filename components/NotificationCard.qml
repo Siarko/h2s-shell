@@ -14,8 +14,8 @@ Rectangle {
     property color replyBackground: Qt.rgba(0, 0, 0, 0.2)
 
     property bool timerVisible: false
-    property int  timerDuration: 5000
-    property bool timerRunning: false
+    // Fraction of the auto-dismiss time left, 1 → 0; the owner runs the countdown
+    property real timerProgress: 1.0
 
     signal dismissRequested()
 
@@ -23,26 +23,6 @@ Rectangle {
     radius: 8
     color: Theme.cellDefault
     clip: true
-
-    property real _timerProgress: 1.0
-
-    onTimerRunningChanged: {
-        if (timerRunning) {
-            _timerProgress = 1.0;
-            _progressAnim.start();
-        } else {
-            _progressAnim.stop();
-        }
-    }
-
-    NumberAnimation {
-        id: _progressAnim
-        target: notifCard
-        property: "_timerProgress"
-        from: 1.0
-        to: 0.0
-        duration: notifCard.timerDuration
-    }
 
     property var _activeEdit: null
     readonly property string _selectedText: _activeEdit ? _activeEdit.selectedText : ""
@@ -318,7 +298,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         height: Theme.notifTimerHeight
-        width: parent.width * notifCard._timerProgress
+        width: parent.width * notifCard.timerProgress
         color: Theme.notifTimerColor
         z: 1
     }

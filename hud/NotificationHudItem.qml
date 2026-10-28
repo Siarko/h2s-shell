@@ -37,11 +37,14 @@ Item {
         }
         currentNotif = notif;
         slideIn.start();
-        autoCloseTimer.restart();
+        countdown.restart();
+        // A toast appearing under a resting pointer must not count down either
+        if (cardHover.hovered)
+            countdown.pause();
     }
 
     function dismiss() {
-        autoCloseTimer.stop();
+        countdown.stop();
         slideOut.start();
     }
 
@@ -64,7 +67,7 @@ Item {
         }
 
         function onHudQueueCleared() {
-            autoCloseTimer.stop();
+            countdown.stop();
             if (root.currentNotif !== null) {
                 slideOut.start();
             }
@@ -101,10 +104,19 @@ Item {
         easing.type: Easing.OutCubic
     }
 
-    Timer {
-        id: autoCloseTimer
-        interval: 5000
-        onTriggered: root.dismiss()
+    // Auto-dismiss countdown, 1 → 0. An animation rather than a Timer because it has to
+    // pause while hovered and carry on from where it stopped, and a Timer can only restart.
+    // It also drives the card's timer bar, so the two cannot drift apart.
+    property real remaining: 1.0
+
+    NumberAnimation {
+        id: countdown
+        target: root
+        property: "remaining"
+        from: 1.0
+        to: 0.0
+        duration: 5000
+        onFinished: root.dismiss()
     }
 
     NotificationCard {
@@ -117,13 +129,15 @@ Item {
         width: root.cardWidth
         onDismissRequested: root.dismiss()
         timerVisible: true
-        timerDuration: autoCloseTimer.interval
-        timerRunning: autoCloseTimer.running
+        timerProgress: root.remaining
 
         HoverHandler {
+            id: cardHover
             onHoveredChanged: {
-                if (hovered) autoCloseTimer.stop()
-                else autoCloseTimer.restart()
+                if (hovered)
+                    countdown.pause();
+                else
+                    countdown.resume();
             }
         }
     }
