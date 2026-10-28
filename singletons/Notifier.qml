@@ -68,8 +68,10 @@ Singleton {
         let hasInlineReply = !!options.inlineReply;
 
         if (hasActions) {
+            // notify-send's syntax is NAME=Text. With any other separator the whole string
+            // becomes the label and the reply is the button's index, so no action matched.
             for (let action of options.actions)
-                cmd.push("--action=" + action.id + ":" + action.label);
+                cmd.push("--action=" + action.id + "=" + action.label);
         }
 
         if (hasInlineReply) {
