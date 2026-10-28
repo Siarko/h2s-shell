@@ -24,7 +24,8 @@ plumbing only — not the Google API path, and not the shell.
 Turn on `Config.gcal.debug` in `~/.config/h2s_shell/config.json` first; most of these are
 read from the log.
 
-1. **Test suites** — `quickshell -p tests.qml`, every assertion `PASS`. The suite never
+1. **Test suites** — ✅ passed on the host 2026-10-28, 31/31.
+   `quickshell -p tests.qml`, every assertion `PASS`. The suite never
    touched `await`, so it should pass unchanged; it is the regression check for the
    promise chaining the fix relies on (`tests/PromisesTest.qml:168` delayed path, `:178`
    deep chain).
@@ -42,6 +43,11 @@ read from the log.
 5. **Happy path** — click several months forward and back; events, colours and the
    per-day dots should look exactly as before, and creating/editing/deleting an event
    should still refresh its month.
+   Refresh after create confirmed working on the host 2026-10-28. Testing it turned up an
+   unrelated, pre-existing bug: all-day events were saved with `end.date == start.date`,
+   which Google accepts but `_getEventDayKeys` dropped, so they never appeared in the
+   shell. Fixed (exclusive end date on save, zero-length tolerated on read) and verified.
+   Edit and delete still to check.
 
 Tick 1.1's box once these pass. If something fails, the analysis behind the change is in
 [CLEANUP.md](CLEANUP.md) findings #1 and #39.
@@ -71,6 +77,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       the hand-rolled `then()` runs its handler synchronously when the promise is
       already settled (`singletons/Promises.qml:69`), native defers to a microtask; 8 executors
       resolve synchronously. Probe script: `quickshell -p tests/probe.qml`.
+      **Probe result (host, Quickshell 0.3.2, 2026-10-28):** native `Promise` exists and
+      microtasks are drained, but `Promise.allSettled`, `Promise.any` and
+      `Promise.prototype.finally` are all `undefined`, and `async` functions do not parse
+      (`SyntaxError: Expected token ','`). A migration would still need hand-written
+      `allSettled` and `finally`, and would gain no `async`/`await`.
 - [ ] **1.2 Fix `Fetch._printf()`** [#2] — `singletons/network/Fetch.qml:86`
       `typeof args[num] !== undefined` is always true; URLs get the string `undefined`.
 - [ ] **1.3 Add request timeout and error handling to `Fetch`** [#3]

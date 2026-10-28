@@ -284,6 +284,9 @@ Singleton {
             let ep = data.end.date.split("-");
             allDayStartDate = new Date(parseInt(sp[0]), parseInt(sp[1]) - 1, parseInt(sp[2]));
             let endExclusive = new Date(parseInt(ep[0]), parseInt(ep[1]) - 1, parseInt(ep[2]));
+            // Same zero-length case as in _getEventDayKeys: treat end == start as one day
+            if (endExclusive <= allDayStartDate)
+                endExclusive = new Date(allDayStartDate.getFullYear(), allDayStartDate.getMonth(), allDayStartDate.getDate() + 1);
             allDayEndDate = new Date(endExclusive.getTime() - 86400000);
             allDayDuration = (endExclusive.getTime() - allDayStartDate.getTime()) / 86400000;
         }
@@ -436,8 +439,11 @@ Singleton {
             body.start.dateTime = dateStr + "T" + data.startTime + ":00" + tz;
             body.end.dateTime = dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz;
         } else {
+            // Google's all-day end date is exclusive. Sending the start date again creates
+            // a zero-length event that the phone still shows but _getEventDayKeys drops.
+            const nextDay = new Date(data.year, data.month, data.day + 1);
             body.start.date = dateStr;
-            body.end.date = dateStr;
+            body.end.date = _dateKey(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
         }
         body = JSON.stringify(body);
         logger.log("Event data", body);
@@ -486,8 +492,11 @@ Singleton {
             let ep = rawItem.end.date.split('-').map(Number);
             startDate = new Date(sp[0], sp[1] - 1, sp[2]);
             endDate   = new Date(ep[0], ep[1] - 1, ep[2]);
-            // Google Calendar all-day events use an exclusive end date
+            // Google Calendar all-day events use an exclusive end date. Events saved with
+            // end == start (as this shell used to create them) still occupy their start day.
             endDate.setDate(endDate.getDate() - 1);
+            if (endDate < startDate)
+                endDate = new Date(startDate);
         } else {
             return [];
         }
