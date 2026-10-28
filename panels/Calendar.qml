@@ -44,6 +44,17 @@ Item {
     onDisplayMonthChanged: Qt.callLater(_fetchCurrentMonth)
     onDisplayYearChanged:  Qt.callLater(_fetchCurrentMonth)
 
+    // Logging in while the calendar is open changes neither the month nor the year, so
+    // without this the events only appeared after a manual refresh
+    Connections {
+        target: GoogleCalendarAuth
+
+        function onAuthorized(success) {
+            if (success)
+                GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
+        }
+    }
+
     Row {
         anchors.fill: parent
         spacing: 0

@@ -10,11 +10,11 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: 1.1 done** (code complete, awaiting host verification). Next item: 1.2.
+**Status: 1.1 done and verified on the host** (2026-10-28). Next item: 1.5 or 1.2.
 
 ---
 
-## Pending host verification — 1.1
+## Host verification — 1.1 (complete, 2026-10-28)
 
 Written in the dev container, where there is no `quickshell`. Nothing below has been run.
 The logic was checked by loading the real `singletons/Promises.qml` into node and driving
@@ -33,6 +33,18 @@ read from the log.
    `refreshToken`, start the shell, open the calendar, click through months. Before: the
    whole shell stops responding. After: bar and popups keep working, the spinner clears,
    and the log shows the rejection.
+   ✅ Passed on the host 2026-10-28: no freeze, one failed refresh, logout, spinner cleared.
+   It took four more fixes, all found on this path:
+   - `Promises._flatten` overwrote a rejection with the resolved state of a settled chain
+     returned by the executor, so a failed refresh carried on as "Token refreshed".
+     Guarded, with a regression test (`tests/PromisesTest.qml`, test 24).
+   - Every request waiting on the refresh notified and logged out on its own, four
+     interactive notifications at once. `GoogleCalendarAuth` now shares one refresh.
+   - `Notifier` passed `--action=id:label`; notify-send 0.8 wants `id=label`, so the reply
+     was the button index and no action ever matched. Reconnect now works.
+   - Clicking connect again while a login waited on a closed browser tab did nothing;
+     it now restarts the login. And a successful login did not fetch the open month —
+     `panels/Calendar.qml` now does.
 3. **401 self-healing** — the path that was dead until now. Keep a *valid* `refreshToken`,
    corrupt only `accessToken`, and set `tokenExpiry` far in the future so the
    `left < 300` pre-check is bypassed. Expect a 401, then a token refresh, then a retry:
@@ -79,7 +91,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       the dead 401 token refresh in `GoogleCalendarAuth` [#39], and keeps the response
       body off the log message [#32, partial]. The dead day-fetch path went with it:
       `fetchDayEvents()` and its only consumer `fetchCalendarEvents()`, 80 lines.
-      **Still to verify on the host** — steps below.
+      Verified on the host 2026-10-28 — see the steps above.
 - [ ] **1.5 Decide whether to drop the hand-rolled `Promises` library** [#41]
       Starts with a probe on the host, since the engine's native `Promise` and `async`
       support cannot be checked in the container. `Promises` touches only `Fetch.qml`,
@@ -95,6 +107,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `Promise.prototype.finally` are all `undefined`, and `async` functions do not parse
       (`SyntaxError: Expected token ','`). A migration would still need hand-written
       `allSettled` and `finally`, and would gain no `async`/`await`.
+      Counterpoint from the 1.1 verification: the library's own non-standard `_flatten`
+      (adopting a promise *returned* by the executor, which native `Promise` ignores) hid
+      a failed token refresh. Fixed, but it is the kind of bug native semantics rule out.
 - [ ] **1.2 Fix `Fetch._printf()`** [#2] — `singletons/network/Fetch.qml:86`
       `typeof args[num] !== undefined` is always true; URLs get the string `undefined`.
 - [ ] **1.3 Add request timeout and error handling to `Fetch`** [#3]

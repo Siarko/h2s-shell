@@ -41,14 +41,30 @@ Singleton {
             if (!running) {
                 root._handleAuthResult(authProcess.outputBuffer);
                 authProcess.outputBuffer = "";
+                // Started only once the old helper is gone, so its exit cannot be mistaken
+                // for the new one's, and deferred so Process is not restarted from inside
+                // its own running change
+                if (root._restartLogin) {
+                    root._restartLogin = false;
+                    Qt.callLater(root.login);
+                }
             }
         }
     }
 
     // Set by cancelLogin() so the empty output of a killed helper is not reported as an error
     property bool _loginCancelled: false
+    // Set by login() when a login is already running, to start a fresh one once it exits
+    property bool _restartLogin: false
 
     function login() {
+        // A login already running is most likely waiting on a browser tab the user closed,
+        // and would sit there until its timeout. Asking again means starting over.
+        if (authProcess.running) {
+            root._restartLogin = true;
+            root.cancelLogin();
+            return;
+        }
         root._loginCancelled = false;
         authProcess.running = true;
     }
@@ -85,7 +101,25 @@ Singleton {
         }
     }
 
+    // Every request that hits a 401 asks for a refresh, often several at once. They share
+    // one refresh so that a failure notifies and logs out once: a burst of interactive
+    // notifications clobbers Notifier's single callback slot and leaves Reconnect dead.
+    property var _refreshPromise: null
+
     function _refreshToken() {
+        if (root._refreshPromise)
+            return root._refreshPromise;
+        // Local, because finally() runs inline on an already settled promise and would clear
+        // the property before this function returns it
+        const refresh = root._requestTokenRefresh();
+        root._refreshPromise = refresh;
+        refresh.finally(() => {
+            root._refreshPromise = null;
+        });
+        return refresh;
+    }
+
+    function _requestTokenRefresh() {
         let body = "grant_type=" + encodeURIComponent("refresh_token");
         body += "&refresh_token=" + encodeURIComponent(Config.gcal.refreshToken);
         body += "&client_id=" + encodeURIComponent(Config.gcal.clientId);
