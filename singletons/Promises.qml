@@ -14,6 +14,10 @@ Singleton {
             _catchQueue: [],
             _finalQueue: [],
             _flatten: function (promise) {
+                // A settled promise keeps its outcome. Without this guard, an executor that
+                // rejected and then returned an already resolved chain flipped to resolved.
+                if (this._value !== null)
+                    return;
                 if (promise?._isPromiseResult) {
                     this._value = promise._value;
                     this._reject = promise._reject;

@@ -227,5 +227,19 @@ TestCase {
                 assertEqual(result.length, 0, "allSettled zero promises: empty result array");
             }
         }
+
+        // Test 24: an executor that rejects and then returns an already settled chain stays
+        // rejected. GoogleCalendarAuth._refreshToken has this shape; when Fetch handed it an
+        // already rejected request, _flatten copied the chain's resolved state over the
+        // rejection and a failed token refresh carried on as "Token refreshed".
+        {
+            let outcome = null;
+            Promises.create((resolve, reject) => {
+                return Promises.rejected("refresh failed").catch(e => { return reject(e); });
+            }).then(() => { outcome = "resolved"; })
+              .catch(e => { outcome = "rejected: " + e; });
+            assertEqual(outcome, "rejected: refresh failed",
+                "executor rejecting before returning a settled chain stays rejected");
+        }
     }
 }
