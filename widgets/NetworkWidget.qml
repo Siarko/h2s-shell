@@ -10,7 +10,7 @@ PopupWidget {
     // traffic, white = powered on but not connected, dim = off/unavailable.
     Row {
         anchors.centerIn: parent
-        spacing: 5
+        spacing: 9
 
         // Ethernet — hidden when the machine has no managed port at all
         Text {
