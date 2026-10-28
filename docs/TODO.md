@@ -10,7 +10,7 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: 1.1 done and verified on the host** (2026-10-28). Next item: 1.5 or 1.2.
+**Status: 1.1, 1.5 and 1.2 done** (2026-10-28). Next item: 1.3, a timeout and error handling for `Fetch`.
 
 ---
 
@@ -92,7 +92,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       body off the log message [#32, partial]. The dead day-fetch path went with it:
       `fetchDayEvents()` and its only consumer `fetchCalendarEvents()`, 80 lines.
       Verified on the host 2026-10-28 — see the steps above.
-- [ ] **1.5 Decide whether to drop the hand-rolled `Promises` library** [#41]
+- [x] **1.5 Decide whether to drop the hand-rolled `Promises` library** [#41]
+      **Decided 2026-10-28: keep it.** Native `Promise` would still need hand-written
+      `allSettled` and `finally`, brings no `async`, and its deferred callbacks would
+      reorder the calendar code that was just verified on the host. The probe script is
+      deleted.
       Starts with a probe on the host, since the engine's native `Promise` and `async`
       support cannot be checked in the container. `Promises` touches only `Fetch.qml`,
       `GoogleCalendar.qml` and `GoogleCalendarAuth.qml`, uses 4 API functions, and no
@@ -101,7 +105,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       (`Promises.qml` 182 + `PromisesTest.qml` 231). Watch the semantic difference:
       the hand-rolled `then()` runs its handler synchronously when the promise is
       already settled (`singletons/Promises.qml:69`), native defers to a microtask; 8 executors
-      resolve synchronously. Probe script: `quickshell -p tests/probe.qml`.
+      resolve synchronously. The probe script (`tests/probe.qml`) is deleted; results below.
       **Probe result (host, Quickshell 0.3.2, 2026-10-28):** native `Promise` exists and
       microtasks are drained, but `Promise.allSettled`, `Promise.any` and
       `Promise.prototype.finally` are all `undefined`, and `async` functions do not parse
@@ -110,14 +114,16 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Counterpoint from the 1.1 verification: the library's own non-standard `_flatten`
       (adopting a promise *returned* by the executor, which native `Promise` ignores) hid
       a failed token refresh. Fixed, but it is the kind of bug native semantics rule out.
-- [ ] **1.2 Fix `Fetch._printf()`** [#2] — `singletons/network/Fetch.qml:86`
+- [x] **1.2 Fix `Fetch._printf()`** [#2] — `singletons/network/Fetch.qml:86`
       `typeof args[num] !== undefined` is always true; URLs get the string `undefined`.
+      Fixed; a missing argument now leaves its `{n}` placeholder in place. Covered by
+      `tests/FetchTest.qml`, which fails against the old code.
 - [ ] **1.3 Add request timeout and error handling to `Fetch`** [#3]
       `singletons/network/Fetch.qml:20-82` — no `xhr.timeout`, no `ontimeout`/`onerror`,
       so a hung request wedges its dedup id for the rest of the session.
 - [ ] **1.4 Add test suites for the pure parsers** [#38]
       `NetworkManager._processStatus`, `WifiManager._processWifiList`, `IpManager._parse`,
-      `Fetch._printf`, `LinkSpeed._update`, `GoogleCalendar._getEventDayKeys`. These are
+      `Fetch._printf` (done with 1.2), `LinkSpeed._update`, `GoogleCalendar._getEventDayKeys`. These are
       pure functions and were the source of several bugs found in the review.
       Add one for `Promises.allSettled` ordering too [#40] — the existing assertions only
       cover synchronously settled promises, so they pass on a guarantee the code does not

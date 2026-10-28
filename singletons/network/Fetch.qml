@@ -97,7 +97,9 @@ Singleton {
 
     function _printf(format, args) {
         return format.replace(/{(\d+)}/g, (match, num) => {
-            return typeof args[num] !== undefined ? args[num] : match;
+            // typeof yields a string; compared with the value undefined it was always unequal,
+            // so a missing argument put the text "undefined" into the URL
+            return typeof args[num] !== "undefined" ? args[num] : match;
         });
     }
 }
