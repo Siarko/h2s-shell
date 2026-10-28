@@ -1,176 +1,221 @@
-# Plan: user-configurable, condition-driven polling rates
+# Plan: shell profiles, and polling rates as their first use
 
-Status: **proposal, not started** (written 2026-10-28, to be continued 2026-10-29).
-Replaces TODO 5.3 ("gate polling on whether anything is observing it") and absorbs 5.4
-(cava frame rate). Open questions for the user are at the end — settle those first.
+Status: **design agreed 2026-10-28, not started.** Replaces TODO 5.3 ("gate polling on
+whether anything is observing it") and absorbs 5.4 (cava frame rate).
 
 ## Why
 
 TODO 5.3 offered three fixed behaviours: always poll, poll only while watched, or a
 fast/slow split. The user's call: none of them should be hard-coded. On a laptop on
-battery they may want the minimum; plugged in, full-rate graphs. So the rates are
-configuration, and which set of rates applies is chosen by conditions.
+battery they may want the minimum; plugged in, full-rate graphs.
+
+The user's further direction (2026-10-28): this is the first use of a general feature —
+**shell profiles**. A profile is a named list of setting overrides, activated by
+conditions. Later profiles will reach many settings across the shell, with a richer
+condition engine; for now they only need to cover polling rates and the system power
+profile, but the design must not need reworking when they grow.
 
 Where things stand after 5.1 and 5.2 (measured on the desktop, 2026-10-28): the shell
 idles at ~0.6% of one core and ~25 main-thread wakeups/s. About 10 of those wakeups are
 the GPU load sampling (200 ms, two cards); the Framework 12's Intel GPU has no amdgpu
-counters, so it will not have that cost. The rest are the hardware sources, link speed,
-the clock, and whatever is animating.
+counters, so it will not have that cost.
+
+## Decisions (2026-10-28)
+
+1. **Categories** of polling, each with its own rate: `hardware` (CPU, RAM, GPU load,
+   VRAM), `temperatures` (CPU and GPU), `disk`, `network` (link throughput),
+   `visualizer` (cava fps).
+2. **No built-in watched/background split.** "A panel is open" is a condition like any
+   other; a profile activated by it raises the rate. One mechanism, not two.
+3. **Conditions**: a structured engine that will grow. Format is a tree from the start;
+   v1 facts are the four below plus fullscreen.
+4. **The shell may set the system power profile**, as a profile setting. The power
+   widget that will expose profile switching comes later.
+5. **Shipped profiles**: the base configuration *is* "Full" (today's rates). One shipped
+   profile, **Power save**, activated on battery.
+6. **Settings UI**: a global **Profiles** page; base values stay on ordinary settings
+   pages. Both edit settings through one schema registry.
 
 ## What polls today
 
-| Poller | File | Rate | Feeds a graph |
+| Poller | File | Rate | Category |
 |---|---|---|---|
-| CPU, RAM | `singletons/hardware/{Cpu,Ram}Source.qml` | 2 s | yes |
-| CPU temperature | `singletons/hardware/CpuTempSource.qml` | 5 s | yes |
-| Disk (`df`, a process) | `singletons/hardware/DiskSource.qml` | 10 s | yes |
-| GPU load, per card | `singletons/hardware/GpuLoadSource.qml` | 2 s tick, 200 ms samples | yes |
-| VRAM, GPU temperature, per card | `GpuMemorySource.qml`, `GpuTemperatureSource.qml` | 2 s | yes |
-| Link throughput, per link | `singletons/network/LinkSpeed.qml` | 2 s while the link is up | yes |
-| Network fallback poll | `NetworkManager`, `WifiManager`, `VpnManager`, `IpManager` | 60 s (events do the rest) | no |
-| Wi-Fi scan | `singletons/network/WifiManager.qml` | 5 s, only while the panel is open | no |
-| Music position | `singletons/Music.qml` | 1 s, only while playing | no |
-| cava visualiser | `singletons/Music.qml` / CLEANUP #23 | 60 fps while playing | no |
+| CPU, RAM | `singletons/hardware/{Cpu,Ram}Source.qml` | 2 s | hardware |
+| GPU load, per card | `singletons/hardware/GpuLoadSource.qml` | 2 s tick, 200 ms samples | hardware |
+| VRAM, per card | `singletons/hardware/GpuMemorySource.qml` | 2 s | hardware |
+| CPU temperature | `singletons/hardware/CpuTempSource.qml` | 5 s | temperatures |
+| GPU temperature, per card | `singletons/hardware/GpuTemperatureSource.qml` | 2 s | temperatures |
+| Disk (`df`, a process) | `singletons/hardware/DiskSource.qml` | 10 s | disk |
+| Link throughput, per link | `singletons/network/LinkSpeed.qml` | 2 s while the link is up | network |
+| cava visualiser | `singletons/Music.qml` / CLEANUP #23 | 60 fps while playing | visualizer |
 
-Event-driven already, out of scope: workspaces, notifications, tray, audio, network
-state (NetworkEvents), MPRIS metadata.
+Not categories, stay fixed: the network fallback poll (60 s; events do the work), the
+Wi-Fi scan (5 s, only while the panel is open), music position (1 s, only while
+playing). Event-driven already: workspaces, notifications, tray, audio, network state,
+MPRIS metadata.
 
 ## Concepts
 
-**Category** — a group of pollers that share a rate. Proposed:
-`hardware` (CPU, RAM, GPU load/VRAM, temperatures), `disk`, `network` (link
-throughput), `visualizer` (cava fps). Fine enough for "graphs fast, disk slow", coarse
-enough for a settings page that fits on screen. The network fallback, Wi-Fi scan and
-music position stay fixed — they are already cheap or already gated.
+### Setting schema
 
-**Watched / background** — a poller is *watched* while something on screen shows it: its
-popup panel is open, or it is in the bar capsule. Otherwise it runs in the *background*.
-Every category has two rates, one per state. "Paused" is a valid background rate.
+A registry of the settings profiles may override, `singletons/SettingsSchema.qml`
+(name open). Each entry:
 
-**Profile** — a named set of rates: for each category, the watched interval and the
-background interval (or paused), plus the GPU sampling mode (averaged 200 ms samples vs
-one sample per tick). Shipped presets, editable and extendable by the user:
+```
+{ key: "polling.hardware.interval", label: "Hardware", group: "Polling",
+  type: "interval", min: 0, max: 60000, default: 2000 }
+```
 
-| Profile | hardware watched / bg | disk | network | GPU sampling | visualizer |
-|---|---|---|---|---|---|
-| Full (= today) | 2 s / 2 s | 10 s / 10 s | 2 s / 2 s | averaged | 60 fps |
-| Balanced | 2 s / 10 s | 30 s / 60 s | 2 s / 10 s | averaged when watched | 30 fps |
-| Saver | 5 s / paused | 60 s / paused | 5 s / paused | single sample | 15 fps or off |
+`type` drives the editor widget (interval picker with "paused" = 0, enum dropdown,
+bool, number). The defaults are today's values, so an empty config behaves exactly as
+the shell does now.
 
-The numbers are a starting point, not a decision.
+v1 keys:
 
-**Rules** — an ordered list; the first rule whose conditions all hold picks the profile,
-and a final default rule always matches. Conditions are a fixed vocabulary, not an
-expression language, so the settings UI can be a list of dropdowns:
+| Key | Type | Default |
+|---|---|---|
+| `polling.hardware.interval` | interval | 2000 |
+| `polling.hardware.gpuSampling` | enum `averaged` / `single` | `averaged` |
+| `polling.temperatures.interval` | interval | 2000 (CPU temp moves from 5 s to this — or keep 5000; decide) |
+| `polling.disk.interval` | interval | 10000 |
+| `polling.network.interval` | interval | 2000 |
+| `polling.visualizer.fps` | number | 60 |
+| `system.powerProfile` | enum `unchanged` / `power-saver` / `balanced` / `performance` | `unchanged` |
 
-- power source: on battery / on AC — `UPower.onBattery`
-- battery level below N % — `UPower.displayDevice.percentage`
-- system power profile: power-saver / balanced / performance —
-  `PowerProfiles.profile` (power-profiles-daemon; follows the user's existing choice)
-- screen locked or screensaver active — the shell knows this itself (`Lockscreen`)
+### Profile
 
-Example: `on battery AND battery < 20 % → Saver`, `on battery → Balanced`,
-`default → Full`.
+```
+{ name: "Power save",
+  enabled: true,
+  when: { all: [ { fact: "power.onBattery", is: true } ] },
+  set:  { "polling.hardware.interval": 10000,
+          "polling.hardware.gpuSampling": "single",
+          "polling.temperatures.interval": 30000,
+          "polling.disk.interval": 0,
+          "polling.network.interval": 10000,
+          "polling.visualizer.fps": 15,
+          "system.powerProfile": "power-saver" } }
+```
 
-All of these are signals, not polls: Quickshell's `Quickshell.Services.UPower` exposes
-`onBattery`, `displayDevice` and `PowerProfiles`, checked on the host 2026-10-28.
+Only the keys a profile sets are overridden; everything else falls through.
 
-## Design
+**Layering.** Several profiles can match at once. Profiles are an ordered list, and the
+effective value of a key is the base value overlaid by every active profile in order —
+a later profile wins a conflict. The user reorders the list in the UI. (Same model as
+CSS: base, then cascading layers.)
 
-### `singletons/Activity.qml` (name open)
+### Conditions
 
-The one place that knows the current profile and hands out rates.
+A tree, so the engine can grow without migrating stored profiles:
 
-- Reads profiles and rules from config, evaluates the rules against the condition
-  inputs, exposes `activeProfile` (name) and `reason` (which rule matched, for the UI).
-- `interval(category, watched)` — the interval in ms, or 0 for paused. Pure function of
-  the active profile, so a `Timer` binds to it and follows changes immediately.
-- The rule evaluation is a pure function, `resolveProfile(rules, conditions)`, so it can
-  be unit-tested without a battery.
-- A debug override ("simulate: on battery, 15 %") in settings, so the rules can be tested
-  on the desktop, which has no battery.
+- `{ all: [...] }`, `{ any: [...] }`, `{ not: {...} }`
+- leaf: `{ fact: "<name>", is: <value> }` or `{ fact: "<name>", lt: <n> }` / `gt`
+- an empty or missing `when` means "always" — a profile that is just switched on
 
-### Watching
+v1 facts, all signals rather than polls:
 
-A small component, `PollingWatch { category: "hardware" }`, placed inside a panel or
-widget: it registers on creation and unregisters on destruction, so Activity keeps a
-count per category (or per source id, for the capsule, which shows individual sources).
-Popup content is created per open and destroyed on close, so this needs no extra wiring.
+| Fact | Source |
+|---|---|
+| `power.onBattery` | `UPower.onBattery` |
+| `battery.percent` | `UPower.displayDevice.percentage` |
+| `power.profile` | `PowerProfiles.profile` (power-profiles-daemon) |
+| `screen.locked` | the shell's own `Lockscreen` state |
+| `window.fullscreen` | Hyprland: the focused window on any monitor is fullscreen |
+| `panel.open` | which popup content is open (`hardware`, `network`, …) — replaces "watched" |
 
-Granularity question: per category is simpler; per source lets the capsule keep only the
-sources it shows at the watched rate. Proposal: per source id, with a category fallback.
+Checked on the host 2026-10-28: `Quickshell.Services.UPower` exposes `onBattery`,
+`displayDevice` and `PowerProfiles` (with `PowerProfileHold`).
 
-### Sources
+v1 UI edits only a flat `all` list of leaves; the stored format already allows nesting.
 
-Each source's `Timer` binds `interval` and `running` to `Activity.interval(...)`
-instead of a literal. Paused → `running: false`. Switching rate does not reset history.
+**Feedback loops.** A profile that sets `system.powerProfile` must not be activated by
+`power.profile`, or it can flip itself. v1: the resolver ignores `power.profile` changes
+caused by the shell's own hold — or simpler, the UI refuses to save a profile that both
+reads `power.profile` and sets `system.powerProfile`. Decide when implementing.
 
-`GpuLoadSource` takes its sampling mode from the profile: averaged (the 200 ms sampler
-runs) or single sample per tick (it does not).
+### `singletons/Profiles.qml`
+
+- Owns the fact values (binding to UPower, Lockscreen, Hyprland, Popup state).
+- Evaluates every profile's `when` with a pure function `matches(condition, facts)`,
+  exposes `activeProfiles` (names, in order) and, per key, which profile set it — the UI
+  shows "polling.disk.interval: paused (Power save)".
+- `value(key)` returns the effective value: last active profile that sets it, else the
+  base value from config, else the schema default. Reactive — bindings follow profile
+  changes immediately.
+- A **simulate** override for facts ("on battery, 15 %"), so profiles can be tested on
+  the desktop, which has no battery.
+- `system.powerProfile`: while the effective value is not `unchanged`, hold a
+  `PowerProfileHold` with that profile; released when it changes back.
+
+Pure functions (`matches`, the overlay) get a test suite, like `CalendarDates`.
+
+### Consumers
+
+Each source's `Timer` binds `interval` to `Profiles.value("polling.<category>.interval")`
+and `running` to "interval > 0" (plus its own existing gates). `GpuLoadSource` runs its
+200 ms sampler only when `gpuSampling` is `averaged`.
 
 ### History and graphs
 
-- History stays continuous whenever the background rate is not paused; samples are simply
-  further apart, and `HistoryChart` already places points by timestamp.
-- When paused, there is a real gap. `HistoryChart` currently draws a straight line across
-  it, which looks like data. It should break the line where consecutive samples are much
-  further apart than the rate they were taken at — store the interval with each sample
-  (`{ t, v, dt }`) or break on a gap larger than, say, 3× the slowest configured rate.
-- Coming back to watched after a pause: take a sample immediately (`triggeredOnStart`
-  semantics on rate change), so the graph does not wait a full interval.
+- Slower sampling keeps history continuous; `HistoryChart` places points by timestamp.
+- Paused (interval 0) leaves a real gap. `HistoryChart` currently draws a straight line
+  across it, which looks like data: store the interval with each sample (`{ t, v, dt }`)
+  and break the line where the gap is much longer than `dt`.
+- On a rate change, sample at once rather than waiting a full new interval.
 - CPU usage and link speed are deltas: after a pause, the first sample only re-establishes
-  the baseline (LinkSpeed already does this via `_reset()`; CpuSource needs the same), so a
-  10-minute average does not show up as a single point.
+  the baseline (LinkSpeed already does this via `_reset()`; CpuSource needs the same).
+- The capsule on the bar shows live values: if a profile pauses a category the capsule
+  shows, its values freeze. Acceptable — it is the user's profile — but the settings UI
+  should say so next to "paused".
 
 ### Config
 
-`Config.polling` holding `profiles` and `rules`. These are dynamic maps and lists, which
-the config currently stores as JSON strings (like `widgetProfiles`) — CLEANUP #11, the
-config/JSON rework, is the proper fix and is in Stage 6. Proposal: follow the existing
-pattern now, migrate with #11.
+`Config.profiles` (the ordered list) and `Config.settings` (base values for schema keys
+that are not already elsewhere in the config). Dynamic structures are stored as JSON
+strings, as `widgetProfiles` is today; CLEANUP #11 (the config/JSON rework, Stage 6) is
+the proper fix, and these move with it.
 
-**Host behaviour must not change** (see memory "preserve host behaviour"): with no
-`polling` section in the config, the result is a single rule `default → Full`, and Full
-equals today's rates exactly.
+**Host behaviour must not change**: with no `profiles` in the config, nothing is
+overridden. The shipped "Power save" only activates on battery, which the desktop never
+is. (Seeding it into a config: on first run when `profiles` is absent — decide whether
+the shipped profile is written to config or kept as a built-in that can be disabled.)
 
 ### Settings UI
 
-A new settings page, "Performance" (name open):
-
-- Current state on top: active profile and why ("Balanced — on battery").
-- Rules: an ordered list, each row "conditions → profile", add/remove/reorder; the last
-  row is the default and cannot be removed.
-- Profiles: one card per profile, a row per category with watched and background rate
-  pickers (dropdowns of sensible values, including "paused"), plus GPU sampling and
-  visualiser fps. Duplicate / rename / delete; the shipped presets can be reset.
-- The simulate override for testing.
+- **Profiles** page (new, global): the ordered profile list with enable switches and
+  drag to reorder; per profile, its conditions (flat list of fact / comparison / value
+  rows) and its overrides (pick a setting from the schema, set its value with the
+  schema's editor). Top of the page: what is active right now and why. The simulate
+  override lives here.
+- Base values: the polling rates get a section on an existing page (or a small
+  "Performance" page), edited through the same schema editors.
 
 ## Implementation order
 
-1. `Activity` with the shipped profiles hard-coded, the `Full` default, the pure
-   resolver, and tests for it. No UI, no config. Sources bind to it. Verify nothing
-   changed on the host.
-2. Watching (`PollingWatch`) in the hardware panel, network panel and hardware capsule.
-3. Graph gap handling and baseline reset after a pause.
-4. Conditions: UPower, power profile, lock state; the simulate override.
-5. Config: `Config.polling`, read and written by Activity.
-6. Settings page.
-7. Visualiser fps (TODO 5.4) as a category.
-8. Disk interval: independent quick win — 10 s → 60 s in `Full` is worth discussing
-   even before any of this, since disk usage barely moves.
+1. `SettingsSchema` with the v1 keys and today's defaults; `Profiles` with `value()`
+   returning base/default only; sources bind to it. Verify on the host that nothing
+   changed.
+2. The condition engine and overlay as pure functions, with tests; `Profiles` evaluates
+   profiles from a hard-coded list.
+3. Facts: UPower, battery, power profile, lock, fullscreen, open panel; the simulate
+   override.
+4. Graph gap handling and the delta baseline reset.
+5. Config storage for profiles and base values; the shipped "Power save".
+6. `system.powerProfile` via `PowerProfileHold`, with the loop guard.
+7. Profiles settings page; base polling rates in settings.
+8. Visualiser fps (TODO 5.4) wired to `polling.visualizer.fps`.
 
-Each step is shippable on its own and verifiable on the desktop; step 4 needs the
-simulate override, or the laptop.
+Each step is shippable alone and verifiable on the desktop (steps 3 and 6 through the
+simulate override, or the laptop).
 
-## Open questions for the user
+Independent quick win, any time: disk usage barely moves, so its default could go from
+10 s to 60 s — but that changes host behaviour, so only with the user's say-so.
 
-1. Categories: are `hardware`, `disk`, `network`, `visualizer` the right split, or should
-   e.g. temperatures be separate from load?
-2. Watched/background per category — or is one rate per category per profile enough,
-   with "pause in background" as a single switch?
-3. Conditions: is the list complete? Candidates not listed: a specific monitor connected
-   (docked), time of day, fullscreen app focused.
-4. Should the shell also *set* the system power profile, or only follow it? (Proposal:
-   only follow; setting it is a different feature.)
-5. Preset names and numbers — Full / Balanced / Saver as above?
-6. Settings page name and place in the settings navigation.
+## Still open
+
+- CPU temperature: keep its 5 s, or join GPU temperature at one `temperatures` rate.
+- Shipped "Power save": written into the config on first run, or a built-in that can be
+  disabled and copied.
+- Loop guard for `system.powerProfile` (see Conditions).
+- Whether base polling rates get their own small settings page or a section on an
+  existing one.
