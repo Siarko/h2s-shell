@@ -1,3 +1,9 @@
 /.devcontainer
-./crashes
-./crashes/*
+
+# Crash dumps. The previous patterns used a "./" prefix, which gitignore does not
+# understand, so nothing was actually being ignored.
+/crashes/
+
+# Machine-local Claude Code settings (permission grants). Hidden by a global ignore
+# inside the dev container, but not necessarily on the host.
+/.claude/
