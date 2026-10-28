@@ -136,8 +136,10 @@ Singleton {
         let result = Promises.create((resolve, reject) => {
             resolver = resolve;
         });
-        let tryResolve = function (r) {
-            results.push(r);
+        // Each result goes to its promise's index: pushing in settlement order scrambled
+        // the results whenever the promises settled in a different order than given
+        let tryResolve = function (index, r) {
+            results[index] = r;
             promiseCount--;
             if (promiseCount === 0) {
                 resolver(results);
@@ -154,19 +156,19 @@ Singleton {
             return result;
         }
 
-        for (const promise of promiseStack) {
+        promiseStack.forEach((promise, index) => {
             promise.then(r => {
-                tryResolve({
+                tryResolve(index, {
                     status: true,
                     value: r
                 });
             }).catch(r => {
-                tryResolve({
+                tryResolve(index, {
                     status: false,
                     reason: r
                 });
             });
-        }
+        });
         return result;
     }
 }

@@ -241,5 +241,29 @@ TestCase {
             assertEqual(outcome, "rejected: refresh failed",
                 "executor rejecting before returning a settled chain stays rejected");
         }
+
+        // Test 25: allSettled keeps input order when promises settle out of order. The
+        // earlier allSettled tests only use promises that are already settled, which
+        // settle in input order by construction, so they could not catch this.
+        {
+            let result = null;
+            let resolveFirst = null;
+            let rejectSecond = null;
+            let resolveThird = null;
+            Promises.allSettled(
+                Promises.create(resolve => { resolveFirst = resolve; }),
+                Promises.create((resolve, reject) => { rejectSecond = reject; }),
+                Promises.create(resolve => { resolveThird = resolve; })
+            ).then(results => { result = results; });
+            resolveThird("third");
+            rejectSecond("second");
+            resolveFirst("first");
+            assert(result !== null, "allSettled out of order: resolved");
+            if (result !== null) {
+                assert(result[0].status === true && result[0].value === "first", "allSettled out of order: entry 0 is the first promise");
+                assert(result[1].status === false && result[1].reason === "second", "allSettled out of order: entry 1 is the second promise");
+                assert(result[2].status === true && result[2].value === "third", "allSettled out of order: entry 2 is the third promise");
+            }
+        }
     }
 }
