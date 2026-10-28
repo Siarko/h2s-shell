@@ -23,18 +23,23 @@ counters, so it will not have that cost.
 ## Decisions (2026-10-28)
 
 1. **Categories** of polling, each with its own rate: `hardware` (CPU, RAM, GPU load,
-   VRAM), `temperatures` (CPU and GPU), `disk`, `network` (link throughput),
-   `visualizer` (cava fps).
+   VRAM), `temperatures` (every temperature, CPU and GPU, at one rate), `disk`,
+   `network` (link throughput), `visualizer` (cava fps).
 2. **No built-in watched/background split.** "A panel is open" is a condition like any
    other; a profile activated by it raises the rate. One mechanism, not two.
 3. **Conditions**: a structured engine that will grow. Format is a tree from the start;
    v1 facts are the four below plus fullscreen.
 4. **The shell may set the system power profile**, as a profile setting. The power
    widget that will expose profile switching comes later.
-5. **Shipped profiles**: the base configuration *is* "Full" (today's rates). One shipped
-   profile, **Power save**, activated on battery.
-6. **Settings UI**: a global **Profiles** page; base values stay on ordinary settings
-   pages. Both edit settings through one schema registry.
+5. **Every profile is a config entry** the user can edit, reorder and delete. The config
+   starts with one profile, **Full** (no condition, today's values). Behind them sits a
+   read-only **system profile** — the schema defaults — which is what applies when the
+   user has deleted every profile. (Whether "Power save" is also seeded: see Still open.)
+6. **Settings UI**: a global **Profiles** page for profiles, their conditions and order;
+   a **Performance** section for the polling rates. Both edit through one schema
+   registry.
+7. **Loop guard**: the UI refuses to save a profile that both reads `power.profile` and
+   sets `system.powerProfile`, and says why.
 
 ## What polls today
 
@@ -76,7 +81,7 @@ v1 keys:
 |---|---|---|
 | `polling.hardware.interval` | interval | 2000 |
 | `polling.hardware.gpuSampling` | enum `averaged` / `single` | `averaged` |
-| `polling.temperatures.interval` | interval | 2000 (CPU temp moves from 5 s to this — or keep 5000; decide) |
+| `polling.temperatures.interval` | interval | 2000 — CPU temperature was 5 s, GPU 2 s; one rate now, so CPU temperature reads more often than before |
 | `polling.disk.interval` | interval | 10000 |
 | `polling.network.interval` | interval | 2000 |
 | `polling.visualizer.fps` | number | 60 |
@@ -100,9 +105,17 @@ v1 keys:
 Only the keys a profile sets are overridden; everything else falls through.
 
 **Layering.** Several profiles can match at once. Profiles are an ordered list, and the
-effective value of a key is the base value overlaid by every active profile in order —
-a later profile wins a conflict. The user reorders the list in the UI. (Same model as
-CSS: base, then cascading layers.)
+effective value of a key is the system profile overlaid by every active profile in
+order — a later profile wins a conflict. The user reorders the list in the UI. (Same
+model as CSS: defaults, then cascading layers.)
+
+**System profile.** Built in, read-only, not in the config: every schema key at its
+default. It is always the bottom layer, so a key no profile sets has a value, and it is
+the whole story once the user deletes every profile.
+
+**Full.** The profile the config starts with: no condition (always active), setting
+today's values explicitly, so they are visible and editable as a profile rather than
+hidden defaults.
 
 ### Conditions
 
@@ -139,8 +152,8 @@ reads `power.profile` and sets `system.powerProfile`. Decide when implementing.
 - Evaluates every profile's `when` with a pure function `matches(condition, facts)`,
   exposes `activeProfiles` (names, in order) and, per key, which profile set it — the UI
   shows "polling.disk.interval: paused (Power save)".
-- `value(key)` returns the effective value: last active profile that sets it, else the
-  base value from config, else the schema default. Reactive — bindings follow profile
+- `value(key)` returns the effective value: the last active profile that sets it, else
+  the schema default (the system profile). Reactive — bindings follow profile
   changes immediately.
 - A **simulate** override for facts ("on battery, 15 %"), so profiles can be tested on
   the desktop, which has no battery.
@@ -170,15 +183,14 @@ and `running` to "interval > 0" (plus its own existing gates). `GpuLoadSource` r
 
 ### Config
 
-`Config.profiles` (the ordered list) and `Config.settings` (base values for schema keys
-that are not already elsewhere in the config). Dynamic structures are stored as JSON
-strings, as `widgetProfiles` is today; CLEANUP #11 (the config/JSON rework, Stage 6) is
-the proper fix, and these move with it.
+`Config.profiles`, the ordered list, stored as a JSON string as `widgetProfiles` is
+today; CLEANUP #11 (the config/JSON rework, Stage 6) is the proper fix, and it moves
+with that. When the key is absent (first run, or a config from before profiles) it is
+seeded with Full. An empty list is different from an absent one: it means the user
+deleted everything, and the system profile applies.
 
-**Host behaviour must not change**: with no `profiles` in the config, nothing is
-overridden. The shipped "Power save" only activates on battery, which the desktop never
-is. (Seeding it into a config: on first run when `profiles` is absent — decide whether
-the shipped profile is written to config or kept as a built-in that can be disabled.)
+**Host behaviour must not change**: Full and the system profile both equal today's
+rates — except the temperatures, now one rate (see the schema table).
 
 ### Settings UI
 
@@ -187,8 +199,11 @@ the shipped profile is written to config or kept as a built-in that can be disab
   rows) and its overrides (pick a setting from the schema, set its value with the
   schema's editor). Top of the page: what is active right now and why. The simulate
   override lives here.
-- Base values: the polling rates get a section on an existing page (or a small
-  "Performance" page), edited through the same schema editors.
+- **Performance** section: the polling rates (every `polling.*` key), edited with the
+  schema editors. It edits one profile at a time, chosen at the top of the section
+  (Full by default), and marks values that a later active profile overrides. This is the
+  pattern every settings page can adopt once profiles reach more settings: a page is a
+  view of a schema group, editing the chosen profile.
 
 ## Implementation order
 
@@ -213,9 +228,5 @@ Independent quick win, any time: disk usage barely moves, so its default could g
 
 ## Still open
 
-- CPU temperature: keep its 5 s, or join GPU temperature at one `temperatures` rate.
-- Shipped "Power save": written into the config on first run, or a built-in that can be
-  disabled and copied.
-- Loop guard for `system.powerProfile` (see Conditions).
-- Whether base polling rates get their own small settings page or a section on an
-  existing one.
+- Is "Power save" (on battery) seeded alongside Full, or does the user create it?
+- Does the Performance section edit a chosen profile (proposed above), or only Full?
