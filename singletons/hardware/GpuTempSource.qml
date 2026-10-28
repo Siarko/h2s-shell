@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.hardware
 
 Singleton {
     id: root
@@ -13,12 +14,13 @@ Singleton {
     property real value: 0
     property real minValue: 0
     property real maxValue: 110
-    property bool available: true
+    property bool available: GpuDevice.available && _readable
     property var history: []
     property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: false
 
+    property bool _readable: true
     property bool _checked: false
 
     function _appendHistory(v) {
@@ -30,7 +32,9 @@ Singleton {
     Timer {
         id: _timer
         interval: 2000
-        running: true
+        // Same gate as GpuSource: wait for the card to be picked, and read the
+        // hwmon that hangs off that card rather than whichever is card0.
+        running: GpuDevice.path !== "" && root._readable
         repeat: true
         triggeredOnStart: true
         onTriggered: if (!_proc.running) _proc.running = true
@@ -40,7 +44,7 @@ Singleton {
         id: _proc
         // Glob expansion via sh; temperature in millidegrees Celsius
         command: ["sh", "-c",
-            "cat /sys/class/drm/card0/device/hwmon/hwmon*/temp1_input 2>/dev/null | head -1"]
+            "cat '" + GpuDevice.path + "'/hwmon/hwmon*/temp1_input 2>/dev/null | head -1"]
         property string _buf: ""
 
         stdout: SplitParser {
@@ -55,8 +59,7 @@ Singleton {
                     root.value = Math.round(raw / 1000)
                     root._appendHistory(root.value)
                 } else if (!root._checked) {
-                    root.available = false
-                    _timer.running = false
+                    root._readable = false
                 }
                 root._checked = true
                 _proc._buf = ""
