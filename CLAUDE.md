@@ -20,6 +20,8 @@ Read these before making structural changes:
 - **[docs/CLEANUP.md](docs/CLEANUP.md)** — the known-problems backlog, prioritised, with
   file:line references. Check this before "fixing" something — it may already be filed,
   with the analysis done.
+- **[docs/TODO.md](docs/TODO.md)** — the cleanup checklist derived from it, in the agreed
+  order, with the current progress. Start here when resuming cleanup work.
 - **[docs/quickshell-integration.md](docs/quickshell-integration.md)** — the `pttd`
   dictation daemon's socket protocol.
 
