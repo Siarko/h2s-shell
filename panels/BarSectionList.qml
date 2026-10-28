@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
 Item {
@@ -24,20 +25,7 @@ Item {
     onWidgetProfilesChanged: if (!_rowList.dragging) _rowList.workingProfiles = widgetProfiles ? widgetProfiles.slice() : []
 
     function displayName(type) {
-        return ({
-            "power": "Power",
-            "settings": "Settings",
-            "workspaces": "Workspaces",
-            "clock": "Clock",
-            "music": "Music",
-            "sound": "Sound",
-            "bluetooth": "Bluetooth",
-            "tray": "System Tray",
-            "network": "Network",
-            "notifications": "Notifications",
-            "hardware": "Hardware",
-            "stt": "Dictation"
-        })[type] ?? type
+        return WidgetRegistry.displayName(type)
     }
 
     Column {
@@ -377,9 +365,10 @@ Item {
                         }
 
                         Repeater {
-                            model: {
-                                var all = ["power", "settings", "workspaces", "clock", "music", "sound", "bluetooth", "tray", "network", "notifications", "hardware", "stt"]
-                                return all.filter(t => !_rowList.workingList.includes(t))
+                            // ScriptModel, never the bare array — see "The Repeater crash"
+                            // in docs/ARCHITECTURE.md
+                            model: ScriptModel {
+                                values: WidgetRegistry.types.filter(t => !_rowList.workingList.includes(t))
                             }
 
                             Item {

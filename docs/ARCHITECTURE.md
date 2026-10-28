@@ -141,8 +141,9 @@ Config.bar.content.left         = ["power", "settings", "workspaces"]
 Config.bar.content.leftProfiles = "[]"        // JSON array, index-aligned with the above
 ```
 
-`Bar._zipModel()` merges the two into `[{ type, profile }]`, a `Repeater` drives a
-`Loader` per entry, and `Bar._widgetMap` maps the type string to a `Component`.
+`Bar._zipModel()` merges the two into `[{ type, profile }]`, a `Repeater` over a
+`ScriptModel` drives a `Loader` per entry, and the `Loader` gets the widget's file from
+`WidgetRegistry.widgetUrl(type)`.
 
 A *profile* is a named per-instance override, so the same widget type can appear twice
 on the bar with different settings (two clocks with different formats, two hardware
@@ -154,10 +155,44 @@ There is exactly one popup window per Bar. `panels/Popup.qml` is a `LazyLoader` 
 a full-screen transparent `PanelWindow` whose `mask: Region` restricts input to the
 visible card, so the rest of the screen stays click-through. `open(element, persistent,
 contentType)` records the trigger cell's x position and width, `contentType` selects the
-panel from `Popup._componentMap`, and the card animates its height from 0.
+panel — from `Popup._componentMap` for the two that need wiring, otherwise by URL from
+`WidgetRegistry.popupPanelUrl()` — and the card animates its height from 0.
 
 `persistent: true` means click-to-close; `persistent: false` means the popup closes as
 soon as the pointer leaves it, via `HoverHandler`.
+
+### The Repeater crash
+
+For months the shell crashed at random — a SIGSEGV, usually when a popup opened. It was
+traced in May 2026 to a Qt 6.11 regression in `QQmlDelegateModel`, the model behind every
+`Repeater`. Two rules come out of it, and both are load-bearing.
+
+**What happens.** A `Repeater` created inside an asynchronous incubation (`LazyLoader` →
+`PanelWindow` → `Loader` → panel, which is exactly how popup content is built) can end up
+with an invalid internal delegate reference. The object finishes loading and looks fine;
+the corruption only bites later, the next time the model changes and `regenerate()` runs.
+It always dies at the same place: `libQt6QmlModels.so.6 + 0xa758e`, with
+`QQuickRepeater::regenerate()` on the stack. If `QQmlObjectCreator::finalize()` is also on
+the stack the crash happened during incubation; if the stack goes through
+`sendPostedEvents` instead, it is a model corrupted earlier, crashing from the event loop.
+
+**Rule 1 — popup content is created outside the incubation.** `panels/Popup.qml` does not
+bind `contentLoader.sourceComponent`; it assigns it in `Qt.callLater` from the window's
+`Component.onCompleted`, so panels and their Repeaters are first built on the main event
+loop after the `PanelWindow` has finished incubating. Two earlier fixes failed because
+they only deferred *setting the model*, not *creating the Repeater*.
+`MusicPanel`, `BluetoothPanel`, `NetworkPanel` and `AudioChannelRow` additionally hold a
+`_ready` guard set via `Qt.callLater`, as a second line of defence.
+
+**Rule 2 — never bind a live array straight to `Repeater.model`.** Every reassignment of
+the array resets the model and runs `regenerate()`, the crashing path. Wrap it in
+`ScriptModel { values: … }`, with `objectProp` as the identity key where delegates should
+be reused; ScriptModel diffs the values instead of resetting. A literal constant array
+(`model: ["Day", "Week", "Mon"]`) never changes and is fine.
+
+**If it comes back:** look for a new `Repeater` whose `model` is a live expression,
+especially inside anything a popup loads, and for any path that builds popup content
+during the `PanelWindow` incubation.
 
 ### Widget contract
 
@@ -172,7 +207,7 @@ By convention a widget declares:
 
 | property | purpose |
 |---|---|
-| `widgetType` | the type string, matching the `_widgetMap` key |
+| `widgetType` | the type string, matching the `WidgetRegistry` entry |
 | `popup` | the Bar's `Popup`, if it has one |
 | `profile` | the active profile name, assigned by the Bar's `Loader` |
 
@@ -223,27 +258,30 @@ Logger { id: logger; prefix: "[STT]"; enabled: Config.stt.debug }
 - **Comments in English**, explaining *why* rather than restating the code.
 - **Never bind a live reactive array straight to `Repeater.model`** — it crashes
   Quickshell. Wrap it in `ScriptModel { values: … }`, optionally with `objectProp` as
-  the identity key so only changed delegates are rebuilt.
+  the identity key so only changed delegates are rebuilt. The history and the second
+  rule that goes with it are in [The Repeater crash](#the-repeater-crash).
 - **`ShapePath` has no `visible` property.**
 - Only commit when explicitly asked.
 
 ## Adding a widget
 
-A new bar widget currently has to be registered in four places, because the type string
-is the key in four parallel maps:
+Every bar widget type is one entry in `singletons/WidgetRegistry.qml`; the bar, the
+section editor's picker and names, the widget settings pane and the popup all read it.
 
-1. `widgets/<Name>Widget.qml` — the widget itself, extending `BarWidget`.
-2. `Bar.qml` — a `Component` wrapper plus an entry in `_widgetMap`.
-3. `panels/BarSectionList.qml` — a display name in `displayName()` and the type in the
-   picker's list of available types.
-4. `panels/WidgetSettingsPane.qml` — an entry in `_settingsComponentMap` if it has
-   per-profile settings, plus the `Component`.
+1. `widgets/<Name>Widget.qml` — the widget itself. Extend `PopupWidget` (and set
+   `widgetType`) if it opens a popup, otherwise `BarWidget`.
+2. If it has a popup: the panel under `panels/`. It is loaded by URL, so it needs no
+   wiring; a panel that must talk back to the popup (close it, know the screen) is the
+   exception and goes in `Popup.qml`'s `_componentMap`, like the tray menu.
+3. If it has per-profile settings: a page under `panels/widget_settings/` with
+   `profileName` and `widgetType` properties.
+4. One entry in `WidgetRegistry.entries` naming those files — the field list is in the
+   comment at the top of that file.
 
-If it also owns a popup panel, add the panel to `Popup._componentMap`, and if it needs
-global settings, add a page under `panels/settings/` plus an entry in
-`SettingsWindow`'s navigation model and its `sourceComponent` if-chain.
-
-Collapsing these into one registry is CLEANUP.md #5.
+Then run `quickshell -p tests.qml`: the WidgetRegistry suite checks that every file the
+registry names exists and compiles. Global settings (a page under `panels/settings/`)
+are still wired by hand in `SettingsWindow`'s navigation model and `sourceComponent`
+if-chain.
 
 ## Testing
 

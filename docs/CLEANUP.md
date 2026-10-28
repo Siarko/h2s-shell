@@ -635,6 +635,24 @@ deduplicates within one event-loop tick. Pre-existing; the #1 fix widens the win
 tick, since the enabled-calendar list is now resolved asynchronously. Fix: mark the month
 as in-flight when the fetch starts, not when it finishes.
 
+### 43. Live arrays still bound straight to `Repeater.model` — **confirmed**
+
+Found 2026-10-28 while starting the widget registry. The rule in
+[ARCHITECTURE.md](ARCHITECTURE.md#the-repeater-crash) is broken in these places, each
+binding a recomputed array directly:
+
+- `Bar.qml:170`, `:194`, `:219` — the three bar sections (`_leftModel` etc.). Fixed with
+  the widget registry.
+- `panels/BarSectionList.qml:380` — the add-widget picker. Fixed with the widget registry.
+- `panels/HardwarePanel.qml:39` — `_popupSources`, inside a popup panel: the riskiest one.
+- `components/NotificationCard.qml:164` — `_regularActions`; the card is used in the
+  notification panel (a popup) and in the HUD.
+- `panels/HardwareSourceList.qml:335` — an inline `.filter()`.
+- `panels/WidgetSettingsPane.qml:193` — `_filteredProfiles`.
+- `panels/settings/SettingOptions.qml:32` — `options`; usually set once, but a `var`.
+
+Fix: `ScriptModel { values: … }` in each. Literal constant arrays elsewhere are fine.
+
 ---
 
 ## Suggested order

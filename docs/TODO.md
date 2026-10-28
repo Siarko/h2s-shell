@@ -10,7 +10,8 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stage 1 and 2.1 done** (2026-10-28). Next item: 2.2, a single `WidgetRegistry`.
+**Status: Stage 1, 2.1 and 2.2 done** (2026-10-28). Next item: 2.3, the four widgets
+not yet on the widget contract.
 
 ---
 
@@ -163,10 +164,16 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       (music and sound set to `hover`). Every popup widget is now highlighted while its
       popup is open, not only power/network/hardware, and click-opened popups are all
       persistent — which fixes 8.6.
-- [ ] **2.2 `singletons/WidgetRegistry.qml`** [#12]
+- [x] **2.2 `singletons/WidgetRegistry.qml`** [#12]
       One declarative source for type → component, display name, popup panel, settings
       pane, default popup mode. Replaces the four parallel maps in `Bar.qml`,
       `panels/BarSectionList.qml`, `panels/WidgetSettingsPane.qml`, `panels/Popup.qml`.
+      Done 2026-10-28, verified on the host. Bar, picker, settings
+      pane and popup load files by URL from the registry; `tests/WidgetRegistryTest.qml`
+      checks every listed file compiles. Bar and picker now use `ScriptModel`. Regression
+      found and fixed on the host: `ScriptModel` updates `modelData` in place, so the
+      bar must bind `profile` to the delegate's `modelData`, not capture it once — the
+      custom workspace and hardware labels had disappeared.
 - [ ] **2.3 Bring the four stragglers onto the widget contract** [#15]
       `NotificationsWidget`, `SettingsWidget`, `TrayWidget` (currently a bare `Row`),
       `WorkspacesWidget`.
@@ -253,6 +260,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [x] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
       Fixed by 2.1: `PopupWidget` opens every click popup persistent.
 - [ ] **8.7 `Lockscreen`: bind config declaratively** [#10]
+- [ ] **8.9 Wrap the remaining live `Repeater` models in `ScriptModel`** [#43]
+      The rule behind the months of random crashes — see ARCHITECTURE.md, "The Repeater
+      crash". Bar and the add-widget picker are fixed with 2.2; `HardwarePanel` (inside a
+      popup) is the most urgent of the rest.
 - [ ] **8.8 Show calendar errors in the UI**
       Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API
       error) only reaches the log; the calendar just stays empty, indistinguishable from
@@ -275,3 +286,20 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Config and UI exist; nothing runs them, so it looks finished to the user.
 - [ ] **9.8 Leftovers** [#37] — empty `assets/`, missing trailing newline in
       `LockscreenSettings.qml`, `Logger` as `Item` rather than `QtObject`.
+
+## Stage 10 — Requested features
+
+- [ ] **10.1 Configurable animations**
+      Requested 2026-10-28: the user wants to tune animation speed and easing curves.
+      There are ~50 hard-coded `duration:` values across the QML, the popup open/close
+      ones being 100 ms with `OutQuad`/`InQuad` (`panels/Popup.qml`). Plan: named
+      durations and easings in `Theme.qml` (or a `Config.animations` section, if it
+      should be editable from settings), a global speed multiplier, and every
+      `NumberAnimation` reading from there.
+      Measured on the host (DP-2, 144 Hz) while looking into popups that felt not quite
+      smooth: frames come every ~6–7 ms as they should, but the calendar popup's first
+      frames have a 51 ms gap — creating the panel (~37 ms) lands inside the running
+      animation, so the 100 ms open took 161 ms and visibly jumps at the start. Worth
+      fixing alongside: start the height animation a frame after the content is
+      created. Do not move the content creation itself out of `Qt.callLater` — see
+      "The Repeater crash" in ARCHITECTURE.md.

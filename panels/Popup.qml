@@ -66,8 +66,10 @@ LazyLoader {
         implicitHeight: popup.screen.height
 
         property bool showPopup: false
+        // Deferred so the panel and its Repeaters are created on the main event loop, after
+        // this window's incubation — see "The Repeater crash" in docs/ARCHITECTURE.md
         Component.onCompleted: Qt.callLater(() => {
-            contentLoader.sourceComponent = content._componentMap[popupLoader.contentType] ?? calendarComponent
+            content.loadContent()
             popup.showPopup = true
         })
 
@@ -152,17 +154,24 @@ LazyLoader {
 
                     color: Theme.popupBackground
 
+                    // Contents that need wiring to this popup. Every other content type is a
+                    // plain widget panel, loaded from the URL WidgetRegistry gives for it.
                     readonly property var _componentMap: ({
                             "tray-menu": trayMenuComponent,
-                            "power": powerMenuComponent,
-                            "notifications": notificationsComponent,
-                            "sound": soundComponent,
-                            "music": musicComponent,
-                            "bluetooth": bluetoothComponent,
-                            "calendar": calendarComponent,
-                            "network": networkComponent,
-                            "hardware": hardwareComponent
+                            "notifications": notificationsComponent
                         })
+
+                    function loadContent() {
+                        const wired = _componentMap[popupLoader.contentType];
+                        // Clear both, since the loader is switched between the two kinds
+                        contentLoader.sourceComponent = null;
+                        contentLoader.source = "";
+                        if (wired)
+                            contentLoader.sourceComponent = wired;
+                        else
+                            contentLoader.source = WidgetRegistry.popupPanelUrl(popupLoader.contentType)
+                                || WidgetRegistry.popupPanelUrl("calendar");
+                    }
 
                     Loader {
                         id: contentLoader
@@ -172,7 +181,7 @@ LazyLoader {
                     Connections {
                         target: popupLoader
                         function onContentTypeChanged() {
-                            contentLoader.sourceComponent = content._componentMap[popupLoader.contentType] ?? calendarComponent
+                            content.loadContent()
                         }
                     }
 
@@ -184,46 +193,11 @@ LazyLoader {
                     }
 
                     Component {
-                        id: calendarComponent
-                        Calendar {}
-                    }
-
-                    Component {
-                        id: powerMenuComponent
-                        PowerMenu {}
-                    }
-
-                    Component {
                         id: notificationsComponent
                         NotificationPanel {
                             screenHeight: popup.screen.height
                             onCloseRequested: popupLoader.close()
                         }
-                    }
-
-                    Component {
-                        id: soundComponent
-                        SoundPanel {}
-                    }
-
-                    Component {
-                        id: musicComponent
-                        MusicPanel {}
-                    }
-
-                    Component {
-                        id: bluetoothComponent
-                        BluetoothPanel {}
-                    }
-
-                    Component {
-                        id: networkComponent
-                        NetworkPanel {}
-                    }
-
-                    Component {
-                        id: hardwareComponent
-                        HardwarePanel {}
                     }
                 }
             }

@@ -10,14 +10,13 @@ BarWidget {
     property var popup: null
     // Key into Config.widgetProfiles, where the user's popup mode is stored
     property string widgetType: ""
-    // Which panel the popup shows. Usually the widget type; the clock opens "calendar".
-    property string popupContent: widgetType
+    // Which panel the popup shows, as registered in WidgetRegistry (the clock's is
+    // "calendar")
+    readonly property string popupContent: WidgetRegistry.popupContent(widgetType)
 
-    // Must match the default in panels/WidgetSettingsPane.qml, which shows the mode
-    readonly property string defaultPopupMode: "click"
     readonly property string popupMode: {
         var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.["_popupMode"] ?? defaultPopupMode;
+        return data[widgetType]?.["_popupMode"] ?? WidgetRegistry.defaultPopupMode;
     }
 
     readonly property bool popupOpen: !!popup?.active && popup?.contentType === popupContent

@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.singletons
-import qs.panels.widget_settings
 
 Item {
     id: root
@@ -19,14 +18,11 @@ Item {
         return Object.keys(data[widgetType]).filter(k => !k.startsWith("_"))
     }
 
-    readonly property var _popupWidgets: ["clock", "network", "hardware", "sound", "bluetooth", "music", "power"]
-    readonly property bool _hasPopup: _popupWidgets.includes(widgetType)
+    readonly property bool _hasPopup: WidgetRegistry.hasPopupMode(widgetType)
 
     readonly property string _popupMode: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
-        // Must match PopupWidget.defaultPopupMode. Click is the default for every widget:
-        // hover cannot be triggered on a touch screen.
-        return data[widgetType]?.["_popupMode"] ?? "click"
+        return data[widgetType]?.["_popupMode"] ?? WidgetRegistry.defaultPopupMode
     }
 
     function _savePopupMode(mode) {
@@ -36,17 +32,6 @@ Item {
         Config.widgetProfiles = JSON.stringify(data)
     }
 
-    readonly property var _settingsComponentMap: ({
-        "workspaces": _workspacesComp,
-        "clock": _clockComp,
-        "hardware": _hardwareComp,
-        "stt": _sttComp
-    })
-
-    Component { id: _workspacesComp; WorkspacesWidgetSettings {} }
-    Component { id: _clockComp; ClockWidgetSettings {} }
-    Component { id: _hardwareComp; HardwareWidgetSettings {} }
-    Component { id: _sttComp; SttWidgetSettings {} }
 
     Column {
         id: _col
@@ -233,7 +218,7 @@ Item {
             width: parent.width
             height: item ? item.implicitHeight : 0
             visible: root.currentProfile !== ""
-            sourceComponent: visible ? (root._settingsComponentMap[root.widgetType] ?? null) : null
+            source: visible ? WidgetRegistry.settingsUrl(root.widgetType) : ""
             onLoaded: {
                 item.profileName = Qt.binding(() => root.currentProfile)
                 item.widgetType  = Qt.binding(() => root.widgetType)

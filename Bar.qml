@@ -5,7 +5,6 @@ import Quickshell.Io
 import qs.components
 import qs.panels
 import qs.singletons
-import qs.widgets
 
 // Top-anchored horizontal bar spanning the full screen width
 PanelWindow {
@@ -42,90 +41,23 @@ PanelWindow {
 
     implicitHeight: Config.bar.layout.reservedSpace
 
-    // Widget components — one per widget type
-    Component {
-        id: _powerComp
-        PowerWidget {
-            popup: popupLoader
-        }
+    // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
+    // Component is set here, only where the widget has the property.
+    //
+    // The profile binding must read through the delegate, not a captured modelData: the
+    // section is built before the config has loaded, and ScriptModel then updates the
+    // existing delegate's modelData in place rather than recreating it. A captured object
+    // keeps the empty profile from that first pass.
+    function _wireWidget(item, delegate) {
+        if (typeof item.popup !== "undefined")
+            item.popup = popupLoader
+        if (typeof item.settingsWindow !== "undefined")
+            item.settingsWindow = Qt.binding(() => bar.settingsWindowRef)
+        if (typeof item.profile !== "undefined")
+            item.profile = Qt.binding(() => delegate.modelData.profile)
+        if (delegate.modelData.type === "notifications")
+            bar.notifWidget = item
     }
-    Component {
-        id: _settingsComp
-        SettingsWidget {
-            settingsWindow: bar.settingsWindowRef
-        }
-    }
-    Component {
-        id: _workspacesComp
-        WorkspacesWidget {}
-    }
-    Component {
-        id: _clockComp
-        ClockWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _musicComp
-        MusicWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _soundComp
-        SoundWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _bluetoothComp
-        BluetoothWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _trayComp
-        TrayWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _networkComp
-        NetworkWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _notifComp
-        NotificationsWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _hardwareComp
-        HardwareWidget {
-            popup: popupLoader
-        }
-    }
-    Component {
-        id: _sttComp
-        SttWidget {}
-    }
-
-    readonly property var _widgetMap: ({
-            "power": _powerComp,
-            "settings": _settingsComp,
-            "workspaces": _workspacesComp,
-            "clock": _clockComp,
-            "music": _musicComp,
-            "sound": _soundComp,
-            "bluetooth": _bluetoothComp,
-            "tray": _trayComp,
-            "network": _networkComp,
-            "notifications": _notifComp,
-            "hardware": _hardwareComp,
-            "stt": _sttComp
-        })
 
     function _zipModel(types, profilesJson) {
         var profs = JSON.parse(profilesJson || "[]")
@@ -167,19 +99,19 @@ PanelWindow {
                 spacing: 5
 
                 Repeater {
-                    model: bar._leftModel
+                    // ScriptModel, never the bare array — see "The Repeater crash"
+                    // in docs/ARCHITECTURE.md
+                    model: ScriptModel {
+                        values: bar._leftModel
+                    }
                     delegate: Loader {
+                        id: widgetLoader
                         required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData.type]
-                        onLoaded: {
-                            if (typeof item.profile !== "undefined")
-                                item.profile = Qt.binding(() => modelData.profile)
-                            if (modelData.type === "notifications")
-                                bar.notifWidget = item
-                        }
+                        source: WidgetRegistry.widgetUrl(modelData.type)
+                        onLoaded: bar._wireWidget(item, widgetLoader)
                     }
                 }
             }
@@ -191,19 +123,19 @@ PanelWindow {
                 anchors.bottom: parent.bottom
 
                 Repeater {
-                    model: bar._centerModel
+                    // ScriptModel, never the bare array — see "The Repeater crash"
+                    // in docs/ARCHITECTURE.md
+                    model: ScriptModel {
+                        values: bar._centerModel
+                    }
                     delegate: Loader {
+                        id: widgetLoader
                         required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData.type]
-                        onLoaded: {
-                            if (typeof item.profile !== "undefined")
-                                item.profile = Qt.binding(() => modelData.profile)
-                            if (modelData.type === "notifications")
-                                bar.notifWidget = item
-                        }
+                        source: WidgetRegistry.widgetUrl(modelData.type)
+                        onLoaded: bar._wireWidget(item, widgetLoader)
                     }
                 }
             }
@@ -216,19 +148,19 @@ PanelWindow {
                 spacing: 5
 
                 Repeater {
-                    model: bar._rightModel
+                    // ScriptModel, never the bare array — see "The Repeater crash"
+                    // in docs/ARCHITECTURE.md
+                    model: ScriptModel {
+                        values: bar._rightModel
+                    }
                     delegate: Loader {
+                        id: widgetLoader
                         required property var modelData
                         Layout.fillHeight: true
                         Layout.topMargin: 5
                         Layout.bottomMargin: 5
-                        sourceComponent: bar._widgetMap[modelData.type]
-                        onLoaded: {
-                            if (typeof item.profile !== "undefined")
-                                item.profile = Qt.binding(() => modelData.profile)
-                            if (modelData.type === "notifications")
-                                bar.notifWidget = item
-                        }
+                        source: WidgetRegistry.widgetUrl(modelData.type)
+                        onLoaded: bar._wireWidget(item, widgetLoader)
                     }
                 }
             }

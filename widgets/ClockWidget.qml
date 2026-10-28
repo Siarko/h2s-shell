@@ -5,7 +5,6 @@ import qs.singletons
 PopupWidget {
     property string profile: ""
     widgetType: "clock"
-    popupContent: "calendar"
 
     readonly property string _format: {
         if (profile !== "") {
