@@ -1,5 +1,5 @@
-import Quickshell.Io
 import QtQuick
+import qs.singletons.io
 
 // Throughput of one network interface, read from its sysfs byte counters.
 //
@@ -12,8 +12,8 @@ Item {
 
     // Interface name, e.g. "enp5s0". Empty stops polling and zeroes the rates.
     property string device: ""
-    // Gate for polling — false while the link is down, so no process is spawned
-    // for counters that cannot move.
+    // Gate for polling — false while the link is down, so counters that cannot move
+    // are not read.
     property bool active: true
     property int intervalMs: 2000
 
@@ -36,43 +36,30 @@ Item {
         txSpeed = 0
     }
 
+    KernelFile {
+        id: _rxFile
+        path: root.device ? "/sys/class/net/" + root.device + "/statistics/rx_bytes" : ""
+    }
+
+    KernelFile {
+        id: _txFile
+        path: root.device ? "/sys/class/net/" + root.device + "/statistics/tx_bytes" : ""
+    }
+
     Timer {
         interval: root.intervalMs
         running: root.device !== "" && root.active
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            if (_speedProcess.running) return
-            _speedProcess._values = []
-            // Both counters in one process — they have to come from the same tick
-            _speedProcess.command = ["cat",
-                "/sys/class/net/" + root.device + "/statistics/rx_bytes",
-                "/sys/class/net/" + root.device + "/statistics/tx_bytes"]
-            _speedProcess.running = true
-        }
-    }
-
-    Process {
-        id: _speedProcess
-        property var _values: []
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                var value = parseFloat(line.trim())
-                if (!isNaN(value))
-                    _speedProcess._values.push(value)
-            }
-        }
-
-        onRunningChanged: {
-            if (running) return
-            // Short read means the interface went away between tick and cat
-            if (_values.length < 2)
+            // Both reads are synchronous, so the two counters come from the same tick
+            var rxBytes = parseFloat(_rxFile.read())
+            var txBytes = parseFloat(_txFile.read())
+            // Unreadable means the interface went away between ticks
+            if (isNaN(rxBytes) || isNaN(txBytes))
                 root._reset()
             else
-                root._update(_values[0], _values[1])
-            _values = []
+                root._update(rxBytes, txBytes)
         }
     }
 

@@ -1,8 +1,8 @@
 pragma Singleton
 
 import Quickshell
-import Quickshell.Io
 import QtQuick
+import qs.singletons.io
 
 Singleton {
     id: root
@@ -34,38 +34,29 @@ Singleton {
         return bytes + " B"
     }
 
+    KernelFile {
+        id: _meminfo
+        path: "/proc/meminfo"
+    }
+
     Timer {
         interval: 2000
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: if (!_proc.running) _proc.running = true
-    }
-
-    Process {
-        id: _proc
-        command: ["cat", "/proc/meminfo"]
-        property var _data: ({})
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
+        onTriggered: {
+            var data = {}
+            for (const line of _meminfo.read().split("\n")) {
                 var m = line.match(/^(\w+):\s+(\d+)/)
-                if (m) _proc._data[m[1]] = parseInt(m[2]) * 1024
+                if (m) data[m[1]] = parseInt(m[2]) * 1024
             }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                var total = _proc._data["MemTotal"] || 0
-                var avail = _proc._data["MemAvailable"] || 0
-                root.totalBytes = total
-                root.usedBytes  = total - avail
-                root.value      = total > 0 ? Math.round((total - avail) / total * 100) : 0
-                root.subtitle   = root.formatBytes(root.usedBytes) + " / " + root.formatBytes(root.totalBytes)
-                root._appendHistory(root.value)
-                _proc._data = {}
-            }
+            var total = data["MemTotal"] || 0
+            var avail = data["MemAvailable"] || 0
+            root.totalBytes = total
+            root.usedBytes  = total - avail
+            root.value      = total > 0 ? Math.round((total - avail) / total * 100) : 0
+            root.subtitle   = root.formatBytes(root.usedBytes) + " / " + root.formatBytes(root.totalBytes)
+            root._appendHistory(root.value)
         }
     }
 }

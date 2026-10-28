@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.io
 
 Singleton {
     id: root
@@ -27,45 +28,55 @@ Singleton {
         history = h
     }
 
-    Timer {
-        id: _timer
-        interval: 5000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: if (!_proc.running) _proc.running = true
-    }
+    // The sensor file, found once at startup; hwmon numbering only changes across boots
+    property string _sensorPath: ""
+
+    Component.onCompleted: _findSensor.running = true
 
     Process {
-        id: _proc
-        // Search hwmon for k10temp (AMD Ryzen), zenpower, or coretemp (Intel).
-        // Falls back to ACPI thermal_zone0 as a last resort.
+        id: _findSensor
+        // hwmon for k10temp (AMD Ryzen), zenpower, or coretemp (Intel); ACPI
+        // thermal_zone0 as a last resort
         command: ["sh", "-c",
             "for d in /sys/class/hwmon/hwmon*; do" +
-            " n=$(cat \"$d/name\" 2>/dev/null);" +
-            " if [ \"$n\" = \"k10temp\" ] || [ \"$n\" = \"zenpower\" ] || [ \"$n\" = \"coretemp\" ]; then" +
-            " cat \"$d/temp1_input\" 2>/dev/null && exit 0; fi; done;" +
-            " cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null"]
+            " case $(cat \"$d/name\" 2>/dev/null) in k10temp|zenpower|coretemp)" +
+            " [ -r \"$d/temp1_input\" ] && echo \"$d/temp1_input\" && exit 0;; esac; done;" +
+            " [ -r /sys/class/thermal/thermal_zone0/temp ] && echo /sys/class/thermal/thermal_zone0/temp"]
         property string _buf: ""
 
         stdout: SplitParser {
             splitMarker: ""
-            onRead: data => { _proc._buf += data }
+            onRead: data => { _findSensor._buf += data }
         }
 
         onRunningChanged: {
-            if (!running) {
-                var raw = parseInt(_proc._buf.trim())
-                if (!isNaN(raw) && raw > 0) {
-                    root.value = Math.round(raw / 1000)
-                    root._appendHistory(root.value)
-                } else if (!root._checked) {
-                    root.available = false
-                    _timer.running = false
-                }
-                root._checked = true
-                _proc._buf = ""
+            if (running) return
+            root._sensorPath = _buf.trim()
+            if (root._sensorPath === "")
+                root.available = false
+            _buf = ""
+        }
+    }
+
+    KernelFile {
+        id: _sensor
+        path: root._sensorPath
+    }
+
+    Timer {
+        interval: 5000
+        running: root._sensorPath !== "" && root.available
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            var raw = parseInt(_sensor.read().trim())
+            if (!isNaN(raw) && raw > 0) {
+                root.value = Math.round(raw / 1000)
+                root._appendHistory(root.value)
+            } else if (!root._checked) {
+                root.available = false
             }
+            root._checked = true
         }
     }
 }
