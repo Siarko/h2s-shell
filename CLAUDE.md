@@ -1,59 +1,60 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## Project Overview
+## Project
 
-This is a **Quickshell desktop shell configuration** — a custom desktop panel built with Qt/QML using the [Quickshell](https://quickshell.outfoxxed.me/) framework. It is not a compiled application; QML files are interpreted directly by the Quickshell runtime.
+A **Quickshell desktop shell configuration** — a custom Wayland/Hyprland desktop panel
+built with Qt 6 and QML. Not a compiled application: QML files are interpreted directly
+by the Quickshell runtime.
+
+## Documentation
+
+Read these before making structural changes:
+
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — runtime model, directory layout,
+  module resolution, the Process/SplitParser I/O idiom, the config system, the widget
+  contract, how to add a widget, testing.
+- **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
+  HUD element, settings page, and the external tools it depends on.
+- **[docs/CLEANUP.md](docs/CLEANUP.md)** — the known-problems backlog, prioritised, with
+  file:line references. Check this before "fixing" something — it may already be filed,
+  with the analysis done.
+- **[docs/quickshell-integration.md](docs/quickshell-integration.md)** — the `pttd`
+  dictation daemon's socket protocol.
 
 ## Running
 
-There is no build step. To run the shell:
+There is no build step:
+
 ```
-quickshell
+quickshell                 # reads shell.qml from the current directory
+quickshell -p tests.qml    # runs the test suites, prints PASS/FAIL, exits
 ```
-Quickshell looks for `shell.qml` in the current directory as its entry point. Testing is manual — verify the panel renders, time updates, cells respond to clicks, and popups toggle correctly.
 
-## Architecture
+Beyond the one test suite, verification is manual: check that the bar renders, the clock
+ticks, cells respond to clicks, and popups toggle.
 
-QML files are organized into subdirectories by role. Quickshell auto-exposes uppercase QML files in subdirectories as types via `import qs.<dirname>`.
+## Conventions
 
-### Root (entry point + top-level shell)
+- **State and I/O live in `singletons/`.** QML under `widgets/`, `panels/` and `hud/`
+  renders that state and calls singleton methods — it should not own system access.
+- **All colours and type sizes come from `singletons/Theme.qml`.** No literal colours
+  elsewhere.
+- **Full variable names** — `calendar`, `response`, `calendarId`, not `c`, `r`, `cid`.
+  Loop indices (`i`, `j`) are the exception.
+- **Comments in English**, explaining *why* rather than restating the code.
+- **Never bind a live reactive array directly to `Repeater.model`** — it crashes
+  Quickshell. Use `ScriptModel { values: … }`, with `objectProp` as the identity key
+  where delegates should be reused.
+- **Never start a `Process` with a declarative `running: true`** — Quickshell writes
+  `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
+  `Timer`.
+- **`ShapePath` has no `visible` property.**
+- **Do not add a `qmldir`.** Quickshell registers types per directory automatically.
+- **Only commit when explicitly asked.** Never commit proactively after making changes.
 
-- **shell.qml** — Entry point. Uses `Variants` with `Quickshell.screens` to instantiate a `Bar` on every monitor. Tracks `activeScreen` so only one popup is open at a time.
-- **Bar.qml** — The main panel window. A top-anchored, 40px `PanelWindow` containing a `FlexboxLayout` with a time display and interactive `BarWidget` widgets. Includes a popup that toggles on widget interaction.
+## Environment
 
-### `components/` (reusable building blocks)
-
-- **BarWidget.qml** — Reusable interactive bar widget. A colored rectangle with `MouseArea` that emits `clicked(color)` on click and `hover(bool)` on enter/exit.
-- **ArrowButton.qml** — Small clickable arrow used for calendar month navigation.
-- **PopupCurve.qml** — Draws the curved corners connecting the popup to the bar edge.
-
-### `panels/` (popup content widgets)
-
-- **Popup.qml** — Lazily-loaded popup container. Manages open/close animations and delegates to content panels.
-- **Calendar.qml** — Monthly calendar with day grid and month navigation arrows.
-- **PowerMenu.qml** — Shutdown/restart/logout buttons that invoke shell scripts.
-- **NotificationPanel.qml** — Scrollable list of desktop notifications with dismiss animations.
-
-### `singletons/` (global shared state, `pragma Singleton`)
-
-- **Theme.qml** — Centralized color palette for the entire shell.
-- **Time.qml** — Wraps `SystemClock` to expose a `time` property formatted as `"hh:mm:ss"`.
-- **Notifications.qml** — DBus notification server exposing a notification list.
-
-### `scripts/` (shell scripts)
-
-- **logout.sh**, **restart.sh**, **shutdown.sh** — Hyprland power management scripts.
-
-## Key Patterns
-
-- **Multi-monitor**: `Variants` + `Quickshell.screens` creates per-screen panel instances
-- **Signals**: BarWidget uses Qt signal/slot pattern (`clicked`, `hover`) for parent communication
-- **Lazy loading**: Popup window only instantiates when `LazyLoader.active` is true
-- **Singleton**: Time.qml uses `pragma Singleton` for shared state across components
-
-## Dependencies
-
-- Quickshell runtime
-- Qt 6 (QtQuick, QtQuick.Layouts)
+Development happens in a dev container where **`quickshell` is not installed** — the
+shell cannot be run or tested here. Changes have to be verified on the host machine.
