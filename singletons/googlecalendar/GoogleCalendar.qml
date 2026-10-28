@@ -63,9 +63,16 @@ Singleton {
             return root._initializatingPromise;
         }
         root._initializatingPromise = Promises.allSettled(fetchColorMappings(), fetchAllCalendars()).then(() => {
-            root._initialized = true;
+            // allSettled never rejects, so reaching here says nothing about whether the
+            // fetches worked. The calendar list is what every later fetch depends on, so
+            // that is the condition: without it, stay uninitialised and retry next time
+            // rather than reporting a readiness that is not there.
+            root._initialized = Object.keys(root.calendars).length > 0;
             root._initializatingPromise = null;
-            logger.log("Setting initialized to true");
+            if (root._initialized)
+                logger.log("Initialised with", Object.keys(root.calendars).length, "calendars");
+            else
+                logger.warn("Initialisation did not produce any calendars — will retry");
         });
         return root._initializatingPromise;
     }
@@ -74,9 +81,11 @@ Singleton {
         return Promises.create((resolve, reject) => {
             try {
                 if (Object.keys(calendars).length === 0) {
+                    // Without the catch a failed calendar fetch left this promise pending
+                    // forever, which is what hung every caller waiting on it.
                     fetchAllCalendars().then(() => {
                         resolve(_getConfigEnabledCalendarIds());
-                    });
+                    }).catch(reject);
                 } else {
                     resolve(_getConfigEnabledCalendarIds());
                 }
@@ -155,86 +164,6 @@ Singleton {
         });
     }
 
-    function fetchDayEvents(year, month, day, invalidateCache = false) {
-        if (!GoogleCalendarAuth.isAuthorized) {
-            return;
-        }
-        if (month > 11 || month < 0 || day < 1) {
-            logger.error("Requested incorrect day: ", year, month, day);
-            return;
-        }
-        const dateKey = _dateKey(year, month, day);
-        const cachedEvents = root.events[dateKey];
-
-        if (!invalidateCache && cachedEvents !== undefined) {
-            return;
-        }
-        root.setDayLoading(dateKey, true);
-        logger.log("Events for ", dateKey, " len: ", cachedEvents?.length);
-
-        let exec = function () {
-            logger.log("Entered exec of event fetching");
-            let fetches = [];
-            let enabledCalendars = Promises.await(getEnabledCalendarIds()).resolved ?? [];
-            for (const id of enabledCalendars) {
-                logger.log("Fetching events for calendar", id, "Date: ", year, month, day);
-                fetches.push(fetchCalendarEvents(id, year, month, day));
-            }
-            return Promises.allSettled(fetches).then(() => {
-                logger.log("All calendars fetched, merging events");
-                _mergeEvents(year, month, day);
-                root.setDayLoading(dateKey, false);
-            }).catch(e => {
-                logger.error("Caught error while fetching events: ", e);
-                logger.error("Stack: ", e.stack);
-            });
-        };
-
-        if (root._initialized) {
-            logger.log("Already initialized, fetching");
-            exec();
-            return;
-        } else {
-            logger.log("Not initialized, running initialize first");
-            return initialize().then(() => {
-                logger.log("Initialized, now fetching events");
-                exec();
-            });
-        }
-    }
-
-    function fetchCalendarEvents(calendarId: string, year, month, day) {
-        return Promises.create((resolve, reject) => {
-            logger.log("Entry to fetching events of calendar ", calendarId);
-            if (!GoogleCalendarAuth.isAuthorized || day <= 0 || Object.keys(root.calendars).length === 0) {
-                return resolve(null);
-            }
-            let dateKey = _dateKey(year, month, day);
-            let requestId = dateKey + "_" + calendarId;
-
-            logger.log("Requesting events for calendar: ", calendarId, " Date: ", dateKey);
-            let calendar = root.calendars[calendarId] ?? null;
-            let tz = _tzOffset();
-            return GoogleCalendarAuth.ensureAuthorized(() => {
-                return _requestEvents({
-                    calendarId: calendarId,
-                    timeMin: dateKey + "T00:00:00" + tz,
-                    timeMax: dateKey + "T23:59:59" + tz,
-                    id: dateKey + calendarId
-                });
-            }).then(response => {
-                return response.json().then(data => {
-                    let events = (data.items || []).map(item => _prepareEventData(item, calendar));
-                    if (!root.eventsByCalendar[dateKey]) {
-                        root.eventsByCalendar[dateKey] = {};
-                    }
-                    root.eventsByCalendar[dateKey][calendarId] = events;
-                    return resolve();
-                }).catch(reject);
-            }).catch(reject);
-        });
-    }
-
     function _fetchCalendarEventsForMonth(calendarId, year, month) {
         return Promises.create((resolve, reject) => {
             if (!GoogleCalendarAuth.isAuthorized || Object.keys(root.calendars).length === 0)
@@ -301,12 +230,15 @@ Singleton {
         logger.log("Fetching month: ", monthKey);
 
         let exec = function () {
-            let fetches = [];
-            let enabledCalendars = Promises.await(getEnabledCalendarIds()).resolved ?? [];
-            for (const id of enabledCalendars) {
-                fetches.push(_fetchCalendarEventsForMonth(id, year, month));
-            }
-            return Promises.allSettled(fetches).then(() => {
+            // Chained rather than awaited: the enabled-calendar list may need a fetch of
+            // its own, and blocking on it froze the whole shell, QML being single-threaded.
+            return getEnabledCalendarIds().then(enabledCalendars => {
+                let fetches = [];
+                for (const id of (enabledCalendars ?? [])) {
+                    fetches.push(_fetchCalendarEventsForMonth(id, year, month));
+                }
+                return Promises.allSettled(fetches);
+            }).then(() => {
                 let daysInMonth = new Date(year, month + 1, 0).getDate();
                 for (let d = 1; d <= daysInMonth; d++)
                     _mergeEvents(year, month, d);
@@ -314,8 +246,11 @@ Singleton {
                 setDayLoading(monthKey, false);
                 logger.log("Month fetch complete: ", monthKey);
             }).catch(e => {
+                // The chain can now reject for real, so the loading flag has to be cleared
+                // here too — otherwise EventsPanel shows its spinner forever.
+                setDayLoading(monthKey, false);
                 logger.error("fetchMonthEvents failed: ", e);
-                logger.error("Stack: ", e.stack);
+                logger.error("Stack: ", e?.stack);
             });
         };
 
@@ -383,7 +318,7 @@ Singleton {
         };
     }
 
-    // month is 0-indexed (same as fetchDayEvents)
+    // month is 0-indexed (same as fetchMonthEvents)
     // event: { year, month, day, title, description, startTime, endTime, calendarId }
     function createEvent(event) {
         const calendarId = event.calendarId || "primary";

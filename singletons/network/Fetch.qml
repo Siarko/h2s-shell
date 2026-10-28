@@ -65,7 +65,14 @@ Singleton {
                         }
                     });
                 } else {
-                    reject(new Error("Unexpected HTTP response status " + xhr.status + ", data: " + xhr.responseText));
+                    // The status has to travel as a field, not just inside the message:
+                    // GoogleCalendarAuth checks `reason.status === 401` to decide whether
+                    // to refresh the token, and a bare Error made that check dead.
+                    let failure = new Error("Unexpected HTTP response status " + xhr.status
+                        + ", data: " + _truncate(xhr.responseText));
+                    failure.status = xhr.status;
+                    failure.body = xhr.responseText;
+                    reject(failure);
                 }
             };
             xhr.send(data.body ?? null);
@@ -79,6 +86,13 @@ Singleton {
             root._pendingRequests[data.id] = result;
         }
         return result;
+    }
+
+    // Error messages reach the log, and an auth endpoint's body can carry tokens, so the
+    // full text stays on the error object for callers that need it and never in the message.
+    function _truncate(text) {
+        const body = text ?? "";
+        return body.length > 200 ? body.substring(0, 200) + "… (truncated)" : body;
     }
 
     function _printf(format, args) {

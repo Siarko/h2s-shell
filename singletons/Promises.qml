@@ -114,20 +114,6 @@ Singleton {
         });
     }
 
-    function await(promise) {
-        const result = {
-            resolved: null,
-            rejected: null
-        };
-        let waiting = true;
-
-        promise.then(r => result.resolved = r).catch(e => result.rejected = e).finally(() => waiting = false);
-        while (waiting) {
-        }
-
-        return result;
-    }
-
     function allSettled() {
         let promiseCount = 0;
         let parseArguments = function (list, callback) {
