@@ -18,6 +18,8 @@ Singleton {
     // to be the shell's "active" one.
     readonly property real rxSpeed: _ethernetSpeed.rxSpeed
     readonly property real txSpeed: _ethernetSpeed.txSpeed
+    readonly property var rxHistory: _ethernetSpeed.rxHistory
+    readonly property var txHistory: _ethernetSpeed.txHistory
 
     LinkSpeed {
         id: _ethernetSpeed

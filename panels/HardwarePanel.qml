@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.components
 import qs.singletons
 
 Item {
@@ -62,23 +63,9 @@ Item {
                 clip: true
 
                 property bool isExpanded: root._expandedId === modelData.sourceId
-                property int scaleSecs: 300
 
                 height: isExpanded ? root._rowH + root._graphAreaH : root._rowH
                 Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
-
-                onIsExpandedChanged: {
-                    if (isExpanded) Qt.callLater(() => _canvas.requestPaint())
-                }
-                onScaleSecsChanged: Qt.callLater(() => _canvas.requestPaint())
-
-                // Listen for new data and repaint when visible
-                Connections {
-                    target: _row.modelData
-                    function onHistoryChanged() {
-                        if (_row.isExpanded) _canvas.requestPaint()
-                    }
-                }
 
                 Column {
                     width: parent.width
@@ -159,7 +146,7 @@ Item {
                         width: parent.width
                         height: root._graphAreaH
 
-                        Column {
+                        HistoryChart {
                             anchors {
                                 fill: parent
                                 topMargin: 8
@@ -167,125 +154,10 @@ Item {
                                 leftMargin: 12
                                 rightMargin: 12
                             }
-                            spacing: 6
-
-                            // Scale buttons
-                            Row {
-                                spacing: 4
-
-                                Repeater {
-                                    model: [
-                                        {label: "5m",  secs: 300},
-                                        {label: "15m", secs: 900},
-                                        {label: "30m", secs: 1800},
-                                        {label: "1h",  secs: 3600}
-                                    ]
-
-                                    Rectangle {
-                                        required property var modelData
-                                        required property int index
-
-                                        width: 32
-                                        height: 24
-                                        radius: 4
-                                        color: _row.scaleSecs === modelData.secs
-                                            ? Theme.sliderAccent
-                                            : Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.15)
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: parent.modelData.label
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: Theme.fontSizeSmall
-                                            color: _row.scaleSecs === parent.modelData.secs
-                                                ? Theme.popupBackground
-                                                : Theme.textSecondary
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: _row.scaleSecs = parent.modelData.secs
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Canvas graph
-                            Canvas {
-                                id: _canvas
-                                width: parent.width
-                                height: 80
-
-                                onPaint: {
-                                    var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    var src = _row.modelData
-                                    var pts = src.history
-                                    if (!pts || pts.length < 2) return
-
-                                    var now       = Date.now()
-                                    var windowMs  = _row.scaleSecs * 1000
-                                    var filtered  = []
-                                    for (var i = 0; i < pts.length; i++) {
-                                        if (pts[i].t >= now - windowMs) filtered.push(pts[i])
-                                    }
-                                    if (filtered.length < 2) return
-
-                                    // The x axis is the selected window ending now, not the span of
-                                    // the samples — otherwise a history shorter than the window is
-                                    // stretched across the full width and the scale buttons do
-                                    // nothing until it fills up
-                                    var range    = Math.max(1, src.maxValue - src.minValue)
-                                    var startT   = now - windowMs
-                                    var timeSpan = windowMs
-
-                                    function rgba(c, a) {
-                                        return "rgba(" + Math.round(c.r*255) + "," + Math.round(c.g*255) + "," + Math.round(c.b*255) + "," + a + ")"
-                                    }
-                                    function xOf(pt) { return (pt.t - startT) / timeSpan * width }
-                                    function yOf(pt) {
-                                        return height - Math.max(0, Math.min(1, (pt.v - src.minValue) / range)) * (height - 2) - 1
-                                    }
-
-                                    // Background
-                                    ctx.fillStyle = rgba(Theme.cellDefault, 0.6)
-                                    ctx.fillRect(0, 0, width, height)
-
-                                    // Grid lines at 25%, 50%, 75%
-                                    ctx.strokeStyle = rgba(Theme.textDim, 0.2)
-                                    ctx.lineWidth = 1
-                                    for (var g = 1; g < 4; g++) {
-                                        var gy = height * g / 4
-                                        ctx.beginPath()
-                                        ctx.moveTo(0, gy)
-                                        ctx.lineTo(width, gy)
-                                        ctx.stroke()
-                                    }
-
-                                    var ac = Theme.sliderAccent
-
-                                    // Fill under line
-                                    ctx.beginPath()
-                                    ctx.moveTo(xOf(filtered[0]), yOf(filtered[0]))
-                                    for (var j = 1; j < filtered.length; j++)
-                                        ctx.lineTo(xOf(filtered[j]), yOf(filtered[j]))
-                                    ctx.lineTo(xOf(filtered[filtered.length - 1]), height)
-                                    ctx.lineTo(xOf(filtered[0]), height)
-                                    ctx.closePath()
-                                    ctx.fillStyle = rgba(ac, 0.15)
-                                    ctx.fill()
-
-                                    // Line
-                                    ctx.beginPath()
-                                    ctx.strokeStyle = rgba(ac, 0.9)
-                                    ctx.lineWidth = 1.5
-                                    ctx.moveTo(xOf(filtered[0]), yOf(filtered[0]))
-                                    for (var k = 1; k < filtered.length; k++)
-                                        ctx.lineTo(xOf(filtered[k]), yOf(filtered[k]))
-                                    ctx.stroke()
-                                }
-                            }
+                            active: _row.isExpanded
+                            series: [{ history: _row.modelData.history, color: Theme.sliderAccent }]
+                            minValue: _row.modelData.minValue
+                            maxValue: _row.modelData.maxValue
                         }
                     }
                 }

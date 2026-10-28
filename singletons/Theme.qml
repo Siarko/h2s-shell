@@ -47,6 +47,9 @@ QtObject {
     // Sliders
     readonly property color sliderAccent: "#44d47a"      // active track fill
     readonly property color sliderAccentHover: "#92db7a"   // active track fill on hover
+    // Link throughput graph: download in the accent, upload in a contrasting blue
+    readonly property color graphDownload: sliderAccent
+    readonly property color graphUpload: "#5aa9e6"
 
     // Calendar
     readonly property color todayHighlight: "#666666"   // background circle on today's date

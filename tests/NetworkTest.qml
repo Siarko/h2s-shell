@@ -123,6 +123,9 @@ TestCase {
             assertEqual(_link.txSpeed, 1000, "link speed: tx bytes per second");
             _link._update(100, 100);
             assert(_link.rxSpeed === 0 && _link.txSpeed === 0, "link speed: a counter reset never goes negative");
+            assertEqual(_link.rxHistory.length, 2, "link speed: one history sample per measured tick, none for the baseline");
+            assertEqual(_link.rxHistory[0].v, 2000, "link speed: history holds the rx speed");
+            assertEqual(_link.txHistory[0].v, 1000, "link speed: and the tx speed separately");
         }
     }
 }

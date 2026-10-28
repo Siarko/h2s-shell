@@ -20,6 +20,11 @@ Item {
     property real rxSpeed: 0
     property real txSpeed: 0
 
+    // [{ t, v }] in bytes/s, one sample per tick while the link is up, for the graph
+    property var rxHistory: []
+    property var txHistory: []
+    property int maxHistory: 1800  // 1h at 2 s
+
     // Byte counts from the previous tick; -1 means the next read only establishes
     // a baseline. Switching device or going down has to go through that again,
     // otherwise the first delta would be a jump between two unrelated counters.
@@ -72,6 +77,9 @@ Item {
         var seconds = intervalMs / 1000.0
         rxSpeed = Math.max(0, (rxBytes - _rxPrevious) / seconds)
         txSpeed = Math.max(0, (txBytes - _txPrevious) / seconds)
+        var now = Date.now()
+        rxHistory = rxHistory.slice(-(maxHistory - 1)).concat([{t: now, v: rxSpeed}])
+        txHistory = txHistory.slice(-(maxHistory - 1)).concat([{t: now, v: txSpeed}])
         _rxPrevious = rxBytes
         _txPrevious = txBytes
     }

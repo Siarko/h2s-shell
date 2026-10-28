@@ -71,7 +71,8 @@ Opened from their bar widget, rendered in the single popup below the bar.
 - **Bluetooth** — adapter toggle, paired and discovered devices, connect/disconnect.
 - **Network** — VPN connections, ethernet with a connect toggle, wifi with a radio
   toggle, the scanned network list with signal strength and security, hidden-network
-  entry, saved-profile management, plus live throughput, IP and DNS per link.
+  entry, saved-profile management, plus live throughput (click it for a
+  download/upload history graph), IP and DNS per link.
 - **Notifications** — the list of unread notifications with per-item dismiss, dismiss
   all, and codes (one-time passwords and similar) extracted by the regexes in
   Settings → Notifications.

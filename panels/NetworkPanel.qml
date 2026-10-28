@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.network
 
@@ -212,24 +213,13 @@ Item {
             }
         }
 
-        RowLayout {
+        LinkSpeedRow {
             visible: EthernetManager.ethernetConnected
             width: parent.width
-
-            Text {
-                text: "↓ " + NetworkManager.formatSpeed(EthernetManager.rxSpeed)
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-                Layout.fillWidth: true
-            }
-
-            Text {
-                text: "↑ " + NetworkManager.formatSpeed(EthernetManager.txSpeed)
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-            }
+            rxSpeed: EthernetManager.rxSpeed
+            txSpeed: EthernetManager.txSpeed
+            rxHistory: EthernetManager.rxHistory
+            txHistory: EthernetManager.txHistory
         }
 
         // Ethernet IP and DNS
@@ -358,24 +348,13 @@ Item {
         }
 
         // ---- WiFi live RX/TX speed ----
-        RowLayout {
+        LinkSpeedRow {
             visible: WifiManager.wifiConnected
             width: parent.width
-
-            Text {
-                text: "↓ " + NetworkManager.formatSpeed(WifiManager.rxSpeed)
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-                Layout.fillWidth: true
-            }
-
-            Text {
-                text: "↑ " + NetworkManager.formatSpeed(WifiManager.txSpeed)
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-            }
+            rxSpeed: WifiManager.rxSpeed
+            txSpeed: WifiManager.txSpeed
+            rxHistory: WifiManager.rxHistory
+            txHistory: WifiManager.txHistory
         }
 
         // WiFi IP and DNS

@@ -12,6 +12,8 @@ Singleton {
     // Throughput of the wifi device, measured independently of ethernet
     readonly property real rxSpeed: _wifiSpeed.rxSpeed
     readonly property real txSpeed: _wifiSpeed.txSpeed
+    readonly property var rxHistory: _wifiSpeed.rxHistory
+    readonly property var txHistory: _wifiSpeed.txHistory
 
     LinkSpeed {
         id: _wifiSpeed
