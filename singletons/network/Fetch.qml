@@ -11,12 +11,25 @@ Singleton {
 
     property var _pendingRequests: ({})
 
+    // QML's XMLHttpRequest has no timeout property — setting one is silently ignored — so
+    // each request gets its own timer that aborts it. Without one, a hung request never
+    // settles and its id stays deduplicated onto a dead promise for the rest of the session.
+    readonly property int defaultTimeout: 30000
+
+    Component {
+        id: _timeoutTimer
+        Timer {}
+    }
+
     Logger {
         id: logger
         enabled: Config.general.fetch_debug
         prefix: "[FETCH]"
     }
 
+    // data: { method, headers, params, query, body, id, timeout }
+    // Rejects with an Error carrying `status` (0 when no response arrived) and, when the
+    // request was aborted for taking longer than `timeout` ms, `timedOut: true`.
     function request(url, data) {
         if (root._pendingRequests[data.id]) {
             logger.log("Returning stamped promise", data.id, root._pendingRequests[data.id]);
@@ -45,9 +58,35 @@ Singleton {
                     xhr.setRequestHeader(name, value);
                 }
             }
+            const timeout = data.timeout ?? root.defaultTimeout;
+            let timedOut = false;
+            const timer = _timeoutTimer.createObject(root, { interval: timeout });
+            timer.triggered.connect(() => {
+                logger.log("Request timed out after", timeout, "ms:", url);
+                timedOut = true;
+                // abort() completes the request synchronously with status 0, which lands
+                // in onreadystatechange below
+                xhr.abort();
+            });
+
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== XMLHttpRequest.DONE)
                     return;
+                timer.stop();
+                timer.destroy();
+                // Released before settling, not in finally(): finally runs after every
+                // handler, so a handler retrying the same id was handed this settled promise
+                if (data.id && root._pendingRequests[data.id] === result) {
+                    logger.log("Request done, removing stamped request", data.id);
+                    delete root._pendingRequests[data.id];
+                }
+                if (timedOut) {
+                    let failure = new Error("Request timed out after " + timeout + " ms");
+                    failure.status = 0;
+                    failure.timedOut = true;
+                    reject(failure);
+                    return;
+                }
                 if (xhr.status >= 200 && xhr.status < 300) {
                     resolve({
                         responseObject: xhr,
@@ -76,12 +115,9 @@ Singleton {
                 }
             };
             xhr.send(data.body ?? null);
+            timer.start();
         });
         if (data.id) {
-            result.finally(() => {
-                logger.log("Request resolved, removing stamped request ", data.id);
-                delete root._pendingRequests[data.id];
-            });
             logger.log("Adding stamped request", data.id, result);
             root._pendingRequests[data.id] = result;
         }

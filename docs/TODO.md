@@ -10,7 +10,7 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: 1.1, 1.5 and 1.2 done** (2026-10-28). Next item: 1.3, a timeout and error handling for `Fetch`.
+**Status: Stage 1 items 1.1, 1.5, 1.2 and 1.3 done** (2026-10-28). Next item: 1.4, test suites for the pure parsers.
 
 ---
 
@@ -118,9 +118,16 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `typeof args[num] !== undefined` is always true; URLs get the string `undefined`.
       Fixed; a missing argument now leaves its `{n}` placeholder in place. Covered by
       `tests/FetchTest.qml`, which fails against the old code.
-- [ ] **1.3 Add request timeout and error handling to `Fetch`** [#3]
+- [x] **1.3 Add request timeout and error handling to `Fetch`** [#3]
       `singletons/network/Fetch.qml:20-82` — no `xhr.timeout`, no `ontimeout`/`onerror`,
       so a hung request wedges its dedup id for the rest of the session.
+      Done 2026-10-28, verified on the host. `xhr.timeout` turned out not to exist in QML
+      (setting it is silently ignored, `ontimeout` never fires), so each request gets a
+      `Timer` that calls `xhr.abort()`; default 30 s, per call via `data.timeout`. A timed
+      out request rejects with `status: 0` and `timedOut: true`, so callers can tell it
+      from a network error (`status: 0` alone) or an HTTP error. The dedup id is now
+      released when the request completes, before any handler runs — releasing it in
+      `finally` handed a handler that retried the same id the already settled promise.
 - [ ] **1.4 Add test suites for the pure parsers** [#38]
       `NetworkManager._processStatus`, `WifiManager._processWifiList`, `IpManager._parse`,
       `Fetch._printf` (done with 1.2), `LinkSpeed._update`, `GoogleCalendar._getEventDayKeys`. These are
