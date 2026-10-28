@@ -156,13 +156,14 @@ Singleton {
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim()
             if (line === "") continue
-            var parts = line.split(":")
+            // SSID,SIGNAL,SECURITY,IN-USE,FREQ
+            var parts = Nmcli.splitTerse(line)
             if (parts.length < 5) continue
-            var freq = parts[parts.length - 1].trim()
-            var inUse = parts[parts.length - 2].trim() === "*"
-            var security = parts[parts.length - 3].trim()
-            var signal = parseInt(parts[parts.length - 4]) || 0
-            var ssid = parts.slice(0, parts.length - 4).join(":")
+            var ssid = parts[0]
+            var signal = parseInt(parts[1]) || 0
+            var security = parts[2].trim()
+            var inUse = parts[3].trim() === "*"
+            var freq = parts[4].trim()
             if (ssid === "") continue
             var freqNum = parseInt(freq) || 0
             var band = freqNum >= 3000 ? "5G" : (freqNum > 0 ? "2.4G" : "")
@@ -217,10 +218,11 @@ Singleton {
     function _processSaved(lines) {
         var ssids = []
         for (var i = 0; i < lines.length; i++) {
-            var parts = lines[i].split(":")
+            // NAME,TYPE
+            var parts = Nmcli.splitTerse(lines[i])
             if (parts.length < 2) continue
-            var type = parts[parts.length - 1].trim()
-            var name = parts.slice(0, parts.length - 1).join(":")
+            var name = parts[0]
+            var type = parts[1].trim()
             if (type === "802-11-wireless")
                 ssids.push(name)
         }

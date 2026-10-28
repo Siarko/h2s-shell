@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.network
 
 Singleton {
     id: root
@@ -72,12 +73,12 @@ Singleton {
         var wifiDeviceName = ""
         var wifiDeviceState = ""
         for (var i = 0; i < lines.length; i++) {
-            var parts = lines[i].trim().split(":")
+            var parts = Nmcli.splitTerse(lines[i].trim())
             if (parts.length < 3) continue
             var device = parts[0].trim()
             var type = parts[1].trim()
             var state = parts[2].trim()
-            var connection = parts.slice(3).join(":")
+            var connection = parts[3] ?? ""
             // Containers and VMs add plenty of type "ethernet" interfaces (veth
             // pairs, taps). NetworkManager reports them as unmanaged, which is
             // what keeps them from being mistaken for the real port.

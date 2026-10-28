@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.network
 
 Singleton {
     id: root
@@ -55,11 +56,12 @@ Singleton {
         var active = ""
         var activeType = ""
         for (var i = 0; i < lines.length; i++) {
-            var parts = lines[i].split(":")
-            if (parts.length < 2) continue
-            var state = parts[parts.length - 1].trim()
-            var type  = parts[parts.length - 2].trim()
-            var name  = parts.slice(0, parts.length - 2).join(":")
+            // NAME,TYPE,STATE
+            var parts = Nmcli.splitTerse(lines[i])
+            if (parts.length < 3) continue
+            var name  = parts[0]
+            var type  = parts[1].trim()
+            var state = parts[2].trim()
             var isVpn = type === "wireguard" || type === "vpn" || type === "openconnect"
             if (!isVpn) continue
             connections.push({ name: name, type: type })
