@@ -10,7 +10,7 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stage 1 items 1.1, 1.5, 1.2 and 1.3 done** (2026-10-28). Next item: 1.4, test suites for the pure parsers.
+**Status: Stage 1 done** (2026-10-28). Next item: 2.1, a shared `PopupWidget` component.
 
 ---
 
@@ -128,13 +128,25 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       from a network error (`status: 0` alone) or an HTTP error. The dedup id is now
       released when the request completes, before any handler runs — releasing it in
       `finally` handed a handler that retried the same id the already settled promise.
-- [ ] **1.4 Add test suites for the pure parsers** [#38]
+- [x] **1.4 Add test suites for the pure parsers** [#38]
       `NetworkManager._processStatus`, `WifiManager._processWifiList`, `IpManager._parse`,
       `Fetch._printf` (done with 1.2), `LinkSpeed._update`, `GoogleCalendar._getEventDayKeys`. These are
       pure functions and were the source of several bugs found in the review.
       Add one for `Promises.allSettled` ordering too [#40] — the existing assertions only
       cover synchronously settled promises, so they pass on a guarantee the code does not
       actually provide.
+      Done 2026-10-28, verified on the host. New suites `tests/NetworkTest.qml` and
+      `tests/CalendarDatesTest.qml`, plus an out-of-order `allSettled` test. Each new test
+      that targets a bug fails against the old code. Bugs fixed along the way:
+      - `allSettled` returned results in settlement order [#40]; now in input order.
+      - **New:** `nmcli -t` escapes `:` and `\` in values with a backslash, and four parsers
+        split on a bare `:` — status, wifi list, saved networks, VPN list. An SSID or
+        connection name containing a colon came out as `Home\:5G`, matched nothing, and
+        left "connecting" stuck. They now use `Nmcli.splitTerse()`
+        (`singletons/network/Nmcli.qml`).
+      - The date helpers moved from `GoogleCalendar` to the pure
+        `singletons/googlecalendar/CalendarDates.qml`, since loading `GoogleCalendar` in a
+        test connects to the real account. `GoogleCalendar` delegates; a first slice of 6.5.
 
 ## Stage 2 — Groundwork that makes touch a one-place change
 
