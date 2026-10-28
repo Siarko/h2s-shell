@@ -16,7 +16,9 @@ BarWidget {
     Text {
         text: "󰂚"
         font.family: Theme.fontFamily
-        color: Theme.textPrimary
+        // Accent while notifications are waiting to be read, same as the
+        // network and dictation widgets use for "this is live"
+        color: Notifications.notifications.count > 0 ? Theme.sliderAccent : Theme.textPrimary
         anchors.centerIn: parent
     }
 }
