@@ -10,8 +10,8 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stages 1 and 2 done** (2026-10-28). Next item: 3.1, a scale unit in
-`Theme.qml`.
+**Status: Stages 1, 2 and 3 done** (2026-10-28). Stage 4 (touch) is deferred until the
+Framework 12 is at hand, since it cannot be verified here. Next item: Stage 5, idle cost.
 
 ---
 
@@ -188,13 +188,22 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 3 — Scaling  [blocks the Framework 12 install]
 
-- [ ] **3.1 A scale unit in `Theme.qml`** [#27]
+- [x] **3.1 A scale unit in `Theme.qml`** [#27]
       No `devicePixelRatio`/`Screen.pixelDensity` anywhere; 245 hardcoded pixel sizes and
       absolute font sizes. Needs a `dp()` or `scale` driven by the screen plus an explicit
       user override, since compositor scaling and shell scaling interact.
-- [ ] **3.2 Migrate sizes to the scale unit**
+      **Not needed — verified on the host 2026-10-28.** On Wayland the QML sizes are
+      logical pixels: Hyprland's per-monitor scale reaches Qt (6.12, fractional scale
+      supported) and the whole shell — bar, popups, fonts, reserved space — scaled
+      correctly when the user changed a monitor's scale. HiDPI on the Framework 12 is a
+      `monitor=` line in Hyprland, as for every other app. What scaling does not cover
+      is how big touch targets should be, which is a design decision and belongs to
+      Stage 4 (4.6).
+- [x] **3.2 Migrate sizes to the scale unit**
       Mechanical but wide. `panels/calendar/EventForm.qml` alone has 45. Worth doing
       per-file alongside the Stage 6 splits rather than in one sweep.
+      **Dropped with 3.1.** The sizes stay as they are; they still belong in `Theme.qml`
+      where they are shared, but that is ordinary hygiene, not a scaling prerequisite.
 
 ## Stage 4 — Touch input
 
@@ -211,6 +220,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **4.5 Gestures** [#29]
       Swipe to dismiss a notification, edge swipe for panels. New feature surface —
       depends on 4.1–4.4.
+- [ ] **4.6 Touch-sized targets**
+      Split off 3.1. Compositor scaling makes everything proportionally larger but does
+      not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized
+      (~9 mm). Decide minimum target sizes, put them in `Theme.qml`, and apply them in the
+      shared components first.
 
 ## Stage 5 — Idle cost  [battery]
 

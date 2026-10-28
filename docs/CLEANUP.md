@@ -451,7 +451,7 @@ touch they either never highlight, or highlight and stay stuck after the finger 
 Fix: drive visual state from a handler that covers both (`TapHandler.pressed` plus
 `HoverHandler.hovered`), ideally through shared components so it is not 64 edits.
 
-### 27. No scaling: 245 hardcoded pixel dimensions and nothing reads the DPI
+### 27. No scaling: 245 hardcoded pixel dimensions and nothing reads the DPI — **NOT A PROBLEM**
 
 There is no `devicePixelRatio`, `Screen.pixelDensity` or scale factor anywhere in the
 project. `Theme.qml` holds absolute font sizes (9–52 px), the bar is 36 px tall, bar cells
@@ -466,6 +466,11 @@ Fix: introduce a scale unit in `Theme.qml` (a `dp()` function or a `scale` multi
 driven by the screen and an explicit user setting), and express sizes in it. This is a
 wide but mechanical change, and it is the one that has to happen before the laptop is
 usable.
+
+**Verified otherwise on the host (2026-10-28):** QML sizes are logical pixels, and
+Hyprland's per-monitor scale is applied by Qt — the whole shell scaled correctly with a
+monitor's scale changed. The analysis above assumed a compositor scale of 1. What is
+left is touch-target size, a design decision tracked as TODO 4.6.
 
 ### 28. Wheel-only interactions have no touch equivalent
 
