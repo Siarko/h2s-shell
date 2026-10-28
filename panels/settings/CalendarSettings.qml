@@ -78,6 +78,37 @@ ColumnLayout {
         Layout.bottomMargin: 4
     }
 
+    // Cancel button (shown while OAuth process runs). A bad client id leaves Google on its
+    // own error page, the redirect never comes, and without this the page is stuck.
+    Item {
+        visible: GoogleCalendarAuth.isBusy
+        Layout.fillWidth: true
+        Layout.preferredHeight: 44
+
+        Rectangle {
+            width: 90
+            height: 28
+            radius: 6
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            color: Theme.cellDefault
+
+            Text {
+                anchors.centerIn: parent
+                text: "Cancel"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                color: Theme.textPrimary
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: GoogleCalendarAuth.cancelLogin()
+            }
+        }
+    }
+
     // Not-authorized inputs (hidden while busy or connected)
     ColumnLayout {
         visible: !GoogleCalendarAuth.isAuthorized && !GoogleCalendarAuth.isBusy

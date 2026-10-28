@@ -34,6 +34,11 @@ quickshell                 # reads shell.qml from the current directory
 quickshell -p tests.qml    # runs the test suites, prints PASS/FAIL, exits
 ```
 
+A running shell reloads itself when a file changes, but that reload is not enough after
+editing a singleton: it has been seen to rebuild the panels while keeping the old
+singleton, so new functions show up as `TypeError: ... is not a function`. Restart the
+shell fully after changing anything under `singletons/`.
+
 Beyond the one test suite, verification is manual: check that the bar renders, the clock
 ticks, cells respond to clicks, and popups toggle.
 

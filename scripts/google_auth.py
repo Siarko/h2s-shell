@@ -90,10 +90,13 @@ def main():
         os.close(old_stdout_fd)
 
     server = HTTPServer(("127.0.0.1", port), Handler)
-    server.handle_request()  # handle exactly one request
+    # A bad client id leaves Google on its own error page and the redirect never comes;
+    # without a timeout this process, and the shell's "Connecting…" state, wait forever.
+    server.timeout = 300
+    server.handle_request()  # handle exactly one request, or give up on timeout
 
     if not auth_code[0]:
-        print("No authorization code received", file=sys.stderr)
+        print("No authorization code received (timed out or denied)", file=sys.stderr)
         sys.exit(1)
 
     # Exchange authorization code for tokens

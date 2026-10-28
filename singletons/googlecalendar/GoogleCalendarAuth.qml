@@ -45,8 +45,17 @@ Singleton {
         }
     }
 
+    // Set by cancelLogin() so the empty output of a killed helper is not reported as an error
+    property bool _loginCancelled: false
+
     function login() {
+        root._loginCancelled = false;
         authProcess.running = true;
+    }
+
+    function cancelLogin() {
+        root._loginCancelled = true;
+        authProcess.running = false;
     }
 
     function logout() {
@@ -57,6 +66,12 @@ Singleton {
     }
 
     function _handleAuthResult(result: string) {
+        if (root._loginCancelled) {
+            root._loginCancelled = false;
+            logger.log("Login cancelled by the user");
+            root.authorized(false);
+            return;
+        }
         try {
             let json = JSON.parse(result.trim());
             Config.gcal.accessToken = json.access_token || "";
