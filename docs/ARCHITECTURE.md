@@ -211,8 +211,10 @@ By convention a widget declares:
 | `popup` | the Bar's `Popup`, if it has one |
 | `profile` | the active profile name, assigned by the Bar's `Loader` |
 
-This contract is only loosely followed: four widgets omit `widgetType` and `TrayWidget`
-is a bare `Row` rather than a `BarWidget` (CLEANUP.md #7).
+`widgetType` is declared on `BarWidget` itself. A widget whose content has several click
+targets of its own (the tray, the workspaces) sets `interactive: false`, which keeps the
+cell's size and background but disables its full-size `MouseArea` — otherwise that sits
+above the content and takes every click and hover.
 
 ### Hardware sources
 
@@ -268,8 +270,8 @@ Logger { id: logger; prefix: "[STT]"; enabled: Config.stt.debug }
 Every bar widget type is one entry in `singletons/WidgetRegistry.qml`; the bar, the
 section editor's picker and names, the widget settings pane and the popup all read it.
 
-1. `widgets/<Name>Widget.qml` — the widget itself. Extend `PopupWidget` (and set
-   `widgetType`) if it opens a popup, otherwise `BarWidget`.
+1. `widgets/<Name>Widget.qml` — the widget itself, setting `widgetType`. Extend
+   `PopupWidget` if it opens a popup, otherwise `BarWidget`.
 2. If it has a popup: the panel under `panels/`. It is loaded by URL, so it needs no
    wiring; a panel that must talk back to the popup (close it, know the screen) is the
    exception and goes in `Popup.qml`'s `_componentMap`, like the tray menu.

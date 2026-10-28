@@ -13,9 +13,10 @@ import QtQuick
 //   name        — shown in settings
 //   widget      — the bar widget
 //   popup       — popup content key, for widgets built on PopupWidget; their popup mode
-//                 is user-configurable. Widgets that manage their own popup (tray,
-//                 notifications) leave it out.
-//   popupPanel  — the panel the popup shows for that key
+//                 is user-configurable. The tray, which opens a menu per icon, leaves it
+//                 out.
+//   popupPanel  — the panel the popup shows for that key. A panel that needs wiring to
+//                 the popup is built from Popup.qml's _componentMap instead, which wins.
 //   settings    — per-profile settings page, if the widget has one
 Singleton {
     id: root
@@ -41,7 +42,8 @@ Singleton {
         { type: "tray", name: "System Tray", widget: "widgets/TrayWidget.qml" },
         { type: "network", name: "Network", widget: "widgets/NetworkWidget.qml",
           popup: "network", popupPanel: "panels/NetworkPanel.qml" },
-        { type: "notifications", name: "Notifications", widget: "widgets/NotificationsWidget.qml" },
+        { type: "notifications", name: "Notifications", widget: "widgets/NotificationsWidget.qml",
+          popup: "notifications", popupPanel: "panels/NotificationPanel.qml" },
         { type: "hardware", name: "Hardware", widget: "widgets/HardwareWidget.qml",
           popup: "hardware", popupPanel: "panels/HardwarePanel.qml",
           settings: "panels/widget_settings/HardwareWidgetSettings.qml" },

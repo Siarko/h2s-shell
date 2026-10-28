@@ -1,13 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
-Item {
+// Each workspace is its own button, so the cell itself takes no input
+BarWidget {
     id: root
-    Layout.fillHeight: true
-    Layout.topMargin: 5
-    Layout.bottomMargin: 5
-    implicitWidth: wsRow.width + 16
+    widgetType: "workspaces"
+    interactive: false
+    // Narrower than a plain cell is fine with a single workspace showing
+    Layout.minimumWidth: 0
 
     property string profile: ""
 
@@ -43,12 +45,6 @@ Item {
             return true;
         var data = JSON.parse(Config.widgetProfiles || "{}");
         return data["workspaces"]?.[profile]?.showNormal ?? true;
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        radius: 5
-        color: Theme.cellDefault
     }
 
     Row {

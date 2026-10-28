@@ -3,6 +3,7 @@ import qs.components
 import qs.singletons
 
 BarWidget {
+    widgetType: "settings"
     property var settingsWindow: null
 
     onClicked: settingsWindow.visible = !settingsWindow.visible

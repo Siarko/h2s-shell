@@ -8,8 +8,6 @@ BarWidget {
     id: root
 
     property var popup: null
-    // Key into Config.widgetProfiles, where the user's popup mode is stored
-    property string widgetType: ""
     // Which panel the popup shows, as registered in WidgetRegistry (the clock's is
     // "calendar")
     readonly property string popupContent: WidgetRegistry.popupContent(widgetType)

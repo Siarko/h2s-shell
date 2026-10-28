@@ -10,8 +10,8 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stage 1, 2.1 and 2.2 done** (2026-10-28). Next item: 2.3, the four widgets
-not yet on the widget contract.
+**Status: Stages 1 and 2 done** (2026-10-28). Next item: 3.1, a scale unit in
+`Theme.qml`.
 
 ---
 
@@ -174,9 +174,17 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       found and fixed on the host: `ScriptModel` updates `modelData` in place, so the
       bar must bind `profile` to the delegate's `modelData`, not capture it once — the
       custom workspace and hardware labels had disappeared.
-- [ ] **2.3 Bring the four stragglers onto the widget contract** [#15]
+- [x] **2.3 Bring the four stragglers onto the widget contract** [#15]
       `NotificationsWidget`, `SettingsWidget`, `TrayWidget` (currently a bare `Row`),
       `WorkspacesWidget`.
+      Done 2026-10-28, verified on the host. `widgetType` moved down into `BarWidget`, and
+      every widget sets it. `BarWidget` gained `interactive` (false: the cell keeps size
+      and background but its full-size `MouseArea` stops swallowing the clicks of the
+      tray icons and workspace buttons) and `horizontalPadding`. Tray and workspaces look
+      as before; tray icons now highlight on hover and while their menu is open.
+      `NotificationsWidget` is a `PopupWidget`, so its popup mode is configurable; its
+      accent colour for unread notifications never worked (it read `.count`, which the
+      `ObjectModel` does not have) and now does.
 
 ## Stage 3 — Scaling  [blocks the Framework 12 install]
 

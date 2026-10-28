@@ -5,12 +5,20 @@ import qs.singletons
 // Reusable interactive bar widget with click and hover signals
 Item {
     id: container
+    // Key into WidgetRegistry and Config.widgetProfiles
+    property string widgetType: ""
     property color cellColor: Theme.cellDefault
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)
     property bool active: false
     // Optional outline around the cell — off by default, so existing widgets are unaffected
     property color borderColor: "transparent"
     property int borderWidth: 0
+    // False for widgets with several click targets of their own (tray icons, workspace
+    // buttons): the cell keeps its size and background but stops taking input, which
+    // otherwise lands on its full-size MouseArea above the content
+    property bool interactive: true
+    // Space between the content and the cell edge, on each side
+    property int horizontalPadding: 8
     // Emitted on click, carries the cell's color
     signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
@@ -27,7 +35,7 @@ Item {
     Layout.topMargin: 5
     Layout.bottomMargin: 5
     Layout.minimumWidth: 40
-    implicitWidth: contentItem.childrenRect.width + 16
+    implicitWidth: contentItem.childrenRect.width + horizontalPadding * 2
 
     default property alias content: contentItem.data
 
@@ -53,6 +61,7 @@ Item {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
+        enabled: container.interactive
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 

@@ -286,7 +286,7 @@ file that otherwise knows nothing about the screen.
 Fix: have `Popup` expose the available content height as a property and let panels bind
 to it.
 
-### 15. The widget contract is not followed
+### 15. The widget contract is not followed — **FIXED**
 
 `widgetType` is missing from `NotificationsWidget`, `SettingsWidget`, `TrayWidget` and
 `WorkspacesWidget`, and `TrayWidget` is a bare `Row` rather than a `BarWidget` — so it
