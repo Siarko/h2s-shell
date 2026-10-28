@@ -17,7 +17,7 @@ Item {
 
     readonly property var _popupKeys: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data[widgetType]?.["_popup"] ?? ["cpu", "ram", "disk", "cpuTemp", "gpu", "gpuTemp"]
+        return data[widgetType]?.["_popup"] ?? Hardware.sourceIds
     }
 
     function _saveCapsuleKeys(keys) {

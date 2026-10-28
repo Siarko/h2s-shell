@@ -223,11 +223,23 @@ interface every sensor must implement (`sourceId`, `label`, `unit`, `value`, `mi
 `maxValue`, `available`, `history`, `maxHistory`, `subtitle`, `showProgressBar`).
 
 `singletons/Hardware.qml` is the registry: `sources` is the ordered list panels iterate,
-and `sourceForId()` resolves a source by its id. Current ids: `cpu`, `ram`, `disk`,
-`cpuTemp`, `gpu`, `gpuTemp`.
+`sourceIds` lists their ids for the settings UI, and `sourceForId()` resolves a source by
+its id. Fixed ids: `cpu`, `ram`, `disk`, `cpuTemp`. Every GPU adds three more, keyed by
+its PCI slot because `cardN` numbering can change between boots: `gpu@0000:03:00.0`
+(load), `vram@…` and `gpuTemp@…`. The bare `gpu`, `vram` and `gpuTemp` of configs from
+before multi-GPU support still resolve, to the primary card. User labels are stored under
+the configured id, so look them up with `Hardware.displayLabel()`; a label of only a space
+deliberately shows as blank.
 
-`GpuDevice.qml` is a non-source helper that decides *which* DRM card the two GPU sources
-read, so they cannot disagree. It is deliberately absent from `Hardware.sources`.
+Sources read procfs and sysfs through `singletons/io/KernelFile.qml`, a `FileView` read
+synchronously on every poll — no `cat` subprocess, and values read in one tick come from
+the same moment. Only things that are not a file still use a `Process`: `df` for the
+disk, and the one-time sensor discovery at startup.
+
+`GpuDevices.qml` finds every amdgpu card once at startup, with its name from `lspci`,
+its temperature sensor, and which one is primary (a dedicated card before an APU's
+carve-out). `Hardware.qml` instantiates a `GpuCard` — load, memory and temperature
+sources — per card.
 
 ### Promises
 

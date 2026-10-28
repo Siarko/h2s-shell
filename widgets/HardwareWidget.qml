@@ -25,8 +25,8 @@ PopupWidget {
         for (var i = 0; i < _capsuleKeys.length; i++) {
             var src = Hardware.sourceForId(_capsuleKeys[i])
             if (src && src.available) {
-                var label = _customLabels[src.sourceId] || src.label
-                parts.push(label + " " + Math.round(src.value) + src.unit)
+                var label = Hardware.displayLabel(_customLabels, _capsuleKeys[i]).trim()
+                parts.push((label !== "" ? label + " " : "") + Math.round(src.value) + src.unit)
             }
         }
         return parts.join("  ") || "—"

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
 Item {
@@ -13,7 +14,7 @@ Item {
     Layout.fillWidth: true
     implicitHeight: _outer.implicitHeight
 
-    readonly property var _allSourceIds: ["cpu", "ram", "disk", "cpuTemp", "gpu", "gpuTemp"]
+    readonly property var _allSourceIds: Hardware.sourceIds
 
     function _getLabel(sourceId) {
         var data = JSON.parse(Config.widgetProfiles || "{}")
@@ -240,7 +241,11 @@ Item {
                                             }
                                         }
 
-                                        onEditingFinished: root._setLabel(_row.modelData, text.trim())
+                                        // Whitespace alone is kept as a single space: it is
+                                        // how a label is left blank, while an empty field
+                                        // goes back to the default label
+                                        onEditingFinished: root._setLabel(_row.modelData,
+                                            text !== "" && text.trim() === "" ? " " : text.trim())
                                     }
 
                                     MouseArea {
@@ -332,9 +337,14 @@ Item {
                         }
 
                         Repeater {
-                            model: root._allSourceIds.filter(id =>
-                                !_rowList.workingList.includes(id) &&
-                                (Hardware.sourceForId(id)?.available ?? false))
+                            // ScriptModel, never the bare array — see "The Repeater crash".
+                            // Compared by source, not id: "gpu" in an older config is the
+                            // same source as its "gpu@<slot>".
+                            model: ScriptModel {
+                                values: root._allSourceIds.filter(id =>
+                                    !_rowList.workingList.some(listed => Hardware.sourceForId(listed) === Hardware.sourceForId(id)) &&
+                                    (Hardware.sourceForId(id)?.available ?? false))
+                            }
 
                             Item {
                                 required property string modelData

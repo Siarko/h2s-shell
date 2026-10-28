@@ -228,9 +228,17 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 5 — Idle cost  [battery]
 
-- [ ] **5.1 Read sysfs with `FileView` instead of `cat` subprocesses** [#21]
+- [x] **5.1 Read sysfs with `FileView` instead of `cat` subprocesses** [#21]
       Biggest single win: ~180 of the ~250 process spawns per minute. Affects the six
       `singletons/hardware/` sources and `singletons/network/LinkSpeed.qml`.
+      Done 2026-10-28, verified on the host. `singletons/io/KernelFile.qml` is a
+      `FileView` read synchronously per poll (~18 µs). Sensor discovery runs once at
+      startup; only `df` for the disk is still a process. While verifying: GPU load was
+      a single instantaneous sample that was mostly 0 — now averaged over 200 ms samples;
+      VRAM got its own source instead of a subtitle under the load bar; the history
+      graph's time axis now spans the selected window instead of the samples; every
+      amdgpu card gets its own load, VRAM and temperature sources; a label of a single
+      space shows as blank.
 - [ ] **5.2 Replace `nmcli` polling with NetworkManager DBus signals** [#21]
       `NetworkManager`, `WifiManager`, `VpnManager`, `IpManager`, `EthernetManager`.
       Removes ~60 spawns/min and makes the UI react instantly instead of up to 5 s late.
@@ -284,8 +292,8 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **8.7 `Lockscreen`: bind config declaratively** [#10]
 - [ ] **8.9 Wrap the remaining live `Repeater` models in `ScriptModel`** [#43]
       The rule behind the months of random crashes — see ARCHITECTURE.md, "The Repeater
-      crash". Bar and the add-widget picker are fixed with 2.2; `HardwarePanel` (inside a
-      popup) is the most urgent of the rest.
+      crash". Bar and the add-widget picker are fixed with 2.2, `HardwarePanel` (the most
+      urgent, inside a popup) alongside the GPU fix in 5.1.
 - [ ] **8.8 Show calendar errors in the UI**
       Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API
       error) only reaches the log; the calendar just stays empty, indistinguishable from

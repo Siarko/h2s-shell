@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
 Item {
@@ -14,15 +15,25 @@ Item {
         return data["hardware"]?.["_popupLabels"] ?? {}
     }
 
-    readonly property var _popupSources: {
+    // Source ids as configured — labels are stored under these, which for the ids from
+    // before multi-GPU support ("gpu") differ from the source's own sourceId
+    readonly property var _popupKeys: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
-        var keys = data["hardware"]?.["_popup"] ?? Hardware.sources.map(s => s.sourceId)
+        return data["hardware"]?.["_popup"] ?? Hardware.sourceIds
+    }
+
+    readonly property var _popupSources: {
         var result = []
-        for (var i = 0; i < keys.length; i++) {
-            var src = Hardware.sourceForId(keys[i])
+        for (var i = 0; i < _popupKeys.length; i++) {
+            var src = Hardware.sourceForId(_popupKeys[i])
             if (src && src.available) result.push(src)
         }
         return result
+    }
+
+    function _labelFor(source) {
+        var key = _popupKeys.find(k => Hardware.sourceForId(k) === source) ?? source.sourceId
+        return Hardware.displayLabel(_customLabels, key)
     }
 
     readonly property int _rowH: 36
@@ -36,7 +47,11 @@ Item {
         spacing: 0
 
         Repeater {
-            model: root._popupSources
+            // ScriptModel, never the bare array — see "The Repeater crash" in
+            // docs/ARCHITECTURE.md. The sources are singletons, so identity is stable.
+            model: ScriptModel {
+                values: root._popupSources
+            }
 
             delegate: Item {
                 id: _row
@@ -79,7 +94,8 @@ Item {
                             spacing: 8
 
                             Text {
-                                text: root._customLabels[_row.modelData.sourceId] || _row.modelData.label
+                                text: root._labelFor(_row.modelData)
+                                elide: Text.ElideRight
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
@@ -214,13 +230,15 @@ Item {
                                     for (var i = 0; i < pts.length; i++) {
                                         if (pts[i].t >= now - windowMs) filtered.push(pts[i])
                                     }
-                                    if (filtered.length < 2) filtered = pts.slice(-Math.min(pts.length, 30))
                                     if (filtered.length < 2) return
 
+                                    // The x axis is the selected window ending now, not the span of
+                                    // the samples — otherwise a history shorter than the window is
+                                    // stretched across the full width and the scale buttons do
+                                    // nothing until it fills up
                                     var range    = Math.max(1, src.maxValue - src.minValue)
-                                    var startT   = filtered[0].t
-                                    var endT     = Math.max(filtered[filtered.length - 1].t, startT + 1)
-                                    var timeSpan = endT - startT
+                                    var startT   = now - windowMs
+                                    var timeSpan = windowMs
 
                                     function rgba(c, a) {
                                         return "rgba(" + Math.round(c.r*255) + "," + Math.round(c.g*255) + "," + Math.round(c.b*255) + "," + a + ")"
