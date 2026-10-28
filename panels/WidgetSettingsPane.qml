@@ -24,8 +24,9 @@ Item {
 
     readonly property string _popupMode: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
-        var def = ["network", "hardware", "power"].includes(widgetType) ? "click" : "hover"
-        return data[widgetType]?.["_popupMode"] ?? def
+        // Must match PopupWidget.defaultPopupMode. Click is the default for every widget:
+        // hover cannot be triggered on a touch screen.
+        return data[widgetType]?.["_popupMode"] ?? "click"
     }
 
     function _savePopupMode(mode) {

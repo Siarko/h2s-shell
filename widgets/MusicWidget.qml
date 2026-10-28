@@ -2,24 +2,9 @@ import QtQuick
 import qs.components
 import qs.singletons
 
-BarWidget {
-    property var popup: null
-    property string widgetType: "music"
+PopupWidget {
+    widgetType: "music"
 
-    readonly property string _popupMode: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["music"]?.["_popupMode"] ?? "hover"
-    }
-
-    onClicked: {
-        if (_popupMode !== "click") return
-        if (popup?.active && popup?.contentType === "music") popup.close()
-        else popup.open(this, true, "music")
-    }
-    onHover: state => {
-        if (_popupMode !== "hover") return
-        if (state) popup.open(this, false, "music")
-    }
     onMiddleClicked: Music.togglePlay()
     onScrollNotch: delta => {
         if (delta > 0)

@@ -10,7 +10,7 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stage 1 done** (2026-10-28). Next item: 2.1, a shared `PopupWidget` component.
+**Status: Stage 1 and 2.1 done** (2026-10-28). Next item: 2.2, a single `WidgetRegistry`.
 
 ---
 
@@ -150,11 +150,19 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 2 — Groundwork that makes touch a one-place change
 
-- [ ] **2.1 `components/PopupWidget.qml`** [#13]
+- [x] **2.1 `components/PopupWidget.qml`** [#13]
       Extract the `_popupMode` + click/hover + `active` block duplicated across
       `PowerWidget`, `ClockWidget`, `MusicWidget`, `SoundWidget`, `BluetoothWidget`,
       `NetworkWidget`, `HardwareWidget`. Settle the inconsistent per-widget default mode
       while doing it. Do this **before** any touch work.
+      Done 2026-10-28, verified on the host. `PopupWidget` extends `BarWidget`; widgets set
+      `widgetType` and, for the clock, `popupContent: "calendar"`. The default mode is now
+      `click` for all seven, since hover cannot fire on touch;
+      `panels/WidgetSettingsPane.qml` repeats that default until 2.2 removes the copy.
+      The user's machine keeps its old behaviour through explicit `_popupMode` values
+      (music and sound set to `hover`). Every popup widget is now highlighted while its
+      popup is open, not only power/network/hardware, and click-opened popups are all
+      persistent — which fixes 8.6.
 - [ ] **2.2 `singletons/WidgetRegistry.qml`** [#12]
       One declarative source for type → component, display name, popup panel, settings
       pane, default popup mode. Replaces the four parallel maps in `Bar.qml`,
@@ -242,7 +250,8 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **8.3 Fix the `Connections` leak in `Audio.qml`** [#6], and document `type === 21`
 - [ ] **8.4 `Notifier`: one process per interactive notification** [#7]
 - [ ] **8.5 `PowerMenu`: absolute script paths** [#8] — `panels/PowerMenu.qml:72`
-- [ ] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
+- [x] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
+      Fixed by 2.1: `PopupWidget` opens every click popup persistent.
 - [ ] **8.7 `Lockscreen`: bind config declaratively** [#10]
 - [ ] **8.8 Show calendar errors in the UI**
       Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API

@@ -3,25 +3,8 @@ import qs.components
 import qs.singletons
 import qs.singletons.network
 
-BarWidget {
-    property var popup: null
-    property string widgetType: "network"
-
-    readonly property string _popupMode: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["network"]?.["_popupMode"] ?? "click"
-    }
-
-    active: popup?.active && popup?.contentType === "network"
-    onClicked: {
-        if (_popupMode !== "click") return
-        if (popup?.active && popup?.contentType === "network") popup.close()
-        else popup.open(this, true, "network")
-    }
-    onHover: state => {
-        if (_popupMode !== "hover") return
-        if (state) popup.open(this, false, "network")
-    }
+PopupWidget {
+    widgetType: "network"
 
     // One icon per link, each coloured by its own state: accent = carrying
     // traffic, white = powered on but not connected, dim = off/unavailable.

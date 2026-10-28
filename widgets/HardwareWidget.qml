@@ -2,26 +2,9 @@ import QtQuick
 import qs.components
 import qs.singletons
 
-BarWidget {
-    property var popup: null
+PopupWidget {
     property string profile: ""
-    property string widgetType: "hardware"
-
-    readonly property string _popupMode: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["hardware"]?.["_popupMode"] ?? "click"
-    }
-
-    active: popup?.active && popup?.contentType === "hardware"
-    onClicked: {
-        if (_popupMode !== "click") return
-        if (popup?.active && popup?.contentType === "hardware") popup.close()
-        else popup.open(this, true, "hardware")
-    }
-    onHover: state => {
-        if (_popupMode !== "hover") return
-        if (state) popup.open(this, false, "hardware")
-    }
+    widgetType: "hardware"
 
     readonly property var _capsuleKeys: {
         if (profile !== "") {
