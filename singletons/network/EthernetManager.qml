@@ -10,7 +10,10 @@ Singleton {
 
     property real rxSpeed: 0
     property real txSpeed: 0
-    property bool ethernetConnected: NetworkManager.activeDeviceType === "ethernet"
+    // Read from the per-device state: with ethernet and wifi both up, the old
+    // activeDeviceType check reported ethernet as down whenever nmcli happened
+    // to list the wifi device first.
+    readonly property bool ethernetConnected: NetworkManager.ethernetConnected
 
     property real _rxPrev: -1
     property real _txPrev: -1

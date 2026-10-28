@@ -10,6 +10,9 @@ Singleton {
 
     property var vpnConnections: []
     property string activeVpn: ""
+    // Type of the active tunnel ("wireguard" | "vpn" | "openconnect"), so the bar
+    // and the panel pick their glyph from the same place
+    property string activeVpnType: ""
 
     // -------------------------------------------------------------------------
     // VPN connection polling (every 5s)
@@ -50,6 +53,7 @@ Singleton {
     function _processVpn(lines) {
         var connections = []
         var active = ""
+        var activeType = ""
         for (var i = 0; i < lines.length; i++) {
             var parts = lines[i].split(":")
             if (parts.length < 2) continue
@@ -59,10 +63,14 @@ Singleton {
             var isVpn = type === "wireguard" || type === "vpn" || type === "openconnect"
             if (!isVpn) continue
             connections.push({ name: name, type: type })
-            if (state === "activated") active = name
+            if (state === "activated") {
+                active = name
+                activeType = type
+            }
         }
         root.vpnConnections = connections
         root.activeVpn = active
+        root.activeVpnType = activeType
     }
 
     // -------------------------------------------------------------------------

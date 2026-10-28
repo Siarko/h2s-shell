@@ -44,7 +44,7 @@ Item {
                 spacing: 8
 
                 Text {
-                    text: VpnManager.activeVpn !== "" && VpnManager.vpnConnections.find(c => c.name === VpnManager.activeVpn)?.type !== "wireguard" ? "󰌾" : "󰒃"
+                    text: (VpnManager.activeVpn === "" || VpnManager.activeVpnType === "wireguard") ? "󰒃" : "󰌾"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeTitle
                     color: VpnManager.activeVpn !== "" ? Theme.sliderAccent : Theme.textDim
@@ -168,7 +168,7 @@ Item {
 
             Text {
                 text: EthernetManager.ethernetConnected
-                    ? (NetworkManager.activeConnection || "Ethernet")
+                    ? (NetworkManager.ethernetConnection || "Ethernet")
                     : "Ethernet"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSection
@@ -268,7 +268,7 @@ Item {
             Text {
                 text: {
                     if (!WifiManager.wifiEnabled) return "󰤭"
-                    if (!NetworkManager.isConnected) return "󰤮"
+                    if (!NetworkManager.wifiConnected) return "󰤮"
                     if (WifiManager.wifiSignal >= 75) return "󰤨"
                     if (WifiManager.wifiSignal >= 50) return "󰤤"
                     if (WifiManager.wifiSignal >= 25) return "󰤢"
@@ -276,7 +276,7 @@ Item {
                 }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: (NetworkManager.activeDeviceType === "wifi" && NetworkManager.isConnected) ? Theme.textPrimary : Theme.textDim
+                color: NetworkManager.wifiConnected ? Theme.textPrimary : Theme.textDim
             }
 
             Text {
