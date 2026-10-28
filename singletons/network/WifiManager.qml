@@ -4,9 +4,20 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.network
 
 Singleton {
     id: root
+
+    // Throughput of the wifi device, measured independently of ethernet
+    readonly property real rxSpeed: _wifiSpeed.rxSpeed
+    readonly property real txSpeed: _wifiSpeed.txSpeed
+
+    LinkSpeed {
+        id: _wifiSpeed
+        device: NetworkManager.wifiDevice
+        active: NetworkManager.wifiConnected
+    }
 
     property bool wifiEnabled: false
     property int wifiSignal: 0

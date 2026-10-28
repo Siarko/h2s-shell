@@ -359,11 +359,11 @@ Item {
 
         // ---- WiFi live RX/TX speed ----
         RowLayout {
-            visible: NetworkManager.activeDeviceType === "wifi" && WifiManager.wifiConnected
+            visible: WifiManager.wifiConnected
             width: parent.width
 
             Text {
-                text: "↓ " + NetworkManager.formatSpeed(EthernetManager.rxSpeed)
+                text: "↓ " + NetworkManager.formatSpeed(WifiManager.rxSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -371,7 +371,7 @@ Item {
             }
 
             Text {
-                text: "↑ " + NetworkManager.formatSpeed(EthernetManager.txSpeed)
+                text: "↑ " + NetworkManager.formatSpeed(WifiManager.txSpeed)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
