@@ -120,20 +120,22 @@ Singleton {
                 resolve();
                 return;
             }
+            // The callback must return the bare request: ensureAuthorized only sees a 401 if
+            // the rejection reaches it, and a catch inside the callback would swallow it.
             GoogleCalendarAuth.ensureAuthorized(() => {
-                return _requestColors().then(response => {
-                    return response.json().then(json => {
-                        let mapBackgroundColor = objects => {
-                            return Object.keys(objects).reduce((result, key) => {
-                                result[key] = objects[key].background;
-                                return result;
-                            }, {});
-                        };
-                        _colorMapEvents = mapBackgroundColor(json.event || {});
-                        _colorMapCalendars = mapBackgroundColor(json.calendar || {});
-                        resolve();
-                    }).catch(reject);
-                }).catch(reject);
+                return _requestColors();
+            }).then(response => {
+                return response.json();
+            }).then(json => {
+                let mapBackgroundColor = objects => {
+                    return Object.keys(objects).reduce((result, key) => {
+                        result[key] = objects[key].background;
+                        return result;
+                    }, {});
+                };
+                _colorMapEvents = mapBackgroundColor(json.event || {});
+                _colorMapCalendars = mapBackgroundColor(json.calendar || {});
+                resolve();
             }).catch(reject);
         });
     }
@@ -143,23 +145,24 @@ Singleton {
             if (!invalidateCache && Object.keys(root.calendars).length > 0) {
                 return resolve();
             }
+            // Bare request in the callback, for the same reason as in fetchColorMappings
             return GoogleCalendarAuth.ensureAuthorized(() => {
-                return _requestCalendars().then(result => {
-                    return result.json().then(json => {
-                        logger.log("Calendar json received");
-                        let cals = {};
-                        json.items.forEach((element, index) => {
-                            let item = _prepareCalendarData(json.items[index]);
-                            cals[item.id] = item;
-                        });
-                        root.calendars = cals;
-                        if (_getConfigEnabledCalendarIds().length === 0) {
-                            let allIds = Object.values(cals).map(c => c.id);
-                            setEnabledCalendarIds(allIds);
-                        }
-                        return resolve();
-                    }).catch(reject);
-                }).catch(reject);
+                return _requestCalendars();
+            }).then(result => {
+                return result.json();
+            }).then(json => {
+                logger.log("Calendar json received");
+                let cals = {};
+                json.items.forEach((element, index) => {
+                    let item = _prepareCalendarData(json.items[index]);
+                    cals[item.id] = item;
+                });
+                root.calendars = cals;
+                if (_getConfigEnabledCalendarIds().length === 0) {
+                    let allIds = Object.values(cals).map(c => c.id);
+                    setEnabledCalendarIds(allIds);
+                }
+                return resolve();
             }).catch(reject);
         });
     }

@@ -37,9 +37,22 @@ read from the log.
    corrupt only `accessToken`, and set `tokenExpiry` far in the future so the
    `left < 300` pre-check is bypassed. Expect a 401, then a token refresh, then a retry:
    two requests in the log and a populated calendar.
+   ✅ Passed on the host 2026-10-28, after a second fix. The first run showed no refresh:
+   `fetchColorMappings()` and `fetchAllCalendars()` caught their own errors *inside* the
+   `ensureAuthorized` callback, so the 401 never reached it and init failed with no
+   calendars. Both now return the bare request and parse after `ensureAuthorized`. Second
+   run: both 401s triggered a refresh, Fetch's dedup made it one token request, and init
+   and the month fetch succeeded with the new token.
+   **Rule:** an `ensureAuthorized` callback must return the bare request, never a chain
+   with its own `.catch`.
 4. **Start with no network.** Disable networking, start the shell, open the calendar —
    empty, and the spinner must clear. Enable networking, change month: events arrive
    without restarting the shell. This is what the `initialize()` change buys.
+   ✅ Passed on the host 2026-10-28. Offline, every attempt failed with status 0, the
+   shell stayed responsive and init retried on each month change; once back online the
+   events loaded without a restart. Two side findings, filed as 8.8: the UI gives no sign
+   that anything failed, and each retry fetches `calendarList` twice (once from
+   `initialize()`, once from `getEnabledCalendarIds()`).
 5. **Happy path** — click several months forward and back; events, colours and the
    per-day dots should look exactly as before, and creating/editing/deleting an event
    should still refresh its month.
@@ -47,7 +60,7 @@ read from the log.
    unrelated, pre-existing bug: all-day events were saved with `end.date == start.date`,
    which Google accepts but `_getEventDayKeys` dropped, so they never appeared in the
    shell. Fixed (exclusive end date on save, zero-length tolerated on read) and verified.
-   Edit and delete still to check.
+   ✅ Create, edit and delete all confirmed on the host 2026-10-28.
 
 Tick 1.1's box once these pass. If something fails, the analysis behind the change is in
 [CLEANUP.md](CLEANUP.md) findings #1 and #39.
@@ -191,6 +204,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **8.5 `PowerMenu`: absolute script paths** [#8] — `panels/PowerMenu.qml:72`
 - [ ] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
 - [ ] **8.7 `Lockscreen`: bind config declaratively** [#10]
+- [ ] **8.8 Show calendar errors in the UI**
+      Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API
+      error) only reaches the log; the calendar just stays empty, indistinguishable from
+      a month with no events. `GoogleCalendar` needs an error state the panel can show,
+      with a retry. While there: a retry after a failed init fetches `calendarList`
+      twice, and the status-0 error message ends in an empty `data:`.
 
 ## Stage 9 — Hygiene, opportunistic  [P7]
 
