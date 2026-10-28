@@ -8,6 +8,9 @@ Item {
     property color cellColor: Theme.cellDefault
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)
     property bool active: false
+    // Optional outline around the cell — off by default, so existing widgets are unaffected
+    property color borderColor: "transparent"
+    property int borderWidth: 0
     // Emitted on click, carries the cell's color
     signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
@@ -36,6 +39,8 @@ Item {
         radius: 5
         anchors.fill: parent
         color: (mouseArea.containsMouse || container.active) ? Theme.cellHover : container.cellColor
+        border.color: container.borderColor
+        border.width: container.borderWidth
     }
 
     // Free-standing item for measuring content size without anchoring loops

@@ -38,12 +38,14 @@ Item {
     readonly property var _settingsComponentMap: ({
         "workspaces": _workspacesComp,
         "clock": _clockComp,
-        "hardware": _hardwareComp
+        "hardware": _hardwareComp,
+        "stt": _sttComp
     })
 
     Component { id: _workspacesComp; WorkspacesWidgetSettings {} }
     Component { id: _clockComp; ClockWidgetSettings {} }
     Component { id: _hardwareComp; HardwareWidgetSettings {} }
+    Component { id: _sttComp; SttWidgetSettings {} }
 
     Column {
         id: _col

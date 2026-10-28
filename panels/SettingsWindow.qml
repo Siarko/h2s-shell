@@ -54,7 +54,7 @@ FloatingWindow {
                     }
 
                     Repeater {
-                        model: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen"]
+                        model: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation"]
                         Rectangle {
                             required property string modelData
                             required property int index
@@ -112,7 +112,8 @@ FloatingWindow {
                         if (root.selectedCategory === 2) return mediaComp;
                         if (root.selectedCategory === 3) return barComp;
                         if (root.selectedCategory === 4) return notificationsComp;
-                        return lockscreenComp;
+                        if (root.selectedCategory === 5) return lockscreenComp;
+                        return sttComp;
                     }
                 }
             }
@@ -125,4 +126,5 @@ FloatingWindow {
     Component { id: barComp;           BarSettings           {} }
     Component { id: notificationsComp; NotificationsSettings {} }
     Component { id: lockscreenComp;    LockscreenSettings    {} }
+    Component { id: sttComp;           SttSettings           {} }
 }

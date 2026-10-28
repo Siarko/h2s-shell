@@ -17,6 +17,7 @@ Singleton {
     property alias audio: _audio
     property alias notifications: _notifications
     property alias widgetProfiles: _adapter.widgetProfiles
+    property alias stt: _stt
 
     signal saved
 
@@ -42,6 +43,16 @@ Singleton {
                 id: _media
                 property string visualizerStyle: "waveform"   // "waveform"|"bars"|"dots"|"none"
                 property string visualizerLayout: "horizontal" // "horizontal"|"vertical"
+            }
+
+            property JsonObject stt: JsonObject {
+                id: _stt
+                property string socketPath: ""      // empty = $XDG_RUNTIME_DIR/ptt/ctl.sock
+                property bool previewEnabled: true
+                property int previewWidth: 180      // width the widget expands to while dictating
+                property int finalLingerMs: 2500
+                property bool showPending: true
+                property bool debug: false
             }
 
             property JsonObject bar: JsonObject {

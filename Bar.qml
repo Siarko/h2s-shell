@@ -107,6 +107,10 @@ PanelWindow {
             popup: popupLoader
         }
     }
+    Component {
+        id: _sttComp
+        SttWidget {}
+    }
 
     readonly property var _widgetMap: ({
             "power": _powerComp,
@@ -119,7 +123,8 @@ PanelWindow {
             "tray": _trayComp,
             "network": _networkComp,
             "notifications": _notifComp,
-            "hardware": _hardwareComp
+            "hardware": _hardwareComp,
+            "stt": _sttComp
         })
 
     function _zipModel(types, profilesJson) {
