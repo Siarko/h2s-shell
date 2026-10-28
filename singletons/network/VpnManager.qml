@@ -16,27 +16,39 @@ Singleton {
     property string activeVpnType: ""
 
     // -------------------------------------------------------------------------
-    // VPN connection polling (every 5s)
+    // VPN connection state
     // -------------------------------------------------------------------------
+    // Re-queried when NetworkEvents reports a change; the slow timer is only the
+    // fallback for changes nmcli monitor does not print
+    Connections {
+        target: NetworkEvents
+        function onChanged() { root._poll() }
+    }
+
     Timer {
-        interval: 5000
+        interval: 60000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: root._poll()
     }
 
+    // A change reported while this query is already running may have come too late
+    // for it, so it runs once more when it finishes rather than being skipped
     function _poll() {
-        if (!vpnProcess.running) {
-            vpnProcess._lines = []
-            vpnProcess.running = true
+        if (vpnProcess.running) {
+            vpnProcess._again = true
+            return
         }
+        vpnProcess._lines = []
+        vpnProcess.running = true
     }
 
     Process {
         id: vpnProcess
         command: ["nmcli", "-t", "-f", "name,type,state", "connection", "show"]
         property var _lines: []
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -47,6 +59,10 @@ Singleton {
             if (!running) {
                 root._processVpn(_lines)
                 _lines = []
+                if (_again) {
+                    _again = false
+                    root._poll()
+                }
             }
         }
     }

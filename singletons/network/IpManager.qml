@@ -13,8 +13,15 @@ Singleton {
     property string ethernetAddress: ""
     property string ethernetDns: ""
 
+    // Re-queried when NetworkEvents reports a change; the slow timer is only the
+    // fallback for changes nmcli monitor does not print
+    Connections {
+        target: NetworkEvents
+        function onChanged() { root._poll() }
+    }
+
     Timer {
-        interval: 10000
+        interval: 60000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -27,15 +34,21 @@ Singleton {
         function onEthernetDeviceChanged() { root._poll() }
     }
 
+    // A change reported while this query is already running may have come too late
+    // for it, so it runs once more when it finishes rather than being skipped
     function _poll() {
         var wifiDev = NetworkManager.wifiDevice
         var ethDev = NetworkManager.ethernetDevice
-        if (wifiDev !== "" && !wifiProcess.running) {
+        if (wifiProcess.running)
+            wifiProcess._again = true
+        else if (wifiDev !== "") {
             wifiProcess._lines = []
             wifiProcess.command = ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", wifiDev]
             wifiProcess.running = true
         }
-        if (ethDev !== "" && !ethProcess.running) {
+        if (ethProcess.running)
+            ethProcess._again = true
+        else if (ethDev !== "") {
             ethProcess._lines = []
             ethProcess.command = ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", ethDev]
             ethProcess.running = true
@@ -45,6 +58,7 @@ Singleton {
     Process {
         id: wifiProcess
         property var _lines: []
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -57,6 +71,10 @@ Singleton {
                 root.wifiAddress = result.address
                 root.wifiDns = result.dns
                 _lines = []
+                if (_again) {
+                    _again = false
+                    root._poll()
+                }
             }
         }
     }
@@ -64,6 +82,7 @@ Singleton {
     Process {
         id: ethProcess
         property var _lines: []
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -76,6 +95,10 @@ Singleton {
                 root.ethernetAddress = result.address
                 root.ethernetDns = result.dns
                 _lines = []
+                if (_again) {
+                    _again = false
+                    root._poll()
+                }
             }
         }
     }

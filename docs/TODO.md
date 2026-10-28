@@ -239,9 +239,18 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       graph's time axis now spans the selected window instead of the samples; every
       amdgpu card gets its own load, VRAM and temperature sources; a label of a single
       space shows as blank.
-- [ ] **5.2 Replace `nmcli` polling with NetworkManager DBus signals** [#21]
+- [x] **5.2 Replace `nmcli` polling with NetworkManager DBus signals** [#21]
       `NetworkManager`, `WifiManager`, `VpnManager`, `IpManager`, `EthernetManager`.
       Removes ~60 spawns/min and makes the UI react instantly instead of up to 5 s late.
+      Done 2026-10-28, verified on the host — with `nmcli monitor` rather than DBus:
+      `Quickshell.Networking` exists but has no VPN, IP/DNS, hidden-network or wired
+      connect, so it would have meant two sources of truth. `NetworkEvents` runs one
+      `nmcli monitor`, debounces its output into `changed()`, and restarts it with a
+      doubling delay (1 s → 60 s) if it dies; the managers re-query on `changed()` and
+      keep a 60 s fallback poll. Queries that are busy when a change arrives run once
+      more afterwards. Fixed on the way: the popup's Wi-Fi status lagged behind the
+      widget after the radio came on, because "which network is in use" came only from
+      scans — the cached list is now re-read on every change.
 - [ ] **5.3 Gate polling on whether anything is observing it** [#21, #22]
       Nothing stops when the popup closes, and all six hardware sources poll even when
       the capsule shows one.

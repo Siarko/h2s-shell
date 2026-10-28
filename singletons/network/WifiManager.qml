@@ -45,10 +45,25 @@ Singleton {
     }
 
     // -------------------------------------------------------------------------
-    // WiFi radio polling (every 5s)
+    // WiFi radio and saved profiles
     // -------------------------------------------------------------------------
+    // Re-queried when NetworkEvents reports a change; the slow timer is only the
+    // fallback for changes nmcli monitor does not print
+    Connections {
+        target: NetworkEvents
+        function onChanged() {
+            root._pollRadio()
+            root._pollSaved()
+            // Which network is in use comes from the network list, so it has to follow
+            // the change too — after the radio comes on, the card connects seconds after
+            // the list was first read. NM's cached list, no rescan: it is instant.
+            if (root.wifiEnabled)
+                root._doScan(false)
+        }
+    }
+
     Timer {
-        interval: 5000
+        interval: 60000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -58,17 +73,22 @@ Singleton {
         }
     }
 
+    // A change reported while this query is already running may have come too late
+    // for it, so it runs once more when it finishes rather than being skipped
     function _pollRadio() {
-        if (!wifiRadioProcess.running) {
-            wifiRadioProcess._output = ""
-            wifiRadioProcess.running = true
+        if (wifiRadioProcess.running) {
+            wifiRadioProcess._again = true
+            return
         }
+        wifiRadioProcess._output = ""
+        wifiRadioProcess.running = true
     }
 
     Process {
         id: wifiRadioProcess
         command: ["nmcli", "radio", "wifi"]
         property string _output: ""
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -82,6 +102,10 @@ Singleton {
             if (!running) {
                 root.wifiEnabled = (_output === "enabled")
                 _output = ""
+                if (_again) {
+                    _again = false
+                    root._pollRadio()
+                }
             }
         }
     }
@@ -196,6 +220,7 @@ Singleton {
         id: savedProcess
         command: ["nmcli", "-t", "-f", "name,type", "connection", "show"]
         property var _lines: []
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -206,15 +231,21 @@ Singleton {
             if (!running) {
                 root._processSaved(_lines)
                 _lines = []
+                if (_again) {
+                    _again = false
+                    root._pollSaved()
+                }
             }
         }
     }
 
     function _pollSaved() {
-        if (!savedProcess.running) {
-            savedProcess._lines = []
-            savedProcess.running = true
+        if (savedProcess.running) {
+            savedProcess._again = true
+            return
         }
+        savedProcess._lines = []
+        savedProcess.running = true
     }
 
     function _processSaved(lines) {

@@ -102,6 +102,10 @@ Process {
 }
 ```
 
+The network managers are the exception to polling: `singletons/network/NetworkEvents.qml`
+keeps one `nmcli monitor` running and emits `changed()` when NetworkManager's state
+changes, and they re-query then (with a slow fallback poll).
+
 `splitMarker: "\n"` reads line-wise; `splitMarker: ""` accumulates raw chunks (used
 where the output is one value, as in `singletons/hardware/GpuDevice.qml`).
 

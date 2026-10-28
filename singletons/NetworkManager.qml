@@ -33,10 +33,17 @@ Singleton {
     readonly property bool wifiConnected: wifiState.startsWith("connected")
 
     // -------------------------------------------------------------------------
-    // Status polling (every 5s) — device/type/state/connection
+    // Device status — device/type/state/connection
     // -------------------------------------------------------------------------
+    // Re-queried when NetworkEvents reports a change; the slow timer is only the
+    // fallback for changes nmcli monitor does not print
+    Connections {
+        target: NetworkEvents
+        function onChanged() { root.refresh() }
+    }
+
     Timer {
-        interval: 5000
+        interval: 60000
         running: true
         repeat: true
         triggeredOnStart: true
@@ -47,6 +54,7 @@ Singleton {
         id: statusProcess
         command: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"]
         property var _lines: []
+        property bool _again: false
 
         stdout: SplitParser {
             splitMarker: "\n"
@@ -60,6 +68,10 @@ Singleton {
             if (!running) {
                 root._processStatus(_lines)
                 _lines = []
+                if (_again) {
+                    _again = false
+                    root.refresh()
+                }
             }
         }
     }
@@ -124,11 +136,15 @@ Singleton {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+    // A change reported while this query is already running may have come too late
+    // for it, so it runs once more when it finishes rather than being skipped
     function refresh() {
-        if (!statusProcess.running) {
-            statusProcess._lines = []
-            statusProcess.running = true
+        if (statusProcess.running) {
+            statusProcess._again = true
+            return
         }
+        statusProcess._lines = []
+        statusProcess.running = true
     }
 
     function formatSpeed(bytesPerSec) {
