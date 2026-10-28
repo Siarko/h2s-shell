@@ -17,17 +17,10 @@ PanelWindow {
     margins { top: 0; left: 0 }
     implicitWidth: root.screen.width
     implicitHeight: root.screen.height
-    color: "transparent"
+    color: "black"
 
     readonly property bool _show: Lockscreen.screensaverVisible && !Lockscreen.locked
     visible: _show || _content.opacity > 0.001
-
-    MouseArea {
-        anchors.fill: parent
-        z: 100
-        cursorShape: Qt.BlankCursor
-        hoverEnabled: true
-    }
 
     Item {
         id: _content
@@ -41,22 +34,17 @@ PanelWindow {
             }
         }
 
-        Rectangle {
-            anchors.fill: parent
-            color: "black"
-        }
-
         // Notification list — top right, below bar
         ListView {
             visible: Config.lockscreen.notificationsOnScreensaver
             anchors {
                 top: parent.top
                 right: parent.right
-                topMargin: Config.bar.layout.reservedSpace + 16
+                topMargin: 30
                 rightMargin: 16
             }
             width: 360
-            height: Math.min(contentHeight, root.height - Config.bar.layout.reservedSpace - 32)
+            height: Math.min(contentHeight, root.height)
             clip: true
             spacing: 8
             model: Notifications.notifications

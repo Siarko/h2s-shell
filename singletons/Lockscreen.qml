@@ -58,7 +58,6 @@ Singleton {
         onIsIdleChanged: console.log("[Lockscreen] screensaver isIdle →", isIdle)
     }
 
-    // Lock after screensaver: QML Timer avoids idle-timer reset caused by screensaver surface appearing
     Timer {
         interval: Config.lockscreen.lockscreenTimeout * 1000
         running: Config.lockscreen.lockscreenEnabled && Config.lockscreen.screensaverEnabled

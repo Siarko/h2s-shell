@@ -84,6 +84,9 @@ Singleton {
             property JsonObject lockscreen: JsonObject {
                 id: _lockscreen
                 property bool screensaverEnabled: false
+                property bool screensaverExecCmd: false
+                property string screensaverExecSleep: ''
+                property string screensaverExecWakeup: ''
                 property int  screensaverTimeout: 300
                 property bool lockscreenEnabled: false
                 property int  lockscreenTimeout: 300
