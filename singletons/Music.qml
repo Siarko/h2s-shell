@@ -98,6 +98,14 @@ Singleton {
         if (activePlayer) activePlayer.togglePlaying();
     }
 
+    function play() {
+        if (activePlayer && activePlayer.canPlay) activePlayer.play();
+    }
+
+    function pause() {
+        if (activePlayer && activePlayer.canPause) activePlayer.pause();
+    }
+
     function next() {
         if (activePlayer && activePlayer.canGoNext) activePlayer.next();
     }

@@ -52,6 +52,7 @@ Singleton {
                 property int previewWidth: 180      // width the widget expands to while dictating
                 property int finalLingerMs: 2500
                 property bool showPending: true
+                property bool pauseMusicWhileDictating: true
                 property bool debug: false
             }
 

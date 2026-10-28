@@ -33,6 +33,10 @@ QtObject {
 
     property var _lockscreen: Lockscreen
 
+    // Wires dictation state to music playback; needs to run whether or not the
+    // dictation widget is on the bar
+    property var _dictationMusicPause: DictationMusicPause
+
     property var _screensavers: Variants {
         model: Quickshell.screens
         delegate: Component { ScreensaverSurface {} }
