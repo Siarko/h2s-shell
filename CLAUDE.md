@@ -58,5 +58,16 @@ ticks, cells respond to clicks, and popups toggle.
 
 ## Environment
 
-Development happens in a dev container where **`quickshell` is not installed** — the
-shell cannot be run or tested here. Changes have to be verified on the host machine.
+This repo gets worked on from two places, and they differ in one way that matters:
+
+- **On the host** (Arch, Hyprland) `quickshell` is installed, so changes can be run and
+  tested directly — `quickshell` from the repo root, `quickshell -p tests.qml` for the
+  suites.
+- **In the dev container** (`.devcontainer/`) there is no Qt and no `quickshell`, so
+  nothing can be run or linted. Changes made there have to be verified on the host, and
+  anything claimed about runtime behaviour is reasoning, not observation.
+
+The container bind-mounts this folder, so the files are the same on both sides. But
+`~/.claude` is a container-local volume: session state, plans and memory do **not**
+travel. Anything that has to survive the move belongs in this repo — which is what
+`docs/TODO.md` is for.

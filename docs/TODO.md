@@ -10,17 +10,67 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: not started.** Next item: 1.1.
+**Status: 1.1 done** (code complete, awaiting host verification). Next item: 1.2.
+
+---
+
+## Pending host verification — 1.1
+
+Written in the dev container, where there is no `quickshell`. Nothing below has been run.
+The logic was checked by loading the real `singletons/Promises.qml` into node and driving
+the new chain through four scenarios plus a counter-test, but that proves the promise
+plumbing only — not the Google API path, and not the shell.
+
+Turn on `Config.gcal.debug` in `~/.config/h2s_shell/config.json` first; most of these are
+read from the log.
+
+1. **Test suites** — `quickshell -p tests.qml`, every assertion `PASS`. The suite never
+   touched `await`, so it should pass unchanged; it is the regression check for the
+   promise chaining the fix relies on (`tests/PromisesTest.qml:168` delayed path, `:178`
+   deep chain).
+2. **The freeze, reproducible before the fix.** Put junk in `Config.gcal.accessToken` and
+   `refreshToken`, start the shell, open the calendar, click through months. Before: the
+   whole shell stops responding. After: bar and popups keep working, the spinner clears,
+   and the log shows the rejection.
+3. **401 self-healing** — the path that was dead until now. Keep a *valid* `refreshToken`,
+   corrupt only `accessToken`, and set `tokenExpiry` far in the future so the
+   `left < 300` pre-check is bypassed. Expect a 401, then a token refresh, then a retry:
+   two requests in the log and a populated calendar.
+4. **Start with no network.** Disable networking, start the shell, open the calendar —
+   empty, and the spinner must clear. Enable networking, change month: events arrive
+   without restarting the shell. This is what the `initialize()` change buys.
+5. **Happy path** — click several months forward and back; events, colours and the
+   per-day dots should look exactly as before, and creating/editing/deleting an event
+   should still refresh its month.
+
+Tick 1.1's box once these pass. If something fails, the analysis behind the change is in
+[CLEANUP.md](CLEANUP.md) findings #1 and #39.
 
 ---
 
 ## Stage 1 — Stop the shell from freezing  [P0]
 
-- [ ] **1.1 Remove `Promises.await()` and make its two callers async** [#1]
-      `singletons/Promises.qml:117-129`, `singletons/googlecalendar/GoogleCalendar.qml:178,305`
-      The busy-wait hard-freezes the whole shell. Also stop `initialize()` from setting
-      `_initialized` when the startup fetches failed, which is what makes the freeze
-      reachable.
+- [x] **1.1 Remove `Promises.await()` and make its callers async** [#1, #39]
+      `Promises.await()` deleted. `fetchMonthEvents()` chains `getEnabledCalendarIds()`
+      instead of blocking on it, and clears the loading flag on the failure path too.
+      `getEnabledCalendarIds()` gained the `.catch(reject)` it was missing, without which
+      a failed calendar fetch left its promise pending forever. `initialize()` now sets
+      `_initialized` only when `calendars` actually came back, so a failed start retries
+      instead of claiming readiness. `Fetch` rejects with a `status` field, which revives
+      the dead 401 token refresh in `GoogleCalendarAuth` [#39], and keeps the response
+      body off the log message [#32, partial]. The dead day-fetch path went with it:
+      `fetchDayEvents()` and its only consumer `fetchCalendarEvents()`, 80 lines.
+      **Still to verify on the host** — steps below.
+- [ ] **1.5 Decide whether to drop the hand-rolled `Promises` library** [#41]
+      Starts with a probe on the host, since the engine's native `Promise` and `async`
+      support cannot be checked in the container. `Promises` touches only `Fetch.qml`,
+      `GoogleCalendar.qml` and `GoogleCalendarAuth.qml`, uses 4 API functions, and no
+      production call site reads `.status`/`.value`/`.reason` from an `allSettled`
+      result — so the migration is contained, and would delete ~410 lines
+      (`Promises.qml` 182 + `PromisesTest.qml` 231). Watch the semantic difference:
+      the hand-rolled `then()` runs its handler synchronously when the promise is
+      already settled (`singletons/Promises.qml:69`), native defers to a microtask; 8 executors
+      resolve synchronously. Probe script: `quickshell -p tests/probe.qml`.
 - [ ] **1.2 Fix `Fetch._printf()`** [#2] — `singletons/network/Fetch.qml:86`
       `typeof args[num] !== undefined` is always true; URLs get the string `undefined`.
 - [ ] **1.3 Add request timeout and error handling to `Fetch`** [#3]
@@ -30,6 +80,9 @@ verified on the host — the dev container has no `quickshell`.
       `NetworkManager._processStatus`, `WifiManager._processWifiList`, `IpManager._parse`,
       `Fetch._printf`, `LinkSpeed._update`, `GoogleCalendar._getEventDayKeys`. These are
       pure functions and were the source of several bugs found in the review.
+      Add one for `Promises.allSettled` ordering too [#40] — the existing assertions only
+      cover synchronously settled promises, so they pass on a guarantee the code does not
+      actually provide.
 
 ## Stage 2 — Groundwork that makes touch a one-place change
 
@@ -131,8 +184,10 @@ verified on the host — the dev container has no `quickshell`.
 ## Stage 9 — Hygiene, opportunistic  [P7]
 
 - [ ] **9.1 Route `console.log` through `Logger`** [#35]
-      `Config.qml:132`, `Notifications.qml:33`, `Lockscreen.qml:58`
-- [ ] **9.2 Fix stale comments** [#36] — `Popup.qml:23`, `Shell.qml:8`, `Music.qml:74`
+      `singletons/Config.qml:132`, `singletons/Notifications.qml:33`,
+      `singletons/Lockscreen.qml:58`
+- [ ] **9.2 Fix stale comments** [#36] — `panels/Popup.qml:23`, `singletons/Shell.qml:8`,
+      `singletons/Music.qml:74`
 - [ ] **9.3 One byte/rate formatter** [#19]
 - [ ] **9.4 Move stray colours into `Theme.qml`** [#18] — 17 hex + 20 named
 - [ ] **9.5 One scroll-notch implementation** [#16] — `BarWidget` vs `CustomMouseArea`

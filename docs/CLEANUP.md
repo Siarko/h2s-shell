@@ -17,9 +17,9 @@ feature's prerequisite.
 
 ## P0 — Can take the whole shell down
 
-### 1. `Promises.await()` busy-waits and will hard-freeze the shell — **confirmed**
+### 1. `Promises.await()` busy-waits and will hard-freeze the shell — **confirmed, FIXED**
 
-`singletons/Promises.qml:125`
+`singletons/Promises.qml:117-129` (line numbers as they were before the fix)
 
 ```js
 promise.then(...).catch(...).finally(() => waiting = false);
@@ -54,7 +54,14 @@ promise, so this is a local change. Also stop setting `_initialized` when the
 initialising fetches failed.
 
 Note: a previous review filed this as "Promises.await fragility, low risk". That was
-wrong — it is a hard hang with a plausible trigger.
+wrong — it is a hard hang with a plausible trigger, and finding #39 makes the trigger
+likelier still: a merely invalidated token reaches the same state.
+
+**Fixed.** `await` is gone, `fetchMonthEvents()` chains instead, `getEnabledCalendarIds()`
+gained its missing `.catch`, and `initialize()` no longer claims readiness it does not
+have. The dead `fetchDayEvents()` path — the other `await` call site — was deleted along
+with its only consumer `fetchCalendarEvents()`, 80 lines in total. Awaiting host
+verification.
 
 ### 2. `Fetch._printf()` substitutes the string `undefined` into URLs — **confirmed**
 
@@ -506,6 +513,10 @@ included, and `GoogleCalendar` logs rejections. A failing token request can ther
 token-endpoint output into the log. Fix: log the status and a truncated body, never the
 whole thing, for auth endpoints.
 
+**Partly fixed** with #39: the message now carries at most 200 characters of the body, and
+the full text moved onto the error object as `body` for callers that need it. The remaining
+work is the call sites that log a whole rejection object.
+
 ### 33. A workspace name is interpolated into a Hyprland dispatch string
 
 `singletons/Workspaces.qml:30` builds
@@ -560,6 +571,69 @@ are the obvious candidates — they are pure and were the source of several bugs
 here: `NetworkManager._processStatus`, `WifiManager._processWifiList`,
 `IpManager._parse`, `GoogleCalendar._getEventDayKeys` / `_prepareEventData`,
 `Fetch._printf`, `LinkSpeed._update`.
+
+---
+
+## Added while implementing
+
+### 39. The 401 token refresh was dead code — **confirmed, FIXED**
+
+`singletons/googlecalendar/GoogleCalendarAuth.qml:109` decides whether to refresh an
+expired token with `if (reason.status === 401)`, but `singletons/network/Fetch.qml` rejected
+with a plain `new Error("Unexpected HTTP response status " + xhr.status + …)` — the status
+only ever existed inside the message string, never as a field. The condition could not be
+true, so a real 401 was passed straight through as a rejection and the token was never
+refreshed. Only the `left < 300` pre-check in `ensureAuthorized` ever refreshed anything.
+
+This is why #1's trigger is more likely than first assessed: an invalidated or revoked
+refresh token produces a failed calendar fetch that is never retried, leaving `calendars`
+empty — exactly the state that used to freeze the shell.
+
+Fixed by attaching `status` (and the full `body`) to the rejection, so the existing check
+in `GoogleCalendarAuth` works unchanged.
+
+### 40. `Promises.allSettled` does not preserve argument order, and its test hides that — **confirmed**
+
+`singletons/Promises.qml:136` pushes each result as it settles:
+
+```js
+let tryResolve = function (r) { results.push(r); promiseCount--; … }
+```
+
+So `results` is in completion order, not argument order. `tests/PromisesTest.qml:100-101`
+and `:113-114` assert entries positionally, but only with promises that settle
+synchronously, where the two orders coincide — so the suite passes on a guarantee the
+implementation does not provide.
+
+Nothing in production depends on it today: all three production `allSettled` call sites
+do `.then(() => …)` and ignore the results. Fix: either preserve order by index, or
+document that the result order is arbitrary and change the test to stop implying otherwise.
+
+### 41. The hand-rolled `Promises` library may be replaceable — **open question**
+
+Native `Promise` would make `singletons/Promises.qml` (182 lines) and
+`tests/PromisesTest.qml` (231 lines) redundant. The surface is small: three production
+files (`Fetch.qml`, `GoogleCalendar.qml`, `GoogleCalendarAuth.qml`), 4 API functions, and
+no production reader of the non-standard `{status: boolean}` result shape.
+
+Two unknowns block it, neither checkable without a Qt runtime: whether this build's engine
+has native `Promise`, and — a separate question — whether it supports `async`/`await` (V4
+has had `Promise` for a long time but historically not `async function`). There is also a
+semantic difference: the hand-rolled `then()` invokes its handler synchronously when the
+promise is already settled (`singletons/Promises.qml:69`), where native always defers to a microtask;
+8 executors in the codebase resolve synchronously. The claim to verify is that with `await`
+gone, nothing depends on inline settling any more.
+
+Filed as TODO 1.5, which starts with a probe script rather than a migration.
+
+### 42. Rapid month switching can overlap calendar fetches — **likely**
+
+`GoogleCalendar.fetchMonthEvents()` only sets `_fetchedMonths[monthKey]` once the whole
+fetch completes, so clicking through months faster than the requests return starts several
+overlapping fetches for different months. `Qt.callLater` in `panels/Calendar.qml:43` only
+deduplicates within one event-loop tick. Pre-existing; the #1 fix widens the window by one
+tick, since the enabled-calendar list is now resolved asynchronously. Fix: mark the month
+as in-flight when the fetch starts, not when it finishes.
 
 ---
 
