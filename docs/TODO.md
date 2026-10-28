@@ -10,8 +10,10 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stages 1, 2 and 3 done** (2026-10-28). Stage 4 (touch) is deferred until the
-Framework 12 is at hand, since it cannot be verified here. Next item: Stage 5, idle cost.
+**Status: Stages 1, 2 and 3 done, 5.1 and 5.2 done** (2026-10-28). Stage 4 (touch) is
+deferred until the Framework 12 is at hand, since it cannot be verified here. Next item:
+5.3, now the adaptive polling plan in [plans/adaptive-polling.md](plans/adaptive-polling.md)
+— go through its open questions with the user first.
 
 ---
 
@@ -254,6 +256,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **5.3 Gate polling on whether anything is observing it** [#21, #22]
       Nothing stops when the popup closes, and all six hardware sources poll even when
       the capsule shows one.
+      **Replaced by a plan (2026-10-28): [plans/adaptive-polling.md](plans/adaptive-polling.md).**
+      The user wants no hard-coded behaviour: rates are configurable profiles, picked by
+      rules on conditions (battery, battery level, power profile, lock). Start there —
+      its open questions come first. Absorbs 5.4.
 - [ ] **5.4 Consider dropping `cava` to 30 fps** [#23] — measure first.
 
 ## Stage 6 — Architecture and size
