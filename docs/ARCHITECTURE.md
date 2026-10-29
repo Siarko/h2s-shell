@@ -151,6 +151,14 @@ debounced 1 s by `_saveTimer`, which then emits `Config.saved`; `Config.ready` t
 once the file has been read, and `Config.readOnly` (set by `tests.qml`) keeps the test
 suites from writing the user's file.
 
+### Version
+
+`singletons/Version.qml` holds the version number (semver) and what the settings sidebar
+shows: the number alone on a tagged release, otherwise the number plus the commit from
+`git describe` (`1.0.0+9d98c91`, `.dirty` with uncommitted changes). Releases are
+recorded in `CHANGELOG.md` and tagged `v<number>`; `Config` stores the version that last
+wrote the file (`writtenBy`).
+
 ### Bar composition
 
 The bar is three sections, each a profile setting — `bar.left`, `bar.center`,

@@ -172,6 +172,21 @@ FloatingWindow {
                     Item {
                         Layout.fillHeight: true
                     }
+
+                    // The shell's version, with the commit when not running a release;
+                    // selectable, so it can be copied into a bug report
+                    TextEdit {
+                        Layout.fillWidth: true
+                        text: "v" + Version.display
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.WrapAnywhere
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textDim
+                        selectionColor: Theme.sliderAccent
+                        selectedTextColor: Theme.textPrimary
+                    }
                 }
             }
 

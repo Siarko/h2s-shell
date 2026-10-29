@@ -441,7 +441,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Done 2026-10-29, verified on the host: the slide-in took its target at the start, and
       the nudge was skipped while sliding; the slide (and the nudge) now catch up to
       `restX` when they finish.
-- [ ] **10.8 Versioning** (requested 2026-10-29)
+- [x] **10.8 Versioning** (requested 2026-10-29)
       Give the shell a version and a scheme for it, and show the current version at the
       bottom of the settings sidebar. To decide: the scheme (semantic versioning seems the
       natural fit — major for config or behaviour changes that need migration, minor for
@@ -450,6 +450,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       builds between releases, and how it ties to the config: `Config` could record the
       version that last wrote it, which the per-key migration could use instead of (or as
       well as) `migratedKeys`. A CHANGELOG would follow naturally.
+      Done 2026-10-29, verified on the host: semver, starting at 1.0.0 (tag `v1.0.0`);
+      `singletons/Version.qml` holds the number and shows `number+commit[.dirty]` off a
+      release, selectable in the settings sidebar; CHANGELOG.md with an Unreleased section;
+      `Config.writtenBy`; tests/VersionTest.qml keeps the number and changelog in step.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

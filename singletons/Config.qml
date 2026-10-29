@@ -81,6 +81,9 @@ Singleton {
             property string profiles: ""
             property string globals: "{}"
             property list<string> migratedKeys: []
+            // The shell version that last wrote this file — for reference, and for
+            // migrations that need to know what wrote it
+            property string writtenBy: ""
             // Remembered per app by the volume sliders, not a preference
             property JsonObject audio: JsonObject {
                 id: _audio
@@ -115,6 +118,7 @@ Singleton {
         onTriggered: {
             if (root.readOnly)
                 return;
+            _adapter.writtenBy = Version.number;
             _file.writeAdapter();
             root.saved();
             console.log("[CONFIG] Saved");

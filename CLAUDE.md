@@ -65,6 +65,11 @@ ticks, cells respond to clicks, and popups toggle.
   `Timer`.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically.
+- **Versioning:** the number is in `singletons/Version.qml` (semver — major for config
+  migrations or behaviour changes, minor for features, patch for fixes). With every
+  user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves
+  them to a new section, bumps the number and tags `v<number>`. `tests/VersionTest.qml`
+  checks the two agree.
 - **Only commit when explicitly asked.** Never commit proactively after making changes.
 
 ## Environment
