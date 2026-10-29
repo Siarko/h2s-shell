@@ -16,7 +16,40 @@ Item {
     property var leftBars: []
     property var rightBars: []
     property real _ambientPhase: 0
-    property string _cavaConfig: Qt.resolvedUrl("../scripts/cava.ini").toString().replace("file://", "")
+    // cava runs from a config generated from the shell's own scripts/cava.ini, with the
+    // frame rate the active profile sets ("polling.visualizer.fps"); the template stays
+    // the one place to edit the rest of cava's settings
+    readonly property int _cavaFps: Profiles.value("polling.visualizer.fps") ?? 60
+    readonly property bool _cavaWanted: Music.hasPlayer
+
+    on_CavaFpsChanged: _restartCava()
+    on_CavaWantedChanged: _restartCava()
+    Component.onCompleted: _restartCava()
+
+    // Writes the config and (re)starts cava if a player is there. A Process must not be
+    // started by a declarative `running:` binding — see CLAUDE.md.
+    function _restartCava() {
+        cava.running = false;
+        if (!_cavaWanted)
+            return;
+        const template = _cavaTemplate.text();
+        _cavaGenerated.setText(template.replace(/^framerate\s*=.*$/m, "framerate = " + _cavaFps));
+        Qt.callLater(() => cava.running = root._cavaWanted);
+    }
+
+    FileView {
+        id: _cavaTemplate
+        path: Qt.resolvedUrl("../scripts/cava.ini").toString().replace("file://", "")
+        blockLoading: true
+    }
+
+    FileView {
+        id: _cavaGenerated
+        path: Quickshell.cachePath("cava.ini")
+        blockWrites: true
+        // Only ever written; it does not exist until the first write, and that is fine
+        printErrors: false
+    }
 
     function _requestAllPaint() {
         waveCanvas.requestPaint();
@@ -147,8 +180,7 @@ Item {
     // Real audio data from cava
     Process {
         id: cava
-        command: ["cava", "-p", root._cavaConfig]
-        running: Music.hasPlayer
+        command: ["cava", "-p", _cavaGenerated.path]
         stdout: SplitParser {
             onRead: line => {
                 var vals = line.split(";").filter(s => s !== "").map(s => parseInt(s) / 100.0);

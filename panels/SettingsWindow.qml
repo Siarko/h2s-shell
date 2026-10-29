@@ -26,8 +26,20 @@ FloatingWindow {
     property int selectedCategory: 0
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
-    // The profile the Performance page edits, when opened from the Profiles page
-    property string performanceProfile: ""
+    readonly property int _mediaCategory: 2
+
+    // The profile every page edits (docs/plans/global-profiles.md), by name so it
+    // survives reordering; Full, else the first
+    property string editedName: "Full"
+    readonly property int editIndex: {
+        const byName = Profiles.profiles.findIndex(profile => profile.name === editedName);
+        return byName >= 0 ? byName : (Profiles.profiles.length > 0 ? 0 : -1);
+    }
+    // Pages whose settings are all per profile; the others apply to every profile until
+    // they are migrated, and say so while another profile than Full is picked
+    readonly property var _perProfileCategories: [_performanceCategory, _profilesCategory]
+    readonly property bool _showScopeNote: Profiles.profiles[editIndex]?.name !== "Full"
+        && !_perProfileCategories.includes(selectedCategory)
 
     Rectangle {
         anchors.fill: parent
@@ -75,6 +87,58 @@ FloatingWindow {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.selectedCategory = root._profilesCategory
                         }
+                    }
+
+                    // The profile being edited, for every page
+                    Text {
+                        visible: Profiles.profiles.length > 0
+                        text: "Editing"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textDim
+                    }
+
+                    Repeater {
+                        // ScriptModel, never the bare array — see "The Repeater crash"
+                        model: ScriptModel {
+                            values: Profiles.profiles.map(profile => profile.name)
+                        }
+
+                        Rectangle {
+                            required property string modelData
+                            required property int index
+                            readonly property bool picked: index === root.editIndex
+                            Layout.fillWidth: true
+                            height: 24
+                            radius: 6
+                            color: picked ? Theme.sliderAccent : (_editArea.containsMouse ? Theme.cellHover : "transparent")
+
+                            Text {
+                                anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 6 }
+                                text: parent.modelData + (Profiles.activeProfiles.includes(parent.modelData) ? " •" : "")
+                                elide: Text.ElideRight
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: parent.picked ? Theme.textPrimary : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: _editArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.editedName = parent.modelData
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        height: 1
+                        color: Theme.textDim
+                        opacity: 0.3
                     }
 
                     Repeater {
@@ -128,8 +192,30 @@ FloatingWindow {
                 width: parent.width - 161
                 height: parent.height
 
+                // Until a page is per profile, editing another profile does not change it
+                Rectangle {
+                    id: _scopeNote
+                    visible: root._showScopeNote
+                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
+                    height: visible ? _scopeText.implicitHeight + 12 : 0
+                    radius: 6
+                    color: Theme.cellDefault
+
+                    Text {
+                        id: _scopeText
+                        anchors { fill: parent; margins: 6 }
+                        wrapMode: Text.WordWrap
+                        text: root.selectedCategory === root._mediaCategory
+                            ? "Only settings showing a profile state are per profile here; the rest apply to every profile."
+                            : "This page is not per profile yet: its settings apply to every profile."
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textSecondary
+                    }
+                }
+
                 Loader {
-                    anchors.fill: parent
+                    anchors { top: _scopeNote.visible ? _scopeNote.bottom : parent.top; left: parent.left; right: parent.right; bottom: parent.bottom }
                     sourceComponent: {
                         if (root.selectedCategory === 0) return generalComp;
                         if (root.selectedCategory === 1) return calendarComp;
@@ -148,20 +234,20 @@ FloatingWindow {
 
     Component { id: generalComp;       GeneralSettings       {} }
     Component { id: calendarComp;      CalendarSettings      {} }
-    Component { id: mediaComp;         MediaSettings         {} }
+    Component { id: mediaComp;         MediaSettings         { editIndex: root.editIndex } }
     Component { id: barComp;           BarSettings           {} }
     Component { id: notificationsComp; NotificationsSettings {} }
     Component { id: lockscreenComp;    LockscreenSettings    {} }
     Component { id: sttComp;           SttSettings           {} }
     Component {
         id: performanceComp
-        PerformanceSettings { editedName: root.performanceProfile }
+        PerformanceSettings { editIndex: root.editIndex }
     }
     Component {
         id: profilesComp
         ProfilesSettings {
             onEditValuesRequested: name => {
-                root.performanceProfile = name;
+                root.editedName = name;
                 root.selectedCategory = root._performanceCategory;
             }
         }

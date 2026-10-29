@@ -10,10 +10,10 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stages 1, 2 and 3 done, 5.1 and 5.2 done** (2026-10-28). Stage 4 (touch) is
-deferred until the Framework 12 is at hand, since it cannot be verified here. Next item:
-5.3, now shell profiles — [plans/adaptive-polling.md](plans/adaptive-polling.md), design
-agreed; four small points are still open at its end.
+**Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
+the Framework 12 is at hand, since it cannot be verified here. In progress: 10.3, every
+setting per profile — [plans/global-profiles.md](plans/global-profiles.md), stage 1
+done; next is stage 2, user-pinned global settings.
 
 ---
 
@@ -253,7 +253,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       more afterwards. Fixed on the way: the popup's Wi-Fi status lagged behind the
       widget after the radio came on, because "which network is in use" came only from
       scans — the cached list is now re-read on every change.
-- [ ] **5.3 Gate polling on whether anything is observing it** [#21, #22]
+- [x] **5.3 Gate polling on whether anything is observing it** [#21, #22]
       Nothing stops when the popup closes, and all six hardware sources poll even when
       the capsule shows one.
       **Replaced by a plan (2026-10-28): [plans/adaptive-polling.md](plans/adaptive-polling.md).**
@@ -261,7 +261,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       profiles — named lists of setting overrides, activated by conditions (battery,
       battery level, power profile, lock, fullscreen, open panel), layered in list
       order. Absorbs 5.4.
-- [ ] **5.4 Consider dropping `cava` to 30 fps** [#23] — measure first.
+- [x] **5.4 Consider dropping `cava` to 30 fps** [#23] — measure first.
+      Done 2026-10-29 as a profile setting, `polling.visualizer.fps` (Media page): 60 by
+      default, 15 in Power save.
 
 ## Stage 6 — Architecture and size
 
@@ -335,6 +337,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 10 — Requested features
 
+- [ ] **10.3 Every setting per profile, with user-pinned global settings** [#11]
+      Agreed 2026-10-29: [plans/global-profiles.md](plans/global-profiles.md). The
+      editing-profile picker covers the whole settings window; every setting is saved per
+      profile, except those the user pins as global. Doubles as the config rework (#11).
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

@@ -1,6 +1,6 @@
 # Plan: shell profiles, and polling rates as their first use
 
-Status: **design agreed 2026-10-28, not started.** Replaces TODO 5.3 ("gate polling on
+Status: **done 2026-10-29** — all eight steps. Continued in [global-profiles.md](global-profiles.md). Replaces TODO 5.3 ("gate polling on
 whether anything is observing it") and absorbs 5.4 (cava frame rate).
 
 ## Why
@@ -257,7 +257,7 @@ rates — except the temperatures, now one rate (see the schema table).
    not persisted, so a shell restart while a profile holds power-saver forgets what to
    restore.
 7. Profiles settings page; base polling rates in settings.
-   *Built 2026-10-29, awaiting the user's test.* Pages `Performance` (edits the picked
+   *Done 2026-10-29, verified on the host.* Pages `Performance` (edits the picked
    profile through `SchemaSettingEditor`; inherited values dimmed, overrides by a later
    active profile marked) and `Profiles` (active now, simulation, per-profile name,
    enable, order, delete with confirm, flat condition list via `ConditionEditor`); the
@@ -266,6 +266,10 @@ rates — except the temperatures, now one rate (see the schema table).
    "Unable to assign [undefined]" as the singletons are torn down — also before this step,
    harmless, worth silencing.
 8. Visualiser fps (TODO 5.4) wired to `polling.visualizer.fps`.
+   *Done 2026-10-29, verified on the host.* On the Media page. `scripts/cava.ini` stays
+   the template: MusicPanel writes a copy with the profile's frame rate to
+   `Quickshell.cachePath("cava.ini")` and restarts cava when it changes (cava itself is
+   no longer started by a declarative `running:` binding). Power save seeds 15 fps.
 
 Each step is shippable alone and verifiable on the desktop (steps 3 and 6 through the
 simulate override, or the laptop).

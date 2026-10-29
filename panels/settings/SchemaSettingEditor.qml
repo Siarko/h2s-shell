@@ -3,23 +3,36 @@ import QtQuick.Layouts
 import Quickshell
 import qs.singletons
 
-// Editor for one SettingsSchema key as set in one profile. The control follows the
-// schema type: pills for intervals and enums, a switch for bools. It says where the shown
-// value comes from — set here, inherited from the profiles above, or overridden right now
-// by a later active profile — and offers to drop this profile's own value.
+// Editor for one SettingsSchema key as set in one profile — the one picked in the
+// settings window. The control follows the schema type: pills for intervals and enums,
+// a switch for bools. It says where the shown value comes from — set here, inherited from
+// the profiles above, or overridden right now by a later active profile — and offers to
+// drop this profile's own value.
 Item {
     id: root
 
     required property string key
-    // The value this profile sets, or undefined when it inherits
-    property var ownValue: undefined
-    // What applies at this profile's place when it sets nothing
-    property var inheritedValue: undefined
-    // A later active profile that currently overrides this key, or ""
-    property string overriddenBy: ""
+    // Index of the edited profile in Profiles.profiles
+    required property int editIndex
 
-    signal edited(var newValue)
-    signal reset
+    readonly property var _profile: Profiles.profiles[editIndex] ?? null
+    // The value this profile sets, or undefined when it inherits
+    readonly property var ownValue: _profile?.set?.[key]
+    // What applies at this profile's place when it sets nothing
+    readonly property var inheritedValue: Profiles.inheritedValue(editIndex, key)
+    // A later active profile that currently overrides this key, or ""
+    readonly property string overriddenBy: {
+        const setter = Profiles.setBy(key);
+        return Profiles.profiles.findIndex(profile => profile.name === setter) > editIndex ? setter : "";
+    }
+
+    function edited(newValue) {
+        Profiles.setOverride(editIndex, key, newValue);
+    }
+
+    function reset() {
+        Profiles.clearOverride(editIndex, key);
+    }
 
     readonly property var entry: SettingsSchema.entry(key)
     readonly property bool inherits: ownValue === undefined

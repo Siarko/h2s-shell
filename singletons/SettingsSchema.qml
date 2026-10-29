@@ -32,6 +32,14 @@ Singleton {
           type: "interval", min: 0, max: 600000, default: 10000 },
         { key: "polling.network.interval", label: "Network throughput", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },
+        // cava's frame rate for the music visualizer; written into the generated cava
+        // config (scripts/cava.ini is the template)
+        { key: "polling.visualizer.fps", label: "Visualizer frame rate", group: "media",
+          type: "enum", default: 60, options: [
+              { value: 15, label: "15 fps" },
+              { value: 30, label: "30 fps" },
+              { value: 60, label: "60 fps" }
+          ] },
         // A brief wave across every history graph when it takes a sample
         { key: "graphs.heartbeat", label: "Graph heartbeat", group: "performance",
           type: "bool", default: true },

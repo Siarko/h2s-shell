@@ -22,6 +22,7 @@ TestCase {
         assertEqual(Profiles.value("polling.disk.interval"), 10000, "disk every 10 s");
         assertEqual(Profiles.value("polling.network.interval"), 2000, "network every 2 s");
         assertEqual(Profiles.value("graphs.heartbeat"), true, "graph heartbeat on");
+        assertEqual(Profiles.value("polling.visualizer.fps"), 60, "visualizer at 60 fps");
         assertEqual(SettingsSchema.keysInGroup("performance").length, 6, "polling and graph keys are in the performance group");
 
         // --- conditions ---

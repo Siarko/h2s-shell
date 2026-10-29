@@ -406,7 +406,7 @@ instantiates all six sources and every one starts its timer. Fix: start a source
 only while something observes it (a reference count, or binding `running` to "is in the
 capsule, or the hardware panel is open").
 
-### 23. `cava` runs at 60 fps and is parsed in JavaScript
+### 23. `cava` runs at 60 fps and is parsed in JavaScript — **FIXED** (configurable per profile)
 
 `panels/MusicPanel.qml:147-163` with `framerate = 60` and 48 bars in
 `scripts/cava.ini` — 60 line-splits and 48 `parseInt`s per second, in the QML JS engine,

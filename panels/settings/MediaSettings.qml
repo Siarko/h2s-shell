@@ -3,6 +3,11 @@ import QtQuick.Layouts
 import qs.singletons
 
 ColumnLayout {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
     anchors {
         fill: parent
         margins: 14
@@ -32,6 +37,13 @@ ColumnLayout {
         labels: ["Horizontal", "Vertical"]
         value: Config.media.visualizerLayout
         onPicked: val => Config.media.visualizerLayout = val
+    }
+
+    // Per profile (docs/plans/global-profiles.md); the settings above are not yet
+    SchemaSettingEditor {
+        visible: root.editIndex >= 0
+        key: "polling.visualizer.fps"
+        editIndex: root.editIndex
     }
 
     Item {

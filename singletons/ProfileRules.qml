@@ -159,6 +159,7 @@ Singleton {
                   "polling.disk.interval": 0,
                   "polling.network.interval": 10000,
                   "graphs.heartbeat": false,
+                  "polling.visualizer.fps": 15,
                   "system.powerProfile": "power-saver"
               } }
         ];
