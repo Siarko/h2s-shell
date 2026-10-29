@@ -137,7 +137,7 @@ PanelWindow {
 
         opacity: Notifications.hudQueue.length > 0 ? 1.0 : 0.0
         visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
 
         Text {
             anchors.centerIn: parent

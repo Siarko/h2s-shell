@@ -25,9 +25,11 @@ FloatingWindow {
     // Index into the sidebar list below
     property int selectedCategory: 0
     // The sidebar's pages, in order; also how IPC names a page
-    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles"]
+    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Curves"]
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
+    // Global, not per profile: moves under Appearance with the theme pages (docs/plans/themes.md)
+    readonly property int _curvesCategory: 9
 
     // The profile every page edits (docs/plans/global-profiles.md), by name so it
     // survives reordering; Full, else the first
@@ -69,7 +71,7 @@ FloatingWindow {
                     // before the handler that enabled it ran.)
                     Behavior on y {
                         enabled: _markSettled.triggeredOnce
-                        NumberAnimation { duration: Theme.duration("slide"); easing.type: Theme.easing("slide") }
+                        NumberAnimation { duration: Theme.duration("slide"); easing: Theme.curve("slide") }
                     }
                 }
 
@@ -107,7 +109,7 @@ FloatingWindow {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.accent
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         MouseArea {
                             id: _profileIndicator
@@ -141,7 +143,7 @@ FloatingWindow {
                             height: 24
                             radius: 6
                             color: picked ? Theme.accent : (_editArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                             Text {
                                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 6 }
@@ -183,7 +185,7 @@ FloatingWindow {
                             // The selected one is marked by the sliding mark above
                             color: _categoryArea.containsMouse && index !== root.selectedCategory
                                 ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
-                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                             Text {
                                 anchors {
@@ -195,7 +197,7 @@ FloatingWindow {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
                                 color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary
-                                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                             }
 
                             MouseArea {
@@ -257,14 +259,15 @@ FloatingWindow {
                         if (root.selectedCategory === 5) return lockscreenComp;
                         if (root.selectedCategory === root._performanceCategory) return performanceComp;
                         if (root.selectedCategory === root._profilesCategory) return profilesComp;
+                        if (root.selectedCategory === root._curvesCategory) return curvesComp;
                         return sttComp;
                     }
                 }
 
                 ParallelAnimation {
                     id: _pageEnter
-                    NumberAnimation { target: _page; property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
-                    NumberAnimation { target: _pageShift; property: "y"; from: 12; to: 0; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
+                    NumberAnimation { target: _page; property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
+                    NumberAnimation { target: _pageShift; property: "y"; from: 12; to: 0; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
                 }
             }
         }
@@ -277,6 +280,7 @@ FloatingWindow {
     Component { id: notificationsComp; NotificationsSettings { editIndex: root.editIndex } }
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
+    Component { id: curvesComp;        CurvesSettings {} }
     Component {
         id: performanceComp
         PerformanceSettings { editIndex: root.editIndex }

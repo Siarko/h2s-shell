@@ -187,7 +187,7 @@ Item {
                     radius: 12
                     color: EthernetManager.ethernetConnected ? Theme.accent : Theme.textDisabled
 
-                    Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
                     Rectangle {
                         width: 20
@@ -198,7 +198,7 @@ Item {
                         x: EthernetManager.ethernetConnected ? parent.width - width - 2 : 2
 
                         Behavior on x {
-                            NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
+                            NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
                         }
                     }
                 }
@@ -288,7 +288,7 @@ Item {
                     color: WifiManager.wifiEnabled ? Theme.accent : Theme.textDisabled
 
                     Behavior on color {
-                        ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
+                        ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
                     }
 
                     Rectangle {
@@ -300,7 +300,7 @@ Item {
                         x: WifiManager.wifiEnabled ? parent.width - width - 2 : 2
 
                         Behavior on x {
-                            NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
+                            NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
                         }
                     }
                 }
@@ -384,7 +384,7 @@ Item {
             color: WifiManager.disconnecting
                 ? Theme.surface
                 : (disconnectArea.containsMouse ? Theme.error : Theme.surface)
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             Text {
                 anchors.centerIn: parent
@@ -446,7 +446,7 @@ Item {
                     implicitHeight: 22
                     radius: 4
                     color: rescanArea.containsMouse ? Theme.surfaceHover : (WifiManager.scanning ? Theme.accent : Theme.surface)
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     Text {
                         id: rescanLabel
@@ -496,14 +496,14 @@ Item {
                 // A network found by a scan fades in, and the list makes room for it;
                 // rows re-sorted by signal slide to their new place
                 add: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
                 }
                 displaced: Transition {
-                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing: Theme.curve("move") }
                     NumberAnimation { property: "opacity"; to: 1; duration: Theme.duration("enter") }
                 }
                 move: Transition {
-                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing: Theme.curve("move") }
                 }
 
                 delegate: Rectangle {
@@ -527,7 +527,7 @@ Item {
                     clip: true
 
                     Behavior on height {
-                        NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
+                        NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
                     }
 
                     Column {
@@ -680,7 +680,7 @@ Item {
                                     color: _busy
                                         ? (_connectArea.containsMouse ? Theme.error : Theme.surface)
                                         : (_connectArea.containsMouse ? Theme.accentHover : Theme.accent)
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         id: _connectLabel
@@ -715,7 +715,7 @@ Item {
                                     height: 26
                                     radius: 6
                                     color: _forgetArea.containsMouse ? Theme.error : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         id: _forgetLabel
@@ -723,7 +723,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeBody
                                         color: _forgetArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                                         anchors.centerIn: parent
                                     }
 
@@ -766,7 +766,7 @@ Item {
                 color: "transparent"
                 clip: true
 
-                Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") } }
+                Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") } }
 
                 Column {
                     width: parent.width

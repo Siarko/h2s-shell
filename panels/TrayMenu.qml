@@ -99,7 +99,7 @@ Item {
         id: outAnim
         property: "x"
         duration: Theme.duration("slide")
-        easing.type: Theme.easing("slide")
+        easing: Theme.curve("slide")
     }
 
     // Incoming slot slides in
@@ -107,7 +107,7 @@ Item {
         id: inAnim
         property: "x"
         duration: Theme.duration("slide")
-        easing.type: Theme.easing("slide")
+        easing: Theme.curve("slide")
     }
 
     // Shared item delegate — defined once, used by both Repeaters
@@ -137,7 +137,7 @@ Item {
                 anchors.margins: 2
                 radius: 4
                 color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : Theme.surfaceHoverClear
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 RowLayout {
                     anchors.fill: parent
@@ -231,7 +231,7 @@ Item {
                     anchors.margins: 2
                     radius: 4
                     color: backArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     RowLayout {
                         anchors.fill: parent

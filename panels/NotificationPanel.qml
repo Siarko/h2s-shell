@@ -98,7 +98,7 @@ Item {
                         property: "x"
                         to: delegateRoot.width
                         duration: Theme.duration("exit")
-                        easing.type: Theme.easing("exit")
+                        easing: Theme.curve("exit")
                     }
 
                     NumberAnimation {
@@ -106,7 +106,7 @@ Item {
                         property: "implicitHeight"
                         to: 0
                         duration: Theme.duration("expand")
-                        easing.type: Theme.easing("expand")
+                        easing: Theme.curve("expand")
                     }
 
                     ScriptAction {
@@ -139,7 +139,7 @@ Item {
                         from: -delegateRoot.width
                         to: 0
                         duration: Theme.duration("enter")
-                        easing.type: Theme.easing("enter")
+                        easing: Theme.curve("enter")
                     }
                 }
             }
@@ -211,7 +211,7 @@ Item {
                 property: "scale"
                 from: 0; to: 1
                 duration: Theme.duration("pop")
-                easing.type: Theme.easing("pop")
+                easing: Theme.curve("pop")
             }
         }
 

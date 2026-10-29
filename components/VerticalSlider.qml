@@ -20,7 +20,7 @@ Item {
     property real _shownValue: value
     Behavior on _shownValue {
         enabled: !dragArea.pressed
-        NumberAnimation { duration: Theme.duration("value"); easing.type: Theme.easing("value") }
+        NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") }
     }
     readonly property real normalized: Math.min(_shownValue / maxValue, 1.0)
     // Leave 6 px at top + bottom so the thumb can overhang the track ends
@@ -66,7 +66,7 @@ Item {
         height: 12
         radius: 6
         color: dragArea.pressed ? Theme.textSecondary : Theme.textPrimary
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
     }
 
     MouseArea {

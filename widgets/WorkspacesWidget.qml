@@ -69,7 +69,7 @@ BarWidget {
                         return Workspaces.isSpecialVisible(modelData) ? Theme.workspaceSpecial : (_wsHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
                     return modelData.focused ? Theme.accentDark : (modelData.active ? Theme.workspaceActive : (_wsHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear))
                 }
-                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
                 Text {
                     id: wsText

@@ -44,7 +44,7 @@ Item {
         property: "x"
         to: root.restX
         duration: Theme.duration("enter")
-        easing.type: Theme.easing("enter")
+        easing: Theme.curve("enter")
     }
 
     NumberAnimation {
@@ -53,7 +53,7 @@ Item {
         property: "x"
         to: root.screenWidth
         duration: Theme.duration("exit")
-        easing.type: Theme.easing("exit")
+        easing: Theme.curve("exit")
     }
 
     Timer {

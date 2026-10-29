@@ -39,6 +39,15 @@ section to the new version and date.
   ("enter", "exit"), and the widgets beside them slide over. The lock screen fades in,
   and waking it fades the notifications out and the password prompt in.
 
+- A curves library, `~/.config/h2s_shell/curves.json`: named cubic Béziers
+  (`"springy": [0.3, 1.6, 0.4, 0.9]`) that a theme's `curves` can use by name, alongside
+  Qt's own (OutQuad, OutBack, …). Watched, like themes; an unknown curve falls back to
+  OutQuad and is reported.
+- Settings → Curves: an editor for the curves library — a graph with two draggable control
+  points (scroll to zoom), exact numbers, a looping preview against a second curve with
+  a dot following each curve on the graph, new curves blank or copied from Qt's, rename
+  (themes using the curve follow), delete, and where each curve is used.
+
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere
   (was 120–200), a notification card arrives in 250 ms (was 200), the password field's

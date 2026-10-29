@@ -129,6 +129,8 @@ Singleton {
     // Where theme files live, next to the config
     readonly property string themesDir: Config.path.toString().replace(/^file:\/\//, "")
         .replace(/\/[^\/]*$/, "") + "/themes"
+    // The curves library, shared by every theme (ThemeRules, "Curves")
+    readonly property string curvesPath: _folder(themesDir) + "/curves.json"
 
     // The resolved values, the chain that produced them, and what went wrong (missing
     // themes, cycles, unreadable files) — for the settings page to show
@@ -204,8 +206,17 @@ Singleton {
             else
                 palettes[entry.name] = palette.colors ?? palette;
         }
+        // The curves library, read with the theme, so a change to either reloads both
+        const library = readWatched(curvesPath) ?? {};
+        const values = ThemeRules.resolve(builtin, result.chain, palettes);
+        for (const role in values.curves) {
+            const curve = ThemeRules.curveEasing(values.curves[role], library);
+            if (curve.error !== "")
+                result.errors.push(curve.error + " (role \"" + role + "\")");
+        }
         return {
-            values: ThemeRules.resolve(builtin, result.chain, palettes),
+            values: values,
+            library: library,
             chain: result.chain.map(entry => entry.name),
             errors: result.errors.concat(readErrors),
             watched: watched,
@@ -225,6 +236,12 @@ Singleton {
         }
         _quietReload = false;
         values = resolved.values;
+        if (JSON.stringify(resolved.library) !== JSON.stringify(curveLibrary))
+            curveLibrary = resolved.library;
+        const easings = {};
+        for (const role in values.curves)
+            easings[role] = ThemeRules.curveEasing(values.curves[role], curveLibrary).easing;
+        _curveEasings = easings;
         chain = resolved.chain;
         errors = resolved.errors;
         for (const error of errors)
@@ -233,6 +250,15 @@ Singleton {
             _watched = resolved.watched;
         if (JSON.stringify(resolved.folders) !== JSON.stringify(_watchedFolders))
             _watchedFolders = resolved.folders;
+        // Every theme file, parsed, for where curves are used (the Curves page)
+        const allThemes = {};
+        for (let i = 0; i < _themeFiles.count; i++) {
+            const name = _themeFiles.get(i, "fileBaseName");
+            const theme = _read(_themePath(name));
+            if (theme !== null)
+                allThemes[name] = theme;
+        }
+        themeFiles = allThemes;
         // Any file may have changed, and with it the other themes asked for
         const others = {};
         for (const other in _otherValues)
@@ -310,6 +336,89 @@ Singleton {
         id: _writer
         blockWrites: true
         printErrors: false
+    }
+
+    // ---- The curves library ----
+    // Every theme file, { name: parsed }, as of the last reload
+    property var themeFiles: ({})
+
+    // Where the library curve `name` is used: [{ theme, role }]
+    function curveUsages(name) {
+        return ThemeRules.curveUsages(themeFiles, name);
+    }
+
+    // Reads the library file for changing it: null when it does not parse — rewriting it
+    // would lose the user's hand edits
+    function _libraryForEdit() {
+        const library = _read(curvesPath);
+        if (library === null && _reader.text() !== "") {
+            console.warn("[Theme] Not changing", curvesPath, "— it does not parse");
+            return null;
+        }
+        return library ?? {};
+    }
+
+    function _writeLibrary(library) {
+        _writer.path = curvesPath;
+        _writer.setText(JSON.stringify(library, null, 2) + "\n");
+        Qt.callLater(reload);
+    }
+
+    // Adds or replaces the curve `name` ([x1, y1, x2, y2] or Qt's form)
+    function writeCurve(name, points) {
+        if (Config.readOnly || !ThemeRules.validCurveName(name) || ThemeRules.curvePoints(points) === null)
+            return false;
+        const library = _libraryForEdit();
+        if (library === null)
+            return false;
+        library[name] = points;
+        _writeLibrary(library);
+        return true;
+    }
+
+    // Removes the curve `name`; themes still naming it fall back (ThemeRules.fallbackCurve)
+    function deleteCurve(name) {
+        if (Config.readOnly)
+            return false;
+        const library = _libraryForEdit();
+        if (library === null || !(name in library))
+            return false;
+        delete library[name];
+        _writeLibrary(library);
+        return true;
+    }
+
+    // Renames the curve `oldName` and points every theme using it at the new name. A theme
+    // file that does not parse is left alone, and reported.
+    function renameCurve(oldName, newName) {
+        if (Config.readOnly || !ThemeRules.validCurveName(newName))
+            return false;
+        const library = _libraryForEdit();
+        if (library === null || !(oldName in library) || (newName in library))
+            return false;
+        const renamed = {};
+        for (const name of Object.keys(library))
+            renamed[name === oldName ? newName : name] = library[name];
+        _writeLibrary(renamed);
+        const changed = ThemeRules.renameCurveIn(themeFiles, oldName, newName);
+        for (const name in changed)
+            _writeTheme(name, changed[name]);
+        for (let i = 0; i < _themeFiles.count; i++) {
+            const name = _themeFiles.get(i, "fileBaseName");
+            if (!(name in themeFiles))
+                console.warn("[Theme] Not renaming curve", oldName, "in", _themePath(name), "— it does not parse");
+        }
+        return true;
+    }
+
+    // The theme files, listed for curveUsages and renameCurve
+    FolderListModel {
+        id: _themeFiles
+        folder: "file://" + root.themesDir
+        nameFilters: ["*.json"]
+        showDirs: false
+        onCountChanged: Qt.callLater(root.reload)
+        onStatusChanged: if (status === FolderListModel.Ready) Qt.callLater(root.reload)
     }
 
     // ---- Migration: the bar's geometry moves from profiles into themes, once ----
@@ -441,11 +550,17 @@ Singleton {
         return Math.max(1, Math.round((values.durations[role] ?? 0) / animationSpeed));
     }
 
-    // The easing curve for `curve`, usually the role's name (popup has popupOpen and
-    // popupClose); an unknown name eases out
-    function easing(curve) {
-        return Easing[values.curves[curve]] ?? Easing.OutQuad;
+    // The easing for `curve`, usually the role's name (popup has popupOpen and
+    // popupClose), for an animation's `easing`: a Qt curve or one from the curves library.
+    // An unknown name eases out.
+    function curve(curve) {
+        return _curveEasings[curve] ?? ThemeRules.curveEasing(curve, curveLibrary).easing;
     }
+
+    // The curves library: { name: points }, see ThemeRules
+    property var curveLibrary: ({})
+    // Each role's easing, resolved once per reload
+    property var _curveEasings: ({})
 
     // Typography
     readonly property string fontFamily: _fonts.family

@@ -34,7 +34,7 @@ Column {
             }
             radius: 4
             color: _rowArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         }
 
         RowLayout {
@@ -74,7 +74,7 @@ Column {
         height: root.expanded ? root._graphAreaHeight : 0
         clip: true
 
-        Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") } }
+        Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") } }
 
         HistoryChart {
             id: _chart

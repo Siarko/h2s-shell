@@ -121,7 +121,7 @@ Item {
                     Text {
                         text: root.monthNames[root.displayMonth]
                         color: _monthArea.containsMouse ? Theme.accent : Theme.textPrimary
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -147,7 +147,7 @@ Item {
                     Text {
                         text: root.displayYear
                         color: _yearArea.containsMouse ? Theme.accent : Theme.textPrimary
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -191,7 +191,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: _todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 MouseArea {
                     id: _todayArea
@@ -253,7 +253,7 @@ Item {
                 }
                 width: _dateGrid.width
                 height: _dateGrid.height / 6
-                Behavior on y { NumberAnimation { duration: Theme.duration("move"); easing.type: Theme.easing("move") } }
+                Behavior on y { NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") } }
                 color: "transparent"
                 border.color: Theme.accent
                 border.width: 1
@@ -276,7 +276,7 @@ Item {
                     from: fromX
                     to: 0
                     duration: Theme.duration("slide")
-                    easing.type: Theme.easing("slide")
+                    easing: Theme.curve("slide")
                 }
 
                 Repeater {
@@ -299,7 +299,7 @@ Item {
                         color: isToday    ? Theme.calendarToday
                              : isSelected ? Theme.accentTint
                              : Qt.alpha(Theme.accentTint, 0)
-                        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                         radius: 4
                         // Border shows selected range: day→cell, week→handled by overlay, month→none
                         border.width: root.viewMode === "day" && isSelected && !isToday ? 1 : 0

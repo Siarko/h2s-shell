@@ -183,7 +183,7 @@ Item {
                                         text: "⠿"
                                         font.pixelSize: Theme.fontSizeMedium
                                         color: _handleArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
-                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                                     }
 
                                     MouseArea {
@@ -292,7 +292,7 @@ Item {
                                     height: 24
                                     radius: 4
                                     color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         anchors.centerIn: parent
@@ -387,7 +387,7 @@ Item {
                                     anchors.rightMargin: 4
                                     radius: 4
                                     color: _pickerItemHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         anchors {

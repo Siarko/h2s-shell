@@ -132,7 +132,7 @@ Item {
                 height: 20
                 radius: 4
                 color: _pinArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
                     anchors.centerIn: parent
@@ -177,7 +177,7 @@ Item {
                 height: 20
                 radius: 4
                 color: _resetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
                     anchors.centerIn: parent
@@ -218,7 +218,7 @@ Item {
                     height: 16
                     radius: 8
                     color: Theme.textPrimary
-                    Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                    Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                 }
 
                 MouseArea {
@@ -356,7 +356,7 @@ Item {
                         height: 26
                         radius: 4
                         color: _removeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
                             anchors.centerIn: parent
@@ -381,7 +381,7 @@ Item {
                 height: 24
                 radius: 6
                 color: _addArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
                     id: _addText

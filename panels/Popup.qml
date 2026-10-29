@@ -87,7 +87,7 @@ LazyLoader {
         property real shownWidth: totalWidth
         Behavior on shownWidth {
             enabled: popup.showPopup
-            NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
+            NumberAnimation { duration: Theme.duration("popupResize"); easing: Theme.curve("popupResize") }
         }
         // The bar's own extent and bottom corners: it need not reach the screen edges
         function _layout(name) {
@@ -209,22 +209,22 @@ LazyLoader {
 
             Behavior on _left {
                 enabled: popup.showPopup
-                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing: Theme.curve("popupResize") }
             }
             Behavior on _right {
                 enabled: popup.showPopup
-                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing: Theme.curve("popupResize") }
             }
             Behavior on _centre {
                 enabled: popup.showPopup
-                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing: Theme.curve("popupResize") }
             }
 
             Behavior on height {
                 enabled: true
                 NumberAnimation {
                     duration: Theme.duration("popup")
-                    easing.type: popupLoader.closing ? Theme.easing("popupClose") : Theme.easing("popupOpen")
+                    easing: Theme.curve(popupLoader.closing ? "popupClose" : "popupOpen")
                     onRunningChanged: {
                         if (!running && popupLoader.closing) {
                             popupLoader.closing = false;
@@ -300,7 +300,7 @@ LazyLoader {
                         property: "opacity"
                         to: 1
                         duration: Theme.duration("fade")
-                        easing.type: Theme.easing("fade")
+                        easing: Theme.curve("fade")
                     }
 
                     Connections {

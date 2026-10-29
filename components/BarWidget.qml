@@ -47,7 +47,7 @@ Item {
         radius: 5
         anchors.fill: parent
         color: (mouseArea.containsMouse || container.active) ? Theme.surfaceHover : container.cellColor
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         border.color: container.borderColor
         border.width: container.borderWidth
     }

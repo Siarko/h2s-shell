@@ -46,14 +46,14 @@ Item {
                 height: 4
                 radius: 2
                 color: seekArea.containsMouse && seekBar.canSeek ? Theme.textSecondary : Theme.textDisabled
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Rectangle {
                     width: seekBar._fraction * parent.width
                     height: parent.height
                     radius: 2
                     color: seekArea.containsMouse && seekBar.canSeek ? Theme.accentHover : Theme.accent
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }
             }
 
@@ -62,7 +62,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 14; height: 14; radius: 7
                 color: seekArea.pressed ? Theme.textSecondary : Theme.textPrimary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 visible: seekBar.canSeek
             }
 

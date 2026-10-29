@@ -44,9 +44,39 @@ TestCase {
         assert(!("unknown" in withPalette.colors), "tokens the built-in theme does not know are ignored");
 
         assertEqual(JSON.stringify(ThemeRules.resolve(builtin, [], {})), JSON.stringify(builtin), "no theme: the built-in one");
+        // --- curves ---
+        const library = { snappy: [0.2, 0.9, 0.1, 1.0], twoStep: [0.1, 0.5, 0.2, 0.6, 0.5, 0.5, 0.6, 0.6, 0.9, 1, 1, 1],
+            backwards: [1.2, 0, 0.5, 1], short: [0.1, 0.2, 0.3], OutQuad: [0, 0, 1, 1] };
+        assertEqual(ThemeRules.curveEasing("OutBack", library).easing.type, Easing.OutBack, "a Qt curve by its name");
+        assertEqual(ThemeRules.curveEasing("OutQuad", library).easing.type, Easing.OutQuad, "a Qt name wins over a library entry");
+        const snappy = ThemeRules.curveEasing("snappy", library);
+        assertEqual(snappy.easing.type, Easing.BezierSpline, "a library curve is a Bézier spline");
+        assertEqual(JSON.stringify(snappy.easing.bezierCurve), JSON.stringify([0.2, 0.9, 0.1, 1, 1, 1]), "one segment gets its end");
+        assertEqual(snappy.error, "", "and resolves without error");
+        assertEqual(ThemeRules.curveEasing("twoStep", library).easing.bezierCurve.length, 12, "several segments are kept");
+        const missing = ThemeRules.curveEasing("nope", library);
+        assertEqual(missing.easing.type, Easing.OutQuad, "an unknown curve falls back");
+        assert(missing.error.includes("not found"), "and is reported");
+        assert(ThemeRules.curveEasing("backwards", library).error.includes("not a valid"), "time cannot run backwards");
+        assert(ThemeRules.curveEasing("short", library).error.includes("not a valid"), "points come in whole segments");
+        assert(ThemeRules.curveEasing("Bezier", library).error !== "", "Bezier is not a curve by itself");
+        assert(!ThemeRules.validCurveName("InOutCubic"), "a library curve cannot take a Qt curve's name");
+        assert(!ThemeRules.validCurveName(" snappy"), "nor stray spaces");
+        assert(ThemeRules.validCurveName("snappy"), "a plain name is fine");
+        const themesWithCurves = { b: { curves: { pop: "snappy", hover: "OutQuad" } }, a: { curves: { enter: "snappy" } }, c: {} };
+        assertEqual(JSON.stringify(ThemeRules.curveUsages(themesWithCurves, "snappy")),
+            JSON.stringify([{ theme: "a", role: "enter" }, { theme: "b", role: "pop" }]), "a curve's usages, by theme and role");
+        const renamed = ThemeRules.renameCurveIn(themesWithCurves, "snappy", "quick");
+        assertEqual(JSON.stringify(Object.keys(renamed).sort()), JSON.stringify(["a", "b"]), "renaming changes only the themes using it");
+        assertEqual(renamed.b.curves.pop, "quick", "pointing them at the new name");
+        assertEqual(renamed.b.curves.hover, "OutQuad", "other roles stay");
+        assertEqual(themesWithCurves.b.curves.pop, "snappy", "the inputs are not modified");
+        for (const name in ThemeRules.qtCurveApproximations)
+            assert(ThemeRules.isQtCurve(name) && ThemeRules.curvePoints(ThemeRules.qtCurveApproximations[name]) !== null,
+                "the copy of " + name + " is a valid curve");
+
         // --- animation ---
-        assertEqual(Theme.easing("pop"), Easing.OutBack, "a curve by its Qt name");
-        assertEqual(Theme.easing("no such curve"), Easing.OutQuad, "an unknown curve eases out");
+        assertEqual(Theme.curve("no such role").type, Easing.OutQuad, "a role without a curve eases out");
         assert(Theme.duration("expand") >= 1, "a role has a duration");
         assertEqual(Theme.duration("no such role"), 1, "an unknown role is instant, but still runs");
 

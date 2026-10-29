@@ -374,7 +374,7 @@ Item {
                     property: "opacity"
                     to: 1
                     duration: Theme.duration("fade")
-                    easing.type: Theme.easing("fade")
+                    easing: Theme.curve("fade")
                 }
 
                 MultiEffect {
@@ -425,7 +425,7 @@ Item {
                 from: 0
                 to: 1
                 duration: Theme.duration("fade")
-                easing.type: Theme.easing("fade")
+                easing: Theme.curve("fade")
             }
 
             Text {
@@ -473,7 +473,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canPrev ? Theme.textDisabled : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -491,7 +491,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeXXLargeDisplay
                 color: playArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -509,7 +509,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canNext ? Theme.textDisabled : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {

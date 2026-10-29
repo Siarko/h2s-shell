@@ -48,15 +48,15 @@ BarWidget {
                     width = 24;
                     opacity = 1;
                 }
-                Behavior on width { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
-                Behavior on opacity { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
+                Behavior on width { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
+                Behavior on opacity { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
 
                 // Highlighted under the pointer and while its menu is open, like a cell
                 Rectangle {
                     anchors.fill: parent
                     radius: 5
                     color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.surfaceHover : Theme.surfaceHoverClear
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }
 
                 Image {

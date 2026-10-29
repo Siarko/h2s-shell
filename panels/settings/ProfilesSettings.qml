@@ -29,7 +29,7 @@ Flickable {
         radius: 6
         opacity: available ? 1 : 0.35
         color: _area.containsMouse && available ? Theme.surfaceHover : Theme.surface
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
             id: _label

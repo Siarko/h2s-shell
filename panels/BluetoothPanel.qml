@@ -82,7 +82,7 @@ Item {
                     Behavior on color {
                         ColorAnimation {
                             duration: Theme.duration("state")
-                            easing.type: Theme.easing("state")
+                            easing: Theme.curve("state")
                         }
                     }
 
@@ -97,7 +97,7 @@ Item {
                         Behavior on x {
                             NumberAnimation {
                                 duration: Theme.duration("state")
-                                easing.type: Theme.easing("state")
+                                easing: Theme.curve("state")
                             }
                         }
                     }
@@ -146,7 +146,7 @@ Item {
                     implicitHeight: 22
                     radius: 4
                     color: scanBtnArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     Text {
                         id: scanLabel
@@ -180,10 +180,10 @@ Item {
                 width: col.width
                 spacing: col.spacing
                 add: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
                 }
                 move: Transition {
-                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing: Theme.curve("move") }
                     NumberAnimation { property: "opacity"; to: 1; duration: Theme.duration("enter") }
                 }
 
@@ -266,7 +266,7 @@ Item {
                                     implicitHeight: 20
                                     radius: 4
                                     color: pairArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         id: pairLabel
@@ -293,7 +293,7 @@ Item {
                                     implicitHeight: 20
                                     radius: 4
                                     color: connArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         id: connLabel
@@ -319,7 +319,7 @@ Item {
                                     implicitHeight: 20
                                     radius: 4
                                     color: forgetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
                                         text: "✕"

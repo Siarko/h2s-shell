@@ -139,7 +139,7 @@ Item {
                 Text {
                     text: "+"
                     color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSection
 
@@ -155,7 +155,7 @@ Item {
                 Text {
                     text: "󰑓"
                     color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
 
@@ -192,7 +192,7 @@ Item {
                 anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                 text: "→"
                 color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.error
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
             }
@@ -226,7 +226,7 @@ Item {
             Behavior on Layout.preferredHeight {
                 NumberAnimation {
                     duration: Theme.duration("expand")
-                    easing.type: Theme.easing("expand")
+                    easing: Theme.curve("expand")
                 }
             }
 
@@ -332,7 +332,7 @@ Item {
             from: 0
             to: 360
             duration: Theme.duration("spin")
-            easing.type: Theme.easing("spin")
+            easing: Theme.curve("spin")
             loops: Animation.Infinite
         }
     }

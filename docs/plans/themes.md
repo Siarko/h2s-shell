@@ -211,6 +211,33 @@ The ~50 hard-coded `duration:` values move to roles.
    - The list of candidates is done. Later (the user's idea): variants per element,
      `expand.dictate` falling back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.
+   *Scope agreed with the user 2026-10-29:* assigning curves to roles stays in stage 6
+   (Animations page); the Curves page gets its own sidebar entry until Appearance exists.
+   Copies of Qt's curves are Bézier approximations (easings.net); Bounce/Elastic cannot
+   be copied. Control points' x stays within 0–1, y is free. Names may not be Qt's.
+   Renaming rewrites references in theme files (a file that does not parse is skipped
+   and reported); deleting leaves references to fall back to OutQuad.
+   *Library and resolution, 2026-10-29, verified on the host with the page:* `ThemeRules.curveEasing`
+   (tested) returns the value an animation's `easing` takes — `{ type }` for a Qt curve,
+   `{ type: BezierSpline, bezierCurve }` for a library curve; Qt accepts the object as a
+   whole (checked in a scratch run). `Theme.curve(role)` replaced `Theme.easing` at all
+   148 sites (`easing: Theme.curve("hover")`). The library is read with the theme and
+   watched like it; unknown or broken curves are listed in `Theme.errors` by role.
+   *Curves page, 2026-10-30, verified on the host:* panels/settings/CurvesSettings.qml, its
+   own sidebar entry. A draft (name, points) is edited by dragging the two control points,
+   or typing them, and written on Save; Save with a new name renames (`Theme.renameCurve`
+   rewrites the themes using it, via `ThemeRules.renameCurveIn`, tested). The graph draws
+   the Bézier and a compared curve sampled through an animation's
+   `easing.valueForProgress`; the preview loops a square per curve. Usages come from
+   `Theme.themeFiles`, every theme file read on reload. Curves of several segments are
+   shown, not edited. Found while testing: the graph's y range now zooms (scroll; opening a
+   curve fits its points), as a point beyond it could not be grabbed; the preview applied
+   the curve twice (an eased animation of a value then eased again) — time now runs
+   linearly and dots on the graph follow each curve at the preview's moment.
+   *Next, asked for by the user:* more control points — editing curves of several
+   segments (the format and resolution already take them): add a point on the curve,
+   which splits a segment, drag the joints and their handles, remove a point. Not
+   scheduled yet; after stage 5 or with stage 6.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
    Notifications, Animations; create/copy/rename/delete themes. The Animations page lists
    every role with its **duration** (ms) and its **curve** (the user's requirement,

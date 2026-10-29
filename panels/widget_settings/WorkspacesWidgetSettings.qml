@@ -154,7 +154,7 @@ Item {
                         height: 16
                         radius: 8
                         color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                     }
 
                     MouseArea {
@@ -197,7 +197,7 @@ Item {
                         height: 16
                         radius: 8
                         color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                     }
 
                     MouseArea {
@@ -313,7 +313,7 @@ Item {
                         height: 20
                         radius: 4
                         color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
                             anchors.centerIn: parent

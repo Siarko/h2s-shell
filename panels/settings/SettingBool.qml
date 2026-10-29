@@ -37,7 +37,7 @@ RowLayout {
             Behavior on x {
                 NumberAnimation {
                     duration: Theme.duration("state")
-                    easing.type: Theme.easing("state")
+                    easing: Theme.curve("state")
                 }
             }
         }

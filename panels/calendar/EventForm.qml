@@ -493,7 +493,7 @@ Item {
             Behavior on height {
                 NumberAnimation {
                     duration: Theme.duration("expand")
-                    easing.type: Theme.easing("expand")
+                    easing: Theme.curve("expand")
                 }
             }
 
@@ -616,7 +616,7 @@ Item {
             Behavior on height {
                 NumberAnimation {
                     duration: Theme.duration("expand")
-                    easing.type: Theme.easing("expand")
+                    easing: Theme.curve("expand")
                 }
             }
 
@@ -735,7 +735,7 @@ Item {
                     Behavior on height {
                         NumberAnimation {
                             duration: Theme.duration("expand")
-                            easing.type: Theme.easing("expand")
+                            easing: Theme.curve("expand")
                         }
                     }
 
@@ -1009,7 +1009,7 @@ Item {
                 height: 28
                 width: (parent.width - 6) / 2
                 color: _cancelArea.containsMouse ? Theme.surface : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 border.color: Theme.textDisabled
                 radius: 4
 

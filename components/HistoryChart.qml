@@ -52,7 +52,7 @@ Column {
         from: 0
         to: 1
         duration: Theme.duration("heartbeat")
-        easing.type: Theme.easing("heartbeat")
+        easing: Theme.curve("heartbeat")
     }
     onActiveChanged: _repaint()
     onScaleSecsChanged: _repaint()

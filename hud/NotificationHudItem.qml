@@ -24,7 +24,7 @@ Item {
     y: _lastY
     Behavior on y {
         enabled: !root._placing
-        NumberAnimation { duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+        NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") }
     }
 
     property var currentNotif: null
@@ -118,7 +118,7 @@ Item {
         from: root.screenWidth
         to: root.restX
         duration: Theme.duration("enter")
-        easing.type: Theme.easing("enter")
+        easing: Theme.curve("enter")
         // The target is taken when the slide starts. A notification queued meanwhile
         // brings the badge and moves restX, and the nudge is skipped while sliding — so
         // the first toast of a burst stopped against the badge. Catch up afterwards.
@@ -131,7 +131,7 @@ Item {
         property: "x"
         to: root.screenWidth
         duration: Theme.duration("exit")
-        easing.type: Theme.easing("exit")
+        easing: Theme.curve("exit")
         onStopped: root.showNext()
     }
 
@@ -142,7 +142,7 @@ Item {
         property: "x"
         to: root.restX
         duration: Theme.duration("move")
-        easing.type: Theme.easing("move")
+        easing: Theme.curve("move")
         // The badge can come or go during the nudge too
         onFinished: if (root.x !== root.restX) nudge.restart()
     }

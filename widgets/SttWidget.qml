@@ -57,7 +57,7 @@ BarWidget {
                 if (Stt.server === "loading") return Theme.textSecondary
                 return root._dictating ? Theme.accent : Theme.textPrimary
             }
-            Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
             // Animating a separate property and gating opacity on _pulsing, so a
             // half-faded value can never be left behind when the pulse stops. With reduced
@@ -68,8 +68,8 @@ BarWidget {
             SequentialAnimation on pulse {
                 running: root._pulsing && !Theme.reduceMotion
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.35; duration: Theme.duration("pulse") / 2; easing.type: Theme.easing("pulse") }
-                NumberAnimation { to: 1.0;  duration: Theme.duration("pulse") / 2; easing.type: Theme.easing("pulse") }
+                NumberAnimation { to: 0.35; duration: Theme.duration("pulse") / 2; easing: Theme.curve("pulse") }
+                NumberAnimation { to: 1.0;  duration: Theme.duration("pulse") / 2; easing: Theme.curve("pulse") }
             }
         }
 
@@ -91,7 +91,7 @@ BarWidget {
             color: Theme.warning
 
             Behavior on width {
-                NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
+                NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
             }
         }
 
@@ -109,7 +109,7 @@ BarWidget {
             color: Theme.textSecondary
 
             Behavior on width {
-                NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
+                NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
             }
         }
     }

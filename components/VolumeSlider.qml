@@ -20,7 +20,7 @@ Item {
     property real _shownValue: value
     Behavior on _shownValue {
         enabled: !sliderArea.pressed
-        NumberAnimation { duration: Theme.duration("value"); easing.type: Theme.easing("value") }
+        NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") }
     }
     property real _position: Math.min(1, _shownValue / maxValue)
     activeFocusOnTab: true
@@ -36,7 +36,7 @@ Item {
         height: 4
         radius: 2
         color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Rectangle {
             width: slider._position * parent.width
@@ -51,7 +51,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: 14; height: 14; radius: 7
         color: sliderArea.pressed ? Theme.textSecondary : Theme.textPrimary
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
     }
 
     MouseArea {

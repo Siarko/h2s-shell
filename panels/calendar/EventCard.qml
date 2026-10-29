@@ -41,7 +41,7 @@ Rectangle {
     }
 
     Behavior on height {
-        NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
+        NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
     }
 
     // Accent bar
@@ -201,7 +201,7 @@ Rectangle {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: _editBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             MouseArea {
                 id: _editBtnArea
@@ -220,7 +220,7 @@ Rectangle {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: _deleteBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             MouseArea {
                 id: _deleteBtnArea
@@ -253,7 +253,7 @@ Rectangle {
             text: "Yes"
             Layout.alignment: Qt.AlignVCenter
             color: _yesArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -276,7 +276,7 @@ Rectangle {
             text: "No"
             Layout.alignment: Qt.AlignVCenter
             color: _noArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
 
@@ -311,7 +311,7 @@ Rectangle {
         Text {
             text: "- This event"
             color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -333,7 +333,7 @@ Rectangle {
         Text {
             text: "- This and following"
             color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -355,7 +355,7 @@ Rectangle {
         Text {
             text: "- All events"
             color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -377,7 +377,7 @@ Rectangle {
         Text {
             text: "- Cancel"
             color: _recurCancelArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
 

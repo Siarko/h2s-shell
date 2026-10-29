@@ -114,7 +114,7 @@ PanelWindow {
         Behavior on _shown {
             NumberAnimation {
                 duration: Theme.duration(widgetLoader.leaving ? "exit" : "enter")
-                easing.type: Theme.easing(widgetLoader.leaving ? "exit" : "enter")
+                easing: Theme.curve(widgetLoader.leaving ? "exit" : "enter")
             }
         }
         Layout.preferredWidth: _shown < 1 ? (item?.implicitWidth ?? 0) * _shown : -1
@@ -155,7 +155,7 @@ PanelWindow {
 
     component SlideBehavior: Behavior {
         enabled: bar._sliding
-        NumberAnimation { duration: Theme.duration("slide"); easing.type: Theme.easing("slide") }
+        NumberAnimation { duration: Theme.duration("slide"); easing: Theme.curve("slide") }
     }
 
     Item {

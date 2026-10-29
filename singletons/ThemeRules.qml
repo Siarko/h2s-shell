@@ -16,8 +16,14 @@ import QtQuick
 //     "fonts":      { "<token>": … },         optional
 //     "bar":        { "<token>": <number> },  optional; geometry, see barTokens
 //     "durations":  { "<role>": <ms> },       optional; animation roles, see Theme
-//     "curves":     { "<role>": "<easing>" }  optional; a Qt easing name: "OutQuad", …
+//     "curves":     { "<role>": "<curve>" }   optional; a Qt easing name ("OutQuad", …) or
+//                                             the name of a curve in the curves library
 //   }
+//
+// The curves library, ~/.config/h2s_shell/curves.json, shared by every theme:
+//   { "<name>": [x1, y1, x2, y2] }            a cubic Bézier from (0,0) to (1,1)
+// or, for several segments, Qt's own form: [c1x, c1y, c2x, c2y, endX, endY, …], the last
+// end being (1,1).
 // Every group is partial: what a theme leaves out comes from what it extends.
 Singleton {
     id: root
@@ -87,6 +93,103 @@ Singleton {
             }
         }
         return result;
+    }
+
+    // ---- Curves ----
+
+    // The easing to fall back on for a curve that cannot be found
+    readonly property string fallbackCurve: "OutQuad"
+
+    // Whether `name` is one of Qt's easing curves ("OutQuad", "Linear", …)
+    function isQtCurve(name) {
+        return typeof name === "string" && /^[A-Z]/.test(name) && typeof Easing[name] === "number"
+            && name !== "BezierSpline" && name !== "Bezier";
+    }
+
+    // A library curve's points in Qt's form (6 numbers per segment, ending at 1,1), or
+    // null when they are not a curve: 4 numbers are one segment, its end added
+    function curvePoints(points) {
+        if (!Array.isArray(points) || points.some(value => typeof value !== "number" || !isFinite(value)))
+            return null;
+        const full = points.length === 4 ? points.concat([1, 1]) : points;
+        if (full.length === 0 || full.length % 6 !== 0)
+            return null;
+        if (full[full.length - 2] !== 1 || full[full.length - 1] !== 1)
+            return null;
+        // Time only moves forward: every control point's x within 0–1
+        for (let i = 0; i < full.length; i += 2) {
+            if (full[i] < 0 || full[i] > 1)
+                return null;
+        }
+        return full;
+    }
+
+    // The easing for a curve name, as a value an animation's `easing` takes: a Qt curve,
+    // or a library curve as a Bézier spline. Unknown names and broken curves fall back.
+    // Returns { easing, error } — error is "" when the name resolved.
+    function curveEasing(name, library) {
+        if (isQtCurve(name))
+            return { easing: { type: Easing[name] }, error: "" };
+        const points = library && Object.prototype.hasOwnProperty.call(library, name) ? curvePoints(library[name]) : null;
+        if (points !== null)
+            return { easing: { type: Easing.BezierSpline, bezierCurve: points }, error: "" };
+        const why = library && Object.prototype.hasOwnProperty.call(library, name)
+            ? "Curve \"" + name + "\" is not a valid curve"
+            : "Curve \"" + name + "\" not found";
+        return { easing: { type: Easing[fallbackCurve] }, error: why };
+    }
+
+    // Qt's curves as one cubic Bézier each, to start a library curve from: close
+    // approximations (easings.net), not exact. Bounce and elastic curves have none.
+    readonly property var qtCurveApproximations: ({
+        Linear: [0, 0, 1, 1],
+        InSine: [0.12, 0, 0.39, 0], OutSine: [0.61, 1, 0.88, 1], InOutSine: [0.37, 0, 0.63, 1],
+        InQuad: [0.11, 0, 0.5, 0], OutQuad: [0.5, 1, 0.89, 1], InOutQuad: [0.45, 0, 0.55, 1],
+        InCubic: [0.32, 0, 0.67, 0], OutCubic: [0.33, 1, 0.68, 1], InOutCubic: [0.65, 0, 0.35, 1],
+        InQuart: [0.5, 0, 0.75, 0], OutQuart: [0.25, 1, 0.5, 1], InOutQuart: [0.76, 0, 0.24, 1],
+        InQuint: [0.64, 0, 0.78, 0], OutQuint: [0.22, 1, 0.36, 1], InOutQuint: [0.83, 0, 0.17, 1],
+        InExpo: [0.7, 0, 0.84, 0], OutExpo: [0.16, 1, 0.3, 1], InOutExpo: [0.87, 0, 0.13, 1],
+        InCirc: [0.55, 0, 1, 0.45], OutCirc: [0, 0.55, 0.45, 1], InOutCirc: [0.85, 0, 0.15, 1],
+        InBack: [0.36, 0, 0.66, -0.56], OutBack: [0.34, 1.56, 0.64, 1], InOutBack: [0.68, -0.6, 0.32, 1.6]
+    })
+
+    // Where the curve `name` is used: [{ theme, role }] over `themes` ({ name: parsed
+    // theme file }), by each theme's own `curves` (what it inherits is counted where it
+    // is set)
+    function curveUsages(themes, name) {
+        const usages = [];
+        for (const theme of Object.keys(themes ?? {}).sort()) {
+            const curves = themes[theme]?.curves ?? {};
+            for (const role in curves) {
+                if (curves[role] === name)
+                    usages.push({ theme: theme, role: role });
+            }
+        }
+        return usages;
+    }
+
+    // `themes` with every reference to the curve `oldName` pointing at `newName`: only
+    // the themes that changed, { name: new theme }. Inputs are not modified.
+    function renameCurveIn(themes, oldName, newName) {
+        const changed = {};
+        for (const theme in themes ?? {}) {
+            const curves = themes[theme]?.curves;
+            if (!curves || !Object.values(curves).includes(oldName))
+                continue;
+            const copy = JSON.parse(JSON.stringify(themes[theme]));
+            for (const role in copy.curves) {
+                if (copy.curves[role] === oldName)
+                    copy.curves[role] = newName;
+            }
+            changed[theme] = copy;
+        }
+        return changed;
+    }
+
+    // Whether `name` may name a library curve: not empty, not a Qt curve's name
+    function validCurveName(name) {
+        return typeof name === "string" && name.trim() !== "" && name === name.trim()
+            && !isQtCurve(name) && name !== "BezierSpline" && name !== "Bezier";
     }
 
     // A file name for a theme named after `wanted` that `exists(name)` does not report

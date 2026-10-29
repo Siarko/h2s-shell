@@ -65,7 +65,7 @@ Item {
         from: root.screenHeight
         to: root.restY
         duration: Theme.duration("enter")
-        easing.type: Theme.easing("enter")
+        easing: Theme.curve("enter")
     }
 
     NumberAnimation {
@@ -74,7 +74,7 @@ Item {
         property: "y"
         to: root.screenHeight
         duration: Theme.duration("exit")
-        easing.type: Theme.easing("exit")
+        easing: Theme.curve("exit")
         onStopped: root.showNext()
     }
 

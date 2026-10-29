@@ -250,7 +250,7 @@ Rectangle {
                     height: 26
                     radius: 5
                     color: _chipArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     Row {
                         id: _chipRow
@@ -319,7 +319,7 @@ Rectangle {
         radius: 6
         z: 1
         color: _copyArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
             anchors.centerIn: parent

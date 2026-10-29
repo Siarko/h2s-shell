@@ -38,7 +38,7 @@ WlSessionLockSurface {
         color: Theme.scrim
         opacity: 0
         Component.onCompleted: opacity = 1
-        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
     }
 
     MouseArea {
@@ -62,8 +62,8 @@ WlSessionLockSurface {
         visible: opacity > 0
         opacity: root._awake ? 1 : 0
         scale: root._awake ? 1 : 0.96
-        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
-        Behavior on scale { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
+        Behavior on scale { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
         onActivity: root._wake()
     }
 
@@ -71,7 +71,7 @@ WlSessionLockSurface {
         readonly property bool shown: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
         visible: opacity > 0
         opacity: shown ? 1 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
         anchors {
             top: parent.top
             right: parent.right
