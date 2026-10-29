@@ -204,6 +204,11 @@ Singleton {
           type: "number", min: 2, max: 10, default: 3,
           hint: "More wait in the queue, counted beside the column." },
 
+        // ── Appearance ── the look itself is in the theme; the profile picks which
+        { key: "appearance.theme", label: "Theme", group: "appearance",
+          type: "string", default: "default",
+          hint: "A file in ~/.config/h2s_shell/themes/, without .json. \"default\" without a file is the built-in look." },
+
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },

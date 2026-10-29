@@ -10,6 +10,12 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Added
+- Theme files: `~/.config/h2s_shell/themes/<name>.json` sets colours and fonts over the
+  built-in look, can `extend` another theme and take colours from a palette file
+  (`colorsFrom`, e.g. from matugen). The setting "Theme" picks one per profile; files are
+  watched, so an edit applies at once.
+
 ### Changed
 - Colours are named by role and come only from the theme: one red, one green and one
   blue where there were several shades (the disconnect buttons, the lock screen's error

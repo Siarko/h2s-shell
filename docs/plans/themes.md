@@ -106,6 +106,13 @@ The ~50 hard-coded `duration:` values move to roles.
    become four. Google's calendar colours are account data and stay out of themes.
 2. **Theme files**: Theme resolves default ⊕ extends ⊕ colours file, watched; tests for
    the resolution (partial themes, extends chain, cycles, missing file).
+   *Done 2026-10-29, not yet verified by the user.* `ThemeRules` (pure: chain, layering)
+   and `Theme` (reads, watches). Theme files and palettes are watched, and so are their
+   folders, so a file created later (a theme, a palette matugen writes) or a broken file
+   being fixed applies too. The setting `appearance.theme` (string, for now) arrived
+   here rather than in stage 3. Groups so far: `colors` (the base colours; transparent
+   variants stay derived) and `fonts` (family and sizes) — which answers the open
+   question: font family is per theme. Errors go to the log and `Theme.errors`.
 3. **Theme per profile**: `appearance.theme` setting; migration of bar geometry into
    themes; Bar.qml and the bar's readers switch from `Profiles.value("bar.layout.*")` to
    theme tokens.
@@ -125,7 +132,6 @@ Each stage ships and is verified on the host on its own.
 
 ## Open
 
-- Font family per theme, or only sizes?
 - Should "reduce motion" also follow a system setting, if one exists on the laptop?
 - Whether profiles may override single theme tokens (decided for now: no — one path,
   pick a theme; a small `extends` theme covers the variation).

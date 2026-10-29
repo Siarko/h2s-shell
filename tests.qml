@@ -21,6 +21,7 @@ QtObject {
     property var _settingsPages: SettingsPagesTest {}
     property var _workspaces: WorkspacesTest {}
     property var _version: VersionTest {}
+    property var _theme: ThemeTest {}
 
     // Exit after all Component.onCompleted handlers finish.
     // interval:0 fires on the next event loop tick, after all suites have run.
