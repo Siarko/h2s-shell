@@ -66,7 +66,7 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: 14
-            anchors.rightMargin: GoogleCalendar.isAuthorized ? 50 : (_birthdayIcon.visible ? _birthdayIcon.implicitWidth + 12 : 8)
+            anchors.rightMargin: GoogleCalendar.available ? 50 : (_birthdayIcon.visible ? _birthdayIcon.implicitWidth + 12 : 8)
             spacing: 2
 
             Text {
@@ -113,7 +113,7 @@ Rectangle {
             id: _birthdayIcon
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: GoogleCalendar.isAuthorized ? 50 : 8
+            anchors.rightMargin: GoogleCalendar.available ? 50 : 8
             text: "🎂"
             font.pixelSize: Theme.fontSizeSection
             visible: root.modelData.eventType === 'birthday'
@@ -189,7 +189,7 @@ Rectangle {
 
     // Edit / Delete action buttons — higher z, intercept clicks in their area
     Row {
-        visible: !root.editing && !root.confirmingDelete && GoogleCalendar.isAuthorized
+        visible: !root.editing && !root.confirmingDelete && GoogleCalendar.available
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.rightMargin: 6

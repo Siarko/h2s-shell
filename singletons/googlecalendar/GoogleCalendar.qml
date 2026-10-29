@@ -17,6 +17,11 @@ Singleton {
     readonly property string _ENDPOINT_EVENT: "https://www.googleapis.com/calendar/v3/calendars/{0}/events/{1}"
 
     readonly property bool isAuthorized: Config.gcal.refreshToken !== ""
+    // The "gcal.enabled" profile setting — off, e.g. in Power save, the calendar fetches
+    // nothing, so it refreshes no tokens either, and shows no events
+    readonly property bool enabled: Profiles.value("gcal.enabled") ?? true
+    // Signed in and switched on: whether to fetch, and whether the panel offers editing
+    readonly property bool available: isAuthorized && enabled
 
     property var events: ({})
     property var eventsByCalendar: ({})
@@ -41,8 +46,23 @@ Singleton {
         prefix: "[GoogleCalendar API]"
     }
 
+    // Switched off: drop what was fetched, so nothing stale shows. Back on: initialise
+    // again; an open calendar panel fetches its month when it sees `available` change.
+    onAvailableChanged: {
+        if (available) {
+            initialize();
+        } else {
+            events = {};
+            eventsByCalendar = {};
+            eventsLoading = {};
+            _fetchedMonths = {};
+        }
+    }
+
     Component.onCompleted: {
-        if (GoogleCalendarAuth.isAuthorized) {
+        if (!root.enabled) {
+            logger.log("Initialization skipped: switched off by the active profile");
+        } else if (GoogleCalendarAuth.isAuthorized) {
             logger.log("Initialization start");
             initialize().then(() => {
                 logger.log("✔ Initialization done");
@@ -169,7 +189,7 @@ Singleton {
 
     function _fetchCalendarEventsForMonth(calendarId, year, month) {
         return Promises.create((resolve, reject) => {
-            if (!GoogleCalendarAuth.isAuthorized || Object.keys(root.calendars).length === 0)
+            if (!root.available || Object.keys(root.calendars).length === 0)
                 return resolve(null);
 
             let calendar = root.calendars[calendarId] ?? null;
@@ -219,7 +239,7 @@ Singleton {
     }
 
     function fetchMonthEvents(year, month, invalidateCache = false) {
-        if (!GoogleCalendarAuth.isAuthorized) return;
+        if (!root.available) return;
         if (month > 11 || month < 0) {
             logger.error("Requested incorrect month: ", year, month);
             return;

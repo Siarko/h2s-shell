@@ -13,7 +13,7 @@ verified on the host — the dev container has no `quickshell`.
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
 the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
 per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next, as
-agreed: 8.10 (the calendar enable switch), then 10.7 (widget presets).
+agreed: 10.7 (widget presets).
 
 ---
 
@@ -327,11 +327,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       with a retry. While there: a retry after a failed init fetches `calendarList`
       twice, and the status-0 error message ends in an empty `data:`.
 
-- [ ] **8.10 "Enable Google Calendar" does nothing but change a message**
+- [x] **8.10 "Enable Google Calendar" does nothing but change a message**
       Found 2026-10-29 while moving it into profiles. `gcal.enabled` is read only by
       `panels/calendar/EventsPanel.qml` for its status text; `GoogleCalendar` syncs
       regardless. Now that it is a per-profile setting (e.g. off in Power save), the sync,
       the token refresh and the calendar panel should honour it.
+      Done 2026-10-29, verified on the host: `GoogleCalendar.available` (signed in and
+      enabled) gates every fetch — and with it every token refresh — and the panel's
+      editing; switching off clears the fetched events, switching on fetches again.
 
 ## Stage 9 — Hygiene, opportunistic  [P7]
 

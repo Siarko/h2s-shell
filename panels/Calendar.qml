@@ -55,6 +55,16 @@ Item {
         }
     }
 
+    // Switched back on by a profile (off battery, say) while the calendar is open
+    Connections {
+        target: GoogleCalendar
+
+        function onAvailableChanged() {
+            if (GoogleCalendar.available)
+                GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
+        }
+    }
+
     Row {
         anchors.fill: parent
         spacing: 0
