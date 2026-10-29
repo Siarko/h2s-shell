@@ -1,6 +1,7 @@
 //@ pragma UseQApplication
 import Quickshell
 import QtQuick
+import Quickshell.Io
 import qs.singletons
 import qs.screensaver
 import qs.panels
@@ -53,6 +54,35 @@ QtObject {
         }
         function onToggleSettings() {
             settingsWindow.visible = !settingsWindow.visible;
+        }
+    }
+
+    // The settings window from outside, e.g. with no settings widget on the bar:
+    //   qs ipc call settings open
+    //   qs ipc call settings openPage profiles     (any sidebar page, case-insensitive)
+    //   qs ipc call settings toggle
+    //   qs ipc call settings close
+    property var _settingsIpc: IpcHandler {
+        target: "settings"
+
+        function open(): void {
+            settingsWindow.visible = true;
+        }
+
+        function openPage(page: string): string {
+            const index = settingsWindow.categoryNames.findIndex(name => name.toLowerCase() === page.toLowerCase());
+            if (index < 0)
+                return "No page \"" + page + "\"; pages: " + settingsWindow.categoryNames.join(", ");
+            Shell.openSettings(index);
+            return "";
+        }
+
+        function toggle(): void {
+            Shell.toggleSettings();
+        }
+
+        function close(): void {
+            settingsWindow.visible = false;
         }
     }
 

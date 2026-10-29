@@ -7,24 +7,12 @@ BarWidget {
     property string preset: ""
     property string widgetType: "stt"
 
-    // Preset override first, global setting as the fallback
-    readonly property bool _previewEnabled: {
-        if (preset !== "") {
-            var data = JSON.parse(Config.widgetPresets || "{}")
-            var override = data["stt"]?.[preset]?.previewEnabled
-            if (override !== undefined) return override
-        }
-        return Profiles.value("stt.previewEnabled") ?? true
-    }
-
-    readonly property int _previewWidth: {
-        if (preset !== "") {
-            var data = JSON.parse(Config.widgetPresets || "{}")
-            var override = data["stt"]?.[preset]?.previewWidth
-            if (override !== undefined) return override
-        }
-        return Profiles.value("stt.previewWidth") ?? 180
-    }
+    // The preset's value first; a preset that leaves a key out inherits the Dictation
+    // setting of the active shell profile
+    readonly property bool _previewEnabled: WidgetPresets.value("stt", preset, "previewEnabled")
+        ?? Profiles.value("stt.previewEnabled") ?? true
+    readonly property int _previewWidth: WidgetPresets.value("stt", preset, "previewWidth")
+        ?? Profiles.value("stt.previewWidth") ?? 180
 
     // Wake is the second, independent axis: the outline means the microphone is open,
     // whatever dictation happens to be doing. It stays on while dictation runs, so it

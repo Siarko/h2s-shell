@@ -13,25 +13,35 @@ Item {
         id: _nameMapModel
     }
 
-    readonly property string _currentTitle: {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data[widgetType]?.[presetName]?.title ?? "";
-    }
+    readonly property string _currentTitle: WidgetPresets.value(widgetType, presetName, "title")
+    readonly property bool _showSpecial: WidgetPresets.value(widgetType, presetName, "showSpecial")
+    readonly property bool _showNormal: WidgetPresets.value(widgetType, presetName, "showNormal")
 
     function _saveTitle(newTitle) {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType])
-            data[widgetType] = {};
-        if (!data[widgetType][presetName])
-            data[widgetType][presetName] = {};
-        data[widgetType][presetName]["title"] = newTitle;
-        Config.widgetPresets = JSON.stringify(data);
+        WidgetPresets.set(widgetType, presetName, "title", newTitle);
+    }
+
+    function _saveShowSpecial(value) {
+        WidgetPresets.set(widgetType, presetName, "showSpecial", value);
+    }
+
+    function _saveShowNormal(value) {
+        WidgetPresets.set(widgetType, presetName, "showNormal", value);
+    }
+
+    // The name map is edited in a ListModel, so rows keep their text fields while typing
+    function _modelEntries() {
+        var entries = [];
+        for (var i = 0; i < _nameMapModel.count; i++) {
+            var item = _nameMapModel.get(i);
+            entries.push({ system: item.system, custom: item.custom });
+        }
+        return entries;
     }
 
     function _loadNameMap() {
         _nameMapModel.clear();
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        var entries = data[widgetType]?.[presetName]?.nameMap ?? [];
+        var entries = WidgetPresets.value(widgetType, presetName, "nameMap") ?? [];
         for (var i = 0; i < entries.length; i++)
             _nameMapModel.append({
                 system: entries[i].system || "",
@@ -40,66 +50,24 @@ Item {
     }
 
     function _saveNameMap() {
-        var entries = [];
-        for (var i = 0; i < _nameMapModel.count; i++) {
-            var item = _nameMapModel.get(i);
-            entries.push({
-                system: item.system,
-                custom: item.custom
-            });
-        }
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType])
-            data[widgetType] = {};
-        if (!data[widgetType][presetName])
-            data[widgetType][presetName] = {};
-        data[widgetType][presetName]["nameMap"] = entries;
-        Config.widgetPresets = JSON.stringify(data);
+        WidgetPresets.set(widgetType, presetName, "nameMap", _modelEntries());
     }
 
     function _removeNameMapRow(index) {
-        var entries = [];
-        for (var i = 0; i < _nameMapModel.count; i++) {
-            if (i === index) continue;
-            var item = _nameMapModel.get(i);
-            entries.push({ system: item.system, custom: item.custom });
-        }
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType]) data[widgetType] = {};
-        if (!data[widgetType][presetName]) data[widgetType][presetName] = {};
-        data[widgetType][presetName]["nameMap"] = entries;
-        Config.widgetPresets = JSON.stringify(data);
         _nameMapModel.remove(index);
+        _saveNameMap();
     }
 
-    readonly property bool _showSpecial: {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data[widgetType]?.[presetName]?.showSpecial ?? true;
-    }
-
-    function _saveShowSpecial(value) {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType])
-            data[widgetType] = {};
-        if (!data[widgetType][presetName])
-            data[widgetType][presetName] = {};
-        data[widgetType][presetName]["showSpecial"] = value;
-        Config.widgetPresets = JSON.stringify(data);
-    }
-
-    readonly property bool _showNormal: {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data[widgetType]?.[presetName]?.showNormal ?? true;
-    }
-
-    function _saveShowNormal(value) {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType])
-            data[widgetType] = {};
-        if (!data[widgetType][presetName])
-            data[widgetType][presetName] = {};
-        data[widgetType][presetName]["showNormal"] = value;
-        Config.widgetPresets = JSON.stringify(data);
+    // The same preset edited elsewhere — another bar entry using it — reloads the list.
+    // This page's own saves leave it equal to the model, so they do not.
+    Connections {
+        target: WidgetPresets
+        function onAllChanged() {
+            var stored = (WidgetPresets.value(root.widgetType, root.presetName, "nameMap") ?? [])
+                .map(entry => ({ system: entry.system || "", custom: entry.custom || "" }));
+            if (JSON.stringify(stored) !== JSON.stringify(root._modelEntries()))
+                root._loadNameMap();
+        }
     }
 
     Component.onCompleted: _loadNameMap()

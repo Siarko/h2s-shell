@@ -18,7 +18,8 @@ import QtQuick
 //                 out.
 //   popupPanel  — the panel the popup shows for that key. A panel that needs wiring to
 //                 the popup is built from Popup.qml's _componentMap instead, which wins.
-//   settings    — per-profile settings page, if the widget has one
+//   settings    — its preset settings page, if the widget has presets
+//   multiple    — true if a section may hold more than one, each with its own preset
 Singleton {
     id: root
 
@@ -30,10 +31,10 @@ Singleton {
           popup: "power", popupPanel: "panels/PowerMenu.qml" },
         { type: "settings", name: "Settings", widget: "widgets/SettingsWidget.qml" },
         { type: "workspaces", name: "Workspaces", widget: "widgets/WorkspacesWidget.qml",
-          settings: "panels/widget_settings/WorkspacesWidgetSettings.qml" },
+          settings: "panels/widget_settings/WorkspacesWidgetSettings.qml", multiple: true },
         { type: "clock", name: "Clock", widget: "widgets/ClockWidget.qml",
           popup: "calendar", popupPanel: "panels/Calendar.qml",
-          settings: "panels/widget_settings/ClockWidgetSettings.qml" },
+          settings: "panels/widget_settings/ClockWidgetSettings.qml", multiple: true },
         { type: "music", name: "Music", widget: "widgets/MusicWidget.qml",
           popup: "music", popupPanel: "panels/MusicPanel.qml" },
         { type: "sound", name: "Sound", widget: "widgets/SoundWidget.qml",
@@ -47,7 +48,7 @@ Singleton {
           popup: "notifications", popupPanel: "panels/NotificationPanel.qml" },
         { type: "hardware", name: "Hardware", widget: "widgets/HardwareWidget.qml",
           popup: "hardware", popupPanel: "panels/HardwarePanel.qml",
-          settings: "panels/widget_settings/HardwareWidgetSettings.qml" },
+          settings: "panels/widget_settings/HardwareWidgetSettings.qml", multiple: true },
         { type: "stt", name: "Dictation", widget: "widgets/SttWidget.qml",
           settings: "panels/widget_settings/SttWidgetSettings.qml" }
     ]
@@ -80,6 +81,15 @@ Singleton {
 
     function settingsUrl(type) {
         return _url(entry(type)?.settings);
+    }
+
+    // Whether the widget has presets — the ones with a settings page
+    function hasPresets(type) {
+        return !!entry(type)?.settings;
+    }
+
+    function allowsMultiple(type) {
+        return entry(type)?.multiple === true;
     }
 
     function hasPopupMode(type) {

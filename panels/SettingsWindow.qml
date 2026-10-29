@@ -24,6 +24,8 @@ FloatingWindow {
 
     // Index into the sidebar list below
     property int selectedCategory: 0
+    // The sidebar's pages, in order; also how IPC names a page
+    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles"]
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
 
@@ -136,7 +138,7 @@ FloatingWindow {
                     }
 
                     Repeater {
-                        model: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles"]
+                        model: root.categoryNames
                         Rectangle {
                             required property string modelData
                             required property int index

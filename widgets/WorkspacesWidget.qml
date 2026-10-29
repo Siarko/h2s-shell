@@ -13,18 +13,11 @@ BarWidget {
 
     property string preset: ""
 
-    readonly property string _title: {
-        if (preset === "")
-            return "";
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data["workspaces"]?.[preset]?.title ?? "";
-    }
+    // From the widget's preset; without one, the workspaces defaults
+    readonly property string _title: WidgetPresets.value("workspaces", preset, "title")
 
     readonly property var _nameMap: {
-        if (preset === "")
-            return ({});
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        var entries = data["workspaces"]?.[preset]?.nameMap ?? [];
+        var entries = WidgetPresets.value("workspaces", preset, "nameMap") ?? [];
         var map = {};
         for (var i = 0; i < entries.length; i++) {
             if (entries[i].system)
@@ -33,19 +26,8 @@ BarWidget {
         return map;
     }
 
-    readonly property bool _showSpecial: {
-        if (preset === "")
-            return true;
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data["workspaces"]?.[preset]?.showSpecial ?? true;
-    }
-
-    readonly property bool _showNormal: {
-        if (preset === "")
-            return true;
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data["workspaces"]?.[preset]?.showNormal ?? true;
-    }
+    readonly property bool _showSpecial: WidgetPresets.value("workspaces", preset, "showSpecial")
+    readonly property bool _showNormal: WidgetPresets.value("workspaces", preset, "showNormal")
 
     Row {
         id: wsRow

@@ -72,7 +72,8 @@ each `Bar` emits `popupOpened`, `shell.qml` records it in `activeScreen`, and ev
 other Bar closes its own popup when `activeScreen` stops matching its own screen.
 
 `SettingsWindow` is the exception: one instance for the whole shell, in `shell.qml`,
-opened with `Shell.openSettings(category)` and toggled with `Shell.toggleSettings()`.
+opened with `Shell.openSettings(category)` and toggled with `Shell.toggleSettings()`, and
+over IPC (`qs ipc call settings open | openPage <page> | toggle | close`, in `shell.qml`).
 
 ## Key patterns
 
@@ -169,7 +170,9 @@ A **preset** is a named set of one widget type's settings in the shared library
 `Config.widgetPresets`, `{ type: { name: { … } } }`, so the same widget type can appear
 twice with different settings (two clocks with different formats, two hardware capsules
 showing different sensors). Presets are not per profile; a profile picks which preset an
-entry uses.
+entry uses. `singletons/WidgetPresets.qml` is the one place that parses and
+writes the library and holds each type's defaults; it also lists where a preset is used,
+and renames or deletes it while repointing the bar entries of every profile.
 
 ### Popup
 

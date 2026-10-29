@@ -9,17 +9,13 @@ Item {
 
     implicitHeight: _col.implicitHeight
 
-    readonly property string _currentFormat: {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        return data[widgetType]?.[presetName]?.format ?? "hh:mm:ss"; // ClockWidget.defaultFormat
-    }
+    // As the clock shows it: an empty format is the default
+    readonly property string _currentFormat: WidgetPresets.value(widgetType, presetName, "format")
+        || WidgetPresets.defaults.clock.format
 
+    // An empty field drops the key, so the clock goes back to the default
     function _saveFormat(value) {
-        var data = JSON.parse(Config.widgetPresets || "{}");
-        if (!data[widgetType]) data[widgetType] = {};
-        if (!data[widgetType][presetName]) data[widgetType][presetName] = {};
-        data[widgetType][presetName]["format"] = value;
-        Config.widgetPresets = JSON.stringify(data);
+        WidgetPresets.set(widgetType, presetName, "format", value !== "" ? value : undefined);
     }
 
     Column {

@@ -203,6 +203,35 @@ TestCase {
         assertEqual(JSON.stringify(model.map(entry => entry.key)), JSON.stringify(["clock/a#1", "clock/a#2", "tray/#1"]),
             "model keys are unique and depend only on the entry");
 
+        // --- preset usages, renaming and deleting ---
+        const withPresets = [
+            { name: "Full", set: { "bar.left": [{ type: "clock", preset: "a" }, { type: "tray", preset: "" }],
+                                   "bar.right": [{ type: "clock", preset: "b" }] } },
+            { name: "Power save", set: { "bar.left": [{ type: "clock", preset: "a" }] } },
+            { name: "Quiet", set: {} }
+        ];
+        const pinnedCenter = { "bar.center": [{ type: "clock", preset: "a" }] };
+        assertEqual(JSON.stringify(ProfileRules.presetUsages(withPresets, pinnedCenter, "clock", "a")),
+            JSON.stringify([{ profile: "Full", section: "left" }, { profile: "Power save", section: "left" },
+                            { profile: "global", section: "center" }]),
+            "a preset is used in every profile section that points at it, and in a pinned section");
+        assertEqual(ProfileRules.presetUsages(withPresets, {}, "workspaces", "a").length, 0, "the same name of another type is not it");
+        const renamed = ProfileRules.replacePreset(withPresets, pinnedCenter, "clock", "a", "c");
+        assertEqual(renamed.profiles[0].set["bar.left"][0].preset, "c", "renaming repoints the entries");
+        assertEqual(renamed.profiles[0].set["bar.right"][0].preset, "b", "other presets stay");
+        assertEqual(renamed.globals["bar.center"][0].preset, "c", "a pinned section is repointed too");
+        assertEqual(renamed.profiles[2].set["bar.left"], undefined, "a profile that inherits its sections stays inheriting");
+        assertEqual(withPresets[0].set["bar.left"][0].preset, "a", "the inputs are not modified");
+        assertEqual(ProfileRules.replacePreset(withPresets, {}, "clock", "a", "").profiles[1].set["bar.left"][0].preset, "",
+            "deleting leaves the entries without a preset");
+
+        // --- the preset library ---
+        assertEqual(WidgetPresets.value("clock", "", "format"), "hh:mm:ss", "no preset: the type's default");
+        assertEqual(WidgetPresets.value("clock", "no such preset", "format"), "hh:mm:ss", "a missing preset: the default");
+        assertEqual(WidgetPresets.value("stt", "", "previewWidth"), undefined, "stt has no defaults — it inherits the profile setting");
+        assert(WidgetRegistry.hasPresets("clock") && !WidgetRegistry.hasPresets("music"), "only widgets with a settings page have presets");
+        assert(WidgetRegistry.allowsMultiple("clock") && !WidgetRegistry.allowsMultiple("tray"), "clocks may repeat in a section, the tray not");
+
         // --- saving ---
         assert(Config.readOnly, "the test run cannot write the user's config");
         const refused = Profiles.save([loops]);

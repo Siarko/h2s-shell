@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
+import qs.components
 import qs.panels.settings
 
 Item {
@@ -17,8 +18,23 @@ Item {
 
     implicitHeight: _col.implicitHeight + 12
 
+    readonly property bool _hasPresets: WidgetRegistry.hasPresets(widgetType)
     // Preset names in the shared library for this widget type
-    readonly property var _knownPresets: Object.keys(JSON.parse(Config.widgetPresets || "{}")[widgetType] ?? {})
+    readonly property var _knownPresets: WidgetPresets.names(widgetType)
+    // Where the current preset is used, across every shell profile
+    readonly property var _usages: currentPreset !== "" ? WidgetPresets.usages(widgetType, currentPreset) : []
+    property bool _renaming: false
+    property bool _confirmingDelete: false
+    onCurrentPresetChanged: {
+        _renaming = false
+        _confirmingDelete = false
+    }
+
+    // Creates the preset if it is new, then assigns it to this bar entry
+    function _assignNew(name) {
+        WidgetPresets.create(widgetType, name)
+        presetAssigned(name)
+    }
 
     readonly property bool _hasPopup: WidgetRegistry.hasPopupMode(widgetType)
 
@@ -51,8 +67,9 @@ Item {
         }
 
         // The preset: a pill per preset in the library, picked at once — no field to
-        // confirm — and a field to start a new one
+        // confirm — and a field to start a new one. Only for widgets that have presets.
         RowLayout {
+            visible: root._hasPresets
             width: parent.width
             spacing: 8
 
@@ -73,10 +90,7 @@ Item {
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
                     model: ScriptModel {
-                        // A just-named preset is assigned before the library has it
-                        values: [""].concat(root._knownPresets,
-                            root.currentPreset !== "" && !root._knownPresets.includes(root.currentPreset)
-                                ? [root.currentPreset] : [])
+                        values: [""].concat(root._knownPresets)
                     }
 
                     Rectangle {
@@ -112,8 +126,7 @@ Item {
                     }
                 }
 
-                // A new preset: named here, created by assigning it; its settings are
-                // stored as soon as one is edited below
+                // A new preset, stored as soon as it is named
                 Rectangle {
                     width: 120
                     height: 24
@@ -134,7 +147,7 @@ Item {
                             text = ""
                             focus = false
                             if (name !== "" && name !== root.currentPreset)
-                                root.presetAssigned(name)
+                                root._assignNew(name)
                         }
                     }
 
@@ -148,6 +161,176 @@ Item {
                         color: Theme.textDim
                     }
                 }
+            }
+        }
+
+        // Without a preset the widget shows its defaults; one click gives it a preset of
+        // its own to edit
+        Text {
+            visible: root._hasPresets && root.currentPreset === ""
+            width: parent.width
+            leftPadding: 68
+            text: "Shows the defaults. <a href=\"customize\">Customize</a> to give it its own preset."
+            textFormat: Text.StyledText
+            linkColor: Theme.sliderAccent
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.textDim
+            onLinkActivated: root._assignNew(WidgetPresets.freeName(root.widgetType))
+
+            HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
+        }
+
+        // The current preset: where it is used — an edit changes all of them
+        Text {
+            visible: root._hasPresets && root.currentPreset !== "" && !root._renaming
+            width: parent.width
+            leftPadding: 68
+            wrapMode: Text.WordWrap
+            text: root._usages.length > 1
+                ? "Shared — used in " + root._usages.map(usage => usage.profile + " · " + usage.section).join(", ")
+                : root._usages.length === 1
+                    ? "Used in " + root._usages[0].profile + " · " + root._usages[0].section
+                    : "Not used on any bar yet"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: root._usages.length > 1 ? Theme.sliderAccent : Theme.textDim
+        }
+
+        // Rename / delete, on a row of their own so a wider label never runs off the edge
+        RowLayout {
+            visible: root._hasPresets && root.currentPreset !== ""
+            width: parent.width
+            spacing: 6
+
+            Item { Layout.preferredWidth: 60 }
+
+            Rectangle {
+                visible: root._renaming
+                Layout.fillWidth: true
+                height: 24
+                radius: 6
+                color: Theme.cellDefault
+                border.width: _renameInput.taken ? 1 : 0
+                border.color: Theme.textError
+
+                TextInput {
+                    id: _renameInput
+                    // Another preset of this type already has the name
+                    readonly property bool taken: text.trim() !== root.currentPreset
+                        && root._knownPresets.includes(text.trim())
+                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: taken ? Theme.textError : Theme.textPrimary
+                    verticalAlignment: TextInput.AlignVCenter
+                    selectByMouse: true
+                    clip: true
+                    onAccepted: {
+                        const name = text.trim()
+                        if (name === root.currentPreset || name === "") {
+                            root._renaming = false
+                        } else if (!taken && WidgetPresets.rename(root.widgetType, root.currentPreset, name)) {
+                            root._renaming = false
+                        }
+                    }
+                    Keys.onEscapePressed: root._renaming = false
+                }
+            }
+
+            Repeater {
+                // A constant model; the labels follow the state in the delegate
+                model: ["rename", "delete"]
+
+                Rectangle {
+                    required property string modelData
+                    readonly property string label: modelData === "rename"
+                        ? (root._renaming ? "Cancel" : "Rename")
+                        : (root._confirmingDelete ? "Delete everywhere?" : "Delete")
+                    // Implicit, not width: a layout overrides width, so the button would
+                    // not grow with its label
+                    implicitWidth: _actionText.implicitWidth + 14
+                    implicitHeight: 24
+                    radius: 6
+                    // Square on the side the cancel button attaches to, so the two read
+                    // as one control
+                    readonly property bool _joined: modelData === "delete" && root._confirmingDelete
+                    topRightRadius: _joined ? 0 : radius
+                    bottomRightRadius: _joined ? 0 : radius
+                    color: _actionArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+
+                    Text {
+                        id: _actionText
+                        anchors.centerIn: parent
+                        text: parent.label
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: parent.modelData === "delete" && root._confirmingDelete ? Theme.textError : Theme.textSecondary
+                    }
+
+                    MouseArea {
+                        id: _actionArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (parent.modelData === "rename") {
+                                root._renaming = !root._renaming
+                                root._confirmingDelete = false
+                                if (root._renaming) {
+                                    _renameInput.text = root.currentPreset
+                                    _renameInput.forceActiveFocus()
+                                    _renameInput.selectAll()
+                                }
+                            } else if (root._confirmingDelete) {
+                                WidgetPresets.remove(root.widgetType, root.currentPreset)
+                            } else {
+                                root._confirmingDelete = true
+                                root._renaming = false
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Cancels the delete, attached to the confirmation button
+            Rectangle {
+                visible: root._confirmingDelete
+                Layout.leftMargin: -4
+                implicitWidth: 24
+                implicitHeight: 24
+                radius: 6
+                topLeftRadius: 0
+                bottomLeftRadius: 0
+                color: _cancelDeleteArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "×"
+                    font.pixelSize: Theme.fontSizeMedium
+                    color: Theme.textSecondary
+                }
+
+                MouseArea {
+                    id: _cancelDeleteArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root._confirmingDelete = false
+                }
+
+                HoverTip {
+                    target: parent
+                    shown: _cancelDeleteArea.containsMouse
+                    text: "Cancel — keep the preset"
+                }
+            }
+
+            // Takes the spare width, so the buttons stay packed at the left instead of the
+            // layout spreading them out (the rename field takes it while renaming)
+            Item {
+                visible: !root._renaming
+                Layout.fillWidth: true
             }
         }
 

@@ -262,7 +262,10 @@ Item {
                                     Layout.fillWidth: true
                                 }
 
+                                // Only for widgets with something to set: a popup mode or presets
+                                // (not the settings button or the tray)
                                 Rectangle {
+                                    visible: WidgetRegistry.hasPopupMode(_row.modelData) || WidgetRegistry.hasPresets(_row.modelData)
                                     width: 24
                                     height: 24
                                     radius: 4
@@ -391,7 +394,10 @@ Item {
                             // ScriptModel, never the bare array — see "The Repeater crash"
                             // in docs/ARCHITECTURE.md
                             model: ScriptModel {
-                                values: WidgetRegistry.types.filter(t => !_rowList.workingList.includes(t))
+                                // Once per section, except widgets that can repeat with
+                                // different presets (two clocks, two hardware capsules)
+                                values: WidgetRegistry.types.filter(t => !_rowList.workingList.includes(t)
+                                                                        || WidgetRegistry.allowsMultiple(t))
                             }
 
                             Item {

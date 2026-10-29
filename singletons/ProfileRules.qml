@@ -240,6 +240,47 @@ Singleton {
         });
     }
 
+    // ---- widget presets in the bar sections ----
+
+    readonly property var _sectionKeys: ["bar.left", "bar.center", "bar.right"]
+
+    // Where a preset is used: [{ profile, section }] for every profile — and the pinned
+    // global value, as profile "global" — whose bar section has an entry of that type
+    // pointing at it. Inherited sections are counted where they are set, not again.
+    function presetUsages(profiles, globals, type, name) {
+        const usages = [];
+        const sources = (profiles ?? []).map(profile => ({ name: profile.name, set: profile.set ?? {} }))
+            .concat([{ name: "global", set: globals ?? {} }]);
+        for (const source of sources) {
+            for (const key of _sectionKeys) {
+                if ((source.set[key] ?? []).some(entry => entry.type === type && entry.preset === name))
+                    usages.push({ profile: source.name, section: key.slice(4) });
+            }
+        }
+        return usages;
+    }
+
+    // Profiles and globals with every bar entry of `type` that points at preset `from`
+    // pointed at `to` instead — "" to leave them without a preset when it is deleted.
+    // Inputs are not modified. Returns { profiles, globals }.
+    function replacePreset(profiles, globals, type, from, to) {
+        const repoint = section => (section ?? []).map(entry =>
+            entry.type === type && entry.preset === from ? { type: entry.type, preset: to } : entry);
+        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
+        for (const profile of newProfiles) {
+            for (const key of _sectionKeys) {
+                if (profile.set?.[key] !== undefined)
+                    profile.set[key] = repoint(profile.set[key]);
+            }
+        }
+        const newGlobals = Object.assign({}, globals ?? {});
+        for (const key of _sectionKeys) {
+            if (newGlobals[key] !== undefined)
+                newGlobals[key] = repoint(newGlobals[key]);
+        }
+        return { profiles: newProfiles, globals: newGlobals };
+    }
+
     // Every fact a condition reads
     function factsRead(condition) {
         if (!condition)

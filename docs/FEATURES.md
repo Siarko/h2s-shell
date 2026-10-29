@@ -141,8 +141,10 @@ Two independent stages, both driven by Wayland idle notifications:
 
 ## Settings
 
-A separate floating window, reachable from the Settings widget or
-`Shell.openSettings(category)`. The sidebar shows which profiles are active right now and
+A separate floating window, reachable from the Settings widget, from
+`Shell.openSettings(category)`, or over IPC — which also works with no Settings widget on
+the bar: `qs ipc call settings open`, `openPage <page>` (e.g. `openPage profiles`),
+`toggle`, `close`. The sidebar shows which profiles are active right now and
 picks the profile every page edits. Pages:
 
 | Page | Covers |

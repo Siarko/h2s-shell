@@ -10,15 +10,8 @@ Item {
     implicitHeight: _col.implicitHeight
 
     // An absent key means "inherit the Dictation setting of the active shell profile"
-    readonly property var _previewOverride: {
-        var data = JSON.parse(Config.widgetPresets || "{}")
-        return data[widgetType]?.[presetName]?.previewEnabled
-    }
-
-    readonly property var _widthOverride: {
-        var data = JSON.parse(Config.widgetPresets || "{}")
-        return data[widgetType]?.[presetName]?.previewWidth
-    }
+    readonly property var _previewOverride: WidgetPresets.value(widgetType, presetName, "previewEnabled")
+    readonly property var _widthOverride: WidgetPresets.value(widgetType, presetName, "previewWidth")
 
     readonly property string _previewMode: {
         if (_previewOverride === undefined) return "global"
@@ -27,14 +20,7 @@ Item {
 
     // Passing undefined drops the key, restoring inheritance
     function _saveKey(key, value) {
-        var data = JSON.parse(Config.widgetPresets || "{}")
-        if (!data[widgetType])              data[widgetType] = {}
-        if (!data[widgetType][presetName]) data[widgetType][presetName] = {}
-        if (value === undefined)
-            delete data[widgetType][presetName][key]
-        else
-            data[widgetType][presetName][key] = value
-        Config.widgetPresets = JSON.stringify(data)
+        WidgetPresets.set(widgetType, presetName, key, value)
     }
 
     function _savePreviewMode(mode) {

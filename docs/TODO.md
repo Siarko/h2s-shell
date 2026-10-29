@@ -12,8 +12,8 @@ verified on the host — the dev container has no `quickshell`.
 
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
 the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
-per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next, as
-agreed: 10.7 (widget presets).
+per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next: to be
+picked from the list.
 
 ---
 
@@ -378,7 +378,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       slider's MouseArea in `panels/settings/SettingSlider.qml` (used by every slider,
       including the schema editor's), and the same for any other drag inside a Flickable.
       Done 2026-10-29: `preventStealing: true` on the slider's MouseArea.
-- [ ] **10.7 Widget presets: review findings** (2026-10-29)
+- [x] **10.7 Widget presets: review findings** (2026-10-29)
       A review of the preset feature (widget settings pages, `panels/WidgetSettingsPane.qml`,
       the widgets that read presets) after the rename from "widget profiles":
       - A section's add-widget picker skips types already in it, so two clocks or two
@@ -401,6 +401,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
         parses the whole preset JSON, every write repeats parse-mutate-stringify (five
         near-identical save functions in the workspaces page). A `WidgetPresets` singleton
         (get, set, usages, rename, delete) would remove that and host the fixes above.
+      Done 2026-10-29, verified on the host: `WidgetPresets` singleton (the one parse and
+      write, per-type defaults, usages, rename and delete repointing every profile's bar
+      entries); the preset area shows only for widgets with presets, says where the
+      preset is used, offers "Customize" for a widget without one (decided: no preset =
+      defaults, settings always through a preset), creates a preset as soon as it is
+      named; clock, hardware and workspaces may repeat in a section (`multiple` in
+      WidgetRegistry); the name map editor refreshes; an empty clock format shows as the
+      default. The gear is hidden for widgets with nothing to set (settings, tray).
 - [ ] **8.11 First toast of a queue sits against the queue badge** (reported 2026-10-29)
       With several notifications queued, the toast should keep a gap from the badge
       showing how many are waiting. The first toast has no gap; every later one does. The

@@ -16,15 +16,6 @@ Item {
 
     implicitHeight: _col.implicitHeight
 
-    readonly property var _preset: JSON.parse(Config.widgetPresets || "{}")[widgetType]?.[presetName] ?? {}
-
-    function _savePreset(changes) {
-        var data = JSON.parse(Config.widgetPresets || "{}")
-        if (!data[widgetType])             data[widgetType] = {}
-        if (!data[widgetType][presetName]) data[widgetType][presetName] = {}
-        Object.assign(data[widgetType][presetName], changes)
-        Config.widgetPresets = JSON.stringify(data)
-    }
 
     Column {
         id: _col
@@ -35,10 +26,10 @@ Item {
         HardwareSourceList {
             width: parent.width
             title: "Capsule"
-            model: root._preset.capsule ?? ["cpu"]
-            labels: root._preset.capsuleLabels ?? {}
-            onListChanged: list => root._savePreset({ capsule: list })
-            onLabelsEdited: labels => root._savePreset({ capsuleLabels: labels })
+            model: WidgetPresets.value(root.widgetType, root.presetName, "capsule")
+            labels: WidgetPresets.value(root.widgetType, root.presetName, "capsuleLabels")
+            onListChanged: list => WidgetPresets.set(root.widgetType, root.presetName, "capsule", list)
+            onLabelsEdited: labels => WidgetPresets.set(root.widgetType, root.presetName, "capsuleLabels", labels)
         }
 
         // Status, pin and reset for the popup setting; the list below edits its value

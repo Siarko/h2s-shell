@@ -7,9 +7,11 @@ PopupWidget {
     widgetType: "hardware"
 
     // The capsule — which sources and their labels — comes from the widget's preset
-    readonly property var _preset: preset !== "" ? (JSON.parse(Config.widgetPresets || "{}")["hardware"]?.[preset] ?? {}) : ({})
-    readonly property var _capsuleKeys: _preset.capsule?.length > 0 ? _preset.capsule : ["cpu"]
-    readonly property var _customLabels: _preset.capsuleLabels ?? {}
+    readonly property var _capsuleKeys: {
+        const keys = WidgetPresets.value("hardware", preset, "capsule")
+        return keys?.length > 0 ? keys : WidgetPresets.defaults.hardware.capsule
+    }
+    readonly property var _customLabels: WidgetPresets.value("hardware", preset, "capsuleLabels") ?? {}
 
     readonly property string _capsuleText: {
         var parts = []

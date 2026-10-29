@@ -6,16 +6,8 @@ PopupWidget {
     property string preset: ""
     widgetType: "clock"
 
-    // The format comes from the widget's preset; without one, the default
-    readonly property string defaultFormat: "hh:mm:ss"
-    readonly property string _format: {
-        if (preset !== "") {
-            var data = JSON.parse(Config.widgetPresets || "{}");
-            var fmt = data["clock"]?.[preset]?.format;
-            if (fmt) return fmt;
-        }
-        return defaultFormat;
-    }
+    // From the widget's preset; without one, the clock default
+    readonly property string _format: WidgetPresets.value("clock", preset, "format") || WidgetPresets.defaults.clock.format
 
     Text {
         text: Qt.formatDateTime(Time.date, _format)
