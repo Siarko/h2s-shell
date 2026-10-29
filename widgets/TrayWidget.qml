@@ -39,8 +39,17 @@ BarWidget {
                     && root.popup?.contentType === "tray-menu"
                     && Tray.menuHandle === modelData.menu
 
-                width: 24
+                // Grows in from nothing, so the icons beside it slide aside rather than jump
+                width: 0
                 height: parent.height
+                opacity: 0
+                clip: true
+                Component.onCompleted: {
+                    width = 24;
+                    opacity = 1;
+                }
+                Behavior on width { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
+                Behavior on opacity { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
 
                 // Highlighted under the pointer and while its menu is open, like a cell
                 Rectangle {

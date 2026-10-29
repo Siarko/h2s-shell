@@ -27,6 +27,10 @@ section to the new version and date.
 - The notification bell fades to the accent and jumps when a notification arrives; the
   dictation icon fades between its states; volume sliders and the volume OSD follow the
   volume keys smoothly ("value"), while dragging stays immediate.
+- Changing theme fades the colours over ("themeChange"), also when a theme file is changed
+  by another program, such as matugen; edits from the settings apply at once.
+- Tray icons grow in when an application adds one ("enter"); networks and Bluetooth
+  devices found by a scan fade in, and re-sorted networks slide to their place ("move").
 
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere

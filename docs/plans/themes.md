@@ -169,6 +169,14 @@ The ~50 hard-coded `duration:` values move to roles.
      host:* there is no unread badge — the bell turns accent — so the bell fades
      (state) and jumps on a new notification (pop; not with reduced motion). Volume
      sliders draw `_shownValue`, animated with value except while dragged.
+   - *Theme colours (5), tray icons (12), scan results (15), 2026-10-29, verified on
+     the host:* the 24 base colours have a `Behavior` enabled only while a reload brings
+     different colours that the shell did not write itself (a theme switch, matugen, a
+     hand edit — not `writeToken`, not the first load); derived colours follow. Tray
+     icons grow from width 0 (also at start, as items register). The network ListView
+     has add/displaced/move transitions; Bluetooth's device rows got a Column of their
+     own for its add/move transitions. Removal is not animated (Repeater destroys the
+     delegate at once).
    - Next: the rest of the list. Later (the user's idea): variants per element, `expand.dictate` falling
    back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.

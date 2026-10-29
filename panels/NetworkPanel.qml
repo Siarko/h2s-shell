@@ -493,6 +493,18 @@ Item {
                 }
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
+                // A network found by a scan fades in, and the list makes room for it;
+                // rows re-sorted by signal slide to their new place
+                add: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
+                }
+                displaced: Transition {
+                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+                    NumberAnimation { property: "opacity"; to: 1; duration: Theme.duration("enter") }
+                }
+                move: Transition {
+                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing.type: Theme.easing("move") }
+                }
 
                 delegate: Rectangle {
                     id: networkDelegate

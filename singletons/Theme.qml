@@ -214,6 +214,15 @@ Singleton {
 
     function reload() {
         const resolved = _resolve(themeName);
+        // A new theme, or a file changed by something else (matugen after a wallpaper
+        // change), fades the colours over; the shell's own edits and the first load do not
+        if (revision > 0 && !_quietReload
+                && JSON.stringify(resolved.values.colors) !== JSON.stringify(values.colors)) {
+            _colorsAnimating = true;
+            _colorsAnimatingEnd.interval = duration("themeChange") + 50;
+            _colorsAnimatingEnd.restart();
+        }
+        _quietReload = false;
         values = resolved.values;
         chain = resolved.chain;
         errors = resolved.errors;
@@ -267,6 +276,7 @@ Singleton {
     function _writeTheme(name, theme) {
         _writer.path = _themePath(name);
         _writer.setText(JSON.stringify(theme, null, 2) + "\n");
+        _quietReload = true;
         Qt.callLater(reload);
     }
 
@@ -365,6 +375,24 @@ Singleton {
     }
 
     // ---- Tokens ----
+    // The base colours fade only while a theme change is under way: _colorsAnimating is
+    // set by reload just before the new values land
+    property bool _colorsAnimating: false
+    property bool _quietReload: false
+
+    Timer {
+        id: _colorsAnimatingEnd
+        onTriggered: root._colorsAnimating = false
+    }
+
+    component ThemeColorBehavior: Behavior {
+        enabled: root._colorsAnimating
+        ColorAnimation {
+            duration: root.duration("themeChange")
+            easing.type: root.easing("themeChange")
+        }
+    }
+
     readonly property var _colors: values.colors
     readonly property var _fonts: values.fonts
 
@@ -410,31 +438,45 @@ Singleton {
     readonly property int fontSizeHero: _fonts.sizeHero
 
     // Backgrounds
-    readonly property color barBackground: _colors.barBackground
-    readonly property color popupBackground: _colors.popupBackground
-    readonly property color surface: _colors.surface
-    readonly property color surfaceHover: _colors.surfaceHover
+    property color barBackground: _colors.barBackground
+    ThemeColorBehavior on barBackground {}
+    property color popupBackground: _colors.popupBackground
+    ThemeColorBehavior on popupBackground {}
+    property color surface: _colors.surface
+    ThemeColorBehavior on surface {}
+    property color surfaceHover: _colors.surfaceHover
+    ThemeColorBehavior on surfaceHover {}
     // surfaceHover, fully transparent: a hover fading in from it changes only the opacity,
     // where fading from "transparent" (transparent black) would darken on the way
     readonly property color surfaceHoverClear: Qt.alpha(surfaceHover, 0)
     readonly property color surfaceSunken: Qt.alpha("black", 0.2)   // lists and containers set into a page
     readonly property color overlay: Qt.alpha("black", 0.65)        // a pill or card over arbitrary content
-    readonly property color scrim: _colors.scrim
+    property color scrim: _colors.scrim
+    ThemeColorBehavior on scrim {}
 
     // Accent
-    readonly property color accent: _colors.accent
-    readonly property color accentHover: _colors.accentHover
+    property color accent: _colors.accent
+    ThemeColorBehavior on accent {}
+    property color accentHover: _colors.accentHover
+    ThemeColorBehavior on accentHover {}
     readonly property color accentTint: Qt.alpha(accent, 0.2)       // a faint accent background: selected row, day
-    readonly property color accentDark: _colors.accentDark
-    readonly property color onAccent: _colors.onAccent
-    readonly property color accentSecondary: _colors.accentSecondary
+    property color accentDark: _colors.accentDark
+    ThemeColorBehavior on accentDark {}
+    property color onAccent: _colors.onAccent
+    ThemeColorBehavior on onAccent {}
+    property color accentSecondary: _colors.accentSecondary
+    ThemeColorBehavior on accentSecondary {}
     readonly property color accentSecondaryTint: Qt.alpha(accentSecondary, 0.15)
 
     // Text, brightest to dimmest
-    readonly property color textPrimary: _colors.textPrimary
-    readonly property color textSecondary: _colors.textSecondary
-    readonly property color textMuted: _colors.textMuted
-    readonly property color textDisabled: _colors.textDisabled
+    property color textPrimary: _colors.textPrimary
+    ThemeColorBehavior on textPrimary {}
+    property color textSecondary: _colors.textSecondary
+    ThemeColorBehavior on textSecondary {}
+    property color textMuted: _colors.textMuted
+    ThemeColorBehavior on textMuted {}
+    property color textDisabled: _colors.textDisabled
+    ThemeColorBehavior on textDisabled {}
 
     // Lines and faint fills
     readonly property color divider: Qt.alpha(textDisabled, 0.3)    // separators, container borders
@@ -444,25 +486,35 @@ Singleton {
     readonly property color track: Qt.alpha(textDisabled, 0.25)     // the empty part of a progress bar
 
     // Status
-    readonly property color error: _colors.error
+    property color error: _colors.error
+    ThemeColorBehavior on error {}
     readonly property color errorTint: Qt.alpha(error, 0.12)        // behind an error message
     readonly property color errorMuted: Qt.alpha(error, 0.6)        // a destructive button at rest
-    readonly property color warning: _colors.warning
-    readonly property color success: _colors.success
+    property color warning: _colors.warning
+    ThemeColorBehavior on warning {}
+    property color success: _colors.success
+    ThemeColorBehavior on success {}
 
     // Workspaces
     readonly property color workspaceFocused: accentDark
-    readonly property color workspaceActive: _colors.workspaceActive
-    readonly property color workspaceSpecial: _colors.workspaceSpecial
+    property color workspaceActive: _colors.workspaceActive
+    ThemeColorBehavior on workspaceActive {}
+    property color workspaceSpecial: _colors.workspaceSpecial
+    ThemeColorBehavior on workspaceSpecial {}
 
     // Calendar
-    readonly property color calendarToday: _colors.calendarToday
+    property color calendarToday: _colors.calendarToday
+    ThemeColorBehavior on calendarToday {}
 
     // Filled buttons
-    readonly property color confirm: _colors.confirm
-    readonly property color confirmHover: _colors.confirmHover
-    readonly property color confirmSecondary: _colors.confirmSecondary
-    readonly property color confirmSecondaryHover: _colors.confirmSecondaryHover
+    property color confirm: _colors.confirm
+    ThemeColorBehavior on confirm {}
+    property color confirmHover: _colors.confirmHover
+    ThemeColorBehavior on confirmHover {}
+    property color confirmSecondary: _colors.confirmSecondary
+    ThemeColorBehavior on confirmSecondary {}
+    property color confirmSecondaryHover: _colors.confirmSecondaryHover
+    ThemeColorBehavior on confirmSecondaryHover {}
 
     // Lock screen and screensaver: light "glass" cards over the scrim
     readonly property color glass: Qt.alpha("white", 0.08)          // a card or field
