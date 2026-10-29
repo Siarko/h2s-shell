@@ -3,8 +3,7 @@ import QtQuick.Layouts
 import qs.singletons
 
 // Screensaver and lock screen settings, edited in the profile picked in the settings
-// window. The command settings are not in the schema yet — nothing runs them (TODO 9.7) —
-// so they still apply to every profile.
+// window.
 Flickable {
     id: root
 
@@ -19,6 +18,7 @@ Flickable {
     }
     readonly property bool _screensaverOn: _edited("lockscreen.screensaverEnabled") === true
     readonly property bool _lockOn: _edited("lockscreen.lockscreenEnabled") === true
+    readonly property bool _commandsOn: _edited("lockscreen.screensaverCommands") === true
 
     anchors.fill: parent
     contentHeight: col.implicitHeight
@@ -90,39 +90,22 @@ Flickable {
             available: root._screensaverOn
         }
 
-        Text {
-            Layout.topMargin: 6
-            text: "The commands below apply to every profile."
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textDim
+        SchemaSettingEditor {
+            key: "lockscreen.screensaverCommands"
+            editIndex: root.editIndex
+            available: root._screensaverOn
         }
 
-        SettingBool {
-            disabled: !root._screensaverOn
-            label: "Execute command on screensaver enable/disable"
-            value: Config.lockscreen.screensaverExecCmd
-            onValueChanged: Config.lockscreen.screensaverExecCmd = value
+        SchemaSettingEditor {
+            key: "lockscreen.screensaverStartCommand"
+            editIndex: root.editIndex
+            available: root._screensaverOn && root._commandsOn
         }
 
-        SettingInputRow {
-            disabled: !root._screensaverOn || !Config.lockscreen.screensaverExecCmd
-            label: "Screensaver enable command"
-            inputWidthPercent: 50
-            value: Config.lockscreen.screensaverExecSleep
-            onValueChanged: Config.lockscreen.screensaverExecSleep = value
-
-            Layout.leftMargin: 5
-        }
-
-        SettingInputRow {
-            disabled: !root._screensaverOn || !Config.lockscreen.screensaverExecCmd
-            label: "Screensaver disable command"
-            inputWidthPercent: 50
-            value: Config.lockscreen.screensaverExecWakeup
-            onValueChanged: Config.lockscreen.screensaverExecWakeup = value
-
-            Layout.leftMargin: 5
+        SchemaSettingEditor {
+            key: "lockscreen.screensaverEndCommand"
+            editIndex: root.editIndex
+            available: root._screensaverOn && root._commandsOn
         }
         // ── Lock screen ───────────────────────────────────────────────────
 

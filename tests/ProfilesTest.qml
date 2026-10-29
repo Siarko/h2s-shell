@@ -151,7 +151,8 @@ TestCase {
             notifications: { codePatterns: ["\\d{4,6}"] },
             lockscreen: { screensaverEnabled: false, screensaverTimeout: 100, fadeInDuration: 200,
                           fadeOutDuration: 800, notificationsOnScreensaver: false, lockscreenEnabled: false,
-                          lockscreenTimeout: 5, notificationsOnLock: true },
+                          lockscreenTimeout: 5, notificationsOnLock: true,
+                          screensaverExecCmd: false, screensaverExecSleep: "", screensaverExecWakeup: "" },
             gcal: { enabled: true, debug: false },
             bar: {
                 content: { left: ["power", "workspaces"], leftProfiles: '["", "default"]',

@@ -46,11 +46,35 @@ Singleton {
     onLockscreenTimeoutChanged: _applyMonitors()
     Component.onCompleted: _applyMonitors()
 
+    // ---- Screensaver commands ----
+    // Tied to idleness, not to the screensaver being on screen: when the screen locks
+    // during a screensaver, the screensaver hides under the lock screen while the user is
+    // still away, so "ended" there would be wrong. The end command runs when the user is
+    // back — activity, even at the lock prompt — and only after a start command, so a
+    // profile switching the screensaver off mid-idle does not fire an unpaired end.
+    property bool _idleSession: false
+
+    function _runCommand(key) {
+        const command = Profiles.value(key) ?? ""
+        if (Profiles.value("lockscreen.screensaverCommands") === true && command.trim() !== "")
+            Quickshell.execDetached(["sh", "-c", command])
+    }
+
+    function _idleChanged(idle) {
+        if (idle && !_idleSession) {
+            _idleSession = true
+            _runCommand("lockscreen.screensaverStartCommand")
+        } else if (!idle && _idleSession) {
+            _idleSession = false
+            _runCommand("lockscreen.screensaverEndCommand")
+        }
+    }
+
     IdleMonitor {
         id: _ssMonitor
         enabled: false
         timeout: root.screensaverTimeout
-        onIsIdleChanged: console.log("[Lockscreen] screensaver isIdle →", isIdle)
+        onIsIdleChanged: root._idleChanged(isIdle)
     }
 
     Timer {

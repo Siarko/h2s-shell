@@ -16,7 +16,6 @@ import QtQuick
 Singleton {
     id: root
 
-    property alias lockscreen: _lockscreen
     property alias gcal: _gcal
     property alias audio: _audio
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
@@ -88,14 +87,6 @@ Singleton {
             property JsonObject audio: JsonObject {
                 id: _audio
                 property string appVolumes: "{}"
-            }
-
-            // Commands nothing runs yet (TODO 9.7); not in the schema until that is decided
-            property JsonObject lockscreen: JsonObject {
-                id: _lockscreen
-                property bool screensaverExecCmd: false
-                property string screensaverExecSleep: ''
-                property string screensaverExecWakeup: ''
             }
 
             // The Google account, its tokens and the calendars picked — data, not settings

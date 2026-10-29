@@ -10,6 +10,11 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Fixed
+- The screensaver's start and end commands now run — they could be set but nothing ran
+  them. They follow idle time rather than the screensaver's visibility, so locking the
+  screen does not count as coming back, and they can differ per profile.
+
 ## [1.0.0] - 2026-10-29
 
 The first numbered version: the shell as it stands after the 2026-10 cleanup, which

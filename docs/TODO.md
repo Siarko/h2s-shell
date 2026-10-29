@@ -370,8 +370,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **9.4 Move stray colours into `Theme.qml`** [#18] — 17 hex + 20 named
 - [ ] **9.5 One scroll-notch implementation** [#16] — `BarWidget` vs `CustomMouseArea`
 - [ ] **9.6 Move tray slide state out of the `Tray` singleton** [#20]
-- [ ] **9.7 Implement or remove the screensaver exec commands** [#37]
+- [x] **9.7 Implement or remove the screensaver exec commands** [#37]
       Config and UI exist; nothing runs them, so it looks finished to the user.
+      Implemented 2026-10-29, verified on the host: schema settings (per profile), run with
+      `sh -c` detached, tied to idleness rather than the screensaver's visibility — a lock
+      during the screensaver is not "back"; the end command runs on return, even at the
+      lock prompt, and only after a start command.
 - [ ] **9.8 Leftovers** [#37] — empty `assets/`, missing trailing newline in
       `LockscreenSettings.qml`, `Logger` as `Item` rather than `QtObject`.
 
@@ -454,6 +458,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `singletons/Version.qml` holds the number and shows `number+commit[.dirty]` off a
       release, selectable in the settings sidebar; CHANGELOG.md with an Unreleased section;
       `Config.writtenBy`; tests/VersionTest.qml keeps the number and changelog in step.
+- [ ] **8.12 Popups overhang a bar that does not reach the screen edge** (reported
+      2026-10-29)
+      With a left or right margin on the bar, a popup opened near that end is clamped to
+      the screen edge, not the bar's: it sticks out past the bar's end, and its top
+      corner curves (`PopupCurve`, `roundingLeft`/`roundingRight` in `panels/Popup.qml`)
+      are drawn as if the bar continued. Clamp `clipWrapper.x` to the bar's extent
+      (`bar.layout.leftMargin` … screen width − `rightMargin`) and decide the curves
+      against those edges too.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the
