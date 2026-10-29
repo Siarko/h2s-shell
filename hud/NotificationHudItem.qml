@@ -82,6 +82,10 @@ Item {
         to: root.restX
         duration: 250
         easing.type: Easing.OutCubic
+        // The target is taken when the slide starts. A notification queued meanwhile
+        // brings the badge and moves restX, and the nudge is skipped while sliding — so
+        // the first toast of a burst stopped against the badge. Catch up afterwards.
+        onFinished: if (root.x !== root.restX) nudge.restart()
     }
 
     NumberAnimation {
@@ -102,6 +106,8 @@ Item {
         to: root.restX
         duration: 200
         easing.type: Easing.OutCubic
+        // The badge can come or go during the nudge too
+        onFinished: if (root.x !== root.restX) nudge.restart()
     }
 
     // Auto-dismiss countdown, 1 → 0. An animation rather than a Timer because it has to

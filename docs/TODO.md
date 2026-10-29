@@ -409,12 +409,24 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       named; clock, hardware and workspaces may repeat in a section (`multiple` in
       WidgetRegistry); the name map editor refreshes; an empty clock format shows as the
       default. The gear is hidden for widgets with nothing to set (settings, tray).
-- [ ] **8.11 First toast of a queue sits against the queue badge** (reported 2026-10-29)
+- [x] **8.11 First toast of a queue sits against the queue badge** (reported 2026-10-29)
       With several notifications queued, the toast should keep a gap from the badge
       showing how many are waiting. The first toast has no gap; every later one does. The
       toast's resting x is `restX` in `hud/NotificationHudItem.qml`, which shifts left
       when the badge appears — likely the first toast slides in to the position computed
       before the queue (and the badge) existed, and only the next show uses the new one.
+      Done 2026-10-29, verified on the host: the slide-in took its target at the start, and
+      the nudge was skipped while sliding; the slide (and the nudge) now catch up to
+      `restX` when they finish.
+- [ ] **10.8 Versioning** (requested 2026-10-29)
+      Give the shell a version and a scheme for it, and show the current version at the
+      bottom of the settings sidebar. To decide: the scheme (semantic versioning seems the
+      natural fit — major for config or behaviour changes that need migration, minor for
+      features, patch for fixes), where the number lives (a `Version` singleton or a file
+      read at startup, plus git tags), whether the shown string adds the git commit for
+      builds between releases, and how it ties to the config: `Config` could record the
+      version that last wrote it, which the per-key migration could use instead of (or as
+      well as) `migratedKeys`. A CHANGELOG would follow naturally.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the
