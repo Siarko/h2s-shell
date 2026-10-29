@@ -37,7 +37,7 @@ FloatingWindow {
     }
     // Pages whose settings are all per profile; the others apply to every profile until
     // they are migrated, and say so while another profile than Full is picked
-    readonly property var _perProfileCategories: [0, _performanceCategory, _profilesCategory]
+    readonly property var _perProfileCategories: [0, _mediaCategory, _performanceCategory, _profilesCategory]
     readonly property bool _showScopeNote: Profiles.profiles[editIndex]?.name !== "Full"
         && !_perProfileCategories.includes(selectedCategory)
 
@@ -205,9 +205,7 @@ FloatingWindow {
                         id: _scopeText
                         anchors { fill: parent; margins: 6 }
                         wrapMode: Text.WordWrap
-                        text: root.selectedCategory === root._mediaCategory
-                            ? "Only settings showing a profile state are per profile here; the rest apply to every profile."
-                            : "This page is not per profile yet: its settings apply to every profile."
+                        text: "This page is not per profile yet: its settings apply to every profile."
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textSecondary

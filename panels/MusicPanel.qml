@@ -224,15 +224,11 @@ Item {
     }
 
     // Repaint when style or layout setting changes
-    Connections {
-        target: Config.media
-        function onVisualizerStyleChanged() {
-            root._requestAllPaint();
-        }
-        function onVisualizerLayoutChanged() {
-            root._requestAllPaint();
-        }
-    }
+    // From the active profile; a change repaints the canvases, which do not bind to them
+    readonly property string visualizerStyle: Profiles.value("media.visualizerStyle") ?? "waveform"
+    readonly property string visualizerLayout: Profiles.value("media.visualizerLayout") ?? "horizontal"
+    onVisualizerStyleChanged: _requestAllPaint()
+    onVisualizerLayoutChanged: _requestAllPaint()
 
     // Left channel canvas — spans full popup height, bars grow from left edge inward
     Canvas {
@@ -241,14 +237,14 @@ Item {
         width: 100
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+        visible: root.visualizerLayout === "vertical" && Music.hasPlayer && root.visualizerStyle !== "none"
         onVisibleChanged: if (visible)
             requestPaint()
 
         onPaint: {
             var ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
-            var style = Config.media.visualizerStyle;
+            var style = root.visualizerStyle;
             if (style === "waveform")
                 root.drawWaveform(ctx, root.leftBars, width, height, true);
             else if (style === "bars")
@@ -265,14 +261,14 @@ Item {
         width: 100
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        visible: Config.media.visualizerLayout === "vertical" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+        visible: root.visualizerLayout === "vertical" && Music.hasPlayer && root.visualizerStyle !== "none"
         onVisibleChanged: if (visible)
             requestPaint()
 
         onPaint: {
             var ctx = getContext("2d");
             ctx.clearRect(0, 0, width, height);
-            var style = Config.media.visualizerStyle;
+            var style = root.visualizerStyle;
             if (style === "waveform")
                 root.drawWaveform(ctx, root.rightBars.reverse(), width, height, true);
             else if (style === "bars")
@@ -349,7 +345,7 @@ Item {
             height: 120
             // In vertical mode: show whenever there's a player (canvases need space even without art).
             // In horizontal mode: only show when art is available (original behavior).
-            visible: Config.media.visualizerLayout === "vertical" ? Music.hasPlayer : Music.artUrl !== ""
+            visible: root.visualizerLayout === "vertical" ? Music.hasPlayer : Music.artUrl !== ""
 
             // Album art (centered, always 120×120)
             Rectangle {
@@ -492,7 +488,7 @@ Item {
             id: waveCanvas
             width: parent.width
             height: 36
-            visible: Config.media.visualizerLayout === "horizontal" && Music.hasPlayer && Config.media.visualizerStyle !== "none"
+            visible: root.visualizerLayout === "horizontal" && Music.hasPlayer && root.visualizerStyle !== "none"
             onVisibleChanged: if (visible)
                 requestPaint()
 
@@ -500,7 +496,7 @@ Item {
                 var ctx = getContext("2d");
                 ctx.clearRect(0, 0, width, height);
                 const bars = [...root.leftBars, ...root.rightBars.reverse()];
-                var style = Config.media.visualizerStyle;
+                var style = root.visualizerStyle;
                 if (style === "waveform")
                     root.drawWaveform(ctx, bars, width, height, false);
                 else if (style === "bars") {

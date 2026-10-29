@@ -146,6 +146,7 @@ verified on the host before the next.
    clock preset; without one it is a fixed "hh:mm:ss".
 2. **Media:** visualizerStyle/Layout; `panels/MusicPanel.qml` bindings and its repaint
    `Connections`.
+   *Done 2026-10-29, verified on the host.*
 3. **Lockscreen:** `singletons/Lockscreen.qml` idle monitors (imperative enable — see
    foundation 3), `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
 4. **Notifications:** codePatterns with the `stringList` editor;

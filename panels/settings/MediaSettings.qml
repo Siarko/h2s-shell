@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
 ColumnLayout {
@@ -23,27 +24,17 @@ ColumnLayout {
         Layout.bottomMargin: 4
     }
 
-    SettingOptions {
-        label: "Visualizer style"
-        options: ["waveform", "bars", "dots", "none"]
-        labels: ["Waveform", "Bars", "Dots", "None"]
-        value: Config.media.visualizerStyle
-        onPicked: val => Config.media.visualizerStyle = val
-    }
+    Repeater {
+        // ScriptModel, never a bare array — see "The Repeater crash"
+        model: ScriptModel {
+            values: SettingsSchema.keysInGroup("media")
+        }
 
-    SettingOptions {
-        label: "Layout"
-        options: ["horizontal", "vertical"]
-        labels: ["Horizontal", "Vertical"]
-        value: Config.media.visualizerLayout
-        onPicked: val => Config.media.visualizerLayout = val
-    }
-
-    // Per profile (docs/plans/global-profiles.md); the settings above are not yet
-    SchemaSettingEditor {
-        visible: root.editIndex >= 0
-        key: "polling.visualizer.fps"
-        editIndex: root.editIndex
+        SchemaSettingEditor {
+            required property string modelData
+            key: modelData
+            editIndex: root.editIndex
+        }
     }
 
     Item {

@@ -29,6 +29,20 @@ Singleton {
         { key: "general.fetchDebug", label: "Debug Mode | Fetch", group: "general",
           type: "bool", default: false, global: true, legacy: ["general", "fetch_debug"] },
 
+        // ── Media ──
+        { key: "media.visualizerStyle", label: "Visualizer style", group: "media",
+          type: "enum", default: "waveform", legacy: ["media", "visualizerStyle"], options: [
+              { value: "waveform", label: "Waveform" },
+              { value: "bars", label: "Bars" },
+              { value: "dots", label: "Dots" },
+              { value: "none", label: "None" }
+          ] },
+        { key: "media.visualizerLayout", label: "Layout", group: "media",
+          type: "enum", default: "horizontal", legacy: ["media", "visualizerLayout"], options: [
+              { value: "horizontal", label: "Horizontal" },
+              { value: "vertical", label: "Vertical" }
+          ] },
+
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },
