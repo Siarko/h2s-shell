@@ -6,7 +6,7 @@ Item {
     id: root
 
     property string prefix: ""
-    property bool enabled: Config.general.debug
+    property bool enabled: Profiles.value("general.debug") ?? false
     property int level: 3
 
     function log() {

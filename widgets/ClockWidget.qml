@@ -6,13 +6,15 @@ PopupWidget {
     property string profile: ""
     widgetType: "clock"
 
+    // The format comes from the widget's preset; without one, the default
+    readonly property string defaultFormat: "hh:mm:ss"
     readonly property string _format: {
         if (profile !== "") {
             var data = JSON.parse(Config.widgetProfiles || "{}");
             var fmt = data["clock"]?.[profile]?.format;
             if (fmt) return fmt;
         }
-        return Config.datetimeFormat;
+        return defaultFormat;
     }
 
     Text {

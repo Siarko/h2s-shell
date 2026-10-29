@@ -24,6 +24,7 @@ TestCase {
         assertEqual(Profiles.value("graphs.heartbeat"), true, "graph heartbeat on");
         assertEqual(Profiles.value("polling.visualizer.fps"), 60, "visualizer at 60 fps");
         assertEqual(SettingsSchema.keysInGroup("performance").length, 6, "polling and graph keys are in the performance group");
+        assert(Profiles.isSystemGlobal("general.debug") && Profiles.isSystemGlobal("general.fetchDebug"), "debug switches are always global");
 
         // --- conditions ---
         const onBattery = { fact: "power.onBattery", is: true };
@@ -115,6 +116,46 @@ TestCase {
         assertEqual(seededOnPerformance[0].set["system.powerProfile"], "performance",
             "Full names the power profile in use when seeding");
         assertEqual(seed[0].set["system.powerProfile"], "unchanged", "without one known, Full leaves it unchanged");
+
+        // --- migrating the old config, once per key ---
+        const legacyConfig = { media: { visualizerStyle: "bars" }, general: { debug: true } };
+        const readLegacy = path => path.reduce((node, part) => node?.[part], legacyConfig);
+        const legacyEntries = [
+            { key: "media.style", legacy: ["media", "visualizerStyle"] },
+            { key: "general.debug", legacy: ["general", "debug"], global: true },
+            { key: "media.missing", legacy: ["media", "nothing"] },
+            { key: "polling.x" }
+        ];
+        const userProfiles = [{ name: "Full", when: {}, set: { "polling.x": 1 } }, { name: "Power save", when: onBattery, set: {} }];
+        const migrated = ProfileRules.migrateLegacy(legacyEntries, readLegacy, [], userProfiles, {});
+        assertEqual(migrated.profiles[0].set["media.style"], "bars", "a setting moves into Full with the user's value");
+        assertEqual(migrated.profiles[0].set["polling.x"], 1, "Full keeps what it had");
+        assertEqual(migrated.globals["general.debug"], true, "an always-global setting moves into the globals");
+        assert(!("general.debug" in migrated.profiles[0].set), "and not into Full");
+        assertEqual(JSON.stringify(migrated.copied), JSON.stringify(["media.style", "general.debug"]), "copied lists what moved");
+        assert(migrated.migratedKeys.includes("media.missing"), "a missing old value is still marked done");
+        assert(!migrated.migratedKeys.includes("polling.x"), "keys without a legacy place are not touched");
+        assertEqual(userProfiles[0].set["media.style"], undefined, "the input profiles are not modified");
+        const again = ProfileRules.migrateLegacy(legacyEntries, path => "changed", migrated.migratedKeys, migrated.profiles, migrated.globals);
+        assertEqual(again.copied.length, 0, "a second run copies nothing — later edits are not overwritten");
+        const broken = ProfileRules.migrateLegacy([{ key: "k", legacy: ["nosection", "x"] }],
+            path => { throw new Error("Config has no nosection"); }, [], userProfiles, {});
+        assert(!broken.migratedKeys.includes("k"), "a wrong legacy path does not mark the key done");
+        assertEqual(broken.failed.length, 1, "and is reported");
+        assert(Profiles._readLegacy(["general", "debug"]) !== undefined, "an old place that exists can be read");
+        let threw = false;
+        try { Profiles._readLegacy(["calendar", "datetimeFormat"]); } catch (error) { threw = true; }
+        assert(threw, "a path through a section Config does not have throws");
+        for (const entry of SettingsSchema.entries) {
+            if (!entry.legacy)
+                continue;
+            let readable = true;
+            try { Profiles._readLegacy(entry.legacy); } catch (error) { readable = false; }
+            assert(readable, entry.key + ": its legacy path exists in Config");
+        }
+        const noFull = ProfileRules.migrateLegacy(legacyEntries, readLegacy, [], [{ name: "Mine", when: {}, set: {} }], {});
+        assertEqual(noFull.profiles[0].name, "Full", "without Full, one is created at the top");
+        assertEqual(noFull.profiles[1].name, "Mine", "and the user's profiles follow");
 
         // --- saving ---
         assert(Config.readOnly, "the test run cannot write the user's config");

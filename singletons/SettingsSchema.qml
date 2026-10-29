@@ -11,16 +11,25 @@ import QtQuick
 //   key      — dotted name, as stored in a profile's `set`
 //   label    — shown in settings
 //   group    — settings section the key is edited in
-//   type     — "interval" (ms, 0 = paused), "number", "enum", "bool"
+//   type     — "interval" (ms, 0 = paused), "number", "enum", "bool", "string"
 //   default  — value of the system profile
 //   min/max  — for interval and number
 //   options  — for enum: [{ value, label }]
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
+//   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"];
+//              its value there is copied into the profiles once (ProfileRules.migrateLegacy)
 Singleton {
     id: root
 
     readonly property var entries: [
+        // ── General ──
+        { key: "general.debug", label: "Debug Mode", group: "general",
+          type: "bool", default: false, global: true, legacy: ["general", "debug"] },
+        { key: "general.fetchDebug", label: "Debug Mode | Fetch", group: "general",
+          type: "bool", default: false, global: true, legacy: ["general", "fetch_debug"] },
+
+        // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },
         { key: "polling.hardware.gpuSampling", label: "GPU load sampling", group: "performance",

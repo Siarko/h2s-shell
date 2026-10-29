@@ -11,7 +11,7 @@ Item {
 
     readonly property string _currentFormat: {
         var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.[profileName]?.format ?? Config.datetimeFormat;
+        return data[widgetType]?.[profileName]?.format ?? "hh:mm:ss"; // ClockWidget.defaultFormat
     }
 
     function _saveFormat(value) {

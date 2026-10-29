@@ -24,6 +24,11 @@ Singleton {
     // Settings the user pinned as global, { key: value } as JSON: the same in every
     // profile (docs/plans/global-profiles.md)
     property alias globals: _adapter.globals
+    // Settings already copied from their old place in this file into the profiles, once
+    // each (docs/plans/global-profiles.md)
+    property alias migratedKeys: _adapter.migratedKeys
+    // The file itself, for the backup taken before a migration
+    readonly property string path: _file.path
 
     // True once the file has been read (or found missing, so the defaults stand) —
     // before that every property still holds its default
@@ -46,6 +51,7 @@ Singleton {
             property string widgetProfiles: "{}"
             property string profiles: ""
             property string globals: "{}"
+            property list<string> migratedKeys: []
             property JsonObject general: JsonObject {
                 id: _general
                 property bool debug: false

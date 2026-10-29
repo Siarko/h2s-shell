@@ -125,6 +125,50 @@ Singleton {
         return { values: values, setBy: setBy, active: active };
     }
 
+    // Copies settings from their place in the old config into profiles, once per key
+    // (docs/plans/global-profiles.md). For every schema entry with a `legacy` location
+    // whose key is not in `migratedKeys` yet: an always-global setting goes into the
+    // globals, any other into Full (created at the top if the user has none) — so Full
+    // spells out the user's own values. A key whose old value is undefined is only marked.
+    // `readLegacy(path)` returns the old value, and throws when the path does not lead
+    // anywhere — a mistake in the schema, which must not mark the key done and lose its
+    // value. Inputs are not modified.
+    // Returns { profiles, globals, migratedKeys, copied: [keys], failed: [key: reason] }.
+    function migrateLegacy(entries, readLegacy, migratedKeys, profiles, globals) {
+        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
+        const newGlobals = Object.assign({}, globals ?? {});
+        const done = (migratedKeys ?? []).slice();
+        const copied = [];
+        const failed = [];
+        for (const entry of entries) {
+            if (!entry.legacy || done.includes(entry.key))
+                continue;
+            let oldValue;
+            try {
+                oldValue = readLegacy(entry.legacy);
+            } catch (error) {
+                failed.push(entry.key + ": " + error.message);
+                continue;
+            }
+            done.push(entry.key);
+            if (oldValue === undefined)
+                continue;
+            if (entry.global === true) {
+                newGlobals[entry.key] = oldValue;
+            } else {
+                let full = newProfiles.find(profile => profile.name === "Full");
+                if (!full) {
+                    full = { name: "Full", enabled: true, when: {}, set: {} };
+                    newProfiles.unshift(full);
+                }
+                full.set = full.set ?? {};
+                full.set[entry.key] = oldValue;
+            }
+            copied.push(entry.key);
+        }
+        return { profiles: newProfiles, globals: newGlobals, migratedKeys: done, copied: copied, failed: failed };
+    }
+
     // Every fact a condition reads
     function factsRead(condition) {
         if (!condition)

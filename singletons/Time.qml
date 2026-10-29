@@ -3,10 +3,9 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// Shared time provider — exposes a formatted clock string updated every second
+// Shared time provider — the current date and time, updated every second
 Singleton {
     id: time
-    readonly property string time: Qt.formatDateTime(clock.date, Config.datetimeFormat)
     readonly property var date: clock.date
 
     SystemClock {

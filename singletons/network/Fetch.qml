@@ -23,7 +23,7 @@ Singleton {
 
     Logger {
         id: logger
-        enabled: Config.general.fetch_debug
+        enabled: Profiles.value("general.fetchDebug") ?? false
         prefix: "[FETCH]"
     }
 

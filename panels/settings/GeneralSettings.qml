@@ -1,8 +1,16 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
+// Every setting in the schema's "general" group, edited in the profile picked in the
+// settings window. The debug switches are always global.
 ColumnLayout {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
     anchors {
         fill: parent
         margins: 14
@@ -18,15 +26,17 @@ ColumnLayout {
         Layout.bottomMargin: 8
     }
 
-    SettingBool {
-        label: "Debug Mode"
-        value: Config.general.debug ?? false
-        onValueChanged: Config.general.debug = value
-    }
-    SettingBool {
-        label: "Debug Mode | Fetch"
-        value: Config.general.fetch_debug ?? false
-        onValueChanged: Config.general.fetch_debug = value
+    Repeater {
+        // ScriptModel, never a bare array — see "The Repeater crash"
+        model: ScriptModel {
+            values: SettingsSchema.keysInGroup("general")
+        }
+
+        SchemaSettingEditor {
+            required property string modelData
+            key: modelData
+            editIndex: root.editIndex
+        }
     }
 
     Item {

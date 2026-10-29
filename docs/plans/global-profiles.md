@@ -74,27 +74,139 @@ first. This is the config rework of CLEANUP #11.
 
 ## Stages
 
-Each shippable and verified on the host on its own.
+1. Window-level editing-profile picker — *done 2026-10-29*.
+2. User-pinned and always-global settings — *done 2026-10-29*.
+3. Foundations, then the simple pages (below).
+4. The bar.
+5. Cleanup.
 
-1. **Window-level editing-profile picker**; un-migrated pages show the note. Visualizer
-   fps (adaptive-polling step 8) lands on the Media page as its first per-profile
-   setting.
-   *Done 2026-10-29.* The picker is in the settings sidebar under the active-profile
-   indicator; `SchemaSettingEditor` now takes `editIndex` and works out own / inherited
-   / overridden itself, so a page only lists keys.
-2. **Global settings**: `Config.globals`, the last layer in `resolve`, the pin control in
-   `SchemaSettingEditor`, tests.
-   *Done 2026-10-29, verified on the host.* The Profiles page lists the pinned settings;
-   schema entries with `global: true` are always global (locked pin). Editors explain the
-   pin and the reset in a tooltip (`components/HoverTip.qml`) and say where an inherited
-   value comes from ("inherited from Full", "default").
-3. **Schema for every per-profile setting**, consumers switched to `Profiles.value()`,
-   per page group. Migrating the config's values into Full, with a backup.
-4. **Pages, simple first**: General, Media, Lockscreen, Notifications, Dictation, Calendar
-   view settings.
-5. **Structured settings**: bar layout and content, widget profiles, hardware source
-   lists, notification code patterns — each with an editor that overrides the whole value.
-6. Remove the old Config sections; CLEANUP #11 closed.
+Decisions taken with the user on 2026-10-29 for stages 3–5:
+- Widget "profiles" stay a **shared, global library** and are **renamed "presets"** (UI,
+  code, config key). Shell profiles decide which widgets the bar has and which preset each
+  instance uses; preset contents are not per profile.
+- A profile overrides the bar **per section** (left / center / right are three settings).
+- **Popup mode** (click / hover / none) becomes a per-profile setting per widget type.
+
+### Classification of the Config settings
+
+- **Per profile (schema keys):** media style/layout; lockscreen enable/timeouts/fades/
+  notification visibility; notifications codePatterns; stt previewEnabled, previewWidth,
+  finalLingerMs, showPending, pauseMusicWhileDictating; gcal.enabled;
+  bar.layout.* (11 ints); bar.left/center/right; widgets.<type>.popupMode; hardware popup
+  sources, popup labels and capsule labels.
+- **Always global (schema `global: true`):** general.debug, general.fetch_debug,
+  stt.debug, gcal.debug, stt.socketPath (machine wiring; a profile switch would drop the
+  dictation connection).
+- **Not settings, stay in Config, no schema:** gcal clientId/secret/tokens/tokenExpiry,
+  gcal.enabledCalendarIds and gcal.viewMode (account data / UI state written by code),
+  audio.appVolumes (remembered per-app volumes), the widget preset library, profiles,
+  globals.
+- **Left alone:** lockscreen screensaverExecCmd/Sleep/Wakeup — nothing reads them; TODO
+  9.7 decides implement-or-remove. They keep their current Config storage.
+
+### Stage 3a — foundations
+
+1. **Schema types** in `singletons/SettingsSchema.qml` + `panels/settings/SchemaSettingEditor.qml`:
+   - `string` (text field; datetimeFormat), `number` (min/max/suffix; timeouts, linger),
+     `slider` presentation for bounded ints (bar geometry, fades, previewWidth),
+     `stringList` (codePatterns), and `custom` with an `editor` name for structured values
+     (bar sections, hardware source lists/labels) whose editors live with their pages.
+   - Structured values are overridden as a whole; editing an inherited one first copies
+     the inherited value into the edited profile (copy-on-write), so the editor always
+     edits a full value.
+2. **Logger cycle:** `components/Logger.qml` reads `Profiles.value("general.debug")`;
+   Profiles' own Logger gets an explicit `enabled` so constructing Profiles does not need
+   Profiles. (`SettingsSchema`/`ProfileRules` import nothing of ours — safe.)
+3. **Change-signal consumers:** code that reacts to `Connections { target: Config.x }`
+   (MusicPanel repaint, Lockscreen idle monitors) switches to local
+   `readonly property … : Profiles.value(…)` with `on…Changed` handlers, plus one apply at
+   startup (today they only fire because loading the file emits change signals).
+4. **Config migration, incremental, per key** (refined when implementing, 2026-10-29):
+   groups move one at a time while un-migrated pages keep writing the old sections, so a
+   one-shot copy would lose edits made in between. Instead each schema entry names its
+   old location (`legacy`), and a key is copied into Full — or into `globals` if always
+   global — exactly once, the first time it appears in the schema; `Config.migratedKeys`
+   records which. A backup of the config file is written before any migration that
+   changes it. The pure part (`ProfileRules.migrateLegacy`) is tested with a fixture
+   shaped like the user's real config. The preset rename and the moving of per-type
+   `_popupMode` / hardware `_popup*` keys out of the preset library happen in stage 4.
+
+### Stage 3b — pages, simple first
+
+Each group: schema entries → consumers switched to `Profiles.value()` → page rebuilt from
+`SchemaSettingEditor` (taking `editIndex` from `panels/SettingsWindow.qml`) → removed
+from the window's scope-note list (`_perProfileCategories`). One commit per group,
+verified on the host before the next.
+
+1. **General:** the two debug switches (always global, locked pin). Readers:
+   `components/Logger.qml`, `singletons/network/Fetch.qml`.
+   *Done 2026-10-29, verified on the host.* `datetimeFormat` was dropped rather than
+   migrated (the user's call): its only reader was the clock widget's fallback when its
+   preset has no format, and `Time.time` was dead code — the clock format belongs to the
+   clock preset; without one it is a fixed "hh:mm:ss".
+2. **Media:** visualizerStyle/Layout; `panels/MusicPanel.qml` bindings and its repaint
+   `Connections`.
+3. **Lockscreen:** `singletons/Lockscreen.qml` idle monitors (imperative enable — see
+   foundation 3), `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
+4. **Notifications:** codePatterns with the `stringList` editor;
+   `singletons/Notifications.qml`.
+5. **Dictation:** stt.*; `singletons/Stt.qml`, `widgets/SttWidget.qml`,
+   `singletons/DictationMusicPause.qml`. Order for a widget instance: preset value →
+   `Profiles.value` → schema default (`panels/widget_settings/SttWidgetSettings.qml`
+   placeholder text follows).
+6. **Calendar:** gcal.enabled (per profile) and gcal.debug (global); credentials and
+   tokens untouched. Note: today `gcal.enabled` only changes a status message — the sync
+   ignores it; making the sync honour it is filed in TODO, not done here.
+
+### Stage 4 — the bar
+
+- **Keys:** `bar.layout.<name>` ×11; `bar.left`, `bar.center`, `bar.right`, each a list
+  of `{ type, preset }` (replacing the two parallel arrays and their short-array case);
+  `widgets.<type>.popupMode` for each popup widget type (from `WidgetRegistry`);
+  `widgets.hardware.popupSources`, `.popupLabels`, `.capsuleLabels`.
+- **Consumers:** `Bar.qml` builds each section's model from `Profiles.value("bar.<side>")`
+  (keeps `ScriptModel` and `_wireWidget`'s binding through `delegate.modelData`; the
+  widget property `profile` becomes `preset`); layout readers `Bar.qml`,
+  `panels/Popup.qml:97`, `panels/NetworkPanel.qml:481`, `Hud.qml:61`,
+  `hud/NotificationHudItem.qml:23`; `components/PopupWidget.qml` popup mode;
+  `widgets/HardwareWidget.qml`, `panels/HardwarePanel.qml`, `panels/HardwareSourceList.qml`
+  for the hardware keys.
+- **Presets rename:** `Config.widgetProfiles` → `Config.widgetPresets` and every reader/
+  writer (`widgets/{Clock,Workspaces,Hardware,Stt}Widget.qml`,
+  `panels/widget_settings/*.qml`, `panels/WidgetSettingsPane.qml`); UI text "Profile" →
+  "Preset".
+- **Settings UI:** `panels/settings/BarSettings.qml` geometry through the schema editor
+  (slider presentation, keeping the existing barHeight/reservedSpace/topOffset clamping as
+  the editor's `onEdited` logic); each section's `panels/BarSectionList.qml` shows the
+  edited profile's section, or the inherited one dimmed with "inherited from Full" and a
+  pin / reset like other settings — the first edit copies it in. `WidgetSettingsPane`
+  writes popup mode to the edited profile and keeps the preset picker (global library).
+- Same bar on every monitor, as today; a per-monitor bar would be a new condition fact
+  later, not part of this plan.
+
+### Stage 5 — cleanup
+
+Remove the migrated sections from `singletons/Config.qml` (keeping the excluded settings
+above), the scope note in `SettingsWindow.qml`, update `docs/ARCHITECTURE.md` (Config,
+Bar composition, Widget contract), `docs/FEATURES.md`, close CLEANUP #11 and TODO 10.3.
+
+### Verification
+
+- `quickshell -p tests.qml` after every change: ProfilesTest (migration fixture with the
+  user's config shape; every Config key is classified — schema, excluded or left alone —
+  so nothing is forgotten; resolve with structured values and copy-on-write), plus
+  SettingsPagesTest / WidgetRegistryTest compile checks.
+- On the host, per group: back up `~/.config/h2s_shell/config.json`, restart the shell
+  myself (`qs kill -c default && qs -c default -d`), check `qs log` is clean, check
+  `qs ipc call profiles status`, diff the config against the backup (migration must only
+  move values, not change them), then the user checks the page and the affected
+  feature behave exactly as before.
+- For per-profile behaviour: set a different value in Power save, simulate battery
+  (`qs ipc call profiles simulate '{"power.onBattery": true}'` or the Profiles page),
+  watch it apply, clear the simulation.
+- Bar specifically: Power save without the hardware capsule on the left section →
+  simulated battery removes it, AC brings it back with its preset labels intact
+  (the earlier regression where workspace/hardware labels vanished must not return).
 
 ## Open
 

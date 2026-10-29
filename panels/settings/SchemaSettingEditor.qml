@@ -6,7 +6,7 @@ import qs.singletons
 
 // Editor for one SettingsSchema key as set in one profile — the one picked in the
 // settings window. The control follows the schema type: pills for intervals and enums,
-// a switch for bools. It says where the shown value comes from — set here, inherited from
+// a switch for bools, a text field for strings. It says where the shown value comes from — set here, inherited from
 // the profiles above, overridden right now by a later active profile, or global — and
 // offers to drop this profile's own value. The pin makes the setting global: the same in
 // every profile, whichever is being edited (docs/plans/global-profiles.md).
@@ -212,6 +212,34 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.edited(root.shownValue !== true)
                 }
+            }
+        }
+
+        // Text: saved when editing finishes; an inherited value is shown dimmed
+        Rectangle {
+            visible: root.entry?.type === "string"
+            width: parent.width
+            height: 26
+            radius: 6
+            color: Theme.cellDefault
+
+            TextInput {
+                id: _textInput
+                anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                text: root.shownValue ?? ""
+                opacity: root._dimmed && !activeFocus ? 0.5 : 1
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                color: Theme.textPrimary
+                verticalAlignment: TextInput.AlignVCenter
+                selectByMouse: true
+                clip: true
+                onEditingFinished: {
+                    if (text !== root.shownValue)
+                        root.edited(text);
+                }
+                // Back to the stored value when focus leaves without a change being saved
+                onActiveFocusChanged: if (!activeFocus) text = Qt.binding(() => root.shownValue ?? "")
             }
         }
 

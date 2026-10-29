@@ -28,14 +28,81 @@ Singleton {
                                                                         _powerProfileName(PowerProfiles.profile)))
     }
 
+    // Settings moving into the schema bring their old value along once — see
+    // ProfileRules.migrateLegacy. Runs after seeding, so the values land in the seeded Full.
+    function _migrateIfNeeded() {
+        if (!Config.ready || Config.profiles === "")
+            return
+        const result = ProfileRules.migrateLegacy(SettingsSchema.entries, _readLegacy,
+                                                  Config.migratedKeys, profiles, globals)
+        for (const failure of result.failed)
+            _log.error("Cannot migrate", failure)
+        if (result.migratedKeys.length === Config.migratedKeys.length)
+            return
+        if (result.copied.length > 0) {
+            _backUpConfig()
+            // Always shown, not only in debug: a one-time change to the user's config
+            console.log("[Profiles] Moved into profiles from the old config:", result.copied.join(", "))
+        }
+        Config.profiles = JSON.stringify(result.profiles)
+        Config.globals = JSON.stringify(result.globals)
+        Config.migratedKeys = result.migratedKeys
+    }
+
+    // A value at its old place in Config, e.g. ["media", "visualizerStyle"]; the old
+    // widget settings were a JSON string, so a path starting at "widgetProfiles" parses it.
+    // Throws when a section on the way does not exist: the path itself is wrong.
+    function _readLegacy(path) {
+        let node = Config
+        for (let i = 0; i < path.length; i++) {
+            if (node === undefined || node === null)
+                return undefined
+            if (i < path.length - 1 && node[path[i]] === undefined)
+                throw new Error("Config has no " + path.slice(0, i + 1).join("."))
+            node = node[path[i]]
+            if (i === 0 && path[0] === "widgetProfiles")
+                node = JSON.parse(node || "{}")
+        }
+        // QML list properties come back as list objects; store a plain array
+        return node !== null && typeof node === "object" && node.length !== undefined && !Array.isArray(node)
+            ? Array.from(node) : node
+    }
+
+    function _backUpConfig() {
+        if (Config.readOnly)
+            return
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+        _configCopy.path = Config.path + ".bak-" + stamp
+        _configCopy.setText(_configFile.text())
+    }
+
+    FileView {
+        id: _configFile
+        path: Config.path
+        blockLoading: true
+        printErrors: false
+    }
+
+    FileView {
+        id: _configCopy
+        blockWrites: true
+        // Only ever written, to a new file
+        printErrors: false
+    }
+
     Component.onCompleted: {
         _seedIfNeeded()
+        _migrateIfNeeded()
         _applyPowerProfile()
     }
 
     Connections {
         target: Config
-        function onReadyChanged() { Qt.callLater(root._seedIfNeeded) }
+        function onReadyChanged() {
+            Qt.callLater(root._seedIfNeeded)
+            Qt.callLater(root._migrateIfNeeded)
+        }
+        function onProfilesChanged() { Qt.callLater(root._migrateIfNeeded) }
     }
 
     // PowerProfiles reads the daemon over D-Bus after startup; until then it reports
@@ -63,6 +130,9 @@ Singleton {
     Logger {
         id: _log
         prefix: "[Profiles]"
+        // Set here rather than inherited from the debug setting, which Profiles itself
+        // provides; only error() is used, and that always prints
+        enabled: false
     }
 
     function _parse(json) {
