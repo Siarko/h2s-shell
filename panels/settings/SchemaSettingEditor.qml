@@ -6,7 +6,7 @@ import qs.singletons
 
 // Editor for one SettingsSchema key as set in one profile — the one picked in the
 // settings window. The control follows the schema type: pills for intervals and enums,
-// a switch for bools, a text field for strings. It says where the shown value comes from — set here, inherited from
+// a switch for bools, a text field for strings, a number field or a slider for numbers. It says where the shown value comes from — set here, inherited from
 // the profiles above, overridden right now by a later active profile, or global — and
 // offers to drop this profile's own value. The pin makes the setting global: the same in
 // every profile, whichever is being edited (docs/plans/global-profiles.md).
@@ -16,6 +16,10 @@ Item {
     required property string key
     // Index of the edited profile in Profiles.profiles
     required property int editIndex
+    // False greys the editor out and ignores input, e.g. a timeout while its feature is off
+    property bool available: true
+    // Replaces the schema label where the page knows better, e.g. "Lock after screensaver"
+    property string label: ""
 
     readonly property var _profile: Profiles.profiles[editIndex] ?? null
     // The value this profile sets, or undefined when it inherits
@@ -80,6 +84,8 @@ Item {
 
     Layout.fillWidth: true
     implicitHeight: _column.implicitHeight + 10
+    opacity: available ? 1 : 0.35
+    enabled: available
 
     Column {
         id: _column
@@ -91,7 +97,7 @@ Item {
             spacing: 8
 
             Text {
-                text: root.entry?.label ?? root.key
+                text: root.label !== "" ? root.label : (root.entry?.label ?? root.key)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
@@ -213,6 +219,62 @@ Item {
                     onClicked: root.edited(root.shownValue !== true)
                 }
             }
+        }
+
+        // Number: a whole number within the schema's range, with its unit
+        Row {
+            visible: root.entry?.type === "number"
+            spacing: 6
+
+            Rectangle {
+                width: 90
+                height: 26
+                radius: 6
+                color: Theme.cellDefault
+                border.width: _numberInput.activeFocus && !_numberInput.acceptableInput ? 1 : 0
+                border.color: Theme.textError
+
+                TextInput {
+                    id: _numberInput
+                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                    text: root.shownValue ?? ""
+                    opacity: root._dimmed && !activeFocus ? 0.5 : 1
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: acceptableInput ? Theme.textPrimary : Theme.textError
+                    verticalAlignment: TextInput.AlignVCenter
+                    inputMethodHints: Qt.ImhDigitsOnly
+                    validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
+                    onEditingFinished: {
+                        if (acceptableInput && parseInt(text) !== root.shownValue)
+                            root.edited(parseInt(text));
+                    }
+                    onActiveFocusChanged: if (!activeFocus) text = Qt.binding(() => root.shownValue ?? "")
+                }
+            }
+
+            Text {
+                visible: (root.entry?.suffix ?? "") !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.entry?.suffix ?? ""
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                color: Theme.textSecondary
+            }
+        }
+
+        // Slider: a bounded whole number, dragged
+        SettingSlider {
+            visible: root.entry?.type === "slider"
+            width: parent.width
+            label: ""
+            sliderRatio: 1.0
+            from: root.entry?.min ?? 0
+            to: root.entry?.max ?? 100
+            suffix: root.entry?.suffix ?? ""
+            value: root.shownValue ?? 0
+            opacity: root._dimmed ? 0.5 : 1
+            onValueEdited: newValue => root.edited(newValue)
         }
 
         // Text: saved when editing finishes; an inherited value is shown dimmed

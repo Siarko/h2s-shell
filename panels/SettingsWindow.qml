@@ -37,7 +37,7 @@ FloatingWindow {
     }
     // Pages whose settings are all per profile; the others apply to every profile until
     // they are migrated, and say so while another profile than Full is picked
-    readonly property var _perProfileCategories: [0, _mediaCategory, _performanceCategory, _profilesCategory]
+    readonly property var _perProfileCategories: [0, _mediaCategory, 5, _performanceCategory, _profilesCategory]
     readonly property bool _showScopeNote: Profiles.profiles[editIndex]?.name !== "Full"
         && !_perProfileCategories.includes(selectedCategory)
 
@@ -235,7 +235,7 @@ FloatingWindow {
     Component { id: mediaComp;         MediaSettings         { editIndex: root.editIndex } }
     Component { id: barComp;           BarSettings           {} }
     Component { id: notificationsComp; NotificationsSettings {} }
-    Component { id: lockscreenComp;    LockscreenSettings    {} }
+    Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: sttComp;           SttSettings           {} }
     Component {
         id: performanceComp

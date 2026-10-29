@@ -149,6 +149,11 @@ verified on the host before the next.
    *Done 2026-10-29, verified on the host.*
 3. **Lockscreen:** `singletons/Lockscreen.qml` idle monitors (imperative enable — see
    foundation 3), `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
+   *Done 2026-10-29, verified on the host.* Lockscreen now reports the lock to Profiles
+   (`Profiles.screenLocked`) instead of Profiles reading Lockscreen — the two would have
+   depended on each other. Found while testing: the screensaver's fade never showed,
+   since the window itself was black; the black now lives in the fading layer. The
+   schema gained `number` and `slider` types; the editor `available` and `label`.
 4. **Notifications:** codePatterns with the `stringList` editor;
    `singletons/Notifications.qml`.
 5. **Dictation:** stt.*; `singletons/Stt.qml`, `widgets/SttWidget.qml`,

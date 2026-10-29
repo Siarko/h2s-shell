@@ -15,52 +15,47 @@ Singleton {
     // True when any one LockSurface has the prompt active — prevents multi-monitor duplication
     property bool promptActive: false
 
-    onLockedChanged: if (!locked) promptActive = false
-
-    function lock() { _lock.locked = true }
-    function unlock() { _lock.locked = false }
-
-    // enabled is set via callLater so timeout binding updates first
-    Connections {
-        target: Config.lockscreen
-        function onScreensaverEnabledChanged() {
-            Qt.callLater(() => {
-                _ssMonitor.enabled = Config.lockscreen.screensaverEnabled
-                _lockMonitor.enabled = Config.lockscreen.lockscreenEnabled && !Config.lockscreen.screensaverEnabled
-            })
-        }
-        function onLockscreenEnabledChanged() {
-            Qt.callLater(() => {
-                _lockMonitor.enabled = Config.lockscreen.lockscreenEnabled && !Config.lockscreen.screensaverEnabled
-            })
-        }
-        // Changing timeout requires recreating the Wayland idle notification object
-        function onScreensaverTimeoutChanged() {
-            Qt.callLater(() => {
-                if (!_ssMonitor.enabled) return
-                _ssMonitor.enabled = false
-                _ssMonitor.enabled = true
-            })
-        }
-        function onLockscreenTimeoutChanged() {
-            Qt.callLater(() => {
-                if (!_lockMonitor.enabled) return
-                _lockMonitor.enabled = false
-                _lockMonitor.enabled = true
-            })
-        }
+    onLockedChanged: {
+        if (!locked)
+            promptActive = false
+        Profiles.screenLocked = locked
     }
+
+    // From the active profile (docs/plans/global-profiles.md)
+    readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
+    readonly property int screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout") ?? 300
+    readonly property bool lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled") ?? false
+    readonly property int lockscreenTimeout: Profiles.value("lockscreen.lockscreenTimeout") ?? 300
+
+    // The idle monitors are switched on and off here rather than bound: a timeout change
+    // only takes effect when the Wayland idle notification is recreated, by toggling the
+    // monitor. Deferred so the timeout binding has updated first. Applied once at start,
+    // and whenever a profile changes the values.
+    function _applyMonitors() {
+        Qt.callLater(() => {
+            _ssMonitor.enabled = false
+            _lockMonitor.enabled = false
+            _ssMonitor.enabled = root.screensaverEnabled
+            _lockMonitor.enabled = root.lockscreenEnabled && !root.screensaverEnabled
+        })
+    }
+
+    onScreensaverEnabledChanged: _applyMonitors()
+    onScreensaverTimeoutChanged: _applyMonitors()
+    onLockscreenEnabledChanged: _applyMonitors()
+    onLockscreenTimeoutChanged: _applyMonitors()
+    Component.onCompleted: _applyMonitors()
 
     IdleMonitor {
         id: _ssMonitor
         enabled: false
-        timeout: Config.lockscreen.screensaverTimeout
+        timeout: root.screensaverTimeout
         onIsIdleChanged: console.log("[Lockscreen] screensaver isIdle →", isIdle)
     }
 
     Timer {
-        interval: Config.lockscreen.lockscreenTimeout * 1000
-        running: Config.lockscreen.lockscreenEnabled && Config.lockscreen.screensaverEnabled
+        interval: root.lockscreenTimeout * 1000
+        running: root.lockscreenEnabled && root.screensaverEnabled
                  && _ssMonitor.isIdle && !root.locked
         repeat: false
         onTriggered: root.lock()
@@ -70,7 +65,7 @@ Singleton {
     IdleMonitor {
         id: _lockMonitor
         enabled: false
-        timeout: Config.lockscreen.lockscreenTimeout
+        timeout: root.lockscreenTimeout
         onIsIdleChanged: if (isIdle) root.lock()
     }
 

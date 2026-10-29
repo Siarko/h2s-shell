@@ -58,7 +58,7 @@ WlSessionLockSurface {
     }
 
     ListView {
-        visible: Config.lockscreen.notificationsOnLock && !root._awake
+        visible: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
         anchors {
             top: parent.top
             right: parent.right

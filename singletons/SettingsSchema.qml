@@ -11,9 +11,11 @@ import QtQuick
 //   key      — dotted name, as stored in a profile's `set`
 //   label    — shown in settings
 //   group    — settings section the key is edited in
-//   type     — "interval" (ms, 0 = paused), "number", "enum", "bool", "string"
+//   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
+//              "bool", "string"
 //   default  — value of the system profile
-//   min/max  — for interval and number
+//   min/max  — for interval, number and slider
+//   suffix   — unit shown after a number or slider, e.g. "s"
 //   options  — for enum: [{ value, label }]
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
@@ -42,6 +44,30 @@ Singleton {
               { value: "horizontal", label: "Horizontal" },
               { value: "vertical", label: "Vertical" }
           ] },
+
+        // ── Lockscreen ──
+        { key: "lockscreen.screensaverEnabled", label: "Enable screensaver", group: "lockscreen",
+          type: "bool", default: false, legacy: ["lockscreen", "screensaverEnabled"] },
+        { key: "lockscreen.screensaverTimeout", label: "Activate after", group: "lockscreen",
+          type: "number", min: 5, max: 86400, suffix: "s", default: 300,
+          legacy: ["lockscreen", "screensaverTimeout"] },
+        { key: "lockscreen.fadeInDuration", label: "Fade in", group: "lockscreen",
+          type: "slider", min: 100, max: 2000, suffix: "ms", default: 800,
+          legacy: ["lockscreen", "fadeInDuration"] },
+        { key: "lockscreen.fadeOutDuration", label: "Fade out", group: "lockscreen",
+          type: "slider", min: 100, max: 2000, suffix: "ms", default: 400,
+          legacy: ["lockscreen", "fadeOutDuration"] },
+        { key: "lockscreen.notificationsOnScreensaver", label: "Show notifications on screensaver",
+          group: "lockscreen", type: "bool", default: true,
+          legacy: ["lockscreen", "notificationsOnScreensaver"] },
+        { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
+          type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
+        { key: "lockscreen.lockscreenTimeout", label: "Lock after", group: "lockscreen",
+          type: "number", min: 5, max: 86400, suffix: "s", default: 300,
+          legacy: ["lockscreen", "lockscreenTimeout"] },
+        { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
+          group: "lockscreen", type: "bool", default: true,
+          legacy: ["lockscreen", "notificationsOnLock"] },
 
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",

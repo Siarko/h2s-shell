@@ -2,7 +2,24 @@ import QtQuick
 import QtQuick.Layouts
 import qs.singletons
 
+// Screensaver and lock screen settings, edited in the profile picked in the settings
+// window. The command settings are not in the schema yet — nothing runs them (TODO 9.7) —
+// so they still apply to every profile.
 Flickable {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
+    // A setting's value in the edited profile, for greying out what depends on it
+    function _edited(key) {
+        if (key in Profiles.effectiveGlobals)
+            return Profiles.effectiveGlobals[key]
+        return Profiles.profiles[editIndex]?.set?.[key] ?? Profiles.inheritedValue(editIndex, key)
+    }
+    readonly property bool _screensaverOn: _edited("lockscreen.screensaverEnabled") === true
+    readonly property bool _lockOn: _edited("lockscreen.lockscreenEnabled") === true
+
     anchors.fill: parent
     contentHeight: col.implicitHeight
     clip: true
@@ -44,57 +61,52 @@ Flickable {
             Layout.bottomMargin: 4
         }
 
-        SettingBool {
-            label: "Enable screensaver"
-            value: Config.lockscreen.screensaverEnabled
-            onValueChanged: Config.lockscreen.screensaverEnabled = value
+        SchemaSettingEditor {
+            key: "lockscreen.screensaverEnabled"
+            editIndex: root.editIndex
         }
 
-        SettingIntInput {
-            disabled: !Config.lockscreen.screensaverEnabled
-            label: "Activate after"
-            value: Config.lockscreen.screensaverTimeout
-            from: 5
-            suffix: "s"
-            onValueEdited: newValue => Config.lockscreen.screensaverTimeout = newValue
+        SchemaSettingEditor {
+            key: "lockscreen.screensaverTimeout"
+            editIndex: root.editIndex
+            available: root._screensaverOn
         }
 
-        SettingSlider {
-            disabled: !Config.lockscreen.screensaverEnabled
-            label: "Fade in"
-            value: Config.lockscreen.fadeInDuration
-            from: 100
-            to: 2000
-            suffix: "ms"
-            onValueEdited: newValue => Config.lockscreen.fadeInDuration = newValue
+        SchemaSettingEditor {
+            key: "lockscreen.fadeInDuration"
+            editIndex: root.editIndex
+            available: root._screensaverOn
         }
 
-        SettingSlider {
-            disabled: !Config.lockscreen.screensaverEnabled
-            label: "Fade out"
-            value: Config.lockscreen.fadeOutDuration
-            from: 100
-            to: 2000
-            suffix: "ms"
-            onValueEdited: newValue => Config.lockscreen.fadeOutDuration = newValue
+        SchemaSettingEditor {
+            key: "lockscreen.fadeOutDuration"
+            editIndex: root.editIndex
+            available: root._screensaverOn
         }
 
-        SettingBool {
-            disabled: !Config.lockscreen.screensaverEnabled
-            label: "Show notifications on screensaver"
-            value: Config.lockscreen.notificationsOnScreensaver
-            onValueChanged: Config.lockscreen.notificationsOnScreensaver = value
+        SchemaSettingEditor {
+            key: "lockscreen.notificationsOnScreensaver"
+            editIndex: root.editIndex
+            available: root._screensaverOn
+        }
+
+        Text {
+            Layout.topMargin: 6
+            text: "The commands below apply to every profile."
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.textDim
         }
 
         SettingBool {
-            disabled: !Config.lockscreen.screensaverEnabled
+            disabled: !root._screensaverOn
             label: "Execute command on screensaver enable/disable"
             value: Config.lockscreen.screensaverExecCmd
             onValueChanged: Config.lockscreen.screensaverExecCmd = value
         }
 
         SettingInputRow {
-            disabled: !Config.lockscreen.screensaverEnabled || !Config.lockscreen.screensaverExecCmd
+            disabled: !root._screensaverOn || !Config.lockscreen.screensaverExecCmd
             label: "Screensaver enable command"
             inputWidthPercent: 50
             value: Config.lockscreen.screensaverExecSleep
@@ -104,7 +116,7 @@ Flickable {
         }
 
         SettingInputRow {
-            disabled: !Config.lockscreen.screensaverEnabled || !Config.lockscreen.screensaverExecCmd
+            disabled: !root._screensaverOn || !Config.lockscreen.screensaverExecCmd
             label: "Screensaver disable command"
             inputWidthPercent: 50
             value: Config.lockscreen.screensaverExecWakeup
@@ -132,26 +144,22 @@ Flickable {
             Layout.bottomMargin: 4
         }
 
-        SettingBool {
-            label: "Enable lock screen"
-            value: Config.lockscreen.lockscreenEnabled
-            onValueChanged: Config.lockscreen.lockscreenEnabled = value
+        SchemaSettingEditor {
+            key: "lockscreen.lockscreenEnabled"
+            editIndex: root.editIndex
         }
 
-        SettingIntInput {
-            disabled: !Config.lockscreen.lockscreenEnabled
-            label: Config.lockscreen.screensaverEnabled ? "Lock after screensaver" : "Lock after"
-            value: Config.lockscreen.lockscreenTimeout
-            from: 5
-            suffix: "s"
-            onValueEdited: newValue => Config.lockscreen.lockscreenTimeout = newValue
+        SchemaSettingEditor {
+            key: "lockscreen.lockscreenTimeout"
+            editIndex: root.editIndex
+            available: root._lockOn
+            label: root._screensaverOn ? "Lock after screensaver" : "Lock after"
         }
 
-        SettingBool {
-            disabled: !Config.lockscreen.lockscreenEnabled
-            label: "Show notifications on lock screen"
-            value: Config.lockscreen.notificationsOnLock
-            onValueChanged: Config.lockscreen.notificationsOnLock = value
+        SchemaSettingEditor {
+            key: "lockscreen.notificationsOnLock"
+            editIndex: root.editIndex
+            available: root._lockOn
         }
 
         Item {

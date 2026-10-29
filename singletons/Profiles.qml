@@ -262,6 +262,10 @@ Singleton {
         return _commit(list)
     }
 
+    // Reported by Lockscreen, which reads its settings from here: reading Lockscreen.locked
+    // instead would make the two singletons depend on each other
+    property bool screenLocked: false
+
     // Popup content types currently open on any screen, with a count each, reported by
     // Popup.qml — several screens can show the same one
     property var _openPanels: ({})
@@ -277,7 +281,7 @@ Singleton {
         "battery.percent": UPower.displayDevice.isPresent
             ? Math.round(UPower.displayDevice.percentage * 100) : null,
         "power.profile": root._powerProfileName(PowerProfiles.profile),
-        "screen.locked": Lockscreen.locked,
+        "screen.locked": root.screenLocked,
         "window.fullscreen": Hyprland.monitors.values.some(monitor => monitor.activeWorkspace?.hasFullscreen ?? false),
         "panel.open": Object.keys(root._openPanels)
     })
