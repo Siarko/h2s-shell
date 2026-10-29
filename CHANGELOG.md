@@ -31,6 +31,10 @@ section to the new version and date.
   by another program, such as matugen; edits from the settings apply at once.
 - Tray icons grow in when an application adds one ("enter"); networks and Bluetooth
   devices found by a scan fade in, and re-sorted networks slide to their place ("move").
+- Settings: the mark of the selected page slides to the new one and the page fades in;
+  page names highlight under the pointer.
+- Calendar: months slide past each other, the new one coming from its side, and the selected day and
+  week move smoothly. Music: a new track's title and cover fade in.
 
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere

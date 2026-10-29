@@ -349,12 +349,33 @@ Item {
 
             // Album art (centered, always 120×120)
             Rectangle {
+                id: _art
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 120
                 height: 120
                 radius: 50
                 clip: true
                 visible: Music.artUrl !== ""
+                // A new track's cover fades in once it has loaded
+                opacity: image.status === Image.Ready ? 1 : 0
+                Connections {
+                    target: image
+                    function onStatusChanged() {
+                        if (image.status === Image.Ready)
+                            _artFadeIn.restart();
+                        else
+                            _art.opacity = 0;
+                    }
+                }
+                NumberAnimation {
+                    id: _artFadeIn
+                    target: _art
+                    from: 0
+                    property: "opacity"
+                    to: 1
+                    duration: Theme.duration("fade")
+                    easing.type: Theme.easing("fade")
+                }
 
                 MultiEffect {
                     source: image
@@ -387,10 +408,25 @@ Item {
             }
         }
 
-        // Track info
+        // Track info; a new track's title and artist fade in
         Column {
+            id: _trackInfo
             width: parent.width
             spacing: 2
+
+            Connections {
+                target: Music
+                function onTitleChanged() { _trackFadeIn.restart() }
+            }
+            NumberAnimation {
+                id: _trackFadeIn
+                target: _trackInfo
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Theme.duration("fade")
+                easing.type: Theme.easing("fade")
+            }
 
             Text {
                 width: parent.width

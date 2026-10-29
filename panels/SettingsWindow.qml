@@ -50,7 +50,39 @@ FloatingWindow {
                 width: 160
                 height: parent.height
 
+                // The selected page's mark, one for the whole list, so it slides from the
+                // old page to the new one; drawn under the list
+                Rectangle {
+                    readonly property Item target: _categoryRepeater.count > root.selectedCategory
+                        ? _categoryRepeater.itemAt(root.selectedCategory) : null
+                    visible: target !== null
+                    x: _sidebar.x + (target?.x ?? 0)
+                    y: _sidebar.y + (target?.y ?? 0)
+                    width: target?.width ?? 0
+                    height: target?.height ?? 0
+                    radius: 6
+                    color: Theme.accentSecondaryTint
+                    border.width: 1
+                    border.color: Theme.accent
+                    // Only for a change of page: not when the list is first laid out
+                    Behavior on y {
+                        enabled: _markSlide.running
+                        NumberAnimation { duration: Theme.duration("slide"); easing.type: Theme.easing("slide") }
+                    }
+                }
+
+                Timer {
+                    id: _markSlide
+                    interval: Theme.duration("slide") + 50
+                }
+
+                Connections {
+                    target: root
+                    function onSelectedCategoryChanged() { _markSlide.restart() }
+                }
+
                 ColumnLayout {
+                    id: _sidebar
                     anchors {
                         fill: parent
                         margins: 10
@@ -140,6 +172,7 @@ FloatingWindow {
                     }
 
                     Repeater {
+                        id: _categoryRepeater
                         model: root.categoryNames
                         Rectangle {
                             required property string modelData
@@ -147,9 +180,10 @@ FloatingWindow {
                             Layout.fillWidth: true
                             height: 34
                             radius: 6
-                            color: index === root.selectedCategory ? Theme.accentSecondaryTint : "transparent"
-                            border.width: index === root.selectedCategory ? 1 : 0
-                            border.color: Theme.accent
+                            // The selected one is marked by the sliding mark above
+                            color: _categoryArea.containsMouse && index !== root.selectedCategory
+                                ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
+                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                             Text {
                                 anchors {
@@ -161,10 +195,13 @@ FloatingWindow {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
                                 color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary
+                                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
                             }
 
                             MouseArea {
+                                id: _categoryArea
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.selectedCategory = index
                             }
@@ -205,8 +242,12 @@ FloatingWindow {
                 width: parent.width - 161
                 height: parent.height
 
+                // A new page fades in, rising a little
                 Loader {
+                    id: _page
                     anchors.fill: parent
+                    transform: Translate { id: _pageShift }
+                    onLoaded: _pageEnter.restart()
                     sourceComponent: {
                         if (root.selectedCategory === 0) return generalComp;
                         if (root.selectedCategory === 1) return calendarComp;
@@ -218,6 +259,12 @@ FloatingWindow {
                         if (root.selectedCategory === root._profilesCategory) return profilesComp;
                         return sttComp;
                     }
+                }
+
+                ParallelAnimation {
+                    id: _pageEnter
+                    NumberAnimation { target: _page; property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
+                    NumberAnimation { target: _pageShift; property: "y"; from: 12; to: 0; duration: Theme.duration("enter"); easing.type: Theme.easing("enter") }
                 }
             }
         }

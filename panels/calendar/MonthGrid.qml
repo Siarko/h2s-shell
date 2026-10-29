@@ -21,6 +21,68 @@ Item {
     property real _monthScrollAccum: 0
     property real _yearScrollAccum: 0
 
+    // A change of month slides the old month out and the new one in, from the side it
+    // comes from: later months from the right, earlier ones from the left. The old month
+    // is a snapshot of the grid. There are three snapshots, taking turns: one is live,
+    // parked outside the clipped area, so it always holds what the grid last showed;
+    // when the month changes — before the grid redraws — it freezes and becomes the
+    // month sliding out. So a change mid-slide slides too, from where the grid is, and
+    // the month that was sliding out then keeps going beside it (the third snapshot)
+    // rather than vanishing.
+    // Set once, not bound: it has to keep the old month until the slide starts
+    property int _shownMonthIndex: -1
+    // 1: the new month comes from the right, -1: from the left; and the slide's before it
+    property int _slideDirection: 1
+    property int _previousDirection: 1
+    // Which snapshot is live (0–2); the one after it is the month sliding out, the one
+    // after that the month before it, shown only when a slide interrupted another going
+    // the same way (going back, the grid itself covers where it was)
+    property int _capturing: 0
+    property bool _showOlder: false
+    property bool _swapPending: false
+    Component.onCompleted: _shownMonthIndex = displayYear * 12 + displayMonth
+    onDisplayMonthChanged: _freezeOldMonth()
+    onDisplayYearChanged: _freezeOldMonth()
+
+    function _freezeOldMonth() {
+        // Once per change: December to January changes the year too
+        if (_swapPending)
+            return;
+        _swapPending = true;
+        _capturing = (_capturing + 2) % 3;
+        Qt.callLater(_slideToShownMonth);
+    }
+
+    function _slideToShownMonth() {
+        _swapPending = false;
+        const monthIndex = displayYear * 12 + displayMonth;
+        if (monthIndex === _shownMonthIndex)
+            return;
+        _previousDirection = _slideDirection;
+        _slideDirection = monthIndex > _shownMonthIndex ? 1 : -1;
+        _shownMonthIndex = monthIndex;
+        _showOlder = _monthSlide.running && _slideDirection === _previousDirection;
+        // The month sliding out starts where the grid is now
+        const from = (_monthSlide.running ? _gridShift.x : 0) + _slideDirection * _dateGrid.width;
+        _monthSlide.stop();
+        _monthSlide.fromX = from;
+        _monthSlide.start();
+    }
+
+    component MonthSnapshot: ShaderEffectSource {
+        required property int snapshotIndex
+        // 0: live, 1: the month sliding out, 2: the one before it
+        readonly property int role: (snapshotIndex - root._capturing + 3) % 3
+        sourceItem: _dateGrid
+        width: _dateGrid.width
+        height: _dateGrid.height
+        live: role === 0
+        visible: role !== 2 || (root._showOlder && _monthSlide.running)
+        x: role === 0 ? width + 1
+            : role === 1 ? _gridShift.x - root._slideDirection * width
+            : _gridShift.x - (root._slideDirection + root._previousDirection) * width
+    }
+
     // Derived grid geometry
     readonly property int _startDow:      (new Date(displayYear, displayMonth, 1).getDay() + 6) % 7
     readonly property int _daysInMonth:   new Date(displayYear, displayMonth + 1, 0).getDate()
@@ -170,6 +232,16 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // The months sliding past stay inside the grid
+            clip: true
+
+            // The three snapshots of the grid, see _freezeOldMonth. The one sliding out sits
+            // a grid's width beside the grid, outside the clipped area when idle; the live
+            // one is parked outside it, where it is still rendered (so it stays current)
+            // but not seen.
+            MonthSnapshot { snapshotIndex: 0 }
+            MonthSnapshot { snapshotIndex: 1 }
+            MonthSnapshot { snapshotIndex: 2 }
 
             // Week-range border — a single rectangle spanning the full row
             Rectangle {
@@ -181,6 +253,7 @@ Item {
                 }
                 width: _dateGrid.width
                 height: _dateGrid.height / 6
+                Behavior on y { NumberAnimation { duration: Theme.duration("move"); easing.type: Theme.easing("move") } }
                 color: "transparent"
                 border.color: Theme.accent
                 border.width: 1
@@ -193,6 +266,18 @@ Item {
                 anchors.fill: parent
                 columns: 7
                 rows: 6
+                transform: Translate { id: _gridShift }
+
+                NumberAnimation {
+                    id: _monthSlide
+                    property real fromX: 0
+                    target: _gridShift
+                    property: "x"
+                    from: fromX
+                    to: 0
+                    duration: Theme.duration("slide")
+                    easing.type: Theme.easing("slide")
+                }
 
                 Repeater {
                     model: 42
@@ -213,7 +298,8 @@ Item {
                         height: _dateGrid.height / 6
                         color: isToday    ? Theme.calendarToday
                              : isSelected ? Theme.accentTint
-                             : "transparent"
+                             : Qt.alpha(Theme.accentTint, 0)
+                        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
                         radius: 4
                         // Border shows selected range: day→cell, week→handled by overlay, month→none
                         border.width: root.viewMode === "day" && isSelected && !isToday ? 1 : 0

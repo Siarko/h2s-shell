@@ -177,6 +177,21 @@ The ~50 hard-coded `duration:` values move to roles.
      has add/displaced/move transitions; Bluetooth's device rows got a Column of their
      own for its add/move transitions. Removal is not animated (Repeater destroys the
      delegate at once).
+   - *Settings pages (7), calendar (9), track change (10), 2026-10-29, verified on the
+     host:*
+     one sliding mark for the selected settings page (slide, only on a page change, not
+     the first layout) and the page fading in, rising 12 px (enter). The month grid
+     slides: the old month out, the new one in from the side it comes from, the full
+     width (slide; the user asked for a full slide over a short nudge). The old month is
+     one of three `ShaderEffectSource`s of the grid taking turns: the live one is parked
+     outside the clipped area (rendered, so current, but not seen); when the month
+     changes — synchronously, before the grid redraws — it freezes and slides out, and
+     the oldest goes live. So a change mid-slide slides too, from where the grid is, and
+     the month that was sliding out keeps going beside it (the third; not when the
+     direction reverses, where the grid covers it). The user found one snapshot, hidden
+     mid-slide, made quick clicks jump, and two left a gap at the edge; the week
+     frame moves (move), day cells fade (state). The cover fades in once loaded and the
+     title/artist on a title change (fade) — no true cross-fade, as for popups.
    - Next: the rest of the list. Later (the user's idea): variants per element, `expand.dictate` falling
    back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.
