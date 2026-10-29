@@ -218,8 +218,17 @@ rates — except the temperatures, now one rate (see the schema table).
    configured interval, since a profile can change the rate between two reads.
 2. The condition engine and overlay as pure functions, with tests; `Profiles` evaluates
    profiles from a hard-coded list.
+   *Done 2026-10-29.* `singletons/ProfileRules.qml`: `matches`, `resolve`, `saveError`
+   (the loop guard), `seedProfiles`. An unknown fact satisfies no comparison, so a
+   missing fact never switches a profile on — but `not` of it holds ("battery is not
+   below 20 %" is true on a desktop). `system.powerProfile` is in the schema already, so
+   the seed can carry it; nothing applies it until step 6.
 3. Facts: UPower, battery, power profile, lock, fullscreen, open panel; the simulate
    override.
+   *Done 2026-10-29, verified on the host.* Simulation is an IPC call for now:
+   `qs ipc call profiles simulate '{"power.onBattery": true}'`, `clearSimulation`,
+   `status`. Measured with a simulated battery: 28 → 3 wakeups/s, 6 → ~0 ms CPU/s.
+   `battery.percent` assumes Quickshell's 0–1 `percentage` — check on the laptop.
 4. Graph gap handling and the delta baseline reset.
 5. Config storage for profiles and base values; the shipped "Power save".
 6. `system.powerProfile` via `PowerProfileHold`, with the loop guard.

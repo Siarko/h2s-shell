@@ -31,7 +31,16 @@ Singleton {
         { key: "polling.disk.interval", label: "Disk", group: "performance",
           type: "interval", min: 0, max: 600000, default: 10000 },
         { key: "polling.network.interval", label: "Network throughput", group: "performance",
-          type: "interval", min: 0, max: 600000, default: 2000 }
+          type: "interval", min: 0, max: 600000, default: 2000 },
+        // Applied by Profiles while a profile sets it (step 6 of the plan); "unchanged"
+        // leaves the system's own choice alone
+        { key: "system.powerProfile", label: "System power profile", group: "power",
+          type: "enum", default: "unchanged", options: [
+              { value: "unchanged", label: "Leave unchanged" },
+              { value: "power-saver", label: "Power saver" },
+              { value: "balanced", label: "Balanced" },
+              { value: "performance", label: "Performance" }
+          ] }
     ]
 
     readonly property var _byKey: {

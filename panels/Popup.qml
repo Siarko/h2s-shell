@@ -23,6 +23,24 @@ LazyLoader {
     // Which content to display in the popup ("calendar" or "power")
     property string contentType: "calendar"
 
+    // The panel on screen, reported to Profiles for its "panel.open" fact. Closed from the
+    // moment the close animation starts.
+    readonly property string _shownPanel: active && !closing ? contentType : ""
+    property string _reportedPanel: ""
+
+    on_ShownPanelChanged: {
+        if (_reportedPanel !== "")
+            Profiles.panelClosed(_reportedPanel);
+        _reportedPanel = _shownPanel;
+        if (_shownPanel !== "")
+            Profiles.panelOpened(_shownPanel);
+    }
+
+    Component.onDestruction: {
+        if (_reportedPanel !== "")
+            Profiles.panelClosed(_reportedPanel);
+    }
+
     // Start the close animation instead of immediately deactivating
     function close() {
         if (popupLoader.active && !popupLoader.closing) {
