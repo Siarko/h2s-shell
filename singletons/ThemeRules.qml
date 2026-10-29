@@ -13,14 +13,19 @@ import QtQuick
 //     "extends":    "<theme name>",          optional; the built-in theme otherwise
 //     "colorsFrom": "<path>",                 optional; a palette file, e.g. from matugen
 //     "colors":     { "<token>": "#rrggbb" }, optional
-//     "fonts":      { "<token>": … }          optional
+//     "fonts":      { "<token>": … },         optional
+//     "bar":        { "<token>": <number> }   optional; geometry, see barTokens
 //   }
 // Every group is partial: what a theme leaves out comes from what it extends.
 Singleton {
     id: root
 
     // Groups of tokens a theme file may set
-    readonly property var groups: ["colors", "fonts"]
+    readonly property var groups: ["colors", "fonts", "bar"]
+
+    // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
+    readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
+        "leftPadding", "rightPadding", "radiusTopLeft", "radiusTopRight", "radiusBottomLeft", "radiusBottomRight"]
 
     // The chain for `name`, the theme itself first and its ancestors after it, each
     // { name, theme }. `readTheme(name)` returns the parsed file or null when there is
@@ -46,7 +51,7 @@ Singleton {
             const theme = readTheme(current);
             if (theme === null || theme === undefined) {
                 // The default theme may simply not exist: that is the built-in theme
-                if (current !== "default" || seen.length > 1)
+                if (current !== "default")
                     errors.push("Theme \"" + current + "\" not found");
                 break;
             }
@@ -80,5 +85,62 @@ Singleton {
             }
         }
         return result;
+    }
+
+    // A file name for a theme named after `wanted` that `exists(name)` does not report
+    // taken: the name itself, else "<name> 2", "<name> 3", …
+    function freeName(wanted, exists) {
+        const base = wanted.replace(/[\/]/g, "-").trim() || "Theme";
+        let name = base;
+        for (let i = 2; exists(name); i++)
+            name = base + " " + i;
+        return name;
+    }
+
+    // Moves the bar geometry from profiles into themes, once (docs/plans/themes.md, stage
+    // 3), so the bar looks the same in every profile afterwards. Each profile that sets
+    // any `bar.layout.*` gets a theme named after it holding those values, extending the
+    // theme of the nearest profile before it that got one ("default" for the first), and
+    // picks it with `appearance.theme` — the same layering profiles had. Geometry pinned
+    // as global goes into every such theme (and gives the first profile one if none has
+    // its own). `legacyLayout`: the `bar.layout` section of a config from before profiles
+    // whose values never reached a profile, or undefined; it counts as the first profile's.
+    // Inputs are not modified.
+    // Returns { profiles, globals, themes: [{ name, theme }] }.
+    function themesFromBarLayout(profiles, globals, legacyLayout, exists) {
+        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
+        const newGlobals = Object.assign({}, globals ?? {});
+        const take = set => {
+            const values = {};
+            for (const token of barTokens) {
+                if (set && ("bar.layout." + token) in set) {
+                    values[token] = set["bar.layout." + token];
+                    delete set["bar.layout." + token];
+                }
+            }
+            return values;
+        };
+        const pinned = take(newGlobals);
+        const themes = [];
+        const taken = name => exists(name) || themes.some(entry => entry.name === name);
+        let parent = "default";
+        newProfiles.forEach((profile, index) => {
+            profile.set = profile.set ?? {};
+            const own = take(profile.set);
+            if (index === 0 && legacyLayout) {
+                for (const token of barTokens) {
+                    if (!(token in own) && legacyLayout[token] !== undefined)
+                        own[token] = legacyLayout[token];
+                }
+            }
+            const needed = Object.keys(own).length > 0 || (index === 0 && Object.keys(pinned).length > 0);
+            if (!needed)
+                return;
+            const name = freeName(profile.name ?? "Theme", taken);
+            themes.push({ name: name, theme: { extends: parent, bar: Object.assign(own, pinned) } });
+            profile.set["appearance.theme"] = name;
+            parent = name;
+        });
+        return { profiles: newProfiles, globals: newGlobals, themes: themes };
     }
 }

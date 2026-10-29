@@ -106,7 +106,7 @@ The ~50 hard-coded `duration:` values move to roles.
    become four. Google's calendar colours are account data and stay out of themes.
 2. **Theme files**: Theme resolves default ⊕ extends ⊕ colours file, watched; tests for
    the resolution (partial themes, extends chain, cycles, missing file).
-   *Done 2026-10-29, not yet verified by the user.* `ThemeRules` (pure: chain, layering)
+   *Done 2026-10-29, verified on the host.* `ThemeRules` (pure: chain, layering)
    and `Theme` (reads, watches). Theme files and palettes are watched, and so are their
    folders, so a file created later (a theme, a palette matugen writes) or a broken file
    being fixed applies too. The setting `appearance.theme` (string, for now) arrived
@@ -116,6 +116,16 @@ The ~50 hard-coded `duration:` values move to roles.
 3. **Theme per profile**: `appearance.theme` setting; migration of bar geometry into
    themes; Bar.qml and the bar's readers switch from `Profiles.value("bar.layout.*")` to
    theme tokens.
+   *Done 2026-10-29, verified on the host.* `ThemeRules.themesFromBarLayout`
+   (tested): each profile with its own geometry gets a theme named after it (not "Main"
+   as first planned — it keeps the generic case of any number of profiles simple), which
+   extends the theme of the profile before it; pinned global geometry goes into each;
+   geometry from a config older than profiles goes to the first. Runs once (marker
+   `theme.barLayout` in `migratedKeys`), with a config backup; theme files are written
+   before the profiles that pick them. Decided with the user: the geometry sliders stay
+   on the Bar page for now, editing the theme of the profile being edited
+   (`Theme.writeToken`, `Theme.valuesOf`, `Theme.usersOf`); they move to Appearance → Bar
+   in stage 6.
 4. **Animation tokens**: roles, durations, speed multiplier and reduce motion; the
    hard-coded durations move to roles. Fix while there: the heavy calendar panel is
    created during the popup's open animation and drops its first frames.

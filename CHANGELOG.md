@@ -17,6 +17,11 @@ section to the new version and date.
   watched, so an edit applies at once.
 
 ### Changed
+- The bar's geometry (height, reserved space, offset, margins, padding, corners) is part
+  of the theme instead of a profile setting. Each profile that had its own geometry gets
+  a theme named after it with those values (Power save's extends Full's), so the bar
+  looks as before. The sliders on the Bar page edit the theme of the profile being
+  edited — and so every profile that uses it.
 - Colours are named by role and come only from the theme: one red, one green and one
   blue where there were several shades (the disconnect buttons, the lock screen's error
   and the calendar's connection status change shade slightly).

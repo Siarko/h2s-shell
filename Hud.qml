@@ -40,7 +40,7 @@ PanelWindow {
     // toast's place comes from Notifications.shownToasts (oldest first): above it are
     // the newer ones, so a new toast pushes the others down and the oldest, at the
     // bottom, is the one counting down.
-    readonly property int _toastTop: (Profiles.value("bar.layout.reservedSpace") ?? 40) + 16
+    readonly property int _toastTop: Theme.bar.reservedSpace + 16
     readonly property int _toastSlots: Profiles.value("notifications.toastLayout") === "column"
         ? (Profiles.value("notifications.toastColumnSize") ?? 3) : 1
     readonly property int _maxToastSlots: 10

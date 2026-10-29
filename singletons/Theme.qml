@@ -68,6 +68,21 @@ Singleton {
             "sizeLargeDisplay": 24,          // music panel headers
             "sizeXXLargeDisplay": 32,        // music track name
             "sizeHero": 52                   // notification empty-state icon
+        },
+        // The bar's geometry (ThemeRules.barTokens): pixels, and corner radii in percent
+        // of half the bar's height
+        "bar": {
+            "barHeight": 36,                 // the bar itself
+            "reservedSpace": 40,             // space kept free for it at the top of the screen
+            "topOffset": 2,                  // between the bar and the top of the screen
+            "leftMargin": 0,                 // between the screen edges and the bar
+            "rightMargin": 0,
+            "leftPadding": 5,                // between the bar's ends and its widgets
+            "rightPadding": 5,
+            "radiusTopLeft": 0,
+            "radiusTopRight": 0,
+            "radiusBottomLeft": 20,
+            "radiusBottomRight": 20
         }
     })
 
@@ -82,13 +97,21 @@ Singleton {
     property var values: builtin
     property var chain: []
     property var errors: []
+    // Counts reloads: bind to it to follow any theme file, not only the active theme's
+    // (valuesOf)
+    property int revision: 0
     // Files the resolution read that exist, watched for changes; and the folders of every
     // file it looked for, watched so a theme or palette created later is noticed
     property var _watched: []
     property var _watchedFolders: []
 
     onThemeNameChanged: Qt.callLater(reload)
-    Component.onCompleted: reload()
+    Component.onCompleted: {
+        reload();
+        if (!Config.readOnly)
+            _ensureThemesDir.running = true;
+        _migrateBarLayoutIfNeeded();
+    }
 
     function _path(file) {
         return file.startsWith("~/") ? Quickshell.env("HOME") + file.slice(1) : file;
@@ -116,7 +139,8 @@ Singleton {
 
     property var _readErrors: []
 
-    function reload() {
+    // Resolves the theme `name`: { values, chain, errors, watched, folders }
+    function _resolve(name) {
         _readErrors = [];
         const watched = [];
         const folders = [themesDir];
@@ -129,7 +153,7 @@ Singleton {
                 folders.push(_folder(path));
             return parsed;
         };
-        const result = ThemeRules.chainFor(themeName, name => readWatched(themesDir + "/" + name + ".json"));
+        const result = ThemeRules.chainFor(name, themeName => readWatched(_themePath(themeName)));
         const palettes = {};
         for (const entry of result.chain) {
             if (typeof entry.theme.colorsFrom !== "string")
@@ -141,15 +165,130 @@ Singleton {
             else
                 palettes[entry.name] = palette.colors ?? palette;
         }
-        values = ThemeRules.resolve(builtin, result.chain, palettes);
-        chain = result.chain.map(entry => entry.name);
-        errors = result.errors.concat(_readErrors);
+        return {
+            values: ThemeRules.resolve(builtin, result.chain, palettes),
+            chain: result.chain.map(entry => entry.name),
+            errors: result.errors.concat(_readErrors),
+            watched: watched,
+            folders: folders
+        };
+    }
+
+    function reload() {
+        const resolved = _resolve(themeName);
+        values = resolved.values;
+        chain = resolved.chain;
+        errors = resolved.errors;
         for (const error of errors)
             console.warn("[Theme]", error);
-        if (JSON.stringify(watched) !== JSON.stringify(_watched))
-            _watched = watched;
-        if (JSON.stringify(folders) !== JSON.stringify(_watchedFolders))
-            _watchedFolders = folders;
+        if (JSON.stringify(resolved.watched) !== JSON.stringify(_watched))
+            _watched = resolved.watched;
+        if (JSON.stringify(resolved.folders) !== JSON.stringify(_watchedFolders))
+            _watchedFolders = resolved.folders;
+        revision++;
+    }
+
+    // The resolved values of any theme, for editing one that is not active; bind to
+    // `revision` alongside to follow changes
+    function valuesOf(name) {
+        return name === themeName ? values : _resolve(name).values;
+    }
+
+    // The theme a profile uses when it is active, as the settings window edits it
+    function themeOf(profileIndex) {
+        return Profiles.editedValue(profileIndex, "appearance.theme") || "default";
+    }
+
+    // Names of the profiles that use the theme `name`
+    function usersOf(name) {
+        return Profiles.profiles.filter((profile, index) => themeOf(index) === name).map(profile => profile.name);
+    }
+
+    function _themePath(name) {
+        return themesDir + "/" + name + ".json";
+    }
+
+    // Sets one token in the theme file `name`, creating the file if needed. A file that
+    // does not parse is left alone — rewriting it would lose the user's hand edits.
+    function writeToken(name, group, token, value) {
+        if (Config.readOnly)
+            return false;
+        const path = _themePath(name);
+        let theme = _read(path);
+        if (theme === null && _reader.text() !== "") {
+            console.warn("[Theme] Not changing", path, "— it does not parse");
+            return false;
+        }
+        theme = theme ?? {};
+        theme[group] = Object.assign({}, theme[group] ?? {});
+        theme[group][token] = value;
+        _writeTheme(name, theme);
+        return true;
+    }
+
+    function _writeTheme(name, theme) {
+        _writer.path = _themePath(name);
+        _writer.setText(JSON.stringify(theme, null, 2) + "\n");
+        Qt.callLater(reload);
+    }
+
+    FileView {
+        id: _writer
+        blockWrites: true
+        printErrors: false
+    }
+
+    // ---- Migration: the bar's geometry moves from profiles into themes, once ----
+    readonly property string _barLayoutMigration: "theme.barLayout"
+
+    function _migrateBarLayoutIfNeeded() {
+        if (!Config.ready || Config.readOnly || Config.profiles === "" || _pendingMigration !== null
+                || Config.migratedKeys.includes(_barLayoutMigration))
+            return;
+        // Geometry from before profiles that never reached one (the per-key migration
+        // marks the keys it copied)
+        const legacy = Config.migratedKeys.includes("bar.layout.barHeight")
+            ? undefined : Profiles.oldConfig().bar?.layout;
+        const result = ThemeRules.themesFromBarLayout(Profiles.profiles, Profiles.globals, legacy,
+            name => _read(_themePath(name)) !== null || _reader.text() !== "");
+        if (result.themes.length > 0)
+            Profiles.backUpConfig();
+        _pendingMigration = result;
+        // The theme files first, once their folder exists, then the profiles that pick them
+        _ensureThemesDir.running = true;
+    }
+
+    property var _pendingMigration: null
+
+    function _finishMigration() {
+        const result = _pendingMigration;
+        _pendingMigration = null;
+        if (result === null || Config.migratedKeys.includes(_barLayoutMigration))
+            return;
+        for (const entry of result.themes)
+            _writeTheme(entry.name, entry.theme);
+        if (result.themes.length > 0) {
+            // Always shown, not only in debug: a one-time change to the user's config
+            console.log("[Theme] Moved the bar geometry into themes:",
+                        result.themes.map(entry => entry.name + " (" + Object.keys(entry.theme.bar).join(", ") + ")").join("; "));
+        }
+        Config.profiles = JSON.stringify(result.profiles);
+        Config.globals = JSON.stringify(result.globals);
+        Config.migratedKeys = Config.migratedKeys.concat([_barLayoutMigration]);
+    }
+
+    // FileView does not create folders: the themes folder is made at start, for
+    // writeToken, and before the migration writes into it
+    Process {
+        id: _ensureThemesDir
+        command: ["mkdir", "-p", root.themesDir]
+        onExited: root._finishMigration()
+    }
+
+    Connections {
+        target: Config
+        function onReadyChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
+        function onProfilesChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
     }
 
     FileView {
@@ -190,6 +329,9 @@ Singleton {
     // ---- Tokens ----
     readonly property var _colors: values.colors
     readonly property var _fonts: values.fonts
+
+    // The bar's geometry, by ThemeRules.barTokens name: Theme.bar.barHeight, …
+    readonly property var bar: values.bar
 
     // Typography
     readonly property string fontFamily: _fonts.family

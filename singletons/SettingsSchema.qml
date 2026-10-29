@@ -37,11 +37,6 @@ Singleton {
         }
     }
 
-    function _layoutEntry(name, label, min, max, defaultValue, suffix, hint) {
-        return { key: "bar.layout." + name, label: label, group: "bar", type: "slider",
-                 min: min, max: max, suffix: suffix ?? "", default: defaultValue, hint: hint ?? "",
-                 legacy: ["bar", "layout", name] };
-    }
 
     function _sectionEntry(side, label, defaultTypes) {
         return { key: "bar." + side, label: label, group: "barContent", type: "barSection",
@@ -164,17 +159,6 @@ Singleton {
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
 
         // ── Bar ──
-        _layoutEntry("barHeight", "Bar height", 10, 80, 36, "", "Excluding the reserved space and top offset"),
-        _layoutEntry("reservedSpace", "Reserved space", 10, 80, 40, "", "Overall space reserved for the bar, including its height and offset"),
-        _layoutEntry("topOffset", "Top offset", 0, 80, 2, "", "Between the bar and the top of the screen"),
-        _layoutEntry("leftMargin", "Left margin", 0, 300, 0),
-        _layoutEntry("rightMargin", "Right margin", 0, 300, 0),
-        _layoutEntry("leftPadding", "Left padding", 0, 300, 5),
-        _layoutEntry("rightPadding", "Right padding", 0, 300, 5),
-        _layoutEntry("radiusTopLeft", "Top left", 0, 100, 0, "%"),
-        _layoutEntry("radiusTopRight", "Top right", 0, 100, 0, "%"),
-        _layoutEntry("radiusBottomLeft", "Bottom left", 0, 100, 20, "%"),
-        _layoutEntry("radiusBottomRight", "Bottom right", 0, 100, 20, "%"),
         _sectionEntry("left", "Left section", ["power", "settings", "workspaces"]),
         _sectionEntry("center", "Center section", ["clock"]),
         _sectionEntry("right", "Right section", ["music", "sound", "bluetooth", "tray", "network", "notifications"]),

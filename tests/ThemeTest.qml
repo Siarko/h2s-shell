@@ -5,7 +5,7 @@ TestCase {
     suiteName: "Theme"
 
     function run() {
-        const builtin = { colors: { accent: "#44d47a", surface: "#3b3b3b" }, fonts: { family: "Mono", sizeBody: 12 } };
+        const builtin = { colors: { accent: "#44d47a", surface: "#3b3b3b" }, fonts: { family: "Mono", sizeBody: 12 }, bar: { barHeight: 36 } };
         const files = {
             "default": { colors: { surface: "#222222" } },
             "wallpaper": { extends: "default", colorsFrom: "x", colors: { accent: "#ff0000" }, fonts: { sizeBody: 14 } },
@@ -44,5 +44,39 @@ TestCase {
         assert(!("unknown" in withPalette.colors), "tokens the built-in theme does not know are ignored");
 
         assertEqual(JSON.stringify(ThemeRules.resolve(builtin, [], {})), JSON.stringify(builtin), "no theme: the built-in one");
+        const toDefault = ThemeRules.chainFor("wallpaper", name => name === "wallpaper" ? { extends: "default" } : null);
+        assertEqual(toDefault.errors.length, 0, "extending a default theme that has no file is not an error");
+
+        // --- bar geometry moves from profiles into themes ---
+        const profiles = [
+            { name: "Full", when: {}, set: { "bar.layout.barHeight": 40, "bar.layout.rightPadding": 5, "polling.x": 1 } },
+            { name: "Quiet", when: {}, set: {} },
+            { name: "Power/save", when: {}, set: { "bar.layout.leftMargin": 300 } }
+        ];
+        const moved = ThemeRules.themesFromBarLayout(profiles, { "general.debug": true }, undefined, name => name === "Full");
+        assertEqual(JSON.stringify(moved.themes.map(entry => entry.name)), JSON.stringify(["Full 2", "Power-save"]),
+            "a theme per profile with geometry, under a free file name");
+        assertEqual(JSON.stringify(moved.themes[0].theme), JSON.stringify({ extends: "default", bar: { barHeight: 40, rightPadding: 5 } }),
+            "holding the profile's geometry, over the default theme");
+        assertEqual(moved.themes[1].theme.extends, "Full 2", "a later profile's theme extends the one before it");
+        assertEqual(moved.profiles[0].set["appearance.theme"], "Full 2", "the profile picks its theme");
+        assertEqual(moved.profiles[1].set["appearance.theme"], undefined, "a profile without geometry keeps inheriting");
+        assert(!("bar.layout.barHeight" in moved.profiles[0].set), "the geometry leaves the profile");
+        assertEqual(moved.profiles[0].set["polling.x"], 1, "other settings stay");
+        assertEqual(profiles[0].set["bar.layout.barHeight"], 40, "the inputs are not modified");
+        assertEqual(moved.globals["general.debug"], true, "other globals stay");
+
+        const pinnedMove = ThemeRules.themesFromBarLayout([{ name: "Full", set: {} }, { name: "B", set: { "bar.layout.topOffset": 3 } }],
+            { "bar.layout.barHeight": 30 }, undefined, name => false);
+        assertEqual(pinnedMove.themes.length, 2, "pinned geometry gives the first profile a theme");
+        assertEqual(pinnedMove.themes[1].theme.bar.barHeight, 30, "and goes into every theme, as it applied everywhere");
+        assert(!("bar.layout.barHeight" in pinnedMove.globals), "and leaves the globals");
+
+        const legacyMove = ThemeRules.themesFromBarLayout([{ name: "Full", set: { "bar.layout.topOffset": 1 } }], {},
+            { barHeight: 33, topOffset: 9 }, name => false);
+        assertEqual(legacyMove.themes[0].theme.bar.barHeight, 33, "geometry from before profiles goes to the first profile's theme");
+        assertEqual(legacyMove.themes[0].theme.bar.topOffset, 1, "under what the profile set itself");
+        assertEqual(ThemeRules.themesFromBarLayout([{ name: "Full", set: {} }], {}, undefined, name => false).themes.length, 0,
+            "no geometry anywhere: no themes");
     }
 }

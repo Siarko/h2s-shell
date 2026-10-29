@@ -86,7 +86,7 @@ LazyLoader {
         }
         // The bar's own extent and bottom corners: it need not reach the screen edges
         function _layout(name) {
-            return Profiles.value("bar.layout." + name) ?? 0
+            return Theme.bar[name] ?? 0
         }
         readonly property real barLeft: _layout("leftMargin")
         readonly property real barRight: popup.screen.width - _layout("rightMargin")
@@ -112,8 +112,7 @@ LazyLoader {
         focusable: hoverHandler.hovered
 
         // Align to the bar's visual bottom, not the full reserved space
-        margins.top: (Profiles.value("bar.layout.topOffset") ?? 0) + (Profiles.value("bar.layout.barHeight") ?? 0)
-            - (Profiles.value("bar.layout.reservedSpace") ?? 0)
+        margins.top: Theme.bar.topOffset + Theme.bar.barHeight - Theme.bar.reservedSpace
         margins.left: 0
         color: "transparent"
 

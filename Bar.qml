@@ -62,9 +62,9 @@ PanelWindow {
     readonly property var _centerModel: ProfileRules.sectionModel(Profiles.value("bar.center"))
     readonly property var _rightModel:  ProfileRules.sectionModel(Profiles.value("bar.right"))
 
-    // Geometry, from the active profile
+    // Geometry, from the theme
     function _layout(name) {
-        return Profiles.value("bar.layout." + name) ?? 0
+        return Theme.bar[name] ?? 0
     }
 
     // Visual bar rectangle — floats within the reserved space

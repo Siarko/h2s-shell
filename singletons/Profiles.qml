@@ -34,16 +34,16 @@ Singleton {
     function _migrateIfNeeded() {
         if (!Config.ready || Config.profiles === "")
             return
-        const oldConfig = _oldConfig()
+        const old = oldConfig()
         const result = ProfileRules.migrateLegacy(SettingsSchema.entries,
-                                                  path => ProfileRules.readLegacy(oldConfig, path),
+                                                  path => ProfileRules.readLegacy(old, path),
                                                   Config.migratedKeys, profiles, globals)
         for (const failure of result.failed)
             _log.error("Cannot migrate", failure)
         if (result.migratedKeys.length === Config.migratedKeys.length)
             return
         if (result.copied.length > 0) {
-            _backUpConfig()
+            backUpConfig()
             // Always shown, not only in debug: a one-time change to the user's config
             console.log("[Profiles] Moved into profiles from the old config:", result.copied.join(", "))
         }
@@ -54,7 +54,7 @@ Singleton {
 
     // The config file as JSON, with the sections from before profiles that Config no
     // longer declares; read fresh for each migration
-    function _oldConfig() {
+    function oldConfig() {
         _configFile.reload()
         try {
             return JSON.parse(_configFile.text() || "{}")
@@ -63,7 +63,7 @@ Singleton {
         }
     }
 
-    function _backUpConfig() {
+    function backUpConfig() {
         if (Config.readOnly)
             return
         const stamp = new Date().toISOString().replace(/[:.]/g, "-")
@@ -91,9 +91,9 @@ Singleton {
             return
         let old = {}
         try {
-            old = JSON.parse(_oldConfig().widgetProfiles || "{}")
+            old = JSON.parse(oldConfig().widgetProfiles || "{}")
         } catch (error) {}
-        _backUpConfig()
+        backUpConfig()
         Config.widgetPresets = JSON.stringify(ProfileRules.presetsFromWidgetProfiles(old))
         console.log("[Profiles] Widget profiles are now widget presets")
     }
