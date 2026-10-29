@@ -75,6 +75,7 @@ FloatingWindow {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.accent
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                         MouseArea {
                             id: _profileIndicator
@@ -107,7 +108,8 @@ FloatingWindow {
                             Layout.fillWidth: true
                             height: 24
                             radius: 6
-                            color: picked ? Theme.accent : (_editArea.containsMouse ? Theme.surfaceHover : "transparent")
+                            color: picked ? Theme.accent : (_editArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                             Text {
                                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 6 }

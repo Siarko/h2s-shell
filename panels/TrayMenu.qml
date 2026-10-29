@@ -136,7 +136,8 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 radius: 4
-                color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : "transparent"
+                color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : Theme.surfaceHoverClear
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 RowLayout {
                     anchors.fill: parent
@@ -229,7 +230,8 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: 4
-                    color: backArea.containsMouse ? Theme.surfaceHover : "transparent"
+                    color: backArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                     RowLayout {
                         anchors.fill: parent

@@ -68,6 +68,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSection
                 color: deviceToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
 
@@ -87,6 +88,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSection
                 color: appMixerToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
 
@@ -131,7 +133,8 @@ Item {
                         visible: matches
                         width: deviceCol.width
                         height: matches ? 28 : 0
-                        color: deviceArea.containsMouse ? Theme.surfaceHover : "transparent"
+                        color: deviceArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                         radius: 4
 
                         RowLayout {

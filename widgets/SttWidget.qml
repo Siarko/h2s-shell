@@ -57,6 +57,7 @@ BarWidget {
                 if (Stt.server === "loading") return Theme.textSecondary
                 return root._dictating ? Theme.accent : Theme.textPrimary
             }
+            Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
 
             // Animating a separate property and gating opacity on _pulsing, so a
             // half-faded value can never be left behind when the pulse stops. With reduced

@@ -146,6 +146,7 @@ Item {
                     implicitHeight: 22
                     radius: 4
                     color: scanBtnArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                     Text {
                         id: scanLabel
@@ -253,6 +254,7 @@ Item {
                                 implicitHeight: 20
                                 radius: 4
                                 color: pairArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                                 Text {
                                     id: pairLabel
@@ -279,6 +281,7 @@ Item {
                                 implicitHeight: 20
                                 radius: 4
                                 color: connArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                                 Text {
                                     id: connLabel
@@ -303,7 +306,8 @@ Item {
                                 implicitWidth: 22
                                 implicitHeight: 20
                                 radius: 4
-                                color: forgetArea.containsMouse ? Theme.surfaceHover : "transparent"
+                                color: forgetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                                 Text {
                                     text: "✕"

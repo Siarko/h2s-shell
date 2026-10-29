@@ -41,6 +41,7 @@ RowLayout {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: _iconHover.hovered ? Theme.textPrimary : Theme.textSecondary
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
             visible: slider.tooltipIcon && slider.tooltip !== ""
 
             HoverHandler {
@@ -81,6 +82,7 @@ RowLayout {
             height: 4
             radius: 2
             color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
             // Locked region overlay (from → lockedFrom)
             Rectangle {
@@ -98,6 +100,7 @@ RowLayout {
                 height: parent.height
                 radius: 2
                 color: _trackArea.containsMouse ? Theme.accentHover : Theme.accent
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
             }
         }
 
@@ -109,6 +112,7 @@ RowLayout {
             height: 14
             radius: 7
             color: _trackArea.pressed ? Theme.textSecondary : Theme.textPrimary
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
         }
 
         CustomMouseArea {

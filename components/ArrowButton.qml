@@ -12,6 +12,7 @@ Text {
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
     color: area.containsMouse ? Theme.textPrimary : Theme.textSecondary
+    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
     MouseArea {
         id: area

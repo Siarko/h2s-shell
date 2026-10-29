@@ -414,6 +414,9 @@ Singleton {
     readonly property color popupBackground: _colors.popupBackground
     readonly property color surface: _colors.surface
     readonly property color surfaceHover: _colors.surfaceHover
+    // surfaceHover, fully transparent: a hover fading in from it changes only the opacity,
+    // where fading from "transparent" (transparent black) would darken on the way
+    readonly property color surfaceHoverClear: Qt.alpha(surfaceHover, 0)
     readonly property color surfaceSunken: Qt.alpha("black", 0.2)   // lists and containers set into a page
     readonly property color overlay: Qt.alpha("black", 0.65)        // a pill or card over arbitrary content
     readonly property color scrim: _colors.scrim

@@ -154,11 +154,29 @@ The ~50 hard-coded `duration:` values move to roles.
    computed from its animated width, restarting the position's animation every frame.
    Switching panels fades the new content in; a true cross-fade (old content as a frozen
    `ShaderEffectSource`) was offered and is not wanted for now.
-   Next: the new animations from the candidate list, a few at a time. Later (the user's idea): variants per element, `expand.dictate` falling
+   New animations, a few at a time:
+   - *Hover (candidate 1) and workspace focus (2), 2026-10-29, verified on the host:* a
+     `Behavior on color` with the hover role on every colour that depends on the pointer
+     (68 places in 27 files; the workspace buttons use state). `Theme.surfaceHoverClear`
+     replaces "transparent" where a hover fades in, so it does not darken on the way.
+   - *Bar geometry on a theme change (3), 2026-10-29, verified on the host:* Bar.qml keeps
+     an animated copy of the shape (`_shape`), animated with slide only for a moment after
+     `Theme.themeName` changes — editing the theme in use (the sliders) stays immediate.
+     The exclusive zone is set to the reserved space at once (`exclusionMode: Normal`), so
+     windows are re-tiled once; the bar's window is as tall as the animated bar needs.
+     Popup and HUD positions follow the new theme at once.
+   - *Bell (11), dictation state (14), volume sliders (13), 2026-10-29, verified on the
+     host:* there is no unread badge — the bell turns accent — so the bell fades
+     (state) and jumps on a new notification (pop; not with reduced motion). Volume
+     sliders draw `_shownValue`, animated with value except while dragged.
+   - Next: the rest of the list. Later (the user's idea): variants per element, `expand.dictate` falling
    back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
-   Notifications, Animations; create/copy/rename/delete themes.
+   Notifications, Animations; create/copy/rename/delete themes. The Animations page lists
+   every role with its **duration** (ms) and its **curve** (the user's requirement,
+   2026-10-29) — popup with its two curves — each inherited from the extended theme
+   until set, with a reset; plus a preview of the role.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

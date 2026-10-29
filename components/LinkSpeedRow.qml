@@ -33,7 +33,8 @@ Column {
                 bottomMargin: -2
             }
             radius: 4
-            color: _rowArea.containsMouse ? Theme.surfaceHover : "transparent"
+            color: _rowArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
         }
 
         RowLayout {

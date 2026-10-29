@@ -437,6 +437,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canPrev ? Theme.textDisabled : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -454,6 +455,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeXXLargeDisplay
                 color: playArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -471,6 +473,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
                 color: !Music.canNext ? Theme.textDisabled : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {

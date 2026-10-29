@@ -19,6 +19,14 @@ section to the new version and date.
   (`durations`, `curves`: hover, state, expand, popup, enter, exit, move, slide, fade,
   value, heartbeat, pop, pulse, spin, …). Per profile: "Animation speed" and "Reduce
   motion", for now on the General page with the theme name.
+- Colours change smoothly under the pointer (bar cells, tray icons, buttons, list rows,
+  sliders, links — the "hover" animation role), and the workspace buttons fade between
+  focused, active and hovered ("state").
+- Switching to a profile with another theme (Power save on battery, say) slides the bar
+  into its new shape ("slide"); the space kept free for windows changes at once.
+- The notification bell fades to the accent and jumps when a notification arrives; the
+  dictation icon fades between its states; volume sliders and the volume OSD follow the
+  volume keys smoothly ("value"), while dragging stays immediate.
 
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere

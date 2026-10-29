@@ -59,6 +59,7 @@ Item {
                     Text {
                         text: root.monthNames[root.displayMonth]
                         color: _monthArea.containsMouse ? Theme.accent : Theme.textPrimary
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -84,6 +85,7 @@ Item {
                     Text {
                         text: root.displayYear
                         color: _yearArea.containsMouse ? Theme.accent : Theme.textPrimary
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -127,6 +129,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: _todayArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 MouseArea {
                     id: _todayArea

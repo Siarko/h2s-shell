@@ -15,7 +15,14 @@ Item {
 
     signal moved(real newValue)
 
-    readonly property real normalized: Math.min(value / maxValue, 1.0)
+    // The value as drawn: it follows changes from elsewhere (volume keys, another app)
+    // smoothly, and the pointer at once while dragging
+    property real _shownValue: value
+    Behavior on _shownValue {
+        enabled: !dragArea.pressed
+        NumberAnimation { duration: Theme.duration("value"); easing.type: Theme.easing("value") }
+    }
+    readonly property real normalized: Math.min(_shownValue / maxValue, 1.0)
     // Leave 6 px at top + bottom so the thumb can overhang the track ends
     readonly property real trackH: height - 12
     readonly property real fillH: normalized * trackH
@@ -59,6 +66,7 @@ Item {
         height: 12
         radius: 6
         color: dragArea.pressed ? Theme.textSecondary : Theme.textPrimary
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
     }
 
     MouseArea {

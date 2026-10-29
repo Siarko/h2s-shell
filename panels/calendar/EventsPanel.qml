@@ -139,6 +139,7 @@ Item {
                 Text {
                     text: "+"
                     color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSection
 
@@ -154,6 +155,7 @@ Item {
                 Text {
                     text: "󰑓"
                     color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
 
@@ -190,6 +192,7 @@ Item {
                 anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                 text: "→"
                 color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.error
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
             }

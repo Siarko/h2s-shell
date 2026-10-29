@@ -39,6 +39,7 @@ Item {
                 height: 44
                 radius: 8
                 color: buttonArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 MouseArea {
                     id: buttonArea

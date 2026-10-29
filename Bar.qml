@@ -38,7 +38,11 @@ PanelWindow {
     }
     color: "transparent"
 
-    implicitHeight: bar._layout("reservedSpace")
+    // Windows keep clear of the reserved space, which changes at once: animating it would
+    // re-tile them every frame. The window itself is as tall as the bar needs meanwhile.
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: Theme.bar.reservedSpace
+    implicitHeight: Math.max(Theme.bar.reservedSpace, Math.ceil(_shape.topOffset + _shape.barHeight))
 
     // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
     // Component is set here, only where the widget has the property.
@@ -62,9 +66,58 @@ PanelWindow {
     readonly property var _centerModel: ProfileRules.sectionModel(Profiles.value("bar.center"))
     readonly property var _rightModel:  ProfileRules.sectionModel(Profiles.value("bar.right"))
 
-    // Geometry, from the theme
+    // Geometry, from the theme. Moving to another theme — a profile switch, say — slides
+    // the bar into its new shape; editing the theme in use (the Bar page's sliders) applies
+    // at once, so a slider does not lag behind the pointer.
     function _layout(name) {
-        return Theme.bar[name] ?? 0
+        return name === "reservedSpace" ? Theme.bar.reservedSpace : _shape[name]
+    }
+
+    property bool _sliding: false
+
+    Connections {
+        target: Theme
+        function onThemeNameChanged() {
+            bar._sliding = true
+            _slideEnd.restart()
+        }
+    }
+
+    // The new theme's values arrive a moment after its name; this covers both
+    Timer {
+        id: _slideEnd
+        interval: Theme.duration("slide") + 200
+        onTriggered: bar._sliding = false
+    }
+
+    component SlideBehavior: Behavior {
+        enabled: bar._sliding
+        NumberAnimation { duration: Theme.duration("slide"); easing.type: Theme.easing("slide") }
+    }
+
+    Item {
+        id: _shape
+        visible: false
+        property real barHeight: Theme.bar.barHeight
+        property real topOffset: Theme.bar.topOffset
+        property real leftMargin: Theme.bar.leftMargin
+        property real rightMargin: Theme.bar.rightMargin
+        property real leftPadding: Theme.bar.leftPadding
+        property real rightPadding: Theme.bar.rightPadding
+        property real radiusTopLeft: Theme.bar.radiusTopLeft
+        property real radiusTopRight: Theme.bar.radiusTopRight
+        property real radiusBottomLeft: Theme.bar.radiusBottomLeft
+        property real radiusBottomRight: Theme.bar.radiusBottomRight
+        SlideBehavior on barHeight {}
+        SlideBehavior on topOffset {}
+        SlideBehavior on leftMargin {}
+        SlideBehavior on rightMargin {}
+        SlideBehavior on leftPadding {}
+        SlideBehavior on rightPadding {}
+        SlideBehavior on radiusTopLeft {}
+        SlideBehavior on radiusTopRight {}
+        SlideBehavior on radiusBottomLeft {}
+        SlideBehavior on radiusBottomRight {}
     }
 
     // Visual bar rectangle — floats within the reserved space

@@ -384,6 +384,7 @@ Item {
             color: WifiManager.disconnecting
                 ? Theme.surface
                 : (disconnectArea.containsMouse ? Theme.error : Theme.surface)
+            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
             Text {
                 anchors.centerIn: parent
@@ -445,6 +446,7 @@ Item {
                     implicitHeight: 22
                     radius: 4
                     color: rescanArea.containsMouse ? Theme.surfaceHover : (WifiManager.scanning ? Theme.accent : Theme.surface)
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                     Text {
                         id: rescanLabel
@@ -666,6 +668,7 @@ Item {
                                     color: _busy
                                         ? (_connectArea.containsMouse ? Theme.error : Theme.surface)
                                         : (_connectArea.containsMouse ? Theme.accentHover : Theme.accent)
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                                     Text {
                                         id: _connectLabel
@@ -700,6 +703,7 @@ Item {
                                     height: 26
                                     radius: 6
                                     color: _forgetArea.containsMouse ? Theme.error : Theme.surface
+                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                                     Text {
                                         id: _forgetLabel
@@ -707,6 +711,7 @@ Item {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeBody
                                         color: _forgetArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                                         anchors.centerIn: parent
                                     }
 

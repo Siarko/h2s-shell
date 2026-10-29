@@ -15,7 +15,14 @@ Item {
     signal moved(real volume)
 
     property real step: 0.02
-    property real _position: Math.min(1, value / maxValue)
+    // The value as drawn: it follows changes from elsewhere (volume keys, another app)
+    // smoothly, and the pointer at once while dragging
+    property real _shownValue: value
+    Behavior on _shownValue {
+        enabled: !sliderArea.pressed
+        NumberAnimation { duration: Theme.duration("value"); easing.type: Theme.easing("value") }
+    }
+    property real _position: Math.min(1, _shownValue / maxValue)
     activeFocusOnTab: true
 
     function nudge(delta) {
@@ -29,6 +36,7 @@ Item {
         height: 4
         radius: 2
         color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
         Rectangle {
             width: slider._position * parent.width
@@ -43,6 +51,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: 14; height: 14; radius: 7
         color: sliderArea.pressed ? Theme.textSecondary : Theme.textPrimary
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
     }
 
     MouseArea {

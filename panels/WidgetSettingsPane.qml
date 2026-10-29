@@ -100,7 +100,8 @@ Item {
                         width: _presetName.implicitWidth + 16
                         height: 24
                         radius: 6
-                        color: picked ? Theme.accent : (_presetArea.containsMouse ? Theme.surfaceHover : "transparent")
+                        color: picked ? Theme.accent : (_presetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
                         border.width: picked ? 0 : 1
                         border.color: Theme.outline
 
@@ -258,6 +259,7 @@ Item {
                     topRightRadius: _joined ? 0 : radius
                     bottomRightRadius: _joined ? 0 : radius
                     color: _actionArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                     Text {
                         id: _actionText
@@ -303,6 +305,7 @@ Item {
                 topLeftRadius: 0
                 bottomLeftRadius: 0
                 color: _cancelDeleteArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 Text {
                     anchors.centerIn: parent

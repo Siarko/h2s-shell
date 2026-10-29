@@ -312,7 +312,8 @@ Item {
                         width: 20
                         height: 20
                         radius: 4
-                        color: _removeHover.containsMouse ? Theme.surfaceHover : "transparent"
+                        color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                         Text {
                             anchors.centerIn: parent

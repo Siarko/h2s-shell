@@ -131,7 +131,8 @@ Item {
                 width: 20
                 height: 20
                 radius: 4
-                color: _pinArea.containsMouse ? Theme.surfaceHover : "transparent"
+                color: _pinArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 Text {
                     anchors.centerIn: parent
@@ -175,7 +176,8 @@ Item {
                 width: 20
                 height: 20
                 radius: 4
-                color: _resetArea.containsMouse ? Theme.surfaceHover : "transparent"
+                color: _resetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 Text {
                     anchors.centerIn: parent
@@ -353,7 +355,8 @@ Item {
                         width: 24
                         height: 26
                         radius: 4
-                        color: _removeArea.containsMouse ? Theme.surfaceHover : "transparent"
+                        color: _removeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                         Text {
                             anchors.centerIn: parent
@@ -378,6 +381,7 @@ Item {
                 height: 24
                 radius: 6
                 color: _addArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing.type: Theme.easing("hover") } }
 
                 Text {
                     id: _addText
