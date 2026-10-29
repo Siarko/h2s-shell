@@ -116,6 +116,9 @@ RowLayout {
             anchors.fill: parent
             enabled: !slider.disabled
             hoverEnabled: true
+            // Keeps the drag once started: otherwise vertical movement hands it to the
+            // settings page's Flickable, which scrolls instead
+            preventStealing: true
             cursorShape: Qt.PointingHandCursor
 
             property real scrollBuffer: 0

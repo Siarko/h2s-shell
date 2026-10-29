@@ -359,11 +359,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Separate settings for the screensaver and for the lock screen: when notifications
       are shown there, show them in full or hide their content (app and title only).
       `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
-- [ ] **10.6 Dragging a slider scrolls the settings page** (reported 2026-10-29)
+- [x] **10.6 Dragging a slider scrolls the settings page** (reported 2026-10-29)
       Moving the mouse vertically while dragging a horizontal slider hands the drag to the
       page's Flickable, which scrolls instead. Likely fix: `preventStealing: true` on the
       slider's MouseArea in `panels/settings/SettingSlider.qml` (used by every slider,
       including the schema editor's), and the same for any other drag inside a Flickable.
+      Done 2026-10-29: `preventStealing: true` on the slider's MouseArea.
 - [ ] **10.7 Widget presets: review findings** (2026-10-29)
       A review of the preset feature (widget settings pages, `panels/WidgetSettingsPane.qml`,
       the widgets that read presets) after the rename from "widget profiles":
@@ -387,6 +388,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
         parses the whole preset JSON, every write repeats parse-mutate-stringify (five
         near-identical save functions in the workspaces page). A `WidgetPresets` singleton
         (get, set, usages, rename, delete) would remove that and host the fixes above.
+- [ ] **8.11 First toast of a queue sits against the queue badge** (reported 2026-10-29)
+      With several notifications queued, the toast should keep a gap from the badge
+      showing how many are waiting. The first toast has no gap; every later one does. The
+      toast's resting x is `restX` in `hud/NotificationHudItem.qml`, which shifts left
+      when the badge appears — likely the first toast slides in to the position computed
+      before the queue (and the badge) existed, and only the next show uses the new one.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

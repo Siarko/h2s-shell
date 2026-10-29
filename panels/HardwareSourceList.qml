@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
+import qs.components
 
 Item {
     id: root
@@ -16,6 +17,13 @@ Item {
 
     Layout.fillWidth: true
     implicitHeight: _outer.implicitHeight
+
+    // Scrolls the settings page while a row is dragged near its edge
+    DragAutoScroll {
+        id: _autoScroll
+        item: _rowList
+        onScrolled: _rowList.trackPointer(sceneY)
+    }
 
     readonly property var _allSourceIds: Hardware.sourceIds
 
@@ -87,6 +95,27 @@ Item {
                         property int dragIndex: -1
                         property int dropIndex: -1
                         property Item ghost: _dragGhost
+
+                        // Where the dragged row would drop, and where its ghost is drawn,
+                        // for a pointer at sceneY — called on pointer moves and on every
+                        // auto-scroll step, when the list moves under a still pointer
+                        function trackPointer(sceneY) {
+                            const listY = mapFromItem(null, 0, sceneY).y
+                            // Rows differ in height — one with its settings open is taller —
+                            // so the drop slot comes from the rows' real positions: before
+                            // the first row whose 32 px header the pointer is above the
+                            // middle of
+                            let slot = workingList.length
+                            for (let i = 0; i < count; i++) {
+                                const row = itemAtIndex(i)
+                                if (row && listY < row.y + 16) {
+                                    slot = i
+                                    break
+                                }
+                            }
+                            dropIndex = slot
+                            ghost.y = Math.max(0, Math.min(contentHeight - 32, listY - 16))
+                        }
 
                         function notifyListChanged(list) { root.listChanged(list) }
 
@@ -161,17 +190,14 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.SizeVerCursor
-                                        drag.target: _row._lv.ghost
-                                        drag.axis: Drag.YAxis
-                                        drag.minimumY: 0
-                                        drag.maximumY: _rowList.contentHeight
+                                        // Keeps the drag from the settings page's Flickable
+                                        preventStealing: true
 
                                         onPositionChanged: {
                                             if (_row._lv.dragging) {
-                                                var listY = mapToItem(_row._lv, 0, mouseY).y
-                                                _row._lv.dropIndex = Math.min(
-                                                    _row._lv.workingList.length,
-                                                    Math.max(0, Math.round(listY / 32)))
+                                                const sceneY = mapToItem(null, 0, mouseY).y
+                                                _row._lv.trackPointer(sceneY)
+                                                _autoScroll.update(sceneY)
                                             }
                                         }
                                         onPressed: {
@@ -179,9 +205,11 @@ Item {
                                             _row._lv.dropIndex = _row.index
                                             _row._lv.dragging = true
                                             _row._lv.ghost.visible = true
-                                            _row._lv.ghost.y = _row.index * 32
+                                            _row._lv.ghost.y = _row.y
+                                            _autoScroll.begin()
                                         }
                                         onReleased: {
+                                            _autoScroll.end()
                                             _row._lv.ghost.visible = false
                                             _row._lv.dragging = false
                                             var from = _row._lv.dragIndex
