@@ -10,6 +10,11 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Added
+- Toast settings, per profile: show toasts at all, how long each stays, and one at a time
+  or a column of them (with how many). A column shows the newest on top, and only the
+  oldest counts down, so they leave one at a time.
+
 ### Fixed
 - The screensaver's start and end commands now run — they could be set but nothing ran
   them. They follow idle time rather than the screensaver's visibility, so locking the

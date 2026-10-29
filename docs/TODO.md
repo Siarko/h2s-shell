@@ -387,13 +387,16 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       profile, except those the user pins as global. Doubles as the config rework (#11).
       Done 2026-10-29, verified on the host: every settings page and the bar are per
       profile; `Config.qml` keeps only data that is not a preference.
-- [ ] **10.4 More notification settings** (requested 2026-10-29)
+- [x] **10.4 More notification settings** (requested 2026-10-29)
       All as schema settings, so per profile (e.g. no toasts in Power save or while a
       fullscreen window is focused):
       - whether toasts show on the desktop at all;
       - how long a toast stays (today a fixed 5 s in `hud/NotificationHudItem.qml`);
       - queueing: one toast at a time with a queue badge, as now, or a column of toasts —
         and then how many at most in the column.
+      Done 2026-10-29, verified on the host: four schema settings on the Notifications page;
+      Hud holds ten toast slots, the setting enables one or the column's size, each placed
+      by `Notifications.shownToasts` — newest on top — and only the oldest counts down.
 - [ ] **10.5 Notification privacy on the screensaver and lock screen** (requested
       2026-10-29)
       Separate settings for the screensaver and for the lock screen: when notifications

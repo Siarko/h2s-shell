@@ -177,6 +177,21 @@ Singleton {
               return { sources: hardware["_popup"] ?? null, labels: hardware["_popupLabels"] ?? {} };
           } },
 
+        // Toasts: new notifications sliding in at the top right of the screen
+        { key: "notifications.toasts", label: "Show toasts", group: "notifications",
+          type: "bool", default: true,
+          hint: "Off, notifications only go to the notification panel." },
+        { key: "notifications.toastDuration", label: "Show each toast for", group: "notifications",
+          type: "number", min: 1, max: 120, suffix: "s", default: 5 },
+        { key: "notifications.toastLayout", label: "Several at once", group: "notifications",
+          type: "enum", default: "queue", options: [
+              { value: "queue", label: "One at a time, the rest counted" },
+              { value: "column", label: "A column" }
+          ] },
+        { key: "notifications.toastColumnSize", label: "Toasts in the column", group: "notifications",
+          type: "number", min: 2, max: 10, default: 3,
+          hint: "More wait in the queue, counted beside the column." },
+
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },

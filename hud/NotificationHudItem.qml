@@ -3,13 +3,29 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.components
 
-// Self-contained notification toast. Manages its own queue consumption,
-// slide-in/out animations, and auto-dismiss timer.
+// One notification toast slot. Manages its own queue consumption, slide-in/out
+// animations, and auto-dismiss timer. Hud stacks one or more of them, newest on top
+// ("notifications.toastLayout"); every free slot takes the next notification from the
+// shared queue, and Hud works out its place (stackY).
 Item {
     id: root
 
     required property int screenWidth
     required property var screenModelData
+    // Slots past the column's current size stay idle: they finish what they show, but
+    // take nothing new
+    property bool slotEnabled: true
+    // Its place in the stack, from Hud; null once it is leaving, when it stays where it was
+    property var stackY: null
+    property real _lastY: 0
+    onStackYChanged: if (stackY !== null) _lastY = stackY
+    // Moves to a new place smoothly — except when it first appears, which is at its place
+    property bool _placing: false
+    y: _lastY
+    Behavior on y {
+        enabled: !root._placing
+        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+    }
 
     property var currentNotif: null
     readonly property int cardWidth: 360
@@ -20,13 +36,13 @@ Item {
 
     // Start off-screen to the right; animations move it in and out
     x: screenWidth
-    y: (Profiles.value("bar.layout.reservedSpace") ?? 40) + 16
     width: cardWidth
     height: notifCard.implicitHeight
+    visible: currentNotif !== null || slideIn.running || slideOut.running
 
     // Consume the next item from the shared queue and start the slide-in
     function showNext() {
-        if (Notifications.hudPanelOpen) {
+        if (Notifications.hudPanelOpen || !slotEnabled) {
             currentNotif = null;
             return;
         }
@@ -35,17 +51,37 @@ Item {
             currentNotif = null;
             return;
         }
+        _placing = true;
         currentNotif = notif;
+        remaining = 1.0;
+        Notifications.toastShown(notif.id);
+        Qt.callLater(() => root._placing = false);
         slideIn.start();
-        countdown.restart();
-        // A toast appearing under a resting pointer must not count down either
-        if (cardHover.hovered)
-            countdown.pause();
     }
 
     function dismiss() {
         countdown.stop();
+        _leave();
         slideOut.start();
+    }
+
+    // Off the list of shown toasts as soon as it starts leaving, so the next one in line
+    // starts counting down at once
+    function _leave() {
+        if (currentNotif !== null)
+            Notifications.toastGone(currentNotif.id);
+    }
+
+    // Whether this toast is the oldest on screen, the one counting down
+    readonly property bool _counting: currentNotif !== null && Notifications.shownToasts[0] === currentNotif.id
+
+    on_CountingChanged: {
+        if (!_counting)
+            return;
+        countdown.restart();
+        // A toast under a resting pointer does not count down either
+        if (cardHover.hovered)
+            countdown.pause();
     }
 
     Connections {
@@ -69,6 +105,7 @@ Item {
         function onHudQueueCleared() {
             countdown.stop();
             if (root.currentNotif !== null) {
+                root._leave();
                 slideOut.start();
             }
         }
@@ -121,7 +158,7 @@ Item {
         property: "remaining"
         from: 1.0
         to: 0.0
-        duration: 5000
+        duration: (Profiles.value("notifications.toastDuration") ?? 5) * 1000
         onFinished: root.dismiss()
     }
 

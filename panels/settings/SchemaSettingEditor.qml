@@ -288,7 +288,9 @@ Item {
             from: root.entry?.min ?? 0
             to: root.maximum ?? root.entry?.max ?? 100
             suffix: root.entry?.suffix ?? ""
-            value: root.shownValue ?? 0
+            // Only a slider's own value: the hidden slider of another type would be handed
+            // a string or a list
+            value: root.entry?.type === "slider" ? (root.shownValue ?? 0) : 0
             opacity: root._dimmed ? 0.5 : 1
             onValueEdited: newValue => root.edited(newValue)
         }
