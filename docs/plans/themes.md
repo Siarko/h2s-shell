@@ -129,6 +129,33 @@ The ~50 hard-coded `duration:` values move to roles.
 4. **Animation tokens**: roles, durations, speed multiplier and reduce motion; the
    hard-coded durations move to roles. Fix while there: the heavy calendar panel is
    created during the popup's open animation and drops its first frames.
+   *Roles agreed with the user 2026-10-29*, by the kind of motion rather than the place:
+   hover 100 OutQuad · state 150 OutQuad (switches, focus, field state) · expand 150
+   OutQuad (height/width in place) · popup 100 with two curves, popupOpen OutQuad and
+   popupClose InQuad · popupResize 100 OutQuad · enter 250 OutCubic · exit 200 InCubic ·
+   move 200 OutCubic (restacking) · slide 300 OutCubic (menus, pages) · fade 150 OutQuad
+   · value 400 Linear · heartbeat 350 OutQuad · pop 380 OutBack ("Clear all" is timed
+   from it; its 750 ms reading pause is fixed) · pulse 1000 InOutQuad · spin 800 Linear ·
+   themeChange 400 OutQuad. Unifying 120–200 ms into one value was accepted. The
+   screensaver's fade stays a profile setting (the user's call).
+   Theme groups `durations` and `curves`; `Theme.duration(role)` (speed applied; with
+   reduced motion everything but hover/state/fade/themeChange/spin takes 1 ms, never 0,
+   so code waiting for an animation's end still sees it) and `Theme.easing(curve)`. The
+   pulse holds still dimmed and the heartbeat stops with reduced motion.
+   *Existing animations moved to roles 2026-10-29, verified on the host.*
+   *Calendar's first frames fixed 2026-10-29, verified on the host.* Measured: creating
+   the content happens before the animation, so its cost (20–26 ms, the first time only:
+   compiling the panel and starting Google Calendar) only delayed the popup; the frames
+   were lost to the content's first render (28–30 ms), inside the animation. Fixed by
+   rendering new content once before animating (`Popup._whenRendered`), opening and
+   switching alike, and by compiling the popup panels in the background after start
+   (shell.qml; Google Calendar is not started early, it would contact Google on every
+   start). Found while there: at the bar's right end the popup's target position was
+   computed from its animated width, restarting the position's animation every frame.
+   Switching panels fades the new content in; a true cross-fade (old content as a frozen
+   `ShaderEffectSource`) was offered and is not wanted for now.
+   Next: the new animations from the candidate list, a few at a time. Later (the user's idea): variants per element, `expand.dictate` falling
+   back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
    Notifications, Animations; create/copy/rename/delete themes.

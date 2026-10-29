@@ -492,8 +492,8 @@ Item {
 
             Behavior on height {
                 NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("expand")
+                    easing.type: Theme.easing("expand")
                 }
             }
 
@@ -615,8 +615,8 @@ Item {
 
             Behavior on height {
                 NumberAnimation {
-                    duration: 150
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("expand")
+                    easing.type: Theme.easing("expand")
                 }
             }
 
@@ -734,8 +734,8 @@ Item {
 
                     Behavior on height {
                         NumberAnimation {
-                            duration: 120
-                            easing.type: Easing.OutQuad
+                            duration: Theme.duration("expand")
+                            easing.type: Theme.easing("expand")
                         }
                     }
 

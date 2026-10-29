@@ -73,7 +73,7 @@ Column {
         height: root.expanded ? root._graphAreaHeight : 0
         clip: true
 
-        Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
+        Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") } }
 
         HistoryChart {
             id: _chart

@@ -73,8 +73,13 @@ LazyLoader {
         property int paddingSide: 10
         property int paddingTop: 10
         property int paddingBottom: 10
-        property int contentWidth: contentLoader.item ? contentLoader.item.implicitWidth : 0
-        property int contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
+        // Switching to another panel, the popup keeps the old one's size until the new one
+        // has rendered once (see _switchContent)
+        property bool _holding: false
+        property int _heldWidth: 0
+        property int _heldHeight: 0
+        property int contentWidth: _holding ? _heldWidth : contentLoader.item ? contentLoader.item.implicitWidth : 0
+        property int contentHeight: _holding ? _heldHeight : contentLoader.item ? contentLoader.item.implicitHeight : 0
         property int popupHeight: contentHeight + paddingTop + paddingBottom
         property int totalWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
         // The width on screen: follows totalWidth with an animation when switching
@@ -82,7 +87,7 @@ LazyLoader {
         property real shownWidth: totalWidth
         Behavior on shownWidth {
             enabled: popup.showPopup
-            NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+            NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
         }
         // The bar's own extent and bottom corners: it need not reach the screen edges
         function _layout(name) {
@@ -106,8 +111,51 @@ LazyLoader {
         // this window's incubation — see "The Repeater crash" in docs/ARCHITECTURE.md
         Component.onCompleted: Qt.callLater(() => {
             content.loadContent()
-            popup.showPopup = true
+            popup._whenRendered(() => {
+                popup.showPopup = true
+            })
         })
+
+        // The first frame with new content is slow — text is laid out and its glyphs
+        // prepared — and took 30 ms for the calendar, a third of the opening animation.
+        // So new content is rendered once first, hidden, and animations start on the
+        // frame after: opening at zero height, switching under the old panel's size.
+        function _whenRendered(action) {
+            _firstRender.action = action
+            _firstRender.ticks = 0
+            _firstRender.running = true
+        }
+
+        FrameAnimation {
+            id: _firstRender
+            property var action: null
+            property int ticks: 0
+            onTriggered: {
+                // The first tick comes before the content's first frame, the second after it
+                if (++ticks < 2)
+                    return
+                running = false
+                const action = _firstRender.action
+                _firstRender.action = null
+                action()
+            }
+        }
+
+        // Another widget's popup while this one is open: the new panel appears as the
+        // popup moves to its size, rather than first jumping in and then being resized
+        function _switchContent() {
+            // Called as the content type changes, before open() moves popupPosition
+            _heldWidth = contentWidth
+            _heldHeight = contentHeight
+            clipWrapper._heldTargetX = clipWrapper._targetX
+            _holding = true
+            contentLoader.opacity = 0
+            content.loadContent()
+            _whenRendered(() => {
+                popup._holding = false
+                _contentFadeIn.restart()
+            })
+        }
 
         focusable: hoverHandler.hovered
 
@@ -128,9 +176,16 @@ LazyLoader {
             // it, keeping its curve; under a square corner it may run to the end.
             readonly property real _minX: popup.barLeft + popup.barCornerLeft
             readonly property real _maxX: popup.barRight - popup.barCornerRight - popup.shownWidth
+            // The target is limited by the width the popup is going to have, not the one it
+            // has mid-animation: a target that moved every frame restarted the position's
+            // animation every frame, and the popup crawled after its size
+            readonly property real _maxTargetX: popup.barRight - popup.barCornerRight - popup.totalWidth
+            property real _heldTargetX: 0
             readonly property real _targetX: {
+                if (popup._holding)
+                    return _heldTargetX;
                 var raw = popupLoader.popupPosition + (popupLoader.popupWidth / 2) - (popup.totalWidth / 2);
-                return Math.max(_minX, Math.min(raw, _maxX));
+                return Math.max(_minX, Math.min(raw, _maxTargetX));
             }
 
             // Moving between popups of different widths, the edge that stays put is the one
@@ -139,7 +194,7 @@ LazyLoader {
             // applies to the new target, so a narrower popup at the right end keeps its
             // right edge instead of opening at the old left edge and sliding over. The bar's
             // limits apply to every frame, since the width changes at once.
-            readonly property string _anchor: _targetX >= _maxX - 0.5 ? "right"
+            readonly property string _anchor: _targetX >= _maxTargetX - 0.5 ? "right"
                 : _targetX <= _minX + 0.5 ? "left" : "centre"
             property real _left: _targetX
             property real _right: _targetX + popup.totalWidth
@@ -154,22 +209,22 @@ LazyLoader {
 
             Behavior on _left {
                 enabled: popup.showPopup
-                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
             }
             Behavior on _right {
                 enabled: popup.showPopup
-                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
             }
             Behavior on _centre {
                 enabled: popup.showPopup
-                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+                NumberAnimation { duration: Theme.duration("popupResize"); easing.type: Theme.easing("popupResize") }
             }
 
             Behavior on height {
                 enabled: true
                 NumberAnimation {
-                    duration: 100
-                    easing.type: popupLoader.closing ? Easing.InQuad : Easing.OutQuad
+                    duration: Theme.duration("popup")
+                    easing.type: popupLoader.closing ? Theme.easing("popupClose") : Theme.easing("popupOpen")
                     onRunningChanged: {
                         if (!running && popupLoader.closing) {
                             popupLoader.closing = false;
@@ -239,10 +294,19 @@ LazyLoader {
                         anchors.centerIn: parent
                     }
 
+                    NumberAnimation {
+                        id: _contentFadeIn
+                        target: contentLoader
+                        property: "opacity"
+                        to: 1
+                        duration: Theme.duration("fade")
+                        easing.type: Theme.easing("fade")
+                    }
+
                     Connections {
                         target: popupLoader
                         function onContentTypeChanged() {
-                            content.loadContent()
+                            popup._switchContent()
                         }
                     }
 

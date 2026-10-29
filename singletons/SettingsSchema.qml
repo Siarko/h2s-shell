@@ -192,6 +192,12 @@ Singleton {
         { key: "appearance.theme", label: "Theme", group: "appearance",
           type: "string", default: "default",
           hint: "A file in ~/.config/h2s_shell/themes/, without .json. \"default\" without a file is the built-in look." },
+        { key: "animation.speed", label: "Animation speed", group: "appearance",
+          type: "slider", min: 25, max: 400, suffix: "%", default: 100,
+          hint: "200% is twice as fast. How each animation moves is up to the theme." },
+        { key: "animation.reduceMotion", label: "Reduce motion", group: "appearance",
+          type: "bool", default: false,
+          hint: "Things move into place at once and indicators stop pulsing; colours and fades still change smoothly." },
 
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",

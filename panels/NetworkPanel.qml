@@ -187,7 +187,7 @@ Item {
                     radius: 12
                     color: EthernetManager.ethernetConnected ? Theme.accent : Theme.textDisabled
 
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
 
                     Rectangle {
                         width: 20
@@ -198,7 +198,7 @@ Item {
                         x: EthernetManager.ethernetConnected ? parent.width - width - 2 : 2
 
                         Behavior on x {
-                            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                            NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
                         }
                     }
                 }
@@ -288,7 +288,7 @@ Item {
                     color: WifiManager.wifiEnabled ? Theme.accent : Theme.textDisabled
 
                     Behavior on color {
-                        ColorAnimation { duration: 150 }
+                        ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
                     }
 
                     Rectangle {
@@ -300,7 +300,7 @@ Item {
                         x: WifiManager.wifiEnabled ? parent.width - width - 2 : 2
 
                         Behavior on x {
-                            NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                            NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") }
                         }
                     }
                 }
@@ -513,7 +513,7 @@ Item {
                     clip: true
 
                     Behavior on height {
-                        NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                        NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
                     }
 
                     Column {
@@ -749,7 +749,7 @@ Item {
                 color: "transparent"
                 clip: true
 
-                Behavior on height { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") } }
 
                 Column {
                     width: parent.width

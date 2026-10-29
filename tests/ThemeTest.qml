@@ -5,7 +5,7 @@ TestCase {
     suiteName: "Theme"
 
     function run() {
-        const builtin = { colors: { accent: "#44d47a", surface: "#3b3b3b" }, fonts: { family: "Mono", sizeBody: 12 }, bar: { barHeight: 36 } };
+        const builtin = { colors: { accent: "#44d47a", surface: "#3b3b3b" }, fonts: { family: "Mono", sizeBody: 12 }, bar: { barHeight: 36 }, durations: { expand: 150 }, curves: { expand: "OutQuad" } };
         const files = {
             "default": { colors: { surface: "#222222" } },
             "wallpaper": { extends: "default", colorsFrom: "x", colors: { accent: "#ff0000" }, fonts: { sizeBody: 14 } },
@@ -44,6 +44,12 @@ TestCase {
         assert(!("unknown" in withPalette.colors), "tokens the built-in theme does not know are ignored");
 
         assertEqual(JSON.stringify(ThemeRules.resolve(builtin, [], {})), JSON.stringify(builtin), "no theme: the built-in one");
+        // --- animation ---
+        assertEqual(Theme.easing("pop"), Easing.OutBack, "a curve by its Qt name");
+        assertEqual(Theme.easing("no such curve"), Easing.OutQuad, "an unknown curve eases out");
+        assert(Theme.duration("expand") >= 1, "a role has a duration");
+        assertEqual(Theme.duration("no such role"), 1, "an unknown role is instant, but still runs");
+
         const toDefault = ThemeRules.chainFor("wallpaper", name => name === "wallpaper" ? { extends: "default" } : null);
         assertEqual(toDefault.errors.length, 0, "extending a default theme that has no file is not an error");
 

@@ -121,7 +121,7 @@ Item {
                 ? Theme.glassHover
                 : Theme.glassRaised
 
-            Behavior on color { ColorAnimation { duration: 120 } }
+            Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
 
             Text {
                 anchors.centerIn: parent

@@ -83,6 +83,44 @@ Singleton {
             "radiusTopRight": 0,
             "radiusBottomLeft": 20,
             "radiusBottomRight": 20
+        },
+        // Animations by role — the kind of motion, not where it happens (docs/plans/themes.md)
+        "durations": {
+            "hover": 100,                    // colour under the pointer
+            "state": 150,                    // a switch, a focused workspace, a field's state
+            "expand": 150,                   // something growing or shrinking in place
+            "popup": 100,                    // a popup opening or closing
+            "popupResize": 100,              // a popup moving to another widget's size
+            "enter": 250,                    // a toast, an OSD or a card arriving
+            "exit": 200,                     // and leaving
+            "move": 200,                     // a small shift: toasts restacking
+            "slide": 300,                    // a larger slide: menus, pages
+            "fade": 150,                     // appearing or disappearing in place
+            "value": 400,                    // a value bar following its data
+            "heartbeat": 350,                // the wave on graphs when a sample arrives
+            "pop": 380,                      // a mark popping in; "Clear all" is timed from it
+            "pulse": 1000,                   // one breath of a pulsing indicator
+            "spin": 800,                     // one turn of a spinner
+            "themeChange": 400               // colours moving to a new theme
+        },
+        "curves": {
+            "hover": "OutQuad",
+            "state": "OutQuad",
+            "expand": "OutQuad",
+            "popupOpen": "OutQuad",
+            "popupClose": "InQuad",
+            "popupResize": "OutQuad",
+            "enter": "OutCubic",
+            "exit": "InCubic",
+            "move": "OutCubic",
+            "slide": "OutCubic",
+            "fade": "OutQuad",
+            "value": "Linear",
+            "heartbeat": "OutQuad",
+            "pop": "OutBack",
+            "pulse": "InOutQuad",
+            "spin": "Linear",
+            "themeChange": "OutQuad"
         }
     })
 
@@ -332,6 +370,28 @@ Singleton {
 
     // The bar's geometry, by ThemeRules.barTokens name: Theme.bar.barHeight, …
     readonly property var bar: values.bar
+
+    // ---- Animation ----
+    // The profile decides how much motion there is; the theme how it looks
+    readonly property real animationSpeed: Math.max(0.1, (Profiles.value("animation.speed") ?? 100) / 100)
+    readonly property bool reduceMotion: Profiles.value("animation.reduceMotion") ?? false
+    // Changes of colour or opacity stay with reduced motion: they do not move anything
+    readonly property var _keptWhenReduced: ["hover", "state", "fade", "themeChange", "spin"]
+
+    // How long an animation of `role` takes, in ms, at the profile's speed. With reduced
+    // motion, movement takes 1 ms — not 0, so code waiting for an animation to finish
+    // still sees it run. Looping animations (pulse) check reduceMotion themselves.
+    function duration(role) {
+        if (reduceMotion && !_keptWhenReduced.includes(role))
+            return 1;
+        return Math.max(1, Math.round((values.durations[role] ?? 0) / animationSpeed));
+    }
+
+    // The easing curve for `curve`, usually the role's name (popup has popupOpen and
+    // popupClose); an unknown name eases out
+    function easing(curve) {
+        return Easing[values.curves[curve]] ?? Easing.OutQuad;
+    }
 
     // Typography
     readonly property string fontFamily: _fonts.family

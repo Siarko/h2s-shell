@@ -154,7 +154,7 @@ Item {
                         height: 16
                         radius: 8
                         color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
                     }
 
                     MouseArea {
@@ -197,7 +197,7 @@ Item {
                         height: 16
                         radius: 8
                         color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing.type: Theme.easing("state") } }
                     }
 
                     MouseArea {

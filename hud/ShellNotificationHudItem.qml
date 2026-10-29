@@ -64,8 +64,8 @@ Item {
         property: "y"
         from: root.screenHeight
         to: root.restY
-        duration: 250
-        easing.type: Easing.OutCubic
+        duration: Theme.duration("enter")
+        easing.type: Theme.easing("enter")
     }
 
     NumberAnimation {
@@ -73,8 +73,8 @@ Item {
         target: root
         property: "y"
         to: root.screenHeight
-        duration: 200
-        easing.type: Easing.InCubic
+        duration: Theme.duration("exit")
+        easing.type: Theme.easing("exit")
         onStopped: root.showNext()
     }
 

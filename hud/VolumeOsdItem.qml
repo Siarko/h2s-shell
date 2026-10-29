@@ -43,8 +43,8 @@ Item {
         target: root
         property: "x"
         to: root.restX
-        duration: 250
-        easing.type: Easing.OutCubic
+        duration: Theme.duration("enter")
+        easing.type: Theme.easing("enter")
     }
 
     NumberAnimation {
@@ -52,8 +52,8 @@ Item {
         target: root
         property: "x"
         to: root.screenWidth
-        duration: 200
-        easing.type: Easing.InCubic
+        duration: Theme.duration("exit")
+        easing.type: Theme.easing("exit")
     }
 
     Timer {

@@ -14,14 +14,16 @@ import QtQuick
 //     "colorsFrom": "<path>",                 optional; a palette file, e.g. from matugen
 //     "colors":     { "<token>": "#rrggbb" }, optional
 //     "fonts":      { "<token>": … },         optional
-//     "bar":        { "<token>": <number> }   optional; geometry, see barTokens
+//     "bar":        { "<token>": <number> },  optional; geometry, see barTokens
+//     "durations":  { "<role>": <ms> },       optional; animation roles, see Theme
+//     "curves":     { "<role>": "<easing>" }  optional; a Qt easing name: "OutQuad", …
 //   }
 // Every group is partial: what a theme leaves out comes from what it extends.
 Singleton {
     id: root
 
     // Groups of tokens a theme file may set
-    readonly property var groups: ["colors", "fonts", "bar"]
+    readonly property var groups: ["colors", "fonts", "bar", "durations", "curves"]
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",

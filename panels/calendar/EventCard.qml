@@ -41,7 +41,7 @@ Rectangle {
     }
 
     Behavior on height {
-        NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+        NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
     }
 
     // Accent bar

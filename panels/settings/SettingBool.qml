@@ -36,8 +36,8 @@ RowLayout {
             color: Theme.textPrimary
             Behavior on x {
                 NumberAnimation {
-                    duration: 150
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("state")
+                    easing.type: Theme.easing("state")
                 }
             }
         }

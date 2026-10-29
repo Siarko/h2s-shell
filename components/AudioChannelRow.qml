@@ -107,8 +107,8 @@ Item {
             clip: true
             Behavior on height {
                 NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("expand")
+                    easing.type: Theme.easing("expand")
                 }
             }
 
@@ -182,8 +182,8 @@ Item {
             clip: true
             Behavior on height {
                 NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("expand")
+                    easing.type: Theme.easing("expand")
                 }
             }
 
@@ -198,8 +198,11 @@ Item {
                     }
 
                     delegate: Item {
+                        // Null for a moment when an app stops playing: its node goes before
+                        // the row does
                         required property var modelData
-                        property bool matches: modelData.isStream && modelData.audio && modelData.isSink === row.isSink
+                        property bool matches: (modelData?.isStream ?? false) && !!modelData?.audio
+                            && modelData?.isSink === row.isSink
                         visible: matches && modelData.ready
                         width: appMixerCol.width
                         height: matches ? 36 : 0
@@ -211,7 +214,7 @@ Item {
                             spacing: 6
 
                             Text {
-                                text: modelData.description || modelData.name
+                                text: modelData?.description || modelData?.name || ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
@@ -220,11 +223,11 @@ Item {
                             }
 
                             VolumeSlider {
-                                value: modelData.audio?.volume ?? 0
+                                value: modelData?.audio?.volume ?? 0
                                 fillColor: Theme.accent
                                 fillColorHover: Theme.accentHover
                                 onMoved: v => {
-                                    if (modelData.audio) {
+                                    if (modelData?.audio) {
                                         var rounded = Math.round(v * 100) / 100;
                                         Audio.targetVolumes[modelData.name] = rounded;
                                         modelData.audio.volume = v;
@@ -236,7 +239,7 @@ Item {
                             }
 
                             Text {
-                                text: modelData.audio ? Math.round((modelData.audio.volume ?? 0) * 100) + "%" : "0%"
+                                text: modelData?.audio ? Math.round((modelData.audio.volume ?? 0) * 100) + "%" : "0%"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary

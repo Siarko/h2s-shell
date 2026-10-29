@@ -97,16 +97,16 @@ Item {
                         target: card
                         property: "x"
                         to: delegateRoot.width
-                        duration: 200
-                        easing.type: Easing.InCubic
+                        duration: Theme.duration("exit")
+                        easing.type: Theme.easing("exit")
                     }
 
                     NumberAnimation {
                         target: delegateRoot
                         property: "implicitHeight"
                         to: 0
-                        duration: 150
-                        easing.type: Easing.InOutQuad
+                        duration: Theme.duration("expand")
+                        easing.type: Theme.easing("expand")
                     }
 
                     ScriptAction {
@@ -138,8 +138,8 @@ Item {
                         property: "x"
                         from: -delegateRoot.width
                         to: 0
-                        duration: 200
-                        easing.type: Easing.OutCubic
+                        duration: Theme.duration("enter")
+                        easing.type: Theme.easing("enter")
                     }
                 }
             }
@@ -204,14 +204,14 @@ Item {
                 target: successOverlay
                 property: "opacity"
                 from: 0; to: 1
-                duration: 180
+                duration: Theme.duration("pop") * 180 / 380
             }
             NumberAnimation {
                 target: checkIcon
                 property: "scale"
                 from: 0; to: 1
-                duration: 380
-                easing.type: Easing.OutBack
+                duration: Theme.duration("pop")
+                easing.type: Theme.easing("pop")
             }
         }
 
@@ -220,9 +220,10 @@ Item {
             target: successLabel
             property: "opacity"
             from: 0; to: 1
-            duration: 200
+            duration: Theme.duration("pop") * 200 / 380
         }
 
+        // Time to read it: not motion, so neither the theme nor the speed changes it
         PauseAnimation { duration: 750 }
 
         // Fade everything out
@@ -230,7 +231,7 @@ Item {
             target: successOverlay
             property: "opacity"
             from: 1; to: 0
-            duration: 200
+            duration: Theme.duration("pop") * 200 / 380
         }
 
         ScriptAction {

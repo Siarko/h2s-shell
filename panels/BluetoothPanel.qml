@@ -81,7 +81,8 @@ Item {
 
                     Behavior on color {
                         ColorAnimation {
-                            duration: 150
+                            duration: Theme.duration("state")
+                            easing.type: Theme.easing("state")
                         }
                     }
 
@@ -95,8 +96,8 @@ Item {
 
                         Behavior on x {
                             NumberAnimation {
-                                duration: 150
-                                easing.type: Easing.OutQuad
+                                duration: Theme.duration("state")
+                                easing.type: Theme.easing("state")
                             }
                         }
                     }

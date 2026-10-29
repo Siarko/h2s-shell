@@ -150,7 +150,7 @@ Item {
                             clip: true
 
                             Behavior on height {
-                                NumberAnimation { duration: 150; easing.type: Easing.OutQuad }
+                                NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
                             }
 
                             // Drop indicator above this row

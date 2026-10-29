@@ -98,16 +98,16 @@ Item {
     NumberAnimation {
         id: outAnim
         property: "x"
-        duration: 300
-        easing.type: Easing.OutCubic
+        duration: Theme.duration("slide")
+        easing.type: Theme.easing("slide")
     }
 
     // Incoming slot slides in
     NumberAnimation {
         id: inAnim
         property: "x"
-        duration: 300
-        easing.type: Easing.OutCubic
+        duration: Theme.duration("slide")
+        easing.type: Theme.easing("slide")
     }
 
     // Shared item delegate — defined once, used by both Repeaters

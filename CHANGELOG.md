@@ -15,8 +15,15 @@ section to the new version and date.
   built-in look, can `extend` another theme and take colours from a palette file
   (`colorsFrom`, e.g. from matugen). The setting "Theme" picks one per profile; files are
   watched, so an edit applies at once.
+- Animations by role: every animation takes its duration and curve from the theme
+  (`durations`, `curves`: hover, state, expand, popup, enter, exit, move, slide, fade,
+  value, heartbeat, pop, pulse, spin, …). Per profile: "Animation speed" and "Reduce
+  motion", for now on the General page with the theme name.
 
 ### Changed
+- Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere
+  (was 120–200), a notification card arrives in 250 ms (was 200), the password field's
+  colour changes in 150 ms (was 120).
 - The bar's geometry (height, reserved space, offset, margins, padding, corners) is part
   of the theme instead of a profile setting. Each profile that had its own geometry gets
   a theme named after it with those values (Power save's extends Full's), so the bar
@@ -25,6 +32,15 @@ section to the new version and date.
 - Colours are named by role and come only from the theme: one red, one green and one
   blue where there were several shades (the disconnect buttons, the lock screen's error
   and the calendar's connection status change shade slightly).
+
+### Fixed
+- The first opening of a popup no longer loses part of its animation: panels are
+  compiled in the background after start, and new content renders once before the
+  animation starts (the calendar dropped a third of its frames).
+- Moving from one widget's popup to another's: the popup no longer crawls after its
+  size at the right end of the bar, and the new content fades in as the popup moves
+  instead of jumping in first.
+- No more warnings in the log when an app stops playing with the sound popup open.
 
 ## [1.1.0] - 2026-10-29
 

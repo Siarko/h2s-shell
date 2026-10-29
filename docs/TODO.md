@@ -381,6 +381,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       lock prompt, and only after a start command.
 - [ ] **9.8 Leftovers** [#37] — empty `assets/`, missing trailing newline in
       `LockscreenSettings.qml`, `Logger` as `Item` rather than `QtObject`.
+- [ ] **9.9 Hidden list editor fed objects** — `Unable to assign QJSValue to QString` at
+      `panels/settings/SchemaSettingEditor.qml:338`, a dozen times when the Bar page opens.
+      The text-list editor (`_listEditor`, line ~307) exists for every setting and takes
+      any array as its items, so a bar section (`[{ type, preset }]`) reaches its
+      `TextInput.text`. Feed it only for `type === "stringList"`, as the slider already is.
+      Found 2026-10-29; harmless, predates the themes work.
 
 ## Stage 10 — Requested features
 

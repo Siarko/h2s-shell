@@ -59,15 +59,16 @@ BarWidget {
             }
 
             // Animating a separate property and gating opacity on _pulsing, so a
-            // half-faded value can never be left behind when the pulse stops
+            // half-faded value can never be left behind when the pulse stops. With reduced
+            // motion it stays dimmed instead of pulsing.
             property real pulse: 1.0
-            opacity: root._pulsing ? pulse : 1.0
+            opacity: !root._pulsing ? 1.0 : Theme.reduceMotion ? 0.6 : pulse
 
             SequentialAnimation on pulse {
-                running: root._pulsing
+                running: root._pulsing && !Theme.reduceMotion
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.35; duration: 500; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0;  duration: 500; easing.type: Easing.InOutQuad }
+                NumberAnimation { to: 0.35; duration: Theme.duration("pulse") / 2; easing.type: Theme.easing("pulse") }
+                NumberAnimation { to: 1.0;  duration: Theme.duration("pulse") / 2; easing.type: Theme.easing("pulse") }
             }
         }
 
@@ -89,7 +90,7 @@ BarWidget {
             color: Theme.warning
 
             Behavior on width {
-                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
             }
         }
 
@@ -107,7 +108,7 @@ BarWidget {
             color: Theme.textSecondary
 
             Behavior on width {
-                NumberAnimation { duration: 160; easing.type: Easing.OutQuad }
+                NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") }
             }
         }
     }

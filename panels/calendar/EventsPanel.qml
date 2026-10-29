@@ -222,8 +222,8 @@ Item {
 
             Behavior on Layout.preferredHeight {
                 NumberAnimation {
-                    duration: 150
-                    easing.type: Easing.OutQuad
+                    duration: Theme.duration("expand")
+                    easing.type: Theme.easing("expand")
                 }
             }
 
@@ -328,7 +328,8 @@ Item {
             running: root._loading
             from: 0
             to: 360
-            duration: 800
+            duration: Theme.duration("spin")
+            easing.type: Theme.easing("spin")
             loops: Animation.Infinite
         }
     }

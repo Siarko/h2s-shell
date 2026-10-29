@@ -61,7 +61,7 @@ Item {
                 property bool isExpanded: root._expandedId === modelData.sourceId
 
                 height: isExpanded ? root._rowH + root._graphAreaH : root._rowH
-                Behavior on height { NumberAnimation { duration: 160; easing.type: Easing.OutQuad } }
+                Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing.type: Theme.easing("expand") } }
 
                 Column {
                     width: parent.width
@@ -105,7 +105,7 @@ Item {
                                         height: parent.height
                                         radius: parent.radius
                                         color: Theme.accent
-                                        Behavior on width { NumberAnimation { duration: 400 } }
+                                        Behavior on width { NumberAnimation { duration: Theme.duration("value"); easing.type: Theme.easing("value") } }
                                     }
                                 }
 

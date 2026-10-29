@@ -35,6 +35,22 @@ QtObject {
 
     property var _lockscreen: Lockscreen
 
+    // Popup panels are compiled the first time they open, which delayed the first opening
+    // of the calendar and the music panel by 20 ms. Compile them in the background once the
+    // shell has settled instead; no objects are created. Kept, so the compiled types stay
+    // cached.
+    property var _compiledPanels: []
+    property var _warmUp: Timer {
+        interval: 3000
+        running: true
+        onTriggered: {
+            const urls = WidgetRegistry.entries.filter(entry => entry.popupPanel)
+                .map(entry => WidgetRegistry.popupPanelUrl(entry.popup))
+                .concat([Qt.resolvedUrl("panels/TrayMenu.qml")]);
+            root._compiledPanels = urls.map(url => Qt.createComponent(url, Component.Asynchronous));
+        }
+    }
+
     // Wires dictation state to music playback; needs to run whether or not the
     // dictation widget is on the bar
     property var _dictationMusicPause: DictationMusicPause

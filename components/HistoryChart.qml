@@ -38,7 +38,7 @@ Column {
                 newest = Math.max(newest, history[history.length - 1].t)
         }
         // Not on the first data the graph sees, which is the whole history at once
-        if (newest > _newestSample && _newestSample > 0 && heartbeat && active)
+        if (newest > _newestSample && _newestSample > 0 && heartbeat && active && !Theme.reduceMotion)
             _wave.restart()
         _newestSample = newest
         _repaint()
@@ -51,8 +51,8 @@ Column {
         property: "_pulse"
         from: 0
         to: 1
-        duration: 350
-        easing.type: Easing.OutQuad
+        duration: Theme.duration("heartbeat")
+        easing.type: Theme.easing("heartbeat")
     }
     onActiveChanged: _repaint()
     onScaleSecsChanged: _repaint()
