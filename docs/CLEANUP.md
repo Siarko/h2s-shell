@@ -654,7 +654,7 @@ binding a recomputed array directly:
   notification panel (a popup) and in the HUD.
 - `panels/HardwareSourceList.qml:335` — an inline `.filter()`.
 - `panels/WidgetSettingsPane.qml:193` — `_filteredProfiles`.
-- `panels/settings/SettingOptions.qml:32` — `options`; usually set once, but a `var`.
+- `panels/settings/SettingOptions.qml:32` — `options`; usually set once, but a `var`. Fixed.
 
 Fix: `ScriptModel { values: … }` in each. Literal constant arrays elsewhere are fine.
 

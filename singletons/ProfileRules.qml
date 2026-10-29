@@ -15,6 +15,61 @@ import QtQuick
 Singleton {
     id: root
 
+    // The facts a condition can test, for the settings editor. `type` picks the editor:
+    //   bool    — { fact, is: true|false }
+    //   percent — { fact, lt|gt: 0–100 }
+    //   enum    — { fact, is: one of `options` }
+    //   panel   — { fact, is: a popup content key } (the fact is the list of open ones)
+    readonly property var factTypes: [
+        { fact: "power.onBattery", label: "On battery", type: "bool" },
+        { fact: "battery.percent", label: "Battery level", type: "percent" },
+        { fact: "power.profile", label: "System power profile", type: "enum",
+          options: ["power-saver", "balanced", "performance"] },
+        { fact: "screen.locked", label: "Screen locked", type: "bool" },
+        { fact: "window.fullscreen", label: "Fullscreen window", type: "bool" },
+        { fact: "panel.open", label: "Popup open", type: "panel" }
+    ]
+
+    function factType(fact) {
+        return factTypes.find(type => type.fact === fact) ?? null;
+    }
+
+    // The leaves of a condition the settings editor can show as a flat list, or null when
+    // it is something else (nested any/not, written by hand in the config)
+    function flatLeaves(condition) {
+        if (!condition || Object.keys(condition).length === 0)
+            return [];
+        const leaves = condition.all ?? (condition.fact !== undefined ? [condition] : null);
+        if (!leaves || leaves.some(leaf => leaf.fact === undefined))
+            return null;
+        return leaves;
+    }
+
+    // One leaf as text, e.g. "On battery", "Battery level < 20 %", "Popup open: hardware"
+    function describeLeaf(leaf) {
+        const type = factType(leaf.fact);
+        const label = type?.label ?? leaf.fact;
+        if (leaf.lt !== undefined)
+            return label + " < " + leaf.lt + (type?.type === "percent" ? " %" : "");
+        if (leaf.gt !== undefined)
+            return label + " > " + leaf.gt + (type?.type === "percent" ? " %" : "");
+        if (leaf.is === true)
+            return label;
+        if (leaf.is === false)
+            return "Not " + label.charAt(0).toLowerCase() + label.slice(1);
+        return label + ": " + leaf.is;
+    }
+
+    // A whole condition as text, for the list of profiles
+    function describe(condition) {
+        const leaves = flatLeaves(condition);
+        if (leaves === null)
+            return "Custom condition (edited in the config)";
+        if (leaves.length === 0)
+            return "Always";
+        return leaves.map(describeLeaf).join(" and ");
+    }
+
     function matches(condition, facts) {
         if (!condition || Object.keys(condition).length === 0)
             return true;

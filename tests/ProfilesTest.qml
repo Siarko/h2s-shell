@@ -47,6 +47,15 @@ TestCase {
         assert(ProfileRules.matches({ fact: "panel.open", is: "hardware" }, { "panel.open": ["calendar", "hardware"] }), "is on a list: contains");
         assert(!ProfileRules.matches({ fact: "panel.open", is: "hardware" }, { "panel.open": [] }), "is on an empty list");
 
+        // --- describing conditions for the editor ---
+        assertEqual(ProfileRules.describe({}), "Always", "empty condition");
+        assertEqual(ProfileRules.describe({ all: [onBattery, low] }), "On battery and Battery level < 20 %", "flat all");
+        assertEqual(ProfileRules.describe(onBattery), "On battery", "a bare leaf counts as flat");
+        assertEqual(ProfileRules.describeLeaf({ fact: "screen.locked", is: false }), "Not screen locked", "a false bool");
+        assertEqual(ProfileRules.describeLeaf({ fact: "panel.open", is: "hardware" }), "Popup open: hardware", "a panel");
+        assertEqual(ProfileRules.flatLeaves({ any: [onBattery] }), null, "any is not flat");
+        assertEqual(ProfileRules.describe({ all: [{ not: onBattery }] }), "Custom condition (edited in the config)", "nested is shown as custom");
+
         // --- layering ---
         const defaults = { a: 1, b: 2, c: 3 };
         const profiles = [

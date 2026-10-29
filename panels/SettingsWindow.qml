@@ -22,7 +22,12 @@ FloatingWindow {
     minimumSize: Qt.size(400, 300)
     visible: false
 
-    property int selectedCategory: 0  // 0=General, 1=Calendar, 2=Media, 3=Bar, 4=Notifications
+    // Index into the sidebar list below
+    property int selectedCategory: 0
+    readonly property int _performanceCategory: 7
+    readonly property int _profilesCategory: 8
+    // The profile the Performance page edits, when opened from the Profiles page
+    property string performanceProfile: ""
 
     Rectangle {
         anchors.fill: parent
@@ -50,11 +55,30 @@ FloatingWindow {
                         font.pixelSize: Theme.fontSizeMedium
                         font.bold: true
                         color: Theme.textPrimary
+                    }
+
+                    // Which profiles apply right now, visible from every page
+                    Text {
+                        Layout.fillWidth: true
                         Layout.bottomMargin: 6
+                        wrapMode: Text.WordWrap
+                        text: "Profile: " + (Profiles.activeProfiles.length > 0 ? Profiles.activeProfiles.join(", ") : "defaults")
+                            + (Object.keys(Profiles.simulated).length > 0 ? " (simulated)" : "")
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+
+                        MouseArea {
+                            id: _profileIndicator
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.selectedCategory = root._profilesCategory
+                        }
                     }
 
                     Repeater {
-                        model: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation"]
+                        model: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles"]
                         Rectangle {
                             required property string modelData
                             required property int index
@@ -113,6 +137,8 @@ FloatingWindow {
                         if (root.selectedCategory === 3) return barComp;
                         if (root.selectedCategory === 4) return notificationsComp;
                         if (root.selectedCategory === 5) return lockscreenComp;
+                        if (root.selectedCategory === root._performanceCategory) return performanceComp;
+                        if (root.selectedCategory === root._profilesCategory) return profilesComp;
                         return sttComp;
                     }
                 }
@@ -127,4 +153,17 @@ FloatingWindow {
     Component { id: notificationsComp; NotificationsSettings {} }
     Component { id: lockscreenComp;    LockscreenSettings    {} }
     Component { id: sttComp;           SttSettings           {} }
+    Component {
+        id: performanceComp
+        PerformanceSettings { editedName: root.performanceProfile }
+    }
+    Component {
+        id: profilesComp
+        ProfilesSettings {
+            onEditValuesRequested: name => {
+                root.performanceProfile = name;
+                root.selectedCategory = root._performanceCategory;
+            }
+        }
+    }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
 
 Item {
@@ -29,7 +30,11 @@ Item {
             spacing: 4
 
             Repeater {
-                model: _so.options
+                // ScriptModel, never the bare array — see "The Repeater crash"; the
+                // options can be live (profile names)
+                model: ScriptModel {
+                    values: _so.options
+                }
 
                 Rectangle {
                     required property string modelData

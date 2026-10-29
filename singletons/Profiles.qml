@@ -90,6 +90,71 @@ Singleton {
         return ""
     }
 
+    // ---- editing, for the settings pages ----
+    // Each edit saves the whole list through save(); a refusal lands in lastError.
+    property string lastError: ""
+
+    function _copy() {
+        return JSON.parse(JSON.stringify(profiles))
+    }
+
+    function _commit(list) {
+        lastError = save(list)
+        return lastError === ""
+    }
+
+    // What a key would be at a profile's place in the list if that profile did not set
+    // it: the defaults overlaid by the active profiles above it
+    function inheritedValue(index, key) {
+        return ProfileRules.resolve(SettingsSchema.defaults, profiles.slice(0, index), facts).values[key]
+    }
+
+    function setOverride(index, key, newValue) {
+        const list = _copy()
+        list[index].set = list[index].set ?? {}
+        list[index].set[key] = newValue
+        return _commit(list)
+    }
+
+    function clearOverride(index, key) {
+        const list = _copy()
+        delete list[index].set?.[key]
+        return _commit(list)
+    }
+
+    // changes: any of { name, enabled, when }
+    function updateProfile(index, changes) {
+        const list = _copy()
+        Object.assign(list[index], changes)
+        return _commit(list)
+    }
+
+    function addProfile() {
+        const list = _copy()
+        let number = list.length + 1
+        while (list.some(profile => profile.name === "Profile " + number))
+            number++
+        list.push({ name: "Profile " + number, enabled: true, when: {}, set: {} })
+        return _commit(list)
+    }
+
+    function removeProfile(index) {
+        const list = _copy()
+        list.splice(index, 1)
+        return _commit(list)
+    }
+
+    // Later profiles win, so moving one down raises its priority
+    function moveProfile(index, delta) {
+        const target = index + delta
+        if (target < 0 || target >= profiles.length)
+            return false
+        const list = _copy()
+        const [moved] = list.splice(index, 1)
+        list.splice(target, 0, moved)
+        return _commit(list)
+    }
+
     // Popup content types currently open on any screen, with a count each, reported by
     // Popup.qml — several screens can show the same one
     property var _openPanels: ({})

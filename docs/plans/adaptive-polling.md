@@ -257,6 +257,14 @@ rates — except the temperatures, now one rate (see the schema table).
    not persisted, so a shell restart while a profile holds power-saver forgets what to
    restore.
 7. Profiles settings page; base polling rates in settings.
+   *Built 2026-10-29, awaiting the user's test.* Pages `Performance` (edits the picked
+   profile through `SchemaSettingEditor`; inherited values dimmed, overrides by a later
+   active profile marked) and `Profiles` (active now, simulation, per-profile name,
+   enable, order, delete with confirm, flat condition list via `ConditionEditor`); the
+   settings sidebar shows the active profiles. `tests/SettingsPagesTest.qml` compiles
+   every page. Known noise: when the test run quits, Profiles and the sources log
+   "Unable to assign [undefined]" as the singletons are torn down — also before this step,
+   harmless, worth silencing.
 8. Visualiser fps (TODO 5.4) wired to `polling.visualizer.fps`.
 
 Each step is shippable alone and verifiable on the desktop (steps 3 and 6 through the
