@@ -5,17 +5,64 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.UPower
 import QtQuick
+import qs.components
 
 // Effective values of the settings in SettingsSchema: the system profile (the schema
 // defaults) overlaid by every active profile, in order. Read them with value(key) in a
 // binding; it follows profile changes. See docs/plans/adaptive-polling.md.
 //
-// Step 3 of the plan: real facts; the profiles are still the seed list, not yet from
-// the config.
+// The profiles live in Config.profiles. A config from before profiles has none and is
+// seeded with Full and Power save; an empty list is the user's choice and leaves only
+// the system profile.
 Singleton {
     id: root
 
-    property var profiles: ProfileRules.seedProfiles(SettingsSchema.defaults)
+    readonly property var profiles: _parse(Config.profiles)
+
+    // Seeded once the config has been read — before that, Config.profiles is "" for every
+    // config, not just the ones without profiles. Not a binding: writing Config.profiles
+    // from a handler of a binding on it is a binding loop.
+    function _seedIfNeeded() {
+        if (Config.ready && Config.profiles === "")
+            Config.profiles = JSON.stringify(ProfileRules.seedProfiles(SettingsSchema.defaults))
+    }
+
+    Component.onCompleted: _seedIfNeeded()
+
+    Connections {
+        target: Config
+        function onReadyChanged() { Qt.callLater(root._seedIfNeeded) }
+    }
+
+    Logger {
+        id: _log
+        prefix: "[Profiles]"
+    }
+
+    function _parse(json) {
+        if (json === "")
+            return ProfileRules.seedProfiles(SettingsSchema.defaults)
+        try {
+            const parsed = JSON.parse(json)
+            if (Array.isArray(parsed))
+                return parsed
+        } catch (error) {}
+        // A broken list is not overwritten, so the user can still fix it by hand
+        _log.error("Config.profiles is not a JSON array; using only the system profile")
+        return []
+    }
+
+    // Replaces the profile list, unless one of them fails ProfileRules.saveError; returns
+    // that error, or "" once saved
+    function save(newProfiles) {
+        for (const profile of newProfiles) {
+            const error = ProfileRules.saveError(profile)
+            if (error !== "")
+                return profile.name + ": " + error
+        }
+        Config.profiles = JSON.stringify(newProfiles)
+        return ""
+    }
 
     // Popup content types currently open on any screen, with a count each, reported by
     // Popup.qml — several screens can show the same one

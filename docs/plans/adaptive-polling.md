@@ -236,6 +236,11 @@ rates — except the temperatures, now one rate (see the schema table).
    `HistoryChart` breaks the line where the gap exceeds 2.5× the larger `dt` of the two
    samples around it.
 5. Config storage for profiles and base values; the shipped "Power save".
+   *Done 2026-10-29, verified on the host.* `Config.profiles` (JSON string; ""
+   = not yet seeded, "[]" = deleted by the user), `Config.ready` so seeding waits for
+   the file to be read, `Profiles.save()` applying the loop guard. A malformed list is
+   logged and left alone, with only the system profile in effect. `Config.readOnly`,
+   set by tests.qml, keeps the suites from writing the user's config.
 6. `system.powerProfile` via `PowerProfileHold`, with the loop guard.
 7. Profiles settings page; base polling rates in settings.
 8. Visualiser fps (TODO 5.4) wired to `polling.visualizer.fps`.

@@ -1,10 +1,15 @@
 //@ pragma UseQApplication
 import QtQuick
+import qs.singletons
 import qs.tests
 
 // Run with: quickshell -p tests.qml
 // Add new test suite components here as suites are created.
 QtObject {
+    // First, before any suite runs: the suites use the real Config singleton, whose
+    // file is the user's
+    readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+
     property var _promises: PromisesTest {}
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}

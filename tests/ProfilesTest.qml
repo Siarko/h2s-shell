@@ -84,5 +84,10 @@ TestCase {
         for (const key in seed[1].set)
             assert(key in SettingsSchema.defaults, "Power save sets a known key: " + key);
         assertEqual(JSON.stringify(Profiles.activeProfiles), JSON.stringify(["Full"]), "on this desktop only Full is active");
+
+        // --- saving ---
+        assert(Config.readOnly, "the test run cannot write the user's config");
+        const refused = Profiles.save([loops]);
+        assert(refused.startsWith("x: "), "save refuses a profile that fails the guard, naming it");
     }
 }

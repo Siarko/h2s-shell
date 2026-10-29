@@ -18,6 +18,16 @@ Singleton {
     property alias notifications: _notifications
     property alias widgetProfiles: _adapter.widgetProfiles
     property alias stt: _stt
+    // Profiles (docs/plans/adaptive-polling.md) as a JSON array. "" means the config
+    // predates profiles and Profiles seeds it; "[]" means the user deleted them all.
+    property alias profiles: _adapter.profiles
+
+    // True once the file has been read (or found missing, so the defaults stand) —
+    // before that every property still holds its default
+    property bool ready: false
+    // Set by the test runner: the suites load the real config, and nothing they change
+    // may reach the user's file
+    property bool readOnly: false
 
     signal saved
 
@@ -25,10 +35,13 @@ Singleton {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         onAdapterUpdated: _saveTimer.restart()
+        onLoaded: root.ready = true
+        onLoadFailed: root.ready = true
 
         adapter: JsonAdapter {
             id: _adapter
             property string widgetProfiles: "{}"
+            property string profiles: ""
             property JsonObject general: JsonObject {
                 id: _general
                 property bool debug: false
@@ -127,6 +140,8 @@ Singleton {
         id: _saveTimer
         interval: 1000
         onTriggered: {
+            if (root.readOnly)
+                return;
             _file.writeAdapter();
             root.saved();
             console.log("[CONFIG] Saved");
