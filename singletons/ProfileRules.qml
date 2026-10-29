@@ -85,10 +85,16 @@ Singleton {
     }
 
     // The profiles a config starts with: Full, always on, with every default spelled out
-    // so it can be edited as a profile; and Power save, on battery.
-    function seedProfiles(defaults) {
+    // so it can be edited as a profile; and Power save, on battery. Full names the
+    // system power profile in use when the config is seeded, so there is always a
+    // concrete one to go back to when Power save stops applying, and seeding changes
+    // nothing.
+    function seedProfiles(defaults, currentPowerProfile) {
+        const full = Object.assign({}, defaults);
+        if (currentPowerProfile)
+            full["system.powerProfile"] = currentPowerProfile;
         return [
-            { name: "Full", enabled: true, when: {}, set: Object.assign({}, defaults) },
+            { name: "Full", enabled: true, when: {}, set: full },
             { name: "Power save", enabled: true,
               when: { all: [ { fact: "power.onBattery", is: true } ] },
               set: {

@@ -84,6 +84,10 @@ TestCase {
         for (const key in seed[1].set)
             assert(key in SettingsSchema.defaults, "Power save sets a known key: " + key);
         assertEqual(JSON.stringify(Profiles.activeProfiles), JSON.stringify(["Full"]), "on this desktop only Full is active");
+        const seededOnPerformance = ProfileRules.seedProfiles(SettingsSchema.defaults, "performance");
+        assertEqual(seededOnPerformance[0].set["system.powerProfile"], "performance",
+            "Full names the power profile in use when seeding");
+        assertEqual(seed[0].set["system.powerProfile"], "unchanged", "without one known, Full leaves it unchanged");
 
         // --- saving ---
         assert(Config.readOnly, "the test run cannot write the user's config");

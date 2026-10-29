@@ -241,7 +241,21 @@ rates — except the temperatures, now one rate (see the schema table).
    the file to be read, `Profiles.save()` applying the loop guard. A malformed list is
    logged and left alone, with only the system profile in effect. `Config.readOnly`,
    set by tests.qml, keeps the suites from writing the user's config.
-6. `system.powerProfile` via `PowerProfileHold`, with the loop guard.
+6. `system.powerProfile`, with the loop guard.
+   *Done 2026-10-29, verified on the host.* `PowerProfileHold` turned out to be
+   read-only in QML (a listing of other apps' holds), so Profiles sets
+   `PowerProfiles.profile`. The mode follows from the profiles and conditions alone
+   (the user's call): whenever the effective value changes to a concrete mode, the system
+   is set to it; "unchanged" leaves it alone; nothing is remembered or restored. So Full
+   names a concrete mode — the seed writes the one in use at seeding time. A change by
+   hand stays until the effective value next changes. PowerProfiles reports "balanced"
+   until D-Bus answers, so seeding and applying wait for the real value (first change
+   signal, or 1 s). Verified: battery → AC goes power-saver → performance from Full; a
+   restart with the battery simulated comes up on performance.
+   Verified with a simulated battery: performance → power-saver → performance, and
+   power-saver → balanced by hand → stays balanced. Known gap: the replaced profile is
+   not persisted, so a shell restart while a profile holds power-saver forgets what to
+   restore.
 7. Profiles settings page; base polling rates in settings.
 8. Visualiser fps (TODO 5.4) wired to `polling.visualizer.fps`.
 

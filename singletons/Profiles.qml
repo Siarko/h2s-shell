@@ -23,15 +23,41 @@ Singleton {
     // config, not just the ones without profiles. Not a binding: writing Config.profiles
     // from a handler of a binding on it is a binding loop.
     function _seedIfNeeded() {
-        if (Config.ready && Config.profiles === "")
-            Config.profiles = JSON.stringify(ProfileRules.seedProfiles(SettingsSchema.defaults))
+        if (Config.ready && _powerProfilesKnown && Config.profiles === "")
+            Config.profiles = JSON.stringify(ProfileRules.seedProfiles(SettingsSchema.defaults,
+                                                                        _powerProfileName(PowerProfiles.profile)))
     }
 
-    Component.onCompleted: _seedIfNeeded()
+    Component.onCompleted: {
+        _seedIfNeeded()
+        _applyPowerProfile()
+    }
 
     Connections {
         target: Config
         function onReadyChanged() { Qt.callLater(root._seedIfNeeded) }
+    }
+
+    // PowerProfiles reads the daemon over D-Bus after startup; until then it reports
+    // "balanced" with no performance profile. Seeding Full with that, or applying a
+    // profile against it, would switch a machine that is on performance. Known after the
+    // first change signal, or after a second if the real value equals the startup one.
+    property bool _powerProfilesKnown: false
+    on_PowerProfilesKnownChanged: {
+        Qt.callLater(_seedIfNeeded)
+        _applyPowerProfile()
+    }
+
+    Connections {
+        target: PowerProfiles
+        function onProfileChanged() { root._powerProfilesKnown = true }
+        function onHasPerformanceProfileChanged() { root._powerProfilesKnown = true }
+    }
+
+    Timer {
+        interval: 1000
+        running: !root._powerProfilesKnown
+        onTriggered: root._powerProfilesKnown = true
     }
 
     Logger {
@@ -112,6 +138,33 @@ Singleton {
         if (--panels[contentType] <= 0)
             delete panels[contentType];
         _openPanels = panels;
+    }
+
+    // ---- system.powerProfile ----
+    // Follows from the profiles and the current conditions, nothing else: whenever the
+    // effective value changes to a concrete profile, the system is set to it; "unchanged"
+    // leaves the system alone. Nothing is remembered or restored — coming back from
+    // battery, the profile that applies on AC (Full) names the one to use. A change by
+    // hand stays until the effective value next changes; the shell does not fight it.
+    readonly property string _wantedPowerProfile: value("system.powerProfile") ?? "unchanged"
+
+    on_WantedPowerProfileChanged: _applyPowerProfile()
+
+    function _applyPowerProfile() {
+        if (!_powerProfilesKnown || _wantedPowerProfile === "unchanged")
+            return
+        if (_wantedPowerProfile === "performance" && !PowerProfiles.hasPerformanceProfile)
+            return
+        if (_powerProfileName(PowerProfiles.profile) !== _wantedPowerProfile)
+            PowerProfiles.profile = _powerProfileValue(_wantedPowerProfile)
+    }
+
+    function _powerProfileValue(name) {
+        switch (name) {
+        case "power-saver": return PowerProfile.PowerSaver;
+        case "performance": return PowerProfile.Performance;
+        }
+        return PowerProfile.Balanced;
     }
 
     function _powerProfileName(profile) {
