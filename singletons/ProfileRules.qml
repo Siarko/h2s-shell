@@ -240,6 +240,29 @@ Singleton {
         });
     }
 
+    // What a bar section shows while it changes from `shown` to `wanted` (both
+    // sectionModel lists): the wanted entries, with the shown ones that are going kept in
+    // their place, marked `leaving: true`, so they can shrink away before they are dropped.
+    // An entry kept after a widget before it went sits after the nearest kept one.
+    function withLeaving(shown, wanted) {
+        const wantedKeys = new Set((wanted ?? []).map(entry => entry.key));
+        const result = (wanted ?? []).slice();
+        (shown ?? []).forEach((entry, index) => {
+            if (wantedKeys.has(entry.key))
+                return;
+            let at = 0;
+            for (let i = index - 1; i >= 0; i--) {
+                const position = result.findIndex(other => other.key === shown[i].key);
+                if (position >= 0) {
+                    at = position + 1;
+                    break;
+                }
+            }
+            result.splice(at, 0, Object.assign({}, entry, { leaving: true }));
+        });
+        return result;
+    }
+
     // ---- widget presets in the bar sections ----
 
     readonly property var _sectionKeys: ["bar.left", "bar.center", "bar.right"]

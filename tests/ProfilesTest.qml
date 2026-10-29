@@ -203,6 +203,14 @@ TestCase {
         const model = ProfileRules.sectionModel([{ type: "clock", preset: "a" }, { type: "clock", preset: "a" }, { type: "tray", preset: "" }]);
         assertEqual(JSON.stringify(model.map(entry => entry.key)), JSON.stringify(["clock/a#1", "clock/a#2", "tray/#1"]),
             "model keys are unique and depend only on the entry");
+        const entry = key => ({ key: key, type: key, preset: "" });
+        const changing = ProfileRules.withLeaving([entry("a"), entry("b"), entry("c"), entry("d")], [entry("a"), entry("e"), entry("d")]);
+        assertEqual(changing.map(item => item.key + (item.leaving ? "-" : "")).join(" "), "a b- c- e d",
+            "widgets going keep their place, after the nearest one staying");
+        assertEqual(ProfileRules.withLeaving([entry("b"), entry("a")], [entry("a")]).map(item => item.key + (item.leaving ? "-" : "")).join(" "),
+            "b- a", "one going from the start stays at the start");
+        assertEqual(ProfileRules.withLeaving([entry("a"), { key: "b", leaving: true }], [entry("a"), entry("b")]).map(item => item.key + (item.leaving ? "-" : "")).join(" "),
+            "a b", "a widget coming back is no longer going");
 
         // --- preset usages, renaming and deleting ---
         const withPresets = [

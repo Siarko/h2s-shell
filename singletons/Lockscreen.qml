@@ -21,6 +21,9 @@ Singleton {
         Profiles.screenLocked = locked
     }
 
+    function lock() { _lock.locked = true }
+    function unlock() { _lock.locked = false }
+
     // From the active profile (docs/plans/global-profiles.md)
     readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
     readonly property int screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout") ?? 300

@@ -66,6 +66,69 @@ PanelWindow {
     readonly property var _centerModel: ProfileRules.sectionModel(Profiles.value("bar.center"))
     readonly property var _rightModel:  ProfileRules.sectionModel(Profiles.value("bar.right"))
 
+    // What each section shows: its model, plus the widgets that are going, kept while they
+    // shrink away (ProfileRules.withLeaving). A widget that arrives grows in, so the ones
+    // beside it slide aside rather than jump — but not while the bar is starting.
+    // Not bound to the models: a binding could update before the handlers below run,
+    // and the widgets going would be lost
+    property var _leftShown: []
+    property var _centerShown: []
+    property var _rightShown: []
+    Component.onCompleted: {
+        _leftShown = _leftModel
+        _centerShown = _centerModel
+        _rightShown = _rightModel
+    }
+    on_LeftModelChanged: _leftShown = ProfileRules.withLeaving(_leftShown, _leftModel)
+    on_CenterModelChanged: _centerShown = ProfileRules.withLeaving(_centerShown, _centerModel)
+    on_RightModelChanged: _rightShown = ProfileRules.withLeaving(_rightShown, _rightModel)
+    readonly property bool _anyLeaving: _leftShown.concat(_centerShown, _rightShown).some(entry => entry.leaving)
+    on_AnyLeavingChanged: if (_anyLeaving) _dropLeaving.restart()
+
+    Timer {
+        id: _dropLeaving
+        interval: Theme.duration("exit") + 50
+        onTriggered: {
+            bar._leftShown = bar._leftShown.filter(entry => !entry.leaving)
+            bar._centerShown = bar._centerShown.filter(entry => !entry.leaving)
+            bar._rightShown = bar._rightShown.filter(entry => !entry.leaving)
+        }
+    }
+
+    property bool _contentAnimated: false
+    Timer {
+        interval: 3000
+        running: true
+        onTriggered: bar._contentAnimated = true
+    }
+
+    // One widget of a section, loaded by type
+    component SectionWidget: Loader {
+        id: widgetLoader
+        required property var modelData
+        readonly property bool leaving: modelData.leaving ?? false
+        // 0 to 1 as it grows in, back to 0 as it goes; drawn at full size meanwhile and
+        // clipped, so its content does not squeeze
+        property real _shown: bar._contentAnimated ? 0 : 1
+        Component.onCompleted: _shown = Qt.binding(() => leaving ? 0 : 1)
+        Behavior on _shown {
+            NumberAnimation {
+                duration: Theme.duration(widgetLoader.leaving ? "exit" : "enter")
+                easing.type: Theme.easing(widgetLoader.leaving ? "exit" : "enter")
+            }
+        }
+        Layout.preferredWidth: _shown < 1 ? (item?.implicitWidth ?? 0) * _shown : -1
+        // The section's spacing shrinks with it, so nothing jumps when it is dropped
+        Layout.rightMargin: _shown < 1 ? -(parent?.spacing ?? 0) * (1 - _shown) : 0
+        clip: _shown < 1
+        opacity: _shown
+        Layout.fillHeight: true
+        Layout.topMargin: 5
+        Layout.bottomMargin: 5
+        source: WidgetRegistry.widgetUrl(modelData.type)
+        onLoaded: bar._wireWidget(item, widgetLoader)
+    }
+
     // Geometry, from the theme. Moving to another theme — a profile switch, say — slides
     // the bar into its new shape; editing the theme in use (the Bar page's sliders) applies
     // at once, so a slider does not lag behind the pointer.
@@ -155,17 +218,9 @@ PanelWindow {
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
                         objectProp: "key"
-                        values: bar._leftModel
+                        values: bar._leftShown
                     }
-                    delegate: Loader {
-                        id: widgetLoader
-                        required property var modelData
-                        Layout.fillHeight: true
-                        Layout.topMargin: 5
-                        Layout.bottomMargin: 5
-                        source: WidgetRegistry.widgetUrl(modelData.type)
-                        onLoaded: bar._wireWidget(item, widgetLoader)
-                    }
+                    delegate: SectionWidget {}
                 }
             }
 
@@ -180,17 +235,9 @@ PanelWindow {
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
                         objectProp: "key"
-                        values: bar._centerModel
+                        values: bar._centerShown
                     }
-                    delegate: Loader {
-                        id: widgetLoader
-                        required property var modelData
-                        Layout.fillHeight: true
-                        Layout.topMargin: 5
-                        Layout.bottomMargin: 5
-                        source: WidgetRegistry.widgetUrl(modelData.type)
-                        onLoaded: bar._wireWidget(item, widgetLoader)
-                    }
+                    delegate: SectionWidget {}
                 }
             }
 
@@ -206,17 +253,9 @@ PanelWindow {
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
                         objectProp: "key"
-                        values: bar._rightModel
+                        values: bar._rightShown
                     }
-                    delegate: Loader {
-                        id: widgetLoader
-                        required property var modelData
-                        Layout.fillHeight: true
-                        Layout.topMargin: 5
-                        Layout.bottomMargin: 5
-                        source: WidgetRegistry.widgetUrl(modelData.type)
-                        onLoaded: bar._wireWidget(item, widgetLoader)
-                    }
+                    delegate: SectionWidget {}
                 }
             }
         }

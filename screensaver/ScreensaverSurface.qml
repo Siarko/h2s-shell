@@ -22,23 +22,63 @@ PanelWindow {
     color: "transparent"
 
     readonly property bool _show: Lockscreen.screensaverVisible && !Lockscreen.locked
-    visible: _show || _content.opacity > 0.001
+    // The window is shown, still clear, before the fade in starts: mapping it and its
+    // first frame took so long the first time that the start of the fade was lost
+    property bool _mapped: false
+    visible: _mapped
+
+    on_ShowChanged: {
+        if (_show) {
+            _fadeOut.stop()
+            _mapped = true
+            _firstFrame.ticks = 0
+            _firstFrame.running = true
+        } else {
+            _firstFrame.running = false
+            _fadeIn.stop()
+            _fadeOut.start()
+        }
+    }
+
+    FrameAnimation {
+        id: _firstFrame
+        property int ticks: 0
+        onTriggered: {
+            // The first tick comes before the window's first frame, the second after it
+            if (++ticks < 2)
+                return
+            running = false
+            _fadeIn.start()
+        }
+    }
+
+    NumberAnimation {
+        id: _fadeIn
+        target: _content
+        property: "opacity"
+        to: 1
+        duration: Profiles.value("lockscreen.fadeInDuration") ?? 800
+        easing.type: Easing.InOutQuad
+    }
+
+    NumberAnimation {
+        id: _fadeOut
+        target: _content
+        property: "opacity"
+        to: 0
+        duration: Profiles.value("lockscreen.fadeOutDuration") ?? 400
+        easing.type: Easing.InOutQuad
+        onFinished: root._mapped = false
+    }
 
     Item {
         id: _content
         anchors.fill: parent
-        opacity: root._show ? 1.0 : 0.0
+        opacity: 0
 
         Rectangle {
             anchors.fill: parent
             color: Theme.scrim
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root._show ? (Profiles.value("lockscreen.fadeInDuration") ?? 800) : (Profiles.value("lockscreen.fadeOutDuration") ?? 400)
-                easing.type: Easing.InOutQuad
-            }
         }
 
         // Notification list — top right, below bar

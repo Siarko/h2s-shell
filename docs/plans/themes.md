@@ -192,8 +192,18 @@ The ~50 hard-coded `duration:` values move to roles.
      mid-slide, made quick clicks jump, and two left a gap at the edge; the week
      frame moves (move), day cells fade (state). The cover fades in once loaded and the
      title/artist on a title change (fade) — no true cross-fade, as for popups.
-   - Next: the rest of the list. Later (the user's idea): variants per element, `expand.dictate` falling
-   back to `expand` — and the same for colours.
+   - *Bar content (4), lock screen (8), 2026-10-29, verified on the host:* each section
+     shows its model plus the widgets going (`ProfileRules.withLeaving`, tested), kept in
+     place marked `leaving` until exit has run; a widget's width (and the section's
+     spacing, as a negative margin) scales with an animated 0–1, clipped, so neighbours
+     slide. Not in the first 3 s, while the bar starts. A widget whose preset changes has
+     a new key, so the old one shrinks while the new grows beside it. Lock screen: the
+     scrim fades in; prompt and notifications fade across, the prompt growing from 96 %. Found while
+     testing: `Lockscreen.lock()`/`unlock()` had been lost (1a02c55), so the lock never
+     came on; and the screensaver's first fade lost its start to the window's first frame
+     — the window now maps clear and fades after a frame, like popups.
+   - The list of candidates is done. Later (the user's idea): variants per element,
+     `expand.dictate` falling back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
    Notifications, Animations; create/copy/rename/delete themes. The Animations page lists

@@ -35,6 +35,9 @@ section to the new version and date.
   page names highlight under the pointer.
 - Calendar: months slide past each other, the new one coming from its side, and the selected day and
   week move smoothly. Music: a new track's title and cover fade in.
+- When a profile change adds or removes widgets on the bar, they grow in and shrink away
+  ("enter", "exit"), and the widgets beside them slide over. The lock screen fades in,
+  and waking it fades the notifications out and the password prompt in.
 
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere
@@ -50,6 +53,9 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- The lock screen never came on: locking and unlocking were lost when its settings
+  became per profile.
+- The screensaver's first fade after start keeps its full duration.
 - The first opening of a popup no longer loses part of its animation: panels are
   compiled in the background after start, and new content renders once before the
   animation starts (the calendar dropped a third of its frames).

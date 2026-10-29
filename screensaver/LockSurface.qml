@@ -32,9 +32,13 @@ WlSessionLockSurface {
         onTriggered: root._sleep()
     }
 
+    // The lock fades in over the screen rather than cutting to it
     Rectangle {
         anchors.fill: parent
         color: Theme.scrim
+        opacity: 0
+        Component.onCompleted: opacity = 1
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
     }
 
     MouseArea {
@@ -50,15 +54,24 @@ WlSessionLockSurface {
         onClicked:         mouse => { mouse.accepted = false }
     }
 
+    // Waking swaps the notifications for the prompt: they fade across, the prompt growing
+    // slightly into place
     LockPrompt {
         id: _prompt
         anchors.centerIn: parent
-        visible: root._awake
+        visible: opacity > 0
+        opacity: root._awake ? 1 : 0
+        scale: root._awake ? 1 : 0.96
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
+        Behavior on scale { NumberAnimation { duration: Theme.duration("enter"); easing.type: Theme.easing("enter") } }
         onActivity: root._wake()
     }
 
     ListView {
-        visible: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
+        readonly property bool shown: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
+        visible: opacity > 0
+        opacity: shown ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing.type: Theme.easing("fade") } }
         anchors {
             top: parent.top
             right: parent.right
