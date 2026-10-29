@@ -22,7 +22,10 @@ TestCase {
         "panels/settings/ProfilesSettings.qml",
         "panels/settings/SchemaSettingEditor.qml",
         "panels/settings/SettingOptions.qml",
-        "panels/settings/SttSettings.qml"
+        "panels/settings/SttSettings.qml",
+        "screensaver/LockSurface.qml",
+        "screensaver/NotificationPreview.qml",
+        "screensaver/ScreensaverSurface.qml"
     ]
 
     function run() {

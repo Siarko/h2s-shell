@@ -91,6 +91,12 @@ Flickable {
         }
 
         SchemaSettingEditor {
+            key: "lockscreen.screensaverNotificationDetail"
+            editIndex: root.editIndex
+            available: root._screensaverOn && root._edited("lockscreen.notificationsOnScreensaver") !== false
+        }
+
+        SchemaSettingEditor {
             key: "lockscreen.screensaverCommands"
             editIndex: root.editIndex
             available: root._screensaverOn
@@ -143,6 +149,12 @@ Flickable {
             key: "lockscreen.notificationsOnLock"
             editIndex: root.editIndex
             available: root._lockOn
+        }
+
+        SchemaSettingEditor {
+            key: "lockscreen.lockNotificationDetail"
+            editIndex: root.editIndex
+            available: root._lockOn && root._edited("lockscreen.notificationsOnLock") !== false
         }
 
         Item {

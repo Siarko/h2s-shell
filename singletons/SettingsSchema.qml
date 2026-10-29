@@ -111,6 +111,12 @@ Singleton {
           hint: "Run with sh -c, detached from the shell" },
         { key: "lockscreen.screensaverEndCommand", label: "When you come back", group: "lockscreen",
           type: "string", default: "", legacy: ["lockscreen", "screensaverExecWakeup"] },
+        { key: "lockscreen.screensaverNotificationDetail", label: "Notifications on the screensaver show",
+          group: "lockscreen", type: "enum", default: "full", options: [
+              { value: "full", label: "In full" },
+              { value: "title", label: "Title only" },
+              { value: "app", label: "App only" }
+          ] },
         { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
           type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
         { key: "lockscreen.lockscreenTimeout", label: "Lock after", group: "lockscreen",
@@ -119,6 +125,12 @@ Singleton {
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnLock"] },
+        { key: "lockscreen.lockNotificationDetail", label: "Notifications on the lock screen show",
+          group: "lockscreen", type: "enum", default: "full", options: [
+              { value: "full", label: "In full" },
+              { value: "title", label: "Title only" },
+              { value: "app", label: "App only" }
+          ] },
 
         // ── Notifications ──
         // Regular expressions for one-time codes in incoming notifications

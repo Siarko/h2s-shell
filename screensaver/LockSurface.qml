@@ -72,53 +72,8 @@ WlSessionLockSurface {
         model: Notifications.notifications
         interactive: false
 
-        delegate: Rectangle {
-            required property var modelData
-            width: 360
-            radius: 8
-            color: Qt.rgba(1, 1, 1, 0.08)
-            border.color: Qt.rgba(1, 1, 1, 0.12)
-            border.width: 1
-            implicitHeight: _col.implicitHeight + 16
-
-            Column {
-                id: _col
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                spacing: 2
-
-                Text {
-                    visible: text !== ""
-                    text: modelData.appName ?? ""
-                    color: Theme.textDim
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    width: parent.width
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    visible: text !== ""
-                    text: modelData.summary ?? ""
-                    color: "white"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBodyLarge
-                    font.bold: true
-                    width: parent.width
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    visible: text !== ""
-                    text: modelData.body ?? ""
-                    color: Theme.textSecondary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                }
-            }
+        delegate: NotificationPreview {
+            detail: Profiles.value("lockscreen.lockNotificationDetail") ?? "full"
         }
     }
 }

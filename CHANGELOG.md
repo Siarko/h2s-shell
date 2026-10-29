@@ -14,6 +14,8 @@ section to the new version and date.
 - Toast settings, per profile: show toasts at all, how long each stays, and one at a time
   or a column of them (with how many). A column shows the newest on top, and only the
   oldest counts down, so they leave one at a time.
+- Notification privacy on the screensaver and the lock screen, separately and per
+  profile: show notifications in full, title only, or the app alone.
 
 ### Fixed
 - The screensaver's start and end commands now run — they could be set but nothing ran

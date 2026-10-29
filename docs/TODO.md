@@ -397,11 +397,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Done 2026-10-29, verified on the host: four schema settings on the Notifications page;
       Hud holds ten toast slots, the setting enables one or the column's size, each placed
       by `Notifications.shownToasts` — newest on top — and only the oldest counts down.
-- [ ] **10.5 Notification privacy on the screensaver and lock screen** (requested
+- [x] **10.5 Notification privacy on the screensaver and lock screen** (requested
       2026-10-29)
       Separate settings for the screensaver and for the lock screen: when notifications
       are shown there, show them in full or hide their content (app and title only).
       `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
+      Done 2026-10-29, verified on the host: `lockscreen.screensaverNotificationDetail` and
+      `lockscreen.lockNotificationDetail` — full / title / app — shown by one shared
+      `screensaver/NotificationPreview.qml` instead of two copies of the card.
 - [x] **10.6 Dragging a slider scrolls the settings page** (reported 2026-10-29)
       Moving the mouse vertically while dragging a horizontal slider hands the drag to the
       page's Flickable, which scrolls instead. Likely fix: `preventStealing: true` on the
