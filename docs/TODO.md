@@ -12,8 +12,8 @@ verified on the host — the dev container has no `quickshell`.
 
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
 the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
-per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next: to be
-picked from the list.
+per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next: 10.9, themes —
+[plans/themes.md](plans/themes.md), stage 1 (colours in order).
 
 ---
 
@@ -485,6 +485,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       system power profile from the change handler of the effective value changed the
       `power.profile` fact while the facts were being re-evaluated. Deferred with
       `Qt.callLater`, as the seeding already was.
+- [ ] **10.9 Themes: every visual value in a theme, curves in a library**
+      Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
+      library, profiles pick one), behaviour stays in the profile; custom animation curves
+      with an editor; an Appearance section in settings; matugen-ready colours. Absorbs
+      10.1 and 9.4.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the
@@ -496,7 +501,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       muted full-height band so it is visible where there is no data yet. Setting
       `graphs.heartbeat` (on; Power save turns it off).
 
-- [ ] **10.1 Configurable animations**
+- [ ] **10.1 Configurable animations** — now part of **10.9**
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close
       ones being 100 ms with `OutQuad`/`InQuad` (`panels/Popup.qml`). Plan: named
