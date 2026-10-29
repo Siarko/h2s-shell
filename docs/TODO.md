@@ -12,8 +12,8 @@ verified on the host — the dev container has no `quickshell`.
 
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
 the Framework 12 is at hand, since it cannot be verified here. In progress: 10.3, every
-setting per profile — [plans/global-profiles.md](plans/global-profiles.md), stage 1
-done; next is stage 2, user-pinned global settings.
+setting per profile — [plans/global-profiles.md](plans/global-profiles.md), stages 1
+and 2 done; next is stage 3, the schema for every per-profile setting.
 
 ---
 

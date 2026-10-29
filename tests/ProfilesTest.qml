@@ -77,6 +77,22 @@ TestCase {
             "no profiles: the system profile");
         assertEqual(defaults.a, 1, "resolve does not modify the defaults");
 
+        // --- always-global settings (schema flag) ---
+        for (const key in SettingsSchema.systemGlobalDefaults)
+            assert(Profiles.isGlobal(key) && Profiles.isSystemGlobal(key), key + " is always global");
+        const systemGlobals = Object.assign({}, { c: 3 }, {});
+        assertEqual(ProfileRules.resolve(defaults, [{ name: "P", when: {}, set: { c: 99 } }], facts, systemGlobals).values.c, 3,
+            "a profile cannot change an always-global setting");
+
+        // --- global settings ---
+        const pinned = ProfileRules.resolve(defaults, profiles, facts, { b: 7, unknown: 1 });
+        assertEqual(pinned.values.b, 7, "a global value wins over every profile");
+        assertEqual(pinned.setBy.b, "global", "setBy reports it as global");
+        assertEqual(pinned.values.a, 10, "other keys still come from the profiles");
+        assert(!("unknown" in pinned.values), "a global outside the schema is ignored");
+        assertEqual(JSON.stringify(ProfileRules.resolve(defaults, profiles, facts, {}).values),
+            JSON.stringify(battery.values), "no globals: as before");
+
         // --- loop guard ---
         const loops = { name: "x", when: { fact: "power.profile", is: "balanced" }, set: { "system.powerProfile": "power-saver" } };
         assert(ProfileRules.saveError(loops) !== "", "setting the power profile while depending on it is refused");
@@ -94,6 +110,7 @@ TestCase {
         for (const key in seed[1].set)
             assert(key in SettingsSchema.defaults, "Power save sets a known key: " + key);
         assertEqual(JSON.stringify(Profiles.activeProfiles), JSON.stringify(["Full"]), "on this desktop only Full is active");
+        assertEqual(Profiles.inheritedFrom(0, "polling.hardware.interval"), "", "the first profile inherits the default");
         const seededOnPerformance = ProfileRules.seedProfiles(SettingsSchema.defaults, "performance");
         assertEqual(seededOnPerformance[0].set["system.powerProfile"], "performance",
             "Full names the power profile in use when seeding");

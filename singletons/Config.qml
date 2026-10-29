@@ -21,6 +21,9 @@ Singleton {
     // Profiles (docs/plans/adaptive-polling.md) as a JSON array. "" means the config
     // predates profiles and Profiles seeds it; "[]" means the user deleted them all.
     property alias profiles: _adapter.profiles
+    // Settings the user pinned as global, { key: value } as JSON: the same in every
+    // profile (docs/plans/global-profiles.md)
+    property alias globals: _adapter.globals
 
     // True once the file has been read (or found missing, so the defaults stand) —
     // before that every property still holds its default
@@ -42,6 +45,7 @@ Singleton {
             id: _adapter
             property string widgetProfiles: "{}"
             property string profiles: ""
+            property string globals: "{}"
             property JsonObject general: JsonObject {
                 id: _general
                 property bool debug: false

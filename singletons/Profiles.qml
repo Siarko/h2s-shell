@@ -109,6 +109,43 @@ Singleton {
         return ProfileRules.resolve(SettingsSchema.defaults, profiles.slice(0, index), facts).values[key]
     }
 
+    // Where that inherited value comes from: the name of the active profile above that
+    // sets it, or "" for the default
+    function inheritedFrom(index, key) {
+        return ProfileRules.resolve(SettingsSchema.defaults, profiles.slice(0, index), facts).setBy[key] ?? ""
+    }
+
+    function isGlobal(key) {
+        return key in effectiveGlobals
+    }
+
+    // Always global by the schema, not by the user's choice
+    function isSystemGlobal(key) {
+        return SettingsSchema.entry(key)?.global === true
+    }
+
+    // Pinning keeps what applies now, so nothing visibly changes. The profiles' own values
+    // for the key are kept, just ignored, and come back when it is unpinned.
+    function pinGlobal(key) {
+        const pinned = Object.assign({}, globals)
+        pinned[key] = value(key)
+        Config.globals = JSON.stringify(pinned)
+    }
+
+    function unpinGlobal(key) {
+        if (isSystemGlobal(key))
+            return
+        const pinned = Object.assign({}, globals)
+        delete pinned[key]
+        Config.globals = JSON.stringify(pinned)
+    }
+
+    function setGlobal(key, newValue) {
+        const pinned = Object.assign({}, globals)
+        pinned[key] = newValue
+        Config.globals = JSON.stringify(pinned)
+    }
+
     function setOverride(index, key, newValue) {
         const list = _copy()
         list[index].set = list[index].set ?? {}
@@ -177,7 +214,21 @@ Singleton {
 
     readonly property var facts: Object.assign({}, realFacts, simulated)
 
-    readonly property var _resolved: ProfileRules.resolve(SettingsSchema.defaults, profiles, facts)
+    // Settings pinned as global: { key: value }
+    readonly property var globals: {
+        try {
+            const parsed = JSON.parse(Config.globals || "{}")
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}
+        } catch (error) {
+            return {}
+        }
+    }
+
+    // Pinned by the user, plus the settings the schema marks as always global — at their
+    // stored value once edited, else their default — so no profile can change them
+    readonly property var effectiveGlobals: Object.assign({}, SettingsSchema.systemGlobalDefaults, globals)
+
+    readonly property var _resolved: ProfileRules.resolve(SettingsSchema.defaults, profiles, facts, effectiveGlobals)
 
     readonly property var effective: _resolved.values
     // Names of the profiles in effect, in order
@@ -262,6 +313,7 @@ Singleton {
                 active: root.activeProfiles,
                 facts: root.facts,
                 simulated: root.simulated,
+                globals: root.globals,
                 values: root.effective
             }, null, 2);
         }

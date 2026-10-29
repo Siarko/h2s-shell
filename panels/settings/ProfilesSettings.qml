@@ -67,7 +67,7 @@ Flickable {
         Text {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "A profile overrides settings while its conditions hold. When several apply, the one lower in the list wins. With no profiles, the built-in defaults apply."
+            text: "A profile overrides settings while its conditions hold. When several apply, the one lower in the list wins. With no profiles, the built-in defaults apply. A setting pinned as global (the pin next to it) is the same in every profile."
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textDim
@@ -83,6 +83,17 @@ Flickable {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
+        }
+
+        Text {
+            visible: Object.keys(Profiles.globals).length > 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: "Global, the same in every profile: "
+                + Object.keys(Profiles.globals).map(key => SettingsSchema.entry(key)?.label ?? key).join(", ")
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeBody
+            color: Theme.textSecondary
         }
 
         // Simulation, for trying conditions out on a machine without a battery

@@ -97,10 +97,11 @@ Singleton {
     }
 
     // Defaults overlaid by every enabled profile whose condition holds, in list order, so
-    // a later profile wins a conflict. Keys that are not in `defaults` are ignored: a
+    // a later profile wins a conflict; then the global values — settings the user pinned
+    // as global, which no profile changes. Keys that are not in `defaults` are ignored: a
     // profile saved by a newer version, or a setting that was removed.
-    // Returns { values, setBy: key → profile name, active: [names] }.
-    function resolve(defaults, profiles, facts) {
+    // Returns { values, setBy: key → profile name or "global", active: [names] }.
+    function resolve(defaults, profiles, facts, globals) {
         const values = Object.assign({}, defaults);
         const setBy = {};
         const active = [];
@@ -114,6 +115,12 @@ Singleton {
                 values[key] = profile.set[key];
                 setBy[key] = profile.name;
             }
+        }
+        for (const key in globals ?? {}) {
+            if (!(key in defaults))
+                continue;
+            values[key] = globals[key];
+            setBy[key] = "global";
         }
         return { values: values, setBy: setBy, active: active };
     }

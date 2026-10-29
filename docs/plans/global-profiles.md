@@ -42,6 +42,12 @@ that sets it, else the default.
   global". Unpinning brings them back into effect.
 - `ProfileRules.resolve` takes the globals as a last layer; `setBy(key)` reports
   "global". Pure, so it gets tests like the rest.
+- **Always-global settings, by the schema** (asked for 2026-10-29): a schema entry with
+  `global: true` behaves as if pinned and cannot be unpinned — its pin is locked and says
+  so. For settings where per-profile values make no sense: Debug Mode and fetch debug
+  (to be flagged when the General page is migrated), likely more later. Whether the
+  Google Calendar integration is one is undecided — it might reasonably be off on battery.
+  Mechanism built 2026-10-29 (`SettingsSchema.systemGlobalDefaults`).
 - Some settings are never per profile, by nature rather than by choice — credentials and
   tokens (Google client id/secret/tokens/expiry), remembered per-app volumes, internal
   flags. These stay out of the schema and out of profiles entirely, and do not get a pin.
@@ -78,6 +84,10 @@ Each shippable and verified on the host on its own.
    / overridden itself, so a page only lists keys.
 2. **Global settings**: `Config.globals`, the last layer in `resolve`, the pin control in
    `SchemaSettingEditor`, tests.
+   *Done 2026-10-29, verified on the host.* The Profiles page lists the pinned settings;
+   schema entries with `global: true` are always global (locked pin). Editors explain the
+   pin and the reset in a tooltip (`components/HoverTip.qml`) and say where an inherited
+   value comes from ("inherited from Full", "default").
 3. **Schema for every per-profile setting**, consumers switched to `Profiles.value()`,
    per page group. Migrating the config's values into Full, with a backup.
 4. **Pages, simple first**: General, Media, Lockscreen, Notifications, Dictation, Calendar

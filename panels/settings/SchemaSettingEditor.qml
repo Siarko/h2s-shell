@@ -1,13 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.components
 import qs.singletons
 
 // Editor for one SettingsSchema key as set in one profile — the one picked in the
 // settings window. The control follows the schema type: pills for intervals and enums,
 // a switch for bools. It says where the shown value comes from — set here, inherited from
-// the profiles above, or overridden right now by a later active profile — and offers to
-// drop this profile's own value.
+// the profiles above, overridden right now by a later active profile, or global — and
+// offers to drop this profile's own value. The pin makes the setting global: the same in
+// every profile, whichever is being edited (docs/plans/global-profiles.md).
 Item {
     id: root
 
@@ -20,14 +22,23 @@ Item {
     readonly property var ownValue: _profile?.set?.[key]
     // What applies at this profile's place when it sets nothing
     readonly property var inheritedValue: Profiles.inheritedValue(editIndex, key)
+    // The profile it comes from, or "" for the default
+    readonly property string inheritedFrom: Profiles.inheritedFrom(editIndex, key)
     // A later active profile that currently overrides this key, or ""
     readonly property string overriddenBy: {
         const setter = Profiles.setBy(key);
         return Profiles.profiles.findIndex(profile => profile.name === setter) > editIndex ? setter : "";
     }
 
+    // Pinned as global, by the user or always by the schema: one value for every profile
+    readonly property bool global: key in Profiles.effectiveGlobals
+    readonly property bool systemGlobal: entry?.global === true
+
     function edited(newValue) {
-        Profiles.setOverride(editIndex, key, newValue);
+        if (global)
+            Profiles.setGlobal(key, newValue);
+        else
+            Profiles.setOverride(editIndex, key, newValue);
     }
 
     function reset() {
@@ -36,7 +47,9 @@ Item {
 
     readonly property var entry: SettingsSchema.entry(key)
     readonly property bool inherits: ownValue === undefined
-    readonly property var shownValue: inherits ? inheritedValue : ownValue
+    readonly property var shownValue: global ? Profiles.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
+    // Shown dimmed: the value is not this profile's own
+    readonly property bool _dimmed: inherits && !global
 
     // Interval presets; the current value is added when it is not one of them, so a value
     // written by hand still shows as selected
@@ -87,18 +100,66 @@ Item {
             }
 
             Text {
-                text: root.overriddenBy !== ""
-                    ? "now set by " + root.overriddenBy
-                    : (root.inherits ? "inherited" : "")
+                text: root.systemGlobal
+                    ? "always global"
+                    : root.global
+                    ? (root.inherits ? "global" : "global — this profile's value is ignored")
+                    : root.overriddenBy !== ""
+                        ? "now set by " + root.overriddenBy
+                        : (root.inherits ? (root.inheritedFrom !== "" ? "inherited from " + root.inheritedFrom : "default") : "")
                 visible: text !== ""
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                color: root.overriddenBy !== "" ? Theme.sliderAccent : Theme.textDim
+                color: root.global || root.overriddenBy !== "" ? Theme.sliderAccent : Theme.textDim
+            }
+
+            // Pin as global, or unpin; profile values are kept either way
+            Rectangle {
+                id: _pin
+                width: 20
+                height: 20
+                radius: 4
+                color: _pinArea.containsMouse ? Theme.cellHover : "transparent"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "󰐃"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeMedium
+                    color: root.global ? Theme.sliderAccent : Theme.textDim
+                    opacity: root.global || _pinArea.containsMouse ? (root.systemGlobal ? 0.6 : 1) : 0.5
+                }
+
+                MouseArea {
+                    id: _pinArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: root.systemGlobal ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.systemGlobal)
+                            return;
+                        if (root.global)
+                            Profiles.unpinGlobal(root.key);
+                        else
+                            Profiles.pinGlobal(root.key);
+                    }
+                }
+
+                HoverTip {
+                    target: _pin
+                    shown: _pinArea.containsMouse
+                    text: root.systemGlobal
+                        ? "Always global: this setting is never per profile, so it has one value whichever profile is being edited."
+                        : root.global
+                        ? "Global: the same value in every profile, whichever profile is being edited. Click to make it per profile again — the profiles' own values come back."
+                        : "Pin as global: one value for every profile, which no profile changes. The profiles' own values are kept and come back when unpinned."
+                }
             }
 
             // Drop this profile's value, so the key falls through to the profiles above
             Rectangle {
-                visible: !root.inherits
+                id: _reset
+                visible: !root.inherits && !root.global
                 width: 20
                 height: 20
                 radius: 4
@@ -118,6 +179,13 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.reset()
                 }
+
+                HoverTip {
+                    target: _reset
+                    shown: _resetArea.containsMouse
+                    text: "Stop setting this in " + (root._profile?.name ?? "this profile")
+                        + ": it then follows the profiles above it, or the default."
+                }
             }
 
             // Bool: a switch on the header row
@@ -126,7 +194,7 @@ Item {
                 width: 36
                 height: 20
                 radius: 10
-                opacity: root.inherits ? 0.5 : 1
+                opacity: root._dimmed ? 0.5 : 1
                 color: root.shownValue === true ? Theme.sliderAccent : Theme.cellDefault
 
                 Rectangle {
@@ -167,7 +235,7 @@ Item {
                     height: 26
                     radius: 6
                     color: selected ? Theme.sliderAccent : "transparent"
-                    opacity: selected && root.inherits ? 0.5 : 1
+                    opacity: selected && root._dimmed ? 0.5 : 1
                     border.width: selected ? 0 : 1
                     border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
 

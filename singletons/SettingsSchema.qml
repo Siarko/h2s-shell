@@ -15,6 +15,8 @@ import QtQuick
 //   default  — value of the system profile
 //   min/max  — for interval and number
 //   options  — for enum: [{ value, label }]
+//   global   — true for a setting that is never per profile (debug switches, say): it
+//              behaves as if the user had pinned it as global, and cannot be unpinned
 Singleton {
     id: root
 
@@ -65,6 +67,16 @@ Singleton {
         let values = {};
         for (const entry of entries)
             values[entry.key] = entry.default;
+        return values;
+    }
+
+    // Defaults of the settings that are always global, { key: default }
+    readonly property var systemGlobalDefaults: {
+        let values = {};
+        for (const entry of entries) {
+            if (entry.global === true)
+                values[entry.key] = entry.default;
+        }
         return values;
     }
 
