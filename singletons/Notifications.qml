@@ -28,17 +28,17 @@ Singleton {
                 return;
             }
 
-            notification.tracked = true;
-
-            console.log("Icon", notification.appIcon);
-
+            // Timestamp and codes first, tracking last: tracking adds the notification to
+            // the list, and a card created right then has to find both already there.
+            // Both maps are reassigned, not mutated — an in-place change emits no signal,
+            // so a card would never see a value that arrived after it.
             var now = new Date();
             var h = String(now.getHours()).padStart(2, '0');
             var m = String(now.getMinutes()).padStart(2, '0');
             var s = String(now.getSeconds()).padStart(2, '0');
-            timestamps[notification.id] = h + ":" + m + ":" + s;
-            if (!hudPanelOpen)
-                enqueueHudNotification(notification);
+            var updatedTimestamps = Object.assign({}, timestamps);
+            updatedTimestamps[notification.id] = h + ":" + m + ":" + s;
+            timestamps = updatedTimestamps;
 
             // Extract codes from summary + body using configured regex patterns
             var text = (notification.summary ?? "") + " " + (notification.body ?? "");
@@ -63,10 +63,16 @@ Singleton {
                 extractedCodes = updatedCodes;
             }
 
+            notification.tracked = true;
+            if (!hudPanelOpen)
+                enqueueHudNotification(notification);
+
             // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
                 if (!notification.tracked) {
-                    delete timestamps[notification.id];
+                    var remainingTimestamps = Object.assign({}, timestamps);
+                    delete remainingTimestamps[notification.id];
+                    timestamps = remainingTimestamps;
                     if (extractedCodes[notification.id]) {
                         var remaining = Object.assign({}, extractedCodes);
                         delete remaining[notification.id];

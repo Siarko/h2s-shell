@@ -313,10 +313,16 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 - [x] **8.1 One `SettingsWindow`, not one per monitor** [#4] — `Bar.qml:247`
       Done 2026-10-29: one window in `shell.qml`, reached through `Shell`.
-- [ ] **8.2 `Notifications.timestamps` reassign instead of mutate** [#5]
-- [ ] **8.3 Fix the `Connections` leak in `Audio.qml`** [#6], and document `type === 21`
-- [ ] **8.4 `Notifier`: one process per interactive notification** [#7]
-- [ ] **8.5 `PowerMenu`: absolute script paths** [#8] — `panels/PowerMenu.qml:72`
+- [x] **8.2 `Notifications.timestamps` reassign instead of mutate** [#5]
+      Done 2026-10-29: reassigned, and set (with the codes) before `tracked = true`.
+- [x] **8.3 Fix the `Connections` leak in `Audio.qml`** [#6], and document `type === 21`
+      Done 2026-10-29: one watcher per app stream, destroyed with it; app streams kept by
+      object, not by the shifting index; 21 is `PwNodeType.AudioOutStream`.
+- [x] **8.4 `Notifier`: one process per interactive notification** [#7]
+      Done 2026-10-29, verified on the host: a process per notification, destroyed on
+      exit; four interactive ones at once each reached their own callbacks.
+- [x] **8.5 `PowerMenu`: absolute script paths** [#8] — `panels/PowerMenu.qml:72`
+      Already fixed before 2026-10-29: the Process sets `workingDirectory: Quickshell.shellDir`.
 - [x] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
       Fixed by 2.1: `PopupWidget` opens every click popup persistent.
 - [x] **8.7 `Lockscreen`: bind config declaratively** [#10]

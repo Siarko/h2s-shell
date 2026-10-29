@@ -120,7 +120,7 @@ singleton. This matters for the laptop-plus-external-monitor setup.
 `Shell.toggleSettings()`. Side effect: "Settings saved" is announced once, not once per
 monitor.
 
-### 5. `Notifications.timestamps` is mutated in place, so its readers never update — **confirmed (latent)**
+### 5. `Notifications.timestamps` is mutated in place, so its readers never update — **FIXED**
 
 `singletons/Notifications.qml:39` writes `timestamps[notification.id] = …` and `:69`
 deletes from it, both without reassigning the property. QML emits no change signal for
@@ -139,7 +139,7 @@ The inconsistency is the tell.
 Fix: treat `timestamps` the same way as `extractedCodes`, and set the timestamp before
 `tracked = true`.
 
-### 6. `singletons/Audio.qml` leaks a `Connections` object per stream — **confirmed**
+### 6. `singletons/Audio.qml` leaks a `Connections` object per stream — **FIXED**
 
 `singletons/Audio.qml:54,79`
 
@@ -162,7 +162,7 @@ document what 21 means.
 Also `appNodesByIndex` is keyed by Pipewire's *index*, which is recycled. A remove/insert
 pair in the wrong order can drop the wrong node.
 
-### 7. `Notifier` has one callback slot and clobbers it — **confirmed**
+### 7. `Notifier` has one callback slot and clobbers it — **FIXED**
 
 `singletons/Notifier.qml:89`
 
@@ -175,7 +175,7 @@ notification's actions are lost silently.
 Fix: one `Process` per interactive notification (an `Instantiator` over a pending list,
 or `createObject`), keyed so each reply reaches its own callbacks.
 
-### 8. Power menu uses paths relative to the working directory — **confirmed**
+### 8. Power menu uses paths relative to the working directory — **FIXED (workingDirectory)**
 
 `panels/PowerMenu.qml:72` runs `["bash", modelData.script]` where `script` is
 `"scripts/shutdown.sh"`. That only resolves when `quickshell` was launched from the repo

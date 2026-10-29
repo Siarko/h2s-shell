@@ -85,79 +85,69 @@ Singleton {
         cmd.push(summary);
         if (options.body)
             cmd.push(options.body);
-
-        if (needWait) {
+        if (needWait)
             cmd.push("--wait");
-            _pendingCallbacks = {
+
+        // A process of its own per notification: one shared process meant a second
+        // interactive notification killed the first's `notify-send --wait` and took over
+        // its callbacks, so the first's buttons did nothing
+        const process = _processComponent.createObject(root, {
+            command: cmd,
+            callbacks: needWait ? {
                 actions: options.actions ?? [],
                 inlineReply: options.inlineReply ?? null,
                 onDismissed: options.onDismissed ?? null
-            };
-            _outputLines = [];
-            _waitProcess.running = false;
-            _waitProcess.command = cmd;
-            _waitProcess.running = true;
-        } else {
-            _simpleProcess.running = false;
-            _simpleProcess.command = cmd;
-            _simpleProcess.running = true;
-        }
+            } : null
+        });
+        process.running = true;
     }
 
-    property var _pendingCallbacks: null
-    property var _outputLines: []
-
-    // Fire-and-forget notifications
-    Process {
-        id: _simpleProcess
-        running: false
-    }
-
-    // Notifications requiring a response (actions, inline reply, dismiss callback)
-    Process {
-        id: _waitProcess
-        running: false
-
-        stdout: SplitParser {
-            onRead: line => {
-                root._outputLines = root._outputLines.concat([line]);
-            }
-        }
-
-        onExited: (exitCode, exitStatus) => {
-            if (!root._pendingCallbacks)
-                return;
-
-            let lines = root._outputLines;
-            let callbacks = root._pendingCallbacks;
-            root._pendingCallbacks = null;
-            root._outputLines = [];
-
-            if (lines.length === 0) {
-                if (callbacks.onDismissed)
-                    callbacks.onDismissed();
-                return;
-            }
-
-            let firstLine = lines[0];
-
-            // Inline reply: notify-send outputs "inline-reply" followed by the reply text
-            if (callbacks.inlineReply && firstLine === "inline-reply" && lines.length > 1) {
-                let replyText = lines.slice(1).join("\n");
-                callbacks.inlineReply.onReply(replyText);
-                return;
-            }
-
-            // Action button: output is the action id
-            let action = callbacks.actions.find(a => a.id === firstLine);
-            if (action && action.onTriggered) {
-                action.onTriggered();
-                return;
-            }
-
-            // No match — treated as dismissed
+    // Calls the callback that matches what notify-send printed when the notification
+    // closed: an action id, "inline-reply" and the text, or nothing for a dismissal
+    function _dispatch(callbacks, lines) {
+        if (lines.length === 0) {
             if (callbacks.onDismissed)
                 callbacks.onDismissed();
+            return;
+        }
+
+        let firstLine = lines[0];
+
+        if (callbacks.inlineReply && firstLine === "inline-reply" && lines.length > 1) {
+            callbacks.inlineReply.onReply(lines.slice(1).join("\n"));
+            return;
+        }
+
+        let action = callbacks.actions.find(a => a.id === firstLine);
+        if (action && action.onTriggered) {
+            action.onTriggered();
+            return;
+        }
+
+        // No match — treated as dismissed
+        if (callbacks.onDismissed)
+            callbacks.onDismissed();
+    }
+
+    // One notify-send run; gone once it exits
+    Component {
+        id: _processComponent
+
+        Process {
+            id: _process
+            // null for a notification that needs no reply
+            property var callbacks: null
+            property var lines: []
+
+            stdout: SplitParser {
+                onRead: line => _process.lines = _process.lines.concat([line])
+            }
+
+            onExited: (exitCode, exitStatus) => {
+                if (_process.callbacks)
+                    root._dispatch(_process.callbacks, _process.lines);
+                _process.destroy();
+            }
         }
     }
 }
