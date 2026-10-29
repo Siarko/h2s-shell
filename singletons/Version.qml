@@ -13,7 +13,7 @@ import QtQuick
 Singleton {
     id: root
 
-    readonly property string number: "1.0.0"
+    readonly property string number: "1.1.0"
 
     // What is shown: the number alone when running exactly the tagged release, otherwise
     // the number plus the commit — "+9d98c91", and ".dirty" for uncommitted changes — so

@@ -10,6 +10,8 @@ section to the new version and date.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-29
+
 ### Added
 - Toast settings, per profile: show toasts at all, how long each stays, and one at a time
   or a column of them (with how many). A column shows the newest on top, and only the
