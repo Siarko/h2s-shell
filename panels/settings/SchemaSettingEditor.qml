@@ -6,7 +6,8 @@ import qs.singletons
 
 // Editor for one SettingsSchema key as set in one profile — the one picked in the
 // settings window. The control follows the schema type: pills for intervals and enums,
-// a switch for bools, a text field for strings, a number field or a slider for numbers. It says where the shown value comes from — set here, inherited from
+// a switch for bools, a text field for strings, a number field or a slider for numbers,
+// a list of fields for a list of texts. It says where the shown value comes from — set here, inherited from
 // the profiles above, overridden right now by a later active profile, or global — and
 // offers to drop this profile's own value. The pin makes the setting global: the same in
 // every profile, whichever is being edited (docs/plans/global-profiles.md).
@@ -275,6 +276,109 @@ Item {
             value: root.shownValue ?? 0
             opacity: root._dimmed ? 0.5 : 1
             onValueEdited: newValue => root.edited(newValue)
+        }
+
+        // List of texts: one field per entry, saved as a whole list when one is edited,
+        // removed or added — editing an inherited list copies it into this profile
+        Column {
+            id: _listEditor
+            visible: root.entry?.type === "stringList"
+            width: parent.width
+            spacing: 4
+            opacity: root._dimmed ? 0.6 : 1
+
+            readonly property var items: Array.isArray(root.shownValue) ? root.shownValue : []
+
+            function replaced(index, text) {
+                const list = items.slice();
+                if (text === null)
+                    list.splice(index, 1);
+                else
+                    list[index] = text;
+                root.edited(list);
+            }
+
+            Repeater {
+                // ScriptModel, never a bare array — see "The Repeater crash"
+                model: ScriptModel {
+                    values: _listEditor.items.map((text, index) => ({ text: text, index: index }))
+                }
+
+                Row {
+                    id: _listRow
+                    required property var modelData
+                    width: _listEditor.width
+                    spacing: 4
+
+                    Rectangle {
+                        width: _listRow.width - 28
+                        height: 26
+                        radius: 6
+                        color: Theme.cellDefault
+
+                        TextInput {
+                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                            text: _listRow.modelData.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            color: Theme.textPrimary
+                            verticalAlignment: TextInput.AlignVCenter
+                            selectByMouse: true
+                            clip: true
+                            onEditingFinished: {
+                                if (text !== _listRow.modelData.text)
+                                    _listEditor.replaced(_listRow.modelData.index, text);
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 24
+                        height: 26
+                        radius: 4
+                        color: _removeArea.containsMouse ? Theme.cellHover : "transparent"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            font.pixelSize: Theme.fontSizeMedium
+                            color: Theme.textDim
+                        }
+
+                        MouseArea {
+                            id: _removeArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: _listEditor.replaced(_listRow.modelData.index, null)
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: _addText.implicitWidth + 16
+                height: 24
+                radius: 6
+                color: _addArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+
+                Text {
+                    id: _addText
+                    anchors.centerIn: parent
+                    text: "+ Add"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textSecondary
+                }
+
+                MouseArea {
+                    id: _addArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.edited(_listEditor.items.concat([""]))
+                }
+            }
         }
 
         // Text: saved when editing finishes; an inherited value is shown dimmed

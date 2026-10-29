@@ -156,6 +156,7 @@ verified on the host before the next.
    schema gained `number` and `slider` types; the editor `available` and `label`.
 4. **Notifications:** codePatterns with the `stringList` editor;
    `singletons/Notifications.qml`.
+   *Done 2026-10-29, verified on the host.*
 5. **Dictation:** stt.*; `singletons/Stt.qml`, `widgets/SttWidget.qml`,
    `singletons/DictationMusicPause.qml`. Order for a widget instance: preset value →
    `Profiles.value` → schema default (`panels/widget_settings/SttWidgetSettings.qml`

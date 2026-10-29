@@ -341,6 +341,18 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Agreed 2026-10-29: [plans/global-profiles.md](plans/global-profiles.md). The
       editing-profile picker covers the whole settings window; every setting is saved per
       profile, except those the user pins as global. Doubles as the config rework (#11).
+- [ ] **10.4 More notification settings** (requested 2026-10-29)
+      All as schema settings, so per profile (e.g. no toasts in Power save or while a
+      fullscreen window is focused):
+      - whether toasts show on the desktop at all;
+      - how long a toast stays (today a fixed 5 s in `hud/NotificationHudItem.qml`);
+      - queueing: one toast at a time with a queue badge, as now, or a column of toasts —
+        and then how many at most in the column.
+- [ ] **10.5 Notification privacy on the screensaver and lock screen** (requested
+      2026-10-29)
+      Separate settings for the screensaver and for the lock screen: when notifications
+      are shown there, show them in full or hide their content (app and title only).
+      `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

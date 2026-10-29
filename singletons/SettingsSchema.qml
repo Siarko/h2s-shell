@@ -12,7 +12,7 @@ import QtQuick
 //   label    — shown in settings
 //   group    — settings section the key is edited in
 //   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
-//              "bool", "string"
+//              "bool", "string", "stringList"
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   suffix   — unit shown after a number or slider, e.g. "s"
@@ -68,6 +68,11 @@ Singleton {
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnLock"] },
+
+        // ── Notifications ──
+        // Regular expressions for one-time codes in incoming notifications
+        { key: "notifications.codePatterns", label: "Code patterns", group: "notifications",
+          type: "stringList", default: ["\\d{4,8}"], legacy: ["notifications", "codePatterns"] },
 
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",

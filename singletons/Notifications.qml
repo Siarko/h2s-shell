@@ -7,7 +7,7 @@ Singleton {
     property alias notifications: server.trackedNotifications
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
-    // Map of notification id -> string[] of extracted codes matching Config.notifications.codePatterns
+    // Map of notification id -> string[] of extracted codes matching the notifications.codePatterns setting
     property var extractedCodes: ({})
 
     NotificationServer {
@@ -43,7 +43,7 @@ Singleton {
             // Extract codes from summary + body using configured regex patterns
             var text = (notification.summary ?? "") + " " + (notification.body ?? "");
             var codes = [];
-            var patterns = Config.notifications.codePatterns;
+            var patterns = Profiles.value("notifications.codePatterns") ?? [];
             for (var i = 0; i < patterns.length; i++) {
                 var pat = patterns[i];
                 if (!pat) continue;
