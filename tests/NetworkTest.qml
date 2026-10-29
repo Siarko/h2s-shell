@@ -116,16 +116,18 @@ TestCase {
 
         // --- LinkSpeed._update ---
         {
-            _link._update(1000, 500);
+            _link._update(1000, 500, 10000);
             assertEqual(_link.rxSpeed, 0, "link speed: the first read is only a baseline");
-            _link._update(5000, 2500);
+            _link._update(5000, 2500, 12000);
             assertEqual(_link.rxSpeed, 2000, "link speed: rx bytes per second");
             assertEqual(_link.txSpeed, 1000, "link speed: tx bytes per second");
-            _link._update(100, 100);
+            _link._update(100, 100, 14000);
             assert(_link.rxSpeed === 0 && _link.txSpeed === 0, "link speed: a counter reset never goes negative");
             assertEqual(_link.rxHistory.length, 2, "link speed: one history sample per measured tick, none for the baseline");
             assertEqual(_link.rxHistory[0].v, 2000, "link speed: history holds the rx speed");
             assertEqual(_link.txHistory[0].v, 1000, "link speed: and the tx speed separately");
+            _link._update(10100, 100, 24000);
+            assertEqual(_link.rxSpeed, 1000, "link speed: divides by the time elapsed, not the configured interval");
         }
     }
 }

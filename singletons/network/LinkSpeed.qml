@@ -1,4 +1,5 @@
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 // Throughput of one network interface, read from its sysfs byte counters.
@@ -15,7 +16,7 @@ Item {
     // Gate for polling — false while the link is down, so counters that cannot move
     // are not read.
     property bool active: true
-    property int intervalMs: 2000
+    property int intervalMs: Profiles.value("polling.network.interval")
 
     property real rxSpeed: 0
     property real txSpeed: 0
@@ -30,6 +31,7 @@ Item {
     // otherwise the first delta would be a jump between two unrelated counters.
     property real _rxPrevious: -1
     property real _txPrevious: -1
+    property double _previousTime: 0
 
     onDeviceChanged: _reset()
     onActiveChanged: if (!active) _reset()
@@ -53,7 +55,7 @@ Item {
 
     Timer {
         interval: root.intervalMs
-        running: root.device !== "" && root.active
+        running: root.intervalMs > 0 && root.device !== "" && root.active
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -68,19 +70,22 @@ Item {
         }
     }
 
-    function _update(rxBytes, txBytes) {
-        if (_rxPrevious < 0) {
+    // Divides by the time actually elapsed, not by intervalMs: a profile can change the
+    // rate between two reads. `now` is a parameter for the tests.
+    function _update(rxBytes, txBytes, now = Date.now()) {
+        if (_rxPrevious < 0 || now <= _previousTime) {
             _rxPrevious = rxBytes
             _txPrevious = txBytes
+            _previousTime = now
             return
         }
-        var seconds = intervalMs / 1000.0
+        var seconds = (now - _previousTime) / 1000.0
         rxSpeed = Math.max(0, (rxBytes - _rxPrevious) / seconds)
         txSpeed = Math.max(0, (txBytes - _txPrevious) / seconds)
-        var now = Date.now()
         rxHistory = rxHistory.slice(-(maxHistory - 1)).concat([{t: now, v: rxSpeed}])
         txHistory = txHistory.slice(-(maxHistory - 1)).concat([{t: now, v: txSpeed}])
         _rxPrevious = rxBytes
         _txPrevious = txBytes
+        _previousTime = now
     }
 }

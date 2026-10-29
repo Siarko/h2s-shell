@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons
 
 Singleton {
     id: root
@@ -35,8 +36,8 @@ Singleton {
     }
 
     Timer {
-        interval: 10000
-        running: true
+        interval: Profiles.value("polling.disk.interval")
+        running: interval > 0
         repeat: true
         triggeredOnStart: true
         onTriggered: if (!_proc.running) _proc.running = true

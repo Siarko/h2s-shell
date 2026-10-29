@@ -34,7 +34,8 @@ counters, so it will not have that cost.
 5. **Every profile is a config entry** the user can edit, reorder and delete. The config
    starts with one profile, **Full** (no condition, today's values). Behind them sits a
    read-only **system profile** — the schema defaults — which is what applies when the
-   user has deleted every profile. (Whether "Power save" is also seeded: see Still open.)
+   user has deleted every profile. **Power save** (on battery) is seeded alongside Full
+   on first run (decided 2026-10-29).
 6. **Settings UI**: a global **Profiles** page for profiles, their conditions and order;
    a **Performance** section for the polling rates. Both edit through one schema
    registry.
@@ -175,6 +176,8 @@ and `running` to "interval > 0" (plus its own existing gates). `GpuLoadSource` r
   across it, which looks like data: store the interval with each sample (`{ t, v, dt }`)
   and break the line where the gap is much longer than `dt`.
 - On a rate change, sample at once rather than waiting a full new interval.
+- History is capped by sample count (1800, i.e. 1 h at 2 s). At a faster rate that is
+  less than the graph's 1 h, at a slower one more: trim by age instead.
 - CPU usage and link speed are deltas: after a pause, the first sample only re-establishes
   the baseline (LinkSpeed already does this via `_reset()`; CpuSource needs the same).
 - The capsule on the bar shows live values: if a profile pauses a category the capsule
@@ -186,7 +189,7 @@ and `running` to "interval > 0" (plus its own existing gates). `GpuLoadSource` r
 `Config.profiles`, the ordered list, stored as a JSON string as `widgetProfiles` is
 today; CLEANUP #11 (the config/JSON rework, Stage 6) is the proper fix, and it moves
 with that. When the key is absent (first run, or a config from before profiles) it is
-seeded with Full. An empty list is different from an absent one: it means the user
+seeded with Full and Power save. An empty list is different from an absent one: it means the user
 deleted everything, and the system profile applies.
 
 **Host behaviour must not change**: Full and the system profile both equal today's
@@ -210,6 +213,9 @@ rates — except the temperatures, now one rate (see the schema table).
 1. `SettingsSchema` with the v1 keys and today's defaults; `Profiles` with `value()`
    returning base/default only; sources bind to it. Verify on the host that nothing
    changed.
+   *Done 2026-10-29, awaiting host verification.* `visualizer.fps` waits for step 8.
+   LinkSpeed now divides by the time actually elapsed between reads, not by the
+   configured interval, since a profile can change the rate between two reads.
 2. The condition engine and overlay as pure functions, with tests; `Profiles` evaluates
    profiles from a hard-coded list.
 3. Facts: UPower, battery, power profile, lock, fullscreen, open panel; the simulate
@@ -226,7 +232,11 @@ simulate override, or the laptop).
 Independent quick win, any time: disk usage barely moves, so its default could go from
 10 s to 60 s — but that changes host behaviour, so only with the user's say-so.
 
-## Still open
+## Decided 2026-10-29
 
-- Is "Power save" (on battery) seeded alongside Full, or does the user create it?
-- Does the Performance section edit a chosen profile (proposed above), or only Full?
+- The Performance section edits a chosen profile (option A above). The user wants to try
+  it before judging how usable it is — build it so that switching to "edits only Full"
+  would be a small change.
+- The settings must show which profiles are active right now, and why: on the Profiles
+  page, and as a compact indicator visible from the other settings pages (e.g. the
+  settings window header) — "Active: Full, Power save (on battery)".

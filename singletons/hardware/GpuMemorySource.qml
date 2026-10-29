@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 // Video memory in use on one card. A source of its own rather than a subtitle under the
@@ -51,8 +52,8 @@ Scope {
     }
 
     Timer {
-        interval: 2000
-        running: root._readable
+        interval: Profiles.value("polling.hardware.interval")
+        running: interval > 0 && root._readable
         repeat: true
         triggeredOnStart: true
         onTriggered: {

@@ -2,6 +2,7 @@ pragma Singleton
 
 import Quickshell
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 Singleton {
@@ -33,8 +34,8 @@ Singleton {
     }
 
     Timer {
-        interval: 2000
-        running: true
+        interval: Profiles.value("polling.hardware.interval")
+        running: interval > 0
         repeat: true
         triggeredOnStart: true
         onTriggered: {

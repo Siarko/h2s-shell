@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 // How busy one card's cores are. One instance per card, created by Hardware.qml.
@@ -27,7 +28,8 @@ Scope {
     // gpu_busy_percent is an instantaneous reading that swings between 0 and its real
     // level within a fraction of a second; one sample per 2 s tick mostly caught the 0.
     // It is sampled often and the tick publishes the average, like CPU usage is an
-    // average over the whole tick.
+    // average over the whole tick. A profile can turn that off ("single"): then each tick
+    // reads one sample itself, below.
     property real _busySum: 0
     property int _busySamples: 0
 
@@ -44,8 +46,8 @@ Scope {
 
     Timer {
         id: _timer
-        interval: 2000
-        running: root._readable
+        interval: Profiles.value("polling.hardware.interval")
+        running: interval > 0 && root._readable
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -65,7 +67,7 @@ Scope {
 
     Timer {
         interval: 200
-        running: _timer.running
+        running: _timer.running && Profiles.value("polling.hardware.gpuSampling") === "averaged"
         repeat: true
         onTriggered: {
             var busy = parseInt(_busy.read())

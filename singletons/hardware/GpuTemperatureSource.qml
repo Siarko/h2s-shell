@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 // One card's temperature (its first hwmon sensor, "edge" on amdgpu). One instance per
@@ -37,8 +38,8 @@ Scope {
     }
 
     Timer {
-        interval: 2000
-        running: root.card.tempPath !== "" && root._readable
+        interval: Profiles.value("polling.temperatures.interval")
+        running: interval > 0 && root.card.tempPath !== "" && root._readable
         repeat: true
         triggeredOnStart: true
         onTriggered: {

@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons
 import qs.singletons.io
 
 Singleton {
@@ -16,7 +17,7 @@ Singleton {
     property real maxValue: 110
     property bool available: true
     property var history: []
-    property int maxHistory: 720  // 1h at 5s interval
+    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: false
 
@@ -64,8 +65,8 @@ Singleton {
     }
 
     Timer {
-        interval: 5000
-        running: root._sensorPath !== "" && root.available
+        interval: Profiles.value("polling.temperatures.interval")
+        running: interval > 0 && root._sensorPath !== "" && root.available
         repeat: true
         triggeredOnStart: true
         onTriggered: {
