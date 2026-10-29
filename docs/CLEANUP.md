@@ -103,7 +103,7 @@ Fix: set `xhr.timeout`, handle `ontimeout` and `onerror` by rejecting, and clear
 
 ## P1 — Bugs
 
-### 4. `SettingsWindow` is created once per monitor — **likely**
+### 4. `SettingsWindow` is created once per monitor — **FIXED**
 
 `Bar.qml:247`
 
@@ -114,6 +114,11 @@ means `Shell.openSettings()` opens *both*.
 
 Fix: hoist it to `shell.qml` as a single instance and route to it through the `Shell`
 singleton. This matters for the laptop-plus-external-monitor setup.
+
+**Fixed (2026-10-29):** one `SettingsWindow` in `shell.qml`, opened through
+`Shell.openSettings(category)` and toggled by the settings widget through
+`Shell.toggleSettings()`. Side effect: "Settings saved" is announced once, not once per
+monitor.
 
 ### 5. `Notifications.timestamps` is mutated in place, so its readers never update — **confirmed (latent)**
 

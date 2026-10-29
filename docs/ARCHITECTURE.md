@@ -45,8 +45,8 @@ hardware widget or panel is actually in use.
 ## Layers
 
 ```
-shell.qml                 process root — one Bar, one Hud, one ScreensaverSurface per screen
-├── Bar.qml               the panel window: widget rows + the popup + the settings window
+shell.qml                 process root — one Bar, one Hud, one ScreensaverSurface per screen; the settings window
+├── Bar.qml               the panel window: widget rows + the popup
 │   ├── widgets/          bar cells (clock, network, …) — thin, read singletons
 │   └── panels/Popup.qml  the single popup window, lazily loaded, hosts one panel at a time
 │       └── panels/       popup content (NetworkPanel, MusicPanel, Calendar, …)
@@ -71,8 +71,8 @@ ScreensaverSurface exist per monitor. Only one popup may be open across all scre
 each `Bar` emits `popupOpened`, `shell.qml` records it in `activeScreen`, and every
 other Bar closes its own popup when `activeScreen` stops matching its own screen.
 
-`SettingsWindow` is also instantiated inside `Bar.qml`, which means one instance *per
-monitor* — see CLEANUP.md #6.
+`SettingsWindow` is the exception: one instance for the whole shell, in `shell.qml`,
+opened with `Shell.openSettings(category)` and toggled with `Shell.toggleSettings()`.
 
 ## Key patterns
 

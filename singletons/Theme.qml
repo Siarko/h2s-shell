@@ -18,7 +18,6 @@ QtObject {
     readonly property int fontSizeTitle: 20         // widget/panel titles, large icons
     readonly property int fontSizeDisplay: 22       // calendar event display
     readonly property int fontSizeLargeDisplay: 24  // music panel headers
-    readonly property int fontSizeXLargeDisplay: 30 // settings widget icon
     readonly property int fontSizeXXLargeDisplay: 32 // music track name
     readonly property int fontSizeHero: 52          // notification empty-state icon
 

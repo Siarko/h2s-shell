@@ -13,8 +13,7 @@ verified on the host — the dev container has no `quickshell`.
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
 the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
 per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next, as
-agreed: 8.9 (the last live Repeater model), 8.1 (one settings window), then 8.10 and
-10.7.
+agreed: 8.10 (the calendar enable switch), then 10.7 (widget presets).
 
 ---
 
@@ -303,7 +302,8 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 8 — Correctness fixes, fold into whichever stage touches the file  [P1]
 
-- [ ] **8.1 One `SettingsWindow`, not one per monitor** [#4] — `Bar.qml:247`
+- [x] **8.1 One `SettingsWindow`, not one per monitor** [#4] — `Bar.qml:247`
+      Done 2026-10-29: one window in `shell.qml`, reached through `Shell`.
 - [ ] **8.2 `Notifications.timestamps` reassign instead of mutate** [#5]
 - [ ] **8.3 Fix the `Connections` leak in `Audio.qml`** [#6], and document `type === 21`
 - [ ] **8.4 `Notifier`: one process per interactive notification** [#7]

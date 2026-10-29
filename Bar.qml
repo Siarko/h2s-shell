@@ -19,7 +19,6 @@ PanelWindow {
     property var notifWidget: null
 
     // Exposed so Component definitions (which have their own id scope) can reference it
-    property var settingsWindowRef: null
 
     // True when the notifications popup is the active panel — suppresses HUD toasts
     property bool notifPanelOpen: popupLoader.active && popupLoader.contentType === "notifications"
@@ -51,8 +50,6 @@ PanelWindow {
     function _wireWidget(item, delegate) {
         if (typeof item.popup !== "undefined")
             item.popup = popupLoader
-        if (typeof item.settingsWindow !== "undefined")
-            item.settingsWindow = Qt.binding(() => bar.settingsWindowRef)
         if (typeof item.preset !== "undefined")
             item.preset = Qt.binding(() => delegate.modelData.preset)
         if (delegate.modelData.type === "notifications")
@@ -178,20 +175,6 @@ PanelWindow {
             if (notifWidget && (!popupLoader.active || popupLoader.contentType !== "notifications")) {
                 popupLoader.open(notifWidget, true, "notifications");
             }
-        }
-    }
-
-    SettingsWindow {
-        id: settingsWindow
-        Component.onCompleted: bar.settingsWindowRef = settingsWindow
-        onBackingWindowVisibleChanged: if (!backingWindowVisible) visible = false
-    }
-
-    Connections {
-        target: Shell
-        function onOpenSettings(category) {
-            settingsWindow.selectedCategory = category;
-            settingsWindow.visible = true;
         }
     }
 
