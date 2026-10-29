@@ -222,6 +222,16 @@ Item {
             }
         }
 
+        Text {
+            visible: (root.entry?.hint ?? "") !== ""
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root.entry?.hint ?? ""
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.textTertiary
+        }
+
         // Number: a whole number within the schema's range, with its unit
         Row {
             visible: root.entry?.type === "number"

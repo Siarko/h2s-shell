@@ -161,6 +161,8 @@ verified on the host before the next.
    `singletons/DictationMusicPause.qml`. Order for a widget instance: preset value →
    `Profiles.value` → schema default (`panels/widget_settings/SttWidgetSettings.qml`
    placeholder text follows).
+   *Done 2026-10-29, verified on the host.* The schema gained `hint` (a note under the
+   setting); the stt widget preset's "Global" option became "Inherit".
 6. **Calendar:** gcal.enabled (per profile) and gcal.debug (global); credentials and
    tokens untouched. Note: today `gcal.enabled` only changes a status message — the sync
    ignores it; making the sync honour it is filed in TODO, not done here.

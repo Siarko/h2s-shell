@@ -16,6 +16,7 @@ import QtQuick
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   suffix   — unit shown after a number or slider, e.g. "s"
+//   hint     — a short explanation shown under the setting
 //   options  — for enum: [{ value, label }]
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
@@ -73,6 +74,26 @@ Singleton {
         // Regular expressions for one-time codes in incoming notifications
         { key: "notifications.codePatterns", label: "Code patterns", group: "notifications",
           type: "stringList", default: ["\\d{4,8}"], legacy: ["notifications", "codePatterns"] },
+
+        // ── Dictation ──
+        { key: "stt.previewEnabled", label: "Show recognized text", group: "stt",
+          type: "bool", default: true, legacy: ["stt", "previewEnabled"] },
+        { key: "stt.previewWidth", label: "Preview width", group: "stt",
+          type: "slider", min: 0, max: 600, suffix: "px", default: 180, legacy: ["stt", "previewWidth"],
+          hint: "How far the widget slides open while dictation is running. At rest it collapses back to just the microphone icon." },
+        { key: "stt.finalLingerMs", label: "Keep typed text visible for", group: "stt",
+          type: "number", min: 0, max: 600000, suffix: "ms", default: 2500, legacy: ["stt", "finalLingerMs"] },
+        { key: "stt.showPending", label: "Show pending fragment counter", group: "stt",
+          type: "bool", default: true, legacy: ["stt", "showPending"] },
+        { key: "stt.pauseMusicWhileDictating", label: "Pause music while dictating", group: "stt",
+          type: "bool", default: true, legacy: ["stt", "pauseMusicWhileDictating"],
+          hint: "Speaker output reaches the microphone and gets transcribed. Only a pause the shell applied is resumed afterwards." },
+        // Machine wiring, not a mode: a profile switch would drop the dictation connection
+        { key: "stt.socketPath", label: "Socket path", group: "stt",
+          type: "string", default: "", global: true, legacy: ["stt", "socketPath"],
+          hint: "Leave empty to use $XDG_RUNTIME_DIR/ptt/ctl.sock" },
+        { key: "stt.debug", label: "Debug log", group: "stt",
+          type: "bool", default: false, global: true, legacy: ["stt", "debug"] },
 
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",

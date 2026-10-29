@@ -14,7 +14,7 @@ BarWidget {
             var override = data["stt"]?.[profile]?.previewEnabled
             if (override !== undefined) return override
         }
-        return Config.stt.previewEnabled
+        return Profiles.value("stt.previewEnabled") ?? true
     }
 
     readonly property int _previewWidth: {
@@ -23,7 +23,7 @@ BarWidget {
             var override = data["stt"]?.[profile]?.previewWidth
             if (override !== undefined) return override
         }
-        return Config.stt.previewWidth
+        return Profiles.value("stt.previewWidth") ?? 180
     }
 
     // Wake is the second, independent axis: the outline means the microphone is open,
@@ -90,7 +90,7 @@ BarWidget {
             // The gap is folded into the animated width rather than left as static
             // padding, so a collapsed item contributes nothing at all — static padding
             // on a zero-width item would push the icon off the widget's centre.
-            readonly property bool shown: Config.stt.showPending && Stt.pending > 0
+            readonly property bool shown: (Profiles.value("stt.showPending") ?? true) && Stt.pending > 0
             width: shown ? 18 : 0
             leftPadding: shown ? 4 : 0
             clip: true

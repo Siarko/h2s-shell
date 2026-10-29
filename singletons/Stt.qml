@@ -44,8 +44,9 @@ Singleton {
     }
 
     readonly property string socketPath: {
-        if (Config.stt.socketPath !== "")
-            return Config.stt.socketPath;
+        const configured = Profiles.value("stt.socketPath") ?? "";
+        if (configured !== "")
+            return configured;
         const runtimeDir = Quickshell.env("XDG_RUNTIME_DIR") ?? "";
         return runtimeDir !== "" ? runtimeDir + "/ptt/ctl.sock" : "";
     }
@@ -55,7 +56,7 @@ Singleton {
     Logger {
         id: logger
         prefix: "[STT]"
-        enabled: Config.stt.debug
+        enabled: Profiles.value("stt.debug") ?? false
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ Singleton {
 
     Timer {
         id: _lingerTimer
-        interval: Config.stt.finalLingerMs
+        interval: Profiles.value("stt.finalLingerMs") ?? 2500
         onTriggered: root._finalVisible = false
     }
 

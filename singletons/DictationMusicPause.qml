@@ -24,12 +24,12 @@ Singleton {
     Logger {
         id: logger
         prefix: "[STT/music]"
-        enabled: Config.stt.debug
+        enabled: Profiles.value("stt.debug") ?? false
     }
 
     on_DictatingChanged: {
         if (_dictating) {
-            if (Config.stt.pauseMusicWhileDictating && Music.playing) {
+            if ((Profiles.value("stt.pauseMusicWhileDictating") ?? true) && Music.playing) {
                 logger.log("pausing", Music.activePlayer?.identity);
                 _pausedPlayer = Music.activePlayer;
                 Music.pause();

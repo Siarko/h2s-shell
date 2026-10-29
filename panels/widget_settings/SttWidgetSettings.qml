@@ -9,7 +9,7 @@ Item {
 
     implicitHeight: _col.implicitHeight
 
-    // An absent key means "inherit the global setting"
+    // An absent key means "inherit the Dictation setting of the active shell profile"
     readonly property var _previewOverride: {
         var data = JSON.parse(Config.widgetProfiles || "{}")
         return data[widgetType]?.[profileName]?.previewEnabled
@@ -87,7 +87,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: ({ "global": "Global", "on": "On", "off": "Off" })[modelData]
+                                    text: ({ "global": "Inherit", "on": "On", "off": "Off" })[modelData]
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeBody
                                     color: root._previewMode === modelData ? Theme.textPrimary : Theme.textSecondary
@@ -160,7 +160,7 @@ Item {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: _widthInput.text === "" && !_widthInput.activeFocus
-                            text: Config.stt.previewWidth + " px (global)"
+                            text: (Profiles.value("stt.previewWidth") ?? 180) + " px (inherited)"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: Theme.textTertiary

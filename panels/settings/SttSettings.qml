@@ -2,7 +2,21 @@ import QtQuick
 import QtQuick.Layouts
 import qs.singletons
 
+// Dictation settings, edited in the profile picked in the settings window. The socket
+// path and the debug log are always global; the wake mode section is a read-only view
+// of the daemon's own config.
 Flickable {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
+    // Whether the edited profile shows the preview, for greying out what depends on it
+    readonly property bool _previewOn: ("stt.previewEnabled" in Profiles.effectiveGlobals
+        ? Profiles.effectiveGlobals["stt.previewEnabled"]
+        : (Profiles.profiles[editIndex]?.set?.["stt.previewEnabled"]
+           ?? Profiles.inheritedValue(editIndex, "stt.previewEnabled"))) === true
+
     anchors.fill: parent
     contentHeight: col.implicitHeight
     clip: true
@@ -44,39 +58,10 @@ Flickable {
             Layout.bottomMargin: 4
         }
 
-        SettingBool {
-            label: "Show recognized text"
-            value: Config.stt.previewEnabled
-            onValueChanged: Config.stt.previewEnabled = value
-        }
-
-        SettingSlider {
-            label: "Preview width"
-            tooltip: "How far the widget slides open while dictation is running. "
-                   + "At rest it collapses back to just the microphone icon."
-            tooltipIcon: true
-            disabled: !Config.stt.previewEnabled
-            from: 0
-            to: 600
-            suffix: "px"
-            value: Config.stt.previewWidth
-            onValueEdited: newValue => Config.stt.previewWidth = newValue
-        }
-
-        SettingIntInput {
-            label: "Keep typed text visible for"
-            disabled: !Config.stt.previewEnabled
-            from: 0
-            suffix: "ms"
-            value: Config.stt.finalLingerMs
-            onValueEdited: newValue => Config.stt.finalLingerMs = newValue
-        }
-
-        SettingBool {
-            label: "Show pending fragment counter"
-            value: Config.stt.showPending
-            onValueChanged: Config.stt.showPending = value
-        }
+        SchemaSettingEditor { key: "stt.previewEnabled"; editIndex: root.editIndex }
+        SchemaSettingEditor { key: "stt.previewWidth"; editIndex: root.editIndex; available: root._previewOn }
+        SchemaSettingEditor { key: "stt.finalLingerMs"; editIndex: root.editIndex; available: root._previewOn }
+        SchemaSettingEditor { key: "stt.showPending"; editIndex: root.editIndex }
 
         // ── Music ─────────────────────────────────────────────────────────
 
@@ -98,21 +83,7 @@ Flickable {
             Layout.bottomMargin: 4
         }
 
-        SettingBool {
-            label: "Pause while dictating"
-            value: Config.stt.pauseMusicWhileDictating
-            onValueChanged: Config.stt.pauseMusicWhileDictating = value
-        }
-
-        Text {
-            text: "Speaker output reaches the microphone and gets transcribed. Only a "
-                + "pause the shell applied is resumed afterwards."
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textTertiary
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
-        }
+        SchemaSettingEditor { key: "stt.pauseMusicWhileDictating"; editIndex: root.editIndex }
 
         // ── Connection ────────────────────────────────────────────────────
 
@@ -134,26 +105,8 @@ Flickable {
             Layout.bottomMargin: 4
         }
 
-        SettingInputRow {
-            label: "Socket path"
-            inputWidthPercent: 50
-            value: Config.stt.socketPath
-            onValueChanged: Config.stt.socketPath = value
-        }
-
-        Text {
-            text: "Leave empty to use $XDG_RUNTIME_DIR/ptt/ctl.sock"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textTertiary
-            Layout.bottomMargin: 6
-        }
-
-        SettingBool {
-            label: "Debug log"
-            value: Config.stt.debug
-            onValueChanged: Config.stt.debug = value
-        }
+        SchemaSettingEditor { key: "stt.socketPath"; editIndex: root.editIndex }
+        SchemaSettingEditor { key: "stt.debug"; editIndex: root.editIndex }
 
         // ── Wake mode ─────────────────────────────────────────────────────
         // Owned by the daemon (~/.config/ptt/config.toml) and editable from the CLI,
