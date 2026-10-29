@@ -19,6 +19,7 @@ QtObject {
     property var _profiles: ProfilesTest {}
     property var _polling: PollingTest {}
     property var _settingsPages: SettingsPagesTest {}
+    property var _workspaces: WorkspacesTest {}
 
     // Exit after all Component.onCompleted handlers finish.
     // interval:0 fires on the next event loop tick, after all suites have run.

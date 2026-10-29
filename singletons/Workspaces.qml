@@ -26,8 +26,17 @@ Singleton {
         workspace.activate();
     }
 
+    // Hyprland with a Lua config (hyprland.lua, 0.5x) takes a Lua expression as the
+    // dispatch, through the hl.dsp.* API — scripts/logout.sh relies on it too. A classic
+    // hyprland.conf setup would need the old "togglespecialworkspace <name>" form instead.
     function toggleSpecial(workspace) {
-        Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"" + workspace.name.replace(/^special:/, "") + "\")");
+        Hyprland.dispatch("hl.dsp.workspace.toggle_special(" + luaString(workspace.name.replace(/^special:/, "")) + ")");
+    }
+
+    // A Lua string literal: the name goes into Lua code, so a quote or backslash in it
+    // must not end the string or change the expression
+    function luaString(text) {
+        return "\"" + text.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n") + "\"";
     }
 
     Connections {

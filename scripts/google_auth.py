@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Google OAuth 2.0 helper for Quickshell Google Calendar integration.
-Usage: python3 google_auth.py <client_id> <client_secret>
+Usage: GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... python3 google_auth.py
+The credentials come from the environment, not the arguments: any user can read a
+process's arguments from /proc/<pid>/cmdline, while its environment is private to its
+owner.
 Prints JSON to stdout: {"access_token":"...","refresh_token":"...","expiry":<unix_ts>}
 Exits 0 on success, 1 on failure (error to stderr).
 """
@@ -24,12 +27,11 @@ def find_free_port():
 
 
 def main():
-    if len(sys.argv) != 3:
-        print("Usage: google_auth.py <client_id> <client_secret>", file=sys.stderr)
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        print("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set", file=sys.stderr)
         sys.exit(1)
-
-    client_id = sys.argv[1]
-    client_secret = sys.argv[2]
 
     port = find_free_port()
     redirect_uri = f"http://127.0.0.1:{port}"

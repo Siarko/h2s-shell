@@ -502,7 +502,7 @@ Only two `ScrollBar`s exist in the whole project against 16 `ListView`s and 7
 
 ## P6 — Security
 
-### 30. The Google client secret is passed as a command-line argument
+### 30. The Google client secret is passed as a command-line argument — **FIXED**
 
 `singletons/googlecalendar/GoogleCalendarAuth.qml:33`
 
@@ -515,7 +515,7 @@ Command lines are world-readable on Linux — any local process can read the sec
 `/proc/<pid>/cmdline` for as long as the helper runs. Fix: pass it on stdin or through
 the environment.
 
-### 31. OAuth tokens sit in plaintext config with unchecked permissions
+### 31. OAuth tokens sit in plaintext config with unchecked permissions — **FIXED** (permissions)
 
 `Config.gcal.clientSecret`, `accessToken` and `refreshToken` are stored in
 `~/.config/h2s_shell/config.json`. The refresh token is a long-lived credential for the
@@ -523,7 +523,7 @@ account's calendar. Nothing in the code sets the file mode, so it inherits whate
 `FileView` writes with — verify it is `0600` on the real machine, and consider keeping
 the tokens in a separate file, or in the keyring.
 
-### 32. HTTP failures log the response body
+### 32. HTTP failures log the response body — **WON'T FIX** (debug only; accepted risk)
 
 `singletons/network/Fetch.qml:68` builds the rejection message with `xhr.responseText`
 included, and `GoogleCalendar` logs rejections. A failing token request can therefore put
@@ -534,7 +534,7 @@ whole thing, for auth endpoints.
 the full text moved onto the error object as `body` for callers that need it. The remaining
 work is the call sites that log a whole rejection object.
 
-### 33. A workspace name is interpolated into a Hyprland dispatch string
+### 33. A workspace name is interpolated into a Hyprland dispatch string — **FIXED**
 
 `singletons/Workspaces.qml:30` builds
 `hl.dsp.workspace.toggle_special("<name>")` by string concatenation with no escaping. A

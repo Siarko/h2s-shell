@@ -30,7 +30,13 @@ Singleton {
 
         property var outputBuffer: ""
 
-        command: ["python3", Quickshell.shellDir + "/scripts/google_auth.py", Config.gcal.clientId, Config.gcal.clientSecret]
+        command: ["python3", Quickshell.shellDir + "/scripts/google_auth.py"]
+        // In the environment, not the arguments: any user can read a process's command
+        // line from /proc/<pid>/cmdline, while /proc/<pid>/environ is the owner's and root's
+        environment: ({
+            "GOOGLE_CLIENT_ID": Config.gcal.clientId,
+            "GOOGLE_CLIENT_SECRET": Config.gcal.clientSecret
+        })
         stdout: SplitParser {
             splitMarker: ""
             onRead: function (data) {

@@ -182,7 +182,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | Tool | Used for |
 |---|---|
 | `nmcli` (NetworkManager) | all network state and actions |
-| `hyprctl` / Hyprland IPC | workspaces, logout |
+| `hyprctl` / Hyprland IPC | workspaces, logout — expects a Lua config (`hyprland.lua`, Hyprland 0.5x): special workspaces and logout dispatch `hl.dsp.*` Lua expressions |
 | `systemctl` | restart, shutdown |
 | `notify-send` | the shell's own outbound notifications |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |

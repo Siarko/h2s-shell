@@ -43,6 +43,31 @@ Singleton {
 
     signal saved
 
+    // The file holds a long-lived Google refresh token, and was created world-readable
+    // (umask 022). Locking the directory keeps out every file in it, whatever its own mode
+    // — backups, files written later — and the files get 600 as well. Once a run, after
+    // the file has been read; never from the test runner.
+    function _protectFiles() {
+        if (!ready || readOnly || _protect.running)
+            return;
+        // The path is a file:// URL (StandardPaths gives URLs); chmod needs a plain path
+        const file = _file.path.toString().replace(/^file:\/\//, "");
+        _protect.command = ["sh", "-c", "chmod 700 \"$1\" && chmod 600 \"$1\"/config.json*", "sh",
+                            file.substring(0, file.lastIndexOf("/"))];
+        _protect.running = true;
+    }
+
+    // The file can finish loading while this singleton is still being built, before a
+    // change handler would see it, so check on completion as well
+    onReadyChanged: _protectFiles()
+    Component.onCompleted: Qt.callLater(_protectFiles)
+
+    Process {
+        id: _protect
+        // A failure is worth knowing: the token would stay readable to other users
+        stderr: SplitParser { onRead: line => console.warn("[Config] could not restrict the config's permissions:", line) }
+    }
+
     FileView {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"

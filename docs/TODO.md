@@ -289,16 +289,25 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 7 — Security  [before the Google account is set up on the new machine]
 
-- [ ] **7.1 Stop passing the client secret on the command line** [#30]
+- [x] **7.1 Stop passing the client secret on the command line** [#30]
       `singletons/googlecalendar/GoogleCalendarAuth.qml:33` — world-readable via
       `/proc/<pid>/cmdline`. Use stdin or the environment.
-- [ ] **7.2 Check and enforce config file permissions** [#31]
+      Done 2026-10-29: the helper gets them from GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+      (`/proc/<pid>/environ` is the owner's and root's only).
+- [x] **7.2 Check and enforce config file permissions** [#31]
       The refresh token is a long-lived credential in plaintext in
       `~/.config/h2s_shell/config.json`. Verify the mode is `0600` on the real machine.
-- [ ] **7.3 Stop logging full HTTP response bodies** [#32] — `singletons/network/Fetch.qml:68`
-- [ ] **7.4 Escape the workspace name in the Hyprland dispatch** [#33]
+      Done 2026-10-29, verified on the host: it was 644 in a 755 directory. Config runs
+      `chmod 700` on the directory and `600` on the config and its backups at every start.
+- [x] **7.3 Stop logging full HTTP response bodies** [#32] — `singletons/network/Fetch.qml:68`
+      Won't fix, decided 2026-10-29: only in debug mode; tokens in a debug log are an
+      accepted risk.
+- [x] **7.4 Escape the workspace name in the Hyprland dispatch** [#33]
       `singletons/Workspaces.qml:30`, and document where `hl.dsp.*` comes from so the new
       install does not silently lose logout and special workspaces.
+      Done 2026-10-29: the name goes in as a Lua string literal (`Workspaces.luaString`,
+      tested); `hl.dsp.*` is Hyprland's Lua-config dispatch (0.5x, `hyprland.lua`),
+      noted in Workspaces.qml, scripts/logout.sh and FEATURES.
 
 ## Stage 8 — Correctness fixes, fold into whichever stage touches the file  [P1]
 
