@@ -11,9 +11,10 @@ guessing. One item at a time. Commit only when asked. Tick a box only after the 
 verified on the host — the dev container has no `quickshell`.
 
 **Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
-the Framework 12 is at hand, since it cannot be verified here. In progress: 10.3, every
-setting per profile — [plans/global-profiles.md](plans/global-profiles.md), stages 1
-and 2 done; next is stage 3, the schema for every per-profile setting.
+the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
+per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next, as
+agreed: 8.9 (the last live Repeater model), 8.1 (one settings window), then 8.10 and
+10.7.
 
 ---
 
@@ -267,10 +268,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 6 — Architecture and size
 
-- [ ] **6.1 Config: stop storing JSON inside JSON** [#11]
+- [x] **6.1 Config: stop storing JSON inside JSON** [#11]
       `widgetProfiles`, `audio.appVolumes`, `bar.content.*Profiles`. ~50 `JSON.parse`
       call sites in 23 files, most inside bindings. Two steps: a cached parse helper
       first, then migrate the storage to real `JsonObject`s keyed by profile name.
+      Superseded by 10.3: settings are read through `Profiles.value()`; what is still a
+      JSON string is parsed in one place each.
 - [ ] **6.2 `Popup` should expose its available content height** [#14]
       `panels/NetworkPanel.qml:496-506` hardcodes Popup's private paddings.
 - [ ] **6.3 Split `panels/calendar/EventForm.qml`** (1033 lines) [P3]
@@ -307,7 +310,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **8.5 `PowerMenu`: absolute script paths** [#8] — `panels/PowerMenu.qml:72`
 - [x] **8.6 Power popup `persistent: true` on click** [#9] — `widgets/PowerWidget.qml:18`
       Fixed by 2.1: `PopupWidget` opens every click popup persistent.
-- [ ] **8.7 `Lockscreen`: bind config declaratively** [#10]
+- [x] **8.7 `Lockscreen`: bind config declaratively** [#10]
+      Done with 10.3: Lockscreen binds its settings from Profiles and reapplies its idle
+      monitors when they change.
 - [ ] **8.9 Wrap the remaining live `Repeater` models in `ScriptModel`** [#43]
       The rule behind the months of random crashes — see ARCHITECTURE.md, "The Repeater
       crash". Bar and the add-widget picker are fixed with 2.2, `HardwarePanel` (the most
@@ -343,10 +348,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 10 — Requested features
 
-- [ ] **10.3 Every setting per profile, with user-pinned global settings** [#11]
+- [x] **10.3 Every setting per profile, with user-pinned global settings** [#11]
       Agreed 2026-10-29: [plans/global-profiles.md](plans/global-profiles.md). The
       editing-profile picker covers the whole settings window; every setting is saved per
       profile, except those the user pins as global. Doubles as the config rework (#11).
+      Done 2026-10-29, verified on the host: every settings page and the bar are per
+      profile; `Config.qml` keeps only data that is not a preference.
 - [ ] **10.4 More notification settings** (requested 2026-10-29)
       All as schema settings, so per profile (e.g. no toasts in Power save or while a
       fullscreen window is focused):

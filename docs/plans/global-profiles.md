@@ -1,6 +1,6 @@
 # Plan: every setting per profile, with user-pinned global settings
 
-Status: **agreed 2026-10-29, first stage in progress.** Follows
+Status: **done 2026-10-29** — all five stages. Follows
 [adaptive-polling.md](adaptive-polling.md), which built profiles for the polling,
 graph and power settings. This extends them to the whole shell. It is also, in effect,
 CLEANUP #11 (the config/JSON rework).
@@ -206,6 +206,12 @@ verified on the host before the next.
 Remove the migrated sections from `singletons/Config.qml` (keeping the excluded settings
 above), the scope note in `SettingsWindow.qml`, update `docs/ARCHITECTURE.md` (Config,
 Bar composition, Widget contract), `docs/FEATURES.md`, close CLEANUP #11 and TODO 10.3.
+
+*Done 2026-10-29, verified on the host.* The migration now reads old values from the raw
+config file rather than from Config properties, so an old config (a restored backup, a
+copy on another machine) still migrates after the sections are gone; a missing section
+means nothing to move — never an empty bar. Tested against a fixture shaped like the
+user's old config.
 
 ### Verification
 

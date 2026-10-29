@@ -26,7 +26,6 @@ FloatingWindow {
     property int selectedCategory: 0
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
-    readonly property int _mediaCategory: 2
 
     // The profile every page edits (docs/plans/global-profiles.md), by name so it
     // survives reordering; Full, else the first
@@ -35,11 +34,6 @@ FloatingWindow {
         const byName = Profiles.profiles.findIndex(profile => profile.name === editedName);
         return byName >= 0 ? byName : (Profiles.profiles.length > 0 ? 0 : -1);
     }
-    // Pages whose settings are all per profile; the others apply to every profile until
-    // they are migrated, and say so while another profile than Full is picked
-    readonly property var _perProfileCategories: [0, 1, _mediaCategory, 3, 4, 5, 6, _performanceCategory, _profilesCategory]
-    readonly property bool _showScopeNote: Profiles.profiles[editIndex]?.name !== "Full"
-        && !_perProfileCategories.includes(selectedCategory)
 
     Rectangle {
         anchors.fill: parent
@@ -192,28 +186,8 @@ FloatingWindow {
                 width: parent.width - 161
                 height: parent.height
 
-                // Until a page is per profile, editing another profile does not change it
-                Rectangle {
-                    id: _scopeNote
-                    visible: root._showScopeNote
-                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
-                    height: visible ? _scopeText.implicitHeight + 12 : 0
-                    radius: 6
-                    color: Theme.cellDefault
-
-                    Text {
-                        id: _scopeText
-                        anchors { fill: parent; margins: 6 }
-                        wrapMode: Text.WordWrap
-                        text: "This page is not per profile yet: its settings apply to every profile."
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textSecondary
-                    }
-                }
-
                 Loader {
-                    anchors { top: _scopeNote.visible ? _scopeNote.bottom : parent.top; left: parent.left; right: parent.right; bottom: parent.bottom }
+                    anchors.fill: parent
                     sourceComponent: {
                         if (root.selectedCategory === 0) return generalComp;
                         if (root.selectedCategory === 1) return calendarComp;

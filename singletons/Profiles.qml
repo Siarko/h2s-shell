@@ -28,12 +28,15 @@ Singleton {
                                                                         _powerProfileName(PowerProfiles.profile)))
     }
 
-    // Settings moving into the schema bring their old value along once — see
-    // ProfileRules.migrateLegacy. Runs after seeding, so the values land in the seeded Full.
+    // Settings that moved into the schema bring their value from a config file written
+    // before profiles along, once — see ProfileRules.migrateLegacy. Runs after seeding, so
+    // the values land in the seeded Full.
     function _migrateIfNeeded() {
         if (!Config.ready || Config.profiles === "")
             return
-        const result = ProfileRules.migrateLegacy(SettingsSchema.entries, _readLegacy,
+        const oldConfig = _oldConfig()
+        const result = ProfileRules.migrateLegacy(SettingsSchema.entries,
+                                                  path => ProfileRules.readLegacy(oldConfig, path),
                                                   Config.migratedKeys, profiles, globals)
         for (const failure of result.failed)
             _log.error("Cannot migrate", failure)
@@ -49,25 +52,15 @@ Singleton {
         Config.migratedKeys = result.migratedKeys
     }
 
-    // A value at its old place in Config, e.g. ["media", "visualizerStyle"]; the old
-    // widget settings were a JSON string, so a path starting at "widgetProfiles" parses it.
-    // Throws when a section on the way does not exist: the path itself is wrong.
-    function _readLegacy(path) {
-        if (typeof path === "function")
-            return path(Config)
-        let node = Config
-        for (let i = 0; i < path.length; i++) {
-            if (node === undefined || node === null)
-                return undefined
-            if (i < path.length - 1 && node[path[i]] === undefined)
-                throw new Error("Config has no " + path.slice(0, i + 1).join("."))
-            node = node[path[i]]
-            if (i === 0 && path[0] === "widgetProfiles")
-                node = JSON.parse(node || "{}")
+    // The config file as JSON, with the sections from before profiles that Config no
+    // longer declares; read fresh for each migration
+    function _oldConfig() {
+        _configFile.reload()
+        try {
+            return JSON.parse(_configFile.text() || "{}")
+        } catch (error) {
+            return {}
         }
-        // QML list properties come back as list objects; store a plain array
-        return node !== null && typeof node === "object" && node.length !== undefined && !Array.isArray(node)
-            ? Array.from(node) : node
     }
 
     function _backUpConfig() {
@@ -98,7 +91,7 @@ Singleton {
             return
         let old = {}
         try {
-            old = JSON.parse(Config.widgetProfiles || "{}")
+            old = JSON.parse(_oldConfig().widgetProfiles || "{}")
         } catch (error) {}
         _backUpConfig()
         Config.widgetPresets = JSON.stringify(ProfileRules.presetsFromWidgetProfiles(old))

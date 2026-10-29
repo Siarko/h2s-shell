@@ -48,6 +48,10 @@ ticks, cells respond to clicks, and popups toggle.
   renders that state and calls singleton methods — it should not own system access.
 - **All colours and type sizes come from `singletons/Theme.qml`.** No literal colours
   elsewhere.
+- **Settings are read with `Profiles.value(key)`** and declared in
+  `singletons/SettingsSchema.qml` — never as a new `Config` property. `Config` holds only
+  data that is not a preference (accounts, tokens, remembered state). See "Config and
+  profiles" in `docs/ARCHITECTURE.md`.
 - **Full variable names** — `calendar`, `response`, `calendarId`, not `c`, `r`, `cid`.
   Loop indices (`i`, `j`) are the exception.
 - **Comments in English**, explaining *why* rather than restating the code.

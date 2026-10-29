@@ -27,7 +27,8 @@ import QtQuick
 Singleton {
     id: root
 
-    // Old widget settings, for the legacy readers of the bar entries below
+    // Old widget settings, for the legacy readers of the bar entries below; `config` is
+    // the parsed config file from before profiles
     function _oldWidgetSettings(config) {
         try {
             return JSON.parse(config.widgetProfiles || "{}");
@@ -45,8 +46,10 @@ Singleton {
     function _sectionEntry(side, label, defaultTypes) {
         return { key: "bar." + side, label: label, group: "barContent", type: "barSection",
                  default: defaultTypes.map(type => ({ type: type, preset: "" })),
-                 legacy: config => ProfileRules.sectionFromLegacy(config.bar.content[side],
-                                                                  config.bar.content[side + "Profiles"]) };
+                 // No old section is no value, not an empty bar
+                 legacy: config => config.bar?.content?.[side] === undefined ? undefined
+                     : ProfileRules.sectionFromLegacy(config.bar.content[side],
+                                                      config.bar.content[side + "Profiles"]) };
     }
 
     // Popup mode per widget type that opens a popup (WidgetRegistry), click by default:

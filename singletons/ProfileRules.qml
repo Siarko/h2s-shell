@@ -169,6 +169,30 @@ Singleton {
         return { profiles: newProfiles, globals: newGlobals, migratedKeys: done, copied: copied, failed: failed };
     }
 
+    // A value at its old place in a config file from before profiles, parsed from JSON:
+    // `path` is e.g. ["media", "visualizerStyle"], or a function (oldConfig) => value. The
+    // old widget settings were a JSON string, so a path starting at "widgetProfiles"
+    // parses it. Anything missing on the way is undefined — a config written after
+    // profiles simply has nothing to move.
+    function readLegacy(oldConfig, path) {
+        if (typeof path === "function")
+            return path(oldConfig ?? {});
+        let node = oldConfig;
+        for (let i = 0; i < path.length; i++) {
+            if (node === undefined || node === null)
+                return undefined;
+            node = node[path[i]];
+            if (i === 0 && path[0] === "widgetProfiles") {
+                try {
+                    node = JSON.parse(node || "{}");
+                } catch (error) {
+                    return undefined;
+                }
+            }
+        }
+        return node;
+    }
+
     // ---- the bar (docs/plans/global-profiles.md, stage 4) ----
 
     // A bar section from the old config's two parallel arrays — widget types, and a JSON

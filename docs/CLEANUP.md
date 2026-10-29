@@ -209,7 +209,7 @@ the initial state in `Component.onCompleted` and document why `callLater` is nee
 
 ## P2 — Architecture
 
-### 11. Config stores JSON inside JSON, and 23 files parse it by hand
+### 11. Config stores JSON inside JSON, and 23 files parse it by hand — **LARGELY FIXED**
 
 `widgetProfiles`, `audio.appVolumes` and the bar's `leftProfiles`/`centerProfiles`/
 `rightProfiles` are `string` properties holding serialised JSON. Consequences:
@@ -229,6 +229,13 @@ that parses once and exposes a cached object, invalidated on `Config.saved`; (b)
 the storage to real `JsonObject` structures, with profiles keyed by name instead of
 positional arrays.
 
+
+**Largely fixed (2026-10-29)** by shell profiles (docs/plans/global-profiles.md): every
+setting is read through `Profiles.value(key)`, so the hand-parsing of settings across the
+shell is gone, and the bar's parallel `leftProfiles`/… arrays became one list per section.
+What remains as JSON strings inside the config: `profiles`, `globals`, `widgetPresets`
+and `audio.appVolumes` — each parsed in one place (Profiles, `WidgetPresets` once TODO
+10.7 adds it, Audio).
 ### 12. The same widget type string keys four parallel registries
 
 Adding one bar widget means editing: `Bar.qml` (a `Component` plus `_widgetMap`),
@@ -652,8 +659,8 @@ binding a recomputed array directly:
 - `panels/HardwarePanel.qml:39` — `_popupSources`, inside a popup panel: the riskiest one. Fixed.
 - `components/NotificationCard.qml:164` — `_regularActions`; the card is used in the
   notification panel (a popup) and in the HUD.
-- `panels/HardwareSourceList.qml:335` — an inline `.filter()`.
-- `panels/WidgetSettingsPane.qml:193` — `_filteredProfiles`.
+- `panels/HardwareSourceList.qml:335` — an inline `.filter()`. Fixed.
+- `panels/WidgetSettingsPane.qml:193` — `_filteredProfiles`. Fixed.
 - `panels/settings/SettingOptions.qml:32` — `options`; usually set once, but a `var`. Fixed.
 
 Fix: `ScriptModel { values: … }` in each. Literal constant arrays elsewhere are fine.

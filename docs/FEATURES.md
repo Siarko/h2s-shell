@@ -13,8 +13,9 @@ expressed as a percentage of half the bar height, so 100 gives a fully rounded e
 
 The bar has three sections — left, centre, right. Each is an ordered list of widgets
 chosen in **Settings → Bar → Content**, and a widget can appear more than once with a
-different *profile* (a named set of per-instance overrides): two clocks with different
-formats, two hardware capsules showing different sensors.
+different *preset* (a named set of that widget's settings): two clocks with different
+formats, two hardware capsules showing different sensors. Like every setting, the bar —
+geometry, sections, popup modes — can differ per shell profile (see Profiles below).
 
 Widgets available to place:
 
@@ -23,7 +24,7 @@ Widgets available to place:
 | **Power** | power glyph | opens the power menu |
 | **Settings** | gear | toggles the settings window |
 | **Workspaces** | Hyprland workspace pills, including special/scratchpad | click to switch, click a special to toggle it |
-| **Clock** | the time, format per profile | opens the calendar |
+| **Clock** | the time, format per preset | opens the calendar |
 | **Music** | current track | opens the music panel |
 | **Sound** | volume % and icon | opens the sound panel; scroll to change volume, middle-click to mute |
 | **Bluetooth** | adapter state and connected-device count | opens the bluetooth panel |
@@ -141,17 +142,33 @@ Two independent stages, both driven by Wayland idle notifications:
 ## Settings
 
 A separate floating window, reachable from the Settings widget or
-`Shell.openSettings(category)`. Pages:
+`Shell.openSettings(category)`. The sidebar shows which profiles are active right now and
+picks the profile every page edits. Pages:
 
 | Page | Covers |
 |---|---|
-| **General** | debug switches |
-| **Calendar** | clock/date format, Google account connection, which calendars are enabled |
-| **Media** | audio visualiser style and layout |
-| **Bar** | geometry (height, reserved space, offsets, margins, padding, corner radii) and the content of the three sections, including each widget's popup mode and per-profile overrides |
+| **General** | debug switches (always global) |
+| **Calendar** | enabling Google Calendar, the account connection, which calendars are enabled, debug |
+| **Media** | audio visualiser style, layout and frame rate |
+| **Bar** | geometry (height, reserved space, offsets, margins, padding, corner radii) and the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | code-extraction regex patterns |
 | **Lockscreen** | screensaver and lock timeouts, fade durations, notification visibility, screensaver commands |
-| **Dictation** | socket path, transcript preview, pending counter, debug, and the daemon's wake configuration (read-only) |
+| **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
+| **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
+| **Profiles** | the profile list: conditions, order, enable switch, rename, delete, simulation of conditions for testing |
+
+Every setting shows where its value comes from in the edited profile — set there,
+inherited from a profile above it, the default, or global — with a pin to make it the
+same in every profile and a reset to inherit again.
+
+### Profiles
+
+A profile is a named set of setting overrides that applies while its conditions hold:
+on battery, battery below a level, a system power profile, screen locked, a fullscreen
+window, a given popup open. Several can apply at once; the one lower in the list wins.
+New configs start with **Full** (always on, today's behaviour spelled out) and **Power
+save** (on battery: slower polling, no graph heartbeat, 15 fps visualiser, the
+power-saver system profile). With no profiles, built-in defaults apply.
 
 Changes apply live and are written to `~/.config/h2s_shell/config.json`, debounced by
 one second.

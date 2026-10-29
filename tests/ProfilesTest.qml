@@ -142,17 +142,42 @@ TestCase {
             path => { throw new Error("Config has no nosection"); }, [], userProfiles, {});
         assert(!broken.migratedKeys.includes("k"), "a wrong legacy path does not mark the key done");
         assertEqual(broken.failed.length, 1, "and is reported");
-        assert(Profiles._readLegacy(["general", "debug"]) !== undefined, "an old place that exists can be read");
-        let threw = false;
-        try { Profiles._readLegacy(["calendar", "datetimeFormat"]); } catch (error) { threw = true; }
-        assert(threw, "a path through a section Config does not have throws");
+        // A config file from before profiles, shaped like the user's (no credentials)
+        const oldFile = {
+            general: { debug: false, fetch_debug: true },
+            media: { visualizerStyle: "bars", visualizerLayout: "horizontal" },
+            stt: { socketPath: "", previewEnabled: true, previewWidth: 180, finalLingerMs: 2500,
+                   showPending: true, pauseMusicWhileDictating: true, debug: false },
+            notifications: { codePatterns: ["\\d{4,6}"] },
+            lockscreen: { screensaverEnabled: false, screensaverTimeout: 100, fadeInDuration: 200,
+                          fadeOutDuration: 800, notificationsOnScreensaver: false, lockscreenEnabled: false,
+                          lockscreenTimeout: 5, notificationsOnLock: true },
+            gcal: { enabled: true, debug: false },
+            bar: {
+                content: { left: ["power", "workspaces"], leftProfiles: '["", "default"]',
+                           center: ["clock"], centerProfiles: '["default"]',
+                           right: ["music"], rightProfiles: "[]" },
+                layout: { reservedSpace: 40, barHeight: 40, topOffset: 0, leftMargin: 0, rightMargin: 0,
+                          leftPadding: 5, rightPadding: 5, radiusTopLeft: 0, radiusTopRight: 0,
+                          radiusBottomLeft: 0, radiusBottomRight: 0 }
+            },
+            widgetProfiles: JSON.stringify({ hardware: { _popup: ["cpu"], _popupLabels: {} }, music: { _popupMode: "hover" } })
+        };
+        const readOld = path => ProfileRules.readLegacy(oldFile, path);
         for (const entry of SettingsSchema.entries) {
-            if (!entry.legacy)
+            if (!entry.legacy || entry.key.endsWith(".popupMode"))
                 continue;
-            let readable = true;
-            try { Profiles._readLegacy(entry.legacy); } catch (error) { readable = false; }
-            assert(readable, entry.key + ": its legacy path exists in Config");
+            assert(readOld(entry.legacy) !== undefined, entry.key + ": read from an old config file");
         }
+        assertEqual(readOld(["stt", "previewWidth"]), 180, "a plain path");
+        assertEqual(readOld(["widgetProfiles", "music", "_popupMode"]), "hover", "a path into the old widget JSON string");
+        assertEqual(readOld(SettingsSchema.entry("widgets.music.popupMode").legacy), "hover", "popup mode from the old widget settings");
+        assertEqual(readOld(SettingsSchema.entry("widgets.clock.popupMode").legacy), undefined, "no stored popup mode: nothing to move");
+        assertEqual(JSON.stringify(readOld(SettingsSchema.entry("bar.left").legacy)),
+            JSON.stringify([{ type: "power", preset: "" }, { type: "workspaces", preset: "default" }]), "a bar section from the old arrays");
+        assertEqual(ProfileRules.readLegacy({}, ["media", "visualizerStyle"]), undefined, "a config without the section has nothing to move");
+        assertEqual(ProfileRules.readLegacy({}, SettingsSchema.entry("bar.left").legacy), undefined,
+            "no old bar section is no value — not an empty bar");
         const noFull = ProfileRules.migrateLegacy(legacyEntries, readLegacy, [], [{ name: "Mine", when: {}, set: {} }], {});
         assertEqual(noFull.profiles[0].name, "Full", "without Full, one is created at the top");
         assertEqual(noFull.profiles[1].name, "Mine", "and the user's profiles follow");

@@ -117,41 +117,59 @@ binding. Start it from `Component.onCompleted` or a `Timer` instead.
 `Socket` from `Quickshell.Io`, holding a long-lived Unix-socket connection with a 2 s
 reconnect loop.
 
-### Config
+### Config and profiles
+
+Settings live in **shell profiles**; the design is in
+[plans/global-profiles.md](plans/global-profiles.md).
+
+- `singletons/SettingsSchema.qml` lists every setting: key (`media.visualizerStyle`,
+  `bar.left`, `widgets.music.popupMode`, …), label, type, default, settings page group,
+  and optionally `global: true` (never per profile — debug switches, the dictation
+  socket) and `legacy` (where it lived in a config file written before profiles). The
+  defaults together are the built-in **system profile**.
+- A **profile** is a named list of overrides with a condition (`when`) over live facts:
+  battery, battery level, power profile, lock state, fullscreen, open popup. Active
+  profiles layer in list order over the system profile; the user can also pin a setting
+  as global, which no profile changes. `singletons/ProfileRules.qml` holds the pure logic
+  (conditions, layering, migration) and has its own tests.
+- `singletons/Profiles.qml` evaluates them: **read any setting with
+  `Profiles.value(key)`** in a binding — it follows profile switches. It also seeds new
+  configs with Full and Power save, applies the system power profile, and migrates old
+  configs once. Facts can be simulated with `qs ipc call profiles simulate '{…}'`.
+- Settings pages edit the profile picked in the settings sidebar through
+  `panels/settings/SchemaSettingEditor.qml`, which shows where a value comes from
+  (set here, inherited from a profile above, default, global) with a pin and a reset.
+  A new setting is a schema entry, a `Profiles.value()` reader, and usually one editor
+  line on its page.
 
 `singletons/Config.qml` wraps a `FileView` with a `JsonAdapter` over
-`~/.config/h2s_shell/config.json`. Nested `JsonObject` blocks are exposed through
-`property alias`, so the rest of the shell reads and writes `Config.bar.layout.barHeight`
-and the adapter persists it. Writes are debounced 1 s by `_saveTimer`, which then emits
-`Config.saved`.
-
-Defaults live in the adapter declaration, so a missing key in the JSON file is simply
-the declared default and no migration step is needed.
-
-Several values are stored as **JSON strings inside the JSON config** rather than as
-structured objects — `widgetProfiles`, `audio.appVolumes`, and the bar's
-`leftProfiles`/`centerProfiles`/`rightProfiles`. Every reader therefore calls
-`JSON.parse` itself, usually inside a property binding. There are ~50 such call sites.
-This is the single most pervasive piece of technical debt in the project; see
-CLEANUP.md #4.
+`~/.config/h2s_shell/config.json`. It holds the profiles and globals (as JSON strings),
+the widget preset library (`widgetPresets`), and data that is not a preference: the
+Google account and tokens, the chosen calendars, remembered per-app volumes. Writes are
+debounced 1 s by `_saveTimer`, which then emits `Config.saved`; `Config.ready` turns true
+once the file has been read, and `Config.readOnly` (set by `tests.qml`) keeps the test
+suites from writing the user's file.
 
 ### Bar composition
 
-The bar is three sections (`left`, `center`, `right`), each a list of widget type
-strings in `Config.bar.content`, zipped with a parallel list of profile names:
+The bar is three sections, each a profile setting — `bar.left`, `bar.center`,
+`bar.right` — holding a list of entries:
 
 ```
-Config.bar.content.left         = ["power", "settings", "workspaces"]
-Config.bar.content.leftProfiles = "[]"        // JSON array, index-aligned with the above
+[{ "type": "power", "preset": "" }, { "type": "workspaces", "preset": "default" }]
 ```
 
-`Bar._zipModel()` merges the two into `[{ type, profile }]`, a `Repeater` over a
-`ScriptModel` drives a `Loader` per entry, and the `Loader` gets the widget's file from
-`WidgetRegistry.widgetUrl(type)`.
+`ProfileRules.sectionModel()` gives each entry a key that only changes with the entry, a
+`Repeater` over a `ScriptModel { objectProp: "key" }` drives a `Loader` per entry (so a
+profile change elsewhere keeps the widgets), and the `Loader` gets the widget's file from
+`WidgetRegistry.widgetUrl(type)`. Geometry is `bar.layout.*`, popup mode is
+`widgets.<type>.popupMode`.
 
-A *profile* is a named per-instance override, so the same widget type can appear twice
-on the bar with different settings (two clocks with different formats, two hardware
-capsules showing different sensors).
+A **preset** is a named set of one widget type's settings in the shared library
+`Config.widgetPresets`, `{ type: { name: { … } } }`, so the same widget type can appear
+twice with different settings (two clocks with different formats, two hardware capsules
+showing different sensors). Presets are not per profile; a profile picks which preset an
+entry uses.
 
 ### Popup
 
@@ -213,7 +231,7 @@ By convention a widget declares:
 |---|---|
 | `widgetType` | the type string, matching the `WidgetRegistry` entry |
 | `popup` | the Bar's `Popup`, if it has one |
-| `profile` | the active profile name, assigned by the Bar's `Loader` |
+| `preset` | the name of its widget preset, assigned by the Bar's `Loader` |
 
 `widgetType` is declared on `BarWidget` itself. A widget whose content has several click
 targets of its own (the tray, the workspaces) sets `interactive: false`, which keeps the
@@ -295,8 +313,9 @@ section editor's picker and names, the widget settings pane and the popup all re
 2. If it has a popup: the panel under `panels/`. It is loaded by URL, so it needs no
    wiring; a panel that must talk back to the popup (close it, know the screen) is the
    exception and goes in `Popup.qml`'s `_componentMap`, like the tray menu.
-3. If it has per-profile settings: a page under `panels/widget_settings/` with
-   `profileName` and `widgetType` properties.
+3. If it has per-preset settings: a page under `panels/widget_settings/` with
+   `presetName` and `widgetType` properties (and `editIndex`, if it also edits profile
+   settings).
 4. One entry in `WidgetRegistry.entries` naming those files — the field list is in the
    comment at the top of that file.
 
