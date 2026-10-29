@@ -326,7 +326,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       a month with no events. `GoogleCalendar` needs an error state the panel can show,
       with a retry. While there: a retry after a failed init fetches `calendarList`
       twice, and the status-0 error message ends in an empty `data:`.
-      Done 2026-10-29, verified on the host: `GoogleCalendar.error`, set by a failed load of
+      Done 2026-10-29, verified on the host (network off, then retry). With the network off
+      the spinner runs until the request fails — up to Fetch's 30 s timeout when the
+      connection hangs rather than being refused. `GoogleCalendar.error`, set by a failed load of
       the calendar list or of events (partial failures name how many calendars), cleared
       by a good one; the panel banner shows it and retries on click. A failed init no
       longer goes on to fetch the calendar list again; status 0 drops the empty "data:".
