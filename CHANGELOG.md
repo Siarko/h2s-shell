@@ -14,6 +14,10 @@ section to the new version and date.
 - The screensaver's start and end commands now run — they could be set but nothing ran
   them. They follow idle time rather than the screensaver's visibility, so locking the
   screen does not count as coming back, and they can differ per profile.
+- Popups stay under the bar when it does not reach the screen edges, stopping short of
+  its rounded ends; switching between popups of different widths keeps the edge they
+  are held against and animates the width instead of jumping.
+- A binding loop when a profile switched the system power profile.
 
 ## [1.0.0] - 2026-10-29
 

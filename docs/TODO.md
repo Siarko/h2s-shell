@@ -458,7 +458,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `singletons/Version.qml` holds the number and shows `number+commit[.dirty]` off a
       release, selectable in the settings sidebar; CHANGELOG.md with an Unreleased section;
       `Config.writtenBy`; tests/VersionTest.qml keeps the number and changelog in step.
-- [ ] **8.12 Popups overhang a bar that does not reach the screen edge** (reported
+- [x] **8.12 Popups overhang a bar that does not reach the screen edge** (reported
       2026-10-29)
       With a left or right margin on the bar, a popup opened near that end is clamped to
       the screen edge, not the bar's: it sticks out past the bar's end, and its top
@@ -466,6 +466,19 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       are drawn as if the bar continued. Clamp `clipWrapper.x` to the bar's extent
       (`bar.layout.leftMargin` … screen width − `rightMargin`) and decide the curves
       against those edges too.
+      Done 2026-10-29, verified on the host: x is kept within the bar, short of a rounded
+      bar corner; the edge the popup is held against is the one animated when switching,
+      the width animates too, and the bar's limits apply to every frame.
+- [x] **8.13 Occasional binding loop in Profiles at startup** (seen 2026-10-29)
+      Sometimes, at startup only, Qt reports a binding loop on `Profiles._resolved` and
+      then `facts`, followed by a config save; four restarts in a row were clean. Qt
+      breaks the loop, so nothing visibly fails. Likely a startup ordering race — something
+      written while `_resolved` is being evaluated (a fact source created during its
+      evaluation, or a migration/seed write). Reproduce by restarting repeatedly.
+      Found the same day: simulating a battery reproduced it every time. Applying the
+      system power profile from the change handler of the effective value changed the
+      `power.profile` fact while the facts were being re-evaluated. Deferred with
+      `Qt.callLater`, as the seeding already was.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

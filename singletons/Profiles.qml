@@ -122,7 +122,7 @@ Singleton {
     property bool _powerProfilesKnown: false
     on_PowerProfilesKnownChanged: {
         Qt.callLater(_seedIfNeeded)
-        _applyPowerProfile()
+        Qt.callLater(_applyPowerProfile)
     }
 
     Connections {
@@ -364,7 +364,10 @@ Singleton {
     // hand stays until the effective value next changes; the shell does not fight it.
     readonly property string _wantedPowerProfile: value("system.powerProfile") ?? "unchanged"
 
-    on_WantedPowerProfileChanged: _applyPowerProfile()
+    // Deferred: setting the system profile changes the "power.profile" fact, and doing it
+    // while the facts are still being re-evaluated was a binding loop on facts and
+    // _resolved (seen at startup and when simulating a battery)
+    on_WantedPowerProfileChanged: Qt.callLater(_applyPowerProfile)
 
     function _applyPowerProfile() {
         if (!_powerProfilesKnown || _wantedPowerProfile === "unchanged")

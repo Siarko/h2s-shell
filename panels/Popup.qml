@@ -77,8 +77,26 @@ LazyLoader {
         property int contentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
         property int popupHeight: contentHeight + paddingTop + paddingBottom
         property int totalWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
-        property bool roundingLeft: clipWrapper.x > 0
-        property bool roundingRight: clipWrapper.x < popup.screen.width - popup.totalWidth
+        // The width on screen: follows totalWidth with an animation when switching
+        // between popups of different widths, so it does not jump
+        property real shownWidth: totalWidth
+        Behavior on shownWidth {
+            enabled: popup.showPopup
+            NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+        }
+        // The bar's own extent and bottom corners: it need not reach the screen edges
+        function _layout(name) {
+            return Profiles.value("bar.layout." + name) ?? 0
+        }
+        readonly property real barLeft: _layout("leftMargin")
+        readonly property real barRight: popup.screen.width - _layout("rightMargin")
+        readonly property real barCornerLeft: _layout("radiusBottomLeft") / 100 * (_layout("barHeight") / 2)
+        readonly property real barCornerRight: _layout("radiusBottomRight") / 100 * (_layout("barHeight") / 2)
+
+        // A popup at the very end of the bar drops its curve there, its straight edge
+        // continuing the bar's end; anywhere else it curves into the bar
+        property bool roundingLeft: clipWrapper.x > popup.barLeft
+        property bool roundingRight: clipWrapper.x + popup.shownWidth < popup.barRight
 
         implicitWidth: popup.screen.width
         implicitHeight: popup.screen.height
@@ -106,21 +124,46 @@ LazyLoader {
         // Clip wrapper — animates height; the window itself never resizes
         Item {
             id: clipWrapper
-            x: {
+            // Centred under its widget, but kept under the bar — not the screen, which the
+            // bar may not reach. Where the bar's corner is rounded the popup stops short of
+            // it, keeping its curve; under a square corner it may run to the end.
+            readonly property real _minX: popup.barLeft + popup.barCornerLeft
+            readonly property real _maxX: popup.barRight - popup.barCornerRight - popup.shownWidth
+            readonly property real _targetX: {
                 var raw = popupLoader.popupPosition + (popupLoader.popupWidth / 2) - (popup.totalWidth / 2);
-                var maxLeft = popup.screen.width - popup.totalWidth;
-                return Math.max(0, Math.min(raw, maxLeft));
+                return Math.max(_minX, Math.min(raw, _maxX));
             }
-            width: popup.totalWidth
+
+            // Moving between popups of different widths, the edge that stays put is the one
+            // the popup is held against: the right edge at the bar's right end, the left at
+            // its left end, else the middle. All three are animated; x follows the one that
+            // applies to the new target, so a narrower popup at the right end keeps its
+            // right edge instead of opening at the old left edge and sliding over. The bar's
+            // limits apply to every frame, since the width changes at once.
+            readonly property string _anchor: _targetX >= _maxX - 0.5 ? "right"
+                : _targetX <= _minX + 0.5 ? "left" : "centre"
+            property real _left: _targetX
+            property real _right: _targetX + popup.totalWidth
+            property real _centre: _targetX + popup.totalWidth / 2
+            // With the width animating too, the held edge stays put while the other moves
+            readonly property real _anchoredX: _anchor === "right" ? _right - popup.shownWidth
+                : _anchor === "left" ? _left : _centre - popup.shownWidth / 2
+            x: Math.max(_minX, Math.min(_anchoredX, _maxX))
+            width: popup.shownWidth
             height: popup.showPopup && !popupLoader.closing ? popup.popupHeight : 0
             clip: true
 
-            Behavior on x {
+            Behavior on _left {
                 enabled: popup.showPopup
-                NumberAnimation {
-                    duration: 100
-                    easing.type: Easing.OutQuad
-                }
+                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+            }
+            Behavior on _right {
+                enabled: popup.showPopup
+                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+            }
+            Behavior on _centre {
+                enabled: popup.showPopup
+                NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
             }
 
             Behavior on height {
@@ -139,7 +182,7 @@ LazyLoader {
 
             Rectangle {
                 id: rect
-                width: popup.totalWidth
+                width: popup.shownWidth
                 height: popup.popupHeight
                 color: "transparent"
 
