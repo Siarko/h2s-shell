@@ -4,7 +4,7 @@ import qs.singletons
 
 Item {
     id: root
-    property string profileName: ""
+    property string presetName: ""
     property string widgetType: "workspaces"
 
     implicitHeight: _col.implicitHeight
@@ -14,24 +14,24 @@ Item {
     }
 
     readonly property string _currentTitle: {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.[profileName]?.title ?? "";
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data[widgetType]?.[presetName]?.title ?? "";
     }
 
     function _saveTitle(newTitle) {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType])
             data[widgetType] = {};
-        if (!data[widgetType][profileName])
-            data[widgetType][profileName] = {};
-        data[widgetType][profileName]["title"] = newTitle;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName])
+            data[widgetType][presetName] = {};
+        data[widgetType][presetName]["title"] = newTitle;
+        Config.widgetPresets = JSON.stringify(data);
     }
 
     function _loadNameMap() {
         _nameMapModel.clear();
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        var entries = data[widgetType]?.[profileName]?.nameMap ?? [];
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        var entries = data[widgetType]?.[presetName]?.nameMap ?? [];
         for (var i = 0; i < entries.length; i++)
             _nameMapModel.append({
                 system: entries[i].system || "",
@@ -48,13 +48,13 @@ Item {
                 custom: item.custom
             });
         }
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType])
             data[widgetType] = {};
-        if (!data[widgetType][profileName])
-            data[widgetType][profileName] = {};
-        data[widgetType][profileName]["nameMap"] = entries;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName])
+            data[widgetType][presetName] = {};
+        data[widgetType][presetName]["nameMap"] = entries;
+        Config.widgetPresets = JSON.stringify(data);
     }
 
     function _removeNameMapRow(index) {
@@ -64,46 +64,46 @@ Item {
             var item = _nameMapModel.get(i);
             entries.push({ system: item.system, custom: item.custom });
         }
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType]) data[widgetType] = {};
-        if (!data[widgetType][profileName]) data[widgetType][profileName] = {};
-        data[widgetType][profileName]["nameMap"] = entries;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName]) data[widgetType][presetName] = {};
+        data[widgetType][presetName]["nameMap"] = entries;
+        Config.widgetPresets = JSON.stringify(data);
         _nameMapModel.remove(index);
     }
 
     readonly property bool _showSpecial: {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.[profileName]?.showSpecial ?? true;
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data[widgetType]?.[presetName]?.showSpecial ?? true;
     }
 
     function _saveShowSpecial(value) {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType])
             data[widgetType] = {};
-        if (!data[widgetType][profileName])
-            data[widgetType][profileName] = {};
-        data[widgetType][profileName]["showSpecial"] = value;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName])
+            data[widgetType][presetName] = {};
+        data[widgetType][presetName]["showSpecial"] = value;
+        Config.widgetPresets = JSON.stringify(data);
     }
 
     readonly property bool _showNormal: {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.[profileName]?.showNormal ?? true;
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data[widgetType]?.[presetName]?.showNormal ?? true;
     }
 
     function _saveShowNormal(value) {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType])
             data[widgetType] = {};
-        if (!data[widgetType][profileName])
-            data[widgetType][profileName] = {};
-        data[widgetType][profileName]["showNormal"] = value;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName])
+            data[widgetType][presetName] = {};
+        data[widgetType][presetName]["showNormal"] = value;
+        Config.widgetPresets = JSON.stringify(data);
     }
 
     Component.onCompleted: _loadNameMap()
-    onProfileNameChanged: _loadNameMap()
+    onPresetNameChanged: _loadNameMap()
 
     Column {
         id: _col

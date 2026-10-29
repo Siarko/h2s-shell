@@ -94,7 +94,8 @@ LazyLoader {
         focusable: hoverHandler.hovered
 
         // Align to the bar's visual bottom, not the full reserved space
-        margins.top: Config.bar.layout.topOffset + Config.bar.layout.barHeight - Config.bar.layout.reservedSpace
+        margins.top: (Profiles.value("bar.layout.topOffset") ?? 0) + (Profiles.value("bar.layout.barHeight") ?? 0)
+            - (Profiles.value("bar.layout.reservedSpace") ?? 0)
         margins.left: 0
         color: "transparent"
 

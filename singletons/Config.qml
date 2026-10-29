@@ -16,7 +16,11 @@ Singleton {
     property alias media: _media
     property alias audio: _audio
     property alias notifications: _notifications
+    // The old widget settings, before presets; read only by the migration
     property alias widgetProfiles: _adapter.widgetProfiles
+    // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
+    // library a bar entry points into. "" until migrated from widgetProfiles.
+    property alias widgetPresets: _adapter.widgetPresets
     property alias stt: _stt
     // Profiles (docs/plans/adaptive-polling.md) as a JSON array. "" means the config
     // predates profiles and Profiles seeds it; "[]" means the user deleted them all.
@@ -49,6 +53,7 @@ Singleton {
         adapter: JsonAdapter {
             id: _adapter
             property string widgetProfiles: "{}"
+            property string widgetPresets: ""
             property string profiles: ""
             property string globals: "{}"
             property list<string> migratedKeys: []

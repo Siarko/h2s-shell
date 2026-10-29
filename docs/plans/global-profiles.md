@@ -193,6 +193,13 @@ verified on the host before the next.
   writes popup mode to the edited profile and keeps the preset picker (global library).
 - Same bar on every monitor, as today; a per-monitor bar would be a new condition fact
   later, not part of this plan.
+- *Done 2026-10-29, verified on the host.* Refinements made while implementing: the
+  hardware capsule labels moved into the hardware preset (a preset now describes its
+  capsule completely; the popup's sources and labels are one profile setting,
+  `widgets.hardware.popup`); `legacy` can be a function for values spread over several
+  old places; the bar's section models carry a stable key (`ProfileRules.sectionModel`)
+  so a profile change elsewhere does not recreate the widgets; the preset picker became
+  pills applied at once plus a "new preset" field. A review of presets is TODO 10.7.
 
 ### Stage 5 — cleanup
 

@@ -12,10 +12,8 @@ BarWidget {
     // "calendar")
     readonly property string popupContent: WidgetRegistry.popupContent(widgetType)
 
-    readonly property string popupMode: {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.["_popupMode"] ?? WidgetRegistry.defaultPopupMode;
-    }
+    // A setting of the active shell profile, per widget type
+    readonly property string popupMode: Profiles.value("widgets." + widgetType + ".popupMode") ?? WidgetRegistry.defaultPopupMode
 
     readonly property bool popupOpen: !!popup?.active && popup?.contentType === popupContent
 

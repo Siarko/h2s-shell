@@ -21,6 +21,11 @@ Item {
     property bool available: true
     // Replaces the schema label where the page knows better, e.g. "Lock after screensaver"
     property string label: ""
+    // A slider's upper bound when it depends on other settings; the schema's otherwise
+    property var maximum: undefined
+    // Replaces the plain write when an edit has to adjust other settings too, e.g. bar
+    // height pushing the reserved space up; gets the new value
+    property var editHook: null
 
     readonly property var _profile: Profiles.profiles[editIndex] ?? null
     // The value this profile sets, or undefined when it inherits
@@ -40,10 +45,10 @@ Item {
     readonly property bool systemGlobal: entry?.global === true
 
     function edited(newValue) {
-        if (global)
-            Profiles.setGlobal(key, newValue);
+        if (editHook)
+            editHook(newValue);
         else
-            Profiles.setOverride(editIndex, key, newValue);
+            Profiles.writeSetting(editIndex, key, newValue);
     }
 
     function reset() {
@@ -281,7 +286,7 @@ Item {
             label: ""
             sliderRatio: 1.0
             from: root.entry?.min ?? 0
-            to: root.entry?.max ?? 100
+            to: root.maximum ?? root.entry?.max ?? 100
             suffix: root.entry?.suffix ?? ""
             value: root.shownValue ?? 0
             opacity: root._dimmed ? 0.5 : 1

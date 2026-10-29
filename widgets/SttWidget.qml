@@ -4,23 +4,23 @@ import qs.singletons
 
 BarWidget {
     id: root
-    property string profile: ""
+    property string preset: ""
     property string widgetType: "stt"
 
-    // Profile override first, global setting as the fallback
+    // Preset override first, global setting as the fallback
     readonly property bool _previewEnabled: {
-        if (profile !== "") {
-            var data = JSON.parse(Config.widgetProfiles || "{}")
-            var override = data["stt"]?.[profile]?.previewEnabled
+        if (preset !== "") {
+            var data = JSON.parse(Config.widgetPresets || "{}")
+            var override = data["stt"]?.[preset]?.previewEnabled
             if (override !== undefined) return override
         }
         return Profiles.value("stt.previewEnabled") ?? true
     }
 
     readonly property int _previewWidth: {
-        if (profile !== "") {
-            var data = JSON.parse(Config.widgetProfiles || "{}")
-            var override = data["stt"]?.[profile]?.previewWidth
+        if (preset !== "") {
+            var data = JSON.parse(Config.widgetPresets || "{}")
+            var override = data["stt"]?.[preset]?.previewWidth
             if (override !== undefined) return override
         }
         return Profiles.value("stt.previewWidth") ?? 180

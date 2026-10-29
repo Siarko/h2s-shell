@@ -53,6 +53,8 @@ Singleton {
     // widget settings were a JSON string, so a path starting at "widgetProfiles" parses it.
     // Throws when a section on the way does not exist: the path itself is wrong.
     function _readLegacy(path) {
+        if (typeof path === "function")
+            return path(Config)
         let node = Config
         for (let i = 0; i < path.length; i++) {
             if (node === undefined || node === null)
@@ -90,9 +92,23 @@ Singleton {
         printErrors: false
     }
 
+    // The preset library starts as a copy of the old widget settings, once
+    function _migratePresetsIfNeeded() {
+        if (!Config.ready || Config.widgetPresets !== "")
+            return
+        let old = {}
+        try {
+            old = JSON.parse(Config.widgetProfiles || "{}")
+        } catch (error) {}
+        _backUpConfig()
+        Config.widgetPresets = JSON.stringify(ProfileRules.presetsFromWidgetProfiles(old))
+        console.log("[Profiles] Widget profiles are now widget presets")
+    }
+
     Component.onCompleted: {
         _seedIfNeeded()
         _migrateIfNeeded()
+        _migratePresetsIfNeeded()
         _applyPowerProfile()
     }
 
@@ -101,6 +117,7 @@ Singleton {
         function onReadyChanged() {
             Qt.callLater(root._seedIfNeeded)
             Qt.callLater(root._migrateIfNeeded)
+            Qt.callLater(root._migratePresetsIfNeeded)
         }
         function onProfilesChanged() { Qt.callLater(root._migrateIfNeeded) }
     }
@@ -214,6 +231,22 @@ Singleton {
         const pinned = Object.assign({}, globals)
         pinned[key] = newValue
         Config.globals = JSON.stringify(pinned)
+    }
+
+    // A setting as a profile at `index` sees it: the global value if pinned, else the
+    // profile's own, else what it inherits
+    function editedValue(index, key) {
+        if (key in effectiveGlobals)
+            return effectiveGlobals[key]
+        return profiles[index]?.set?.[key] ?? inheritedValue(index, key)
+    }
+
+    // Writes a setting the way its editor would: the global value if pinned, else into
+    // the profile at `index`
+    function writeSetting(index, key, newValue) {
+        if (key in effectiveGlobals)
+            return setGlobal(key, newValue)
+        return setOverride(index, key, newValue)
     }
 
     function setOverride(index, key, newValue) {

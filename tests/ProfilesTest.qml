@@ -157,6 +157,27 @@ TestCase {
         assertEqual(noFull.profiles[0].name, "Full", "without Full, one is created at the top");
         assertEqual(noFull.profiles[1].name, "Mine", "and the user's profiles follow");
 
+        // --- the bar ---
+        assertEqual(JSON.stringify(ProfileRules.sectionFromLegacy(["stt", "music", "sound"], '["", "x"]')),
+            JSON.stringify([{ type: "stt", preset: "" }, { type: "music", preset: "x" }, { type: "sound", preset: "" }]),
+            "a section from the two old arrays, a short preset list meaning no preset");
+        assertEqual(ProfileRules.sectionFromLegacy(["clock"], "not json")[0].preset, "", "broken preset JSON: no presets");
+        const oldWidgets = {
+            workspaces: { default: { title: "" }, only_special: { showNormal: true } },
+            clock: { default: { format: "hh:mm" }, _popupMode: "click" },
+            hardware: { default: { capsule: ["cpuTemp"] }, _popup: ["cpu"], _labels: {}, _capsuleLabels: { cpuTemp: "CPU" }, _popupLabels: {} },
+            music: { _popupMode: "hover" }
+        };
+        const presets = ProfileRules.presetsFromWidgetProfiles(oldWidgets);
+        assertEqual(JSON.stringify(Object.keys(presets.workspaces)), JSON.stringify(["default", "only_special"]), "presets are kept");
+        assertEqual(presets.clock._popupMode, undefined, "per-type keys are not presets");
+        assertEqual(presets.music, undefined, "a type with only per-type keys has no presets");
+        assertEqual(presets.hardware.default.capsuleLabels.cpuTemp, "CPU", "capsule labels move into the hardware preset");
+        assertEqual(JSON.stringify(presets.hardware.default.capsule), JSON.stringify(["cpuTemp"]), "with its capsule sources");
+        const model = ProfileRules.sectionModel([{ type: "clock", preset: "a" }, { type: "clock", preset: "a" }, { type: "tray", preset: "" }]);
+        assertEqual(JSON.stringify(model.map(entry => entry.key)), JSON.stringify(["clock/a#1", "clock/a#2", "tray/#1"]),
+            "model keys are unique and depend only on the entry");
+
         // --- saving ---
         assert(Config.readOnly, "the test run cannot write the user's config");
         const refused = Profiles.save([loops]);

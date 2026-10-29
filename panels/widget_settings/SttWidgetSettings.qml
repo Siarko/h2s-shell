@@ -4,20 +4,20 @@ import qs.singletons
 
 Item {
     id: root
-    property string profileName: ""
+    property string presetName: ""
     property string widgetType: "stt"
 
     implicitHeight: _col.implicitHeight
 
     // An absent key means "inherit the Dictation setting of the active shell profile"
     readonly property var _previewOverride: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data[widgetType]?.[profileName]?.previewEnabled
+        var data = JSON.parse(Config.widgetPresets || "{}")
+        return data[widgetType]?.[presetName]?.previewEnabled
     }
 
     readonly property var _widthOverride: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data[widgetType]?.[profileName]?.previewWidth
+        var data = JSON.parse(Config.widgetPresets || "{}")
+        return data[widgetType]?.[presetName]?.previewWidth
     }
 
     readonly property string _previewMode: {
@@ -27,14 +27,14 @@ Item {
 
     // Passing undefined drops the key, restoring inheritance
     function _saveKey(key, value) {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
+        var data = JSON.parse(Config.widgetPresets || "{}")
         if (!data[widgetType])              data[widgetType] = {}
-        if (!data[widgetType][profileName]) data[widgetType][profileName] = {}
+        if (!data[widgetType][presetName]) data[widgetType][presetName] = {}
         if (value === undefined)
-            delete data[widgetType][profileName][key]
+            delete data[widgetType][presetName][key]
         else
-            data[widgetType][profileName][key] = value
-        Config.widgetProfiles = JSON.stringify(data)
+            data[widgetType][presetName][key] = value
+        Config.widgetPresets = JSON.stringify(data)
     }
 
     function _savePreviewMode(mode) {

@@ -359,6 +359,34 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Separate settings for the screensaver and for the lock screen: when notifications
       are shown there, show them in full or hide their content (app and title only).
       `screensaver/ScreensaverSurface.qml`, `screensaver/LockSurface.qml`.
+- [ ] **10.6 Dragging a slider scrolls the settings page** (reported 2026-10-29)
+      Moving the mouse vertically while dragging a horizontal slider hands the drag to the
+      page's Flickable, which scrolls instead. Likely fix: `preventStealing: true` on the
+      slider's MouseArea in `panels/settings/SettingSlider.qml` (used by every slider,
+      including the schema editor's), and the same for any other drag inside a Flickable.
+- [ ] **10.7 Widget presets: review findings** (2026-10-29)
+      A review of the preset feature (widget settings pages, `panels/WidgetSettingsPane.qml`,
+      the widgets that read presets) after the rename from "widget profiles":
+      - A section's add-widget picker skips types already in it, so two clocks or two
+        hardware capsules in one section — the main use of presets — need a hand edit.
+      - The preset field shows for every widget, including those without preset settings
+        (music, sound, tray), where assigning one does nothing.
+      - Editing a preset changes every place that uses it, now including bar sections of
+        other shell profiles, and nothing says so. Show where it is used.
+      - Presets cannot be deleted or renamed; a name is only stored once a setting is
+        edited, so an unedited new name (or a typo) points at nothing and the widget
+        silently falls back to defaults.
+      - A widget without a preset cannot be configured at all — open question: own
+        settings for a preset-less widget, or a one-click "new preset".
+      - The workspaces name-map editor loads its list once and never refreshes, so a
+        second settings window (one per monitor, 8.1) or a second expanded entry editing
+        the same preset gets overwritten.
+      - An empty clock format: the widget falls back to "hh:mm:ss", the settings page shows
+        an empty field and an empty preview.
+      - Defaults are duplicated between each widget and its settings page; every read
+        parses the whole preset JSON, every write repeats parse-mutate-stringify (five
+        near-identical save functions in the workspaces page). A `WidgetPresets` singleton
+        (get, set, usages, rename, delete) would remove that and host the fixes above.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

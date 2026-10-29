@@ -169,6 +169,53 @@ Singleton {
         return { profiles: newProfiles, globals: newGlobals, migratedKeys: done, copied: copied, failed: failed };
     }
 
+    // ---- the bar (docs/plans/global-profiles.md, stage 4) ----
+
+    // A bar section from the old config's two parallel arrays — widget types, and a JSON
+    // array of preset names that may be shorter (a missing name means no preset)
+    function sectionFromLegacy(types, presetsJson) {
+        let presets = [];
+        try {
+            presets = JSON.parse(presetsJson || "[]");
+        } catch (error) {}
+        return Array.from(types ?? []).map((type, index) => ({ type: type, preset: presets[index] || "" }));
+    }
+
+    // The preset library from the old widgetProfiles object. Keys starting with "_" were
+    // per widget type, not presets: popup mode and the hardware popup are profile settings
+    // now and are dropped here; the hardware capsule labels move into every hardware
+    // preset, since a preset now describes its capsule completely; "_labels" was unused.
+    function presetsFromWidgetProfiles(widgetProfiles) {
+        const presets = {};
+        for (const type in widgetProfiles ?? {}) {
+            const byName = {};
+            for (const name in widgetProfiles[type]) {
+                if (!name.startsWith("_"))
+                    byName[name] = JSON.parse(JSON.stringify(widgetProfiles[type][name]));
+            }
+            const capsuleLabels = widgetProfiles[type]["_capsuleLabels"];
+            if (type === "hardware" && capsuleLabels) {
+                for (const name in byName)
+                    byName[name].capsuleLabels = Object.assign({}, capsuleLabels);
+            }
+            if (Object.keys(byName).length > 0)
+                presets[type] = byName;
+        }
+        return presets;
+    }
+
+    // Model entries for one bar section, with a key that stays the same as long as the
+    // entry does: ScriptModel keeps a delegate whose key is unchanged, so editing some
+    // unrelated setting does not recreate every widget on the bar
+    function sectionModel(section) {
+        const seen = {};
+        return (section ?? []).map(entry => {
+            const base = entry.type + "/" + (entry.preset ?? "");
+            seen[base] = (seen[base] ?? 0) + 1;
+            return { key: base + "#" + seen[base], type: entry.type, preset: entry.preset ?? "" };
+        });
+    }
+
     // Every fact a condition reads
     function factsRead(condition) {
         if (!condition)

@@ -3,26 +3,29 @@ import QtQuick.Layouts
 import Quickshell
 import qs.singletons
 
+// The widgets of one bar section: reorder by dragging, add, remove, and per entry its
+// popup mode and widget preset. Edits come back whole through `edited`, so the owner
+// stores the section as one value.
 Item {
     id: root
     property string title: ""
-    property var model: []
+    // [{ type, preset }]
+    property var entries: []
     property string section: ""
-    property var widgetProfiles: []
+    // The shell profile being edited, picked in the settings window
+    property int editIndex: -1
 
-    signal listChanged(var newList)
-    signal widgetSettingsClicked(int index)
-    signal profileListChanged(var newProfiles)
+    signal edited(var newEntries)
 
     Layout.fillWidth: true
     implicitHeight: _outer.implicitHeight
 
-    Component.onCompleted: {
-        _rowList.workingList = model ? model.slice() : []
-        _rowList.workingProfiles = widgetProfiles ? widgetProfiles.slice() : []
+    function _load() {
+        _rowList.workingList = (entries ?? []).map(entry => entry.type)
+        _rowList.workingPresets = (entries ?? []).map(entry => entry.preset ?? "")
     }
-    onModelChanged: if (!_rowList.dragging) _rowList.workingList = model ? model.slice() : []
-    onWidgetProfilesChanged: if (!_rowList.dragging) _rowList.workingProfiles = widgetProfiles ? widgetProfiles.slice() : []
+    Component.onCompleted: _load()
+    onEntriesChanged: if (!_rowList.dragging) _load()
 
     function displayName(type) {
         return WidgetRegistry.displayName(type)
@@ -78,7 +81,7 @@ Item {
 
                         // All state here — delegates reach it via _row._lv (captured ListView.view)
                         property var workingList: []
-                        property var workingProfiles: []
+                        property var workingPresets: []
                         property bool dragging: false
                         property int dragIndex: -1
                         property int dropIndex: -1
@@ -92,10 +95,13 @@ Item {
                         }
 
                         // Proxy functions called from delegate JS handlers via _row._lv
-                        function notifyListChanged(list) { root.listChanged(list) }
-                        function notifyProfilesChanged(profs) { root.profileListChanged(profs) }
+                        // Both arrays at once: types and their presets are one entry each
+                        function commit(list, presets) {
+                            workingList = list
+                            workingPresets = presets
+                            root.edited(list.map((type, index) => ({ type: type, preset: presets[index] || "" })))
+                        }
                         function notifySettingsClicked(idx) {
-                            root.widgetSettingsClicked(idx)
                             toggleExpanded(idx)
                         }
                         function getDisplayName(type) { return root.displayName(type) }
@@ -209,13 +215,10 @@ Item {
                                                 var moved = list.splice(from, 1)[0]
                                                 var adjTo = to > from ? to - 1 : to
                                                 list.splice(adjTo, 0, moved)
-                                                _row._lv.workingList = list
-                                                _row._lv.notifyListChanged(list)
-                                                var profs = _row._lv.workingProfiles.slice()
-                                                var movedProf = profs.splice(from, 1)[0] || ""
-                                                profs.splice(adjTo, 0, movedProf)
-                                                _row._lv.workingProfiles = profs
-                                                _row._lv.notifyProfilesChanged(profs)
+                                                var presets = _row._lv.workingPresets.slice()
+                                                var movedPreset = presets.splice(from, 1)[0] || ""
+                                                presets.splice(adjTo, 0, movedPreset)
+                                                _row._lv.commit(list, presets)
                                             }
                                             _row._lv.dragIndex = -1
                                             _row._lv.dropIndex = -1
@@ -274,12 +277,9 @@ Item {
                                         onClicked: {
                                             var list = _row._lv.workingList.slice()
                                             list.splice(_row.index, 1)
-                                            _row._lv.workingList = list
-                                            _row._lv.notifyListChanged(list)
-                                            var profs = _row._lv.workingProfiles.slice()
-                                            profs.splice(_row.index, 1)
-                                            _row._lv.workingProfiles = profs
-                                            _row._lv.notifyProfilesChanged(profs)
+                                            var presets = _row._lv.workingPresets.slice()
+                                            presets.splice(_row.index, 1)
+                                            _row._lv.commit(list, presets)
                                         }
                                     }
                                 }
@@ -297,13 +297,13 @@ Item {
                                 }
                                 visible: _row._expanded
                                 widgetType: _row.modelData
-                                currentProfile: _row._lv.workingProfiles[_row.index] || ""
-                                onProfileAssigned: function(newName) {
-                                    var profs = _row._lv.workingProfiles.slice()
-                                    while (profs.length <= _row.index) profs.push("")
-                                    profs[_row.index] = newName
-                                    _row._lv.workingProfiles = profs
-                                    _row._lv.notifyProfilesChanged(profs)
+                                editIndex: root.editIndex
+                                currentPreset: _row._lv.workingPresets[_row.index] || ""
+                                onPresetAssigned: function(newName) {
+                                    var presets = _row._lv.workingPresets.slice()
+                                    while (presets.length <= _row.index) presets.push("")
+                                    presets[_row.index] = newName
+                                    _row._lv.commit(_row._lv.workingList.slice(), presets)
                                 }
                             }
                         }
@@ -355,12 +355,7 @@ Item {
 
                         // Called via parent.parent.parent from Repeater delegate handlers
                         function addWidget(type) {
-                            var list = [..._rowList.workingList, type]
-                            _rowList.workingList = list
-                            _rowList.notifyListChanged(list)
-                            var profs = [..._rowList.workingProfiles, ""]
-                            _rowList.workingProfiles = profs
-                            _rowList.notifyProfilesChanged(profs)
+                            _rowList.commit([..._rowList.workingList, type], [..._rowList.workingPresets, ""])
                             _picker.visible = false
                         }
 

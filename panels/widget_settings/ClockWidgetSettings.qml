@@ -4,22 +4,22 @@ import qs.singletons
 
 Item {
     id: root
-    property string profileName: ""
+    property string presetName: ""
     property string widgetType: "clock"
 
     implicitHeight: _col.implicitHeight
 
     readonly property string _currentFormat: {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data[widgetType]?.[profileName]?.format ?? "hh:mm:ss"; // ClockWidget.defaultFormat
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data[widgetType]?.[presetName]?.format ?? "hh:mm:ss"; // ClockWidget.defaultFormat
     }
 
     function _saveFormat(value) {
-        var data = JSON.parse(Config.widgetProfiles || "{}");
+        var data = JSON.parse(Config.widgetPresets || "{}");
         if (!data[widgetType]) data[widgetType] = {};
-        if (!data[widgetType][profileName]) data[widgetType][profileName] = {};
-        data[widgetType][profileName]["format"] = value;
-        Config.widgetProfiles = JSON.stringify(data);
+        if (!data[widgetType][presetName]) data[widgetType][presetName] = {};
+        data[widgetType][presetName]["format"] = value;
+        Config.widgetPresets = JSON.stringify(data);
     }
 
     Column {

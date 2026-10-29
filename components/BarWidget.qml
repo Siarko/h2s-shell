@@ -5,7 +5,7 @@ import qs.singletons
 // Reusable interactive bar widget with click and hover signals
 Item {
     id: container
-    // Key into WidgetRegistry and Config.widgetProfiles
+    // Key into WidgetRegistry and the widget preset library
     property string widgetType: ""
     property color cellColor: Theme.cellDefault
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)

@@ -8,6 +8,9 @@ TestCase {
 
     readonly property var _files: [
         "panels/SettingsWindow.qml",
+        "panels/BarSectionList.qml",
+        "panels/HardwareSourceList.qml",
+        "panels/WidgetSettingsPane.qml",
         "panels/settings/BarSettings.qml",
         "panels/settings/CalendarSettings.qml",
         "panels/settings/ConditionEditor.qml",

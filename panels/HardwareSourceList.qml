@@ -7,9 +7,12 @@ Item {
     id: root
     property string title: ""
     property var model: []
-    property string labelsKey: "_labels"
+    // Labels by source id; edits come back through labelsEdited, and the owner decides
+    // where they are stored (a preset for the capsule, a profile for the popup)
+    property var labels: ({})
 
     signal listChanged(var newList)
+    signal labelsEdited(var newLabels)
 
     Layout.fillWidth: true
     implicitHeight: _outer.implicitHeight
@@ -17,19 +20,16 @@ Item {
     readonly property var _allSourceIds: Hardware.sourceIds
 
     function _getLabel(sourceId) {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["hardware"]?.[labelsKey]?.[sourceId] ?? ""
+        return labels?.[sourceId] ?? ""
     }
 
     function _setLabel(sourceId, label) {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        if (!data["hardware"]) data["hardware"] = {}
-        if (!data["hardware"][labelsKey]) data["hardware"][labelsKey] = {}
+        const newLabels = Object.assign({}, labels ?? {})
         if (label === "")
-            delete data["hardware"][labelsKey][sourceId]
+            delete newLabels[sourceId]
         else
-            data["hardware"][labelsKey][sourceId] = label
-        Config.widgetProfiles = JSON.stringify(data)
+            newLabels[sourceId] = label
+        labelsEdited(newLabels)
     }
 
     Component.onCompleted: _rowList.workingList = model ? model.slice() : []
@@ -234,8 +234,8 @@ Item {
                                         Component.onCompleted: text = root._getLabel(_row.modelData)
 
                                         Connections {
-                                            target: Config
-                                            function onWidgetProfilesChanged() {
+                                            target: root
+                                            function onLabelsChanged() {
                                                 if (!_labelInput.activeFocus)
                                                     _labelInput.text = root._getLabel(_row.modelData)
                                             }

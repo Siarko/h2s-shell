@@ -12,7 +12,8 @@ import QtQuick
 //   label    — shown in settings
 //   group    — settings section the key is edited in
 //   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
-//              "bool", "string", "stringList"
+//              "bool", "string", "stringList"; or a structured value with its own editor
+//              on its page ("barSection", "hardwarePopup"), overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   suffix   — unit shown after a number or slider, e.g. "s"
@@ -20,12 +21,50 @@ import QtQuick
 //   options  — for enum: [{ value, label }]
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
-//   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"];
+//   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"],
+//              or a function (config) => value where it was spread over several places;
 //              its value there is copied into the profiles once (ProfileRules.migrateLegacy)
 Singleton {
     id: root
 
-    readonly property var entries: [
+    // Old widget settings, for the legacy readers of the bar entries below
+    function _oldWidgetSettings(config) {
+        try {
+            return JSON.parse(config.widgetProfiles || "{}");
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function _layoutEntry(name, label, min, max, defaultValue, suffix, hint) {
+        return { key: "bar.layout." + name, label: label, group: "bar", type: "slider",
+                 min: min, max: max, suffix: suffix ?? "", default: defaultValue, hint: hint ?? "",
+                 legacy: ["bar", "layout", name] };
+    }
+
+    function _sectionEntry(side, label, defaultTypes) {
+        return { key: "bar." + side, label: label, group: "barContent", type: "barSection",
+                 default: defaultTypes.map(type => ({ type: type, preset: "" })),
+                 legacy: config => ProfileRules.sectionFromLegacy(config.bar.content[side],
+                                                                  config.bar.content[side + "Profiles"]) };
+    }
+
+    // Popup mode per widget type that opens a popup (WidgetRegistry), click by default:
+    // hover cannot fire on a touch screen
+    readonly property var _popupModeEntries: WidgetRegistry.entries.filter(widget => widget.popup).map(widget => ({
+        key: "widgets." + widget.type + ".popupMode", label: widget.name + " popup", group: "popupMode",
+        type: "enum", default: WidgetRegistry.defaultPopupMode,
+        legacy: config => root._oldWidgetSettings(config)[widget.type]?.["_popupMode"],
+        options: [
+            { value: "click", label: "Click" },
+            { value: "hover", label: "Hover" },
+            { value: "none", label: "None" }
+        ]
+    }))
+
+    readonly property var entries: _baseEntries.concat(_popupModeEntries)
+
+    readonly property var _baseEntries: [
         // ── General ──
         { key: "general.debug", label: "Debug Mode", group: "general",
           type: "bool", default: false, global: true, legacy: ["general", "debug"] },
@@ -100,6 +139,32 @@ Singleton {
           type: "bool", default: true, legacy: ["gcal", "enabled"] },
         { key: "gcal.debug", label: "Debug Mode", group: "calendar",
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
+
+        // ── Bar ──
+        _layoutEntry("barHeight", "Bar height", 10, 80, 36, "", "Excluding the reserved space and top offset"),
+        _layoutEntry("reservedSpace", "Reserved space", 10, 80, 40, "", "Overall space reserved for the bar, including its height and offset"),
+        _layoutEntry("topOffset", "Top offset", 0, 80, 2, "", "Between the bar and the top of the screen"),
+        _layoutEntry("leftMargin", "Left margin", 0, 300, 0),
+        _layoutEntry("rightMargin", "Right margin", 0, 300, 0),
+        _layoutEntry("leftPadding", "Left padding", 0, 300, 5),
+        _layoutEntry("rightPadding", "Right padding", 0, 300, 5),
+        _layoutEntry("radiusTopLeft", "Top left", 0, 100, 0, "%"),
+        _layoutEntry("radiusTopRight", "Top right", 0, 100, 0, "%"),
+        _layoutEntry("radiusBottomLeft", "Bottom left", 0, 100, 20, "%"),
+        _layoutEntry("radiusBottomRight", "Bottom right", 0, 100, 20, "%"),
+        _sectionEntry("left", "Left section", ["power", "settings", "workspaces"]),
+        _sectionEntry("center", "Center section", ["clock"]),
+        _sectionEntry("right", "Right section", ["music", "sound", "bluetooth", "tray", "network", "notifications"]),
+        // Which sources the hardware popup lists (null: all) and their labels; the
+        // capsule on the bar is described by its preset instead
+        { key: "widgets.hardware.popup", label: "Hardware popup", group: "hardwarePopup",
+          type: "hardwarePopup", default: { sources: null, labels: {} },
+          legacy: config => {
+              const hardware = root._oldWidgetSettings(config)["hardware"] ?? {};
+              if (hardware["_popup"] === undefined && hardware["_popupLabels"] === undefined)
+                  return undefined;
+              return { sources: hardware["_popup"] ?? null, labels: hardware["_popupLabels"] ?? {} };
+          } },
 
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",

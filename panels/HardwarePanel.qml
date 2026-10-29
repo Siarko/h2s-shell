@@ -11,17 +11,13 @@ Item {
 
     property var _expandedId: null
 
-    readonly property var _customLabels: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["hardware"]?.["_popupLabels"] ?? {}
-    }
+    // Which sources the popup lists and their labels: a profile setting
+    readonly property var _popupSetting: Profiles.value("widgets.hardware.popup") ?? ({})
+    readonly property var _customLabels: _popupSetting.labels ?? {}
 
     // Source ids as configured — labels are stored under these, which for the ids from
     // before multi-GPU support ("gpu") differ from the source's own sourceId
-    readonly property var _popupKeys: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["hardware"]?.["_popup"] ?? Hardware.sourceIds
-    }
+    readonly property var _popupKeys: _popupSetting.sources ?? Hardware.sourceIds
 
     readonly property var _popupSources: {
         var result = []

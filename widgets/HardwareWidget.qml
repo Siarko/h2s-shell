@@ -3,22 +3,13 @@ import qs.components
 import qs.singletons
 
 PopupWidget {
-    property string profile: ""
+    property string preset: ""
     widgetType: "hardware"
 
-    readonly property var _capsuleKeys: {
-        if (profile !== "") {
-            var data = JSON.parse(Config.widgetProfiles || "{}")
-            var keys = data["hardware"]?.[profile]?.capsule
-            if (keys && keys.length > 0) return keys
-        }
-        return ["cpu"]
-    }
-
-    readonly property var _customLabels: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data["hardware"]?.["_capsuleLabels"] ?? {}
-    }
+    // The capsule — which sources and their labels — comes from the widget's preset
+    readonly property var _preset: preset !== "" ? (JSON.parse(Config.widgetPresets || "{}")["hardware"]?.[preset] ?? {}) : ({})
+    readonly property var _capsuleKeys: _preset.capsule?.length > 0 ? _preset.capsule : ["cpu"]
+    readonly property var _customLabels: _preset.capsuleLabels ?? {}
 
     readonly property string _capsuleText: {
         var parts = []

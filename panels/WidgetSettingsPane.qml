@@ -1,36 +1,26 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.singletons
+import qs.panels.settings
 
 Item {
     id: root
 
     property string widgetType: ""
-    property string currentProfile: ""
+    // The widget preset this bar entry uses, "" for none
+    property string currentPreset: ""
+    // The shell profile being edited, picked in the settings window
+    property int editIndex: -1
 
-    signal profileAssigned(string newProfileName)
+    signal presetAssigned(string newPresetName)
 
     implicitHeight: _col.implicitHeight + 12
 
-    readonly property var _knownProfiles: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        if (!data[widgetType]) return []
-        return Object.keys(data[widgetType]).filter(k => !k.startsWith("_"))
-    }
+    // Preset names in the shared library for this widget type
+    readonly property var _knownPresets: Object.keys(JSON.parse(Config.widgetPresets || "{}")[widgetType] ?? {})
 
     readonly property bool _hasPopup: WidgetRegistry.hasPopupMode(widgetType)
-
-    readonly property string _popupMode: {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        return data[widgetType]?.["_popupMode"] ?? WidgetRegistry.defaultPopupMode
-    }
-
-    function _savePopupMode(mode) {
-        var data = JSON.parse(Config.widgetProfiles || "{}")
-        if (!data[widgetType]) data[widgetType] = {}
-        data[widgetType]["_popupMode"] = mode
-        Config.widgetProfiles = JSON.stringify(data)
-    }
 
 
     Column {
@@ -51,163 +41,111 @@ Item {
             color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.3)
         }
 
+        // Popup mode is a setting of the shell profile being edited
+        SchemaSettingEditor {
+            visible: root._hasPopup
+            width: parent.width
+            key: "widgets." + root.widgetType + ".popupMode"
+            editIndex: root.editIndex
+            label: "Popup"
+        }
+
+        // The preset: a pill per preset in the library, picked at once — no field to
+        // confirm — and a field to start a new one
         RowLayout {
             width: parent.width
-            visible: root._hasPopup
             spacing: 8
 
             Text {
-                text: "Popup"
+                text: "Preset"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
                 Layout.preferredWidth: 60
+                Layout.alignment: Qt.AlignTop
+                topPadding: 4
             }
 
-            Rectangle {
+            Flow {
                 Layout.fillWidth: true
-                height: 26
-                radius: 6
-                color: Theme.cellDefault
-                clip: true
+                spacing: 4
 
-                RowLayout {
-                    anchors.fill: parent
-                    spacing: 0
+                Repeater {
+                    // ScriptModel, never the bare array — see "The Repeater crash"
+                    model: ScriptModel {
+                        // A just-named preset is assigned before the library has it
+                        values: [""].concat(root._knownPresets,
+                            root.currentPreset !== "" && !root._knownPresets.includes(root.currentPreset)
+                                ? [root.currentPreset] : [])
+                    }
 
-                    Repeater {
-                        model: ["click", "hover", "none"]
+                    Rectangle {
+                        required property string modelData
+                        readonly property bool picked: modelData === root.currentPreset
 
-                        Rectangle {
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            color: root._popupMode === modelData ? Theme.sliderAccent : "transparent"
+                        width: _presetName.implicitWidth + 16
+                        height: 24
+                        radius: 6
+                        color: picked ? Theme.sliderAccent : (_presetArea.containsMouse ? Theme.cellHover : "transparent")
+                        border.width: picked ? 0 : 1
+                        border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: ({ "click": "Click", "hover": "Hover", "none": "None" })[modelData]
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: root._popupMode === modelData ? Theme.textPrimary : Theme.textSecondary
-                            }
+                        Text {
+                            id: _presetName
+                            anchors.centerIn: parent
+                            text: parent.modelData === "" ? "None" : parent.modelData
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            color: parent.picked ? Theme.textPrimary : Theme.textSecondary
+                        }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root._savePopupMode(modelData)
+                        MouseArea {
+                            id: _presetArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!parent.picked)
+                                    root.presetAssigned(parent.modelData)
                             }
                         }
                     }
                 }
-            }
-        }
 
-        RowLayout {
-            width: parent.width
-            spacing: 8
-
-            Text {
-                text: "Profile"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-                Layout.preferredWidth: 60
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 26
-                radius: 6
-                color: Theme.cellDefault
-
-                TextInput {
-                    id: _profileInput
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    text: root.currentProfile
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    verticalAlignment: TextInput.AlignVCenter
-                    clip: true
-                    onEditingFinished: {
-                        var name = text.trim()
-                        if (name !== root.currentProfile)
-                            root.profileAssigned(name)
-                    }
-                    onActiveFocusChanged: if (!activeFocus) text = root.currentProfile
-                }
-            }
-
-            Rectangle {
-                visible: root.currentProfile !== ""
-                width: 20
-                height: 20
-                radius: 4
-                color: _clearHover.containsMouse ? Theme.cellHover : "transparent"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "×"
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.textDim
-                }
-
-                MouseArea {
-                    id: _clearHover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.profileAssigned("")
-                }
-            }
-        }
-
-        // Inline autocomplete suggestions — part of the column layout to avoid clipping issues
-        Column {
-            id: _suggestionsList
-            width: parent.width
-            visible: _profileInput.activeFocus && _suggestionsRepeater.count > 0
-
-            readonly property var _filteredProfiles: root._knownProfiles.filter(p =>
-                p.toLowerCase().startsWith(_profileInput.text.toLowerCase())
-                && p !== _profileInput.text)
-
-            Repeater {
-                id: _suggestionsRepeater
-                model: _suggestionsList._filteredProfiles
-
-                Item {
-                    required property string modelData
-                    width: _suggestionsList.width
+                // A new preset: named here, created by assigning it; its settings are
+                // stored as soon as one is edited below
+                Rectangle {
+                    width: 120
                     height: 24
+                    radius: 6
+                    color: Theme.cellDefault
 
-                    Rectangle {
-                        anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
-                        radius: 4
-                        color: _suggHover.containsMouse ? Theme.cellHover : "transparent"
-                    }
-
-                    Text {
-                        anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 12 }
-                        text: modelData
+                    TextInput {
+                        id: _newPreset
+                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
+                        verticalAlignment: TextInput.AlignVCenter
+                        selectByMouse: true
+                        clip: true
+                        onAccepted: {
+                            const name = text.trim()
+                            text = ""
+                            focus = false
+                            if (name !== "" && name !== root.currentPreset)
+                                root.presetAssigned(name)
+                        }
                     }
 
-                    MouseArea {
-                        id: _suggHover
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        // Use onPressed (fires before focus transfer) so the suggestion
-                        // list doesn't disappear before the selection is processed
-                        onPressed: {
-                            _profileInput.text = modelData
-                            root.profileAssigned(modelData)
-                            _profileInput.focus = false
-                        }
+                    Text {
+                        anchors { fill: parent; leftMargin: 8 }
+                        verticalAlignment: Text.AlignVCenter
+                        visible: _newPreset.text === "" && !_newPreset.activeFocus
+                        text: "+ New preset"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textDim
                     }
                 }
             }
@@ -217,10 +155,12 @@ Item {
             id: _specificLoader
             width: parent.width
             height: item ? item.implicitHeight : 0
-            visible: root.currentProfile !== ""
+            visible: root.currentPreset !== ""
             source: visible ? WidgetRegistry.settingsUrl(root.widgetType) : ""
             onLoaded: {
-                item.profileName = Qt.binding(() => root.currentProfile)
+                item.presetName = Qt.binding(() => root.currentPreset)
+                if (item.editIndex !== undefined)
+                    item.editIndex = Qt.binding(() => root.editIndex)
                 item.widgetType  = Qt.binding(() => root.widgetType)
             }
         }

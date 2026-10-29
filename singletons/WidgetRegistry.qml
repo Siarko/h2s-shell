@@ -9,7 +9,8 @@ import QtQuick
 // entry below; tests/WidgetRegistryTest.qml checks that every listed file loads.
 //
 // Entry fields (paths are relative to the repo root):
-//   type        — key stored in Config.bar.content.* and Config.widgetProfiles
+//   type        — key used in the bar section settings (bar.left etc.) and in the
+//                 widget preset library, Config.widgetPresets
 //   name        — shown in settings
 //   widget      — the bar widget
 //   popup       — popup content key, for widgets built on PopupWidget; their popup mode

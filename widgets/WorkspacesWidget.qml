@@ -11,20 +11,20 @@ BarWidget {
     // Narrower than a plain cell is fine with a single workspace showing
     Layout.minimumWidth: 0
 
-    property string profile: ""
+    property string preset: ""
 
     readonly property string _title: {
-        if (profile === "")
+        if (preset === "")
             return "";
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data["workspaces"]?.[profile]?.title ?? "";
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data["workspaces"]?.[preset]?.title ?? "";
     }
 
     readonly property var _nameMap: {
-        if (profile === "")
+        if (preset === "")
             return ({});
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        var entries = data["workspaces"]?.[profile]?.nameMap ?? [];
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        var entries = data["workspaces"]?.[preset]?.nameMap ?? [];
         var map = {};
         for (var i = 0; i < entries.length; i++) {
             if (entries[i].system)
@@ -34,17 +34,17 @@ BarWidget {
     }
 
     readonly property bool _showSpecial: {
-        if (profile === "")
+        if (preset === "")
             return true;
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data["workspaces"]?.[profile]?.showSpecial ?? true;
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data["workspaces"]?.[preset]?.showSpecial ?? true;
     }
 
     readonly property bool _showNormal: {
-        if (profile === "")
+        if (preset === "")
             return true;
-        var data = JSON.parse(Config.widgetProfiles || "{}");
-        return data["workspaces"]?.[profile]?.showNormal ?? true;
+        var data = JSON.parse(Config.widgetPresets || "{}");
+        return data["workspaces"]?.[preset]?.showNormal ?? true;
     }
 
     Row {

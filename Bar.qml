@@ -39,12 +39,12 @@ PanelWindow {
     }
     color: "transparent"
 
-    implicitHeight: Config.bar.layout.reservedSpace
+    implicitHeight: bar._layout("reservedSpace")
 
     // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
     // Component is set here, only where the widget has the property.
     //
-    // The profile binding must read through the delegate, not a captured modelData: the
+    // The preset binding must read through the delegate, not a captured modelData: the
     // section is built before the config has loaded, and ScriptModel then updates the
     // existing delegate's modelData in place rather than recreating it. A captured object
     // keeps the empty profile from that first pass.
@@ -53,20 +53,22 @@ PanelWindow {
             item.popup = popupLoader
         if (typeof item.settingsWindow !== "undefined")
             item.settingsWindow = Qt.binding(() => bar.settingsWindowRef)
-        if (typeof item.profile !== "undefined")
-            item.profile = Qt.binding(() => delegate.modelData.profile)
+        if (typeof item.preset !== "undefined")
+            item.preset = Qt.binding(() => delegate.modelData.preset)
         if (delegate.modelData.type === "notifications")
             bar.notifWidget = item
     }
 
-    function _zipModel(types, profilesJson) {
-        var profs = JSON.parse(profilesJson || "[]")
-        return types.map((t, i) => ({ type: t, profile: profs[i] || "" }))
-    }
+    // Each section is a profile setting, [{ type, preset }]; the model entries carry a key
+    // that only changes with the entry, so a profile change elsewhere keeps the widgets
+    readonly property var _leftModel:   ProfileRules.sectionModel(Profiles.value("bar.left"))
+    readonly property var _centerModel: ProfileRules.sectionModel(Profiles.value("bar.center"))
+    readonly property var _rightModel:  ProfileRules.sectionModel(Profiles.value("bar.right"))
 
-    readonly property var _leftModel:   _zipModel(Config.bar.content.left,   Config.bar.content.leftProfiles)
-    readonly property var _centerModel: _zipModel(Config.bar.content.center, Config.bar.content.centerProfiles)
-    readonly property var _rightModel:  _zipModel(Config.bar.content.right,  Config.bar.content.rightProfiles)
+    // Geometry, from the active profile
+    function _layout(name) {
+        return Profiles.value("bar.layout." + name) ?? 0
+    }
 
     // Visual bar rectangle — floats within the reserved space
     Rectangle {
@@ -74,22 +76,22 @@ PanelWindow {
             top: parent.top
             left: parent.left
             right: parent.right
-            topMargin: Config.bar.layout.topOffset
-            leftMargin: Config.bar.layout.leftMargin
-            rightMargin: Config.bar.layout.rightMargin
+            topMargin: bar._layout("topOffset")
+            leftMargin: bar._layout("leftMargin")
+            rightMargin: bar._layout("rightMargin")
         }
-        height: Config.bar.layout.barHeight
+        height: bar._layout("barHeight")
         color: Theme.barBackground
-        topLeftRadius: Config.bar.layout.radiusTopLeft / 100 * (Config.bar.layout.barHeight / 2)
-        topRightRadius: Config.bar.layout.radiusTopRight / 100 * (Config.bar.layout.barHeight / 2)
-        bottomLeftRadius: Config.bar.layout.radiusBottomLeft / 100 * (Config.bar.layout.barHeight / 2)
-        bottomRightRadius: Config.bar.layout.radiusBottomRight / 100 * (Config.bar.layout.barHeight / 2)
+        topLeftRadius: bar._layout("radiusTopLeft") / 100 * (bar._layout("barHeight") / 2)
+        topRightRadius: bar._layout("radiusTopRight") / 100 * (bar._layout("barHeight") / 2)
+        bottomLeftRadius: bar._layout("radiusBottomLeft") / 100 * (bar._layout("barHeight") / 2)
+        bottomRightRadius: bar._layout("radiusBottomRight") / 100 * (bar._layout("barHeight") / 2)
 
         // Three-section bar layout: left-aligned, centered, right-aligned
         Item {
             anchors.fill: parent
-            anchors.leftMargin: Config.bar.layout.leftPadding
-            anchors.rightMargin: Config.bar.layout.rightPadding
+            anchors.leftMargin: bar._layout("leftPadding")
+            anchors.rightMargin: bar._layout("rightPadding")
 
             // Left section
             RowLayout {
@@ -102,6 +104,7 @@ PanelWindow {
                     // ScriptModel, never the bare array — see "The Repeater crash"
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
+                        objectProp: "key"
                         values: bar._leftModel
                     }
                     delegate: Loader {
@@ -126,6 +129,7 @@ PanelWindow {
                     // ScriptModel, never the bare array — see "The Repeater crash"
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
+                        objectProp: "key"
                         values: bar._centerModel
                     }
                     delegate: Loader {
@@ -151,6 +155,7 @@ PanelWindow {
                     // ScriptModel, never the bare array — see "The Repeater crash"
                     // in docs/ARCHITECTURE.md
                     model: ScriptModel {
+                        objectProp: "key"
                         values: bar._rightModel
                     }
                     delegate: Loader {

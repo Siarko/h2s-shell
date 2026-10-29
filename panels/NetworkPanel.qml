@@ -478,7 +478,7 @@ Item {
                     // Popup content starts at y = topOffset + barHeight from screen top.
                     // Inside popup: paddingTop=10 above panel, paddingBottom=10 below.
                     // Below the list in _wifiSection: _hiddenRow + 8px spacing.
-                    var panelTopY = Config.bar.layout.topOffset + Config.bar.layout.barHeight
+                    var panelTopY = (Profiles.value("bar.layout.topOffset") ?? 0) + (Profiles.value("bar.layout.barHeight") ?? 0)
                     var maxH = Screen.height - panelTopY - 10 - _wifiSection.y - networkList.y - _hiddenRow.height - 8 - 10 - 16
                     return Math.min(contentHeight, Math.max(80, maxH))
                 }

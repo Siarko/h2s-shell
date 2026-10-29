@@ -3,7 +3,29 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.panels
 
+// The bar's geometry, corners and widgets, edited in the profile picked in the settings
+// window. Each section (left, center, right) is one setting: a profile either inherits
+// it or has its own list of widgets (docs/plans/global-profiles.md).
 Flickable {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
+    function _value(name) {
+        return Profiles.editedValue(editIndex, "bar.layout." + name)
+    }
+
+    function _write(name, value) {
+        Profiles.writeSetting(editIndex, "bar.layout." + name, value)
+    }
+
+    // The top offset has to fit between the bar and the edge of its reserved space
+    function _clampTopOffset(reservedSpace, barHeight) {
+        if (_value("topOffset") > reservedSpace - barHeight)
+            _write("topOffset", reservedSpace - barHeight)
+    }
+
     anchors.fill: parent
     contentHeight: _barCol.implicitHeight
     clip: true
@@ -14,7 +36,7 @@ Flickable {
             fill: parent
             margins: 14
         }
-        spacing: 16
+        spacing: 4
 
         Text {
             text: "Geometry"
@@ -24,76 +46,41 @@ Flickable {
             color: Theme.textSecondary
         }
 
-        SettingsGroup {
-            SettingSlider {
-                label: "Bar height"
-                tooltip: "Bar height. Excluding the reserved space and top offset"
-                tooltipIcon: true
-                from: 10
-                to: 80
-                value: Config.bar.layout.barHeight
-                onValueEdited: newValue => {
-                    Config.bar.layout.barHeight = newValue;
-                    if (Config.bar.layout.reservedSpace < newValue)
-                        Config.bar.layout.reservedSpace = newValue;
-                    var maxOffset = Config.bar.layout.reservedSpace - newValue;
-                    if (Config.bar.layout.topOffset > maxOffset)
-                        Config.bar.layout.topOffset = maxOffset;
-                }
+        SchemaSettingEditor {
+            key: "bar.layout.barHeight"
+            editIndex: root.editIndex
+            editHook: newValue => {
+                root._write("barHeight", newValue)
+                if (root._value("reservedSpace") < newValue)
+                    root._write("reservedSpace", newValue)
+                root._clampTopOffset(Math.max(root._value("reservedSpace"), newValue), newValue)
             }
+        }
 
-            SettingSlider {
-                label: "Reserved space"
-                tooltip: "Overall reserved space for the bar, includes bar height and offset"
-                tooltipIcon: true
-                from: 10
-                to: 80
-                lockedFrom: Config.bar.layout.barHeight
-                value: Config.bar.layout.reservedSpace
-                onValueEdited: newValue => {
-                    Config.bar.layout.reservedSpace = newValue;
-                    var maxOffset = newValue - Config.bar.layout.barHeight;
-                    if (Config.bar.layout.topOffset > maxOffset)
-                        Config.bar.layout.topOffset = maxOffset;
-                }
+        SchemaSettingEditor {
+            key: "bar.layout.reservedSpace"
+            editIndex: root.editIndex
+            editHook: newValue => {
+                const value = Math.max(newValue, root._value("barHeight"))
+                root._write("reservedSpace", value)
+                root._clampTopOffset(value, root._value("barHeight"))
             }
-            SettingSlider {
-                label: "Top offset"
-                tooltip: "Top offset between the bar and top of the screen"
-                tooltipIcon: true
-                from: 0
-                to: Config.bar.layout.reservedSpace - Config.bar.layout.barHeight
-                disabled: Config.bar.layout.reservedSpace <= Config.bar.layout.barHeight
-                value: Config.bar.layout.topOffset
-                onValueEdited: newValue => Config.bar.layout.topOffset = newValue
-            }
-            SettingSlider {
-                label: "Left margin"
-                from: 0
-                to: 300
-                value: Config.bar.layout.leftMargin
-                onValueEdited: newValue => Config.bar.layout.leftMargin = newValue
-            }
-            SettingSlider {
-                label: "Right margin"
-                from: 0
-                to: 300
-                value: Config.bar.layout.rightMargin
-                onValueEdited: newValue => Config.bar.layout.rightMargin = newValue
-            }
-            SettingSlider {
-                label: "Left padding"
-                from: 0
-                to: 300
-                value: Config.bar.layout.leftPadding
-                onValueEdited: newValue => Config.bar.layout.leftPadding = newValue
-            }
-            SettingSlider {
-                label: "Right padding"
-                from: 0
-                to: 300
-                value: Config.bar.layout.rightPadding
-                onValueEdited: newValue => Config.bar.layout.rightPadding = newValue
+        }
+
+        SchemaSettingEditor {
+            key: "bar.layout.topOffset"
+            editIndex: root.editIndex
+            maximum: Math.max(0, root._value("reservedSpace") - root._value("barHeight"))
+            available: root._value("reservedSpace") > root._value("barHeight")
+        }
+
+        Repeater {
+            model: ["leftMargin", "rightMargin", "leftPadding", "rightPadding"]
+
+            SchemaSettingEditor {
+                required property string modelData
+                key: "bar.layout." + modelData
+                editIndex: root.editIndex
             }
         }
 
@@ -103,41 +90,16 @@ Flickable {
             font.pixelSize: Theme.fontSizeHeading
             font.bold: true
             color: Theme.textSecondary
-            Layout.topMargin: 4
+            Layout.topMargin: 12
         }
 
-        SettingsGroup {
-            SettingSlider {
-                label: "Top left"
-                from: 0
-                to: 100
-                suffix: "%"
-                value: Config.bar.layout.radiusTopLeft
-                onValueEdited: newValue => Config.bar.layout.radiusTopLeft = newValue
-            }
-            SettingSlider {
-                label: "Top right"
-                from: 0
-                to: 100
-                suffix: "%"
-                value: Config.bar.layout.radiusTopRight
-                onValueEdited: newValue => Config.bar.layout.radiusTopRight = newValue
-            }
-            SettingSlider {
-                label: "Bottom left"
-                from: 0
-                to: 100
-                suffix: "%"
-                value: Config.bar.layout.radiusBottomLeft
-                onValueEdited: newValue => Config.bar.layout.radiusBottomLeft = newValue
-            }
-            SettingSlider {
-                label: "Bottom right"
-                from: 0
-                to: 100
-                suffix: "%"
-                value: Config.bar.layout.radiusBottomRight
-                onValueEdited: newValue => Config.bar.layout.radiusBottomRight = newValue
+        Repeater {
+            model: ["radiusTopLeft", "radiusTopRight", "radiusBottomLeft", "radiusBottomRight"]
+
+            SchemaSettingEditor {
+                required property string modelData
+                key: "bar.layout." + modelData
+                editIndex: root.editIndex
             }
         }
 
@@ -147,35 +109,34 @@ Flickable {
             font.pixelSize: Theme.fontSizeHeading
             font.bold: true
             color: Theme.textSecondary
-            Layout.topMargin: 4
+            Layout.topMargin: 12
         }
 
-        SettingsGroup {
-            BarSectionList {
-                title: "Left section"
-                section: "left"
-                model: Config.bar.content.left
-                widgetProfiles: JSON.parse(Config.bar.content.leftProfiles || "[]")
-                onListChanged: newList => Config.bar.content.left = newList
-                onProfileListChanged: newProfiles => Config.bar.content.leftProfiles = JSON.stringify(newProfiles)
-            }
+        // One section: its status, pin and reset come from the schema editor; the list
+        // below edits its value, and editing an inherited section copies it in
+        Repeater {
+            model: ["left", "center", "right"]
 
-            BarSectionList {
-                title: "Center section"
-                section: "center"
-                model: Config.bar.content.center
-                widgetProfiles: JSON.parse(Config.bar.content.centerProfiles || "[]")
-                onListChanged: newList => Config.bar.content.center = newList
-                onProfileListChanged: newProfiles => Config.bar.content.centerProfiles = JSON.stringify(newProfiles)
-            }
+            ColumnLayout {
+                id: _section
+                required property string modelData
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                spacing: 2
 
-            BarSectionList {
-                title: "Right section"
-                section: "right"
-                model: Config.bar.content.right
-                widgetProfiles: JSON.parse(Config.bar.content.rightProfiles || "[]")
-                onListChanged: newList => Config.bar.content.right = newList
-                onProfileListChanged: newProfiles => Config.bar.content.rightProfiles = JSON.stringify(newProfiles)
+                SchemaSettingEditor {
+                    id: _sectionSetting
+                    key: "bar." + _section.modelData
+                    editIndex: root.editIndex
+                }
+
+                BarSectionList {
+                    section: _section.modelData
+                    editIndex: root.editIndex
+                    opacity: _sectionSetting.inherits && !_sectionSetting.global ? 0.6 : 1
+                    entries: _sectionSetting.shownValue ?? []
+                    onEdited: newEntries => _sectionSetting.edited(newEntries)
+                }
             }
         }
 
