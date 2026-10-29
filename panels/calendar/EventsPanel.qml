@@ -44,13 +44,17 @@ Item {
         return GoogleCalendar.events[GoogleCalendar._dateKey(displayYear, displayMonth, selectedDay)] ?? [];
     }
 
-    readonly property string _statusMessage: {
-        if (!GoogleCalendar.enabled)
-            return "Google Calendar is off";
-        if (!GoogleCalendarAuth.isAuthorized)
-            return "Google Calendar connected but not authorized";
-        return "";
-    }
+    // One banner at a time: switched off, not signed in, or the last load failed — each
+    // with its own action on click
+    readonly property string _statusKind: !GoogleCalendar.enabled ? "off"
+        : !GoogleCalendarAuth.isAuthorized ? "unauthorized"
+        : GoogleCalendar.error !== "" ? "error" : ""
+    readonly property string _statusMessage: ({
+        "off": "Google Calendar is off",
+        "unauthorized": "Google Calendar connected but not authorized",
+        "error": GoogleCalendar.error + " — click to retry",
+        "": ""
+    })[_statusKind]
 
     // Used by Calendar.qml to grow implicitHeight when the add form is open.
     // = form content height + 8px (form item margins) + 6px (extra ColumnLayout spacing gap)
@@ -148,7 +152,7 @@ Item {
                 }
 
                 Text {
-                    text: "↻"
+                    text: "󰑓"
                     color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
@@ -196,7 +200,10 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
-                    if (Config.gcal.clientId !== "" && Config.gcal.clientSecret !== "")
+                    if (root._statusKind === "error")
+                        GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
+                    else if (root._statusKind === "unauthorized"
+                             && Config.gcal.clientId !== "" && Config.gcal.clientSecret !== "")
                         GoogleCalendarAuth.login();
                     else
                         Shell.openSettings(1);
@@ -287,13 +294,35 @@ Item {
     // Loading spinner overlay
     property bool _loading: GoogleCalendar.eventsLoading[GoogleCalendar._monthKey(displayYear, displayMonth)] ?? false
 
-    Text {
+    // Spins around the centre of the glyph's ring. Rotating the Text spun it around the
+    // middle of its box instead — Nerd Font icons are wider than the one-cell box and
+    // stick out to the right — and even the middle of the ink is off, since the arrowhead
+    // pokes out of the ring on the right. The ring's centre, fitted to the rendered glyph:
+    // 0.401 em from the left of the ink, 0.359 em above the baseline. The box here is the
+    // ink (TextMetrics, which matches the render), with the glyph placed so that point
+    // lands on the box's centre, the rotation origin.
+    Item {
+        id: _spinner
         visible: root._loading
-        text: "↻"
-        font.pixelSize: Theme.fontSizeDisplay
-        color: Theme.textSecondary
-        font.family: Theme.fontFamily
         anchors.centerIn: parent
+        width: _spinnerMetrics.tightBoundingRect.width
+        height: _spinnerMetrics.tightBoundingRect.height
+
+        Text {
+            id: _spinnerGlyph
+            x: _spinner.width / 2 - (_spinnerMetrics.tightBoundingRect.x + 0.401 * font.pixelSize)
+            y: _spinner.height / 2 - (baselineOffset - 0.359 * font.pixelSize)
+            text: "󰑓"
+            font.pixelSize: Theme.fontSizeDisplay
+            font.family: Theme.fontFamily
+            color: Theme.textSecondary
+        }
+
+        TextMetrics {
+            id: _spinnerMetrics
+            font: _spinnerGlyph.font
+            text: _spinnerGlyph.text
+        }
 
         RotationAnimator on rotation {
             running: root._loading

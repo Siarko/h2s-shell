@@ -53,5 +53,12 @@ TestCase {
 
         // --- malformed ---
         assertEqual(_keys({}, 2026, 9), JSON.stringify([]), "event without a start gives no keys");
+
+        // --- failures as the calendar panel shows them ---
+        assertEqual(GoogleCalendar._describe({ status: 0 }), "no connection", "status 0: offline");
+        assertEqual(GoogleCalendar._describe({ status: 0, timedOut: true }), "the request timed out", "a timeout says so");
+        assert(GoogleCalendar._describe({ status: 401 }).includes("sign-in expired"), "401: the sign-in");
+        assertEqual(GoogleCalendar._describe({ status: 500 }), "Google returned an error (HTTP 500)", "other statuses");
+        assertEqual(GoogleCalendar._describe(new Error("boom")), "boom", "anything else: its message");
     }
 }

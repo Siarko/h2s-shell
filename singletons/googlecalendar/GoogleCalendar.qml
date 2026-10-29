@@ -23,6 +23,25 @@ Singleton {
     // Signed in and switched on: whether to fetch, and whether the panel offers editing
     readonly property bool available: isAuthorized && enabled
 
+    // What went wrong with the last load, for the panel to show with a retry; "" when the
+    // last load worked. A failed load otherwise looked like a month without events.
+    property string error: ""
+
+    // A failure as the user would put it
+    function _describe(reason) {
+        if (reason?.timedOut)
+            return "the request timed out";
+        if (reason?.status === 0)
+            return "no connection";
+        if (reason?.status === 401)
+            return "the sign-in expired — reconnect in Settings → Calendar";
+        if (reason?.status === 403)
+            return "access was denied";
+        if (reason?.status)
+            return "Google returned an error (HTTP " + reason.status + ")";
+        return reason?.message ?? String(reason);
+    }
+
     property var events: ({})
     property var eventsByCalendar: ({})
     property var eventsLoading: ({})
@@ -56,6 +75,7 @@ Singleton {
             eventsByCalendar = {};
             eventsLoading = {};
             _fetchedMonths = {};
+            error = "";
         }
     }
 
@@ -82,17 +102,21 @@ Singleton {
         if (root._initializatingPromise) {
             return root._initializatingPromise;
         }
-        root._initializatingPromise = Promises.allSettled(fetchColorMappings(), fetchAllCalendars()).then(() => {
+        root._initializatingPromise = Promises.allSettled(fetchColorMappings(), fetchAllCalendars()).then(results => {
             // allSettled never rejects, so reaching here says nothing about whether the
             // fetches worked. The calendar list is what every later fetch depends on, so
             // that is the condition: without it, stay uninitialised and retry next time
             // rather than reporting a readiness that is not there.
             root._initialized = Object.keys(root.calendars).length > 0;
             root._initializatingPromise = null;
-            if (root._initialized)
+            if (root._initialized) {
                 logger.log("Initialised with", Object.keys(root.calendars).length, "calendars");
-            else
+            } else {
                 logger.warn("Initialisation did not produce any calendars — will retry");
+                const failure = results[1]?.status === false ? results[1].reason : results[0]?.reason;
+                root.error = "Could not load your calendars: "
+                    + (failure !== undefined ? root._describe(failure) : "Google returned none");
+            }
         });
         return root._initializatingPromise;
     }
@@ -261,7 +285,12 @@ Singleton {
                     fetches.push(_fetchCalendarEventsForMonth(id, year, month));
                 }
                 return Promises.allSettled(fetches);
-            }).then(() => {
+            }).then(results => {
+                // Calendars that loaded still show; the others are reported
+                const failed = (results ?? []).filter(result => result.status === false);
+                root.error = failed.length === 0 ? ""
+                    : "Could not load events from " + failed.length + " of " + results.length
+                      + " calendars: " + root._describe(failed[0].reason);
                 let daysInMonth = new Date(year, month + 1, 0).getDate();
                 for (let d = 1; d <= daysInMonth; d++)
                     _mergeEvents(year, month, d);
@@ -272,6 +301,7 @@ Singleton {
                 // The chain can now reject for real, so the loading flag has to be cleared
                 // here too — otherwise EventsPanel shows its spinner forever.
                 setDayLoading(monthKey, false);
+                root.error = "Could not load events: " + root._describe(e);
                 logger.error("fetchMonthEvents failed: ", e);
                 logger.error("Stack: ", e?.stack);
             });
@@ -280,7 +310,14 @@ Singleton {
         if (root._initialized) {
             exec();
         } else {
-            initialize().then(() => exec());
+            // A failed initialisation has set the error already; going on would fetch the
+            // calendar list a second time, through getEnabledCalendarIds
+            initialize().then(() => {
+                if (root._initialized)
+                    exec();
+                else
+                    setDayLoading(monthKey, false);
+            });
         }
     }
 

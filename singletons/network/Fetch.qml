@@ -107,8 +107,9 @@ Singleton {
                     // The status has to travel as a field, not just inside the message:
                     // GoogleCalendarAuth checks `reason.status === 401` to decide whether
                     // to refresh the token, and a bare Error made that check dead.
+                    // No body at all (status 0: offline, refused, aborted) adds no "data:"
                     let failure = new Error("Unexpected HTTP response status " + xhr.status
-                        + ", data: " + _truncate(xhr.responseText));
+                        + (xhr.responseText ? ", data: " + _truncate(xhr.responseText) : ""));
                     failure.status = xhr.status;
                     failure.body = xhr.responseText;
                     reject(failure);

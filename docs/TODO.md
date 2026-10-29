@@ -320,12 +320,18 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Done 2026-10-29: the last one, the notification card's action buttons, is wrapped
       too. The calendar's day names (an input property) got one as well. Every
       remaining Repeater model is a Quickshell ObjectModel or a ListModel.
-- [ ] **8.8 Show calendar errors in the UI**
+- [x] **8.8 Show calendar errors in the UI**
       Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API
       error) only reaches the log; the calendar just stays empty, indistinguishable from
       a month with no events. `GoogleCalendar` needs an error state the panel can show,
       with a retry. While there: a retry after a failed init fetches `calendarList`
       twice, and the status-0 error message ends in an empty `data:`.
+      Done 2026-10-29, verified on the host: `GoogleCalendar.error`, set by a failed load of
+      the calendar list or of events (partial failures name how many calendars), cleared
+      by a good one; the panel banner shows it and retries on click. A failed init no
+      longer goes on to fetch the calendar list again; status 0 drops the empty "data:".
+      The banner's click now fits its message (retry / sign in / settings), and the
+      loading spinner turns around its ring's centre.
 
 - [x] **8.10 "Enable Google Calendar" does nothing but change a message**
       Found 2026-10-29 while moving it into profiles. `gcal.enabled` is read only by
