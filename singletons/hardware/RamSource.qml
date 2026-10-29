@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 Singleton {
@@ -16,7 +17,6 @@ Singleton {
     property real maxValue: 100
     property bool available: true
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: true
 
@@ -24,9 +24,7 @@ Singleton {
     property real totalBytes: 0
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     function formatBytes(bytes) {
@@ -40,11 +38,9 @@ Singleton {
         path: "/proc/meminfo"
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.hardware.interval")
-        running: interval > 0
-        repeat: true
-        triggeredOnStart: true
         onTriggered: {
             var data = {}
             for (const line of _meminfo.read().split("\n")) {

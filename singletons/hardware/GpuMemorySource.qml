@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 // Video memory in use on one card. A source of its own rather than a subtitle under the
@@ -20,7 +21,6 @@ Scope {
     property real maxValue: 100
     property bool available: _readable
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: true
 
@@ -30,9 +30,7 @@ Scope {
     property bool _checked: false
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     function formatBytes(bytes) {
@@ -51,11 +49,10 @@ Scope {
         path: root.card.path + "/mem_info_vram_total"
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.hardware.interval")
-        running: interval > 0 && root._readable
-        repeat: true
-        triggeredOnStart: true
+        active: root._readable
         onTriggered: {
             var used  = parseFloat(_used.read())
             var total = parseFloat(_total.read())

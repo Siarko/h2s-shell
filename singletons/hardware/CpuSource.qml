@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 Singleton {
@@ -16,16 +17,13 @@ Singleton {
     property real maxValue: 100
     property bool available: true
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: true
 
     property var _prev: null
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     KernelFile {
@@ -33,11 +31,11 @@ Singleton {
         path: "/proc/stat"
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.hardware.interval")
-        running: interval > 0
-        repeat: true
-        triggeredOnStart: true
+        // Otherwise the first sample after a pause averages over the whole pause
+        onPaused: root._prev = null
         onTriggered: {
             var line = _stat.read().split("\n").find(l => l.startsWith("cpu "))
             if (!line) return

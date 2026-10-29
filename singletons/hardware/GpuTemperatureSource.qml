@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 // One card's temperature (its first hwmon sensor, "edge" on amdgpu). One instance per
@@ -19,7 +20,6 @@ Scope {
     property real maxValue: 110
     property bool available: card.tempPath !== "" && _readable
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: false
 
@@ -27,9 +27,7 @@ Scope {
     property bool _checked: false
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     KernelFile {
@@ -37,11 +35,10 @@ Scope {
         path: root.card.tempPath
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.temperatures.interval")
-        running: interval > 0 && root.card.tempPath !== "" && root._readable
-        repeat: true
-        triggeredOnStart: true
+        active: root.card.tempPath !== "" && root._readable
         onTriggered: {
             var raw = parseInt(_sensor.read().trim())
             if (!isNaN(raw) && raw > 0) {

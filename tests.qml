@@ -12,6 +12,7 @@ QtObject {
     property var _widgetRegistry: WidgetRegistryTest {}
     property var _hardware: HardwareTest {}
     property var _profiles: ProfilesTest {}
+    property var _polling: PollingTest {}
 
     // Exit after all Component.onCompleted handlers finish.
     // interval:0 fires on the next event loop tick, after all suites have run.

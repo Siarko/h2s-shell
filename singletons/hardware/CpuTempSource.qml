@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 Singleton {
@@ -17,16 +18,13 @@ Singleton {
     property real maxValue: 110
     property bool available: true
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: false
 
     property bool _checked: false
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     // The sensor file, found once at startup; hwmon numbering only changes across boots
@@ -64,11 +62,10 @@ Singleton {
         path: root._sensorPath
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.temperatures.interval")
-        running: interval > 0 && root._sensorPath !== "" && root.available
-        repeat: true
-        triggeredOnStart: true
+        active: root._sensorPath !== "" && root.available
         onTriggered: {
             var raw = parseInt(_sensor.read().trim())
             if (!isNaN(raw) && raw > 0) {

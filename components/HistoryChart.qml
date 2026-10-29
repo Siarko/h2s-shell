@@ -2,8 +2,9 @@ import QtQuick
 import qs.singletons
 
 // History graph with 5m/15m/30m/1h scale buttons, for one or more series drawn over each
-// other. A series is { history: [{ t, v }], color }, history being what the hardware
-// sources and LinkSpeed keep. Bind `series` to an expression that reads the histories:
+// other. A series is { history, color }, history being History.append samples
+// ({ t, v, dt }) as the hardware sources and LinkSpeed keep them. Where sampling was
+// paused the line breaks rather than bridging the gap as if there were data. Bind `series` to an expression that reads the histories:
 // each new sample then reassigns it, which repaints.
 Column {
     id: root
@@ -18,14 +19,64 @@ Column {
     // Paints only while true, so a collapsed graph costs nothing
     property bool active: true
     property int graphHeight: 80
+    // A quick wave across the graph when a sample arrives (the "graphs.heartbeat"
+    // setting): it brightens the line and the fill under it as it passes, right to left
+    property bool heartbeat: Profiles.value("graphs.heartbeat")
+    // 0 → 1 while the wave travels; 1 when idle
+    property real _pulse: 1
+    // Newest sample time across the series, so only a new sample starts a wave
+    property double _newestSample: 0
     property int scaleSecs: 300
 
     spacing: 6
 
-    onSeriesChanged: _repaint()
+    onSeriesChanged: {
+        var newest = 0
+        for (var i = 0; i < (series ?? []).length; i++) {
+            var history = series[i].history ?? []
+            if (history.length > 0)
+                newest = Math.max(newest, history[history.length - 1].t)
+        }
+        // Not on the first data the graph sees, which is the whole history at once
+        if (newest > _newestSample && _newestSample > 0 && heartbeat && active)
+            _wave.restart()
+        _newestSample = newest
+        _repaint()
+    }
+    on_PulseChanged: if (active) _canvas.requestPaint()
+
+    NumberAnimation {
+        id: _wave
+        target: root
+        property: "_pulse"
+        from: 0
+        to: 1
+        duration: 350
+        easing.type: Easing.OutQuad
+    }
     onActiveChanged: _repaint()
     onScaleSecsChanged: _repaint()
     onWidthChanged: _repaint()
+
+    // Splits samples into runs of continuous sampling. Two samples belong to one run unless
+    // the time between them is well over the interval either was taken at — then sampling
+    // was paused. Taking the larger of the two keeps a rate change from looking like a gap.
+    function _runs(points) {
+        var runs = []
+        var current = []
+        for (var i = 0; i < points.length; i++) {
+            var previous = current[current.length - 1]
+            if (previous && previous.dt && points[i].dt
+                    && points[i].t - previous.t > 2.5 * Math.max(previous.dt, points[i].dt)) {
+                runs.push(current)
+                current = []
+            }
+            current.push(points[i])
+        }
+        if (current.length > 0)
+            runs.push(current)
+        return runs
+    }
 
     function _repaint() {
         if (active)
@@ -89,15 +140,16 @@ Column {
             var startT = now - windowMs
             var visible = (root.series ?? []).map(serie => ({
                 color: serie.color,
-                points: (serie.history ?? []).filter(point => point.t >= startT)
+                runs: root._runs((serie.history ?? []).filter(point => point.t >= startT))
             }))
 
             var top = root.maxValue
             if (isNaN(top)) {
                 top = root.minValue
                 for (var s = 0; s < visible.length; s++)
-                    for (var p = 0; p < visible[s].points.length; p++)
-                        top = Math.max(top, visible[s].points[p].v)
+                    for (var r = 0; r < visible[s].runs.length; r++)
+                        for (var p = 0; p < visible[s].runs[r].length; p++)
+                            top = Math.max(top, visible[s].runs[r][p].v)
             }
             var range = Math.max(top - root.minValue, 1e-9)
 
@@ -124,31 +176,79 @@ Column {
                 ctx.stroke()
             }
 
-            for (var i = 0; i < visible.length; i++) {
-                var points = visible[i].points
-                if (points.length < 2) continue
-                var color = visible[i].color
-
-                // Fill under line; fainter with several series, so they stay readable
-                // where they overlap
+            function tracePath(points, closed) {
                 ctx.beginPath()
                 ctx.moveTo(xOf(points[0]), yOf(points[0]))
                 for (var j = 1; j < points.length; j++)
                     ctx.lineTo(xOf(points[j]), yOf(points[j]))
-                ctx.lineTo(xOf(points[points.length - 1]), height)
-                ctx.lineTo(xOf(points[0]), height)
-                ctx.closePath()
-                ctx.fillStyle = rgba(color, visible.length > 1 ? 0.08 : 0.15)
+                if (closed) {
+                    ctx.lineTo(xOf(points[points.length - 1]), height)
+                    ctx.lineTo(xOf(points[0]), height)
+                    ctx.closePath()
+                }
+            }
+
+            // One continuous run of samples: the fill under it, then its line. The fill is
+            // fainter with several series, so they stay readable where they overlap.
+            var fillAlpha = visible.length > 1 ? 0.08 : 0.15
+            function drawRun(points, color) {
+                tracePath(points, true)
+                ctx.fillStyle = rgba(color, fillAlpha)
                 ctx.fill()
 
-                // Line
-                ctx.beginPath()
+                tracePath(points, false)
                 ctx.strokeStyle = rgba(color, 0.9)
                 ctx.lineWidth = 1.5
-                ctx.moveTo(xOf(points[0]), yOf(points[0]))
-                for (var k = 1; k < points.length; k++)
-                    ctx.lineTo(xOf(points[k]), yOf(points[k]))
                 ctx.stroke()
+            }
+
+            // The heartbeat: a band of light centred on waveX, drawn over each run in a
+            // lighter shade of its own colour, so with several series the waves of each
+            // line up into one. It fades as it travels.
+            var waveX = width * (1 - root._pulse)
+            var waveHalf = width * 0.12
+            var waveStrength = 1 - root._pulse
+            function waveGradient(color, peakAlpha) {
+                var gradient = ctx.createLinearGradient(waveX - waveHalf, 0, waveX + waveHalf, 0)
+                var light = Qt.lighter(color, 1.6)
+                gradient.addColorStop(0, rgba(light, 0))
+                gradient.addColorStop(0.5, rgba(light, peakAlpha * waveStrength))
+                gradient.addColorStop(1, rgba(light, 0))
+                return gradient
+            }
+            function drawWave(points, color) {
+                tracePath(points, true)
+                ctx.fillStyle = waveGradient(color, fillAlpha * 2.5)
+                ctx.fill()
+
+                tracePath(points, false)
+                ctx.strokeStyle = waveGradient(color, 1)
+                ctx.lineWidth = 2.5
+                ctx.stroke()
+            }
+
+            var waving = root.heartbeat && root._pulse < 1
+
+            // The wave also crosses the background, full height, in a muted tone, so it
+            // reads as one wave over the whole graph — including where there is no data
+            // yet, or a pause. Drawn under the lines; the coloured part goes on top.
+            if (waving) {
+                var backgroundWave = ctx.createLinearGradient(waveX - waveHalf, 0, waveX + waveHalf, 0)
+                backgroundWave.addColorStop(0, rgba(Theme.textDim, 0))
+                backgroundWave.addColorStop(0.5, rgba(Theme.textDim, 0.12 * waveStrength))
+                backgroundWave.addColorStop(1, rgba(Theme.textDim, 0))
+                ctx.fillStyle = backgroundWave
+                ctx.fillRect(Math.max(0, waveX - waveHalf), 0, waveHalf * 2, height)
+            }
+
+            for (var i = 0; i < visible.length; i++) {
+                for (var run = 0; run < visible[i].runs.length; run++) {
+                    if (visible[i].runs[run].length < 2)
+                        continue
+                    drawRun(visible[i].runs[run], visible[i].color)
+                    if (waving)
+                        drawWave(visible[i].runs[run], visible[i].color)
+                }
             }
 
             if (root.formatPeak && isNaN(root.maxValue)) {

@@ -230,6 +230,11 @@ rates — except the temperatures, now one rate (see the schema table).
    `status`. Measured with a simulated battery: 28 → 3 wakeups/s, 6 → ~0 ms CPU/s.
    `battery.percent` assumes Quickshell's 0–1 `percentage` — check on the laptop.
 4. Graph gap handling and the delta baseline reset.
+   *Done 2026-10-29, verified on the host.* `singletons/polling/PollTimer.qml` (0 =
+   paused, a new interval samples at once, `paused()` for delta sources) and
+   `History.append` (samples carry `dt`, trimmed by age) replace eight copies of each.
+   `HistoryChart` breaks the line where the gap exceeds 2.5× the larger `dt` of the two
+   samples around it.
 5. Config storage for profiles and base values; the shipped "Power save".
 6. `system.powerProfile` via `PowerProfileHold`, with the loop guard.
 7. Profiles settings page; base polling rates in settings.

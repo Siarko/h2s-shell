@@ -97,6 +97,7 @@ Singleton {
                   "polling.temperatures.interval": 30000,
                   "polling.disk.interval": 0,
                   "polling.network.interval": 10000,
+                  "graphs.heartbeat": false,
                   "system.powerProfile": "power-saver"
               } }
         ];

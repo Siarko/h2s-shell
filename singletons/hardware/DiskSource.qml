@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 
 Singleton {
     id: root
@@ -16,7 +17,6 @@ Singleton {
     property real maxValue: 100
     property bool available: true
     property var history: []
-    property int maxHistory: 360  // 1h at 10s interval
     property string subtitle: ""
     property bool showProgressBar: true
 
@@ -24,9 +24,7 @@ Singleton {
     property real totalBytes: 0
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     function formatBytes(bytes) {
@@ -35,11 +33,9 @@ Singleton {
         return bytes + " B"
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.disk.interval")
-        running: interval > 0
-        repeat: true
-        triggeredOnStart: true
         onTriggered: if (!_proc.running) _proc.running = true
     }
 

@@ -235,6 +235,10 @@ before multi-GPU support still resolve, to the primary card. User labels are sto
 the configured id, so look them up with `Hardware.displayLabel()`; a label of only a space
 deliberately shows as blank.
 
+Sources poll with `singletons/polling/PollTimer.qml`, their interval bound to a
+`Profiles.value("polling.<category>.interval")` setting (0 = paused, see
+docs/plans/adaptive-polling.md), and keep their graph history with `History.append`.
+
 Sources read procfs and sysfs through `singletons/io/KernelFile.qml`, a `FileView` read
 synchronously on every poll — no `cat` subprocess, and values read in one tick come from
 the same moment. Only things that are not a file still use a `Process`: `df` for the

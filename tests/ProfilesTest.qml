@@ -21,7 +21,8 @@ TestCase {
         assertEqual(Profiles.value("polling.temperatures.interval"), 2000, "temperatures every 2 s");
         assertEqual(Profiles.value("polling.disk.interval"), 10000, "disk every 10 s");
         assertEqual(Profiles.value("polling.network.interval"), 2000, "network every 2 s");
-        assertEqual(SettingsSchema.keysInGroup("performance").length, 5, "all polling keys are in the performance group");
+        assertEqual(Profiles.value("graphs.heartbeat"), true, "graph heartbeat on");
+        assertEqual(SettingsSchema.keysInGroup("performance").length, 6, "polling and graph keys are in the performance group");
 
         // --- conditions ---
         const onBattery = { fact: "power.onBattery", is: true };

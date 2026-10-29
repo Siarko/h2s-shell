@@ -335,6 +335,17 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 10 — Requested features
 
+- [x] **10.2 Heartbeat on graph updates**
+      Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
+      history graph takes a new sample — a semi-transparent wave travelling across the
+      graph from its right edge to the left. Matters more now that profiles can slow
+      sampling to 10–30 s: it shows the graph is alive and when it updated. Lives in
+      `components/HistoryChart.qml`; the look is to be settled with the user.
+      Done 2026-10-29, verified on the host: a 350 ms wave, right to left, brightening the
+      line and the fill under it in a lighter shade of each series' colour, over a
+      muted full-height band so it is visible where there is no data yet. Setting
+      `graphs.heartbeat` (on; Power save turns it off).
+
 - [ ] **10.1 Configurable animations**
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close

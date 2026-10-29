@@ -1,5 +1,6 @@
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 // Throughput of one network interface, read from its sysfs byte counters.
@@ -21,10 +22,9 @@ Item {
     property real rxSpeed: 0
     property real txSpeed: 0
 
-    // [{ t, v }] in bytes/s, one sample per tick while the link is up, for the graph
+    // History.append samples in bytes/s, one per tick while the link is up, for the graph
     property var rxHistory: []
     property var txHistory: []
-    property int maxHistory: 1800  // 1h at 2 s
 
     // Byte counts from the previous tick; -1 means the next read only establishes
     // a baseline. Switching device or going down has to go through that again,
@@ -53,11 +53,12 @@ Item {
         path: root.device ? "/sys/class/net/" + root.device + "/statistics/tx_bytes" : ""
     }
 
-    Timer {
+    PollTimer {
+        id: _poll
         interval: root.intervalMs
-        running: root.intervalMs > 0 && root.device !== "" && root.active
-        repeat: true
-        triggeredOnStart: true
+        active: root.device !== "" && root.active
+        // Bytes counted during a pause would show up as one spike
+        onPaused: root._reset()
         onTriggered: {
             // Both reads are synchronous, so the two counters come from the same tick
             var rxBytes = parseFloat(_rxFile.read())
@@ -82,8 +83,8 @@ Item {
         var seconds = (now - _previousTime) / 1000.0
         rxSpeed = Math.max(0, (rxBytes - _rxPrevious) / seconds)
         txSpeed = Math.max(0, (txBytes - _txPrevious) / seconds)
-        rxHistory = rxHistory.slice(-(maxHistory - 1)).concat([{t: now, v: rxSpeed}])
-        txHistory = txHistory.slice(-(maxHistory - 1)).concat([{t: now, v: txSpeed}])
+        rxHistory = History.append(rxHistory, rxSpeed, intervalMs, now)
+        txHistory = History.append(txHistory, txSpeed, intervalMs, now)
         _rxPrevious = rxBytes
         _txPrevious = txBytes
         _previousTime = now

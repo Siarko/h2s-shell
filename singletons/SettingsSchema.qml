@@ -11,7 +11,7 @@ import QtQuick
 //   key      — dotted name, as stored in a profile's `set`
 //   label    — shown in settings
 //   group    — settings section the key is edited in
-//   type     — "interval" (ms, 0 = paused), "number", "enum"
+//   type     — "interval" (ms, 0 = paused), "number", "enum", "bool"
 //   default  — value of the system profile
 //   min/max  — for interval and number
 //   options  — for enum: [{ value, label }]
@@ -32,6 +32,9 @@ Singleton {
           type: "interval", min: 0, max: 600000, default: 10000 },
         { key: "polling.network.interval", label: "Network throughput", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },
+        // A brief wave across every history graph when it takes a sample
+        { key: "graphs.heartbeat", label: "Graph heartbeat", group: "performance",
+          type: "bool", default: true },
         // Applied by Profiles while a profile sets it (step 6 of the plan); "unchanged"
         // leaves the system's own choice alone
         { key: "system.powerProfile", label: "System power profile", group: "power",

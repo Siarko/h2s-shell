@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import qs.singletons
+import qs.singletons.polling
 import qs.singletons.io
 
 // How busy one card's cores are. One instance per card, created by Hardware.qml.
@@ -18,7 +19,6 @@ Scope {
     property real maxValue: 100
     property bool available: _readable
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: true
 
@@ -34,9 +34,7 @@ Scope {
     property int _busySamples: 0
 
     function _appendHistory(v) {
-        var h = history.slice(-(maxHistory - 1))
-        h.push({t: Date.now(), v: v})
-        history = h
+        history = History.append(history, v, _poll.interval)
     }
 
     KernelFile {
@@ -44,12 +42,14 @@ Scope {
         path: root.card.path + "/gpu_busy_percent"
     }
 
-    Timer {
-        id: _timer
+    PollTimer {
+        id: _poll
         interval: Profiles.value("polling.hardware.interval")
-        running: interval > 0 && root._readable
-        repeat: true
-        triggeredOnStart: true
+        active: root._readable
+        onPaused: {
+            root._busySum = 0
+            root._busySamples = 0
+        }
         onTriggered: {
             // The first tick runs before any sample, so it reads one itself
             var busy = root._busySamples > 0 ? root._busySum / root._busySamples : parseInt(_busy.read())
@@ -67,7 +67,7 @@ Scope {
 
     Timer {
         interval: 200
-        running: _timer.running && Profiles.value("polling.hardware.gpuSampling") === "averaged"
+        running: _poll.running && Profiles.value("polling.hardware.gpuSampling") === "averaged"
         repeat: true
         onTriggered: {
             var busy = parseInt(_busy.read())

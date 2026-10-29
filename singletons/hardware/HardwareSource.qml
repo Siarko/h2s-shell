@@ -10,8 +10,8 @@ QtObject {
     property real minValue: 0
     property real maxValue: 100
     property bool available: true
+    // History.append samples, one hour
     property var history: []
-    property int maxHistory: 1800
     property string subtitle: ""
     property bool showProgressBar: true
 }
