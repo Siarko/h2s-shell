@@ -101,7 +101,7 @@ Item {
                         Text {
                             visible: index > 0
                             text: "/"
-                            color: Theme.textDim
+                            color: Theme.textDisabled
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
                             height: _modeLabel.implicitHeight
@@ -115,7 +115,7 @@ Item {
                             font.pixelSize: Theme.fontSizeSmall
                             font.bold: _modeArea.containsMouse || root.viewMode === modelData.toLowerCase()
                             color: (root.viewMode === modelData.toLowerCase()) ? Theme.textPrimary
-                                 : _modeArea.containsMouse                     ? Theme.textSubtle
+                                 : _modeArea.containsMouse                     ? Theme.textSecondary
                                  : Theme.textSecondary
 
                             MouseArea {
@@ -174,13 +174,13 @@ Item {
             Layout.fillWidth: true
             implicitHeight: _statusText.implicitHeight + 8
             radius: 4
-            color: Qt.rgba(Theme.textError.r, Theme.textError.g, Theme.textError.b, 0.12)
+            color: Theme.errorTint
 
             Text {
                 id: _statusText
                 anchors { fill: parent; leftMargin: 8; rightMargin: 36; topMargin: 4; bottomMargin: 4 }
                 text: root._statusMessage
-                color: Theme.textError
+                color: Theme.error
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 wrapMode: Text.WordWrap
@@ -189,7 +189,7 @@ Item {
             Text {
                 anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                 text: "→"
-                color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.textError
+                color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.error
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
             }
@@ -236,8 +236,8 @@ Item {
                     margins: 4
                 }
                 submitLabel: "Add Event"
-                submitColor: "#1e5c1e"
-                submitColorHover: "#2d6a2d"
+                submitColor: Theme.confirm
+                submitColorHover: Theme.confirmHover
                 showCalendarPicker: true
                 onSubmitted: (title, description, startTime, endTime) => {
                     GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
@@ -283,7 +283,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: "No events"
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 visible: _eventsList.count === 0 && !_loading

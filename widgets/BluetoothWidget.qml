@@ -15,7 +15,7 @@ PopupWidget {
             text: !powered ? "󰂲" : Bluetooth.devices.count > 0 ? "󰂱" : "󰂯"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: powered ? Theme.textPrimary : Theme.textDim
+            color: powered ? Theme.textPrimary : Theme.textDisabled
             anchors.verticalCenter: parent.verticalCenter
         }
 

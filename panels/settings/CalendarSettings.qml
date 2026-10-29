@@ -34,7 +34,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 1
         Layout.topMargin: 10
-        color: Theme.textDim
+        color: Theme.textDisabled
         opacity: 0.3
     }
 
@@ -63,7 +63,7 @@ ColumnLayout {
             width: 8
             height: 8
             radius: 4
-            color: GoogleCalendarAuth.isAuthorized ? "#33b679" : "#e87c5b"
+            color: GoogleCalendarAuth.isAuthorized ? Theme.success : Theme.warning
         }
 
         Text {
@@ -98,7 +98,7 @@ ColumnLayout {
             radius: 6
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            color: Theme.cellDefault
+            color: Theme.surface
 
             Text {
                 anchors.centerIn: parent
@@ -147,7 +147,7 @@ ColumnLayout {
                 radius: 6
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                color: _enabled ? Theme.sliderAccent : Theme.cellDefault
+                color: _enabled ? Theme.accent : Theme.surface
                 opacity: _enabled ? 1.0 : 0.5
 
                 Text {
@@ -180,7 +180,7 @@ ColumnLayout {
             radius: 6
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            color: "#c0392b"
+            color: Theme.error
 
             Text {
                 anchors.centerIn: parent
@@ -273,8 +273,8 @@ ColumnLayout {
                                 width: 16
                                 height: 16
                                 radius: 3
-                                color: checked ? Theme.sliderAccent : "transparent"
-                                border.color: Theme.sliderAccent
+                                color: checked ? Theme.accent : "transparent"
+                                border.color: Theme.accent
                                 border.width: 1
 
                                 Text {
@@ -302,7 +302,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 1
         Layout.topMargin: 10
-        color: Theme.textDim
+        color: Theme.textDisabled
         opacity: 0.3
     }
 

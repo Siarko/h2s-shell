@@ -58,7 +58,7 @@ Item {
 
                     Text {
                         text: root.monthNames[root.displayMonth]
-                        color: _monthArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                        color: _monthArea.containsMouse ? Theme.accent : Theme.textPrimary
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -83,7 +83,7 @@ Item {
 
                     Text {
                         text: root.displayYear
-                        color: _yearArea.containsMouse ? Theme.sliderAccent : Theme.textPrimary
+                        color: _yearArea.containsMouse ? Theme.accent : Theme.textPrimary
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSection
                         font.bold: true
@@ -179,7 +179,7 @@ Item {
                 width: _dateGrid.width
                 height: _dateGrid.height / 6
                 color: "transparent"
-                border.color: Theme.sliderAccent
+                border.color: Theme.accent
                 border.width: 1
                 radius: 4
                 z: 1
@@ -208,18 +208,18 @@ Item {
 
                         width: _dateGrid.width / 7
                         height: _dateGrid.height / 6
-                        color: isToday    ? Theme.todayHighlight
-                             : isSelected ? Qt.rgba(Theme.sliderAccent.r, Theme.sliderAccent.g, Theme.sliderAccent.b, 0.2)
+                        color: isToday    ? Theme.calendarToday
+                             : isSelected ? Theme.accentTint
                              : "transparent"
                         radius: 4
                         // Border shows selected range: day→cell, week→handled by overlay, month→none
                         border.width: root.viewMode === "day" && isSelected && !isToday ? 1 : 0
-                        border.color: Theme.sliderAccent
+                        border.color: Theme.accent
 
                         Text {
                             anchors.centerIn: parent
                             text: dayNum
-                            color: isCurrent ? Theme.textPrimary : Theme.textDim
+                            color: isCurrent ? Theme.textPrimary : Theme.textDisabled
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeMedium
                             font.bold: isToday
@@ -230,7 +230,7 @@ Item {
                             width: 4
                             height: 4
                             radius: 2
-                            color: Theme.sliderAccent
+                            color: Theme.accent
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
                             anchors.bottomMargin: 3

@@ -32,7 +32,7 @@ Rectangle {
     width: ListView.view.width
     height: _cardHeight
     radius: 6
-    color: Theme.cellDefault
+    color: Theme.surface
     clip: true
 
     border {
@@ -102,7 +102,7 @@ Rectangle {
                         let d = root.modelData.startTime;
                         return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()] + " " + d.getDate();
                     }
-                    color: Theme.textTertiary
+                    color: Theme.textMuted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                 }
@@ -158,8 +158,8 @@ Rectangle {
             topMargin: 8; leftMargin: 14; rightMargin: 6
         }
         submitLabel: "Save"
-        submitColor: "#1e3a5f"
-        submitColorHover: "#2d4a6d"
+        submitColor: Theme.confirmSecondary
+        submitColorHover: Theme.confirmSecondaryHover
         onSubmitted: (title, description, startTime, endTime) => {
             GoogleCalendar.updateEvent({
                 year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
@@ -200,7 +200,7 @@ Rectangle {
             text: "✏"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
-            color: _editBtnArea.containsMouse ? Theme.textSecondary : Theme.textTertiary
+            color: _editBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
 
             MouseArea {
                 id: _editBtnArea
@@ -218,7 +218,7 @@ Rectangle {
             text: "✕"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
-            color: _deleteBtnArea.containsMouse ? Theme.textSecondary : Theme.textTertiary
+            color: _deleteBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
 
             MouseArea {
                 id: _deleteBtnArea
@@ -250,7 +250,7 @@ Rectangle {
         Text {
             text: "Yes"
             Layout.alignment: Qt.AlignVCenter
-            color: _yesArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            color: _yesArea.containsMouse ? Theme.textPrimary : Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -306,7 +306,7 @@ Rectangle {
 
         Text {
             text: "- This event"
-            color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -327,7 +327,7 @@ Rectangle {
 
         Text {
             text: "- This and following"
-            color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true
@@ -348,7 +348,7 @@ Rectangle {
 
         Text {
             text: "- All events"
-            color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+            color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             font.bold: true

@@ -60,7 +60,7 @@ Item {
     function drawWaveform(ctx, bars, w, h, vertical) {
         if (bars.length < 2)
             return;
-        var c = Theme.sliderAccent;
+        var c = Theme.accent;
 
         if (!vertical) {
             var cx = w / (bars.length - 1);
@@ -114,7 +114,7 @@ Item {
     function drawBars(ctx, bars, w, h, vertical, fromRight) {
         if (bars.length === 0)
             return;
-        var c = Theme.sliderAccent;
+        var c = Theme.accent;
         ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.7);
 
         var n = bars.length;
@@ -143,7 +143,7 @@ Item {
     function drawDots(ctx, bars, w, h, vertical) {
         if (bars.length === 0)
             return;
-        var c = Theme.sliderAccent;
+        var c = Theme.accent;
         ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.9);
 
         var n = bars.length;
@@ -315,7 +315,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         font.bold: modelData === Music.activePlayer
-                        color: modelData === Music.activePlayer ? Theme.sliderAccent : Theme.textSecondary
+                        color: modelData === Music.activePlayer ? Theme.accent : Theme.textSecondary
                         elide: Text.ElideRight
 
                         MouseArea {
@@ -436,7 +436,7 @@ Item {
                 text: "󰒮"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
-                color: !Music.canPrev ? Theme.textDim : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: !Music.canPrev ? Theme.textDisabled : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {
@@ -470,7 +470,7 @@ Item {
                 text: "󰒭"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
-                color: !Music.canNext ? Theme.textDim : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: !Music.canNext ? Theme.textDisabled : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 anchors.verticalCenter: parent.verticalCenter
 
                 MouseArea {

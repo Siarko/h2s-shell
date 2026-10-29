@@ -89,7 +89,7 @@ Item {
         height: root.pillHeight
         topRightRadius: root.pillHeight / 2
         topLeftRadius: topRightRadius
-        color: Qt.rgba(0, 0, 0, 0.65)
+        color: Theme.overlay
 
         Text {
             anchors {

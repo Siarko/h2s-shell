@@ -53,7 +53,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: Theme.popupBackground
-        border.color: (_hInput.activeFocus || _mInput.activeFocus) ? Theme.textSecondary : Theme.textDim
+        border.color: (_hInput.activeFocus || _mInput.activeFocus) ? Theme.textSecondary : Theme.textDisabled
         radius: 4
 
         // Clicking anywhere outside the TextInputs (e.g. padding) focuses hours
@@ -146,7 +146,7 @@ Item {
                 width: 8
                 height: 20
                 color: (_hInput.activeFocus || _mInput.activeFocus)
-                    ? Theme.textSecondary : Theme.textTertiary
+                    ? Theme.textSecondary : Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 horizontalAlignment: Text.AlignHCenter
@@ -217,7 +217,7 @@ Item {
         Text {
             anchors { fill: parent; leftMargin: 6; topMargin: 4; bottomMargin: 4 }
             text: "HH:MM"
-            color: Theme.textTertiary
+            color: Theme.textMuted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
             verticalAlignment: Text.AlignVCenter

@@ -80,14 +80,14 @@ RowLayout {
             width: parent.width
             height: 4
             radius: 2
-            color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDim
+            color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
 
             // Locked region overlay (from → lockedFrom)
             Rectangle {
                 width: parent.parent._lockedPos * parent.width
                 height: parent.height
                 radius: 2
-                color: Qt.rgba(Theme.sliderAccent.r, Theme.sliderAccent.g, Theme.sliderAccent.b, 0.25)
+                color: Theme.accentTint
                 visible: parent.parent._lockedPos > 0
             }
 
@@ -97,7 +97,7 @@ RowLayout {
                 width: Math.max(0, (parent.parent._pos - parent.parent._lockedPos) * parent.width)
                 height: parent.height
                 radius: 2
-                color: _trackArea.containsMouse ? Theme.sliderAccentHover : Theme.sliderAccent
+                color: _trackArea.containsMouse ? Theme.accentHover : Theme.accent
             }
         }
 
@@ -161,8 +161,8 @@ RowLayout {
             z: 999
             width: _tooltipText.width + 16
             height: _tooltipText.contentHeight + 12
-            color: Theme.cellDefault
-            border.color: Theme.textDim
+            color: Theme.surface
+            border.color: Theme.textDisabled
             border.width: 1
             radius: 4
 

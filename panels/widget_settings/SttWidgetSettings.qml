@@ -55,7 +55,7 @@ Item {
                     Layout.fillWidth: true
                     height: 22
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
                     clip: true
 
                     RowLayout {
@@ -69,7 +69,7 @@ Item {
                                 required property string modelData
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                color: root._previewMode === modelData ? Theme.sliderAccent : "transparent"
+                                color: root._previewMode === modelData ? Theme.accent : "transparent"
 
                                 Text {
                                     anchors.centerIn: parent
@@ -112,7 +112,7 @@ Item {
                     Layout.fillWidth: true
                     height: 22
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
 
                     TextInput {
                         id: _widthInput
@@ -149,7 +149,7 @@ Item {
                             text: (Profiles.value("stt.previewWidth") ?? 180) + " px (inherited)"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textTertiary
+                            color: Theme.textMuted
                         }
                     }
                 }

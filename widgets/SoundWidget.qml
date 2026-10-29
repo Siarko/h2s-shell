@@ -24,7 +24,7 @@ PopupWidget {
             text: Audio.volume + "%"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
-            color: Audio.muted ? Theme.textDim : Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
+            color: Audio.muted ? Theme.textDisabled : Audio.volume > 100 ? Theme.warning : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -32,7 +32,7 @@ PopupWidget {
             text: Audio.muted ? "󰖁" : "󰕾"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: Audio.muted ? Theme.textDim : Theme.textPrimary
+            color: Audio.muted ? Theme.textDisabled : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
     }

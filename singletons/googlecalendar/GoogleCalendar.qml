@@ -325,7 +325,7 @@ Singleton {
         let timeStr = "All day";
         let startTimeStr = "";
         let endTimeStr = "";
-        let color = data.colorId ? (root._colorMapEvents[data.colorId] || Theme.cellAccent) : calendar.color;
+        let color = data.colorId ? (root._colorMapEvents[data.colorId] || Theme.accentDark) : calendar.color;
         let calendarColor = calendar ? (calendar?.primary ? null : calendar.color) : null;
 
         let startTime = null;

@@ -23,8 +23,8 @@ Rectangle {
     width: Math.min(_text.implicitWidth, maxWidth) + 16
     height: _text.implicitHeight + 12
     radius: 4
-    color: Theme.cellDefault
-    border.color: Theme.textDim
+    color: Theme.surface
+    border.color: Theme.textDisabled
     border.width: 1
 
     onShownChanged: {

@@ -133,7 +133,7 @@ PanelWindow {
         height: Math.max(36, toastSlots.count > 0 ? (toastSlots.itemAt(0)?.height ?? 36) : 36)
         topLeftRadius: 6
         bottomLeftRadius: 6
-        color: Theme.cellDefault
+        color: Theme.surface
 
         opacity: Notifications.hudQueue.length > 0 ? 1.0 : 0.0
         visible: opacity > 0

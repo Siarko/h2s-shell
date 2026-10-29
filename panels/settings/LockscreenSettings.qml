@@ -47,7 +47,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 4
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -119,7 +119,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 14
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 

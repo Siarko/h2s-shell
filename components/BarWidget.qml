@@ -7,7 +7,7 @@ Item {
     id: container
     // Key into WidgetRegistry and the widget preset library
     property string widgetType: ""
-    property color cellColor: Theme.cellDefault
+    property color cellColor: Theme.surface
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)
     property bool active: false
     // Optional outline around the cell — off by default, so existing widgets are unaffected
@@ -46,7 +46,7 @@ Item {
         id: rectangle
         radius: 5
         anchors.fill: parent
-        color: (mouseArea.containsMouse || container.active) ? Theme.cellHover : container.cellColor
+        color: (mouseArea.containsMouse || container.active) ? Theme.surfaceHover : container.cellColor
         border.color: container.borderColor
         border.width: container.borderWidth
     }

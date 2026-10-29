@@ -33,7 +33,7 @@ Column {
                 bottomMargin: -2
             }
             radius: 4
-            color: _rowArea.containsMouse ? Theme.cellHover : "transparent"
+            color: _rowArea.containsMouse ? Theme.surfaceHover : "transparent"
         }
 
         RowLayout {
@@ -41,7 +41,7 @@ Column {
             width: parent.width
 
             Text {
-                text: root._arrow("↓", Theme.graphDownload) + " " + NetworkManager.formatSpeed(root.rxSpeed)
+                text: root._arrow("↓", Theme.accent) + " " + NetworkManager.formatSpeed(root.rxSpeed)
                 textFormat: Text.StyledText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -50,7 +50,7 @@ Column {
             }
 
             Text {
-                text: root._arrow("↑", Theme.graphUpload) + " " + NetworkManager.formatSpeed(root.txSpeed)
+                text: root._arrow("↑", Theme.accentSecondary) + " " + NetworkManager.formatSpeed(root.txSpeed)
                 textFormat: Text.StyledText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -81,8 +81,8 @@ Column {
             width: parent.width
             active: root.expanded
             series: [
-                { history: root.rxHistory, color: Theme.graphDownload },
-                { history: root.txHistory, color: Theme.graphUpload }
+                { history: root.rxHistory, color: Theme.accent },
+                { history: root.txHistory, color: Theme.accentSecondary }
             ]
             formatPeak: NetworkManager.formatSpeed
         }

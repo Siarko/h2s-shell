@@ -45,7 +45,7 @@ Item {
                     Layout.fillWidth: true
                     height: 22
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
 
                     TextInput {
                         id: _formatInput

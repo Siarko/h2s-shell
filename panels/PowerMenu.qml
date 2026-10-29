@@ -38,7 +38,7 @@ Item {
                 width: powerMenu.width
                 height: 44
                 radius: 8
-                color: buttonArea.containsMouse ? Theme.buttonHover : Theme.cellDefault
+                color: buttonArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                 MouseArea {
                     id: buttonArea

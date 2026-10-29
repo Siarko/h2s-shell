@@ -54,7 +54,7 @@ Item {
         Rectangle {
             width: parent.width
             height: 1
-            color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.3)
+            color: Theme.divider
         }
 
         // Popup mode is a setting of the shell profile being edited
@@ -100,9 +100,9 @@ Item {
                         width: _presetName.implicitWidth + 16
                         height: 24
                         radius: 6
-                        color: picked ? Theme.sliderAccent : (_presetArea.containsMouse ? Theme.cellHover : "transparent")
+                        color: picked ? Theme.accent : (_presetArea.containsMouse ? Theme.surfaceHover : "transparent")
                         border.width: picked ? 0 : 1
-                        border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
+                        border.color: Theme.outline
 
                         Text {
                             id: _presetName
@@ -131,7 +131,7 @@ Item {
                     width: 120
                     height: 24
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
 
                     TextInput {
                         id: _newPreset
@@ -158,7 +158,7 @@ Item {
                         text: "+ New preset"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textDim
+                        color: Theme.textDisabled
                     }
                 }
             }
@@ -172,10 +172,10 @@ Item {
             leftPadding: 68
             text: "Shows the defaults. <a href=\"customize\">Customize</a> to give it its own preset."
             textFormat: Text.StyledText
-            linkColor: Theme.sliderAccent
+            linkColor: Theme.accent
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textDim
+            color: Theme.textDisabled
             onLinkActivated: root._assignNew(WidgetPresets.freeName(root.widgetType))
 
             HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
@@ -194,7 +194,7 @@ Item {
                     : "Not used on any bar yet"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: root._usages.length > 1 ? Theme.sliderAccent : Theme.textDim
+            color: root._usages.length > 1 ? Theme.accent : Theme.textDisabled
         }
 
         // Rename / delete, on a row of their own so a wider label never runs off the edge
@@ -210,9 +210,9 @@ Item {
                 Layout.fillWidth: true
                 height: 24
                 radius: 6
-                color: Theme.cellDefault
+                color: Theme.surface
                 border.width: _renameInput.taken ? 1 : 0
-                border.color: Theme.textError
+                border.color: Theme.error
 
                 TextInput {
                     id: _renameInput
@@ -222,7 +222,7 @@ Item {
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
-                    color: taken ? Theme.textError : Theme.textPrimary
+                    color: taken ? Theme.error : Theme.textPrimary
                     verticalAlignment: TextInput.AlignVCenter
                     selectByMouse: true
                     clip: true
@@ -257,7 +257,7 @@ Item {
                     readonly property bool _joined: modelData === "delete" && root._confirmingDelete
                     topRightRadius: _joined ? 0 : radius
                     bottomRightRadius: _joined ? 0 : radius
-                    color: _actionArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+                    color: _actionArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                     Text {
                         id: _actionText
@@ -265,7 +265,7 @@ Item {
                         text: parent.label
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: parent.modelData === "delete" && root._confirmingDelete ? Theme.textError : Theme.textSecondary
+                        color: parent.modelData === "delete" && root._confirmingDelete ? Theme.error : Theme.textSecondary
                     }
 
                     MouseArea {
@@ -302,7 +302,7 @@ Item {
                 radius: 6
                 topLeftRadius: 0
                 bottomLeftRadius: 0
-                color: _cancelDeleteArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+                color: _cancelDeleteArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                 Text {
                     anchors.centerIn: parent

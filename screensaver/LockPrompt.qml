@@ -48,8 +48,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 16
-        color: Qt.rgba(0, 0, 0, 0.65)
-        border.color: Qt.rgba(1, 1, 1, 0.12)
+        color: Theme.overlay
+        border.color: Theme.glassBorder
         border.width: 1
     }
 
@@ -61,7 +61,7 @@ Item {
         Text {
             Layout.fillWidth: true
             text: "Session locked"
-            color: "white"
+            color: Theme.textPrimary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             font.bold: true
@@ -72,7 +72,7 @@ Item {
             Layout.fillWidth: true
             visible: _failed
             text: _errorMessage
-            color: "#ff6b6b"
+            color: Theme.error
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             horizontalAlignment: Text.AlignHCenter
@@ -82,16 +82,16 @@ Item {
             Layout.fillWidth: true
             implicitHeight: 40
             radius: 8
-            color: Qt.rgba(1, 1, 1, 0.08)
+            color: Theme.glass
             border.color: _failed
-                ? "#ff6b6b"
-                : (_input.activeFocus ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(1, 1, 1, 0.18))
+                ? Theme.error
+                : (_input.activeFocus ? Theme.glassBorderFocus : Theme.glassBorder)
             border.width: 1
 
             Text {
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
                 text: "Password"
-                color: Qt.rgba(1, 1, 1, 0.35)
+                color: Theme.glassTextMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 visible: _input.text === ""
@@ -101,7 +101,7 @@ Item {
                 id: _input
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
                 echoMode: TextInput.Password
-                color: _pam.active ? Qt.rgba(1, 1, 1, 0.4) : "white"
+                color: _pam.active ? Theme.glassTextMuted : Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 font.letterSpacing: 4
@@ -118,15 +118,15 @@ Item {
             implicitHeight: 40
             radius: 8
             color: (_pam.active || _unlockHover.containsMouse)
-                ? Qt.rgba(1, 1, 1, 0.22)
-                : Qt.rgba(1, 1, 1, 0.14)
+                ? Theme.glassHover
+                : Theme.glassRaised
 
             Behavior on color { ColorAnimation { duration: 120 } }
 
             Text {
                 anchors.centerIn: parent
                 text: _pam.active ? "Verifying…" : "Unlock"
-                color: "white"
+                color: Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
             }

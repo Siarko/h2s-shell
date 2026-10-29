@@ -44,7 +44,7 @@ Item {
             text: "No Bluetooth adapter found"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
-            color: Theme.textTertiary
+            color: Theme.textMuted
             width: col.width
             horizontalAlignment: Text.AlignHCenter
         }
@@ -58,7 +58,7 @@ Item {
                 text: (root.adapter?.enabled ?? false) ? "󰂯" : "󰂲"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: (root.adapter?.enabled ?? false) ? Theme.textPrimary : Theme.textDim
+                color: (root.adapter?.enabled ?? false) ? Theme.textPrimary : Theme.textDisabled
             }
 
             Text {
@@ -77,7 +77,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: (root.adapter?.enabled ?? false) ? Theme.sliderAccent : Theme.textDim
+                    color: (root.adapter?.enabled ?? false) ? Theme.accent : Theme.textDisabled
 
                     Behavior on color {
                         ColorAnimation {
@@ -89,7 +89,7 @@ Item {
                         width: 20
                         height: 20
                         radius: 10
-                        color: "white"
+                        color: Theme.textPrimary
                         anchors.verticalCenter: parent.verticalCenter
                         x: (root.adapter?.enabled ?? false) ? parent.width - width - 2 : 2
 
@@ -137,14 +137,14 @@ Item {
                     text: "Scanning…"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.sliderAccent
+                    color: Theme.accent
                 }
 
                 Rectangle {
                     implicitWidth: scanLabel.implicitWidth + 14
                     implicitHeight: 22
                     radius: 4
-                    color: scanBtnArea.containsMouse ? Theme.buttonHover : Theme.cellDefault
+                    color: scanBtnArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                     Text {
                         id: scanLabel
@@ -186,7 +186,7 @@ Item {
                     width: col.width
                     height: 52
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
 
                     Column {
                         anchors.fill: parent
@@ -241,7 +241,7 @@ Item {
                                 }
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeSmall
-                                color: modelData.state === BluetoothDeviceState.Connected ? Theme.sliderAccent : Theme.textSecondary
+                                color: modelData.state === BluetoothDeviceState.Connected ? Theme.accent : Theme.textSecondary
                                 Layout.fillWidth: true
                             }
 
@@ -251,7 +251,7 @@ Item {
                                 implicitWidth: pairLabel.implicitWidth + 10
                                 implicitHeight: 20
                                 radius: 4
-                                color: pairArea.containsMouse ? Theme.buttonHover : Theme.cellDefault
+                                color: pairArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                                 Text {
                                     id: pairLabel
@@ -277,7 +277,7 @@ Item {
                                 implicitWidth: connLabel.implicitWidth + 10
                                 implicitHeight: 20
                                 radius: 4
-                                color: connArea.containsMouse ? Theme.buttonHover : Theme.cellDefault
+                                color: connArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                                 Text {
                                     id: connLabel
@@ -302,7 +302,7 @@ Item {
                                 implicitWidth: 22
                                 implicitHeight: 20
                                 radius: 4
-                                color: forgetArea.containsMouse ? Theme.buttonHover : "transparent"
+                                color: forgetArea.containsMouse ? Theme.surfaceHover : "transparent"
 
                                 Text {
                                     text: "✕"
@@ -331,7 +331,7 @@ Item {
                 text: (root.adapter?.discovering ?? false) ? "Scanning for devices…" : "No devices"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 width: col.width
                 horizontalAlignment: Text.AlignHCenter
             }

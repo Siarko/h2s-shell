@@ -10,6 +10,11 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Changed
+- Colours are named by role and come only from the theme: one red, one green and one
+  blue where there were several shades (the disconnect buttons, the lock screen's error
+  and the calendar's connection status change shade slightly).
+
 ## [1.1.0] - 2026-10-29
 
 ### Added

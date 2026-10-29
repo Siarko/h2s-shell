@@ -22,7 +22,7 @@ Item {
         Rectangle {
             width: parent.width
             height: 1
-            color: Theme.textDim
+            color: Theme.textDisabled
         }
 
         AudioChannelRow {

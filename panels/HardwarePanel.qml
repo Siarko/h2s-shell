@@ -96,7 +96,7 @@ Item {
                                     width: parent.width
                                     height: visible ? 4 : 0
                                     radius: 2
-                                    color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.25)
+                                    color: Theme.track
 
                                     Rectangle {
                                         width: parent.width * Math.max(0, Math.min(1,
@@ -104,7 +104,7 @@ Item {
                                             Math.max(1, _row.modelData.maxValue - _row.modelData.minValue)))
                                         height: parent.height
                                         radius: parent.radius
-                                        color: Theme.sliderAccent
+                                        color: Theme.accent
                                         Behavior on width { NumberAnimation { duration: 400 } }
                                     }
                                 }
@@ -116,7 +116,7 @@ Item {
                                     text: _row.modelData.subtitle
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
-                                    color: Theme.textDim
+                                    color: Theme.textDisabled
                                 }
                             }
 
@@ -151,7 +151,7 @@ Item {
                                 rightMargin: 12
                             }
                             active: _row.isExpanded
-                            series: [{ history: _row.modelData.history, color: Theme.sliderAccent }]
+                            series: [{ history: _row.modelData.history, color: Theme.accent }]
                             minValue: _row.modelData.minValue
                             maxValue: _row.modelData.maxValue
                         }

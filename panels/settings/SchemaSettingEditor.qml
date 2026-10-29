@@ -122,7 +122,7 @@ Item {
                 visible: text !== ""
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                color: root.global || root.overriddenBy !== "" ? Theme.sliderAccent : Theme.textDim
+                color: root.global || root.overriddenBy !== "" ? Theme.accent : Theme.textDisabled
             }
 
             // Pin as global, or unpin; profile values are kept either way
@@ -131,14 +131,14 @@ Item {
                 width: 20
                 height: 20
                 radius: 4
-                color: _pinArea.containsMouse ? Theme.cellHover : "transparent"
+                color: _pinArea.containsMouse ? Theme.surfaceHover : "transparent"
 
                 Text {
                     anchors.centerIn: parent
                     text: "󰐃"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
-                    color: root.global ? Theme.sliderAccent : Theme.textDim
+                    color: root.global ? Theme.accent : Theme.textDisabled
                     opacity: root.global || _pinArea.containsMouse ? (root.systemGlobal ? 0.6 : 1) : 0.5
                 }
 
@@ -175,13 +175,13 @@ Item {
                 width: 20
                 height: 20
                 radius: 4
-                color: _resetArea.containsMouse ? Theme.cellHover : "transparent"
+                color: _resetArea.containsMouse ? Theme.surfaceHover : "transparent"
 
                 Text {
                     anchors.centerIn: parent
                     text: "×"
                     font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.textDim
+                    color: Theme.textDisabled
                 }
 
                 MouseArea {
@@ -207,7 +207,7 @@ Item {
                 height: 20
                 radius: 10
                 opacity: root._dimmed ? 0.5 : 1
-                color: root.shownValue === true ? Theme.sliderAccent : Theme.cellDefault
+                color: root.shownValue === true ? Theme.accent : Theme.surface
 
                 Rectangle {
                     x: root.shownValue === true ? parent.width - width - 2 : 2
@@ -234,7 +234,7 @@ Item {
             text: root.entry?.hint ?? ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textTertiary
+            color: Theme.textMuted
         }
 
         // Number: a whole number within the schema's range, with its unit
@@ -246,9 +246,9 @@ Item {
                 width: 90
                 height: 26
                 radius: 6
-                color: Theme.cellDefault
+                color: Theme.surface
                 border.width: _numberInput.activeFocus && !_numberInput.acceptableInput ? 1 : 0
-                border.color: Theme.textError
+                border.color: Theme.error
 
                 TextInput {
                     id: _numberInput
@@ -257,7 +257,7 @@ Item {
                     opacity: root._dimmed && !activeFocus ? 0.5 : 1
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
-                    color: acceptableInput ? Theme.textPrimary : Theme.textError
+                    color: acceptableInput ? Theme.textPrimary : Theme.error
                     verticalAlignment: TextInput.AlignVCenter
                     inputMethodHints: Qt.ImhDigitsOnly
                     validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
@@ -331,7 +331,7 @@ Item {
                         width: _listRow.width - 28
                         height: 26
                         radius: 6
-                        color: Theme.cellDefault
+                        color: Theme.surface
 
                         TextInput {
                             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
@@ -353,13 +353,13 @@ Item {
                         width: 24
                         height: 26
                         radius: 4
-                        color: _removeArea.containsMouse ? Theme.cellHover : "transparent"
+                        color: _removeArea.containsMouse ? Theme.surfaceHover : "transparent"
 
                         Text {
                             anchors.centerIn: parent
                             text: "×"
                             font.pixelSize: Theme.fontSizeMedium
-                            color: Theme.textDim
+                            color: Theme.textDisabled
                         }
 
                         MouseArea {
@@ -377,7 +377,7 @@ Item {
                 width: _addText.implicitWidth + 16
                 height: 24
                 radius: 6
-                color: _addArea.containsMouse ? Theme.cellHover : Theme.cellDefault
+                color: _addArea.containsMouse ? Theme.surfaceHover : Theme.surface
 
                 Text {
                     id: _addText
@@ -404,7 +404,7 @@ Item {
             width: parent.width
             height: 26
             radius: 6
-            color: Theme.cellDefault
+            color: Theme.surface
 
             TextInput {
                 id: _textInput
@@ -445,10 +445,10 @@ Item {
                     width: _pillText.implicitWidth + 16
                     height: 26
                     radius: 6
-                    color: selected ? Theme.sliderAccent : "transparent"
+                    color: selected ? Theme.accent : "transparent"
                     opacity: selected && root._dimmed ? 0.5 : 1
                     border.width: selected ? 0 : 1
-                    border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
+                    border.color: Theme.outline
 
                     Text {
                         id: _pillText

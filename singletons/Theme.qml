@@ -21,42 +21,71 @@ QtObject {
     readonly property int fontSizeXXLargeDisplay: 32 // music track name
     readonly property int fontSizeHero: 52          // notification empty-state icon
 
-    // Bar & cells
-    readonly property color barBackground: "#4b4b4b"   // top panel background
-    readonly property color cellDefault: "#3b3b3b"      // default cell / notification card background
-    readonly property color cellHover: "#5a5a5a"        // cell background on hover or while popup is open
-    readonly property color cellAccent: "green"         // highlighted interactive cell
-    readonly property color cellAccentSecondary: "#4a6a4a"  // active but unfocused workspace
-    readonly property color cellAccentSpecial: "#7a1a2a"    // focused special (scratchpad) workspace
-    readonly property color cellMuted: "gray"           // de-emphasized cell (e.g. notification bell)
+    // Colours, by role rather than by where they were first used, so a theme — or a
+    // palette generated from a wallpaper (matugen) — can set each one meaningfully. See
+    // docs/plans/themes.md. Variants with transparency are derived here with Qt.alpha, not
+    // written as numbers at the call sites.
 
-    // Popup & buttons
-    readonly property color popupBackground: "#4d4d4d"  // popup panel and curved corners
-    readonly property color buttonHover: "#5a5a5a"      // power menu button hover state
+    // Backgrounds
+    readonly property color barBackground: "#4b4b4b"     // the bar
+    readonly property color popupBackground: "#4d4d4d"   // popups and their curved corners
+    readonly property color surface: "#3b3b3b"           // an element: bar cell, card, field, row
+    readonly property color surfaceHover: "#5a5a5a"      // an element under the pointer, or whose popup is open
+    readonly property color surfaceSunken: Qt.alpha("black", 0.2)  // lists and containers set into a page
+    readonly property color overlay: Qt.alpha("black", 0.65)       // a pill or card over arbitrary content
+    readonly property color scrim: "black"                          // behind the screensaver and lock screen
 
-    // Text hierarchy (brightest → dimmest)
-    readonly property color textPrimary: "white"        // main labels, headings, clock
-    readonly property color textSecondary: "#aaaaaa"    // day-of-week headers, arrow buttons, "Clear all"
-    readonly property color textSubtle: "#bbbbbb"       // notification app name
-    readonly property color textBody: "#cccccc"         // notification body text
-    readonly property color textTertiary: "#888888"     // "dismiss" link, timestamp, empty-state text
-    readonly property color textWarning: "#e8a854"       // volume above 100%
-    readonly property color textDim: "#777777"          // previous/next month day numbers
+    // Accent
+    readonly property color accent: "#44d47a"            // selection, active state, progress, graphs
+    readonly property color accentHover: "#92db7a"       // accent under the pointer
+    readonly property color accentTint: Qt.alpha(accent, 0.2)   // a faint accent background: selected row, day
+    readonly property color accentDark: "green"          // filled accent: focused workspace, code buttons
+    readonly property color onAccent: textPrimary        // text and icons on the accent
+    readonly property color accentSecondary: "#5aa9e6"   // a second series or highlight: upload, sidebar selection
+    readonly property color accentSecondaryTint: Qt.alpha(accentSecondary, 0.15)
 
-    // Sliders
-    readonly property color sliderAccent: "#44d47a"      // active track fill
-    readonly property color sliderAccentHover: "#92db7a"   // active track fill on hover
-    // Link throughput graph: download in the accent, upload in a contrasting blue
-    readonly property color graphDownload: sliderAccent
-    readonly property color graphUpload: "#5aa9e6"
+    // Text, brightest to dimmest
+    readonly property color textPrimary: "white"         // labels, headings, the clock
+    readonly property color textSecondary: "#aaaaaa"     // secondary labels, body text
+    readonly property color textMuted: "#888888"         // timestamps, links, empty states
+    readonly property color textDisabled: "#777777"     // disabled, other-month days, faint icons
+
+    // Lines and faint fills
+    readonly property color divider: Qt.alpha(textDisabled, 0.3)   // separators, container borders
+    readonly property color outline: Qt.alpha(textSecondary, 0.4)  // borders of pills and outlined buttons
+    readonly property color fill: Qt.alpha(textDisabled, 0.15)     // an unselected pill, a dragged row
+    readonly property color fillSubtle: Qt.alpha(textDisabled, 0.08)  // a row under the pointer in a list
+    readonly property color track: Qt.alpha(textDisabled, 0.25)    // the empty part of a progress bar
+
+    // Status
+    readonly property color error: "#e05555"             // errors, destructive actions
+    readonly property color errorTint: Qt.alpha(error, 0.12)   // behind an error message
+    readonly property color errorMuted: Qt.alpha(error, 0.6)   // a destructive button at rest
+    readonly property color warning: "#e8a854"           // warnings, volume above 100%
+    readonly property color success: accent              // connected, done
+
+    // Workspaces
+    readonly property color workspaceFocused: accentDark
+    readonly property color workspaceActive: "#4a6a4a"   // active but not focused
+    readonly property color workspaceSpecial: "#7a1a2a"  // a shown special (scratchpad) workspace
 
     // Calendar
-    readonly property color todayHighlight: "#666666"   // background circle on today's date
+    readonly property color calendarToday: "#666666"     // the circle behind today's date
 
-    // Status / error text
-    readonly property color textError: "#e05555"
+    // Filled buttons
+    readonly property color confirm: "#1e5c1e"           // confirming: add an event
+    readonly property color confirmHover: "#2d6a2d"
+    readonly property color confirmSecondary: "#1e3a5f"  // confirming a change: save an edited event
+    readonly property color confirmSecondaryHover: "#2d4a6d"
+
+    // Lock screen and screensaver: light "glass" cards over the scrim
+    readonly property color glass: Qt.alpha("white", 0.08)          // a card or field
+    readonly property color glassRaised: Qt.alpha("white", 0.14)    // a button
+    readonly property color glassHover: Qt.alpha("white", 0.22)     // a button under the pointer
+    readonly property color glassBorder: Qt.alpha("white", 0.12)
+    readonly property color glassBorderFocus: Qt.alpha("white", 0.45)  // a focused field
+    readonly property color glassTextMuted: Qt.alpha("white", 0.38)    // placeholder, disabled text
 
     // HUD notification timer bar
-    readonly property int   notifTimerHeight: 3
-    readonly property color notifTimerColor:  sliderAccent
+    readonly property int notifTimerHeight: 3
 }

@@ -25,7 +25,7 @@ RowLayout {
         width: 36
         height: 20
         radius: 10
-        color: checked ? Theme.sliderAccent : Theme.cellDefault
+        color: checked ? Theme.accent : Theme.surface
 
         Rectangle {
             x: parent.checked ? parent.width - width - 2 : 2

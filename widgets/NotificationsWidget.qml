@@ -11,7 +11,7 @@ PopupWidget {
         // Accent while notifications are waiting to be read, same as the network and
         // dictation widgets use for "this is live". trackedNotifications is an
         // ObjectModel, which has no count property — only values.
-        color: Notifications.notifications.values.length > 0 ? Theme.sliderAccent : Theme.textPrimary
+        color: Notifications.notifications.values.length > 0 ? Theme.accent : Theme.textPrimary
         anchors.centerIn: parent
     }
 }

@@ -28,7 +28,7 @@ Flickable {
         height: 24
         radius: 6
         opacity: available ? 1 : 0.35
-        color: _area.containsMouse && available ? Theme.cellHover : Theme.cellDefault
+        color: _area.containsMouse && available ? Theme.surfaceHover : Theme.surface
 
         Text {
             id: _label
@@ -70,7 +70,7 @@ Flickable {
             text: "A profile overrides settings while its conditions hold. When several apply, the one lower in the list wins. With no profiles, the built-in defaults apply. A setting pinned as global (the pin next to it) is the same in every profile."
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textDim
+            color: Theme.textDisabled
         }
 
         // ── Active now ─────────────────────────────────────────────
@@ -120,7 +120,7 @@ Flickable {
                     required property var modelData
                     label: modelData.label
                     color: JSON.stringify(Profiles.simulated) === JSON.stringify(modelData.facts)
-                        ? Theme.sliderAccent : Theme.cellDefault
+                        ? Theme.accent : Theme.surface
                     onClicked: Profiles.simulated = modelData.facts
                 }
             }
@@ -135,7 +135,7 @@ Flickable {
             text: Profiles.lastError
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
-            color: Theme.textError
+            color: Theme.error
         }
 
         // ── The profiles ───────────────────────────────────────────
@@ -161,9 +161,9 @@ Flickable {
                 Layout.topMargin: 6
                 implicitHeight: _cardColumn.implicitHeight + 20
                 radius: 8
-                color: Theme.cellDefault
+                color: Theme.surface
                 border.width: active ? 1 : 0
-                border.color: Theme.sliderAccent
+                border.color: Theme.accent
 
                 ColumnLayout {
                     id: _cardColumn
@@ -200,7 +200,7 @@ Flickable {
                             text: _card.active ? "active" : ""
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.sliderAccent
+                            color: Theme.accent
                         }
 
                         // Enabled
@@ -208,7 +208,7 @@ Flickable {
                             width: 36
                             height: 20
                             radius: 10
-                            color: _card.modelData.enabled !== false ? Theme.sliderAccent : Theme.popupBackground
+                            color: _card.modelData.enabled !== false ? Theme.accent : Theme.popupBackground
 
                             Rectangle {
                                 x: _card.modelData.enabled !== false ? parent.width - width - 2 : 2
@@ -307,7 +307,7 @@ Flickable {
                             text: Object.keys(_card.modelData.set ?? {}).length + " settings"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textDim
+                            color: Theme.textDisabled
                         }
 
                         SmallButton {

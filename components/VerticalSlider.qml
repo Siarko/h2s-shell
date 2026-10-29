@@ -29,7 +29,7 @@ Item {
         width: 6
         height: slider.trackH
         radius: 3
-        color: Theme.textDim
+        color: Theme.textDisabled
 
         // Normal fill (0 – warningThreshold)
         Rectangle {
@@ -38,7 +38,7 @@ Item {
             width: parent.width
             height: Math.min(slider.fillH, slider.markPos)
             radius: parent.radius
-            color: Theme.sliderAccent
+            color: Theme.accent
         }
 
         // Over fill (warningThreshold – maxValue), stacked above normal fill
@@ -47,7 +47,7 @@ Item {
             width: parent.width
             height: Math.max(0, slider.fillH - slider.markPos)
             radius: parent.radius
-            color: Theme.textWarning
+            color: Theme.warning
         }
     }
 

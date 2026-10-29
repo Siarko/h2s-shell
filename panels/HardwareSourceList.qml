@@ -60,9 +60,9 @@ Item {
         Rectangle {
             width: parent.width
             height: _container.implicitHeight
-            color: Qt.rgba(0, 0, 0, 0.15)
+            color: Theme.surfaceSunken
             radius: 6
-            border.color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.2)
+            border.color: Theme.divider
             border.width: 1
             clip: true
 
@@ -137,7 +137,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
                                 radius: 1
-                                color: Theme.sliderAccent
+                                color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row._lv.dropIndex === _row.index
                                          && _row._lv.dragIndex !== _row.index
@@ -153,7 +153,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
                                 radius: 1
-                                color: Theme.sliderAccent
+                                color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row.index === _row._lv.workingList.length - 1
                                          && _row._lv.dropIndex === _row._lv.workingList.length
@@ -182,7 +182,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: "⠿"
                                         font.pixelSize: Theme.fontSizeMedium
-                                        color: _handleArea.containsMouse ? Theme.textSecondary : Theme.textDim
+                                        color: _handleArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
                                     }
 
                                     MouseArea {
@@ -234,9 +234,9 @@ Item {
                                     height: 22
                                     radius: 3
                                     color: _labelInput.activeFocus
-                                        ? Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.15)
+                                        ? Theme.fill
                                         : _labelHover.containsMouse
-                                            ? Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.08)
+                                            ? Theme.fillSubtle
                                             : "transparent"
 
                                     Text {
@@ -245,7 +245,7 @@ Item {
                                         text: Hardware.sourceForId(_row.modelData)?.label ?? _row.modelData
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeBody
-                                        color: Theme.textDim
+                                        color: Theme.textDisabled
                                         visible: _labelInput.text === "" && !_labelInput.activeFocus
                                     }
 
@@ -290,13 +290,13 @@ Item {
                                     width: 24
                                     height: 24
                                     radius: 4
-                                    color: _removeHover.containsMouse ? Theme.cellHover : "transparent"
+                                    color: _removeHover.containsMouse ? Theme.surfaceHover : "transparent"
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "×"
                                         font.pixelSize: Theme.fontSizeMedium
-                                        color: Theme.textDim
+                                        color: Theme.textDisabled
                                     }
 
                                     MouseArea {
@@ -320,7 +320,7 @@ Item {
                 Rectangle {
                     width: parent.width
                     height: 1
-                    color: Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.2)
+                    color: Theme.divider
                 }
 
                 Item {
@@ -347,7 +347,7 @@ Item {
                     visible: false
                     width: parent.width
                     implicitHeight: _pickerCol.implicitHeight + 8
-                    color: Qt.rgba(0, 0, 0, 0.25)
+                    color: Theme.surfaceSunken
                     radius: 6
                     z: 10
 
@@ -384,7 +384,7 @@ Item {
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
                                     radius: 4
-                                    color: _pickerItemHover.containsMouse ? Theme.cellHover : "transparent"
+                                    color: _pickerItemHover.containsMouse ? Theme.surfaceHover : "transparent"
 
                                     Text {
                                         anchors {

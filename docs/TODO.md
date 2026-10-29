@@ -367,7 +367,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **9.2 Fix stale comments** [#36] — `panels/Popup.qml:23`, `singletons/Shell.qml:8`,
       `singletons/Music.qml:74`
 - [ ] **9.3 One byte/rate formatter** [#19]
-- [ ] **9.4 Move stray colours into `Theme.qml`** [#18] — 17 hex + 20 named
+- [x] **9.4 Move stray colours into `Theme.qml`** [#18] — 17 hex + 20 named
+      Done 2026-10-29 as stage 1 of plans/themes.md: colours named by role, all literals
+      and hand-written alphas replaced; the only literals left are Google's calendar colour
+      (account data) and the music visualizer's shades of a colour it is given.
 - [ ] **9.5 One scroll-notch implementation** [#16] — `BarWidget` vs `CustomMouseArea`
 - [ ] **9.6 Move tray slide state out of the `Tray` singleton** [#20]
 - [x] **9.7 Implement or remove the screensaver exec commands** [#37]

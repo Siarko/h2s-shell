@@ -43,9 +43,9 @@ Item {
                     width: _pillText.implicitWidth + 16
                     height: 26
                     radius: 6
-                    color: selected ? Theme.sliderAccent : "transparent"
+                    color: selected ? Theme.accent : "transparent"
                     border.width: selected ? 0 : 1
-                    border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
+                    border.color: Theme.outline
 
                     Text {
                         id: _pillText

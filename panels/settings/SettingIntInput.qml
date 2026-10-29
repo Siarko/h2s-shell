@@ -29,9 +29,9 @@ RowLayout {
             width: 80
             height: 26
             radius: 6
-            color: Theme.cellDefault
+            color: Theme.surface
             border.width: _input.activeFocus && !_input.acceptableInput ? 1 : 0
-            border.color: Theme.textError
+            border.color: Theme.error
 
             TextInput {
                 id: _input
@@ -44,7 +44,7 @@ RowLayout {
                 readOnly: disabled
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
-                color: acceptableInput ? Theme.textPrimary : Theme.textError
+                color: acceptableInput ? Theme.textPrimary : Theme.error
                 verticalAlignment: TextInput.AlignVCenter
                 clip: true
                 inputMethodHints: Qt.ImhDigitsOnly

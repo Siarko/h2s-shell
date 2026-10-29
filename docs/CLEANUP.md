@@ -327,7 +327,7 @@ Fix: split into an API client (endpoints and requests), a store (caches and
 invalidation), and date/RRULE helpers. The OAuth half is already separate, which shows
 the seam works.
 
-### 18. Colours and sizes escape the theme
+### 18. Colours and sizes escape the theme — **FIXED**
 
 17 literal hex colours and 20 named colours (`"white"`, `"black"`, `"green"`,
 `"#1e3a5f"`, …) outside `Theme.qml`. Heaviest:

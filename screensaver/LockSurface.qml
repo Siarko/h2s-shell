@@ -34,7 +34,7 @@ WlSessionLockSurface {
 
     Rectangle {
         anchors.fill: parent
-        color: "black"
+        color: Theme.scrim
     }
 
     MouseArea {

@@ -168,7 +168,7 @@ Item {
         compactDismiss: true
         imageMaxHeight: 120
         contentPadding: 10
-        replyBackground: Qt.rgba(0, 0, 0, 0.2)
+        replyBackground: Theme.surfaceSunken
         width: root.cardWidth
         onDismissRequested: root.dismiss()
         timerVisible: true

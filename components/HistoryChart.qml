@@ -101,8 +101,8 @@ Column {
                 height: 24
                 radius: 4
                 color: root.scaleSecs === modelData.secs
-                    ? Theme.sliderAccent
-                    : Qt.rgba(Theme.textDim.r, Theme.textDim.g, Theme.textDim.b, 0.15)
+                    ? Theme.accent
+                    : Theme.fill
 
                 Text {
                     anchors.centerIn: parent
@@ -162,11 +162,11 @@ Column {
             }
 
             // Background
-            ctx.fillStyle = rgba(Theme.cellDefault, 0.6)
+            ctx.fillStyle = rgba(Theme.surface, 0.6)
             ctx.fillRect(0, 0, width, height)
 
             // Grid lines at 25%, 50%, 75%
-            ctx.strokeStyle = rgba(Theme.textDim, 0.2)
+            ctx.strokeStyle = rgba(Theme.textDisabled, 0.2)
             ctx.lineWidth = 1
             for (var g = 1; g < 4; g++) {
                 var gy = height * g / 4
@@ -234,9 +234,9 @@ Column {
             // yet, or a pause. Drawn under the lines; the coloured part goes on top.
             if (waving) {
                 var backgroundWave = ctx.createLinearGradient(waveX - waveHalf, 0, waveX + waveHalf, 0)
-                backgroundWave.addColorStop(0, rgba(Theme.textDim, 0))
-                backgroundWave.addColorStop(0.5, rgba(Theme.textDim, 0.12 * waveStrength))
-                backgroundWave.addColorStop(1, rgba(Theme.textDim, 0))
+                backgroundWave.addColorStop(0, rgba(Theme.textDisabled, 0))
+                backgroundWave.addColorStop(0.5, rgba(Theme.textDisabled, 0.12 * waveStrength))
+                backgroundWave.addColorStop(1, rgba(Theme.textDisabled, 0))
                 ctx.fillStyle = backgroundWave
                 ctx.fillRect(Math.max(0, waveX - waveHalf), 0, waveHalf * 2, height)
             }
@@ -252,7 +252,7 @@ Column {
             }
 
             if (root.formatPeak && isNaN(root.maxValue)) {
-                ctx.fillStyle = rgba(Theme.textDim, 0.9)
+                ctx.fillStyle = rgba(Theme.textDisabled, 0.9)
                 ctx.font = Theme.fontSizeSmall + "px '" + Theme.fontFamily + "'"
                 ctx.textBaseline = "top"
                 ctx.fillText(root.formatPeak(top), 4, 3)

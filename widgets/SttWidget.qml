@@ -17,7 +17,7 @@ BarWidget {
     // Wake is the second, independent axis: the outline means the microphone is open,
     // whatever dictation happens to be doing. It stays on while dictation runs, so it
     // is clear that a stop phrase returns to listening rather than closing the mic.
-    borderColor: Stt.wake ? Theme.sliderAccent : "transparent"
+    borderColor: Stt.wake ? Theme.accent : "transparent"
     borderWidth: Stt.wake ? 1 : 0
 
     readonly property bool _dictating: Stt.dictation !== "idle"
@@ -51,11 +51,11 @@ BarWidget {
             // ink back left by half this value.
             rightPadding: 2
             color: {
-                if (!Stt.connected) return Theme.textDim
-                if (Stt.server === "error") return Theme.textError
-                if (Stt.server === "off") return Theme.textDim
+                if (!Stt.connected) return Theme.textDisabled
+                if (Stt.server === "error") return Theme.error
+                if (Stt.server === "off") return Theme.textDisabled
                 if (Stt.server === "loading") return Theme.textSecondary
-                return root._dictating ? Theme.sliderAccent : Theme.textPrimary
+                return root._dictating ? Theme.accent : Theme.textPrimary
             }
 
             // Animating a separate property and gating opacity on _pulsing, so a
@@ -86,7 +86,7 @@ BarWidget {
             text: Stt.pending > 0 ? String(Stt.pending) : ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeXSmall
-            color: Theme.textWarning
+            color: Theme.warning
 
             Behavior on width {
                 NumberAnimation { duration: 120; easing.type: Easing.OutQuad }

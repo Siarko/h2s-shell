@@ -150,7 +150,7 @@ Item {
                 text: "No notifications"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 visible: notificationList.count === 0 && successOverlay.opacity === 0
             }
         }

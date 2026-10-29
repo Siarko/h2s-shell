@@ -44,7 +44,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 4
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -69,7 +69,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 10
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -91,7 +91,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 10
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -116,7 +116,7 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             Layout.topMargin: 10
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -133,21 +133,21 @@ Flickable {
         SettingInfoRow {
             label: "Daemon"
             value: Stt.connected ? "connected" : "not running"
-            valueColor: Stt.connected ? Theme.sliderAccent : Theme.textDim
+            valueColor: Stt.connected ? Theme.accent : Theme.textDisabled
         }
 
         SettingInfoRow {
             label: "Whisper server"
             value: Stt.connected ? Stt.server : "—"
-            valueColor: Stt.server === "error" ? Theme.textError
-                      : Stt.server === "ready" ? Theme.sliderAccent
+            valueColor: Stt.server === "error" ? Theme.error
+                      : Stt.server === "ready" ? Theme.accent
                       : Theme.textSecondary
         }
 
         SettingInfoRow {
             label: "Wake listening"
             value: Stt.wake ? "yes" : "no"
-            valueColor: Stt.wake ? Theme.sliderAccent : Theme.textSecondary
+            valueColor: Stt.wake ? Theme.accent : Theme.textSecondary
         }
 
         SettingInfoRow {
@@ -170,7 +170,7 @@ Flickable {
                 + "ptt wake autostart on|off"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textTertiary
+            color: Theme.textMuted
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
             Layout.topMargin: 6

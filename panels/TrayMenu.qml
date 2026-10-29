@@ -126,7 +126,7 @@ Item {
                 width: parent.width - 16
                 height: 1
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.textDim
+                color: Theme.textDisabled
                 opacity: 0.25
             }
 
@@ -136,7 +136,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 radius: 4
-                color: itemArea.containsMouse && modelData.enabled ? Theme.buttonHover : "transparent"
+                color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : "transparent"
 
                 RowLayout {
                     anchors.fill: parent
@@ -174,7 +174,7 @@ Item {
                         text: modelData.text
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBodyLarge
-                        color: modelData.enabled ? Theme.textPrimary : Theme.textDim
+                        color: modelData.enabled ? Theme.textPrimary : Theme.textDisabled
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                     }
@@ -185,7 +185,7 @@ Item {
                         text: "›"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeMedium
-                        color: Theme.textDim
+                        color: Theme.textDisabled
                     }
                 }
 
@@ -229,7 +229,7 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: 4
-                    color: backArea.containsMouse ? Theme.buttonHover : "transparent"
+                    color: backArea.containsMouse ? Theme.surfaceHover : "transparent"
 
                     RowLayout {
                         anchors.fill: parent
@@ -273,7 +273,7 @@ Item {
                     width: parent.width - 16
                     height: 1
                     anchors.verticalCenter: parent.verticalCenter
-                    color: Theme.textDim
+                    color: Theme.textDisabled
                     opacity: 0.2
                 }
             }

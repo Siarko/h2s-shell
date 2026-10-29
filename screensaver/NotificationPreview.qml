@@ -14,8 +14,8 @@ Rectangle {
 
     width: 360
     radius: 8
-    color: Qt.rgba(1, 1, 1, 0.08)
-    border.color: Qt.rgba(1, 1, 1, 0.12)
+    color: Theme.glass
+    border.color: Theme.glassBorder
     border.width: 1
     implicitHeight: _col.implicitHeight + 16
 
@@ -27,7 +27,7 @@ Rectangle {
         Text {
             visible: text !== ""
             text: root.modelData.appName ?? ""
-            color: root.detail === "app" ? "white" : Theme.textDim
+            color: root.detail === "app" ? Theme.textPrimary : Theme.textDisabled
             font.family: Theme.fontFamily
             font.pixelSize: root.detail === "app" ? Theme.fontSizeBodyLarge : Theme.fontSizeSmall
             font.bold: root.detail === "app"
@@ -38,7 +38,7 @@ Rectangle {
         Text {
             visible: root.detail !== "app" && text !== ""
             text: root.modelData.summary ?? ""
-            color: "white"
+            color: Theme.textPrimary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             font.bold: true

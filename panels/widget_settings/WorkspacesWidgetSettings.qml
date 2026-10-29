@@ -100,7 +100,7 @@ Item {
                     Layout.fillWidth: true
                     height: 22
                     radius: 6
-                    color: Theme.cellDefault
+                    color: Theme.surface
 
                     TextInput {
                         id: _titleInput
@@ -145,7 +145,7 @@ Item {
                     width: 36
                     height: 20
                     radius: 10
-                    color: _showSpecial ? Theme.sliderAccent : Theme.cellDefault
+                    color: _showSpecial ? Theme.accent : Theme.surface
 
                     Rectangle {
                         x: _showSpecial ? parent.width - width - 2 : 2
@@ -188,7 +188,7 @@ Item {
                     width: 36
                     height: 20
                     radius: 10
-                    color: _showNormal ? Theme.sliderAccent : Theme.cellDefault
+                    color: _showNormal ? Theme.accent : Theme.surface
 
                     Rectangle {
                         x: _showNormal ? parent.width - width - 2 : 2
@@ -244,7 +244,7 @@ Item {
                         width: 200
                         height: 22
                         radius: 6
-                        color: Theme.cellDefault
+                        color: Theme.surface
 
                         TextInput {
                             id: _sysInput
@@ -274,14 +274,14 @@ Item {
                     Text {
                         text: "→"
                         font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textDim
+                        color: Theme.textDisabled
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         height: 22
                         radius: 6
-                        color: Theme.cellDefault
+                        color: Theme.surface
 
                         TextInput {
                             id: _custInput
@@ -312,13 +312,13 @@ Item {
                         width: 20
                         height: 20
                         radius: 4
-                        color: _removeHover.containsMouse ? Theme.cellHover : "transparent"
+                        color: _removeHover.containsMouse ? Theme.surfaceHover : "transparent"
 
                         Text {
                             anchors.centerIn: parent
                             text: "×"
                             font.pixelSize: Theme.fontSizeMedium
-                            color: Theme.textDim
+                            color: Theme.textDisabled
                         }
 
                         MouseArea {

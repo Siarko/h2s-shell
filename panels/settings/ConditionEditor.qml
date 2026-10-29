@@ -42,9 +42,9 @@ Item {
         width: _text.implicitWidth + 14
         height: 24
         radius: 6
-        color: selected ? Theme.sliderAccent : "transparent"
+        color: selected ? Theme.accent : "transparent"
         border.width: selected ? 0 : 1
-        border.color: Qt.rgba(Theme.textSecondary.r, Theme.textSecondary.g, Theme.textSecondary.b, 0.4)
+        border.color: Theme.outline
 
         Text {
             id: _text
@@ -110,7 +110,7 @@ Item {
                 width: 52
                 height: 24
                 radius: 6
-                color: Theme.cellDefault
+                color: Theme.surface
 
                 TextInput {
                     anchors { fill: parent; leftMargin: 6; rightMargin: 6 }

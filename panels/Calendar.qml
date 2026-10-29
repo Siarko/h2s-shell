@@ -81,7 +81,7 @@ Item {
         Rectangle {
             width: 1
             height: 340
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 

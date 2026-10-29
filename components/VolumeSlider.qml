@@ -10,8 +10,8 @@ Item {
 
     property real value: 0
     property real maxValue: 1.5
-    property color fillColor: Theme.sliderAccent
-    property color fillColorHover: Theme.sliderAccentHover
+    property color fillColor: Theme.accent
+    property color fillColorHover: Theme.accentHover
     signal moved(real volume)
 
     property real step: 0.02
@@ -28,7 +28,7 @@ Item {
         width: parent.width
         height: 4
         radius: 2
-        color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDim
+        color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
 
         Rectangle {
             width: slider._position * parent.width

@@ -34,7 +34,7 @@ Item {
         width: parent.width * (root.inputWidthPercent / 100)
         height: 26
         radius: 6
-        color: Theme.cellDefault
+        color: Theme.surface
 
         TextInput {
             anchors {

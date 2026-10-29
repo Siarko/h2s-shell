@@ -74,7 +74,7 @@ FloatingWindow {
                             + (Object.keys(Profiles.simulated).length > 0 ? " (simulated)" : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.sliderAccent
+                        color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.accent
 
                         MouseArea {
                             id: _profileIndicator
@@ -91,7 +91,7 @@ FloatingWindow {
                         text: "Editing"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textDim
+                        color: Theme.textDisabled
                     }
 
                     Repeater {
@@ -107,7 +107,7 @@ FloatingWindow {
                             Layout.fillWidth: true
                             height: 24
                             radius: 6
-                            color: picked ? Theme.sliderAccent : (_editArea.containsMouse ? Theme.cellHover : "transparent")
+                            color: picked ? Theme.accent : (_editArea.containsMouse ? Theme.surfaceHover : "transparent")
 
                             Text {
                                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 6 }
@@ -133,7 +133,7 @@ FloatingWindow {
                         Layout.topMargin: 4
                         Layout.bottomMargin: 4
                         height: 1
-                        color: Theme.textDim
+                        color: Theme.textDisabled
                         opacity: 0.3
                     }
 
@@ -145,9 +145,9 @@ FloatingWindow {
                             Layout.fillWidth: true
                             height: 34
                             radius: 6
-                            color: index === root.selectedCategory ? Qt.rgba(0.36, 0.61, 0.96, 0.15) : "transparent"
+                            color: index === root.selectedCategory ? Theme.accentSecondaryTint : "transparent"
                             border.width: index === root.selectedCategory ? 1 : 0
-                            border.color: Theme.sliderAccent
+                            border.color: Theme.accent
 
                             Text {
                                 anchors {
@@ -183,8 +183,8 @@ FloatingWindow {
                         wrapMode: TextEdit.WrapAnywhere
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textDim
-                        selectionColor: Theme.sliderAccent
+                        color: Theme.textDisabled
+                        selectionColor: Theme.accent
                         selectedTextColor: Theme.textPrimary
                     }
                 }
@@ -194,7 +194,7 @@ FloatingWindow {
             Rectangle {
                 width: 1
                 height: parent.height
-                color: Theme.textDim
+                color: Theme.textDisabled
                 opacity: 0.3
             }
 

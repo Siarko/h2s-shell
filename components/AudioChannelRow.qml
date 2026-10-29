@@ -28,7 +28,7 @@ Item {
                 text: row.muted ? (row.isSink ? "󰖁" : "󰍭") : (row.isSink ? "󰕾" : "󰍬")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: row.muted ? Theme.textDim : Theme.textPrimary
+                color: row.muted ? Theme.textDisabled : Theme.textPrimary
                 Layout.preferredWidth: 24
                 horizontalAlignment: Text.AlignHCenter
 
@@ -44,8 +44,8 @@ Item {
 
             VolumeSlider {
                 value: row.node?.audio?.volume ?? 0
-                fillColor: row.volume > 100 ? Theme.textWarning : Theme.sliderAccent
-                fillColorHover: row.volume > 100 ? Theme.textWarning : Theme.sliderAccentHover
+                fillColor: row.volume > 100 ? Theme.warning : Theme.accent
+                fillColorHover: row.volume > 100 ? Theme.warning : Theme.accentHover
                 onMoved: v => {
                     if (row.node?.audio)
                         row.node.audio.volume = v;
@@ -56,7 +56,7 @@ Item {
                 text: row.volume + "%"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
-                color: row.volume > 100 ? Theme.textWarning : Theme.textPrimary
+                color: row.volume > 100 ? Theme.warning : Theme.textPrimary
                 Layout.preferredWidth: 38
                 horizontalAlignment: Text.AlignRight
             }
@@ -131,7 +131,7 @@ Item {
                         visible: matches
                         width: deviceCol.width
                         height: matches ? 28 : 0
-                        color: deviceArea.containsMouse ? Theme.buttonHover : "transparent"
+                        color: deviceArea.containsMouse ? Theme.surfaceHover : "transparent"
                         radius: 4
 
                         RowLayout {
@@ -145,7 +145,7 @@ Item {
                                 text: modelData === activeNode ? "●" : "○"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
-                                color: modelData === activeNode ? Theme.textPrimary : Theme.textDim
+                                color: modelData === activeNode ? Theme.textPrimary : Theme.textDisabled
                             }
 
                             Text {
@@ -221,8 +221,8 @@ Item {
 
                             VolumeSlider {
                                 value: modelData.audio?.volume ?? 0
-                                fillColor: Theme.sliderAccent
-                                fillColorHover: Theme.sliderAccentHover
+                                fillColor: Theme.accent
+                                fillColorHover: Theme.accentHover
                                 onMoved: v => {
                                     if (modelData.audio) {
                                         var rounded = Math.round(v * 100) / 100;

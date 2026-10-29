@@ -12,8 +12,8 @@ Item {
     implicitHeight: _col.implicitHeight
 
     property string submitLabel: "Save"
-    property color submitColor: "#1e3a5f"
-    property color submitColorHover: "#2d4a6d"
+    property color submitColor: Theme.confirmSecondary
+    property color submitColorHover: Theme.confirmSecondaryHover
 
     property bool showCalendarPicker: false
     property string selectedCalendarId: ""
@@ -128,7 +128,7 @@ Item {
             width: parent.width
             height: 28
             color: Theme.popupBackground
-            border.color: _titleInput.activeFocus ? Theme.textSecondary : Theme.textDim
+            border.color: _titleInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
             radius: 4
 
             TextInput {
@@ -153,7 +153,7 @@ Item {
                     bottomMargin: 4
                 }
                 text: "Title"
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 verticalAlignment: Text.AlignVCenter
@@ -203,14 +203,14 @@ Item {
                             height: 16
                             radius: 8
                             anchors.centerIn: parent
-                            color: "#888888"
-                            border.color: root.selectedColorId === "" ? "white" : "transparent"
+                            color: Theme.textMuted
+                            border.color: root.selectedColorId === "" ? Theme.textPrimary : "transparent"
                             border.width: 2
 
                             Text {
                                 anchors.centerIn: parent
                                 text: "×"
-                                color: "white"
+                                color: Theme.textPrimary
                                 font.pixelSize: Theme.fontSizeXSmall
                                 font.bold: true
                             }
@@ -245,7 +245,7 @@ Item {
                                 radius: 8
                                 anchors.centerIn: parent
                                 color: modelData.hex
-                                border.color: root.selectedColorId === modelData.id ? "white" : "transparent"
+                                border.color: root.selectedColorId === modelData.id ? Theme.textPrimary : "transparent"
                                 border.width: 2
                             }
 
@@ -293,8 +293,8 @@ Item {
                 height: 14
                 radius: 3
                 anchors.verticalCenter: parent.verticalCenter
-                color: root._allDay ? Theme.sliderAccent : "transparent"
-                border.color: activeFocus ? Theme.textSecondary : (root._allDay ? Theme.sliderAccent : Theme.textDim)
+                color: root._allDay ? Theme.accent : "transparent"
+                border.color: activeFocus ? Theme.textSecondary : (root._allDay ? Theme.accent : Theme.textDisabled)
                 border.width: 1
                 activeFocusOnTab: true
 
@@ -363,7 +363,7 @@ Item {
 
                 Text {
                     text: "→"
-                    color: Theme.textTertiary
+                    color: Theme.textMuted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     width: 12
@@ -387,7 +387,7 @@ Item {
             width: parent.width
             height: Math.max(60, _descInput.implicitHeight + 8)
             color: Theme.popupBackground
-            border.color: _descInput.activeFocus ? Theme.textSecondary : Theme.textDim
+            border.color: _descInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
             radius: 4
 
             TextEdit {
@@ -420,7 +420,7 @@ Item {
                     topMargin: 4
                 }
                 text: "Description"
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 visible: !_descInput.text.length
@@ -434,7 +434,7 @@ Item {
             height: 28
             visible: root.showCalendarPicker
             color: Theme.popupBackground
-            border.color: Theme.textDim
+            border.color: Theme.textDisabled
             radius: 4
 
             readonly property var _selectedCal: GoogleCalendar.calendars[root.selectedCalendarId] ?? null
@@ -452,7 +452,7 @@ Item {
                     height: 10
                     radius: 5
                     anchors.verticalCenter: parent.verticalCenter
-                    color: parent.parent._selectedCal?.color ?? Theme.textDim
+                    color: parent.parent._selectedCal?.color ?? Theme.textDisabled
                 }
 
                 Text {
@@ -467,7 +467,7 @@ Item {
 
                 Text {
                     text: "▾"
-                    color: Theme.textTertiary
+                    color: Theme.textMuted
                     font.pixelSize: Theme.fontSizeXSmall
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -487,7 +487,7 @@ Item {
             visible: root.showCalendarPicker
             clip: true
             color: Theme.popupBackground
-            border.color: Theme.textDim
+            border.color: Theme.textDisabled
             radius: 4
 
             Behavior on height {
@@ -520,7 +520,7 @@ Item {
 
                         width: _pickerList.width
                         height: 24
-                        color: modelData === root.selectedCalendarId ? Theme.cellHover : "transparent"
+                        color: modelData === root.selectedCalendarId ? Theme.surfaceHover : "transparent"
                         radius: 3
 
                         Row {
@@ -535,7 +535,7 @@ Item {
                                 height: 10
                                 radius: 5
                                 anchors.verticalCenter: parent.verticalCenter
-                                color: parent.parent._cal?.color ?? Theme.textDim
+                                color: parent.parent._cal?.color ?? Theme.textDisabled
                             }
 
                             Text {
@@ -573,8 +573,8 @@ Item {
                 height: 14
                 radius: 3
                 anchors.verticalCenter: parent.verticalCenter
-                color: root._recurring ? Theme.sliderAccent : "transparent"
-                border.color: root._recurring ? Theme.sliderAccent : Theme.textDim
+                color: root._recurring ? Theme.accent : "transparent"
+                border.color: root._recurring ? Theme.accent : Theme.textDisabled
                 border.width: 1
 
                 Text {
@@ -639,7 +639,7 @@ Item {
                         width: 76
                         height: 28
                         color: Theme.popupBackground
-                        border.color: Theme.textDim
+                        border.color: Theme.textDisabled
                         radius: 4
 
                         Row {
@@ -662,7 +662,7 @@ Item {
 
                             Text {
                                 text: "▾"
-                                color: Theme.textTertiary
+                                color: Theme.textMuted
                                 font.pixelSize: Theme.fontSizeXSmall
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -688,7 +688,7 @@ Item {
                         width: 40
                         height: 28
                         color: Theme.popupBackground
-                        border.color: _intervalInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                        border.color: _intervalInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
                         radius: 4
 
                         TextInput {
@@ -729,7 +729,7 @@ Item {
                     height: root._freqPickerOpen ? _freqList.implicitHeight + 4 : 0
                     clip: true
                     color: Theme.popupBackground
-                    border.color: Theme.textDim
+                    border.color: Theme.textDisabled
                     radius: 4
 
                     Behavior on height {
@@ -757,7 +757,7 @@ Item {
 
                                 width: _freqList.width
                                 height: 24
-                                color: modelData === root._rruleFreq ? Theme.cellHover : "transparent"
+                                color: modelData === root._rruleFreq ? Theme.surfaceHover : "transparent"
                                 radius: 3
 
                                 Text {
@@ -807,8 +807,8 @@ Item {
                             height: 20
                             radius: 3
                             anchors.verticalCenter: parent.verticalCenter
-                            color: selected ? Theme.sliderAccent : "transparent"
-                            border.color: selected ? Theme.sliderAccent : Theme.textDim
+                            color: selected ? Theme.accent : "transparent"
+                            border.color: selected ? Theme.accent : Theme.textDisabled
                             border.width: 1
 
                             Text {
@@ -863,7 +863,7 @@ Item {
                             width: _endBtnText.implicitWidth + 12
                             radius: 3
                             color: "transparent"
-                            border.color: selected ? Theme.sliderAccent : Theme.textDim
+                            border.color: selected ? Theme.accent : Theme.textDisabled
                             border.width: 1
                             anchors.verticalCenter: parent.verticalCenter
 
@@ -871,7 +871,7 @@ Item {
                                 id: _endBtnText
                                 anchors.centerIn: parent
                                 text: modelData.label
-                                color: parent.selected ? Theme.sliderAccent : Theme.textSecondary
+                                color: parent.selected ? Theme.accent : Theme.textSecondary
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeSmall
                             }
@@ -891,7 +891,7 @@ Item {
                     height: 28
                     visible: root._rruleEndType === "date"
                     color: Theme.popupBackground
-                    border.color: _endDateInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                    border.color: _endDateInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
                     radius: 4
 
                     TextInput {
@@ -918,7 +918,7 @@ Item {
                             bottomMargin: 4
                         }
                         text: "YYYY-MM-DD"
-                        color: Theme.textTertiary
+                        color: Theme.textMuted
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         verticalAlignment: Text.AlignVCenter
@@ -938,7 +938,7 @@ Item {
                         width: 50
                         height: 28
                         color: Theme.popupBackground
-                        border.color: _countInput.activeFocus ? Theme.textSecondary : Theme.textDim
+                        border.color: _countInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
                         radius: 4
 
                         TextInput {
@@ -1008,8 +1008,8 @@ Item {
             Rectangle {
                 height: 28
                 width: (parent.width - 6) / 2
-                color: _cancelArea.containsMouse ? Theme.cellDefault : "transparent"
-                border.color: Theme.textDim
+                color: _cancelArea.containsMouse ? Theme.surface : "transparent"
+                border.color: Theme.textDisabled
                 radius: 4
 
                 Text {

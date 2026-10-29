@@ -57,7 +57,7 @@ Flickable {
             text: Profiles.lastError
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
-            color: Theme.textError
+            color: Theme.error
         }
 
         Repeater {

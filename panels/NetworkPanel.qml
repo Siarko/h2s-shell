@@ -23,10 +23,10 @@ Item {
     }
 
     function signalColor(signal) {
-        if (signal >= 75) return Theme.sliderAccent
-        if (signal >= 50) return Theme.textWarning
-        if (signal >= 25) return Theme.textTertiary
-        return Theme.textDim
+        if (signal >= 75) return Theme.accent
+        if (signal >= 50) return Theme.warning
+        if (signal >= 25) return Theme.textMuted
+        return Theme.textDisabled
     }
 
     Column {
@@ -48,7 +48,7 @@ Item {
                     text: (VpnManager.activeVpn === "" || VpnManager.activeVpnType === "wireguard") ? "󰒃" : "󰌾"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeTitle
-                    color: VpnManager.activeVpn !== "" ? Theme.sliderAccent : Theme.textDim
+                    color: VpnManager.activeVpn !== "" ? Theme.accent : Theme.textDisabled
                 }
 
                 Text {
@@ -63,7 +63,7 @@ Item {
                     text: VpnManager.activeVpn !== "" ? VpnManager.activeVpn : "Off"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
-                    color: VpnManager.activeVpn !== "" ? Theme.sliderAccent : Theme.textDim
+                    color: VpnManager.activeVpn !== "" ? Theme.accent : Theme.textDisabled
                     elide: Text.ElideRight
                     Layout.maximumWidth: 120
                 }
@@ -90,7 +90,7 @@ Item {
                     width: col.width
                     height: 36
                     radius: 6
-                    color: isActive ? Qt.rgba(0.27, 0.83, 0.48, 0.12) : Theme.cellDefault
+                    color: isActive ? Theme.accentTint : Theme.surface
 
                     RowLayout {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
@@ -100,14 +100,14 @@ Item {
                             text: modelData.type === "wireguard" ? "󰒃" : "󰌾"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
-                            color: isActive ? Theme.sliderAccent : Theme.textTertiary
+                            color: isActive ? Theme.accent : Theme.textMuted
                         }
 
                         Text {
                             text: modelData.name
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
-                            color: isActive ? Theme.sliderAccent : Theme.textPrimary
+                            color: isActive ? Theme.accent : Theme.textPrimary
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }
@@ -117,8 +117,8 @@ Item {
                             implicitHeight: 24
                             radius: 4
                             color: vpnBtnArea.containsMouse
-                                ? (isActive ? "#c0392b" : Theme.sliderAccentHover)
-                                : (isActive ? Qt.rgba(0.75, 0.2, 0.2, 0.6) : Theme.sliderAccent)
+                                ? (isActive ? Theme.error : Theme.accentHover)
+                                : (isActive ? Theme.errorMuted : Theme.accent)
 
                             Text {
                                 id: vpnBtnLabel
@@ -149,7 +149,7 @@ Item {
             Rectangle {
                 width: parent.width
                 height: 1
-                color: Theme.textDim
+                color: Theme.textDisabled
                 opacity: 0.3
             }
         }
@@ -164,7 +164,7 @@ Item {
                 text: "󰈀"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: EthernetManager.ethernetConnected ? Theme.textPrimary : Theme.textDim
+                color: EthernetManager.ethernetConnected ? Theme.textPrimary : Theme.textDisabled
             }
 
             Text {
@@ -185,7 +185,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: EthernetManager.ethernetConnected ? Theme.sliderAccent : Theme.textDim
+                    color: EthernetManager.ethernetConnected ? Theme.accent : Theme.textDisabled
 
                     Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -193,7 +193,7 @@ Item {
                         width: 20
                         height: 20
                         radius: 10
-                        color: "white"
+                        color: Theme.textPrimary
                         anchors.verticalCenter: parent.verticalCenter
                         x: EthernetManager.ethernetConnected ? parent.width - width - 2 : 2
 
@@ -237,7 +237,7 @@ Item {
             text: "DNS: " + IpManager.ethernetDns
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeXSmall
-            color: Theme.textTertiary
+            color: Theme.textMuted
         }
 
         // Divider below ethernet section
@@ -245,7 +245,7 @@ Item {
             visible: NetworkManager.ethernetDevice !== ""
             width: parent.width
             height: 1
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -266,7 +266,7 @@ Item {
                 }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: NetworkManager.wifiConnected ? Theme.textPrimary : Theme.textDim
+                color: NetworkManager.wifiConnected ? Theme.textPrimary : Theme.textDisabled
             }
 
             Text {
@@ -285,7 +285,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: WifiManager.wifiEnabled ? Theme.sliderAccent : Theme.textDim
+                    color: WifiManager.wifiEnabled ? Theme.accent : Theme.textDisabled
 
                     Behavior on color {
                         ColorAnimation { duration: 150 }
@@ -295,7 +295,7 @@ Item {
                         width: 20
                         height: 20
                         radius: 10
-                        color: "white"
+                        color: Theme.textPrimary
                         anchors.verticalCenter: parent.verticalCenter
                         x: WifiManager.wifiEnabled ? parent.width - width - 2 : 2
 
@@ -335,7 +335,7 @@ Item {
                 text: root.signalBars(WifiManager.wifiSignal)
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.sliderAccent
+                color: Theme.accent
             }
 
             Text {
@@ -372,7 +372,7 @@ Item {
             text: "DNS: " + IpManager.wifiDns
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeXSmall
-            color: Theme.textTertiary
+            color: Theme.textMuted
         }
 
         // ---- WiFi disconnect button ----
@@ -382,15 +382,15 @@ Item {
             height: 28
             radius: 6
             color: WifiManager.disconnecting
-                ? Theme.cellDefault
-                : (disconnectArea.containsMouse ? "#c0392b" : Theme.cellDefault)
+                ? Theme.surface
+                : (disconnectArea.containsMouse ? Theme.error : Theme.surface)
 
             Text {
                 anchors.centerIn: parent
                 text: WifiManager.disconnecting ? "Disconnecting…" : "Disconnect"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
-                color: WifiManager.disconnecting ? Theme.textDim : Theme.textPrimary
+                color: WifiManager.disconnecting ? Theme.textDisabled : Theme.textPrimary
             }
 
             MouseArea {
@@ -407,7 +407,7 @@ Item {
             visible: WifiManager.wifiEnabled
             width: parent.width
             height: 1
-            color: Theme.textDim
+            color: Theme.textDisabled
             opacity: 0.3
         }
 
@@ -437,14 +437,14 @@ Item {
                     text: WifiManager.scanInProgress ? "Scanning…" : "next scan…"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.sliderAccent
+                    color: Theme.accent
                 }
 
                 Rectangle {
                     implicitWidth: rescanLabel.implicitWidth + 14
                     implicitHeight: 22
                     radius: 4
-                    color: rescanArea.containsMouse ? Theme.buttonHover : (WifiManager.scanning ? Theme.sliderAccent : Theme.cellDefault)
+                    color: rescanArea.containsMouse ? Theme.surfaceHover : (WifiManager.scanning ? Theme.accent : Theme.surface)
 
                     Text {
                         id: rescanLabel
@@ -509,7 +509,7 @@ Item {
                     width: networkList.width
                     height: expanded ? 76 : 36
                     radius: 6
-                    color: modelData.inUse ? Qt.rgba(0.27, 0.83, 0.48, 0.12) : Theme.cellDefault
+                    color: modelData.inUse ? Theme.accentTint : Theme.surface
                     clip: true
 
                     Behavior on height {
@@ -547,7 +547,7 @@ Item {
                                     text: networkDelegate.modelData.ssid
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeBodyLarge
-                                    color: networkDelegate.modelData.inUse ? Theme.sliderAccent : Theme.textPrimary
+                                    color: networkDelegate.modelData.inUse ? Theme.accent : Theme.textPrimary
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
                                 }
@@ -564,7 +564,7 @@ Item {
                                     text: networkDelegate.modelData.band ?? ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeXSmall
-                                    color: (networkDelegate.modelData.band === "5G") ? Theme.sliderAccent : Theme.textTertiary
+                                    color: (networkDelegate.modelData.band === "5G") ? Theme.accent : Theme.textMuted
                                 }
 
                                 Text {
@@ -572,7 +572,7 @@ Item {
                                     text: networkDelegate.modelData.security !== "--" ? networkDelegate.modelData.security : ""
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeXSmall
-                                    color: Theme.textTertiary
+                                    color: Theme.textMuted
                                 }
                             }
 
@@ -599,7 +599,7 @@ Item {
                                     height: 26
                                     radius: 6
                                     color: Theme.popupBackground
-                                    border.color: Theme.textDim
+                                    border.color: Theme.textDisabled
                                     border.width: 1
 
                                     Text {
@@ -607,7 +607,7 @@ Item {
                                         text: "Password"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeBody
-                                        color: Theme.textDim
+                                        color: Theme.textDisabled
                                         verticalAlignment: Text.AlignVCenter
                                         visible: pwInput.text === ""
                                     }
@@ -629,7 +629,7 @@ Item {
                                         text: networkDelegate._showPassword ? "󰛐" : "󰛑"
                                         font.family: Theme.fontFamily
                                         font.pixelSize: Theme.fontSizeMedium
-                                        color: Theme.textTertiary
+                                        color: Theme.textMuted
 
                                         MouseArea {
                                             anchors.fill: parent
@@ -651,7 +651,7 @@ Item {
                                     text: "Wrong password"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeBody
-                                    color: Theme.textWarning
+                                    color: Theme.warning
                                     Layout.alignment: Qt.AlignVCenter
                                 }
 
@@ -664,8 +664,8 @@ Item {
 
                                     readonly property bool _busy: WifiManager.connecting && WifiManager.connectingTo === networkDelegate.modelData.ssid
                                     color: _busy
-                                        ? (_connectArea.containsMouse ? "#c0392b" : Theme.cellDefault)
-                                        : (_connectArea.containsMouse ? Theme.sliderAccentHover : Theme.sliderAccent)
+                                        ? (_connectArea.containsMouse ? Theme.error : Theme.surface)
+                                        : (_connectArea.containsMouse ? Theme.accentHover : Theme.accent)
 
                                     Text {
                                         id: _connectLabel
@@ -699,7 +699,7 @@ Item {
                                     implicitWidth: _forgetLabel.implicitWidth + 14
                                     height: 26
                                     radius: 6
-                                    color: _forgetArea.containsMouse ? "#c0392b" : Theme.cellDefault
+                                    color: _forgetArea.containsMouse ? Theme.error : Theme.surface
 
                                     Text {
                                         id: _forgetLabel
@@ -730,7 +730,7 @@ Item {
                 text: "No networks found"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.textTertiary
+                color: Theme.textMuted
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -768,7 +768,7 @@ Item {
                                 text: "󰀆"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textTertiary
+                                color: Theme.textMuted
                             }
 
                             Text {
@@ -783,7 +783,7 @@ Item {
                                 text: _hiddenRow.expanded ? "󰅃" : "󰅀"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textTertiary
+                                color: Theme.textMuted
                             }
                         }
 
@@ -800,7 +800,7 @@ Item {
                         height: 28
                         radius: 6
                         color: Theme.popupBackground
-                        border.color: Theme.textDim
+                        border.color: Theme.textDisabled
                         border.width: 1
 
                         Text {
@@ -808,7 +808,7 @@ Item {
                             text: "Network name (SSID)"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textDim
+                            color: Theme.textDisabled
                             verticalAlignment: Text.AlignVCenter
                             visible: _hiddenRow.ssidText === ""
                         }
@@ -834,7 +834,7 @@ Item {
                             height: 28
                             radius: 6
                             color: Theme.popupBackground
-                            border.color: Theme.textDim
+                            border.color: Theme.textDisabled
                             border.width: 1
 
                             Text {
@@ -842,7 +842,7 @@ Item {
                                 text: "Password (optional)"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textDim
+                                color: Theme.textDisabled
                                 verticalAlignment: Text.AlignVCenter
                                 visible: _hiddenRow.passwordText === ""
                             }
@@ -863,7 +863,7 @@ Item {
                                 text: _hiddenRow._showPassword ? "󰛐" : "󰛑"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeMedium
-                                color: Theme.textTertiary
+                                color: Theme.textMuted
 
                                 MouseArea {
                                     anchors.fill: parent
@@ -879,7 +879,7 @@ Item {
                             radius: 6
                             opacity: _hiddenRow.ssidText === "" ? 0.4 : 1.0
                             color: _hiddenArea.containsMouse && _hiddenRow.ssidText !== ""
-                                ? Theme.sliderAccentHover : Theme.sliderAccent
+                                ? Theme.accentHover : Theme.accent
 
                             Text {
                                 id: _hiddenConnectLabel

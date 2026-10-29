@@ -45,13 +45,13 @@ Item {
                 width: parent.width
                 height: 4
                 radius: 2
-                color: seekArea.containsMouse && seekBar.canSeek ? Theme.textSecondary : Theme.textDim
+                color: seekArea.containsMouse && seekBar.canSeek ? Theme.textSecondary : Theme.textDisabled
 
                 Rectangle {
                     width: seekBar._fraction * parent.width
                     height: parent.height
                     radius: 2
-                    color: seekArea.containsMouse && seekBar.canSeek ? Theme.sliderAccentHover : Theme.sliderAccent
+                    color: seekArea.containsMouse && seekBar.canSeek ? Theme.accentHover : Theme.accent
                 }
             }
 

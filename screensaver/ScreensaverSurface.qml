@@ -31,7 +31,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "black"
+            color: Theme.scrim
         }
 
         Behavior on opacity {

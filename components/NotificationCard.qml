@@ -11,7 +11,7 @@ Rectangle {
     property bool compactDismiss: false
     property int imageMaxHeight: 120
     property int contentPadding: 10
-    property color replyBackground: Qt.rgba(0, 0, 0, 0.2)
+    property color replyBackground: Theme.surfaceSunken
 
     property bool timerVisible: false
     // Fraction of the auto-dismiss time left, 1 → 0; the owner runs the countdown
@@ -21,7 +21,7 @@ Rectangle {
 
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
     radius: 8
-    color: Theme.cellDefault
+    color: Theme.surface
     clip: true
 
     property var _activeEdit: null
@@ -66,7 +66,7 @@ Rectangle {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 font.bold: true
-                color: Theme.textSubtle
+                color: Theme.textSecondary
                 Layout.fillWidth: true
                 elide: Text.ElideRight
             }
@@ -76,14 +76,14 @@ Rectangle {
                 text: notifCard.timestamp
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                color: Theme.textTertiary
+                color: Theme.textMuted
             }
 
             Text {
                 text: notifCard.compactDismiss ? "×" : "dismiss"
                 font.family: Theme.fontFamily
                 font.pixelSize: notifCard.compactDismiss ? Theme.fontSizeSection : Theme.fontSizeSmall
-                color: notifCard.compactDismiss ? Theme.textSubtle : Theme.textTertiary
+                color: notifCard.compactDismiss ? Theme.textSecondary : Theme.textMuted
 
                 MouseArea {
                     anchors.fill: parent
@@ -114,7 +114,7 @@ Rectangle {
             text: notifCard.notification?.body ?? ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
-            color: Theme.textBody
+            color: Theme.textSecondary
             Layout.fillWidth: true
             wrapMode: TextEdit.WordWrap
             readOnly: true
@@ -152,7 +152,7 @@ Rectangle {
                     implicitWidth: _actionLabel.implicitWidth + 16
                     height: 24
                     radius: 5
-                    color: Theme.sliderAccent
+                    color: Theme.accent
 
                     Text {
                         id: _actionLabel
@@ -193,7 +193,7 @@ Rectangle {
                     text: "Reply…"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textTertiary
+                    color: Theme.textMuted
                     verticalAlignment: Text.AlignVCenter
                     visible: _replyInput.text.length === 0
                 }
@@ -213,7 +213,7 @@ Rectangle {
                 implicitWidth: 48
                 implicitHeight: 28
                 radius: 5
-                color: Theme.sliderAccent
+                color: Theme.accent
 
                 Text {
                     anchors.centerIn: parent
@@ -249,7 +249,7 @@ Rectangle {
                     implicitWidth: _chipRow.implicitWidth + 12
                     height: 26
                     radius: 5
-                    color: _chipArea.containsMouse ? Theme.buttonHover : Theme.cellAccent
+                    color: _chipArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
 
                     Row {
                         id: _chipRow
@@ -303,7 +303,7 @@ Rectangle {
         anchors.right: parent.right
         height: Theme.notifTimerHeight
         width: parent.width * notifCard.timerProgress
-        color: Theme.notifTimerColor
+        color: Theme.accent
         z: 1
     }
 
@@ -317,7 +317,7 @@ Rectangle {
         height: 28
         radius: 6
         z: 1
-        color: _copyArea.containsMouse ? Theme.buttonHover : Theme.cellAccent
+        color: _copyArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
 
         Text {
             anchors.centerIn: parent

@@ -46,7 +46,7 @@ BarWidget {
                 Rectangle {
                     anchors.fill: parent
                     radius: 5
-                    color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.cellHover : "transparent"
+                    color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.surfaceHover : "transparent"
                 }
 
                 Image {

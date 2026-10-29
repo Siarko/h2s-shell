@@ -98,6 +98,12 @@ The ~50 hard-coded `duration:` values move to roles.
 
 1. **Colours in order** (TODO 9.4): the 17 hex and 20 named colours outside Theme move
    in; token names reviewed against the Material You roles.
+   *Done 2026-10-29, verified on the host.* Colours renamed by role (accent, surface,
+   text primary/secondary/muted/disabled, divider, outline, error, warning, success,
+   workspace states, confirm buttons, lock-screen glass, …), with the transparent variants
+   derived in Theme with Qt.alpha. Decided with the user: one green, one red, one blue
+   (the dark workspace green stays a colour of its own, `accentDark`); six text greys
+   become four. Google's calendar colours are account data and stay out of themes.
 2. **Theme files**: Theme resolves default ⊕ extends ⊕ colours file, watched; tests for
    the resolution (partial themes, extends chain, cycles, missing file).
 3. **Theme per profile**: `appearance.theme` setting; migration of bar geometry into

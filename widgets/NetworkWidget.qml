@@ -22,9 +22,9 @@ PopupWidget {
             // the cable is out — dim rather than white, since there is nothing
             // to connect to.
             color: NetworkManager.ethernetConnected
-                ? Theme.sliderAccent
+                ? Theme.accent
                 : NetworkManager.ethernetState === "unavailable"
-                    ? Theme.textDim
+                    ? Theme.textDisabled
                     : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -49,7 +49,7 @@ PopupWidget {
             }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: NetworkManager.wifiConnected ? Theme.sliderAccent : Theme.textPrimary
+            color: NetworkManager.wifiConnected ? Theme.accent : Theme.textPrimary
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -59,7 +59,7 @@ PopupWidget {
             text: VpnManager.activeVpnType === "wireguard" ? "󰒃" : "󰌾"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: Theme.sliderAccent
+            color: Theme.accent
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -71,7 +71,7 @@ PopupWidget {
             text: "󰤭"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: Theme.textDim
+            color: Theme.textDisabled
             anchors.verticalCenter: parent.verticalCenter
         }
     }

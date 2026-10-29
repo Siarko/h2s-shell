@@ -76,7 +76,7 @@ Item {
         height: root.cardHeight
         topLeftRadius: 6
         bottomLeftRadius: 6
-        color: Theme.cellDefault
+        color: Theme.surface
 
         ColumnLayout {
             anchors {
@@ -95,7 +95,7 @@ Item {
                 text: Audio.muted ? "󰖁" : "󰕾"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeHeading
-                color: Audio.muted ? Theme.textDim : Theme.textPrimary
+                color: Audio.muted ? Theme.textDisabled : Theme.textPrimary
             }
 
             // Volume label
@@ -106,7 +106,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
                 font.bold: true
-                color: Audio.volume > 100 ? Theme.textWarning : Theme.textPrimary
+                color: Audio.volume > 100 ? Theme.warning : Theme.textPrimary
             }
 
             // Vertical slider
