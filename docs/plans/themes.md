@@ -202,6 +202,12 @@ The ~50 hard-coded `duration:` values move to roles.
      testing: `Lockscreen.lock()`/`unlock()` had been lost (1a02c55), so the lock never
      came on; and the screensaver's first fade lost its start to the window's first frame
      — the window now maps clear and fades after a frame, like popups.
+     Later fixes: the settings page mark sometimes jumped (it was enabled for a moment
+     by a handler that could run after the position had already changed; now enabled
+     once the list is first laid out). The Bar page looped bindings while editing a
+     profile whose theme is not active: `FileView.text()` is reactive, so resolving a
+     chain of files inside a binding re-triggered it — `Theme.valuesOf` now resolves
+     other themes outside bindings and keeps them until the next reload.
    - The list of candidates is done. Later (the user's idea): variants per element,
      `expand.dictate` falling back to `expand` — and the same for colours.
 5. **Curves**: the library, roles use them by name, the Curves editor page.

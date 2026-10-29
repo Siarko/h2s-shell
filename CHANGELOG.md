@@ -56,6 +56,8 @@ section to the new version and date.
 - The lock screen never came on: locking and unlocking were lost when its settings
   became per profile.
 - The screensaver's first fade after start keeps its full duration.
+- Settings: the selected page's mark always slides (it sometimes jumped), and the Bar page
+  no longer logs binding loops while editing a profile whose theme is not in use.
 - The first opening of a popup no longer loses part of its animation: panels are
   compiled in the background after start, and new content renders once before the
   animation starts (the calendar dropped a third of its frames).

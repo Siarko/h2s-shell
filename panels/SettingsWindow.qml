@@ -64,21 +64,21 @@ FloatingWindow {
                     color: Theme.accentSecondaryTint
                     border.width: 1
                     border.color: Theme.accent
-                    // Only for a change of page: not when the list is first laid out
+                    // Not while the list is first laid out. (Enabled only for a moment
+                    // after a page change, it sometimes missed: the position could update
+                    // before the handler that enabled it ran.)
                     Behavior on y {
-                        enabled: _markSlide.running
+                        enabled: _markSettled.triggeredOnce
                         NumberAnimation { duration: Theme.duration("slide"); easing.type: Theme.easing("slide") }
                     }
                 }
 
                 Timer {
-                    id: _markSlide
-                    interval: Theme.duration("slide") + 50
-                }
-
-                Connections {
-                    target: root
-                    function onSelectedCategoryChanged() { _markSlide.restart() }
+                    id: _markSettled
+                    property bool triggeredOnce: false
+                    interval: 300
+                    running: _categoryRepeater.count > 0
+                    onTriggered: triggeredOnce = true
                 }
 
                 ColumnLayout {

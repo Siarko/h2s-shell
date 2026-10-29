@@ -159,8 +159,9 @@ Singleton {
         return path.replace(/\/[^\/]*$/, "");
     }
 
-    // Reads and parses a JSON file; null when it is missing or broken
-    function _read(path) {
+    // Reads and parses a JSON file; null when it is missing or broken, adding why to
+    // `errors` if given
+    function _read(path, errors) {
         _reader.path = path;
         // The reader keeps what it read last for an unchanged path
         _reader.reload();
@@ -170,20 +171,20 @@ Singleton {
         try {
             return JSON.parse(text);
         } catch (error) {
-            root._readErrors.push(path + ": " + error.message);
+            errors?.push(path + ": " + error.message);
             return null;
         }
     }
 
-    property var _readErrors: []
-
     // Resolves the theme `name`: { values, chain, errors, watched, folders }
     function _resolve(name) {
-        _readErrors = [];
+        // Local, not a property: a property written and read here would make any binding
+        // that ends up calling this loop
+        const readErrors = [];
         const watched = [];
         const folders = [themesDir];
         const readWatched = path => {
-            const parsed = _read(path);
+            const parsed = _read(path, readErrors);
             // A broken file is watched too, so fixing it applies
             if (_reader.text() !== "")
                 watched.push(path);
@@ -206,7 +207,7 @@ Singleton {
         return {
             values: ThemeRules.resolve(builtin, result.chain, palettes),
             chain: result.chain.map(entry => entry.name),
-            errors: result.errors.concat(_readErrors),
+            errors: result.errors.concat(readErrors),
             watched: watched,
             folders: folders
         };
@@ -232,13 +233,38 @@ Singleton {
             _watched = resolved.watched;
         if (JSON.stringify(resolved.folders) !== JSON.stringify(_watchedFolders))
             _watchedFolders = resolved.folders;
+        // Any file may have changed, and with it the other themes asked for
+        const others = {};
+        for (const other in _otherValues)
+            others[other] = _resolve(other).values;
+        _otherValues = others;
         revision++;
     }
 
     // The resolved values of any theme, for editing one that is not active; bind to
-    // `revision` alongside to follow changes
+    // `revision` alongside to follow changes. Themes other than the active one are
+    // resolved outside the caller's binding and kept: FileView.text() is reactive, so
+    // reading a chain of files inside a binding re-triggered it file by file — a binding
+    // loop. Until a theme's values are ready (a moment later), the active ones stand in.
     function valuesOf(name) {
-        return name === themeName ? values : _resolve(name).values;
+        if (name === themeName)
+            return values;
+        const known = _otherValues[name];
+        if (known === undefined) {
+            Qt.callLater(_resolveOther, name);
+            return values;
+        }
+        return known;
+    }
+
+    property var _otherValues: ({})
+
+    function _resolveOther(name) {
+        if (name in _otherValues)
+            return;
+        const others = Object.assign({}, _otherValues);
+        others[name] = _resolve(name).values;
+        _otherValues = others;
     }
 
     // The theme a profile uses when it is active, as the settings window edits it
