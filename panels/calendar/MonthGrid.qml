@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import QtQuick.Layouts
 import qs.components
 import qs.singletons
@@ -143,7 +144,11 @@ Item {
             height: 20
 
             Repeater {
-                model: root.dayNames
+                // ScriptModel, never the bare array — see "The Repeater crash" in
+                // docs/ARCHITECTURE.md; dayNames is an input, set by the parent
+                model: ScriptModel {
+                    values: root.dayNames
+                }
                 Text {
                     required property string modelData
                     width: parent.width / 7

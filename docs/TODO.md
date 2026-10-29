@@ -313,10 +313,13 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [x] **8.7 `Lockscreen`: bind config declaratively** [#10]
       Done with 10.3: Lockscreen binds its settings from Profiles and reapplies its idle
       monitors when they change.
-- [ ] **8.9 Wrap the remaining live `Repeater` models in `ScriptModel`** [#43]
+- [x] **8.9 Wrap the remaining live `Repeater` models in `ScriptModel`** [#43]
       The rule behind the months of random crashes — see ARCHITECTURE.md, "The Repeater
       crash". Bar and the add-widget picker are fixed with 2.2, `HardwarePanel` (the most
       urgent, inside a popup) alongside the GPU fix in 5.1.
+      Done 2026-10-29: the last one, the notification card's action buttons, is wrapped
+      too. The calendar's day names (an input property) got one as well. Every
+      remaining Repeater model is a Quickshell ObjectModel or a ListModel.
 - [ ] **8.8 Show calendar errors in the UI**
       Found while verifying 1.1 on the host. A failed fetch (offline, bad token, API
       error) only reaches the log; the calendar just stays empty, indistinguishable from

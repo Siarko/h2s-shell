@@ -141,7 +141,12 @@ Rectangle {
             Layout.topMargin: 4
 
             Repeater {
-                model: notifCard._regularActions
+                // ScriptModel, never the bare array — see "The Repeater crash" in
+                // docs/ARCHITECTURE.md. The card is reused for the next notification, so
+                // this array is replaced while the card lives.
+                model: ScriptModel {
+                    values: notifCard._regularActions
+                }
                 delegate: Rectangle {
                     required property var modelData
                     implicitWidth: _actionLabel.implicitWidth + 16
@@ -234,9 +239,8 @@ Rectangle {
             visible: (Notifications.extractedCodes[notifCard.notification?.id ?? -1] ?? []).length > 0
 
             Repeater {
-                // ScriptModel diffs old vs. new values so only changed delegates get
-                // added/removed — see MusicPanel.qml for why binding a plain live-model
-                // array straight to Repeater.model was crashing this app.
+                // ScriptModel, never the bare array — see "The Repeater crash" in
+                // docs/ARCHITECTURE.md
                 model: ScriptModel {
                     values: Notifications.extractedCodes[notifCard.notification?.id ?? -1] ?? []
                 }

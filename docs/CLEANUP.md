@@ -658,7 +658,7 @@ binding a recomputed array directly:
 - `panels/BarSectionList.qml:380` — the add-widget picker. Fixed with the widget registry.
 - `panels/HardwarePanel.qml:39` — `_popupSources`, inside a popup panel: the riskiest one. Fixed.
 - `components/NotificationCard.qml:164` — `_regularActions`; the card is used in the
-  notification panel (a popup) and in the HUD.
+  notification panel (a popup) and in the HUD. Fixed.
 - `panels/HardwareSourceList.qml:335` — an inline `.filter()`. Fixed.
 - `panels/WidgetSettingsPane.qml:193` — `_filteredProfiles`. Fixed.
 - `panels/settings/SettingOptions.qml:32` — `options`; usually set once, but a `var`. Fixed.
