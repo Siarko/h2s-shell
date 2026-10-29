@@ -4,7 +4,15 @@ import Quickshell
 import qs.singletons
 import qs.singletons.googlecalendar
 
+// Calendar settings. Enabling the calendar is per profile and its debug log always
+// global; the account (client id and secret, the sign-in) and the chosen calendars are
+// not settings and apply everywhere.
 ColumnLayout {
+    id: root
+
+    // The profile being edited, picked in the settings window
+    property int editIndex: -1
+
     anchors {
         fill: parent
         margins: 14
@@ -40,10 +48,9 @@ ColumnLayout {
         Layout.bottomMargin: 4
     }
 
-    SettingBool {
-        label: "Enable Google Calendar"
-        value: Config.gcal.enabled
-        onValueChanged: Config.gcal.enabled = value
+    SchemaSettingEditor {
+        key: "gcal.enabled"
+        editIndex: root.editIndex
     }
 
     // Connection status row
@@ -299,10 +306,9 @@ ColumnLayout {
         opacity: 0.3
     }
 
-    SettingBool {
-        label: "Debug Mode"
-        value: Config.gcal.debug ?? false
-        onValueChanged: Config.gcal.debug = value
+    SchemaSettingEditor {
+        key: "gcal.debug"
+        editIndex: root.editIndex
     }
 
     Item {

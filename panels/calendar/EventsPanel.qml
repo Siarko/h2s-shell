@@ -45,7 +45,7 @@ Item {
     }
 
     readonly property string _statusMessage: {
-        if (Config.gcal.enabled && !GoogleCalendarAuth.isAuthorized)
+        if ((Profiles.value("gcal.enabled") ?? true) && !GoogleCalendarAuth.isAuthorized)
             return "Google Calendar connected but not authorized";
         return "";
     }

@@ -166,6 +166,7 @@ verified on the host before the next.
 6. **Calendar:** gcal.enabled (per profile) and gcal.debug (global); credentials and
    tokens untouched. Note: today `gcal.enabled` only changes a status message — the sync
    ignores it; making the sync honour it is filed in TODO, not done here.
+   *Done 2026-10-29, verified on the host* (TODO 8.10 filed for the sync).
 
 ### Stage 4 — the bar
 

@@ -319,6 +319,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       with a retry. While there: a retry after a failed init fetches `calendarList`
       twice, and the status-0 error message ends in an empty `data:`.
 
+- [ ] **8.10 "Enable Google Calendar" does nothing but change a message**
+      Found 2026-10-29 while moving it into profiles. `gcal.enabled` is read only by
+      `panels/calendar/EventsPanel.qml` for its status text; `GoogleCalendar` syncs
+      regardless. Now that it is a per-profile setting (e.g. off in Power save), the sync,
+      the token refresh and the calendar panel should honour it.
+
 ## Stage 9 — Hygiene, opportunistic  [P7]
 
 - [ ] **9.1 Route `console.log` through `Logger`** [#35]

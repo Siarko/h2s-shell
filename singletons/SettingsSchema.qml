@@ -95,6 +95,12 @@ Singleton {
         { key: "stt.debug", label: "Debug log", group: "stt",
           type: "bool", default: false, global: true, legacy: ["stt", "debug"] },
 
+        // ── Calendar ── (the account, tokens and chosen calendars stay in Config.gcal)
+        { key: "gcal.enabled", label: "Enable Google Calendar", group: "calendar",
+          type: "bool", default: true, legacy: ["gcal", "enabled"] },
+        { key: "gcal.debug", label: "Debug Mode", group: "calendar",
+          type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
+
         // ── Performance ──
         { key: "polling.hardware.interval", label: "Hardware", group: "performance",
           type: "interval", min: 0, max: 600000, default: 2000 },

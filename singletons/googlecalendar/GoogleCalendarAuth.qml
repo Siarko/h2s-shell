@@ -21,7 +21,7 @@ Singleton {
 
     Logger {
         id: logger
-        enabled: Config.gcal.debug
+        enabled: Profiles.value("gcal.debug") ?? false
         prefix: "[GoogleCalendar: Auth]"
     }
 
