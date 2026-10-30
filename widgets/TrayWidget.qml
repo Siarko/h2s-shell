@@ -13,6 +13,9 @@ BarWidget {
     property var popup: null
 
     interactive: false
+
+    // The icon whose menu opened last, so the next menu slides in from its side
+    property int _lastMenuIndex: 0
     cellColor: "transparent"
     horizontalPadding: 0
     // An empty tray takes no space
@@ -37,7 +40,7 @@ BarWidget {
 
                 readonly property bool menuOpen: !!root.popup?.active
                     && root.popup?.contentType === "tray-menu"
-                    && Tray.menuHandle === modelData.menu
+                    && root.popup?.contentData?.menu === modelData.menu
 
                 // Grows in from nothing, so the icons beside it slide aside rather than jump
                 width: 0
@@ -80,9 +83,9 @@ BarWidget {
                             if (trayDelegate.menuOpen) {
                                 root.popup.close()
                             } else {
-                                Tray.calculateDirection(trayDelegate.index)
-                                Tray.menuHandle = item.menu
-                                root.popup.open(trayDelegate, true, "tray-menu")
+                                const direction = trayDelegate.index < root._lastMenuIndex ? -1 : 1
+                                root._lastMenuIndex = trayDelegate.index
+                                root.popup.open(trayDelegate, true, "tray-menu", { menu: item.menu, direction: direction })
                             }
                         } else if (!item.onlyMenu) {
                             item.activate()

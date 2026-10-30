@@ -385,7 +385,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       and explained. Fixed on the way: the direction was taken before the event was added,
       so the first notch, and the first after turning back, went the wrong way.
       `tests/ScrollNotchesTest.qml`.
-- [ ] **9.6 Move tray slide state out of the `Tray` singleton** [#20]
+- [x] **9.6 Move tray slide state out of the `Tray` singleton** [#20]
+      Done 2026-10-30: `singletons/Tray.qml` removed. `Popup.open()` takes a `contentData`,
+      per popup (so per screen); the tray icon passes `{ menu, direction }`, working out
+      the direction from the icon it opened last, and `TrayMenu.request` reads it.
 - [x] **9.7 Implement or remove the screensaver exec commands** [#37]
       Config and UI exist; nothing runs them, so it looks finished to the user.
       Implemented 2026-10-29, verified on the host: schema settings (per profile), run with
@@ -405,6 +408,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Found 2026-10-29; harmless, predates the themes work.
       Done 2026-10-30: the editor's items are the value only for a `stringList`; after
       opening the Bar, General and Notifications pages the log has no such warning.
+- [ ] **9.10 A tray menu opening fresh slides in from the right** (reported 2026-10-30)
+      Opening a tray menu with no popup open (not switching from another icon's menu),
+      the menu slides in sideways from the right, as a switch would. It should come in
+      from the bar's side, the way the other popups open. Switching between tray icons'
+      menus stays as it is (from the side of the icon clicked), and so does going into
+      a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
+      `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
+      open should show the menu in place and leave the entrance to the popup.
 
 ## Stage 10 — Requested features
 

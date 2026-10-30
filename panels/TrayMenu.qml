@@ -14,30 +14,34 @@ Item {
     implicitHeight: activeSlot === 0 ? slot0.implicitHeight : slot1.implicitHeight
     clip: true
 
+    // The menu to show and the way it slides in: { menu, direction } (1 from the right,
+    // -1 from the left), from the tray icon that was clicked. A new object for every
+    // click, so another icon's menu, opened over this one, slides in.
+    property var request: null
+    // Only once built: the first menu is shown by Component.onCompleted, and the request
+    // set while building must not start a second transition. Nor for no request: the
+    // popup switching to another panel clears it, and this menu stays on screen until
+    // the new panel replaces it.
+    onRequestChanged: if (_built && request) changeMenu()
+    property bool _built: false
+
     property var menuStack: []
 
     // Which slot is currently the "active" (fully visible) one.
     // 0 → slot0/opener0 is showing, 1 → slot1/opener1 is showing.
     property int activeSlot: 0
 
-    // Reset when a new top-level menu is opened
     Component.onCompleted: {
         changeMenu();
-    }
-
-    Connections {
-        target: Tray
-        function onMenuHandleChanged() {
-            root.changeMenu();
-        }
+        _built = true;
     }
 
     function changeMenu() {
         root.menuStack = [];
-        anchorOpener.menu = Tray.menuHandle;
+        anchorOpener.menu = root.request?.menu ?? null;
         const next = root.activeSlot === 0 ? opener1 : opener0;
-        next.menu = Tray.menuHandle;
-        root.beginTransition(Tray.slideDirection);
+        next.menu = root.request?.menu ?? null;
+        root.beginTransition(root.request?.direction ?? 1);
     }
 
     // Navigate into a submenu entry.

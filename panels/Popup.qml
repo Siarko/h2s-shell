@@ -24,6 +24,9 @@ LazyLoader {
     // Which content the popup shows: a widget type, whose panel WidgetRegistry gives, or
     // one of the contents wired here ("tray-menu", "notifications" — see _componentMap)
     property string contentType: "calendar"
+    // What the content needs to know beyond its type, given to open(): the tray menu's
+    // { menu, direction }. Kept per popup, so each screen's bar has its own.
+    property var contentData: null
 
     // The panel on screen, reported to Profiles for its "panel.open" fact. Closed from the
     // moment the close animation starts.
@@ -51,9 +54,10 @@ LazyLoader {
     }
 
     // Open the popup aligned to the given element
-    function open(element, persistent = false, contentType = "calendar") {
+    function open(element, persistent = false, contentType = "calendar", contentData = null) {
         popupLoader.persistent = persistent;
         popupLoader.contentType = contentType;
+        popupLoader.contentData = contentData;
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = mapped.x;
         popupLoader.popupWidth = element.width;
@@ -344,6 +348,7 @@ LazyLoader {
                     Component {
                         id: trayMenuComponent
                         TrayMenu {
+                            request: popupLoader.contentData
                             onCloseRequested: popupLoader.close()
                         }
                     }
