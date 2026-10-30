@@ -50,9 +50,13 @@ section to the new version and date.
   Curves can have more points: double-click the curve to add one, select a point to
   type its position, remove it, or switch off "Smooth" for a corner there.
 
-- Settings → Appearance: a group of pages that edit a theme rather than a profile — the
-  sidebar's profile list gives way to the list of themes. Its first page, Themes, shows
-  who uses the picked theme and what is wrong with it, sets what it extends, and makes a
+- Settings has two tabs: Behaviour, whose pages edit a profile (picked at the top of the
+  sidebar, which also says which theme that profile uses, a click away), and Appearance,
+  whose pages edit a theme (picked the same way, starting at the edited profile's theme,
+  saying which profiles use it, with "Preview" to try the theme on the whole shell while
+  editing it — saved nowhere, the theme list locked meanwhile, ended by "Stop preview",
+  leaving Appearance or closing the window). Appearance's first page, Themes, shows who
+  uses the picked theme and what is wrong with it, sets what it extends, and makes a
   new theme (extending it, or as a copy), renames it (themes and profiles follow) or
   deletes it (asking first; profiles using it go back to the default theme). Curves moved
   into the group.

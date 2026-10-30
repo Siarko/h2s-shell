@@ -499,7 +499,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       library, profiles pick one), behaviour stays in the profile; custom animation curves
       with an editor; an Appearance section in settings; matugen-ready colours. Absorbs
       10.1 and 9.4.
-- [ ] **10.10 Settings window: make "editing a profile" and "editing a theme" clear**
+- [x] **10.10 Settings window: make "editing a profile" and "editing a theme" clear**
       (reported 2026-10-30, while testing themes stage 6a)
       The window edits two kinds of thing: behaviour pages edit a profile, Appearance
       pages (Themes, Curves, later Colors, Fonts, Bar, Animations) edit a theme. Both
@@ -512,6 +512,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       sections, each with its own picker; showing the link — "Full uses theme X", jump to
       it — on both sides; the theme picker on Appearance pages defaulting to the theme of
       the profile being edited.
+      Decided 2026-10-30: two tabs at the top of the window, Behaviour and Appearance,
+      each with its own picker at the top of the sidebar (profile / theme, a list that
+      opens under it) and the link shown on both sides ("Uses theme X ↗" / "Used by …");
+      entering Appearance starts at the theme of the profile being edited. Added at the
+      user's request: "Preview" (`Theme.preview`, shown over the profile's
+      theme; the theme list locked meanwhile, not offered for the theme in use, ended by
+      "Stop preview", leaving Appearance or closing the window). Verified on the host
+      2026-10-30.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

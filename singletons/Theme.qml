@@ -125,7 +125,11 @@ Singleton {
     })
 
     // ---- Resolution ----
-    readonly property string themeName: Profiles.value("appearance.theme") || "default"
+    // The theme the active profile picks, and the one shown: that, unless a theme is being
+    // previewed from the settings window (a test, saved nowhere)
+    readonly property string profileTheme: Profiles.value("appearance.theme") || "default"
+    property string preview: ""
+    readonly property string themeName: preview !== "" ? preview : profileTheme
     // Where theme files live, next to the config
     readonly property string themesDir: Config.path.toString().replace(/^file:\/\//, "")
         .replace(/\/[^\/]*$/, "") + "/themes"

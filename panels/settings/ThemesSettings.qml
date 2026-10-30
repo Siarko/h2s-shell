@@ -181,7 +181,7 @@ Flickable {
         }
         spacing: 10
 
-        Heading { text: root.themeName + (root.themeName === Theme.themeName ? " (in use)" : "") }
+        Heading { text: root.themeName + (root.themeName === Theme.profileTheme ? " (in use)" : "") }
         Hint {
             text: "A theme is how the shell looks: colours, fonts, the bar's shape, animations. Profiles pick one (General → Theme). "
                 + "What a theme does not set comes from the theme it extends. Files in "
