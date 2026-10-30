@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
 Item {
@@ -43,25 +44,12 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                Rectangle {
+                InputField {
+                    id: _formatInput
                     Layout.fillWidth: true
-                    // As tall as a line of its text, never less than 22 px
-                    height: Math.max(22, _formatInput.implicitHeight + 6)
-                    radius: 6
-                    color: Theme.surface
-
-                    TextInput {
-                        id: _formatInput
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        text: _currentFormat
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        verticalAlignment: TextInput.AlignVCenter
-                        clip: true
-                        onEditingFinished: _saveFormat(text.trim())
-                        onActiveFocusChanged: if (!activeFocus) text = _currentFormat
-                    }
+                    text: _currentFormat
+                    onEditingFinished: _saveFormat(text.trim())
+                    onEditingChanged: if (!editing) text = _currentFormat
                 }
             }
         }

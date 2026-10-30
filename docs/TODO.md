@@ -550,6 +550,15 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       how the exclusive zone behaves for a floating bar, how popups join an island (their
       curved corners assume a bar running to its ends; see 8.12 for the margin case), and
       animation when the island resizes. Related to 10.12 (position) and themes stage 7.
+- [ ] **10.14 Explore styling with CSS-like selectors** (requested 2026-10-30; after the
+      themes plan is finished)
+      Themes today set values per element kind (`button.radius`, `osdToast.padding`, …,
+      themes stage 7). Explore going further: styling by something like CSS selectors —
+      targeting an element by kind, place and state (e.g. `popup button:hover`,
+      `bar .clock`, `osdToast.critical`), with cascading and specificity — and what it
+      would take in QML (element identity, a resolver, live updates, cost). Exploration
+      only; to discuss with the user before any design. Related: the user's earlier idea
+      of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

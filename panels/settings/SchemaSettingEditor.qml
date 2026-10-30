@@ -237,31 +237,20 @@ Item {
             visible: root.entry?.type === "number"
             spacing: 6
 
-            Rectangle {
+            InputField {
+                id: _numberInput
                 width: 90
-                height: 26
-                radius: 6
-                color: Theme.surface
-                border.width: _numberInput.activeFocus && !_numberInput.acceptableInput ? 1 : 0
-                border.color: Theme.error
-
-                TextInput {
-                    id: _numberInput
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    text: root.shownValue ?? ""
-                    opacity: root._dimmed && !activeFocus ? 0.5 : 1
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: acceptableInput ? Theme.textPrimary : Theme.error
-                    verticalAlignment: TextInput.AlignVCenter
-                    inputMethodHints: Qt.ImhDigitsOnly
-                    validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
-                    onEditingFinished: {
-                        if (acceptableInput && parseInt(text) !== root.shownValue)
-                            root.edited(parseInt(text));
-                    }
-                    onActiveFocusChanged: if (!activeFocus) text = Qt.binding(() => root.shownValue ?? "")
+                readonly property bool acceptableInput: input.acceptableInput
+                text: root.shownValue ?? ""
+                opacity: root._dimmed && !editing ? 0.5 : 1
+                problem: editing && !acceptableInput
+                input.inputMethodHints: Qt.ImhDigitsOnly
+                input.validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
+                onEditingFinished: {
+                    if (acceptableInput && parseInt(text) !== root.shownValue)
+                        root.edited(parseInt(text));
                 }
+                onEditingChanged: if (!editing) text = Qt.binding(() => root.shownValue ?? "")
             }
 
             Text {
@@ -322,25 +311,12 @@ Item {
                     width: _listEditor.width
                     spacing: 4
 
-                    Rectangle {
+                    InputField {
                         width: _listRow.width - 28
-                        height: 26
-                        radius: 6
-                        color: Theme.surface
-
-                        TextInput {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            text: _listRow.modelData.text
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                            verticalAlignment: TextInput.AlignVCenter
-                            selectByMouse: true
-                            clip: true
-                            onEditingFinished: {
-                                if (text !== _listRow.modelData.text)
-                                    _listEditor.replaced(_listRow.modelData.index, text);
-                            }
+                        text: _listRow.modelData.text
+                        onEditingFinished: {
+                            if (text !== _listRow.modelData.text)
+                                _listEditor.replaced(_listRow.modelData.index, text);
                         }
                     }
 
@@ -383,82 +359,63 @@ Item {
             width: parent.width
             spacing: 2
 
-            Rectangle {
+            InputField {
+                id: _textInput
                 width: parent.width
-                height: 26
-                radius: 6
-                color: Theme.surface
-                border.width: 1
-                border.color: _textInput.activeFocus ? Theme.accent : Theme.surfaceHoverClear
-                Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-                TextInput {
-                    id: _textInput
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    text: root.shownValue ?? ""
-                    opacity: root._dimmed && !activeFocus ? 0.5 : 1
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    verticalAlignment: TextInput.AlignVCenter
-                    selectByMouse: true
-                    clip: true
-                    // The suggestions that match what is typed, and the one picked with the
-                    // arrow keys (-1: none)
-                    readonly property var matches: root._suggestions.filter(name => name.toLowerCase().includes(text.trim().toLowerCase()))
-                    property int highlighted: -1
-                    onTextEdited: highlighted = -1
-                    onEditingFinished: {
-                        if (text !== root.shownValue)
-                            root.edited(text);
-                    }
-                    // Back to the stored value when focus leaves without a change being saved
-                    onActiveFocusChanged: {
-                        highlighted = -1;
-                        if (!activeFocus)
-                            text = Qt.binding(() => root.shownValue ?? "");
-                    }
-
-                    function pick(name) {
-                        text = name;
-                        if (name !== root.shownValue)
-                            root.edited(name);
-                        focus = false;
-                    }
-
-                    Keys.onDownPressed: event => {
-                        if (matches.length === 0)
-                            return event.accepted = false;
-                        highlighted = (highlighted + 1) % matches.length;
-                    }
-                    Keys.onUpPressed: event => {
-                        if (matches.length === 0)
-                            return event.accepted = false;
-                        highlighted = highlighted <= 0 ? matches.length - 1 : highlighted - 1;
-                    }
-                    Keys.onReturnPressed: event => {
-                        if (highlighted >= 0 && highlighted < matches.length)
-                            pick(matches[highlighted]);
-                        else
-                            event.accepted = false;
-                    }
-                    Keys.onEscapePressed: focus = false
+                text: root.shownValue ?? ""
+                opacity: root._dimmed && !editing ? 0.5 : 1
+                // The suggestions that match what is typed, and the one picked with the arrow keys
+                // (-1: none)
+                readonly property var matches: root._suggestions.filter(name => name.toLowerCase().includes(text.trim().toLowerCase()))
+                property int highlighted: -1
+                onTextEdited: highlighted = -1
+                onEditingFinished: {
+                    if (text !== root.shownValue)
+                        root.edited(text);
                 }
+                // Back to the stored value when focus leaves without a change being saved
+                onEditingChanged: {
+                    highlighted = -1;
+                    if (!editing)
+                        text = Qt.binding(() => root.shownValue ?? "");
+                }
+
+                function pick(name) {
+                    text = name;
+                    if (name !== root.shownValue)
+                        root.edited(name);
+                    input.focus = false;
+                }
+
+                // Up and Down come here from the input, which does not use them; Return picks
+                // through `accepted`
+                Keys.onDownPressed: event => {
+                    if (matches.length === 0)
+                        return event.accepted = false;
+                    highlighted = (highlighted + 1) % matches.length;
+                }
+                Keys.onUpPressed: event => {
+                    if (matches.length === 0)
+                        return event.accepted = false;
+                    highlighted = highlighted <= 0 ? matches.length - 1 : highlighted - 1;
+                }
+                onAccepted: {
+                    if (highlighted >= 0 && highlighted < matches.length)
+                        pick(matches[highlighted]);
+                }
+                Keys.onEscapePressed: input.focus = false
             }
 
-            // The matching suggestions; picked on press, as the field keeps its focus
-            Rectangle {
-                visible: _textInput.activeFocus && _textInput.matches.length > 0
-                width: parent.width
-                height: _suggestionList.height + 6
-                radius: 6
-                color: Theme.surfaceSunken
+            // The matching suggestions, floating under the field; picked on press, as the
+            // field keeps its focus. A press elsewhere closes them with the field.
+            FloatingList {
+                anchorItem: _textInput
+                open: _textInput.editing && _textInput.matches.length > 0
+                onClosed: _textInput.input.focus = false
 
                 Column {
                     id: _suggestionList
-                    x: 3
-                    y: 3
-                    width: parent.width - 6
+                    width: parent.width
 
                     Repeater {
                         // ScriptModel, never the bare array — see "The Repeater crash"
@@ -496,7 +453,7 @@ Item {
 
             // A value the suggestions do not know, e.g. a theme without a file
             Text {
-                visible: root._suggestions.length > 0 && !_textInput.activeFocus
+                visible: root._suggestions.length > 0 && !_textInput.editing
                     && (root.shownValue ?? "") !== "" && !root._suggestions.includes(root.shownValue)
                 width: parent.width
                 wrapMode: Text.WordWrap

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
 Item {
@@ -120,51 +121,31 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                Rectangle {
+                InputField {
+                    id: _widthInput
                     Layout.fillWidth: true
-                    // As tall as a line of its text, never less than 22 px
-                    height: Math.max(22, _widthInput.implicitHeight + 6)
-                    radius: 6
-                    color: Theme.surface
-
-                    TextInput {
-                        id: _widthInput
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        text: root._widthOverride === undefined ? "" : String(root._widthOverride)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        verticalAlignment: TextInput.AlignVCenter
-                        // No IntValidator: it marks an empty field unacceptable, which
-                        // would stop editingFinished from firing and leave the user
-                        // unable to clear the override back to the global value.
-                        inputMethodHints: Qt.ImhDigitsOnly
-                        clip: true
-                        onEditingFinished: {
-                            var entered = text.trim()
-                            if (entered === "") {
-                                root._saveKey("previewWidth", undefined)
-                                return
-                            }
-                            var parsed = parseInt(entered)
-                            if (isNaN(parsed)) {
-                                text = root._widthOverride === undefined ? "" : String(root._widthOverride)
-                                return
-                            }
-                            root._saveKey("previewWidth", Math.max(0, Math.min(600, parsed)))
+                    text: root._widthOverride === undefined ? "" : String(root._widthOverride)
+                    placeholder: (Profiles.value("stt.previewWidth") ?? 180) + " px (inherited)"
+                    // No IntValidator: it marks an empty field unacceptable, which
+                    // would stop editingFinished from firing and leave the user
+                    // unable to clear the override back to the global value.
+                    input.inputMethodHints: Qt.ImhDigitsOnly
+                    onEditingFinished: {
+                        var entered = text.trim()
+                        if (entered === "") {
+                            root._saveKey("previewWidth", undefined)
+                            return
                         }
-                        onActiveFocusChanged: if (!activeFocus)
+                        var parsed = parseInt(entered)
+                        if (isNaN(parsed)) {
                             text = root._widthOverride === undefined ? "" : String(root._widthOverride)
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: _widthInput.text === "" && !_widthInput.activeFocus
-                            text: (Profiles.value("stt.previewWidth") ?? 180) + " px (inherited)"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textMuted
+                            return
                         }
+                        root._saveKey("previewWidth", Math.max(0, Math.min(600, parsed)))
                     }
+                    onEditingChanged: if (!editing)
+                        text = root._widthOverride === undefined ? "" : String(root._widthOverride)
+
                 }
             }
         }

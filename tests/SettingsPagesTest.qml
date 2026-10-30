@@ -1,6 +1,7 @@
 import QtQuick
 
-// The settings window and every page and control under panels/settings must compile. A
+// The settings window and every page and control under panels/settings must compile, and
+// the forms that load only when opened (the calendar's event form). A
 // page is only loaded when its sidebar entry is clicked, so a broken one otherwise goes
 // unnoticed until then.
 TestCase {
@@ -9,6 +10,8 @@ TestCase {
     readonly property var _files: [
         "panels/SettingsWindow.qml",
         "panels/BarSectionList.qml",
+        "panels/calendar/EventForm.qml",
+        "panels/calendar/TimeField.qml",
         "panels/HardwareSourceList.qml",
         "panels/WidgetSettingsPane.qml",
         "panels/settings/AnimationsSettings.qml",

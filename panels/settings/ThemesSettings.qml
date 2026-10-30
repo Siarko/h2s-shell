@@ -58,41 +58,8 @@ Flickable {
         color: Theme.textSecondary
     }
 
-    // A one-line text field
-    component Field: Rectangle {
-        property alias text: _fieldInput.text
-        property alias input: _fieldInput
-        property string placeholder
-        property bool problem: false
-        signal accepted
-
+    component Field: InputField {
         Layout.fillWidth: true
-        height: 26
-        radius: 6
-        color: Theme.surface
-        border.width: 1
-        border.color: problem ? Theme.error : (_fieldInput.activeFocus ? Theme.accent : Theme.surfaceHoverClear)
-        Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-        TextInput {
-            id: _fieldInput
-            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-            verticalAlignment: TextInput.AlignVCenter
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            color: Theme.textPrimary
-            selectByMouse: true
-            clip: true
-            onAccepted: parent.accepted()
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                visible: parent.text === "" && !parent.activeFocus
-                text: parent.parent.placeholder
-                font: parent.font
-                color: Theme.glassTextMuted
-            }
-        }
     }
 
     ColumnLayout {

@@ -266,6 +266,9 @@ LazyLoader {
 
                 Rectangle {
                     id: content
+                    // Floating lists (FloatingList) open over the panel here, inside the
+                    // popup, where clicks reach them
+                    objectName: "overlayHost"
                     anchors.top: parent.top
                     anchors.left: popup.roundingLeft ? leftCurve.right : parent.left
                     anchors.right: popup.roundingRight ? rightCurve.left : parent.right

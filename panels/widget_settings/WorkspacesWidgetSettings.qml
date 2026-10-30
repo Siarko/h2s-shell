@@ -99,30 +99,13 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                Rectangle {
+                InputField {
+                    id: _titleInput
                     Layout.fillWidth: true
-                    // As tall as a line of its text, never less than 22 px
-                    height: Math.max(22, _titleInput.implicitHeight + 6)
-                    radius: 6
-                    color: Theme.surface
-
-                    TextInput {
-                        id: _titleInput
-                        anchors {
-                            fill: parent
-                            leftMargin: 8
-                            rightMargin: 8
-                        }
-                        text: _currentTitle
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        verticalAlignment: TextInput.AlignVCenter
-                        clip: true
-                        onEditingFinished: _saveTitle(text.trim())
-                        onActiveFocusChanged: if (!activeFocus)
-                            text = _currentTitle
-                    }
+                    text: _currentTitle
+                    onEditingFinished: _saveTitle(text.trim())
+                    onEditingChanged: if (!editing)
+                        text = _currentTitle
                 }
             }
         }
@@ -208,36 +191,19 @@ Item {
                     }
                     spacing: 4
 
-                    Rectangle {
+                    InputField {
+                        id: _sysInput
                         width: 200
-                        // As tall as a line of its text, never less than 22 px
-                        height: Math.max(22, _sysInput.implicitHeight + 6)
-                        radius: 6
-                        color: Theme.surface
-
-                        TextInput {
-                            id: _sysInput
-                            anchors {
-                                fill: parent
-                                leftMargin: 6
-                                rightMargin: 6
-                            }
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                            verticalAlignment: TextInput.AlignVCenter
-                            clip: true
-                            Component.onCompleted: text = _mapRow.system
-                            onEditingFinished: {
-                                _nameMapModel.set(_mapRow.index, {
-                                    system: text.trim(),
-                                    custom: _custInput.text
-                                });
-                                _saveNameMap();
-                            }
-                            onActiveFocusChanged: if (!activeFocus)
-                                text = _mapRow.system
+                        Component.onCompleted: text = _mapRow.system
+                        onEditingFinished: {
+                            _nameMapModel.set(_mapRow.index, {
+                                system: text.trim(),
+                                custom: _custInput.text
+                            });
+                            _saveNameMap();
                         }
+                        onEditingChanged: if (!editing)
+                            text = _mapRow.system
                     }
 
                     Text {
@@ -247,36 +213,19 @@ Item {
                         color: Theme.textDisabled
                     }
 
-                    Rectangle {
+                    InputField {
+                        id: _custInput
                         Layout.fillWidth: true
-                        // As tall as a line of its text, never less than 22 px
-                        height: Math.max(22, _custInput.implicitHeight + 6)
-                        radius: 6
-                        color: Theme.surface
-
-                        TextInput {
-                            id: _custInput
-                            anchors {
-                                fill: parent
-                                leftMargin: 6
-                                rightMargin: 6
-                            }
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                            verticalAlignment: TextInput.AlignVCenter
-                            clip: true
-                            Component.onCompleted: text = _mapRow.custom
-                            onEditingFinished: {
-                                _nameMapModel.set(_mapRow.index, {
-                                    system: _sysInput.text,
-                                    custom: text.trim()
-                                });
-                                _saveNameMap();
-                            }
-                            onActiveFocusChanged: if (!activeFocus)
-                                text = _mapRow.custom
+                        Component.onCompleted: text = _mapRow.custom
+                        onEditingFinished: {
+                            _nameMapModel.set(_mapRow.index, {
+                                system: _sysInput.text,
+                                custom: text.trim()
+                            });
+                            _saveNameMap();
                         }
+                        onEditingChanged: if (!editing)
+                            text = _mapRow.custom
                     }
 
                     Rectangle {

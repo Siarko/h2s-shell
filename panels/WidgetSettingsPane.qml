@@ -108,38 +108,16 @@ Item {
                 }
 
                 // A new preset, stored as soon as it is named
-                Rectangle {
+                InputField {
+                    id: _newPreset
                     width: 120
-                    height: 24
-                    radius: 6
-                    color: Theme.surface
-
-                    TextInput {
-                        id: _newPreset
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        verticalAlignment: TextInput.AlignVCenter
-                        selectByMouse: true
-                        clip: true
-                        onAccepted: {
-                            const name = text.trim()
-                            text = ""
-                            focus = false
-                            if (name !== "" && name !== root.currentPreset)
-                                root._assignNew(name)
-                        }
-                    }
-
-                    Text {
-                        anchors { fill: parent; leftMargin: 8 }
-                        verticalAlignment: Text.AlignVCenter
-                        visible: _newPreset.text === "" && !_newPreset.activeFocus
-                        text: "+ New preset"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textDisabled
+                    placeholder: "+ New preset"
+                    onAccepted: {
+                        const name = text.trim()
+                        text = ""
+                        input.focus = false
+                        if (name !== "" && name !== root.currentPreset)
+                            root._assignNew(name)
                     }
                 }
             }
@@ -186,37 +164,23 @@ Item {
 
             Item { Layout.preferredWidth: 60 }
 
-            Rectangle {
+            InputField {
+                id: _renameInput
                 visible: root._renaming
                 Layout.fillWidth: true
-                height: 24
-                radius: 6
-                color: Theme.surface
-                border.width: _renameInput.taken ? 1 : 0
-                border.color: Theme.error
-
-                TextInput {
-                    id: _renameInput
-                    // Another preset of this type already has the name
-                    readonly property bool taken: text.trim() !== root.currentPreset
-                        && root._knownPresets.includes(text.trim())
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: taken ? Theme.error : Theme.textPrimary
-                    verticalAlignment: TextInput.AlignVCenter
-                    selectByMouse: true
-                    clip: true
-                    onAccepted: {
-                        const name = text.trim()
-                        if (name === root.currentPreset || name === "") {
-                            root._renaming = false
-                        } else if (!taken && WidgetPresets.rename(root.widgetType, root.currentPreset, name)) {
-                            root._renaming = false
-                        }
+                // Another preset of this type already has the name
+                readonly property bool taken: text.trim() !== root.currentPreset
+                    && root._knownPresets.includes(text.trim())
+                problem: taken
+                onAccepted: {
+                    const name = text.trim()
+                    if (name === root.currentPreset || name === "") {
+                        root._renaming = false
+                    } else if (!taken && WidgetPresets.rename(root.widgetType, root.currentPreset, name)) {
+                        root._renaming = false
                     }
-                    Keys.onEscapePressed: root._renaming = false
                 }
+                Keys.onEscapePressed: root._renaming = false
             }
 
             SmallButton {
@@ -228,8 +192,7 @@ Item {
                     _deletePreset.asking = false
                     if (root._renaming) {
                         _renameInput.text = root.currentPreset
-                        _renameInput.forceActiveFocus()
-                        _renameInput.selectAll()
+                        _renameInput.focusAll()
                     }
                 }
             }

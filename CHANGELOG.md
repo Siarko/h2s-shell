@@ -83,6 +83,17 @@ section to the new version and date.
   and a preview that plays it; drafts like the other theme pages.
 
 ### Changed
+- Dropdowns and pickers float over the content instead of pushing it down: the event
+  form's repeat frequency and calendar, the Bar page's "+ Add widget", the hardware
+  sources' "+ Add source", the Theme setting's suggestions. They open upwards when there
+  is no room below, and a click elsewhere closes them.
+- Text fields are one shared component everywhere (settings, Wi-Fi, the event form, the
+  colour and curve editors): the same look, focus outline and placeholder; password
+  fields have an eye to show what is typed.
+- The event form's time fields: "HH" and "MM" placeholders in their own segments; one
+  minute digit means tens ("3" → 30), one hour digit that hour ("1" → 01), also when
+  clicking away; an hour that can only be one digit moves straight on ("7" → 07); Up and
+  Down step the value; Backspace in empty minutes goes back to the hours.
 - Buttons, pills and switches are shared components everywhere: the Network, Bluetooth
   and calendar settings buttons, the preset and choice pills, the event form's choices,
   every on/off switch, the slider's tooltip. Small changes follow: Network VPN, scan and

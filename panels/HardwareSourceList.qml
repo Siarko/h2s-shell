@@ -329,6 +329,7 @@ Item {
                 }
 
                 Item {
+                    id: _addRow
                     width: _container.width
                     height: 32
 
@@ -343,18 +344,15 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: _picker.visible = !_picker.visible
+                        onClicked: _picker.open = !_picker.open
                     }
                 }
 
-                Rectangle {
+                // The add-picker, floating over what is below rather than pushing it down
+                FloatingList {
                     id: _picker
-                    visible: false
-                    width: parent.width
-                    implicitHeight: _pickerCol.implicitHeight + 8
-                    color: Theme.surfaceSunken
-                    radius: 6
-                    z: 10
+                    anchorItem: _addRow
+                    onClosed: open = false
 
                     Column {
                         id: _pickerCol
@@ -366,7 +364,7 @@ Item {
                             var list = [..._rowList.workingList, sourceId]
                             _rowList.workingList = list
                             _rowList.notifyListChanged(list)
-                            _picker.visible = false
+                            _picker.open = false
                         }
 
                         Repeater {

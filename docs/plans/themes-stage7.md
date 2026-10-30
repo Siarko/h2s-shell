@@ -150,3 +150,28 @@ disconnecting the Google account go through `DeleteButton`. Removed as unused:
 for 7b to decide: the event form's Save and Cancel (Save is coloured by `confirm` /
 `confirmSecondary`, adding vs editing), the settings tabs, the notification card's
 controls. Still to do in 7a: a shared text field.
+
+*7a, text fields, 2026-10-30, verified on the host:* `components/InputField.qml` (box,
+placeholder, focus and problem outline, height from the text, password with an eye whose
+state the owner may keep) in place of the hand-made fields: the schema editor's text,
+number and list fields, the theme and font pages, widget settings, presets, Wi-Fi
+(password per network, hidden network), the condition editor, the curve editor, the
+colour picker's hex, the event form, `SettingInputRow`. Left as they are: inline edits
+without a box (a profile's name, a hardware label), the notification reply
+(`notificationCard`), the lock screen (`lock`). The event form's `TimeField` rewritten:
+one `Segment` component for hours and minutes, the user's completion rules (an hour digit
+is the hour, a minute digit the tens), per-segment placeholders, Up/Down stepping.
+
+**Text selection colour** (asked for by the user 2026-10-30): to analyse — whether one
+selection colour (and selected-text colour) fits everywhere, or some places need another
+(e.g. the lock screen's glass, fields on the accent). Today every TextInput uses Qt's
+default palette highlight, except a few that set `selectionColor: Theme.accent`.
+
+*Floating lists, 2026-10-30, verified on the host (the user: a dropdown's list must not
+take room in the layout):* `components/FloatingList.qml` (moves to the window's top, or to an
+ancestor named "overlayHost" — the popup's panel, where clicks reach it; opens upwards
+without room below; a press elsewhere closes it) and `components/Dropdown.qml` (a button
+with the current choice and a FloatingList of options, with optional colour dots). Used
+by the event form's frequency and calendar, the Bar page's and the hardware sources'
+"+ Add" pickers, and the Theme setting's suggestions. The settings window's own pickers
+already floated.

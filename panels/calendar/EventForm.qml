@@ -18,7 +18,6 @@ Item {
 
     property bool showCalendarPicker: false
     property string selectedCalendarId: ""
-    property bool _pickerOpen: false
 
     property string selectedColorId: ""
     property bool _allDay: false
@@ -31,7 +30,6 @@ Item {
     property string _rruleEndType:   "never"     // "never"|"date"|"count"
     property string _rruleEndDate:   ""          // "YYYY-MM-DD"
     property int    _rruleCount:     1
-    property bool   _freqPickerOpen: false
 
     readonly property string rrule: {
         if (!_recurring) return ""
@@ -104,12 +102,10 @@ Item {
         _endInput.clear();
         _descInput.text = "";
         _allDay = false;
-        _pickerOpen = false;
         selectedColorId = "";
         _recurring = false;
         _rruleFreq = "WEEKLY"; _rruleInterval = 1; _rruleDays = []
         _rruleEndType = "never"; _rruleEndDate = ""; _rruleCount = 1
-        _freqPickerOpen = false
         _intervalInput.text = "1"
         _countInput.text    = "1"
         _endDateInput.text  = ""
@@ -125,42 +121,12 @@ Item {
         spacing: 6
 
         // Title
-        Rectangle {
+        InputField {
+            id: _titleInput
+            fieldColor: Theme.popupBackground
+            outlined: true
+            placeholder: "Title"
             width: parent.width
-            height: 28
-            color: Theme.popupBackground
-            border.color: _titleInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
-            radius: 4
-
-            TextInput {
-                id: _titleInput
-                anchors {
-                    fill: parent
-                    leftMargin: 6
-                    rightMargin: 6
-                    topMargin: 4
-                    bottomMargin: 4
-                }
-                color: Theme.textPrimary
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                verticalAlignment: TextInput.AlignVCenter
-            }
-            Text {
-                anchors {
-                    fill: parent
-                    leftMargin: 6
-                    topMargin: 4
-                    bottomMargin: 4
-                }
-                text: "Title"
-                color: Theme.textMuted
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                verticalAlignment: Text.AlignVCenter
-                visible: !_titleInput.text.length
-                enabled: false
-            }
         }
 
         // Color picker row
@@ -431,139 +397,18 @@ Item {
             }
         }
 
-        // Calendar picker button — visible only when showCalendarPicker
-        Rectangle {
+        // Which calendar a new event goes to — only when showCalendarPicker
+        Dropdown {
             width: parent.width
-            height: 28
             visible: root.showCalendarPicker
-            color: Theme.popupBackground
-            border.color: Theme.textDisabled
-            radius: 4
-
-            readonly property var _selectedCal: GoogleCalendar.calendars[root.selectedCalendarId] ?? null
-
-            Row {
-                anchors {
-                    fill: parent
-                    leftMargin: 6
-                    rightMargin: 6
-                }
-                spacing: 6
-
-                Rectangle {
-                    width: 10
-                    height: 10
-                    radius: 5
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: parent.parent._selectedCal?.color ?? Theme.textDisabled
-                }
-
-                Text {
-                    text: parent.parent._selectedCal?.name ?? "Select calendar"
-                    color: Theme.textSecondary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - 30
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    font.family: Theme.fontFamily
-                    text: "▾"
-                    color: Theme.textMuted
-                    font.pixelSize: Theme.fontSizeXSmall
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root._pickerOpen = !root._pickerOpen
-            }
-        }
-
-        // Calendar dropdown list
-        Rectangle {
-            width: parent.width
-            height: root._pickerOpen && root.showCalendarPicker ? _pickerList.implicitHeight + 4 : 0
-            visible: root.showCalendarPicker
-            clip: true
-            color: Theme.popupBackground
-            border.color: Theme.textDisabled
-            radius: 4
-
-            Behavior on height {
-                NumberAnimation {
-                    duration: Theme.duration("expand")
-                    easing: Theme.curve("expand")
-                }
-            }
-
-            Column {
-                id: _pickerList
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                    margins: 2
-                }
-
-                Repeater {
-                    // ScriptModel diffs old vs. new values so only changed delegates get
-                    // added/removed — see MusicPanel.qml for why binding a plain live-model
-                    // array straight to Repeater.model was crashing this app.
-                    model: ScriptModel {
-                        values: GoogleCalendar.enabledCalendarIds
-                    }
-
-                    Rectangle {
-                        required property string modelData
-                        readonly property var _cal: GoogleCalendar.calendars[modelData] ?? null
-
-                        width: _pickerList.width
-                        height: 24
-                        color: modelData === root.selectedCalendarId ? Theme.surfaceHover : "transparent"
-                        radius: 3
-
-                        Row {
-                            anchors {
-                                fill: parent
-                                leftMargin: 6
-                            }
-                            spacing: 6
-
-                            Rectangle {
-                                width: 10
-                                height: 10
-                                radius: 5
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: parent.parent._cal?.color ?? Theme.textDisabled
-                            }
-
-                            Text {
-                                text: parent.parent._cal?.name ?? modelData
-                                color: Theme.textSecondary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 22
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.selectedCalendarId = modelData;
-                                root._pickerOpen = false;
-                            }
-                        }
-                    }
-                }
-            }
+            placeholder: "Select calendar"
+            options: GoogleCalendar.enabledCalendarIds.map(id => ({
+                value: id,
+                label: GoogleCalendar.calendars[id]?.name ?? id,
+                color: GoogleCalendar.calendars[id]?.color ?? Theme.textDisabled
+            }))
+            value: root.selectedCalendarId
+            onPicked: value => root.selectedCalendarId = value
         }
 
         // Recurring toggle
@@ -639,45 +484,19 @@ Item {
                     readonly property var _freqLabels: ({ "DAILY": "Daily", "WEEKLY": "Weekly", "MONTHLY": "Monthly", "YEARLY": "Yearly" })
                     readonly property var _unitLabels: ({ "DAILY": "day(s)", "WEEKLY": "week(s)", "MONTHLY": "month(s)", "YEARLY": "year(s)" })
 
-                    // Frequency dropdown button
-                    Rectangle {
-                        width: 76
-                        height: 28
-                        color: Theme.popupBackground
-                        border.color: Theme.textDisabled
-                        radius: 4
+                    // Frequency
+                    Dropdown {
+                        width: Math.max(76, implicitWidth)
+                        implicitWidth: _freqWidest.advanceWidth + 36
+                        options: ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].map(code => ({ value: code, label: parent._freqLabels[code] }))
+                        value: root._rruleFreq
+                        onPicked: value => root._rruleFreq = value
 
-                        Row {
-                            anchors {
-                                fill: parent
-                                leftMargin: 6
-                                rightMargin: 4
-                            }
-                            spacing: 4
-
-                            Text {
-                                text: parent.parent.parent._freqLabels[root._rruleFreq] ?? root._rruleFreq
-                                color: Theme.textSecondary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 14
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                font.family: Theme.fontFamily
-                                text: "▾"
-                                color: Theme.textMuted
-                                font.pixelSize: Theme.fontSizeXSmall
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root._freqPickerOpen = !root._freqPickerOpen
+                        TextMetrics {
+                            id: _freqWidest
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            text: "Monthly"
                         }
                     }
 
@@ -690,33 +509,17 @@ Item {
                     }
 
                     // Interval input
-                    Rectangle {
+                    InputField {
+                        id: _intervalInput
+                        fieldColor: Theme.popupBackground
+                        outlined: true
                         width: 40
-                        height: 28
-                        color: Theme.popupBackground
-                        border.color: _intervalInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
-                        radius: 4
-
-                        TextInput {
-                            id: _intervalInput
-                            anchors {
-                                fill: parent
-                                leftMargin: 4
-                                rightMargin: 4
-                                topMargin: 4
-                                bottomMargin: 4
-                            }
-                            text: "1"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            verticalAlignment: TextInput.AlignVCenter
-                            horizontalAlignment: TextInput.AlignHCenter
-                            validator: IntValidator { bottom: 1; top: 999 }
-                            onTextEdited: {
-                                let value = parseInt(text)
-                                if (!isNaN(value) && value >= 1) root._rruleInterval = value
-                            }
+                        text: "1"
+                        input.horizontalAlignment: TextInput.AlignHCenter
+                        input.validator: IntValidator { bottom: 1; top: 999 }
+                        onTextEdited: {
+                            let value = parseInt(text)
+                            if (!isNaN(value) && value >= 1) root._rruleInterval = value
                         }
                     }
 
@@ -726,68 +529,6 @@ Item {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                // Frequency dropdown list
-                Rectangle {
-                    width: parent.width
-                    height: root._freqPickerOpen ? _freqList.implicitHeight + 4 : 0
-                    clip: true
-                    color: Theme.popupBackground
-                    border.color: Theme.textDisabled
-                    radius: 4
-
-                    Behavior on height {
-                        NumberAnimation {
-                            duration: Theme.duration("expand")
-                            easing: Theme.curve("expand")
-                        }
-                    }
-
-                    Column {
-                        id: _freqList
-                        anchors {
-                            left: parent.left
-                            right: parent.right
-                            top: parent.top
-                            margins: 2
-                        }
-
-                        Repeater {
-                            model: ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]
-
-                            Rectangle {
-                                required property string modelData
-                                readonly property var _labels: ({ "DAILY": "Daily", "WEEKLY": "Weekly", "MONTHLY": "Monthly", "YEARLY": "Yearly" })
-
-                                width: _freqList.width
-                                height: 24
-                                color: modelData === root._rruleFreq ? Theme.surfaceHover : "transparent"
-                                radius: 3
-
-                                Text {
-                                    anchors {
-                                        fill: parent
-                                        leftMargin: 6
-                                    }
-                                    text: parent._labels[modelData] ?? modelData
-                                    color: Theme.textSecondary
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeBody
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root._rruleFreq = modelData
-                                        root._freqPickerOpen = false
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -856,45 +597,14 @@ Item {
                 }
 
                 // End date input — visible when ends = "date"
-                Rectangle {
+                InputField {
+                    id: _endDateInput
+                    fieldColor: Theme.popupBackground
+                    outlined: true
+                    placeholder: "YYYY-MM-DD"
                     width: parent.width
-                    height: 28
                     visible: root._rruleEndType === "date"
-                    color: Theme.popupBackground
-                    border.color: _endDateInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
-                    radius: 4
-
-                    TextInput {
-                        id: _endDateInput
-                        anchors {
-                            fill: parent
-                            leftMargin: 6
-                            rightMargin: 6
-                            topMargin: 4
-                            bottomMargin: 4
-                        }
-                        color: Theme.textPrimary
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        verticalAlignment: TextInput.AlignVCenter
-                        onTextEdited: root._rruleEndDate = text
-                    }
-
-                    Text {
-                        anchors {
-                            fill: parent
-                            leftMargin: 6
-                            topMargin: 4
-                            bottomMargin: 4
-                        }
-                        text: "YYYY-MM-DD"
-                        color: Theme.textMuted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        verticalAlignment: Text.AlignVCenter
-                        visible: !_endDateInput.text.length
-                        enabled: false
-                    }
+                    onTextEdited: root._rruleEndDate = text
                 }
 
                 // End count input — visible when ends = "count"
@@ -904,33 +614,17 @@ Item {
                     spacing: 6
                     visible: root._rruleEndType === "count"
 
-                    Rectangle {
+                    InputField {
+                        id: _countInput
+                        fieldColor: Theme.popupBackground
+                        outlined: true
                         width: 50
-                        height: 28
-                        color: Theme.popupBackground
-                        border.color: _countInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
-                        radius: 4
-
-                        TextInput {
-                            id: _countInput
-                            anchors {
-                                fill: parent
-                                leftMargin: 4
-                                rightMargin: 4
-                                topMargin: 4
-                                bottomMargin: 4
-                            }
-                            text: "1"
-                            color: Theme.textPrimary
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            verticalAlignment: TextInput.AlignVCenter
-                            horizontalAlignment: TextInput.AlignHCenter
-                            validator: IntValidator { bottom: 1; top: 999 }
-                            onTextEdited: {
-                                let value = parseInt(text)
-                                if (!isNaN(value) && value >= 1) root._rruleCount = value
-                            }
+                        text: "1"
+                        input.horizontalAlignment: TextInput.AlignHCenter
+                        input.validator: IntValidator { bottom: 1; top: 999 }
+                        onTextEdited: {
+                            let value = parseInt(text)
+                            if (!isNaN(value) && value >= 1) root._rruleCount = value
                         }
                     }
 

@@ -523,50 +523,19 @@ Item {
                                 spacing: 6
 
                                 // Password field — only for unsaved secured networks
-                                Rectangle {
+                                InputField {
+                                    id: pwInput
                                     visible: networkDelegate.needsPassword
                                     Layout.fillWidth: true
-                                    height: 26
-                                    radius: 6
-                                    color: Theme.popupBackground
-                                    border.color: Theme.textDisabled
-                                    border.width: 1
-
-                                    Text {
-                                        anchors { fill: parent; leftMargin: 8; rightMargin: 28 }
-                                        text: "Password"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeBody
-                                        color: Theme.textDisabled
-                                        verticalAlignment: Text.AlignVCenter
-                                        visible: pwInput.text === ""
-                                    }
-
-                                    TextInput {
-                                        id: pwInput
-                                        anchors { fill: parent; leftMargin: 8; rightMargin: 28 }
-                                        echoMode: networkDelegate._showPassword ? TextInput.Normal : TextInput.Password
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeBody
-                                        color: Theme.textPrimary
-                                        verticalAlignment: TextInput.AlignVCenter
-                                        clip: true
-                                        onTextEdited: root._setPassword(networkDelegate.ssid, text)
-                                    }
-
-                                    Text {
-                                        anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                                        text: networkDelegate._showPassword ? "󰛐" : "󰛑"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeMedium
-                                        color: Theme.textMuted
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: root._showPassword = !root._showPassword
-                                        }
-                                    }
+                                    fieldColor: Theme.popupBackground
+                                    outlined: true
+                                    placeholder: "Password"
+                                    password: true
+                                    // Shown or not per network, kept by the panel (see the delegate)
+                                    ownsReveal: false
+                                    revealed: networkDelegate._showPassword
+                                    onRevealToggled: root._showPassword = !root._showPassword
+                                    onTextEdited: root._setPassword(networkDelegate.ssid, text)
                                 }
 
                                 // Spacer for saved/open networks (no password field)
@@ -635,7 +604,6 @@ Item {
                 property bool expanded: false
                 property string ssidText: ""
                 property string passwordText: ""
-                property bool _showPassword: false
 
                 width: parent.width
                 height: expanded ? 102 : 30
@@ -690,33 +658,12 @@ Item {
                     }
 
                     // SSID input
-                    Rectangle {
+                    InputField {
                         width: parent.width
-                        height: 28
-                        radius: 6
-                        color: Theme.popupBackground
-                        border.color: Theme.textDisabled
-                        border.width: 1
-
-                        Text {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            text: "Network name (SSID)"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textDisabled
-                            verticalAlignment: Text.AlignVCenter
-                            visible: _hiddenRow.ssidText === ""
-                        }
-
-                        TextInput {
-                            anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                            verticalAlignment: TextInput.AlignVCenter
-                            clip: true
-                            onTextEdited: _hiddenRow.ssidText = text
-                        }
+                        fieldColor: Theme.popupBackground
+                        outlined: true
+                        placeholder: "Network name (SSID)"
+                        onTextEdited: _hiddenRow.ssidText = text
                     }
 
                     // Password + Connect row
@@ -724,48 +671,13 @@ Item {
                         width: parent.width
                         spacing: 6
 
-                        Rectangle {
+                        InputField {
                             Layout.fillWidth: true
-                            height: 28
-                            radius: 6
-                            color: Theme.popupBackground
-                            border.color: Theme.textDisabled
-                            border.width: 1
-
-                            Text {
-                                anchors { fill: parent; leftMargin: 8; rightMargin: 28 }
-                                text: "Password (optional)"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textDisabled
-                                verticalAlignment: Text.AlignVCenter
-                                visible: _hiddenRow.passwordText === ""
-                            }
-
-                            TextInput {
-                                anchors { fill: parent; leftMargin: 8; rightMargin: 28 }
-                                echoMode: _hiddenRow._showPassword ? TextInput.Normal : TextInput.Password
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textPrimary
-                                verticalAlignment: TextInput.AlignVCenter
-                                clip: true
-                                onTextEdited: _hiddenRow.passwordText = text
-                            }
-
-                            Text {
-                                anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                                text: _hiddenRow._showPassword ? "󰛐" : "󰛑"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeMedium
-                                color: Theme.textMuted
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: _hiddenRow._showPassword = !_hiddenRow._showPassword
-                                }
-                            }
+                            fieldColor: Theme.popupBackground
+                            outlined: true
+                            placeholder: "Password (optional)"
+                            password: true
+                            onTextEdited: _hiddenRow.passwordText = text
                         }
 
                         SmallButton {

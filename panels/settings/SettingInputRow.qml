@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
 Item {
@@ -27,29 +28,13 @@ Item {
         elide: Text.ElideRight
     }
 
-    Rectangle {
+    InputField {
         id: _inputRect
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width * (root.inputWidthPercent / 100)
-        height: 26
-        radius: 6
-        color: Theme.surface
-
-        TextInput {
-            anchors {
-                fill: parent
-                leftMargin: 8
-                rightMargin: 8
-            }
-            text: value
-            echoMode: root.echoMode
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            color: Theme.textPrimary
-            verticalAlignment: TextInput.AlignVCenter
-            clip: true
-            onTextEdited: root.value = text
-        }
+        text: root.value
+        password: root.echoMode === TextInput.Password
+        onTextEdited: root.value = text
     }
 }

@@ -144,33 +144,11 @@ Flickable {
         }
 
         // Search the installed families; each shown in itself
-        Rectangle {
+        InputField {
+            id: _search
             Layout.fillWidth: true
-            height: Math.max(26, _search.implicitHeight + 8)
-            radius: 6
-            color: Theme.surface
-            border.width: 1
-            border.color: _search.activeFocus ? Theme.accent : Theme.surfaceHoverClear
-
-            TextInput {
-                id: _search
-                anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                verticalAlignment: TextInput.AlignVCenter
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textPrimary
-                selectByMouse: true
-                clip: true
-                enabled: root._editable
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: parent.text === "" && !parent.activeFocus
-                    text: "Search the installed fonts"
-                    font: parent.font
-                    color: Theme.glassTextMuted
-                }
-            }
+            placeholder: "Search the installed fonts"
+            enabled: root._editable
         }
 
         Rectangle {

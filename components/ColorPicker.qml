@@ -201,11 +201,11 @@ Item {
         Column {
             spacing: 8
             // Wide enough for the longest hex (#aarrggbb) and its padding
-            width: Math.max(90, Math.ceil(_widestHex.advanceWidth) + 14)
+            width: Math.max(90, Math.ceil(_widestHex.advanceWidth) + 18)
 
             TextMetrics {
                 id: _widestHex
-                font: _hexInput.font
+                font: _hexInput.input.font
                 text: "#88888888"
             }
 
@@ -218,37 +218,24 @@ Item {
                 border.color: Theme.outline
             }
 
-            Rectangle {
+            InputField {
+                id: _hexInput
                 width: parent.width
-                height: Math.max(26, _hexInput.implicitHeight + 8)
-                radius: 6
-                color: Theme.surface
-                border.width: 1
-                border.color: _hexInput.activeFocus ? Theme.accent : (_hexInput.valid ? Theme.surfaceHoverClear : Theme.error)
-
-                TextInput {
-                    id: _hexInput
-                    readonly property bool valid: /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text)
-                    anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
-                    verticalAlignment: TextInput.AlignVCenter
-                    text: root.hexOf(root._picked)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    selectByMouse: true
-                    maximumLength: 9
-                    onEditingFinished: {
-                        // Only a different colour: focus merely leaving must not turn an
-                        // inherited colour into one set here. Compared as hex text:
-                        // Qt.colorEqual tells an HSV colour from the same colour in RGB.
-                        const typed = String(Qt.color(text)).toLowerCase();
-                        if (valid && typed !== root.hexOf(root._picked).toLowerCase()
-                                && typed !== root.hexOf(root.color).toLowerCase()) {
-                            root._setFrom(Qt.color(text));
-                            root.committed(root._picked);
-                        }
-                        text = Qt.binding(() => root.hexOf(root._picked));
+                readonly property bool valid: /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text)
+                problem: !valid && !editing
+                text: root.hexOf(root._picked)
+                input.maximumLength: 9
+                onEditingFinished: {
+                    // Only a different colour: focus merely leaving must not turn an
+                    // inherited colour into one set here. Compared as hex text:
+                    // Qt.colorEqual tells an HSV colour from the same colour in RGB.
+                    const typed = String(Qt.color(text)).toLowerCase();
+                    if (valid && typed !== root.hexOf(root._picked).toLowerCase()
+                            && typed !== root.hexOf(root.color).toLowerCase()) {
+                        root._setFrom(Qt.color(text));
+                        root.committed(root._picked);
                     }
+                    text = Qt.binding(() => root.hexOf(root._picked));
                 }
             }
 

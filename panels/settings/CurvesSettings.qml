@@ -337,27 +337,11 @@ Flickable {
                 color: Theme.textPrimary
             }
 
-            Rectangle {
+            InputField {
+                id: _nameInput
                 Layout.fillWidth: true
-                height: 28
-                radius: 6
-                color: Theme.surface
-                border.width: 1
-                border.color: _nameInput.activeFocus ? Theme.accent : Theme.surfaceHoverClear
-                Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-                TextInput {
-                    id: _nameInput
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    verticalAlignment: TextInput.AlignVCenter
-                    text: root.draftName
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    selectByMouse: true
-                    clip: true
-                    onTextEdited: root.draftName = text
-                }
+                text: root.draftName
+                onTextEdited: root.draftName = text
             }
         }
 
@@ -583,43 +567,30 @@ Flickable {
                                 color: Theme.textMuted
                             }
 
-                            Rectangle {
-                                // Wide enough for "-8.888" and its padding, as tall as a line
-                                width: Math.max(60, Math.ceil(_widestCoordinate.advanceWidth) + 14)
-                                height: Math.max(24, _coordinateInput.implicitHeight + 8)
-                                radius: 5
+                            InputField {
+                                id: _coordinateInput
+                                // Wide enough for "-8.888" and its padding
+                                width: Math.max(60, Math.ceil(_widestCoordinate.advanceWidth) + 18)
 
                                 TextMetrics {
                                     id: _widestCoordinate
-                                    font: _coordinateInput.font
+                                    font: _coordinateInput.input.font
                                     text: "-8.888"
                                 }
-                                color: Theme.surface
-                                border.width: 1
-                                border.color: _coordinateInput.activeFocus ? Theme.accent : Theme.surfaceHoverClear
 
-                                TextInput {
-                                    id: _coordinateInput
-                                    anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
-                                    verticalAlignment: TextInput.AlignVCenter
-                                    readonly property real _value: root.draftPoints[_coordinates._index + _coordinate.index] ?? 0
-                                    text: _value.toFixed(3)
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeBody
-                                    color: Theme.textPrimary
-                                    selectByMouse: true
-                                    validator: DoubleValidator { decimals: 3 }
-                                    onEditingFinished: {
-                                        const value = parseFloat(text.replace(",", "."));
-                                        if (!isNaN(value)) {
-                                            const point = root._point(_coordinates._index);
-                                            if (_coordinate.index === 0)
-                                                root.movePoint(_coordinates._index, value, point.y, true);
-                                            else
-                                                root.movePoint(_coordinates._index, point.x, value, true);
-                                        }
-                                        text = Qt.binding(() => _value.toFixed(3));
+                                readonly property real _value: root.draftPoints[_coordinates._index + _coordinate.index] ?? 0
+                                text: _value.toFixed(3)
+                                input.validator: DoubleValidator { decimals: 3 }
+                                onEditingFinished: {
+                                    const value = parseFloat(text.replace(",", "."));
+                                    if (!isNaN(value)) {
+                                        const point = root._point(_coordinates._index);
+                                        if (_coordinate.index === 0)
+                                            root.movePoint(_coordinates._index, value, point.y, true);
+                                        else
+                                            root.movePoint(_coordinates._index, point.x, value, true);
                                     }
+                                    text = Qt.binding(() => _value.toFixed(3));
                                 }
                             }
                         }

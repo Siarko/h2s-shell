@@ -88,29 +88,19 @@ Item {
                 picked: root.leaf.gt !== undefined
                 onClicked: root.changedTo({ fact: root.leaf.fact, gt: root.leaf.lt ?? root.leaf.gt ?? 80 })
             }
-            Rectangle {
+            InputField {
+                id: _percentInput
                 visible: root.factType?.type === "percent"
                 width: 52
-                height: 24
-                radius: 6
-                color: Theme.surface
-
-                TextInput {
-                    anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
-                    text: root.leaf.lt ?? root.leaf.gt ?? ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    verticalAlignment: TextInput.AlignVCenter
-                    validator: IntValidator { bottom: 0; top: 100 }
-                    onEditingFinished: {
-                        if (!acceptableInput)
-                            return;
-                        const number = parseInt(text);
-                        root.changedTo(root.leaf.gt !== undefined
-                            ? { fact: root.leaf.fact, gt: number }
-                            : { fact: root.leaf.fact, lt: number });
-                    }
+                text: root.leaf.lt ?? root.leaf.gt ?? ""
+                input.validator: IntValidator { bottom: 0; top: 100 }
+                onEditingFinished: {
+                    if (!input.acceptableInput)
+                        return;
+                    const number = parseInt(text);
+                    root.changedTo(root.leaf.gt !== undefined
+                        ? { fact: root.leaf.fact, gt: number }
+                        : { fact: root.leaf.fact, lt: number });
                 }
             }
             Text {
