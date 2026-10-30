@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Window
 import Quickshell
 import qs.components
 import qs.singletons
@@ -9,6 +8,10 @@ import qs.singletons.network
 // Network management popup: WiFi toggle, connection status, speed, network list
 Item {
     id: root
+
+    // The most height the popup lets this panel take (Popup.availableContentHeight); the
+    // network list is cut to fit it. Unlimited until the popup sets it.
+    property real availableHeight: Infinity
 
     // The network row that is open, by SSID; the passwords typed, by SSID; whether the
     // open row shows its password (see the network delegate)
@@ -386,13 +389,12 @@ Item {
             ListView {
                 id: networkList
                 width: parent.width
+                // What the panel has left for it: everything above it, and below it the
+                // hidden-network row (the empty-state text shows only with no list)
                 height: {
-                    // Popup content starts at y = topOffset + barHeight from screen top.
-                    // Inside popup: paddingTop=10 above panel, paddingBottom=10 below.
-                    // Below the list in _wifiSection: _hiddenRow + 8px spacing.
-                    var panelTopY = Theme.bar.topOffset + Theme.bar.barHeight
-                    var maxH = Screen.height - panelTopY - 10 - _wifiSection.y - networkList.y - _hiddenRow.height - 8 - 10 - 16
-                    return Math.min(contentHeight, Math.max(80, maxH))
+                    const below = _wifiSection.spacing + _hiddenRow.height;
+                    const room = root.availableHeight - _wifiSection.y - networkList.y - below;
+                    return Math.min(contentHeight, Math.max(80, room));
                 }
                 clip: true
                 // Same reasoning as the VPN Repeater above: keyed by "ssid" since

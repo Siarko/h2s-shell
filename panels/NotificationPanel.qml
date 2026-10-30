@@ -5,12 +5,13 @@ import qs.components
 
 Item {
     id: root
-    required property int screenHeight
+    // As tall as the popup lets it be (Popup.availableContentHeight)
+    property real availableHeight: 0
 
     signal closeRequested
 
     implicitWidth: Theme.popupWidth("notifications", 350)
-    implicitHeight: screenHeight - 40 - 16
+    implicitHeight: availableHeight
 
     // Set when the user empties the list — "Clear all", or dismissing the last card;
     // triggers the success animation, then closes the popup, once the list is empty

@@ -273,8 +273,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       first, then migrate the storage to real `JsonObject`s keyed by profile name.
       Superseded by 10.3: settings are read through `Profiles.value()`; what is still a
       JSON string is parsed in one place each.
-- [ ] **6.2 `Popup` should expose its available content height** [#14]
+- [x] **6.2 `Popup` should expose its available content height** [#14]
       `panels/NetworkPanel.qml:496-506` hardcodes Popup's private paddings.
+      Done 2026-10-30: `availableContentHeight` in `Popup.qml` (screen height less the bar,
+      the paddings and a 16 px gap), set on a panel with an `availableHeight` property.
+      NetworkPanel's list and NotificationPanel (which had its own `- 40 - 16`) use it.
 - [ ] **6.3 Split `panels/calendar/EventForm.qml`** (1033 lines) [P3]
       The RRULE editor, colour picker, calendar picker and all-day/time row are four
       independent components.
@@ -408,14 +411,6 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Found 2026-10-29; harmless, predates the themes work.
       Done 2026-10-30: the editor's items are the value only for a `stringList`; after
       opening the Bar, General and Notifications pages the log has no such warning.
-- [ ] **9.10 A tray menu opening fresh slides in from the right** (reported 2026-10-30)
-      Opening a tray menu with no popup open (not switching from another icon's menu),
-      the menu slides in sideways from the right, as a switch would. It should come in
-      from the bar's side, the way the other popups open. Switching between tray icons'
-      menus stays as it is (from the side of the icon clicked), and so does going into
-      a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
-      `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
-      open should show the menu in place and leave the entrance to the popup.
 
 ## Stage 10 — Requested features
 
@@ -622,6 +617,15 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       muted full-height band so it is visible where there is no data yet. Setting
       `graphs.heartbeat` (on; Power save turns it off).
 
+- [ ] **10.16 A tray menu opening fresh slides in from the bar** (requested 2026-10-30; moved
+      from 9.10)
+      Opening a tray menu with no popup open (not switching from another icon's menu),
+      the menu slides in sideways from the right, as a switch would. It should come in
+      from the bar's side, the way the other popups open. Switching between tray icons'
+      menus stays as it is (from the side of the icon clicked), and so does going into
+      a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
+      `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
+      open should show the menu in place and leave the entrance to the popup.
 - [ ] **10.1 Configurable animations** — now part of **10.9**
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close

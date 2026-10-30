@@ -154,6 +154,8 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- The notifications popup ends 16 px above the bottom of the screen, whatever the bar's
+  height; it used to assume a 40 px bar and, with a taller one, run past the edge.
 - Scrolling by notches (sliders, the music widget's next/previous track, the music
   panel's player) went the wrong way on the first notch, and on the first notch after
   turning the wheel back.

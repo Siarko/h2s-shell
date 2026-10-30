@@ -87,6 +87,12 @@ LazyLoader {
         property int contentWidth: _holding ? _heldWidth : contentLoader.item ? contentLoader.item.implicitWidth : 0
         property int contentHeight: _holding ? _heldHeight : contentLoader.item ? contentLoader.item.implicitHeight : 0
         property int popupHeight: contentHeight + paddingTop + paddingBottom
+        // The most height content can take and still end a gap above the screen's bottom
+        // edge: the popup opens at the bar's bottom edge, and adds its paddings. Given to
+        // the panel as its `availableHeight`, if it has one.
+        readonly property int _screenGap: 16
+        readonly property real availableContentHeight: popup.screen.height - Theme.bar.topOffset - Theme.bar.barHeight
+            - paddingTop - paddingBottom - _screenGap
         property int totalWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
         // The width on screen: follows totalWidth with an animation when switching
         // between popups of different widths, so it does not jump
@@ -324,6 +330,10 @@ LazyLoader {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         anchors.topMargin: popup.paddingTop
+                        onLoaded: {
+                            if (typeof item.availableHeight !== "undefined")
+                                item.availableHeight = Qt.binding(() => popup.availableContentHeight)
+                        }
                     }
 
                     // A click anywhere in the popup takes the focus from a field
@@ -356,7 +366,6 @@ LazyLoader {
                     Component {
                         id: notificationsComponent
                         NotificationPanel {
-                            screenHeight: popup.screen.height
                             onCloseRequested: popupLoader.close()
                         }
                     }
