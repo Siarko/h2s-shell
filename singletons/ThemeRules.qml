@@ -95,6 +95,119 @@ Singleton {
         return result;
     }
 
+    // ---- What the Appearance pages show ----
+
+    // The base colours a theme sets, by group, with what each is for (the transparent
+    // variants are derived in Theme, not set)
+    readonly property var colorTokens: [
+        { group: "Backgrounds", token: "barBackground", label: "Bar", hint: "The bar" },
+        { group: "Backgrounds", token: "popupBackground", label: "Popup", hint: "Popups and their curved corners" },
+        { group: "Backgrounds", token: "surface", label: "Surface", hint: "An element: bar cell, card, field, row" },
+        { group: "Backgrounds", token: "surfaceHover", label: "Surface, hovered", hint: "An element under the pointer, or whose popup is open" },
+        { group: "Backgrounds", token: "scrim", label: "Scrim", hint: "Behind the screensaver and the lock screen" },
+        { group: "Accent", token: "accent", label: "Accent", hint: "Selection, active state, progress, graphs" },
+        { group: "Accent", token: "accentHover", label: "Accent, hovered", hint: "The accent under the pointer" },
+        { group: "Accent", token: "accentDark", label: "Accent, dark", hint: "Filled accent: focused workspace, code buttons" },
+        { group: "Accent", token: "onAccent", label: "On accent", hint: "Text and icons on the accent" },
+        { group: "Accent", token: "accentSecondary", label: "Second accent", hint: "A second series or highlight: upload, sidebar selection" },
+        { group: "Text", token: "textPrimary", label: "Primary", hint: "Labels, headings, the clock" },
+        { group: "Text", token: "textSecondary", label: "Secondary", hint: "Secondary labels, body text" },
+        { group: "Text", token: "textMuted", label: "Muted", hint: "Timestamps, links, empty states" },
+        { group: "Text", token: "textDisabled", label: "Disabled", hint: "Disabled, other-month days, faint icons; dividers and faint fills derive from it" },
+        { group: "Status", token: "error", label: "Error", hint: "Errors, destructive actions" },
+        { group: "Status", token: "warning", label: "Warning", hint: "Warnings, volume above 100%" },
+        { group: "Status", token: "success", label: "Success", hint: "Connected, done" },
+        { group: "Workspaces", token: "workspaceActive", label: "Active", hint: "A workspace that is active but not focused (focused uses the dark accent)" },
+        { group: "Workspaces", token: "workspaceSpecial", label: "Special", hint: "A shown special (scratchpad) workspace" },
+        { group: "Calendar", token: "calendarToday", label: "Today", hint: "The circle behind today's date" },
+        { group: "Buttons", token: "confirm", label: "Confirm", hint: "Confirming: add an event" },
+        { group: "Buttons", token: "confirmHover", label: "Confirm, hovered", hint: "A confirm button under the pointer" },
+        { group: "Buttons", token: "confirmSecondary", label: "Confirm a change", hint: "Confirming a change: save an edited event" },
+        { group: "Buttons", token: "confirmSecondaryHover", label: "Confirm a change, hovered", hint: "A confirm-a-change button under the pointer" }
+    ]
+
+    // Where each resolved value comes from: { group: { token: { theme, palette } } } for
+    // what the chain sets — `theme` the name of the theme that has the last word, `palette`
+    // true when it comes from that theme's palette file. A token absent here is built in.
+    function origins(chain, palettes) {
+        const result = {};
+        for (const group of groups)
+            result[group] = {};
+        for (let i = chain.length - 1; i >= 0; i--) {
+            const entry = chain[i];
+            for (const token in palettes?.[entry.name] ?? {})
+                result.colors[token] = { theme: entry.name, palette: true };
+            for (const group of groups) {
+                for (const token in entry.theme[group] ?? {})
+                    result[group][token] = { theme: entry.name, palette: false };
+            }
+        }
+        return result;
+    }
+
+    // ---- Drafts: changes made in the settings, not saved yet ----
+    // A draft is part of a theme file, { group: { token: value } }, kept in a file of its
+    // own; null as a value means the token is removed from the theme (a reset). It is laid
+    // over the theme file, so what the draft does not touch follows the file.
+
+    // The theme file `theme` with `draft` laid over it. Inputs are not modified.
+    function applyDraft(theme, draft) {
+        const result = JSON.parse(JSON.stringify(theme ?? {}));
+        for (const group in draft ?? {}) {
+            const values = Object.assign({}, result[group] ?? {});
+            for (const token in draft[group]) {
+                if (draft[group][token] === null)
+                    delete values[token];
+                else
+                    values[token] = draft[group][token];
+            }
+            if (Object.keys(values).length > 0)
+                result[group] = values;
+            else
+                delete result[group];
+        }
+        return result;
+    }
+
+    // `draft` with one token changed to `value`, or, with `value` null, reset: removed from
+    // the theme if `theme` sets it, else dropped from the draft. Empty groups go.
+    function draftWith(draft, theme, group, token, value) {
+        const result = JSON.parse(JSON.stringify(draft ?? {}));
+        result[group] = result[group] ?? {};
+        if (value === null && !(token in (theme?.[group] ?? {})))
+            delete result[group][token];
+        else
+            result[group][token] = value;
+        if (Object.keys(result[group]).length === 0)
+            delete result[group];
+        return result;
+    }
+
+    // `draft` without its change to one token: back to what the theme file has
+    function draftWithout(draft, group, token) {
+        const result = JSON.parse(JSON.stringify(draft ?? {}));
+        if (result[group]) {
+            delete result[group][token];
+            if (Object.keys(result[group]).length === 0)
+                delete result[group];
+        }
+        return result;
+    }
+
+    // The part of `draft` in `groups` (all when not given), and the rest:
+    // { taken, rest } — each a draft, possibly empty
+    function splitDraft(draft, groups) {
+        const taken = {};
+        const rest = {};
+        for (const group in draft ?? {}) {
+            if (!groups || groups.includes(group))
+                taken[group] = draft[group];
+            else
+                rest[group] = draft[group];
+        }
+        return { taken: taken, rest: rest };
+    }
+
     // ---- Managing themes ----
 
     // Whether `name` may name a theme file: not empty, no spaces at its ends, no slash,

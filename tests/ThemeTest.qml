@@ -44,6 +44,42 @@ TestCase {
         assert(!("unknown" in withPalette.colors), "tokens the built-in theme does not know are ignored");
 
         assertEqual(JSON.stringify(ThemeRules.resolve(builtin, [], {})), JSON.stringify(builtin), "no theme: the built-in one");
+        // --- where values come from ---
+        const origins = ThemeRules.origins(chain.chain, { wallpaper: { surface: "#101010" } });
+        assertEqual(JSON.stringify(origins.colors.accent), JSON.stringify({ theme: "wallpaper", palette: false }), "a value set by the theme itself");
+        assertEqual(JSON.stringify(origins.colors.surface), JSON.stringify({ theme: "wallpaper", palette: true }),
+            "a value from its palette, over what it extends");
+        assertEqual(ThemeRules.origins(chain.chain, {}).colors.surface.theme, "default", "a value from the theme it extends");
+        assertEqual(origins.fonts.family, undefined, "a value set nowhere is built in");
+        for (const entry of ThemeRules.colorTokens)
+            assert(entry.token in Theme.builtin.colors, "the colour " + entry.token + " is a built-in token");
+        assertEqual(ThemeRules.colorTokens.length, Object.keys(Theme.builtin.colors).length, "and every built-in colour is listed");
+
+        // --- drafts ---
+        const file = { extends: "default", colors: { accent: "#111111", surface: "#222222" }, bar: { barHeight: 30 } };
+        const draft = { colors: { accent: "#ff0000", surface: null, error: "#00ff00" } };
+        const drafted = ThemeRules.applyDraft(file, draft);
+        assertEqual(drafted.colors.accent, "#ff0000", "a draft changes a value");
+        assert(!("surface" in drafted.colors), "a null in a draft removes the value");
+        assertEqual(drafted.colors.error, "#00ff00", "and adds one the file did not have");
+        assertEqual(drafted.bar.barHeight, 30, "what the draft does not touch follows the file");
+        assertEqual(file.colors.surface, "#222222", "the inputs are not modified");
+        assert(!("colors" in ThemeRules.applyDraft({ colors: { a: "#1" } }, { colors: { a: null } })), "a group left empty goes");
+        const resetInFile = ThemeRules.draftWith({}, file, "colors", "surface", null);
+        assertEqual(resetInFile.colors.surface, null, "resetting a value the file sets drafts its removal");
+        const resetDraftOnly = ThemeRules.draftWith(draft, file, "colors", "error", null);
+        assert(!("error" in resetDraftOnly.colors), "resetting a value only the draft sets drops it from the draft");
+        assertEqual(JSON.stringify(ThemeRules.draftWith({ colors: { error: "#0" } }, file, "colors", "error", null)), "{}",
+            "and an emptied draft is empty");
+        assertEqual(JSON.stringify(ThemeRules.draftWithout(draft, "colors", "surface")),
+            JSON.stringify({ colors: { accent: "#ff0000", error: "#00ff00" } }), "undoing one change keeps the others");
+        assertEqual(JSON.stringify(ThemeRules.draftWithout({ colors: { a: null } }, "colors", "a")), "{}", "and undoing the last empties the draft");
+        assertEqual(draft.colors.surface, null, "undoing does not modify the input");
+        const split = ThemeRules.splitDraft({ colors: { a: "#1" }, fonts: { b: 2 } }, ["colors"]);
+        assertEqual(JSON.stringify(split.taken), JSON.stringify({ colors: { a: "#1" } }), "a draft splits by group");
+        assertEqual(JSON.stringify(split.rest), JSON.stringify({ fonts: { b: 2 } }), "leaving the rest");
+        assertEqual(Object.keys(ThemeRules.splitDraft({ colors: {}, fonts: {} }).rest).length, 0, "no groups: all of it");
+
         // --- managing themes ---
         assert(ThemeRules.validThemeName("Power save"), "a theme name may have spaces inside");
         assert(!ThemeRules.validThemeName("a/b") && !ThemeRules.validThemeName(".hidden") && !ThemeRules.validThemeName(" x"),

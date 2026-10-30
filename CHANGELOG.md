@@ -61,7 +61,18 @@ section to the new version and date.
   deletes it (asking first; profiles using it go back to the default theme). Curves moved
   into the group.
 
+- Settings → Appearance → Colors: every base colour of the picked theme, by group, with
+  what it is for and where its value comes from (set here, inherited, a palette, built
+  in), and a colour picker (saturation and brightness, hue, opacity, hex). Changes are
+  drafts, kept in `~/.config/h2s_shell/theme-drafts/` until saved — across restarts too:
+  the page has Save and Cancel, a banner offers to save or throw away all of a theme's
+  changes, ✎ marks the pages and themes with unsaved changes, and Preview shows a theme
+  with its changes (also the theme in use, when it has some). Reset returns a colour to
+  the inherited value; Undo takes back one colour's unsaved change.
+
 ### Changed
+- A click anywhere in the settings window or a popup — the background too — takes the
+  focus from a text field; before, only clicking another control did.
 - The "Theme" setting suggests the theme files as you type (and "default"), and warns
   when the name has no file.
 - Deleting a profile, a widget preset or a curve asks the same way everywhere: the button

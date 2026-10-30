@@ -294,6 +294,9 @@ LazyLoader {
                         anchors.centerIn: parent
                     }
 
+                    // A click anywhere in the popup takes the focus from a field
+                    FocusReleaser {}
+
                     NumberAnimation {
                         id: _contentFadeIn
                         target: contentLoader

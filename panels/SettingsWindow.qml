@@ -26,13 +26,16 @@ FloatingWindow {
     // Index into the sidebar list below
     property int selectedCategory: 0
     // The sidebar's pages, in order; also how IPC names a page
-    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves"]
+    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves", "Colors"]
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
     // The window has two tabs: Behaviour, whose pages edit a profile, and Appearance, from
     // here on, whose pages edit a theme (docs/plans/themes.md, stage 6; TODO 10.10)
     readonly property int _themesCategory: 9
     readonly property int _curvesCategory: 10
+    // From here on, the pages that edit the picked theme's values (after a separator)
+    readonly property int _colorsCategory: 11
+    readonly property int _firstThemePage: _colorsCategory
     readonly property bool _onAppearance: selectedCategory >= _themesCategory
 
     // The page last open in each tab, to come back to
@@ -82,6 +85,8 @@ FloatingWindow {
     // the profile being edited; the active theme stands in if the picked one is gone.
     property string editedTheme: ""
     readonly property string editTheme: Theme.themeExists(editedTheme) ? editedTheme : Theme.profileTheme
+    // A question to throw a theme's changes away never carries over to another theme
+    onEditThemeChanged: _discardAll.asking = false
 
     // Previewing: the theme being edited is shown on the whole shell, saved nowhere. The
     // theme picker is locked meanwhile; leaving Appearance or closing the window ends it.
@@ -97,6 +102,11 @@ FloatingWindow {
             editedTheme = Theme.themeOf(editIndex);
         else
             previewing = false;
+    }
+
+    // The theme group an Appearance page edits through a draft, or ""
+    function _pageGroup(category) {
+        return category === _colorsCategory ? "colors" : "";
     }
 
     function showBehaviour() {
@@ -127,8 +137,13 @@ FloatingWindow {
         property string label
         property string current
         property var options: []
-        // Options shown with a • after them: the active profiles, the theme in use
+        // Options shown with a • after them: the active profiles, the theme in use; and with
+        // a ✎: themes with unsaved changes
         property var marked: []
+        property var edited: []
+        function display(name) {
+            return name + (marked.includes(name) ? " •" : "") + (edited.includes(name) ? " ✎" : "");
+        }
         // Shown, but not changed, e.g. while the theme picked is previewed
         property bool locked: false
         readonly property bool open: root._openList === _optionList
@@ -159,7 +174,7 @@ FloatingWindow {
 
             Text {
                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: _arrow.left; rightMargin: 4 }
-                text: _picker.current + (_picker.marked.includes(_picker.current) ? " •" : "")
+                text: _picker.display(_picker.current)
                 elide: Text.ElideRight
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -218,7 +233,7 @@ FloatingWindow {
 
                             Text {
                                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 8; right: parent.right; rightMargin: 6 }
-                                text: parent.modelData + (_picker.marked.includes(parent.modelData) ? " •" : "")
+                                text: _picker.display(parent.modelData)
                                 elide: Text.ElideRight
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
@@ -320,8 +335,67 @@ FloatingWindow {
             }
         }
 
+        // Unsaved changes to the theme edited, on any page: save or throw away all of them
+        Rectangle {
+            id: _draftBanner
+            readonly property bool shown: root._onAppearance && (Theme.drafts, Theme.hasDraft(root.editTheme))
+            anchors { left: parent.left; right: parent.right; top: _tabBar.bottom }
+            height: shown ? 40 : 0
+            visible: shown
+            color: Qt.alpha(Theme.warning, 0.15)
+            onShownChanged: if (!shown) _discardAll.asking = false
+
+            RowLayout {
+                anchors { fill: parent; leftMargin: 14; rightMargin: 10 }
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "✎ Unsaved changes in " + root.editTheme
+                    elide: Text.ElideRight
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textPrimary
+                }
+
+                Rectangle {
+                    width: _saveAllLabel.implicitWidth + 14
+                    height: 24
+                    radius: 6
+                    color: _saveAllArea.containsMouse ? Theme.accentHover : Theme.accent
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+                    Text {
+                        id: _saveAllLabel
+                        anchors.centerIn: parent
+                        text: "Save all"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.onAccent
+                    }
+
+                    MouseArea {
+                        id: _saveAllArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Theme.saveDraft(root.editTheme)
+                    }
+                }
+
+                DeleteButton {
+                    id: _discardAll
+                    label: "Discard all"
+                    confirmLabel: "Throw away all?"
+                    fontSize: Theme.fontSizeBody
+                    cancelTip: "Keep the changes"
+                    onConfirmed: Theme.discardDraft(root.editTheme)
+                }
+            }
+        }
+
         Row {
-            anchors { left: parent.left; right: parent.right; top: _tabBar.bottom; bottom: parent.bottom }
+            anchors { left: parent.left; right: parent.right; top: _draftBanner.bottom; bottom: parent.bottom }
             spacing: 0
 
             // ── Left sidebar (160px) ──────────────────────────────────
@@ -411,6 +485,7 @@ FloatingWindow {
                         current: root.editTheme
                         options: (Theme.themeNames.includes("default") ? [] : ["default"]).concat(Theme.themeNames)
                         marked: [Theme.profileTheme]
+                        edited: Object.keys(Theme.drafts)
                         // The preview shows the theme picked: stop it to pick another
                         locked: root.previewing
                         onPicked: name => root.editedTheme = name
@@ -424,8 +499,10 @@ FloatingWindow {
 
                         Rectangle {
                             id: _previewToggle
-                            // Nothing to preview in the theme already in use
+                            // Nothing to preview in the theme already in use, unless it has
+                            // unsaved changes
                             readonly property bool available: root.previewing || root.editTheme !== Theme.profileTheme
+                                || (Theme.drafts, Theme.hasDraft(root.editTheme))
                             width: _previewText.implicitWidth + 14
                             height: 20
                             radius: 6
@@ -453,9 +530,9 @@ FloatingWindow {
                             HoverTip {
                                 target: _previewToggle
                                 shown: _previewToggleArea.containsMouse
-                                text: !_previewToggle.available ? "This theme is already in use"
+                                text: !_previewToggle.available ? "This theme is already in use, with nothing unsaved"
                                     : root.previewing ? "Back to the profile's theme"
-                                    : "Show this theme on the whole shell while you edit it. Saved nowhere; leaving Appearance or closing the window ends it."
+                                    : "Show this theme, with its unsaved changes, on the whole shell. Leaving Appearance or closing the window ends it."
                             }
                         }
 
@@ -506,8 +583,20 @@ FloatingWindow {
                             Layout.fillWidth: true
                             // Only the pages of the tab that is open
                             visible: (index >= root._themesCategory) === root._onAppearance
+                            // A line above the pages that edit the theme's values: Themes and
+                            // Curves above it manage the library
+                            Layout.topMargin: index === root._firstThemePage ? 13 : 0
                             height: 34
                             radius: 6
+
+                            Rectangle {
+                                visible: parent.index === root._firstThemePage
+                                y: -8
+                                width: parent.width
+                                height: 1
+                                color: Theme.textDisabled
+                                opacity: 0.3
+                            }
                             // The selected one is marked by the sliding mark above
                             color: _categoryArea.containsMouse && index !== root.selectedCategory
                                 ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
@@ -519,7 +608,8 @@ FloatingWindow {
                                     left: parent.left
                                     leftMargin: 10
                                 }
-                                text: modelData
+                                // ✎: the theme edited has unsaved changes on this page
+                                text: modelData + ((Theme.drafts, root._pageGroup(index) !== "" && Theme.hasDraft(root.editTheme, root._pageGroup(index))) ? "  ✎" : "")
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
                                 color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary
@@ -586,6 +676,7 @@ FloatingWindow {
                         if (root.selectedCategory === root._performanceCategory) return performanceComp;
                         if (root.selectedCategory === root._profilesCategory) return profilesComp;
                         if (root.selectedCategory === root._themesCategory) return themesComp;
+                        if (root.selectedCategory === root._colorsCategory) return colorsComp;
                         if (root.selectedCategory === root._curvesCategory) return curvesComp;
                         return sttComp;
                     }
@@ -598,6 +689,9 @@ FloatingWindow {
                 }
             }
         }
+        // A click anywhere takes the focus from a field (but on the field itself)
+        FocusReleaser {}
+
         // While a picker's list is open, a press anywhere but on it closes it
         MouseArea {
             anchors.fill: parent
@@ -621,6 +715,7 @@ FloatingWindow {
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
+    Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }
     Component {
         id: themesComp
         ThemesSettings {

@@ -14,6 +14,7 @@ TestCase {
         "panels/settings/BarSettings.qml",
         "panels/settings/CalendarSettings.qml",
         "panels/settings/ConditionEditor.qml",
+        "panels/settings/ColorsSettings.qml",
         "panels/settings/CurvesSettings.qml",
         "panels/settings/GeneralSettings.qml",
         "panels/settings/LockscreenSettings.qml",

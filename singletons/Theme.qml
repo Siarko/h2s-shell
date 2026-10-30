@@ -135,6 +135,9 @@ Singleton {
         .replace(/\/[^\/]*$/, "") + "/themes"
     // The curves library, shared by every theme (ThemeRules, "Curves")
     readonly property string curvesPath: _folder(themesDir) + "/curves.json"
+    // Drafts: changes made in the settings, not saved yet, one file per theme
+    // (ThemeRules, "Drafts")
+    readonly property string draftsDir: _folder(themesDir) + "/theme-drafts"
 
     // The resolved values, the chain that produced them, and what went wrong (missing
     // themes, cycles, unreadable files) — for the settings page to show
@@ -150,6 +153,8 @@ Singleton {
     property var _watchedFolders: []
 
     onThemeNameChanged: Qt.callLater(reload)
+    // Previewing the theme in use changes no name, only whether its draft shows
+    onPreviewChanged: Qt.callLater(reload)
     Component.onCompleted: {
         reload();
         if (!Config.readOnly)
@@ -183,7 +188,10 @@ Singleton {
     }
 
     // Resolves the theme `name`: { values, chain, errors, watched, folders }
-    function _resolve(name) {
+    // `withDraft`: the theme `name` with its draft laid over it — what the settings show,
+    // and the shell while it is previewed
+    function _resolve(name, withDraft) {
+        const draft = withDraft ? drafts[name] : undefined;
         // Local, not a property: a property written and read here would make any binding
         // that ends up calling this loop
         const readErrors = [];
@@ -198,7 +206,10 @@ Singleton {
                 folders.push(_folder(path));
             return parsed;
         };
-        const result = ThemeRules.chainFor(name, themeName => readWatched(_themePath(themeName)));
+        const result = ThemeRules.chainFor(name, themeName => {
+            const parsed = readWatched(_themePath(themeName));
+            return themeName === name && draft ? ThemeRules.applyDraft(parsed ?? {}, draft) : parsed;
+        });
         const palettes = {};
         for (const entry of result.chain) {
             if (typeof entry.theme.colorsFrom !== "string")
@@ -218,8 +229,22 @@ Singleton {
             if (curve.error !== "")
                 result.errors.push(curve.error + " (role \"" + role + "\")");
         }
+        // What the draft sets is marked as such; a value it resets keeps where its
+        // inherited value comes from, marked as reset
+        const origins = ThemeRules.origins(result.chain, palettes);
+        for (const group in draft ?? {}) {
+            for (const token in draft[group]) {
+                if (!origins[group])
+                    continue;
+                if (draft[group][token] === null)
+                    origins[group][token] = Object.assign({}, origins[group][token] ?? {}, { reset: true });
+                else
+                    origins[group][token] = { theme: name, palette: false, draft: true };
+            }
+        }
         return {
             values: values,
+            origins: origins,
             library: library,
             chain: result.chain.map(entry => entry.name),
             errors: result.errors.concat(readErrors),
@@ -229,7 +254,7 @@ Singleton {
     }
 
     function reload() {
-        const resolved = _resolve(themeName);
+        const resolved = _resolve(themeName, preview !== "");
         // A new theme, or a file changed by something else (matugen after a wallpaper
         // change), fades the colours over; the shell's own edits and the first load do not
         if (revision > 0 && !_quietReload
@@ -240,6 +265,7 @@ Singleton {
         }
         _quietReload = false;
         values = resolved.values;
+        origins = resolved.origins;
         if (JSON.stringify(resolved.library) !== JSON.stringify(curveLibrary))
             curveLibrary = resolved.library;
         const easings = {};
@@ -272,13 +298,16 @@ Singleton {
         // Any file may have changed, and with it the other themes asked for
         const others = {};
         const otherErrors = {};
+        const otherOrigins = {};
         for (const other in _otherValues) {
-            const otherResolved = _resolve(other);
+            const otherResolved = _resolve(other, true);
             others[other] = otherResolved.values;
             otherErrors[other] = otherResolved.errors;
+            otherOrigins[other] = otherResolved.origins;
         }
-        _otherValues = others;
         _otherErrors = otherErrors;
+        _otherOrigins = otherOrigins;
+        _otherValues = others;
         revision++;
     }
 
@@ -288,7 +317,7 @@ Singleton {
     // reading a chain of files inside a binding re-triggered it file by file — a binding
     // loop. Until a theme's values are ready (a moment later), the active ones stand in.
     function valuesOf(name) {
-        if (name === themeName)
+        if (_showsDraftOf(name))
             return values;
         const known = _otherValues[name];
         if (known === undefined) {
@@ -300,29 +329,161 @@ Singleton {
 
     property var _otherValues: ({})
     property var _otherErrors: ({})
+    property var _otherOrigins: ({})
+    // Where the active theme's values come from (ThemeRules.origins)
+    property var origins: ({})
 
     function _resolveOther(name) {
         if (name in _otherValues)
             return;
-        const resolved = _resolve(name);
+        const resolved = _resolve(name, true);
         const others = Object.assign({}, _otherValues);
         others[name] = resolved.values;
         const otherErrors = Object.assign({}, _otherErrors);
         otherErrors[name] = resolved.errors;
         _otherErrors = otherErrors;
+        const otherOrigins = Object.assign({}, _otherOrigins);
+        otherOrigins[name] = resolved.origins;
+        _otherOrigins = otherOrigins;
         _otherValues = others;
     }
 
     // What went wrong resolving any theme (missing parent, cycle, broken file, unknown
     // curve); like valuesOf, ready a moment after it is first asked for
     function errorsOf(name) {
-        if (name === themeName)
+        if (_showsDraftOf(name))
             return errors;
         if (!(name in _otherErrors)) {
             Qt.callLater(_resolveOther, name);
             return [];
         }
         return _otherErrors[name];
+    }
+
+    // Where any theme's values come from (ThemeRules.origins); like valuesOf, ready a moment
+    // after it is first asked for
+    function originsOf(name) {
+        if (_showsDraftOf(name))
+            return origins;
+        if (!(name in _otherOrigins)) {
+            Qt.callLater(_resolveOther, name);
+            return ({});
+        }
+        return _otherOrigins[name];
+    }
+
+    // ---- Drafts ----
+    // Each theme's draft, { name: draft }: what the settings changed and did not save.
+    // The shell shows a draft only while that theme is previewed; the settings always do.
+    // Read from their files once, at start (drafts left from before a restart); from then
+    // on this is the record, and the files follow it — so a draft emptied can simply be
+    // removed, without a later read bringing it back while the removal runs.
+    property var drafts: ({})
+    property bool _draftsLoaded: false
+
+    function _draftPath(name) {
+        return draftsDir + "/" + name + ".json";
+    }
+
+    // Whether the active values are what the settings should show for `name`: the theme
+    // shown, with its draft if it has one (it is shown with it only while previewed)
+    function _showsDraftOf(name) {
+        return name === themeName && (preview !== "" || !(name in drafts));
+    }
+
+    function _loadDrafts() {
+        if (_draftsLoaded)
+            return;
+        _draftsLoaded = true;
+        const read = Object.assign({}, drafts);
+        for (let i = 0; i < _draftFiles.count; i++) {
+            const name = _draftFiles.get(i, "fileBaseName");
+            const draft = _read(_draftPath(name));
+            if (draft !== null && Object.keys(draft).length > 0 && !(name in read))
+                read[name] = draft;
+        }
+        drafts = read;
+        Qt.callLater(reload);
+    }
+
+    function _writeDraft(name, draft) {
+        const all = Object.assign({}, drafts);
+        if (Object.keys(draft).length > 0) {
+            all[name] = draft;
+            _write(_draftPath(name), draft);
+        } else {
+            delete all[name];
+            _removeFile(_draftPath(name));
+        }
+        drafts = all;
+        _quietReload = true;
+        Qt.callLater(reload);
+    }
+
+    // The theme file of `name` as it is on disk now, for changing it; null when it does
+    // not parse (rewriting it would lose the user's hand edits), {} when there is none
+    function _fileForEdit(name) {
+        const theme = _read(_themePath(name));
+        if (theme === null && _reader.text() !== "") {
+            console.warn("[Theme] Not changing", _themePath(name), "— it does not parse");
+            return null;
+        }
+        return theme ?? {};
+    }
+
+    // Whether the theme `name` has unsaved changes, in `group` or in any
+    function hasDraft(name, group) {
+        return group ? !!drafts[name]?.[group] : name in drafts;
+    }
+
+    // Changes one token in the draft of `name`; `value` null resets it (ThemeRules.draftWith)
+    function draftToken(name, group, token, value) {
+        if (Config.readOnly)
+            return false;
+        const file = _fileForEdit(name);
+        if (file === null)
+            return false;
+        _writeDraft(name, ThemeRules.draftWith(drafts[name], file, group, token, value));
+        return true;
+    }
+
+    // Takes back the draft's change to one token: it is as saved again
+    function undraftToken(name, group, token) {
+        if (Config.readOnly || !(name in drafts))
+            return false;
+        _writeDraft(name, ThemeRules.draftWithout(drafts[name], group, token));
+        return true;
+    }
+
+    // Writes the draft of `name` into its theme file — the groups given, or all of it — and
+    // keeps the rest as the draft. Built on the file as it is now, not as last read.
+    function saveDraft(name, groups) {
+        if (Config.readOnly || !(name in drafts))
+            return false;
+        const file = _fileForEdit(name);
+        if (file === null)
+            return false;
+        const split = ThemeRules.splitDraft(drafts[name], groups);
+        _writeTheme(name, ThemeRules.applyDraft(file, split.taken));
+        _writeDraft(name, split.rest);
+        return true;
+    }
+
+    // Throws away the draft of `name` — the groups given, or all of it
+    function discardDraft(name, groups) {
+        if (Config.readOnly || !(name in drafts))
+            return false;
+        _writeDraft(name, ThemeRules.splitDraft(drafts[name], groups).rest);
+        return true;
+    }
+
+    // The draft files, listed once at start to find the drafts left from before
+    FolderListModel {
+        id: _draftFiles
+        folder: "file://" + root.draftsDir
+        nameFilters: ["*.json"]
+        showDirs: false
+        onStatusChanged: if (status === FolderListModel.Ready) Qt.callLater(root._loadDrafts)
     }
 
     // ---- Managing themes (the Themes page) ----
@@ -387,6 +548,10 @@ Singleton {
         for (const name in changed)
             _writeTheme(name, changed[name]);
         _retargetProfiles(oldName, newName);
+        if (oldName in drafts) {
+            _writeDraft(newName, drafts[oldName]);
+            _writeDraft(oldName, {});
+        }
         _removeFile(_themePath(oldName));
         return true;
     }
@@ -400,6 +565,8 @@ Singleton {
         for (const other in changed)
             _writeTheme(other, changed[other]);
         _retargetProfiles(name, "default");
+        if (name in drafts)
+            _writeDraft(name, {});
         _removeFile(_themePath(name));
         return true;
     }
@@ -414,14 +581,29 @@ Singleton {
         Config.globals = JSON.stringify(result.globals);
     }
 
+    // Files are removed one at a time, in the order asked
+    property var _removals: []
+
     function _removeFile(path) {
-        _remover.command = ["rm", "-f", "--", path];
+        _removals = _removals.concat([path]);
+        if (!_remover.running)
+            _nextRemoval();
+    }
+
+    function _nextRemoval() {
+        if (_removals.length === 0)
+            return;
+        _remover.command = ["rm", "-f", "--", _removals[0]];
+        _removals = _removals.slice(1);
         _remover.running = true;
     }
 
     Process {
         id: _remover
-        onExited: Qt.callLater(root.reload)
+        onExited: {
+            root._nextRemoval();
+            Qt.callLater(root.reload);
+        }
     }
 
     // The theme a profile uses when it is active, as the settings window edits it
@@ -606,7 +788,7 @@ Singleton {
     // writeToken, and before the migration writes into it
     Process {
         id: _ensureThemesDir
-        command: ["mkdir", "-p", root.themesDir]
+        command: ["mkdir", "-p", root.themesDir, root.draftsDir]
         onExited: root._finishMigration()
     }
 
@@ -666,7 +848,7 @@ Singleton {
         enabled: root._colorsAnimating
         ColorAnimation {
             duration: root.duration("themeChange")
-            easing.type: root.easing("themeChange")
+            easing: root.curve("themeChange")
         }
     }
 
@@ -806,6 +988,12 @@ Singleton {
     readonly property color glassBorder: Qt.alpha("white", 0.12)
     readonly property color glassBorderFocus: Qt.alpha("white", 0.45)  // a focused field
     readonly property color glassTextMuted: Qt.alpha("white", 0.38)    // placeholder, disabled text
+
+    // Fixed, not themed: they have to read against any colour a theme could pick
+    readonly property color checkerLight: "#999999"     // the squares behind a colour with
+    readonly property color checkerDark: "#666666"      //   transparency, so it shows
+    readonly property color markOnLight: "black"        // a picker's marks, over the colour
+    readonly property color markOnDark: "white"         //   being picked
 
     // HUD notification timer bar
     readonly property int notifTimerHeight: 3

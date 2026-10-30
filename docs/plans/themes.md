@@ -275,7 +275,32 @@ The ~50 hard-coded `duration:` values move to roles.
    new name was never written (and a copy neither). `Theme._write` clears the path and
    reads first.
    The user found the two editing modes confusing (the sidebar's list swapping between
-   profiles and themes): TODO 10.10, to be designed before the rest of stage 6.
+   profiles and themes): TODO 10.10, to be designed before the rest of stage 6. Done the
+   same day: two tabs, Behaviour and Appearance, each with its own picker, and a theme
+   preview (`Theme.preview`).
+   *(b) Colors, 2026-10-30, verified on the host:* `ThemeRules.colorTokens` (group, label,
+   use; tested to match the built-in colours) and `ThemeRules.origins` (which theme, or
+   its palette, sets each value; tested); `Theme.originsOf`, `Theme.removeToken`.
+   `components/ColorPicker.qml` works in HSV kept apart from the colour, so a hue survives
+   grey; writes while dragging go out at most every 80 ms.
+   *Drafts, 2026-10-30, verified on the host (the user's design):* experimenting is the
+   normal use of these pages, so changes are not written to the theme straight away.
+   One draft file per theme in `theme-drafts/`, holding only the changed tokens (null:
+   removed on save), laid over the theme file (`ThemeRules.applyDraft`, `draftWith`,
+   `splitDraft`, tested), so untouched values follow the file. The settings always show
+   a theme with its draft; the shell only while it is previewed. Per page: Save / Cancel
+   (that page's groups); a banner between the tabs and the pages saves or discards all
+   of the edited theme's changes (not other themes'); a pencil on pages and in the theme
+   list. Only Colors goes through drafts so far; Curves keeps its own Save/Revert;
+   operations on whole themes stay immediate. Drafts are read from their files once, at
+   start; from then on memory is the record and the files follow it, so an emptied draft
+   is simply removed. After a code review (/code-review, 2026-10-30): the hex field no
+   longer drafts a colour when focus merely leaves it; saving and drafting build on the
+   theme file as it is on disk, not as last read; a reset in a draft shows ("✎ reset")
+   and each changed colour has Undo (`ThemeRules.draftWithout`, tested); discard
+   questions are disarmed when their target changes; a cancelled drag no longer leaves
+   the picker deaf; the checkerboard and picker marks are Theme constants and one
+   component. Left for later: each drag step writes the draft and reloads (every 80 ms).
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a
