@@ -25,11 +25,19 @@ FloatingWindow {
     // Index into the sidebar list below
     property int selectedCategory: 0
     // The sidebar's pages, in order; also how IPC names a page
-    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Curves"]
+    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves"]
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
-    // Global, not per profile: moves under Appearance with the theme pages (docs/plans/themes.md)
-    readonly property int _curvesCategory: 9
+    // From here on the pages are Appearance: they edit a theme, picked in the sidebar in
+    // place of the profile (docs/plans/themes.md, stage 6)
+    readonly property int _themesCategory: 9
+    readonly property int _curvesCategory: 10
+    readonly property bool _onAppearance: selectedCategory >= _themesCategory
+
+    // The theme the Appearance pages edit, by name; the active theme until one is picked,
+    // or when the picked one is gone
+    property string editedTheme: ""
+    readonly property string editTheme: Theme.themeExists(editedTheme) ? editedTheme : Theme.themeName
 
     // The profile every page edits (docs/plans/global-profiles.md), by name so it
     // survives reordering; Full, else the first
@@ -120,9 +128,9 @@ FloatingWindow {
                         }
                     }
 
-                    // The profile being edited, for every page
+                    // The profile being edited, for every page but Appearance's
                     Text {
-                        visible: Profiles.profiles.length > 0
+                        visible: Profiles.profiles.length > 0 && !root._onAppearance
                         text: "Editing"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
@@ -132,7 +140,7 @@ FloatingWindow {
                     Repeater {
                         // ScriptModel, never the bare array — see "The Repeater crash"
                         model: ScriptModel {
-                            values: Profiles.profiles.map(profile => profile.name)
+                            values: root._onAppearance ? [] : Profiles.profiles.map(profile => profile.name)
                         }
 
                         Rectangle {
@@ -164,6 +172,50 @@ FloatingWindow {
                         }
                     }
 
+                    // The theme being edited, on Appearance's pages; • marks the one in use
+                    Text {
+                        visible: root._onAppearance
+                        text: "Editing theme"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textDisabled
+                    }
+
+                    Repeater {
+                        // ScriptModel, never the bare array — see "The Repeater crash"
+                        model: ScriptModel {
+                            values: !root._onAppearance ? []
+                                : (Theme.themeNames.includes("default") ? [] : ["default"]).concat(Theme.themeNames)
+                        }
+
+                        Rectangle {
+                            required property string modelData
+                            readonly property bool picked: modelData === root.editTheme
+                            Layout.fillWidth: true
+                            height: 24
+                            radius: 6
+                            color: picked ? Theme.accent : (_themeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+                            Text {
+                                anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: parent.right; rightMargin: 6 }
+                                text: parent.modelData + (parent.modelData === Theme.themeName ? " •" : "")
+                                elide: Text.ElideRight
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: parent.picked ? Theme.textPrimary : Theme.textSecondary
+                            }
+
+                            MouseArea {
+                                id: _themeArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.editedTheme = parent.modelData
+                            }
+                        }
+                    }
+
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.topMargin: 4
@@ -180,8 +232,21 @@ FloatingWindow {
                             required property string modelData
                             required property int index
                             Layout.fillWidth: true
+                            // Appearance's pages start with its heading, above the first
+                            Layout.topMargin: index === root._themesCategory ? _appearanceHeading.height + 6 : 0
                             height: 34
                             radius: 6
+
+                            Text {
+                                id: _appearanceHeading
+                                visible: parent.index === root._themesCategory
+                                y: -height - 4
+                                x: 4
+                                text: "Appearance"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textDisabled
+                            }
                             // The selected one is marked by the sliding mark above
                             color: _categoryArea.containsMouse && index !== root.selectedCategory
                                 ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
@@ -259,6 +324,7 @@ FloatingWindow {
                         if (root.selectedCategory === 5) return lockscreenComp;
                         if (root.selectedCategory === root._performanceCategory) return performanceComp;
                         if (root.selectedCategory === root._profilesCategory) return profilesComp;
+                        if (root.selectedCategory === root._themesCategory) return themesComp;
                         if (root.selectedCategory === root._curvesCategory) return curvesComp;
                         return sttComp;
                     }
@@ -281,6 +347,13 @@ FloatingWindow {
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
+    Component {
+        id: themesComp
+        ThemesSettings {
+            themeName: root.editTheme
+            onThemePicked: name => root.editedTheme = name
+        }
+    }
     Component {
         id: performanceComp
         PerformanceSettings { editIndex: root.editIndex }

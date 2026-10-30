@@ -24,6 +24,7 @@ TestCase {
         "panels/settings/SchemaSettingEditor.qml",
         "panels/settings/SettingOptions.qml",
         "panels/settings/SttSettings.qml",
+        "panels/settings/ThemesSettings.qml",
         "screensaver/LockSurface.qml",
         "screensaver/NotificationPreview.qml",
         "screensaver/ScreensaverSurface.qml"

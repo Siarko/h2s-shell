@@ -44,6 +44,29 @@ TestCase {
         assert(!("unknown" in withPalette.colors), "tokens the built-in theme does not know are ignored");
 
         assertEqual(JSON.stringify(ThemeRules.resolve(builtin, [], {})), JSON.stringify(builtin), "no theme: the built-in one");
+        // --- managing themes ---
+        assert(ThemeRules.validThemeName("Power save"), "a theme name may have spaces inside");
+        assert(!ThemeRules.validThemeName("a/b") && !ThemeRules.validThemeName(".hidden") && !ThemeRules.validThemeName(" x"),
+            "but no slash, no leading dot, no spaces at its ends");
+        const family = { base: { extends: "root", colors: {} }, child: { extends: "base" }, other: { extends: "child" }, alone: {} };
+        const renamedFamily = ThemeRules.renameExtends(family, "base", "core");
+        assertEqual(JSON.stringify(Object.keys(renamedFamily)), JSON.stringify(["child"]), "renaming re-points only the themes extending it");
+        assertEqual(renamedFamily.child.extends, "core", "at the new name");
+        assertEqual(family.child.extends, "base", "the inputs are not modified");
+        assertEqual(ThemeRules.withoutExtends(family, "base").child.extends, "root", "deleting hands its parent to the themes extending it");
+        assertEqual(ThemeRules.withoutExtends(family, "alone").child, undefined, "and leaves the others");
+        assertEqual(ThemeRules.withoutExtends({ a: {}, b: { extends: "a" } }, "a").b.extends, "default", "a parent of nothing hands over the default");
+        const retargeted = ThemeRules.retargetTheme([{ name: "Full", set: { "appearance.theme": "x" } }, { name: "Quiet", set: {} }],
+            { "appearance.theme": "x" }, "x", "y");
+        assertEqual(retargeted.profiles[0].set["appearance.theme"], "y", "profiles using a theme follow it");
+        assertEqual(retargeted.globals["appearance.theme"], "y", "and so does a pinned global");
+        assertEqual(JSON.stringify(retargeted.changed), JSON.stringify(["Full", "global"]), "naming what changed");
+        assertEqual(retargeted.profiles[1].set["appearance.theme"], undefined, "a profile without its own theme is left alone");
+        const readFamily = name => family[name] ?? null;
+        assert(ThemeRules.extendsCycle("base", "other", readFamily), "extending a descendant is a cycle");
+        assert(ThemeRules.extendsCycle("base", "base", readFamily), "and so is extending itself");
+        assert(!ThemeRules.extendsCycle("other", "alone", readFamily), "an unrelated theme is fine");
+
         // --- curves ---
         const library = { snappy: [0.2, 0.9, 0.1, 1.0], twoStep: [0.1, 0.5, 0.2, 0.6, 0.5, 0.5, 0.6, 0.6, 0.9, 1, 1, 1],
             backwards: [1.2, 0, 0.5, 1], short: [0.1, 0.2, 0.3], OutQuad: [0, 0, 1, 1] };

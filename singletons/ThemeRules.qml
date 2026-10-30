@@ -95,6 +95,60 @@ Singleton {
         return result;
     }
 
+    // ---- Managing themes ----
+
+    // Whether `name` may name a theme file: not empty, no spaces at its ends, no slash,
+    // not hidden
+    function validThemeName(name) {
+        return typeof name === "string" && name.trim() !== "" && name === name.trim()
+            && !name.includes("/") && !name.startsWith(".");
+    }
+
+    // The themes (`{ name: parsed file }`) that extend `oldName`, pointed at `newName`:
+    // only those that changed. Inputs are not modified.
+    function renameExtends(themes, oldName, newName) {
+        const changed = {};
+        for (const name in themes ?? {}) {
+            if (themes[name]?.extends === oldName)
+                changed[name] = Object.assign({}, themes[name], { extends: newName });
+        }
+        return changed;
+    }
+
+    // The themes that extend `removed`, extending what it extended instead (the default
+    // theme when it extended nothing): only those that changed
+    function withoutExtends(themes, removed) {
+        const parent = typeof themes?.[removed]?.extends === "string" ? themes[removed].extends : "default";
+        return renameExtends(themes, removed, parent);
+    }
+
+    // Profiles and pinned globals with `appearance.theme` set to `oldName` set to
+    // `newName` instead. Inputs are not modified.
+    // Returns { profiles, globals, changed: [profile names, "global" for the pin] }.
+    function retargetTheme(profiles, globals, oldName, newName) {
+        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
+        const newGlobals = Object.assign({}, globals ?? {});
+        const changed = [];
+        for (const profile of newProfiles) {
+            if (profile.set?.["appearance.theme"] === oldName) {
+                profile.set["appearance.theme"] = newName;
+                changed.push(profile.name);
+            }
+        }
+        if (newGlobals["appearance.theme"] === oldName) {
+            newGlobals["appearance.theme"] = newName;
+            changed.push("global");
+        }
+        return { profiles: newProfiles, globals: newGlobals, changed: changed };
+    }
+
+    // Whether `name` extending `base` would make a cycle: `base`'s chain reaches `name`
+    function extendsCycle(name, base, readTheme) {
+        if (name === base)
+            return true;
+        return chainFor(base, readTheme).chain.some(entry => entry.name === name);
+    }
+
     // ---- Curves ----
 
     // The easing to fall back on for a curve that cannot be found

@@ -250,20 +250,31 @@ Singleton {
             _watched = resolved.watched;
         if (JSON.stringify(resolved.folders) !== JSON.stringify(_watchedFolders))
             _watchedFolders = resolved.folders;
-        // Every theme file, parsed, for where curves are used (the Curves page)
+        // Every theme file, parsed, for where curves are used and for managing themes; and
+        // every name in the folder, including files that do not parse
         const allThemes = {};
+        const allNames = [];
         for (let i = 0; i < _themeFiles.count; i++) {
             const name = _themeFiles.get(i, "fileBaseName");
+            allNames.push(name);
             const theme = _read(_themePath(name));
             if (theme !== null)
                 allThemes[name] = theme;
         }
         themeFiles = allThemes;
+        allNames.sort((a, b) => a.localeCompare(b));
+        if (JSON.stringify(allNames) !== JSON.stringify(themeNames))
+            themeNames = allNames;
         // Any file may have changed, and with it the other themes asked for
         const others = {};
-        for (const other in _otherValues)
-            others[other] = _resolve(other).values;
+        const otherErrors = {};
+        for (const other in _otherValues) {
+            const otherResolved = _resolve(other);
+            others[other] = otherResolved.values;
+            otherErrors[other] = otherResolved.errors;
+        }
         _otherValues = others;
+        _otherErrors = otherErrors;
         revision++;
     }
 
@@ -284,13 +295,129 @@ Singleton {
     }
 
     property var _otherValues: ({})
+    property var _otherErrors: ({})
 
     function _resolveOther(name) {
         if (name in _otherValues)
             return;
+        const resolved = _resolve(name);
         const others = Object.assign({}, _otherValues);
-        others[name] = _resolve(name).values;
+        others[name] = resolved.values;
+        const otherErrors = Object.assign({}, _otherErrors);
+        otherErrors[name] = resolved.errors;
+        _otherErrors = otherErrors;
         _otherValues = others;
+    }
+
+    // What went wrong resolving any theme (missing parent, cycle, broken file, unknown
+    // curve); like valuesOf, ready a moment after it is first asked for
+    function errorsOf(name) {
+        if (name === themeName)
+            return errors;
+        if (!(name in _otherErrors)) {
+            Qt.callLater(_resolveOther, name);
+            return [];
+        }
+        return _otherErrors[name];
+    }
+
+    // ---- Managing themes (the Themes page) ----
+    // Every theme file's name, including files that do not parse, as of the last reload
+    property var themeNames: []
+
+    // Whether a theme of this name exists: a file, or the built-in default
+    function themeExists(name) {
+        return name === "default" || themeNames.includes(name);
+    }
+
+    // Names of the profiles whose own `appearance.theme` is `name`, and "global" when it
+    // is pinned — what renaming or deleting it changes
+    function setters(name) {
+        return ThemeRules.retargetTheme(Profiles.profiles, Profiles.globals, name, name).changed;
+    }
+
+    // A new theme extending `base`
+    function createTheme(name, base) {
+        if (Config.readOnly || !ThemeRules.validThemeName(name) || themeExists(name))
+            return false;
+        _writeTheme(name, { extends: base || "default" });
+        return true;
+    }
+
+    // A copy of the file of `source` under a new name: the same values, extending the
+    // same theme
+    function duplicateTheme(source, name) {
+        if (Config.readOnly || !ThemeRules.validThemeName(name) || themeExists(name))
+            return false;
+        if (themeNames.includes(source) && !(source in themeFiles)) {
+            console.warn("[Theme] Not copying", _themePath(source), "— it does not parse");
+            return false;
+        }
+        _writeTheme(name, JSON.parse(JSON.stringify(themeFiles[source] ?? {})));
+        return true;
+    }
+
+    // Points the theme `name` at a new parent, unless that would make a cycle
+    function setExtends(name, base) {
+        if (Config.readOnly || !(name in themeFiles))
+            return false;
+        if (ThemeRules.extendsCycle(name, base, themeName => themeFiles[themeName] ?? null))
+            return false;
+        const theme = Object.assign({}, themeFiles[name]);
+        if (base === "default")
+            delete theme.extends;
+        else
+            theme.extends = base;
+        _writeTheme(name, theme);
+        return true;
+    }
+
+    // Renames a theme: the new file is written first, then the themes extending it and the
+    // profiles using it follow, and the old file goes. The config is backed up first.
+    function renameTheme(oldName, newName) {
+        if (Config.readOnly || oldName === "default" || !(oldName in themeFiles)
+                || !ThemeRules.validThemeName(newName) || themeExists(newName))
+            return false;
+        _writeTheme(newName, themeFiles[oldName]);
+        const changed = ThemeRules.renameExtends(themeFiles, oldName, newName);
+        for (const name in changed)
+            _writeTheme(name, changed[name]);
+        _retargetProfiles(oldName, newName);
+        _removeFile(_themePath(oldName));
+        return true;
+    }
+
+    // Deletes a theme: the themes extending it extend its parent instead, and the
+    // profiles using it fall back to the default theme. The config is backed up first.
+    function deleteTheme(name) {
+        if (Config.readOnly || !themeNames.includes(name))
+            return false;
+        const changed = ThemeRules.withoutExtends(themeFiles, name);
+        for (const other in changed)
+            _writeTheme(other, changed[other]);
+        _retargetProfiles(name, "default");
+        _removeFile(_themePath(name));
+        return true;
+    }
+
+    function _retargetProfiles(oldName, newName) {
+        const result = ThemeRules.retargetTheme(Profiles.profiles, Profiles.globals, oldName, newName);
+        if (result.changed.length === 0)
+            return;
+        Profiles.backUpConfig();
+        console.log("[Theme] Theme", oldName, "is now", newName, "in:", result.changed.join(", "));
+        Config.profiles = JSON.stringify(result.profiles);
+        Config.globals = JSON.stringify(result.globals);
+    }
+
+    function _removeFile(path) {
+        _remover.command = ["rm", "-f", "--", path];
+        _remover.running = true;
+    }
+
+    Process {
+        id: _remover
+        onExited: Qt.callLater(root.reload)
     }
 
     // The theme a profile uses when it is active, as the settings window edits it
@@ -326,8 +453,7 @@ Singleton {
     }
 
     function _writeTheme(name, theme) {
-        _writer.path = _themePath(name);
-        _writer.setText(JSON.stringify(theme, null, 2) + "\n");
+        _write(_themePath(name), theme);
         _quietReload = true;
         Qt.callLater(reload);
     }
@@ -335,7 +461,20 @@ Singleton {
     FileView {
         id: _writer
         blockWrites: true
+        blockAllReads: true
         printErrors: false
+    }
+
+    // Writes `value` as JSON to `path`. A FileView skips a write of the text it already
+    // holds, and after a change of path it still held the previous file's (until a read
+    // caught up — and reading a file that does not exist leaves it) — so a theme renamed
+    // or copied, the same text under a new name, was never written. Clearing the path
+    // first empties it.
+    function _write(path, value) {
+        _writer.path = "";
+        _writer.path = path;
+        _writer.reload();
+        _writer.setText(JSON.stringify(value, null, 2) + "\n");
     }
 
     // ---- The curves library ----
@@ -359,8 +498,7 @@ Singleton {
     }
 
     function _writeLibrary(library) {
-        _writer.path = curvesPath;
-        _writer.setText(JSON.stringify(library, null, 2) + "\n");
+        _write(curvesPath, library);
         Qt.callLater(reload);
     }
 

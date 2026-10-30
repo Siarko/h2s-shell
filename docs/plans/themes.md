@@ -263,6 +263,19 @@ The ~50 hard-coded `duration:` values move to roles.
    in use may be deleted, after a question naming the profiles: they fall back to
    "default", and themes extending it take over its `extends`. Renaming and deleting a
    theme back the config up first.
+   *(a) Structure and managing themes, 2026-10-30, verified on the host:* the sidebar has an
+   Appearance heading over Themes and Curves; on its pages the profile list gives way
+   to the theme list (`editedTheme`, following the active theme until one is picked).
+   `ThemeRules.renameExtends`, `withoutExtends`, `retargetTheme`, `extendsCycle`,
+   `validThemeName` (tested); `Theme.createTheme`, `duplicateTheme` (the file as it is),
+   `setExtends` (refusing cycles), `renameTheme`, `deleteTheme` (files removed with
+   `rm`), `errorsOf`, `themeNames` (every file, broken ones too), `setters`. Found while
+   testing: renaming wrote nothing — a FileView skips writing the text it holds, and
+   after a change of path it still held the previous file's, so the same theme under a
+   new name was never written (and a copy neither). `Theme._write` clears the path and
+   reads first.
+   The user found the two editing modes confusing (the sidebar's list swapping between
+   profiles and themes): TODO 10.10, to be designed before the rest of stage 6.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

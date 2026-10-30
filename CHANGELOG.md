@@ -50,6 +50,13 @@ section to the new version and date.
   Curves can have more points: double-click the curve to add one, select a point to
   type its position, remove it, or switch off "Smooth" for a corner there.
 
+- Settings → Appearance: a group of pages that edit a theme rather than a profile — the
+  sidebar's profile list gives way to the list of themes. Its first page, Themes, shows
+  who uses the picked theme and what is wrong with it, sets what it extends, and makes a
+  new theme (extending it, or as a copy), renames it (themes and profiles follow) or
+  deletes it (asking first; profiles using it go back to the default theme). Curves moved
+  into the group.
+
 ### Changed
 - The "Theme" setting suggests the theme files as you type (and "default"), and warns
   when the name has no file.
