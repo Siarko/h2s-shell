@@ -54,6 +54,12 @@ TestCase {
         for (const entry of ThemeRules.colorTokens)
             assert(entry.token in Theme.builtin.colors, "the colour " + entry.token + " is a built-in token");
         assertEqual(ThemeRules.colorTokens.length, Object.keys(Theme.builtin.colors).length, "and every built-in colour is listed");
+        for (const entry of ThemeRules.fontTokens) {
+            assert(entry.token in Theme.builtin.fonts, "the font size " + entry.token + " is a built-in token");
+            const size = Theme.builtin.fonts[entry.token];
+            assert(size >= entry.from && size <= entry.to, "and its slider reaches today's " + size + " px");
+        }
+        assertEqual(ThemeRules.fontTokens.length + 1, Object.keys(Theme.builtin.fonts).length, "every built-in size is listed, besides the family");
 
         // --- drafts ---
         const file = { extends: "default", colors: { accent: "#111111", surface: "#222222" }, bar: { barHeight: 30 } };

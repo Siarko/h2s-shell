@@ -315,6 +315,12 @@ The ~50 hard-coded `duration:` values move to roles.
    height at once under the animating clip; it is now at least as tall as the clip.
    Left for later (TODO 10.11): fixed popup widths, the calendar's 270 px column, the
    event form's recurrence row, NetworkPanel's hand-summed expanded heights.
+   *The Fonts page, 2026-10-30, verified on the host:* `ThemeRules.fontTokens` (label, use,
+   slider range; tested to cover the built-in sizes and reach them);
+   `panels/settings/DraftActions.qml` (a page's Save / Cancel of its draft groups, now
+   shared with Colors); the family from `Qt.fontFamilies()`, searchable, each shown in
+   itself; per size a sample, a slider (writes at most every 80 ms), origin, Reset, Undo;
+   a warning when a Title-size glyph is taller than a bar cell (bar height − 10).
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

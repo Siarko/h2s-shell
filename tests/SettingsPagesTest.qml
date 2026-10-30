@@ -16,6 +16,8 @@ TestCase {
         "panels/settings/ConditionEditor.qml",
         "panels/settings/ColorsSettings.qml",
         "panels/settings/CurvesSettings.qml",
+        "panels/settings/DraftActions.qml",
+        "panels/settings/FontsSettings.qml",
         "panels/settings/GeneralSettings.qml",
         "panels/settings/LockscreenSettings.qml",
         "panels/settings/MediaSettings.qml",

@@ -26,10 +26,7 @@ Flickable {
     readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
     // The colour whose picker is open
     property string expanded: ""
-    onThemeNameChanged: {
-        expanded = "";
-        _cancelButton.asking = false;
-    }
+    onThemeNameChanged: expanded = ""
 
     // Writes while a picker is dragged go out at most every 80 ms; the last one on release
     property string _pendingToken: ""
@@ -84,9 +81,6 @@ Flickable {
         return !!origin && !origin.palette && origin.theme === themeName;
     }
 
-    readonly property bool _changed: (Theme.drafts, Theme.hasDraft(themeName, "colors"))
-    // A question to throw the changes away does not outlive them
-    on_ChangedChanged: if (!_changed) _cancelButton.asking = false
 
     ColumnLayout {
         id: _column
@@ -114,36 +108,11 @@ Flickable {
         }
 
         // This page's changes: save them into the theme, or throw them away
-        RowLayout {
-            visible: root._changed
-            Layout.fillWidth: true
-            spacing: 6
-
-            Text {
-                Layout.fillWidth: true
-                text: "✎ Colours changed, not saved"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.warning
-            }
-
-            SmallButton {
-                label: "Save"
-                primary: true
-                onClicked: {
-                    root._write("", "", true);
-                    Theme.saveDraft(root.themeName, ["colors"]);
-                }
-            }
-
-            DeleteButton {
-                id: _cancelButton
-                label: "Cancel"
-                confirmLabel: "Throw away?"
-                fontSize: Theme.fontSizeBody
-                cancelTip: "Keep the changes"
-                onConfirmed: Theme.discardDraft(root.themeName, ["colors"])
-            }
+        DraftActions {
+            themeName: root.themeName
+            groups: ["colors"]
+            message: "Colours changed, not saved"
+            onAboutToSave: root._write("", "", true)
         }
 
         Repeater {

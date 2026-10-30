@@ -70,6 +70,11 @@ section to the new version and date.
   with its changes (also the theme in use, when it has some). Reset returns a colour to
   the inherited value; Undo takes back one colour's unsaved change.
 
+- Settings → Appearance → Fonts: the theme's font family, picked from the installed fonts
+  (searchable, each shown in itself), and its 13 sizes, each with a sample, a slider,
+  where its value comes from, Reset and Undo; drafts like colours. Warns when the bar's
+  larger icons would not fit its cells.
+
 ### Changed
 - Ready for larger fonts: buttons, pills, fields, icon buttons, Bluetooth device cards,
   event cards and calendar rows grow with their text instead of letting it spill out

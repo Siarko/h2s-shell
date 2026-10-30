@@ -126,6 +126,24 @@ Singleton {
         { group: "Buttons", token: "confirmSecondaryHover", label: "Confirm a change, hovered", hint: "A confirm-a-change button under the pointer" }
     ]
 
+    // The font tokens: the family, and the sizes in pixels with what each is for and the
+    // range its slider offers
+    readonly property var fontTokens: [
+        { token: "sizeTiny", label: "Tiny", hint: "The smallest form labels", from: 6, to: 30 },
+        { token: "sizeXSmall", label: "Extra small", hint: "Very small secondary labels", from: 6, to: 30 },
+        { token: "sizeSmall", label: "Small", hint: "Metadata, times, captions, hints", from: 6, to: 30 },
+        { token: "sizeBody", label: "Body", hint: "Most text: rows, fields, buttons", from: 6, to: 30 },
+        { token: "sizeBodyLarge", label: "Body, large", hint: "Larger labels: settings names, volume", from: 6, to: 30 },
+        { token: "sizeMedium", label: "Medium", hint: "Subheadings, small icons", from: 6, to: 36 },
+        { token: "sizeSection", label: "Section", hint: "Section icons, calendar headers, the bell", from: 8, to: 40 },
+        { token: "sizeHeading", label: "Heading", hint: "Settings headings, most bar icons", from: 8, to: 40 },
+        { token: "sizeTitle", label: "Title", hint: "Panel titles, large bar icons (clock, power, settings)", from: 8, to: 48 },
+        { token: "sizeDisplay", label: "Display", hint: "Calendar events", from: 8, to: 48 },
+        { token: "sizeLargeDisplay", label: "Large display", hint: "Music panel headers", from: 8, to: 60 },
+        { token: "sizeXXLargeDisplay", label: "Extra large display", hint: "The music track's name", from: 10, to: 72 },
+        { token: "sizeHero", label: "Hero", hint: "The empty notifications icon", from: 16, to: 96 }
+    ]
+
     // Where each resolved value comes from: { group: { token: { theme, palette } } } for
     // what the chain sets — `theme` the name of the theme that has the last word, `palette`
     // true when it comes from that theme's palette file. A token absent here is built in.

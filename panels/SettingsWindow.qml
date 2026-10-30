@@ -26,7 +26,7 @@ FloatingWindow {
     // Index into the sidebar list below
     property int selectedCategory: 0
     // The sidebar's pages, in order; also how IPC names a page
-    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves", "Colors"]
+    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves", "Colors", "Fonts"]
     readonly property int _performanceCategory: 7
     readonly property int _profilesCategory: 8
     // The window has two tabs: Behaviour, whose pages edit a profile, and Appearance, from
@@ -35,6 +35,7 @@ FloatingWindow {
     readonly property int _curvesCategory: 10
     // From here on, the pages that edit the picked theme's values (after a separator)
     readonly property int _colorsCategory: 11
+    readonly property int _fontsCategory: 12
     readonly property int _firstThemePage: _colorsCategory
     readonly property bool _onAppearance: selectedCategory >= _themesCategory
 
@@ -106,7 +107,7 @@ FloatingWindow {
 
     // The theme group an Appearance page edits through a draft, or ""
     function _pageGroup(category) {
-        return category === _colorsCategory ? "colors" : "";
+        return category === _colorsCategory ? "colors" : category === _fontsCategory ? "fonts" : "";
     }
 
     function showBehaviour() {
@@ -649,6 +650,7 @@ FloatingWindow {
                         if (root.selectedCategory === root._profilesCategory) return profilesComp;
                         if (root.selectedCategory === root._themesCategory) return themesComp;
                         if (root.selectedCategory === root._colorsCategory) return colorsComp;
+                        if (root.selectedCategory === root._fontsCategory) return fontsComp;
                         if (root.selectedCategory === root._curvesCategory) return curvesComp;
                         return sttComp;
                     }
@@ -688,6 +690,7 @@ FloatingWindow {
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }
+    Component { id: fontsComp;         FontsSettings { themeName: root.editTheme } }
     Component {
         id: themesComp
         ThemesSettings {
