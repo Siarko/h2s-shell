@@ -20,6 +20,12 @@ ColumnLayout {
     // A theme file that does not parse is not changed
     readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
 
+    // What a popup of `base` px at the built-in fonts comes to in this theme, as dragged
+    function _popupWidth(base, token) {
+        const fontScale = (_values.fonts?.sizeBody ?? Theme.builtin.fonts.sizeBody) / Theme.builtin.fonts.sizeBody;
+        return Math.round(base * fontScale * _value("popupWidth", "all") / 100 * _value("popupWidth", token) / 100);
+    }
+
     function flush() {
         _flushPending();
     }
@@ -108,7 +114,10 @@ ColumnLayout {
 
                         Text {
                             Layout.fillWidth: true
-                            text: _entry.modelData.hint
+                            // A popup's width also says what it comes to, at this theme's fonts
+                        text: _entry.modelData.base === undefined ? _entry.modelData.hint
+                            : (_entry.modelData.hint !== "" ? _entry.modelData.hint + " — " : "")
+                                + root._popupWidth(_entry.modelData.base, _entry.modelData.token) + " px"
                             elide: Text.ElideRight
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall

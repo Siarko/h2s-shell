@@ -9,7 +9,7 @@ import qs.singletons
 // Bluetooth management popup: adapter toggle, device list, scan
 Item {
     id: root
-    implicitWidth: 280
+    implicitWidth: Theme.popupWidth("bluetooth", 280)
     implicitHeight: col.implicitHeight
 
     property var adapter: Bluetooth.defaultAdapter

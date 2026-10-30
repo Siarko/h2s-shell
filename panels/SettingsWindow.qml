@@ -18,8 +18,8 @@ FloatingWindow {
             });
         }
     }
-    implicitWidth: 520
-    implicitHeight: 640
+    implicitWidth: Theme.scaled(520)
+    implicitHeight: Theme.scaled(640)
     minimumSize: Qt.size(400, 300)
     visible: false
 
@@ -48,7 +48,7 @@ FloatingWindow {
         { id: "fonts", label: "Fonts", tab: "appearance", component: fontsComp, draftGroups: ["fonts"] },
         { id: "bar_appearance", label: "Bar", tab: "appearance", component: barShapeComp, draftGroups: ["bar"] },
         { id: "widgets_appearance", label: "Widgets", tab: "appearance", component: widgetsLookComp, draftGroups: ["capsule", "workspace", "tray"] },
-        { id: "popups", label: "Popups", tab: "appearance", component: popupsComp, draftGroups: ["popup", "row", "listItem", "dropdown", "powerMenu"] },
+        { id: "popups", label: "Popups", tab: "appearance", component: popupsComp, draftGroups: ["popup", "popupWidth", "row", "listItem", "dropdown", "powerMenu"] },
         { id: "controls", label: "Controls", tab: "appearance", component: controlsComp,
           draftGroups: ["button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field", "checkbox", "tooltip", "border"] },
         { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
@@ -70,6 +70,9 @@ FloatingWindow {
     // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
     readonly property var _currentPage: _pageOf(selectedPage)
     readonly property bool _onAppearance: _currentPage.tab === "appearance"
+
+    // The sidebar, wide enough for its names at the theme's fonts
+    readonly property int _sidebarWidth: Theme.scaled(160)
 
     // The page last open in each tab, to come back to
     property string _lastBehaviourPage: "general"
@@ -341,7 +344,7 @@ FloatingWindow {
             }
 
             Row {
-                anchors { left: parent.left; leftMargin: 170; verticalCenter: parent.verticalCenter }
+                anchors { left: parent.left; leftMargin: root._sidebarWidth + 10; verticalCenter: parent.verticalCenter }
                 spacing: 4
                 WindowTab {
                     label: "Behaviour"
@@ -409,7 +412,7 @@ FloatingWindow {
 
             // ── Left sidebar (160px) ──────────────────────────────────
             Item {
-                width: 160
+                width: root._sidebarWidth
                 height: parent.height
 
                 // The selected page's mark, one for the whole list, so it slides from the
@@ -655,7 +658,7 @@ FloatingWindow {
 
             // ── Right content area ────────────────────────────────────
             Item {
-                width: parent.width - 161
+                width: parent.width - root._sidebarWidth - 1
                 height: parent.height
 
                 // A new page fades in, rising a little
@@ -726,6 +729,8 @@ FloatingWindow {
             hint: "The popups opening from the bar, and what is in them. Their colours, and the border's, are on the Colors page."
             sections: [
                 { title: "Popup", group: "popup" },
+                { title: "Widths", group: "popupWidth",
+                  hint: "Popups grow with the theme's text; these widen or narrow them on top of that. Each one's width as it comes out is beside it." },
                 { title: "Rows and cards", group: "row" },
                 { title: "Menu and list items", group: "listItem" },
                 { title: "Dropdowns", group: "dropdown" },

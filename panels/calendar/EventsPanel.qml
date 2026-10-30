@@ -84,9 +84,14 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 font.bold: true
+                // The date gives way first when the column is narrow
+                Layout.fillWidth: true
+                Layout.maximumWidth: implicitWidth
+                Layout.minimumWidth: 30
+                elide: Text.ElideRight
             }
 
-            Item { Layout.fillWidth: true }
+            Item { Layout.fillWidth: true; Layout.minimumWidth: 6 }
 
             Row {
                 spacing: 1
@@ -130,7 +135,7 @@ Item {
                 }
             }
 
-            Item { Layout.fillWidth: true }
+            Item { Layout.fillWidth: true; Layout.minimumWidth: 6 }
 
             Row {
                 spacing: 6

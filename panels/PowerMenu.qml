@@ -5,7 +5,7 @@ import qs.singletons
 
 Item {
     id: powerMenu
-    implicitWidth: 200
+    implicitWidth: Theme.popupWidth("power", 200)
     implicitHeight: col.implicitHeight
 
     Column {

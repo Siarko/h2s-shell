@@ -26,7 +26,7 @@ Item {
         passwords[ssid] = text;
         _passwords = passwords;
     }
-    implicitWidth: 280
+    implicitWidth: Theme.popupWidth("network", 280)
     implicitHeight: col.implicitHeight
 
     Component.onCompleted: WifiManager.startScan()
@@ -437,7 +437,8 @@ Item {
                     }
 
                     width: networkList.width
-                    height: expanded ? 76 : 36
+                    // The info row, and with it the action row when open: as tall as they are
+                    height: expanded ? _networkColumn.implicitHeight : _infoRow.height
                     radius: Theme.row.radius
                     color: modelData.inUse ? Theme.accentTint : Theme.surface
                     clip: true
@@ -447,6 +448,7 @@ Item {
                     }
 
                     Column {
+                        id: _networkColumn
                         anchors {
                             left: parent.left
                             right: parent.right
@@ -458,10 +460,12 @@ Item {
 
                         // Main info row — always click to expand
                         Item {
+                            id: _infoRow
                             width: parent.width
-                            height: 36
+                            height: Math.max(36, _infoContent.implicitHeight + 8)
 
                             RowLayout {
+                                id: _infoContent
                                 anchors.fill: parent
                                 spacing: 6
 
@@ -516,9 +520,10 @@ Item {
                         // Action row (revealed when expanded)
                         Item {
                             width: parent.width
-                            height: 36
+                            height: Math.max(36, _actionContent.implicitHeight + 8)
 
                             RowLayout {
+                                id: _actionContent
                                 anchors.fill: parent
                                 spacing: 6
 
@@ -606,7 +611,9 @@ Item {
                 property string passwordText: ""
 
                 width: parent.width
-                height: expanded ? 102 : 30
+                // The header, and with it the fields when open: as tall as they are (with a
+                // little room below)
+                height: expanded ? _hiddenColumn.implicitHeight + 6 : _hiddenHeader.height
                 radius: Theme.row.radius
                 color: "transparent"
                 clip: true
@@ -614,15 +621,18 @@ Item {
                 Behavior on height { NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") } }
 
                 Column {
+                    id: _hiddenColumn
                     width: parent.width
                     spacing: 4
 
                     // Header row
                     Item {
+                        id: _hiddenHeader
                         width: parent.width
-                        height: 30
+                        height: Math.max(30, _hiddenHeaderContent.implicitHeight + 6)
 
                         RowLayout {
+                            id: _hiddenHeaderContent
                             anchors.fill: parent
                             spacing: 6
 

@@ -101,6 +101,11 @@ section to the new version and date.
   drafts. Border colours are in Colors → Borders.
 
 ### Changed
+- Popups, the calendar and the settings window's sidebar grow with the theme's text size;
+  each popup's width (and all of them at once) can be widened or narrowed in Appearance →
+  Popups → Widths, shown with the width it comes to. Wi-Fi rows grow with their content,
+  the events header gives way when narrow, and the event form's repeat row wraps instead
+  of running out of its card.
 - Save buttons take the confirm colour (adding) or the second confirm colour (saving a
   change), as the event form's did; the event form's buttons are the shared ones. Profile
   cards have the common card radius (6), the toast queue badge the toast's (8).
@@ -152,7 +157,8 @@ section to the new version and date.
 - Wi-Fi list: an open network and its typed password stay with that network; after a scan
   or a connection they used to jump to whichever network took its place in the list.
 - The calendar's and the hardware popup's left curved corner no longer shows a faint seam
-  next to the panel (the popup now sits on whole pixels).
+  next to the panel (the popup now comes to rest on whole pixels; while moving it does
+  not, which made it jump at the bar's end).
 - Notifications on the lock screen and screensaver have the same padding below as above.
 - Switching from a taller popup to a shorter one animates the height too; the panel's
   background used to drop to the new height at once.

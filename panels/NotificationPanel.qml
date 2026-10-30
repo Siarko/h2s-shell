@@ -9,7 +9,7 @@ Item {
 
     signal closeRequested
 
-    implicitWidth: 350
+    implicitWidth: Theme.popupWidth("notifications", 350)
     implicitHeight: screenHeight - 40 - 16
 
     // Set when the user empties the list — "Clear all", or dismissing the last card;

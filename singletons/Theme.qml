@@ -124,6 +124,10 @@ Singleton {
         "checkbox": { "radius": 3 },
         "lock": { "cardRadius": 16, "controlRadius": 8, "controlHeight": 40 },
         "border": { "width": 1, "selectedWidth": 2 },  // ordinary outlines; selection rings
+        // Popups' widths, in percent of their width at the built-in fonts: `all` for every
+        // popup, then each one's own, multiplied (popupWidth())
+        "popupWidth": { "all": 100, "network": 100, "bluetooth": 100, "hardware": 100, "sound": 100,
+                        "music": 100, "notifications": 100, "tray": 100, "power": 100, "calendar": 100 },
         // Animations by role — the kind of motion, not where it happens (docs/plans/themes.md)
         "durations": {
             "hover": 100,                    // colour under the pointer
@@ -906,6 +910,22 @@ Singleton {
     readonly property var checkbox: values.checkbox
     readonly property var lock: values.lock
     readonly property var border: values.border
+    readonly property var popupWidthScale: values.popupWidth
+
+    // How much bigger the theme's text is than the built-in's: what fixed widths grow by,
+    // so text keeps its room (TODO 10.11)
+    readonly property real fontScale: _fonts.sizeBody / builtin.fonts.sizeBody
+
+    // A width designed at the built-in fonts, grown with the text
+    function scaled(width) {
+        return Math.round(width * fontScale);
+    }
+
+    // A popup's width: `base` at the built-in fonts, grown with the text, times the
+    // theme's multipliers for every popup and for this one (`name`, a popupWidth token)
+    function popupWidth(name, base) {
+        return Math.round(base * fontScale * (popupWidthScale.all ?? 100) / 100 * (popupWidthScale[name] ?? 100) / 100);
+    }
 
     // ---- Animation ----
     // The profile decides how much motion there is; the theme how it looks

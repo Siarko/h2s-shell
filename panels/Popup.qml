@@ -203,10 +203,23 @@ LazyLoader {
             // With the width animating too, the held edge stays put while the other moves
             readonly property real _anchoredX: _anchor === "right" ? _right - popup.shownWidth
                 : _anchor === "left" ? _left : _centre - popup.shownWidth / 2
-            // On whole pixels: at half a pixel (an odd width centred, e.g. the calendar's
-            // 551) the curved top corners and the panel met mid-pixel, and smoothing left a
-            // faint seam between them
-            x: Math.round(Math.max(_minX, Math.min(_anchoredX, _maxX)))
+            // On whole pixels at rest: at half a pixel (an odd width centred, e.g. the
+            // calendar's 551) the curved top corners and the panel met mid-pixel, and
+            // smoothing left a faint seam between them. Not while moving: rounding every
+            // frame moved the popup in steps, and at the bar's end changed when it reached
+            // the end and its ear went, so it jumped.
+            readonly property real _exactX: Math.max(_minX, Math.min(_anchoredX, _maxX))
+            property bool _settled: true
+            on_ExactXChanged: {
+                _settled = false;
+                _settle.restart();
+            }
+            Timer {
+                id: _settle
+                interval: 60
+                onTriggered: clipWrapper._settled = true
+            }
+            x: _settled ? Math.round(_exactX) : _exactX
             width: popup.shownWidth
             height: popup.showPopup && !popupLoader.closing ? popup.popupHeight : 0
             clip: true

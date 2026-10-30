@@ -9,7 +9,7 @@ Item {
 
     signal closeRequested
 
-    implicitWidth: 220
+    implicitWidth: Theme.popupWidth("tray", 220)
     // Track whichever slot is incoming so height follows new content immediately
     implicitHeight: activeSlot === 0 ? slot0.implicitHeight : slot1.implicitHeight
     clip: true

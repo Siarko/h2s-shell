@@ -477,10 +477,11 @@ Item {
                 width: parent.width
                 spacing: 6
 
-                // Frequency row: [Freq ▾]  Every  [N]  unit(s)
-                Row {
+                // Frequency row: [Freq ▾]  Every  [N]  unit(s) — wrapping onto a second line
+                // when the card is too narrow for it
+                Flow {
+                    id: _frequencyRow
                     width: parent.width
-                    height: 28
                     spacing: 6
 
                     readonly property var _freqLabels: ({ "DAILY": "Daily", "WEEKLY": "Weekly", "MONTHLY": "Monthly", "YEARLY": "Yearly" })
@@ -503,11 +504,12 @@ Item {
                     }
 
                     Text {
+                        height: _intervalInput.height
+                        verticalAlignment: Text.AlignVCenter
                         text: "Every"
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
-                        anchors.verticalCenter: parent.verticalCenter
                     }
 
                     // Interval input
@@ -515,7 +517,7 @@ Item {
                         id: _intervalInput
                         fieldColor: Theme.popupBackground
                         outlined: true
-                        width: 40
+                        width: Theme.scaled(40)
                         text: "1"
                         input.horizontalAlignment: TextInput.AlignHCenter
                         input.validator: IntValidator { bottom: 1; top: 999 }
@@ -526,11 +528,12 @@ Item {
                     }
 
                     Text {
+                        height: _intervalInput.height
+                        verticalAlignment: Text.AlignVCenter
                         text: parent._unitLabels[root._rruleFreq] ?? ""
                         color: Theme.textSecondary
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
-                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 

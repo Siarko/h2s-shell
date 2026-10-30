@@ -6,7 +6,7 @@ import qs.singletons
 // Sound management popup with output/input volume sliders and device selectors
 Item {
     id: root
-    implicitWidth: 300
+    implicitWidth: Theme.popupWidth("sound", 300)
     implicitHeight: col.implicitHeight
 
     Column {

@@ -35,7 +35,7 @@ Singleton {
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
-        "checkbox", "lock", "border"]
+        "checkbox", "lock", "border", "popupWidth"]
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
@@ -259,6 +259,17 @@ Singleton {
                 border("Around the volume OSD, in the colour Volume OSD (Colors → Borders); 0: none")],
             osdMessage: [{ token: "radius", label: "Corner radius", hint: "The shell's message pill (\"Settings saved\"); -1: fully round", from: -1, to: 30, suffix: px },
                 border("Around the message pill, in the colour Shell messages (Colors → Borders); 0: none")],
+            popupWidth: [
+                { token: "all", label: "Every popup", hint: "Multiplies each popup's own width below", from: 50, to: 200, suffix: "%" },
+                { token: "network", label: "Network", hint: "", from: 50, to: 200, suffix: "%", base: 280 },
+                { token: "bluetooth", label: "Bluetooth", hint: "", from: 50, to: 200, suffix: "%", base: 280 },
+                { token: "hardware", label: "Hardware", hint: "", from: 50, to: 200, suffix: "%", base: 280 },
+                { token: "sound", label: "Sound", hint: "", from: 50, to: 200, suffix: "%", base: 300 },
+                { token: "music", label: "Music", hint: "", from: 50, to: 200, suffix: "%", base: 320 },
+                { token: "notifications", label: "Notifications", hint: "", from: 50, to: 200, suffix: "%", base: 350 },
+                { token: "tray", label: "Tray menu", hint: "", from: 50, to: 200, suffix: "%", base: 220 },
+                { token: "power", label: "Power menu", hint: "", from: 50, to: 200, suffix: "%", base: 200 },
+                { token: "calendar", label: "Calendar", hint: "Both columns, and its height", from: 50, to: 200, suffix: "%", base: 551 }],
             settings: [
                 { token: "pageMargin", label: "Page margin", hint: "Around a settings page", from: 0, to: 40, suffix: px },
                 { token: "sidebarItemRadius", label: "Sidebar radius", hint: "The sidebar's pages and the selection mark", from: 0, to: 20, suffix: px },

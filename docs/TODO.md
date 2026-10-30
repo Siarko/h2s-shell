@@ -520,7 +520,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       theme; the theme list locked meanwhile, not offered for the theme in use, ended by
       "Stop preview", leaving Appearance or closing the window). Verified on the host
       2026-10-30.
-- [ ] **10.11 Popup widths and remaining fixed layouts that do not follow the font**
+- [x] **10.11 Popup widths and remaining fixed layouts that do not follow the font**
       (found 2026-10-30, auditing for user-set font sizes, themes stage 6)
       Popups grow with their content vertically but have fixed widths (Network and
       Bluetooth 280, Tray 220, Power 200, Music 320, Sound 300, Notifications 350,
@@ -529,6 +529,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       field + "month(s)" in a ~250 px card); NetworkPanel's expanded heights (76, 102) are
       sums of fixed rows; EventsPanel's header in the 270 px column; the settings window's
       160 px sidebar. Make popup widths follow content or the font, within limits.
+      Done 2026-10-30, verified on the host (decided with the user: widths follow the font,
+      with multipliers on top): `Theme.fontScale` (the theme's body size over the
+      built-in's), `Theme.scaled(width)`, `Theme.popupWidth(name, base)` = base × font
+      scale × `popupWidth.all` % × `popupWidth.<name>` %; every popup panel and the
+      calendar (columns and height) use it; the settings window and its sidebar scale
+      with the font. Appearance → Popups → Widths: the multipliers (50–200 %), each with
+      the width it comes to. Network's rows take their heights from their content; the
+      events header elides the date when narrow; the event form's repeat row is a Flow.
 - [ ] **10.12 Bar position: bottom, and vertical at a side** (requested 2026-10-30)
       Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
       screen, and — harder — a vertical bar along the left or right edge. Touches far more

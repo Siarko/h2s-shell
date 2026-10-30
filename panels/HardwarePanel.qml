@@ -6,7 +6,7 @@ import qs.singletons
 
 Item {
     id: root
-    implicitWidth: 280
+    implicitWidth: Theme.popupWidth("hardware", 280)
     implicitHeight: _col.implicitHeight
 
     property var _expandedId: null

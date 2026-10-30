@@ -9,7 +9,7 @@ import QtQuick.Effects
 
 Item {
     id: root
-    implicitWidth: 320
+    implicitWidth: Theme.popupWidth("music", 320)
     implicitHeight: col.implicitHeight
 
     property bool useCava: false
