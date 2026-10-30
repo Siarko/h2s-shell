@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -92,27 +93,12 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 44
 
-        Rectangle {
-            width: 90
-            height: 28
-            radius: 6
+        SmallButton {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            color: Theme.surface
-
-            Text {
-                anchors.centerIn: parent
-                text: "Cancel"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textPrimary
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: GoogleCalendarAuth.cancelLogin()
-            }
+            label: "Cancel"
+            kind: "cancel"
+            onClicked: GoogleCalendarAuth.cancelLogin()
         }
     }
 
@@ -140,30 +126,13 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 44
 
-            Rectangle {
-                readonly property bool _enabled: Config.gcal.clientId !== "" && Config.gcal.clientSecret !== ""
-                width: 90
-                height: 28
-                radius: 6
+            SmallButton {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                color: _enabled ? Theme.accent : Theme.surface
-                opacity: _enabled ? 1.0 : 0.5
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Connect"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: parent._enabled
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: GoogleCalendarAuth.login()
-                }
+                label: "Connect"
+                kind: "save"
+                available: Config.gcal.clientId !== "" && Config.gcal.clientSecret !== ""
+                onClicked: GoogleCalendarAuth.login()
             }
         }
     }
@@ -174,27 +143,15 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: 44
 
-        Rectangle {
-            width: 100
-            height: 28
-            radius: 6
+        // Drops the account's tokens: asks first, like every delete (DeleteButton)
+        DeleteButton {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            color: Theme.error
-
-            Text {
-                anchors.centerIn: parent
-                text: "Disconnect"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textPrimary
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: GoogleCalendarAuth.logout()
-            }
+            label: "Disconnect"
+            confirmLabel: "Disconnect the account?"
+            fontSize: Theme.fontSizeBody
+            cancelTip: "Stay connected"
+            onConfirmed: GoogleCalendarAuth.logout()
         }
     }
 

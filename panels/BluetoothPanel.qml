@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Io
+import qs.components
 import qs.singletons
 
 // Bluetooth management popup: adapter toggle, device list, scan
@@ -69,47 +70,15 @@ Item {
                 Layout.fillWidth: true
             }
 
-            Item {
-                width: 44
-                height: 24
+            ToggleSwitch {
                 visible: root.adapter !== null
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: (root.adapter?.enabled ?? false) ? Theme.accent : Theme.textDisabled
-
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: Theme.duration("state")
-                            easing: Theme.curve("state")
-                        }
-                    }
-
-                    Rectangle {
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: Theme.textPrimary
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: (root.adapter?.enabled ?? false) ? parent.width - width - 2 : 2
-
-                        Behavior on x {
-                            NumberAnimation {
-                                duration: Theme.duration("state")
-                                easing: Theme.curve("state")
-                            }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.adapter)
-                            root.adapter.enabled = !root.adapter.enabled;
-                    }
+                implicitWidth: 44
+                implicitHeight: 24
+                offColor: Theme.textDisabled
+                checked: root.adapter?.enabled ?? false
+                onToggled: {
+                    if (root.adapter)
+                        root.adapter.enabled = !root.adapter.enabled;
                 }
             }
         }
@@ -141,34 +110,15 @@ Item {
                     color: Theme.accent
                 }
 
-                Rectangle {
-                    implicitWidth: scanLabel.implicitWidth + 14
-                    implicitHeight: 22
-                    radius: 4
-                    color: scanBtnArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                    Text {
-                        id: scanLabel
-                        text: root.adapter?.discovering ? "Stop" : "Scan"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        anchors.centerIn: parent
-                    }
-
-                    MouseArea {
-                        id: scanBtnArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (scanProcess.running) {
-                                scanProcess.running = false;
-                            } else {
-                                scanTimer.restart();
-                                scanProcess.running = true;
-                            }
+                SmallButton {
+                    label: root.adapter?.discovering ? "Stop" : "Scan"
+                    checked: root.adapter?.discovering ?? false
+                    onClicked: {
+                        if (scanProcess.running) {
+                            scanProcess.running = false;
+                        } else {
+                            scanTimer.restart();
+                            scanProcess.running = true;
                         }
                     }
                 }
@@ -263,82 +213,30 @@ Item {
                                 }
 
                                 // Pair button (only when disconnected and not already pairing)
-                                Rectangle {
+                                SmallButton {
                                     visible: modelData.state === BluetoothDeviceState.Disconnected && !modelData.pairing && !modelData.paired
-                                    implicitWidth: pairLabel.implicitWidth + 10
-                                    implicitHeight: 20
-                                    radius: 4
-                                    color: pairArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                                    Text {
-                                        id: pairLabel
-                                        text: "Pair"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: Theme.textPrimary
-                                        anchors.centerIn: parent
-                                    }
-
-                                    MouseArea {
-                                        id: pairArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: modelData.pair()
-                                    }
+                                    label: "Pair"
+                                    fontSize: Theme.fontSizeSmall
+                                    onClicked: modelData.pair()
                                 }
 
                                 // Connect / Disconnect button (hidden while transitioning or pairing)
-                                Rectangle {
+                                SmallButton {
                                     visible: modelData.state !== BluetoothDeviceState.Connecting && modelData.state !== BluetoothDeviceState.Disconnecting && !modelData.pairing
-                                    implicitWidth: connLabel.implicitWidth + 10
-                                    implicitHeight: 20
-                                    radius: 4
-                                    color: connArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                                    Text {
-                                        id: connLabel
-                                        text: modelData.state === BluetoothDeviceState.Connected ? "Disconnect" : "Connect"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: Theme.textPrimary
-                                        anchors.centerIn: parent
-                                    }
-
-                                    MouseArea {
-                                        id: connArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: modelData.connected = !modelData.connected
-                                    }
+                                    readonly property bool _connected: modelData.state === BluetoothDeviceState.Connected
+                                    label: _connected ? "Disconnect" : "Connect"
+                                    kind: _connected ? "delete" : "normal"
+                                    fontSize: Theme.fontSizeSmall
+                                    onClicked: modelData.connected = !modelData.connected
                                 }
 
                                 // Forget button
-                                Rectangle {
-                                    implicitWidth: 22
-                                    implicitHeight: 20
-                                    radius: 4
-                                    color: forgetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                                    Text {
-                                        text: "✕"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeSmall
-                                        color: Theme.textSecondary
-                                        anchors.centerIn: parent
-                                    }
-
-                                    MouseArea {
-                                        id: forgetArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: modelData.forget()
-                                    }
+                                // Forgets the device: asks first, like every delete (DeleteButton)
+                                DeleteButton {
+                                    label: "✕"
+                                    confirmLabel: "Forget?"
+                                    cancelTip: "Keep the device"
+                                    onConfirmed: modelData.forget()
                                 }
                             }
                         }

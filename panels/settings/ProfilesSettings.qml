@@ -91,7 +91,7 @@ Flickable {
                     required property var modelData
                     label: modelData.label
                     // The simulation in force, filled with the accent
-                    primary: JSON.stringify(Profiles.simulated) === JSON.stringify(modelData.facts)
+                    checked: JSON.stringify(Profiles.simulated) === JSON.stringify(modelData.facts)
                     onClicked: Profiles.simulated = modelData.facts
                 }
             }
@@ -175,26 +175,10 @@ Flickable {
                         }
 
                         // Enabled
-                        Rectangle {
-                            width: 36
-                            height: 20
-                            radius: 10
-                            color: _card.modelData.enabled !== false ? Theme.accent : Theme.popupBackground
-
-                            Rectangle {
-                                x: _card.modelData.enabled !== false ? parent.width - width - 2 : 2
-                                y: 2
-                                width: 16
-                                height: 16
-                                radius: 8
-                                color: Theme.textPrimary
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Profiles.updateProfile(_card.index, { enabled: _card.modelData.enabled === false })
-                            }
+                        ToggleSwitch {
+                            offColor: Theme.popupBackground
+                            checked: _card.modelData.enabled !== false
+                            onToggled: Profiles.updateProfile(_card.index, { enabled: _card.modelData.enabled === false })
                         }
 
                         SmallButton {

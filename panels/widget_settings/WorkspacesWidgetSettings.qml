@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 
 Item {
@@ -143,28 +144,10 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                Rectangle {
+                ToggleSwitch {
                     id: _specialToggle
-                    width: 36
-                    height: 20
-                    radius: 10
-                    color: _showSpecial ? Theme.accent : Theme.surface
-
-                    Rectangle {
-                        x: _showSpecial ? parent.width - width - 2 : 2
-                        y: 2
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: _saveShowSpecial(!_showSpecial)
-                    }
+                    checked: _showSpecial
+                    onToggled: _saveShowSpecial(!_showSpecial)
                 }
             }
         }
@@ -186,28 +169,10 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                Rectangle {
+                ToggleSwitch {
                     id: _normalToggle
-                    width: 36
-                    height: 20
-                    radius: 10
-                    color: _showNormal ? Theme.accent : Theme.surface
-
-                    Rectangle {
-                        x: _showNormal ? parent.width - width - 2 : 2
-                        y: 2
-                        width: 16
-                        height: 16
-                        radius: 8
-                        color: Theme.textPrimary
-                        Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: _saveShowNormal(!_showNormal)
-                    }
+                    checked: _showNormal
+                    onToggled: _saveShowNormal(!_showNormal)
                 }
             }
         }

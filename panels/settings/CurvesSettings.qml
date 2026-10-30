@@ -757,7 +757,7 @@ Flickable {
 
             SmallButton {
                 label: root.selected === "" ? "Save" : (root.draftName !== root.selected ? "Save and rename" : "Save")
-                primary: true
+                kind: "save"
                 available: root._dirty && root._nameProblem === ""
                 onClicked: root.save()
             }

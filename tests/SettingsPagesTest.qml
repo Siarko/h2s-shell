@@ -27,7 +27,6 @@ TestCase {
         "panels/settings/PerformanceSettings.qml",
         "panels/settings/ProfilesSettings.qml",
         "panels/settings/SchemaSettingEditor.qml",
-        "panels/settings/SettingOptions.qml",
         "panels/settings/SttSettings.qml",
         "panels/settings/ThemesSettings.qml",
         "screensaver/LockSurface.qml",

@@ -36,7 +36,7 @@ RowLayout {
 
     SmallButton {
         label: "Save"
-        primary: true
+        kind: "save"
         onClicked: {
             root.aboutToSave();
             Theme.saveDraft(root.themeName, root.groups);

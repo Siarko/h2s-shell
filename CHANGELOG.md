@@ -83,6 +83,13 @@ section to the new version and date.
   and a preview that plays it; drafts like the other theme pages.
 
 ### Changed
+- Buttons, pills and switches are shared components everywhere: the Network, Bluetooth
+  and calendar settings buttons, the preset and choice pills, the event form's choices,
+  every on/off switch, the slider's tooltip. Small changes follow: Network VPN, scan and
+  Bluetooth buttons have the common rounded corners and height; a running scan shows as
+  a filled button; disconnecting is red under the pointer.
+- Forgetting a Wi-Fi network or a Bluetooth device, and disconnecting the Google account,
+  ask first, like every other delete.
 - Settings pages are named by id: `qs ipc call settings openPage` takes a page's id
   (`profiles`, `bar_appearance`, …), not its label.
 - Ready for larger fonts: buttons, pills, fields, icon buttons, Bluetooth device cards,
@@ -109,6 +116,8 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- Wi-Fi list: an open network and its typed password stay with that network; after a scan
+  or a connection they used to jump to whichever network took its place in the list.
 - The calendar's and the hardware popup's left curved corner no longer shows a faint seam
   next to the panel (the popup now sits on whole pixels).
 - Notifications on the lock screen and screensaver have the same padding below as above.

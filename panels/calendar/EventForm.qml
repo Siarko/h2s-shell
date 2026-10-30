@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -803,37 +804,21 @@ Item {
                     Repeater {
                         model: 7
 
-                        Rectangle {
+                        Pill {
                             required property int index
                             readonly property string dayCode: parent._dayCodes[index]
-                            readonly property bool selected: root._rruleDays.indexOf(dayCode) >= 0
-
-                            width: 20
-                            height: 20
-                            radius: 3
+                            // All days as wide as the widest letter, so the row is even
+                            implicitWidth: Math.max(22, implicitHeight)
                             anchors.verticalCenter: parent.verticalCenter
-                            color: selected ? Theme.accent : "transparent"
-                            border.color: selected ? Theme.accent : Theme.textDisabled
-                            border.width: 1
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: parent.parent._dayLabels[parent.index]
-                                color: parent.selected ? Theme.textPrimary : Theme.textSecondary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeXSmall
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    let days = root._rruleDays.slice()
-                                    let idx = days.indexOf(parent.dayCode)
-                                    if (idx >= 0) days.splice(idx, 1)
-                                    else days.push(parent.dayCode)
-                                    root._rruleDays = days
-                                }
+                            label: parent._dayLabels[index]
+                            picked: root._rruleDays.indexOf(dayCode) >= 0
+                            fontSize: Theme.fontSizeXSmall
+                            onClicked: {
+                                let days = root._rruleDays.slice()
+                                let idx = days.indexOf(dayCode)
+                                if (idx >= 0) days.splice(idx, 1)
+                                else days.push(dayCode)
+                                root._rruleDays = days
                             }
                         }
                     }
@@ -860,32 +845,12 @@ Item {
                             { value: "count", label: "After N" }
                         ]
 
-                        Rectangle {
+                        Pill {
                             required property var modelData
-                            readonly property bool selected: root._rruleEndType === modelData.value
-
-                            height: 22
-                            width: _endBtnText.implicitWidth + 12
-                            radius: 3
-                            color: "transparent"
-                            border.color: selected ? Theme.accent : Theme.textDisabled
-                            border.width: 1
                             anchors.verticalCenter: parent.verticalCenter
-
-                            Text {
-                                id: _endBtnText
-                                anchors.centerIn: parent
-                                text: modelData.label
-                                color: parent.selected ? Theme.accent : Theme.textSecondary
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeSmall
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root._rruleEndType = modelData.value
-                            }
+                            label: modelData.label
+                            picked: root._rruleEndType === modelData.value
+                            onClicked: root._rruleEndType = modelData.value
                         }
                     }
                 }

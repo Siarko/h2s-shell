@@ -1,7 +1,6 @@
 # Themes stage 7: radii, borders and spacing as theme tokens
 
-Part of [themes.md](themes.md). Status: **token set agreed with the user 2026-10-30, not
-started.** Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
+Part of [themes.md](themes.md). Status: **token set agreed with the user 2026-10-30; 7a in progress.** Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
 spacings, ~250 margins).
 
 ## Decisions taken with the user
@@ -137,3 +136,17 @@ The toast's card controls take `notificationCard.controlRadius`.
 - Parts and order of work: consolidating hand-written buttons, pills, the slider tooltip,
   switches and fields into shared components first (7a), then the tokens (7b), then the
   Popups and Notifications pages and the Bar page's additions (7c).
+
+## Progress
+
+*7a, consolidation, 2026-10-30, verified on the host:* `components/ToggleSwitch.qml` replaces
+the 8 switch copies; the slider's tooltip is a `HoverTip`; the settings choices, preset
+pills and the event form's end and weekday choices are `Pill`s; the Network, Bluetooth,
+calendar-account, "+ Add" and preset Rename buttons are `SmallButton`s, which gained
+`kind` (normal, save, cancel, delete — for the per-function groups) and `checked` (a
+toggle that is on), replacing `primary`. Forgetting a network or a device and
+disconnecting the Google account go through `DeleteButton`. Removed as unused:
+`SettingBool`, `SettingOptions`, `SettingIntInput`, `SettingsGroup`. Left as they are,
+for 7b to decide: the event form's Save and Cancel (Save is coloured by `confirm` /
+`confirmSecondary`, adding vs editing), the settings tabs, the notification card's
+controls. Still to do in 7a: a shared text field.

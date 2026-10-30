@@ -94,36 +94,15 @@ Item {
                         values: [""].concat(root._knownPresets)
                     }
 
-                    Rectangle {
+                    Pill {
                         required property string modelData
-                        readonly property bool picked: modelData === root.currentPreset
-
-                        width: _presetName.implicitWidth + 16
-                        height: 24
-                        radius: 6
-                        color: picked ? Theme.accent : (_presetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-                        border.width: picked ? 0 : 1
-                        border.color: Theme.outline
-
-                        Text {
-                            id: _presetName
-                            anchors.centerIn: parent
-                            text: parent.modelData === "" ? "None" : parent.modelData
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: parent.picked ? Theme.textPrimary : Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: _presetArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (!parent.picked)
-                                    root.presetAssigned(parent.modelData)
-                            }
+                        label: modelData === "" ? "None" : modelData
+                        picked: modelData === root.currentPreset
+                        fontSize: Theme.fontSizeBody
+                        minimumHeight: 24
+                        onClicked: {
+                            if (!picked)
+                                root.presetAssigned(modelData)
                         }
                     }
                 }
@@ -240,37 +219,17 @@ Item {
                 }
             }
 
-            Rectangle {
-                // Implicit, not width: a layout overrides width, so the button would not
-                // grow with its label
-                implicitWidth: _renameText.implicitWidth + 14
-                implicitHeight: 24
-                radius: 6
-                color: _renameArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                Text {
-                    id: _renameText
-                    anchors.centerIn: parent
-                    text: root._renaming ? "Cancel" : "Rename"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textSecondary
-                }
-
-                MouseArea {
-                    id: _renameArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root._renaming = !root._renaming
-                        _deletePreset.asking = false
-                        if (root._renaming) {
-                            _renameInput.text = root.currentPreset
-                            _renameInput.forceActiveFocus()
-                            _renameInput.selectAll()
-                        }
+            SmallButton {
+                label: root._renaming ? "Cancel" : "Rename"
+                kind: root._renaming ? "cancel" : "normal"
+                fontSize: Theme.fontSizeSmall
+                onClicked: {
+                    root._renaming = !root._renaming
+                    _deletePreset.asking = false
+                    if (root._renaming) {
+                        _renameInput.text = root.currentPreset
+                        _renameInput.forceActiveFocus()
+                        _renameInput.selectAll()
                     }
                 }
             }

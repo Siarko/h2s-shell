@@ -381,7 +381,7 @@ FloatingWindow {
 
                 SmallButton {
                     label: "Save all"
-                    primary: true
+                    kind: "save"
                     onClicked: Theme.saveDraft(root.editTheme)
                 }
 
@@ -505,7 +505,7 @@ FloatingWindow {
                             available: root.previewing || root.editTheme !== Theme.profileTheme
                                 || (Theme.drafts, Theme.hasDraft(root.editTheme))
                             label: root.previewing ? "Stop preview" : "Preview"
-                            primary: root.previewing
+                            checked: root.previewing
                             fontSize: Theme.fontSizeSmall
                             tooltip: !available ? "This theme is already in use, with nothing unsaved"
                                 : root.previewing ? "Back to the profile's theme"

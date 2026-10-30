@@ -9,6 +9,23 @@ import qs.singletons.network
 // Network management popup: WiFi toggle, connection status, speed, network list
 Item {
     id: root
+
+    // The network row that is open, by SSID; the passwords typed, by SSID; whether the
+    // open row shows its password (see the network delegate)
+    property string _expandedSsid: ""
+    property var _passwords: ({})
+    property bool _showPassword: false
+
+    function _toggleNetwork(ssid) {
+        _expandedSsid = _expandedSsid === ssid ? "" : ssid;
+        _showPassword = false;
+    }
+
+    function _setPassword(ssid, text) {
+        const passwords = Object.assign({}, _passwords);
+        passwords[ssid] = text;
+        _passwords = passwords;
+    }
     implicitWidth: 280
     implicitHeight: col.implicitHeight
 
@@ -112,34 +129,14 @@ Item {
                             elide: Text.ElideRight
                         }
 
-                        Rectangle {
-                            implicitWidth: vpnBtnLabel.implicitWidth + 14
-                            implicitHeight: 24
-                            radius: 4
-                            color: vpnBtnArea.containsMouse
-                                ? (isActive ? Theme.error : Theme.accentHover)
-                                : (isActive ? Theme.errorMuted : Theme.accent)
-
-                            Text {
-                                id: vpnBtnLabel
-                                text: isActive ? "Disconnect" : "Connect"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textPrimary
-                                anchors.centerIn: parent
-                            }
-
-                            MouseArea {
-                                id: vpnBtnArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (isActive)
-                                        VpnManager.disconnectVpn()
-                                    else
-                                        VpnManager.connectVpn(modelData.name)
-                                }
+                        SmallButton {
+                            label: isActive ? "Disconnect" : "Connect"
+                            kind: isActive ? "delete" : "save"
+                            onClicked: {
+                                if (isActive)
+                                    VpnManager.disconnectVpn()
+                                else
+                                    VpnManager.connectVpn(modelData.name)
                             }
                         }
                     }
@@ -178,38 +175,14 @@ Item {
                 elide: Text.ElideRight
             }
 
-            Item {
-                width: 44
-                height: 24
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: EthernetManager.ethernetConnected ? Theme.accent : Theme.textDisabled
-
-                    Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-                    Rectangle {
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: Theme.textPrimary
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: EthernetManager.ethernetConnected ? parent.width - width - 2 : 2
-
-                        Behavior on x {
-                            NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: EthernetManager.ethernetConnected
-                        ? EthernetManager.disconnect()
-                        : EthernetManager.connect()
-                }
+            ToggleSwitch {
+                implicitWidth: 44
+                implicitHeight: 24
+                offColor: Theme.textDisabled
+                checked: EthernetManager.ethernetConnected
+                onToggled: EthernetManager.ethernetConnected
+                    ? EthernetManager.disconnect()
+                    : EthernetManager.connect()
             }
         }
 
@@ -277,39 +250,13 @@ Item {
                 Layout.fillWidth: true
             }
 
-            // WiFi toggle switch (same style as BluetoothPanel)
-            Item {
-                width: 44
-                height: 24
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: WifiManager.wifiEnabled ? Theme.accent : Theme.textDisabled
-
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
-                    }
-
-                    Rectangle {
-                        width: 20
-                        height: 20
-                        radius: 10
-                        color: Theme.textPrimary
-                        anchors.verticalCenter: parent.verticalCenter
-                        x: WifiManager.wifiEnabled ? parent.width - width - 2 : 2
-
-                        Behavior on x {
-                            NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: WifiManager.toggleWifi()
-                }
+            // WiFi toggle switch
+            ToggleSwitch {
+                implicitWidth: 44
+                implicitHeight: 24
+                offColor: Theme.textDisabled
+                checked: WifiManager.wifiEnabled
+                onToggled: WifiManager.toggleWifi()
             }
         }
 
@@ -376,31 +323,13 @@ Item {
         }
 
         // ---- WiFi disconnect button ----
-        Rectangle {
+        SmallButton {
             visible: WifiManager.wifiConnected || WifiManager.disconnecting
             width: parent.width
-            height: 28
-            radius: 6
-            color: WifiManager.disconnecting
-                ? Theme.surface
-                : (disconnectArea.containsMouse ? Theme.error : Theme.surface)
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-            Text {
-                anchors.centerIn: parent
-                text: WifiManager.disconnecting ? "Disconnecting…" : "Disconnect"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: WifiManager.disconnecting ? Theme.textDisabled : Theme.textPrimary
-            }
-
-            MouseArea {
-                id: disconnectArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: WifiManager.disconnecting ? Qt.ArrowCursor : Qt.PointingHandCursor
-                onClicked: { if (!WifiManager.disconnecting) WifiManager.disconnect() }
-            }
+            label: WifiManager.disconnecting ? "Disconnecting…" : "Disconnect"
+            kind: "delete"
+            available: !WifiManager.disconnecting
+            onClicked: WifiManager.disconnect()
         }
 
         // ---- Divider above available networks ----
@@ -441,33 +370,14 @@ Item {
                     color: Theme.accent
                 }
 
-                Rectangle {
-                    implicitWidth: rescanLabel.implicitWidth + 14
-                    implicitHeight: 22
-                    radius: 4
-                    color: rescanArea.containsMouse ? Theme.surfaceHover : (WifiManager.scanning ? Theme.accent : Theme.surface)
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                    Text {
-                        id: rescanLabel
-                        text: WifiManager.scanning ? "Stop" : "Scan"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textPrimary
-                        anchors.centerIn: parent
-                    }
-
-                    MouseArea {
-                        id: rescanArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (WifiManager.scanning)
-                                WifiManager.stopScan()
-                            else
-                                WifiManager.startScan()
-                        }
+                SmallButton {
+                    label: WifiManager.scanning ? "Stop" : "Scan"
+                    checked: WifiManager.scanning
+                    onClicked: {
+                        if (WifiManager.scanning)
+                            WifiManager.stopScan()
+                        else
+                            WifiManager.startScan()
                     }
                 }
             }
@@ -510,10 +420,16 @@ Item {
                     id: networkDelegate
                     required property var modelData
                     required property int index
-                    property bool expanded: false
-                    property string passwordText: ""
-                    property bool _showPassword: false
-                    onExpandedChanged: { if (!expanded) _showPassword = false }
+                    // The open row and its password belong to the network, kept by the
+                    // panel under its SSID: a delegate is reused for another network when
+                    // the list is rebuilt (each scan, a connection), and state kept here
+                    // moved to whichever network took its place
+                    readonly property string ssid: modelData.ssid
+                    readonly property bool expanded: root._expandedSsid === ssid
+                    readonly property string passwordText: root._passwords[ssid] ?? ""
+                    readonly property bool _showPassword: expanded && root._showPassword
+                    // A delegate now showing another network shows that network's password
+                    onSsidChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
                     readonly property bool isSaved: WifiManager.savedSsids.includes(modelData.ssid)
                     readonly property bool needsPassword: {
                         var sec = modelData.security
@@ -593,7 +509,7 @@ Item {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: networkDelegate.expanded = !networkDelegate.expanded
+                                onClicked: root._toggleNetwork(networkDelegate.ssid)
                             }
                         }
 
@@ -635,7 +551,7 @@ Item {
                                         color: Theme.textPrimary
                                         verticalAlignment: TextInput.AlignVCenter
                                         clip: true
-                                        onTextEdited: networkDelegate.passwordText = text
+                                        onTextEdited: root._setPassword(networkDelegate.ssid, text)
                                     }
 
                                     Text {
@@ -648,7 +564,7 @@ Item {
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: networkDelegate._showPassword = !networkDelegate._showPassword
+                                            onClicked: root._showPassword = !root._showPassword
                                         }
                                     }
                                 }
@@ -670,70 +586,31 @@ Item {
                                 }
 
                                 // Connect / Cancel button
-                                Rectangle {
+                                SmallButton {
                                     visible: !networkDelegate.modelData.inUse
-                                    implicitWidth: _connectLabel.implicitWidth + 14
-                                    height: 26
-                                    radius: 6
-
                                     readonly property bool _busy: WifiManager.connecting && WifiManager.connectingTo === networkDelegate.modelData.ssid
-                                    color: _busy
-                                        ? (_connectArea.containsMouse ? Theme.error : Theme.surface)
-                                        : (_connectArea.containsMouse ? Theme.accentHover : Theme.accent)
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                                    Text {
-                                        id: _connectLabel
-                                        text: parent._busy ? "Cancel" : "Connect"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeBody
-                                        color: parent._busy ? Theme.textSecondary : Theme.textPrimary
-                                        anchors.centerIn: parent
-                                    }
-
-                                    MouseArea {
-                                        id: _connectArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (parent._busy)
-                                                WifiManager.cancelConnect()
-                                            else
-                                                WifiManager.connectToWifi(
-                                                    networkDelegate.modelData.ssid,
-                                                    networkDelegate.needsPassword ? networkDelegate.passwordText : ""
-                                                )
-                                        }
+                                    label: _busy ? "Cancel" : "Connect"
+                                    kind: _busy ? "cancel" : "save"
+                                    onClicked: {
+                                        if (_busy)
+                                            WifiManager.cancelConnect()
+                                        else
+                                            WifiManager.connectToWifi(
+                                                networkDelegate.modelData.ssid,
+                                                networkDelegate.needsPassword ? networkDelegate.passwordText : ""
+                                            )
                                     }
                                 }
 
                                 // Forget button — only for saved networks
-                                Rectangle {
+                                // Asks first, like every delete (DeleteButton)
+                                DeleteButton {
                                     visible: networkDelegate.isSaved
-                                    implicitWidth: _forgetLabel.implicitWidth + 14
-                                    height: 26
-                                    radius: 6
-                                    color: _forgetArea.containsMouse ? Theme.error : Theme.surface
-                                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                                    Text {
-                                        id: _forgetLabel
-                                        text: "Forget"
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSizeBody
-                                        color: _forgetArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-                                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-                                        anchors.centerIn: parent
-                                    }
-
-                                    MouseArea {
-                                        id: _forgetArea
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: WifiManager.forgetNetwork(networkDelegate.modelData.ssid)
-                                    }
+                                    label: "Forget"
+                                    confirmLabel: "Forget?"
+                                    fontSize: Theme.fontSizeBody
+                                    cancelTip: "Keep the network"
+                                    onConfirmed: WifiManager.forgetNetwork(networkDelegate.modelData.ssid)
                                 }
                             }
                         }
@@ -891,31 +768,11 @@ Item {
                             }
                         }
 
-                        Rectangle {
-                            implicitWidth: _hiddenConnectLabel.implicitWidth + 14
-                            height: 28
-                            radius: 6
-                            opacity: _hiddenRow.ssidText === "" ? 0.4 : 1.0
-                            color: _hiddenArea.containsMouse && _hiddenRow.ssidText !== ""
-                                ? Theme.accentHover : Theme.accent
-
-                            Text {
-                                id: _hiddenConnectLabel
-                                text: "Connect"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: Theme.textPrimary
-                                anchors.centerIn: parent
-                            }
-
-                            MouseArea {
-                                id: _hiddenArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: _hiddenRow.ssidText !== ""
-                                cursorShape: _hiddenRow.ssidText !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: WifiManager.connectToHiddenWifi(_hiddenRow.ssidText, _hiddenRow.passwordText)
-                            }
+                        SmallButton {
+                            label: "Connect"
+                            kind: "save"
+                            available: _hiddenRow.ssidText !== ""
+                            onClicked: WifiManager.connectToHiddenWifi(_hiddenRow.ssidText, _hiddenRow.passwordText)
                         }
                     }
                 }

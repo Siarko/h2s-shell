@@ -214,29 +214,11 @@ Item {
             }
 
             // Bool: a switch on the header row
-            Rectangle {
+            ToggleSwitch {
                 visible: root.entry?.type === "bool"
-                width: 36
-                height: 20
-                radius: 10
                 opacity: root._dimmed ? 0.5 : 1
-                color: root.shownValue === true ? Theme.accent : Theme.surface
-
-                Rectangle {
-                    x: root.shownValue === true ? parent.width - width - 2 : 2
-                    y: 2
-                    width: 16
-                    height: 16
-                    radius: 8
-                    color: Theme.textPrimary
-                    Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.edited(root.shownValue !== true)
-                }
+                checked: root.shownValue === true
+                onToggled: root.edited(root.shownValue !== true)
             }
         }
 
@@ -388,29 +370,9 @@ Item {
                 }
             }
 
-            Rectangle {
-                width: _addText.implicitWidth + 16
-                height: 24
-                radius: 6
-                color: _addArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                Text {
-                    id: _addText
-                    anchors.centerIn: parent
-                    text: "+ Add"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textSecondary
-                }
-
-                MouseArea {
-                    id: _addArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.edited(_listEditor.items.concat([""]))
-                }
+            SmallButton {
+                label: "+ Add"
+                onClicked: root.edited(_listEditor.items.concat([""]))
             }
         }
 
@@ -559,32 +521,14 @@ Item {
                     values: root._choices
                 }
 
-                Rectangle {
+                Pill {
                     required property var modelData
-                    readonly property bool selected: modelData.value === root.shownValue
-
-                    width: _pillText.implicitWidth + 16
-                    height: 26
-                    radius: 6
-                    color: selected ? Theme.accent : "transparent"
-                    opacity: selected && root._dimmed ? 0.5 : 1
-                    border.width: selected ? 0 : 1
-                    border.color: Theme.outline
-
-                    Text {
-                        id: _pillText
-                        anchors.centerIn: parent
-                        text: parent.modelData.label
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: parent.selected ? Theme.textPrimary : Theme.textSecondary
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.edited(parent.modelData.value)
-                    }
+                    label: modelData.label
+                    picked: modelData.value === root.shownValue
+                    fontSize: Theme.fontSizeBody
+                    minimumHeight: 26
+                    opacity: picked && root._dimmed ? 0.5 : 1
+                    onClicked: root.edited(modelData.value)
                 }
             }
         }
