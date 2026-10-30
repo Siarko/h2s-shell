@@ -47,6 +47,8 @@ section to the new version and date.
   points (scroll to zoom), exact numbers, a looping preview against a second curve with
   a dot following each curve on the graph, new curves blank or copied from Qt's, rename
   (themes using the curve follow), delete, and where each curve is used.
+  Curves can have more points: double-click the curve to add one, select a point to
+  type its position, remove it, or switch off "Smooth" for a corner there.
 
 ### Changed
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere

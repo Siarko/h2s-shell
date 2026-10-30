@@ -229,15 +229,20 @@ The ~50 hard-coded `duration:` values move to roles.
    rewrites the themes using it, via `ThemeRules.renameCurveIn`, tested). The graph draws
    the Bézier and a compared curve sampled through an animation's
    `easing.valueForProgress`; the preview loops a square per curve. Usages come from
-   `Theme.themeFiles`, every theme file read on reload. Curves of several segments are
-   shown, not edited. Found while testing: the graph's y range now zooms (scroll; opening a
+   `Theme.themeFiles`, every theme file read on reload. Curves of several segments were
+   at first shown, not edited. Found while testing: the graph's y range now zooms (scroll; opening a
    curve fits its points), as a point beyond it could not be grabbed; the preview applied
    the curve twice (an eased animation of a value then eased again) — time now runs
    linearly and dots on the graph follow each curve at the preview's moment.
-   *Next, asked for by the user:* more control points — editing curves of several
-   segments (the format and resolution already take them): add a point on the curve,
-   which splits a segment, drag the joints and their handles, remove a point. Not
-   scheduled yet; after stage 5 or with stage 6.
+   *More control points, 2026-10-30, verified on the host (asked for by the user):* the
+   draft is Qt's full form; double-clicking the curve splits its segment there without
+   changing its shape (de Casteljau), elsewhere fits the view. Clicking a point selects
+   it for the numbers beside; a joint between segments can be removed (its segments
+   join) and toggled smooth — on by default (the user's call), keeping its two handles in
+   line. Smoothness is not saved: it is read back from the points (handles in line) when
+   a curve is opened, so the library format is unchanged. Time only moves forward: a
+   joint stays between its neighbours and takes its handles along, a handle stays within
+   its segment's x range. One segment is still saved as four numbers.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
    Notifications, Animations; create/copy/rename/delete themes. The Animations page lists
    every role with its **duration** (ms) and its **curve** (the user's requirement,
