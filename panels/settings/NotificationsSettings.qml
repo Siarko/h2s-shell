@@ -14,7 +14,7 @@ ColumnLayout {
 
     anchors {
         fill: parent
-        margins: 14
+        margins: Theme.settings.pageMargin
     }
     spacing: 0
 

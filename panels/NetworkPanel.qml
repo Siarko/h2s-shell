@@ -106,11 +106,11 @@ Item {
 
                     width: col.width
                     height: 36
-                    radius: 6
+                    radius: Theme.row.radius
                     color: isActive ? Theme.accentTint : Theme.surface
 
                     RowLayout {
-                        anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
+                        anchors { fill: parent; leftMargin: Theme.row.horizontalPadding; rightMargin: Theme.row.horizontalPadding }
                         spacing: 6
 
                         Text {
@@ -438,7 +438,7 @@ Item {
 
                     width: networkList.width
                     height: expanded ? 76 : 36
-                    radius: 6
+                    radius: Theme.row.radius
                     color: modelData.inUse ? Theme.accentTint : Theme.surface
                     clip: true
 
@@ -451,8 +451,8 @@ Item {
                             left: parent.left
                             right: parent.right
                             top: parent.top
-                            leftMargin: 8
-                            rightMargin: 8
+                            leftMargin: Theme.row.horizontalPadding
+                            rightMargin: Theme.row.horizontalPadding
                         }
                         spacing: 4
 
@@ -468,7 +468,7 @@ Item {
                                 Rectangle {
                                     width: 8
                                     height: 8
-                                    radius: 4
+                                    radius: width / 2
                                     Layout.alignment: Qt.AlignVCenter
                                     color: root.signalColor(networkDelegate.modelData.signal)
                                 }
@@ -607,7 +607,7 @@ Item {
 
                 width: parent.width
                 height: expanded ? 102 : 30
-                radius: 6
+                radius: Theme.row.radius
                 color: "transparent"
                 clip: true
 

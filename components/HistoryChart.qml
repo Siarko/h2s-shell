@@ -99,7 +99,7 @@ Column {
 
                 width: 32
                 height: 24
-                radius: 4
+                radius: Theme.listItem.radius
                 color: root.scaleSecs === modelData.secs
                     ? Theme.accent
                     : Theme.fill

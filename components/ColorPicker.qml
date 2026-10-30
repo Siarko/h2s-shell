@@ -86,7 +86,7 @@ Item {
                 height: 12
                 radius: 6
                 color: "transparent"
-                border.width: 2
+                border.width: Theme.border.selectedWidth
                 border.color: root._value > 0.5 ? Theme.markOnLight : Theme.markOnDark
             }
 
@@ -133,7 +133,7 @@ Item {
                 height: 4
                 radius: 2
                 color: Theme.markOnDark
-                border.width: 1
+                border.width: Theme.border.width
                 border.color: Theme.markOnLight
             }
 
@@ -177,7 +177,7 @@ Item {
                 height: 4
                 radius: 2
                 color: Theme.markOnDark
-                border.width: 1
+                border.width: Theme.border.width
                 border.color: Theme.markOnLight
             }
 
@@ -214,7 +214,7 @@ Item {
                 height: 40
                 radius: 6
                 color: root._picked
-                border.width: 1
+                border.width: Theme.border.width
                 border.color: Theme.outline
             }
 

@@ -34,14 +34,14 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
         height: 4
-        radius: 2
+        radius: height / 2
         color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Rectangle {
             width: slider._position * parent.width
             height: parent.height
-            radius: 2
+            radius: height / 2
             color: sliderArea.containsMouse ? slider.fillColorHover : slider.fillColor
         }
     }

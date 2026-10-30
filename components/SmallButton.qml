@@ -2,7 +2,8 @@ import QtQuick
 import qs.singletons
 
 // A compact button with a label. `kind` is what it does — "normal", "save" (confirms:
-// filled with the accent), "cancel", "delete" (destructive: red under the pointer, as
+// the confirm colour), "saveChange" (confirms a change to something that exists: the
+// second confirm colour), "cancel", "delete" (destructive: red under the pointer, as
 // DeleteButton) — so each kind can be
 // styled on its own (docs/plans/themes-stage7.md). `checked` shows a toggle that is on
 // (filled with the accent), e.g. a scan running. As tall as its label needs, never less
@@ -20,17 +21,26 @@ Rectangle {
     readonly property bool hovered: _area.containsMouse
     signal clicked
 
-    readonly property bool _filled: kind === "save" || checked
+    readonly property bool _confirms: kind === "save" || kind === "saveChange"
+    readonly property bool _filled: _confirms || checked
     readonly property bool _hot: _area.containsMouse && available
+    // The theme's group for this kind of button: its own radius; padding and height are
+    // the general button's
+    readonly property var _shape: kind === "save" || kind === "saveChange" ? Theme.saveButton
+        : kind === "cancel" ? Theme.cancelButton
+        : kind === "delete" ? Theme.deleteButton
+        : Theme.button
 
-    implicitWidth: _label.implicitWidth + 14
-    implicitHeight: Math.max(24, _label.implicitHeight + 8)
+    implicitWidth: _label.implicitWidth + 2 * Theme.button.horizontalPadding
+    implicitHeight: Math.max(Theme.button.minHeight, _label.implicitHeight + 2 * Theme.button.verticalPadding)
     width: implicitWidth
     height: implicitHeight
-    radius: 6
+    radius: _shape.radius
     opacity: available ? 1 : 0.35
     color: kind === "delete" ? (_hot ? Theme.error : Theme.surface)
-        : _filled ? (_hot ? Theme.accentHover : Theme.accent)
+        : kind === "save" ? (_hot ? Theme.confirmHover : Theme.confirm)
+        : kind === "saveChange" ? (_hot ? Theme.confirmSecondaryHover : Theme.confirmSecondary)
+        : checked ? (_hot ? Theme.accentHover : Theme.accent)
         : (_hot ? Theme.surfaceHover : Theme.surface)
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -40,7 +50,10 @@ Rectangle {
         text: root.label
         font.family: Theme.fontFamily
         font.pixelSize: root.fontSize
-        color: root.kind === "delete" && root._hot ? Theme.textPrimary : root._filled ? Theme.onAccent : Theme.textSecondary
+        color: root.kind === "delete" && root._hot ? Theme.textPrimary
+            : root._confirms ? Theme.textPrimary
+            : root._filled ? Theme.onAccent
+            : Theme.textSecondary
     }
 
     MouseArea {

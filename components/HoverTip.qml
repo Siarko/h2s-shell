@@ -20,12 +20,12 @@ Rectangle {
     parent: target?.Window.window?.contentItem ?? target
     z: 1000
     visible: false
-    width: Math.min(_text.implicitWidth, maxWidth) + 16
-    height: _text.implicitHeight + 12
-    radius: 4
+    width: Math.min(_text.implicitWidth, maxWidth) + 2 * Theme.tooltip.horizontalPadding
+    height: _text.implicitHeight + 2 * Theme.tooltip.verticalPadding
+    radius: Theme.tooltip.radius
     color: Theme.surface
     border.color: Theme.textDisabled
-    border.width: 1
+    border.width: Theme.border.width
 
     onShownChanged: {
         if (shown && text !== "") {
@@ -55,8 +55,8 @@ Rectangle {
 
     Text {
         id: _text
-        x: 8
-        y: 6
+        x: Theme.tooltip.horizontalPadding
+        y: Theme.tooltip.verticalPadding
         width: Math.min(implicitWidth, root.maxWidth)
         text: root.text
         wrapMode: Text.WordWrap

@@ -13,7 +13,7 @@ Flickable {
     id: root
 
     anchors.fill: parent
-    contentHeight: _column.implicitHeight + 28
+    contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
 
     // The library curve being edited; "" for a new one not saved yet
@@ -265,7 +265,7 @@ Flickable {
             left: parent.left
             right: parent.right
             top: parent.top
-            margins: 14
+            margins: Theme.settings.pageMargin
         }
         spacing: 10
 
@@ -394,7 +394,7 @@ Flickable {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 6
+                    radius: Theme.settings.cardRadius
                     color: Theme.surfaceSunken
                 }
 
@@ -482,7 +482,7 @@ Flickable {
                         y: _graph.toY(root.draftPoints[modelData + 1] ?? 0) - height / 2
                         color: joint ? Theme.textPrimary
                             : (_handleArea.pressed || _handleArea.containsMouse ? Theme.accentHover : Theme.accent)
-                        border.width: 2
+                        border.width: Theme.border.selectedWidth
                         border.color: picked ? Theme.warning : (joint ? Theme.accent : Theme.popupBackground)
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -523,7 +523,7 @@ Flickable {
                     height: 10
                     radius: 5
                     color: Theme.textPrimary
-                    border.width: 2
+                    border.width: Theme.border.selectedWidth
                     border.color: Theme.accent
                     x: _graph.toX(_preview.time) - width / 2
                     y: _graph.toY(_draftSampler.easing.valueForProgress(_preview.time)) - height / 2

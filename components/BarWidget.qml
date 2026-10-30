@@ -11,14 +11,14 @@ Item {
     // When true, keeps the cell highlighted regardless of hover (e.g. while its popup is open)
     property bool active: false
     // Optional outline around the cell — off by default, so existing widgets are unaffected
-    property color borderColor: "transparent"
-    property int borderWidth: 0
+    property color borderColor: Theme.capsuleBorder
+    property int borderWidth: Theme.capsule.borderWidth
     // False for widgets with several click targets of their own (tray icons, workspace
     // buttons): the cell keeps its size and background but stops taking input, which
     // otherwise lands on its full-size MouseArea above the content
     property bool interactive: true
     // Space between the content and the cell edge, on each side
-    property int horizontalPadding: 8
+    property int horizontalPadding: Theme.capsule.horizontalPadding
     // Emitted on click, carries the cell's color
     signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
@@ -44,7 +44,7 @@ Item {
 
     Rectangle {
         id: rectangle
-        radius: 5
+        radius: Theme.capsule.radius
         anchors.fill: parent
         color: (mouseArea.containsMouse || container.active) ? Theme.surfaceHover : container.cellColor
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }

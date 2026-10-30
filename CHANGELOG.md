@@ -11,6 +11,15 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Themes set the shape of every kind of element — corner radii, padding, spacing, border
+  widths — by kind: bar cells, workspace pills, popups, rows, list items, dropdowns,
+  buttons (general, save, cancel, delete, icon), pills, fields, notification cards and
+  toasts, the volume OSD, the message pill, tooltips, the settings window, calendar days,
+  checkboxes, the lock screen (docs/plans/themes-stage7.md). New: borders along the
+  bar's edge facing the desktop (following it if the bar moves to another edge) and
+  around its cells, toasts, the volume OSD and the message pill, each with its own width
+  and colour (none by default). The Bar page sets the cells' margin, the widgets' spacing and
+  the bar's border.
 - Theme files: `~/.config/h2s_shell/themes/<name>.json` sets colours and fonts over the
   built-in look, can `extend` another theme and take colours from a palette file
   (`colorsFrom`, e.g. from matugen). The setting "Theme" picks one per profile; files are
@@ -83,6 +92,9 @@ section to the new version and date.
   and a preview that plays it; drafts like the other theme pages.
 
 ### Changed
+- Save buttons take the confirm colour (adding) or the second confirm colour (saving a
+  change), as the event form's did; the event form's buttons are the shared ones. Profile
+  cards have the common card radius (6), the toast queue badge the toast's (8).
 - Dropdowns and pickers float over the content instead of pushing it down: the event
   form's repeat frequency and calendar, the Bar page's "+ Add widget", the hardware
   sources' "+ Add source", the Theme setting's suggestions. They open upwards when there
@@ -109,7 +121,8 @@ section to the new version and date.
   the settings sidebar and label columns are cut with "…"; the notification bell and
   the small symbols (×, ✓, ▾) take their font from the theme.
 - A click anywhere in the settings window or a popup — the background too — takes the
-  focus from a text field; before, only clicking another control did.
+  focus from a text field; before, only clicking another control did. (It watches clicks
+  without a cursor of its own, so controls keep their pointing-hand cursor.)
 - The "Theme" setting suggests the theme files as you type (and "default"), and warns
   when the name has no file.
 - Deleting a profile, a widget preset or a curve asks the same way everywhere: the button

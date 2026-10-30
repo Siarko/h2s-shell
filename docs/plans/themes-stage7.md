@@ -1,6 +1,6 @@
 # Themes stage 7: radii, borders and spacing as theme tokens
 
-Part of [themes.md](themes.md). Status: **token set agreed with the user 2026-10-30; 7a in progress.** Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
+Part of [themes.md](themes.md). Status: **token set agreed with the user 2026-10-30; 7a done, 7b in progress.** Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
 spacings, ~250 margins).
 
 ## Decisions taken with the user
@@ -175,3 +175,25 @@ with the current choice and a FloatingList of options, with optional colour dots
 by the event form's frequency and calendar, the Bar page's and the hardware sources'
 "+ Add" pickers, and the Theme setting's suggestions. The settings window's own pickers
 already floated.
+
+*7b, tokens, 2026-10-30, verified on the host:* the 24 shape groups in `Theme.builtin` (today's
+values) and `ThemeRules.shapeGroups` (tested: each group has built-in tokens), read as
+`Theme.<group>.<token>`; `resolve` keeps only the groups the built-in theme has. Bar
+tokens `cellVerticalMargin`, `widgetSpacing`, `borderWidth` (on the Bar page). Border
+colours `barBorder`, `capsuleBorder` (added: the bar cell has a border too),
+`popupBorder`, `osdToastBorder`, `osdVolumeBorder`, `osdMessageBorder`. Wired: the shared
+components (by kind for buttons: `saveButton`, `cancelButton`, `deleteButton` radii; save
+buttons coloured `confirm`, a new kind `saveChange` `confirmSecondary` — the user: save
+buttons take their function's colours), the bar, workspace pills, the tray highlight,
+the popup frame and curves, rows and list items, dropdowns, the power menu, notification
+cards (toast and panel apart), toasts' width, gaps, spacing and badge, the volume OSD, the
+message pill (-1: fully round), tooltips, the settings pages' margins, tabs and cards,
+calendar days, checkboxes, the lock screen, every literal border width. Round shapes
+(slider tracks and thumbs, dots) are derived from their size. Borders drawn: the bar's,
+only along the edge facing the desktop (the user's call), outside the bar — a shape like
+the bar's, grown on that side, behind it — so the bar keeps its height (drawn inside, it
+took room from the content) and a popup, in a window above, covers it where it joins the
+bar (inside, it left a line between them). The side derives from `Bar.screenEdge`, top
+for now, so it follows the bar when it can move (TODO 10.12). Bar cells, toasts and their badge, the volume OSD, the message pill. The popup's border
+waits for its design. The event form's Save and Cancel are `SmallButton`s
+(`submitKind`).

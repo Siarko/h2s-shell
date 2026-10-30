@@ -32,12 +32,12 @@ BarWidget {
     Row {
         id: wsRow
         anchors.centerIn: parent
-        spacing: 4
+        spacing: Theme.workspace.pillSpacing
 
         Item {
             visible: _title !== ""
             width: _titleText.implicitWidth
-            height: 22
+            height: Theme.workspace.pillHeight
 
             Text {
                 id: _titleText
@@ -60,10 +60,12 @@ BarWidget {
             model: Workspaces.workspaces
             delegate: Rectangle {
                 required property var modelData
-                visible: (Workspaces.isSpecial(modelData) ? _showSpecial : _showNormal)
-                width: Math.max(22, wsText.implicitWidth + 8)
-                height: 22
-                radius: 4
+                // Special workspaces wait for the config: until the preset's name map is
+                // read they would show their raw names ("special:music") for a moment
+                visible: Workspaces.isSpecial(modelData) ? _showSpecial && Config.ready : _showNormal
+                width: Math.max(Theme.workspace.pillHeight, wsText.implicitWidth + 2 * Theme.workspace.pillHorizontalPadding)
+                height: Theme.workspace.pillHeight
+                radius: Theme.workspace.pillRadius
                 color: {
                     if (Workspaces.isSpecial(modelData))
                         return Workspaces.isSpecialVisible(modelData) ? Theme.workspaceSpecial : (_wsHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)

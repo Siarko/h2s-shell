@@ -13,8 +13,8 @@ Item {
     implicitHeight: _col.implicitHeight
 
     property string submitLabel: "Save"
-    property color submitColor: Theme.confirmSecondary
-    property color submitColorHover: Theme.confirmSecondaryHover
+    // The submit button's kind (SmallButton): "save" adding an event, "saveChange" editing one
+    property string submitKind: "saveChange"
 
     property bool showCalendarPicker: false
     property string selectedCalendarId: ""
@@ -168,11 +168,11 @@ Item {
                         Rectangle {
                             width: 16
                             height: 16
-                            radius: 8
+                            radius: width / 2
                             anchors.centerIn: parent
                             color: Theme.textMuted
                             border.color: root.selectedColorId === "" ? Theme.textPrimary : "transparent"
-                            border.width: 2
+                            border.width: Theme.border.selectedWidth
 
                             Text {
                                 font.family: Theme.fontFamily
@@ -210,11 +210,11 @@ Item {
                             Rectangle {
                                 width: 16
                                 height: 16
-                                radius: 8
+                                radius: width / 2
                                 anchors.centerIn: parent
                                 color: modelData.hex
                                 border.color: root.selectedColorId === modelData.id ? Theme.textPrimary : "transparent"
-                                border.width: 2
+                                border.width: Theme.border.selectedWidth
                             }
 
                             MouseArea {
@@ -259,11 +259,11 @@ Item {
                 id: _allDayCheckbox
                 width: 14
                 height: 14
-                radius: 3
+                radius: Theme.checkbox.radius
                 anchors.verticalCenter: parent.verticalCenter
                 color: root._allDay ? Theme.accent : "transparent"
                 border.color: activeFocus ? Theme.textSecondary : (root._allDay ? Theme.accent : Theme.textDisabled)
-                border.width: 1
+                border.width: Theme.border.width
                 activeFocusOnTab: true
 
                 Text {
@@ -357,7 +357,7 @@ Item {
             height: Math.max(60, _descInput.implicitHeight + 8)
             color: Theme.popupBackground
             border.color: _descInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
-            radius: 4
+            radius: Theme.field.radius
 
             TextEdit {
                 id: _descInput
@@ -420,11 +420,11 @@ Item {
             Rectangle {
                 width: 14
                 height: 14
-                radius: 3
+                radius: Theme.checkbox.radius
                 anchors.verticalCenter: parent.verticalCenter
                 color: root._recurring ? Theme.accent : "transparent"
                 border.color: root._recurring ? Theme.accent : Theme.textDisabled
-                border.width: 1
+                border.width: Theme.border.width
 
                 Text {
                     font.family: Theme.fontFamily
@@ -642,56 +642,20 @@ Item {
         // Submit / Cancel buttons
         Row {
             width: parent.width
-            height: 28
             spacing: 6
 
-            Rectangle {
-                height: 28
+            SmallButton {
                 width: (parent.width - 6) / 2
-                color: _submitArea.containsMouse ? root.submitColorHover : root.submitColor
-                radius: 4
-
-                Text {
-                    anchors.centerIn: parent
-                    text: root.submitLabel
-                    color: Theme.textPrimary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    font.bold: true
-                }
-
-                MouseArea {
-                    id: _submitArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.submitted(_titleInput.text, _descInput.text, root._allDay ? "" : _startInput.text, root._allDay ? "" : _endInput.text)
-                }
+                label: root.submitLabel
+                kind: root.submitKind
+                onClicked: root.submitted(_titleInput.text, _descInput.text, root._allDay ? "" : _startInput.text, root._allDay ? "" : _endInput.text)
             }
 
-            Rectangle {
-                height: 28
+            SmallButton {
                 width: (parent.width - 6) / 2
-                color: _cancelArea.containsMouse ? Theme.surface : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-                border.color: Theme.textDisabled
-                radius: 4
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Cancel"
-                    color: Theme.textSecondary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-
-                MouseArea {
-                    id: _cancelArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.cancelled()
-                }
+                label: "Cancel"
+                kind: "cancel"
+                onClicked: root.cancelled()
             }
         }
     }

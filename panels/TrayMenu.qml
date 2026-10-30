@@ -135,7 +135,7 @@ Item {
                 visible: !modelData.isSeparator
                 anchors.fill: parent
                 anchors.margins: 2
-                radius: 4
+                radius: Theme.listItem.radius
                 color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -229,7 +229,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 2
-                    radius: 4
+                    radius: Theme.listItem.radius
                     color: backArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

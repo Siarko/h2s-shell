@@ -38,9 +38,9 @@ Rectangle {
 
     implicitWidth: 120
     implicitHeight: Math.max(26, _input.implicitHeight + 8)
-    radius: 6
+    radius: Theme.field.radius
     color: fieldColor
-    border.width: 1
+    border.width: Theme.border.width
     border.color: problem ? Theme.error
         : _input.activeFocus ? Theme.accent
         : outlined ? Theme.outline : Qt.alpha(Theme.outline, 0)
@@ -52,8 +52,8 @@ Rectangle {
             left: parent.left
             right: _eye.visible ? _eye.left : parent.right
             verticalCenter: parent.verticalCenter
-            leftMargin: 8
-            rightMargin: _eye.visible ? 4 : 8
+            leftMargin: Theme.field.horizontalPadding
+            rightMargin: _eye.visible ? 4 : Theme.field.horizontalPadding
         }
         verticalAlignment: TextInput.AlignVCenter
         echoMode: root.password && !root.revealed ? TextInput.Password : TextInput.Normal

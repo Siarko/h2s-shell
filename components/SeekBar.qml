@@ -54,14 +54,14 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 height: 4
-                radius: 2
+                radius: height / 2
                 color: seekArea.containsMouse && seekBar.canSeek ? Theme.textSecondary : Theme.textDisabled
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Rectangle {
                     width: seekBar._fraction * parent.width
                     height: parent.height
-                    radius: 2
+                    radius: height / 2
                     color: seekArea.containsMouse && seekBar.canSeek ? Theme.accentHover : Theme.accent
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }

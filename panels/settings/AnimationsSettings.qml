@@ -17,7 +17,7 @@ Flickable {
     required property string themeName
 
     anchors.fill: parent
-    contentHeight: _column.implicitHeight + 28
+    contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
 
     readonly property var _values: (Theme.revision, Theme.valuesOf(themeName))
@@ -66,7 +66,7 @@ Flickable {
             left: parent.left
             right: parent.right
             top: parent.top
-            margins: 14
+            margins: Theme.settings.pageMargin
         }
         spacing: 6
 

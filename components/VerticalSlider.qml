@@ -35,7 +35,7 @@ Item {
         y: 6
         width: 6
         height: slider.trackH
-        radius: 3
+        radius: width / 2
         color: Theme.textDisabled
 
         // Normal fill (0 – warningThreshold)
@@ -64,7 +64,7 @@ Item {
         y: 6 + slider.trackH - slider.fillH - height / 2
         width: 12
         height: 12
-        radius: 6
+        radius: width / 2
         color: dragArea.pressed ? Theme.textSecondary : Theme.textPrimary
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
     }

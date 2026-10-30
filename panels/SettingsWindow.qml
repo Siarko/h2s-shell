@@ -185,10 +185,10 @@ FloatingWindow {
             id: _pickerButton
             Layout.fillWidth: true
             height: 28
-            radius: 6
+            radius: Theme.dropdown.radius
             color: _pickerArea.containsMouse && !_picker.locked ? Theme.surfaceHover : Theme.surface
             opacity: _picker.locked ? 0.5 : 1
-            border.width: 1
+            border.width: Theme.border.width
             border.color: _picker.open ? Theme.accent : Theme.surfaceHoverClear
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -228,9 +228,9 @@ FloatingWindow {
                 y: parent.height + 2
                 width: parent.width
                 height: _optionColumn.height + 6
-                radius: 6
+                radius: Theme.dropdown.radius
                 color: Theme.popupBackground
-                border.width: 1
+                border.width: Theme.border.width
                 border.color: Theme.outline
 
                 Column {
@@ -248,7 +248,7 @@ FloatingWindow {
                             readonly property bool picked: modelData === _picker.current
                             width: _optionColumn.width
                             height: 24
-                            radius: 4
+                            radius: Theme.listItem.radius
                             color: picked ? Theme.accentTint : (_optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
                             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -287,11 +287,11 @@ FloatingWindow {
         property bool picked: false
         signal clicked
 
-        width: _tabLabel.implicitWidth + 24
+        width: _tabLabel.implicitWidth + 2 * Theme.settings.tabHorizontalPadding
         height: 28
-        radius: 6
+        radius: Theme.settings.tabRadius
         color: picked ? Theme.accentSecondaryTint : (_tabArea.containsMouse ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
-        border.width: picked ? 1 : 0
+        border.width: picked ? Theme.border.width : 0
         border.color: Theme.accent
         Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
@@ -416,9 +416,9 @@ FloatingWindow {
                     y: _sidebar.y + (target?.y ?? 0) + root._markOffset
                     width: target?.width ?? 0
                     height: target?.height ?? 0
-                    radius: 6
+                    radius: Theme.settings.sidebarItemRadius
                     color: Theme.accentSecondaryTint
-                    border.width: 1
+                    border.width: Theme.border.width
                     border.color: Theme.accent
                 }
 
@@ -563,7 +563,7 @@ FloatingWindow {
                             visible: (modelData.tab === "appearance") === root._onAppearance
                             Layout.topMargin: modelData.separatorBefore ? 13 : 0
                             height: 34
-                            radius: 6
+                            radius: Theme.settings.sidebarItemRadius
 
                             Rectangle {
                                 visible: !!parent.modelData.separatorBefore

@@ -57,9 +57,9 @@ Item {
             width: parent.width
             height: _container.implicitHeight
             color: Theme.surfaceSunken
-            radius: 6
+            radius: Theme.settings.cardRadius
             border.color: Theme.divider
-            border.width: 1
+            border.width: Theme.border.width
             clip: true
 
             Column {
@@ -160,7 +160,7 @@ Item {
                                 width: parent.width - 16
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
-                                radius: 1
+                                radius: height / 2
                                 color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row._lv.dropIndex === _row.index
@@ -176,7 +176,7 @@ Item {
                                 width: parent.width - 16
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
-                                radius: 1
+                                radius: height / 2
                                 color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row.index === _row._lv.workingList.length - 1
@@ -270,7 +270,7 @@ Item {
                                     visible: WidgetRegistry.hasPopupMode(_row.modelData) || WidgetRegistry.hasPresets(_row.modelData)
                                     width: 24
                                     height: 24
-                                    radius: 4
+                                    radius: Theme.iconButton.radius
                                     color: _gearHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -294,7 +294,7 @@ Item {
                                 Rectangle {
                                     width: 24
                                     height: 24
-                                    radius: 4
+                                    radius: Theme.iconButton.radius
                                     color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -412,7 +412,7 @@ Item {
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
-                                    radius: 4
+                                    radius: Theme.listItem.radius
                                     color: _pickerItemHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

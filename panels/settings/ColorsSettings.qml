@@ -17,7 +17,7 @@ Flickable {
     required property string themeName
 
     anchors.fill: parent
-    contentHeight: _column.implicitHeight + 28
+    contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
 
     readonly property var _colors: (Theme.revision, Theme.valuesOf(themeName).colors)
@@ -88,7 +88,7 @@ Flickable {
             left: parent.left
             right: parent.right
             top: parent.top
-            margins: 14
+            margins: Theme.settings.pageMargin
         }
         spacing: 6
 
@@ -142,7 +142,7 @@ Flickable {
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: _rowContent.implicitHeight + 12
-                    radius: 6
+                    radius: Theme.settings.cardRadius
                     color: _entry.open ? Theme.surface : (_rowArea.containsMouse ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -163,7 +163,7 @@ Flickable {
                                 anchors.fill: parent
                                 radius: 5
                                 color: root._colors[_entry.token] ?? "transparent"
-                                border.width: 1
+                                border.width: Theme.border.width
                                 border.color: Theme.outline
                             }
                         }

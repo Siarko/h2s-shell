@@ -13,10 +13,10 @@ Rectangle {
     property string detail: "full"
 
     width: 360
-    radius: 8
+    radius: Theme.notificationCard.radius
     color: Theme.glass
     border.color: Theme.glassBorder
-    border.width: 1
+    border.width: Theme.border.width
     // The column's 12 px margin above and below it (16 left 4 px at the bottom)
     implicitHeight: _col.implicitHeight + 24
 

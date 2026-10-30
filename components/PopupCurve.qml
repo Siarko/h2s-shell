@@ -6,7 +6,7 @@ Rectangle {
     id: root
 
     property string side: "left"
-    property int radius: 20
+    property int radius: Theme.popup.radius
     property color curveColor: Theme.popupBackground
 
     implicitWidth: radius

@@ -58,7 +58,7 @@ Item {
                     Layout.fillWidth: true
                     // As tall as a line of its labels, never less than 22 px
                     height: Math.max(22, _lineMetrics.height + 6)
-                    radius: 6
+                    radius: Theme.field.radius
                     color: Theme.surface
                     clip: true
 

@@ -36,8 +36,8 @@ Item {
                 required property var modelData
 
                 width: powerMenu.width
-                height: 44
-                radius: 8
+                height: Theme.powerMenu.buttonHeight
+                radius: Theme.powerMenu.buttonRadius
                 color: buttonArea.containsMouse ? Theme.surfaceHover : Theme.surface
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

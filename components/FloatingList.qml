@@ -33,9 +33,9 @@ Rectangle {
     visible: open && _host !== null
     width: listWidth
     height: Math.min(_items.implicitHeight + 6, maximumHeight)
-    radius: 6
+    radius: Theme.dropdown.radius
     color: Theme.popupBackground
-    border.width: 1
+    border.width: Theme.border.width
     border.color: Theme.outline
     clip: true
 

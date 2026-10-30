@@ -186,9 +186,9 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 6
+        radius: Theme.field.radius
         color: Theme.popupBackground
-        border.width: 1
+        border.width: Theme.border.width
         border.color: root._editing ? Theme.accent : Theme.outline
         Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 

@@ -29,11 +29,18 @@ Singleton {
     id: root
 
     // Groups of tokens a theme file may set
-    readonly property var groups: ["colors", "fonts", "bar", "durations", "curves"]
+    readonly property var groups: ["colors", "fonts", "bar", "durations", "curves"].concat(shapeGroups)
+
+    // The groups of radii, borders and spacing by kind of element (themes stage 7)
+    readonly property var shapeGroups: ["capsule", "workspace", "popup", "row", "listItem", "dropdown",
+        "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field",
+        "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
+        "checkbox", "lock", "border"]
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
-        "leftPadding", "rightPadding", "radiusTopLeft", "radiusTopRight", "radiusBottomLeft", "radiusBottomRight"]
+        "leftPadding", "rightPadding", "radiusTopLeft", "radiusTopRight", "radiusBottomLeft", "radiusBottomRight",
+        "cellVerticalMargin", "widgetSpacing", "borderWidth"]
 
     // The chain for `name`, the theme itself first and its ancestors after it, each
     // { name, theme }. `readTheme(name)` returns the parsed file or null when there is
@@ -76,8 +83,10 @@ Singleton {
     // modified. Returns { group: { token: value } } for every group.
     function resolve(builtin, chain, palettes) {
         const result = {};
-        for (const group of groups)
-            result[group] = Object.assign({}, builtin[group] ?? {});
+        for (const group of groups) {
+            if (builtin[group] !== undefined)
+                result[group] = Object.assign({}, builtin[group]);
+        }
         for (let i = chain.length - 1; i >= 0; i--) {
             const entry = chain[i];
             const layers = [];
@@ -87,7 +96,7 @@ Singleton {
                 layers.push({ group: group, values: entry.theme[group] });
             for (const layer of layers) {
                 for (const token in layer.values ?? {}) {
-                    if (token in result[layer.group])
+                    if (result[layer.group] && token in result[layer.group])
                         result[layer.group][token] = layer.values[token];
                 }
             }
@@ -123,7 +132,13 @@ Singleton {
         { group: "Buttons", token: "confirm", label: "Confirm", hint: "Confirming: add an event" },
         { group: "Buttons", token: "confirmHover", label: "Confirm, hovered", hint: "A confirm button under the pointer" },
         { group: "Buttons", token: "confirmSecondary", label: "Confirm a change", hint: "Confirming a change: save an edited event" },
-        { group: "Buttons", token: "confirmSecondaryHover", label: "Confirm a change, hovered", hint: "A confirm-a-change button under the pointer" }
+        { group: "Buttons", token: "confirmSecondaryHover", label: "Confirm a change, hovered", hint: "A confirm-a-change button under the pointer" },
+        { group: "Borders", token: "barBorder", label: "Bar", hint: "Along the bar's edge facing the desktop, when its border width is above 0" },
+        { group: "Borders", token: "capsuleBorder", label: "Bar cells", hint: "Around the widgets' cells on the bar, when their border width is above 0" },
+        { group: "Borders", token: "popupBorder", label: "Popups", hint: "Around popups, when their border width is above 0" },
+        { group: "Borders", token: "osdToastBorder", label: "Notification toasts", hint: "Around toasts, when their border width is above 0" },
+        { group: "Borders", token: "osdVolumeBorder", label: "Volume OSD", hint: "Around the volume OSD, when its border width is above 0" },
+        { group: "Borders", token: "osdMessageBorder", label: "Shell messages", hint: "Around the shell's message pill, when its border width is above 0" }
     ]
 
     // The bar's geometry tokens (barTokens) as the Bar shape page shows them: label, use,
@@ -139,7 +154,10 @@ Singleton {
         { token: "radiusTopLeft", group: "Corners", label: "Top left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
         { token: "radiusTopRight", group: "Corners", label: "Top right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
         { token: "radiusBottomLeft", group: "Corners", label: "Bottom left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
-        { token: "radiusBottomRight", group: "Corners", label: "Bottom right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" }
+        { token: "radiusBottomRight", group: "Corners", label: "Bottom right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "cellVerticalMargin", group: "Widgets", label: "Cell margin", hint: "Above and below each widget's cell", from: 0, to: 20, suffix: " px" },
+        { token: "widgetSpacing", group: "Widgets", label: "Widget spacing", hint: "Between the widgets of a section", from: 0, to: 30, suffix: " px" },
+        { token: "borderWidth", group: "Border", label: "Border width", hint: "Along the edge facing the desktop, in the colour Bar border (Colors); 0: none", from: 0, to: 10, suffix: " px" }
     ]
 
     // The animation roles as the Animations page shows them: what each moves, the range of

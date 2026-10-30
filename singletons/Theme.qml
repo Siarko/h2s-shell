@@ -51,7 +51,14 @@ Singleton {
             "confirm": "#1e5c1e",            // confirming: add an event
             "confirmHover": "#2d6a2d",
             "confirmSecondary": "#1e3a5f",   // confirming a change: save an edited event
-            "confirmSecondaryHover": "#2d4a6d"
+            "confirmSecondaryHover": "#2d4a6d",
+            // Borders, drawn where their width is above 0
+            "barBorder": "#777777",
+            "capsuleBorder": "#777777",
+            "popupBorder": "#777777",
+            "osdToastBorder": "#777777",
+            "osdVolumeBorder": "#777777",
+            "osdMessageBorder": "#777777"
         },
         "fonts": {
             "family": "JetBrainsMono Nerd Font",
@@ -82,8 +89,38 @@ Singleton {
             "radiusTopLeft": 0,
             "radiusTopRight": 0,
             "radiusBottomLeft": 20,
-            "radiusBottomRight": 20
+            "radiusBottomRight": 20,
+            "cellVerticalMargin": 5,         // above and below each widget's cell
+            "widgetSpacing": 5,              // between the widgets of a section
+            "borderWidth": 0                 // along the edge facing the desktop (colour barBorder); 0: none
         },
+        // Radii, borders and spacing by kind of element (docs/plans/themes-stage7.md). Radii
+        // and sizes in pixels.
+        "capsule": { "radius": 5, "horizontalPadding": 8, "borderWidth": 0 },   // a widget's cell on the bar
+        "workspace": { "pillRadius": 4, "pillHorizontalPadding": 4, "pillHeight": 22, "pillSpacing": 4 },
+        "popup": { "radius": 20, "contentPadding": 10, "borderWidth": 0 },
+        "row": { "radius": 6, "horizontalPadding": 8 },                       // rows and cards in popups
+        "listItem": { "radius": 4 },                                          // menu and list items
+        "dropdown": { "radius": 6 },
+        "powerMenu": { "buttonRadius": 8, "buttonHeight": 44 },
+        "button": { "radius": 6, "horizontalPadding": 7, "verticalPadding": 4, "minHeight": 24 },
+        "saveButton": { "radius": 6 },
+        "cancelButton": { "radius": 6 },
+        "deleteButton": { "radius": 6 },
+        "iconButton": { "radius": 4 },
+        "pill": { "radius": 6, "horizontalPadding": 7, "minHeight": 22 },
+        "field": { "radius": 6, "horizontalPadding": 8 },
+        "notificationCard": { "radius": 8, "padding": 8, "controlRadius": 5 },  // in the panel
+        "osdToast": { "radius": 8, "padding": 10, "width": 360, "screenGap": 16, "spacing": 8, "badgeWidth": 36, "borderWidth": 0 },
+        "osdVolume": { "radius": 6, "padding": 10, "borderWidth": 0 },
+        // The shell's message pill; a radius of -1 rounds its ends fully
+        "osdMessage": { "radius": -1, "borderWidth": 0 },
+        "tooltip": { "radius": 4, "horizontalPadding": 8, "verticalPadding": 6 },
+        "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
+        "calendar": { "dayRadius": 4 },
+        "checkbox": { "radius": 3 },
+        "lock": { "cardRadius": 16, "controlRadius": 8, "controlHeight": 40 },
+        "border": { "width": 1, "selectedWidth": 2 },  // ordinary outlines; selection rings
         // Animations by role — the kind of motion, not where it happens (docs/plans/themes.md)
         "durations": {
             "hover": 100,                    // colour under the pointer
@@ -839,6 +876,32 @@ Singleton {
 
     // The bar's geometry, by ThemeRules.barTokens name: Theme.bar.barHeight, …
     readonly property var bar: values.bar
+    // Radii, borders and spacing by kind of element: Theme.button.radius, … (the groups
+    // above; docs/plans/themes-stage7.md)
+    readonly property var capsule: values.capsule
+    readonly property var workspace: values.workspace
+    readonly property var popup: values.popup
+    readonly property var row: values.row
+    readonly property var listItem: values.listItem
+    readonly property var dropdown: values.dropdown
+    readonly property var powerMenu: values.powerMenu
+    readonly property var button: values.button
+    readonly property var saveButton: values.saveButton
+    readonly property var cancelButton: values.cancelButton
+    readonly property var deleteButton: values.deleteButton
+    readonly property var iconButton: values.iconButton
+    readonly property var pill: values.pill
+    readonly property var field: values.field
+    readonly property var notificationCard: values.notificationCard
+    readonly property var osdToast: values.osdToast
+    readonly property var osdVolume: values.osdVolume
+    readonly property var osdMessage: values.osdMessage
+    readonly property var tooltip: values.tooltip
+    readonly property var settings: values.settings
+    readonly property var calendar: values.calendar
+    readonly property var checkbox: values.checkbox
+    readonly property var lock: values.lock
+    readonly property var border: values.border
 
     // ---- Animation ----
     // The profile decides how much motion there is; the theme how it looks
@@ -962,6 +1025,20 @@ Singleton {
     ThemeColorBehavior on confirmSecondary {}
     property color confirmSecondaryHover: _colors.confirmSecondaryHover
     ThemeColorBehavior on confirmSecondaryHover {}
+
+    // Borders, drawn where the element's border width (its group's borderWidth) is above 0
+    property color barBorder: _colors.barBorder
+    ThemeColorBehavior on barBorder {}
+    property color capsuleBorder: _colors.capsuleBorder
+    ThemeColorBehavior on capsuleBorder {}
+    property color popupBorder: _colors.popupBorder
+    ThemeColorBehavior on popupBorder {}
+    property color osdToastBorder: _colors.osdToastBorder
+    ThemeColorBehavior on osdToastBorder {}
+    property color osdVolumeBorder: _colors.osdVolumeBorder
+    ThemeColorBehavior on osdVolumeBorder {}
+    property color osdMessageBorder: _colors.osdMessageBorder
+    ThemeColorBehavior on osdMessageBorder {}
 
     // Lock screen and screensaver: light "glass" cards over the scrim
     readonly property color glass: Qt.alpha("white", 0.08)          // a card or field

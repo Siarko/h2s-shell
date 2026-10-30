@@ -28,11 +28,12 @@ Item {
     }
 
     property var currentNotif: null
-    readonly property int cardWidth: 360
+    readonly property int cardWidth: Theme.osdToast.width
 
-    // Resting x: shift left by an extra 28px (badge 36px - existing 16px gap) when
-    // the queue badge is visible so the toast doesn't overlap it.
-    readonly property int restX: screenWidth - cardWidth - (Notifications.hudQueue.length > 0 ? 44 : 16)
+    // Resting x: the gap from the screen edge, or, while the queue badge shows, the badge
+    // and a gap of 8 beside it, so the toast doesn't overlap it
+    readonly property int restX: screenWidth - cardWidth
+        - (Notifications.hudQueue.length > 0 ? Theme.osdToast.badgeWidth + 8 : Theme.osdToast.screenGap)
 
     // Start off-screen to the right; animations move it in and out
     x: screenWidth
@@ -167,7 +168,10 @@ Item {
         notification: root.currentNotif
         compactDismiss: true
         imageMaxHeight: 120
-        contentPadding: 10
+        contentPadding: Theme.osdToast.padding
+        cornerRadius: Theme.osdToast.radius
+        borderWidth: Theme.osdToast.borderWidth
+        borderColor: Theme.osdToastBorder
         replyBackground: Theme.surfaceSunken
         width: root.cardWidth
         onDismissRequested: root.dismiss()

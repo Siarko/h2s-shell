@@ -150,7 +150,7 @@ Item {
                         width: col.width
                         // As tall as its two rows need, never less than 52 px
                         height: Math.max(52, _deviceRows.implicitHeight + 12)
-                        radius: 6
+                        radius: Theme.row.radius
                         color: Theme.surface
 
                         Column {
@@ -158,8 +158,8 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 6
+                            anchors.leftMargin: Theme.row.horizontalPadding
+                            anchors.rightMargin: Theme.row.horizontalPadding
                             anchors.topMargin: 6
                             spacing: 4
 

@@ -54,7 +54,7 @@ BarWidget {
                 // Highlighted under the pointer and while its menu is open, like a cell
                 Rectangle {
                     anchors.fill: parent
-                    radius: 5
+                    radius: Theme.capsule.radius
                     color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.surfaceHover : Theme.surfaceHoverClear
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }

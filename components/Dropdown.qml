@@ -19,9 +19,9 @@ Rectangle {
 
     implicitWidth: 120
     implicitHeight: Math.max(26, _label.implicitHeight + 8)
-    radius: 6
+    radius: Theme.dropdown.radius
     color: Theme.popupBackground
-    border.width: 1
+    border.width: Theme.border.width
     border.color: open ? Theme.accent : (_area.containsMouse ? Theme.textMuted : Theme.outline)
     Behavior on border.color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -29,11 +29,11 @@ Rectangle {
     component Dot: Rectangle {
         width: 10
         height: 10
-        radius: 5
+        radius: width / 2
     }
 
     Row {
-        anchors { left: parent.left; right: _arrow.left; leftMargin: 8; rightMargin: 4; verticalCenter: parent.verticalCenter }
+        anchors { left: parent.left; right: _arrow.left; leftMargin: Theme.field.horizontalPadding; rightMargin: 4; verticalCenter: parent.verticalCenter }
         spacing: 6
 
         Dot {
@@ -54,7 +54,7 @@ Rectangle {
 
     Text {
         id: _arrow
-        anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
+        anchors { right: parent.right; rightMargin: Theme.field.horizontalPadding; verticalCenter: parent.verticalCenter }
         text: root.open ? "▴" : "▾"
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeXSmall
@@ -84,7 +84,7 @@ Rectangle {
                 readonly property bool picked: modelData.value === root.value
                 width: parent.width
                 height: Math.max(24, _optionLabel.implicitHeight + 6)
-                radius: 4
+                radius: Theme.listItem.radius
                 color: picked ? Theme.accentTint : (_optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

@@ -87,9 +87,12 @@ Item {
     Rectangle {
         width: root.pillWidth
         height: root.pillHeight
-        topRightRadius: root.pillHeight / 2
+        // The theme's radius; -1 rounds the ends fully
+        topRightRadius: Theme.osdMessage.radius < 0 ? root.pillHeight / 2 : Theme.osdMessage.radius
         topLeftRadius: topRightRadius
         color: Theme.overlay
+        border.width: Theme.osdMessage.borderWidth
+        border.color: Theme.osdMessageBorder
 
         Text {
             anchors {

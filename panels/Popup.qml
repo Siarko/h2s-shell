@@ -69,10 +69,10 @@ LazyLoader {
             left: true
         }
 
-        property int panelRadius: 20
-        property int paddingSide: 10
-        property int paddingTop: 10
-        property int paddingBottom: 10
+        property int panelRadius: Theme.popup.radius
+        property int paddingSide: Theme.popup.contentPadding
+        property int paddingTop: Theme.popup.contentPadding
+        property int paddingBottom: Theme.popup.contentPadding
         // Switching to another panel, the popup keeps the old one's size until the new one
         // has rendered once (see _switchContent)
         property bool _holding: false

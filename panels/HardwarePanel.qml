@@ -73,7 +73,7 @@ Item {
                         height: root._rowH
 
                         RowLayout {
-                            anchors { fill: parent; leftMargin: 12; rightMargin: 12 }
+                            anchors { fill: parent; leftMargin: Theme.row.horizontalPadding; rightMargin: Theme.row.horizontalPadding }
                             spacing: 8
 
                             Text {
@@ -95,7 +95,7 @@ Item {
                                     visible: _row.modelData.showProgressBar
                                     width: parent.width
                                     height: visible ? 4 : 0
-                                    radius: 2
+                                    radius: height / 2
                                     color: Theme.track
 
                                     Rectangle {
@@ -147,8 +147,8 @@ Item {
                                 fill: parent
                                 topMargin: 8
                                 bottomMargin: 8
-                                leftMargin: 12
-                                rightMargin: 12
+                                leftMargin: Theme.row.horizontalPadding
+                                rightMargin: Theme.row.horizontalPadding
                             }
                             active: _row.isExpanded
                             series: [{ history: _row.modelData.history, color: Theme.accent }]

@@ -9,16 +9,16 @@ Rectangle {
     property string label
     property bool picked: false
     property int fontSize: Theme.fontSizeSmall
-    property int minimumHeight: 22
+    property int minimumHeight: Theme.pill.minHeight
     signal clicked
 
-    implicitWidth: _label.implicitWidth + 14
+    implicitWidth: _label.implicitWidth + 2 * Theme.pill.horizontalPadding
     implicitHeight: Math.max(minimumHeight, _label.implicitHeight + 6)
     width: implicitWidth
     height: implicitHeight
-    radius: 6
+    radius: Theme.pill.radius
     color: picked ? Theme.accent : (_area.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-    border.width: picked ? 0 : 1
+    border.width: picked ? 0 : Theme.border.width
     border.color: Theme.outline
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

@@ -175,7 +175,7 @@ Item {
             visible: root._statusMessage !== ""
             Layout.fillWidth: true
             implicitHeight: _statusText.implicitHeight + 8
-            radius: 4
+            radius: Theme.listItem.radius
             color: Theme.errorTint
 
             Text {
@@ -239,8 +239,7 @@ Item {
                     margins: 4
                 }
                 submitLabel: "Add Event"
-                submitColor: Theme.confirm
-                submitColorHover: Theme.confirmHover
+                submitKind: "save"
                 showCalendarPicker: true
                 onSubmitted: (title, description, startTime, endTime) => {
                     GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,

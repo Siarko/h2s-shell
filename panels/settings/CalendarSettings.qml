@@ -16,7 +16,7 @@ ColumnLayout {
 
     anchors {
         fill: parent
-        margins: 14
+        margins: Theme.settings.pageMargin
     }
     spacing: 0
 
@@ -63,7 +63,7 @@ ColumnLayout {
         Rectangle {
             width: 8
             height: 8
-            radius: 4
+            radius: width / 2
             color: GoogleCalendarAuth.isAuthorized ? Theme.success : Theme.warning
         }
 
@@ -211,7 +211,7 @@ ColumnLayout {
                             Rectangle {
                                 width: 8
                                 height: 8
-                                radius: 4
+                                radius: width / 2
                                 color: calendarRow.modelData.color
                             }
 
@@ -229,10 +229,10 @@ ColumnLayout {
                                 property bool checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.modelData.id)
                                 width: 16
                                 height: 16
-                                radius: 3
+                                radius: Theme.checkbox.radius
                                 color: checked ? Theme.accent : "transparent"
                                 border.color: Theme.accent
-                                border.width: 1
+                                border.width: Theme.border.width
 
                                 Text {
                                     font.family: Theme.fontFamily

@@ -122,7 +122,6 @@ Item {
                     timestamp: Notifications.timestamps[delegateRoot.modelData.id] ?? ""
                     compactDismiss: false
                     imageMaxHeight: 160
-                    contentPadding: 8
                     replyBackground: Theme.popupBackground
                     onDismissRequested: {
                         // Dismissing the last one ends like "Clear all"

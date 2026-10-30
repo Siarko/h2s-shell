@@ -40,11 +40,11 @@ PanelWindow {
     // toast's place comes from Notifications.shownToasts (oldest first): above it are
     // the newer ones, so a new toast pushes the others down and the oldest, at the
     // bottom, is the one counting down.
-    readonly property int _toastTop: Theme.bar.reservedSpace + 16
+    readonly property int _toastTop: Theme.bar.reservedSpace + Theme.osdToast.screenGap
     readonly property int _toastSlots: Profiles.value("notifications.toastLayout") === "column"
         ? (Profiles.value("notifications.toastColumnSize") ?? 3) : 1
     readonly property int _maxToastSlots: 10
-    readonly property int _toastSpacing: 8
+    readonly property int _toastSpacing: Theme.osdToast.spacing
 
     // The toast on screen showing notification `id`
     function _slotFor(id) {
@@ -103,9 +103,11 @@ PanelWindow {
     // tall as the visible ones
     Item {
         id: toastArea
-        x: hud.implicitWidth - 360 - 44
+        // The toast and, at most, the badge beside it
+        readonly property int _reach: Theme.osdToast.width + Math.max(Theme.osdToast.screenGap, Theme.osdToast.badgeWidth + 8)
+        x: hud.implicitWidth - _reach
         y: toastStack.y
-        width: 360 + 44
+        width: _reach
         height: toastStack.height
     }
 
@@ -128,12 +130,15 @@ PanelWindow {
         id: queueBadge
         x: visible ? hud.implicitWidth - width : hud.implicitWidth
         y: hud._toastTop
-        width: 36
+        width: Theme.osdToast.badgeWidth
         // As tall as the first toast; a sensible size before there is one
         height: Math.max(36, toastSlots.count > 0 ? (toastSlots.itemAt(0)?.height ?? 36) : 36)
-        topLeftRadius: 6
-        bottomLeftRadius: 6
+        // Shares the toast's rounding
+        topLeftRadius: Theme.osdToast.radius
+        bottomLeftRadius: Theme.osdToast.radius
         color: Theme.surface
+        border.width: Theme.osdToast.borderWidth
+        border.color: Theme.osdToastBorder
 
         opacity: Notifications.hudQueue.length > 0 ? 1.0 : 0.0
         visible: opacity > 0

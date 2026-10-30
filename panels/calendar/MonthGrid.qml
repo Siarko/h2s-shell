@@ -264,8 +264,8 @@ Item {
                 Behavior on y { NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") } }
                 color: "transparent"
                 border.color: Theme.accent
-                border.width: 1
-                radius: 4
+                border.width: Theme.border.width
+                radius: Theme.calendar.dayRadius
                 z: 1
             }
 
@@ -308,9 +308,9 @@ Item {
                              : isSelected ? Theme.accentTint
                              : Qt.alpha(Theme.accentTint, 0)
                         Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                        radius: 4
+                        radius: Theme.calendar.dayRadius
                         // Border shows selected range: day→cell, week→handled by overlay, month→none
-                        border.width: root.viewMode === "day" && isSelected && !isToday ? 1 : 0
+                        border.width: root.viewMode === "day" && isSelected && !isToday ? Theme.border.width : 0
                         border.color: Theme.accent
 
                         Text {
@@ -326,7 +326,7 @@ Item {
                             visible: isCurrent && (GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
                             width: 4
                             height: 4
-                            radius: 2
+                            radius: width / 2
                             color: Theme.accent
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom

@@ -17,7 +17,7 @@ Flickable {
     required property string themeName
 
     anchors.fill: parent
-    contentHeight: _column.implicitHeight + 28
+    contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
 
     readonly property var _fonts: (Theme.revision, Theme.valuesOf(themeName).fonts)
@@ -64,15 +64,15 @@ Flickable {
         onAboutToChange: root._write("", null, true)
     }
 
-    // The bar's icons at their size in this theme, against the room a bar cell has
-    // (the bar's height less the cells' 5 px margins, Bar.qml)
+    // The bar's icons at their size in this theme, against the room a bar cell has (the
+    // bar's height less the cells' margins above and below)
     TextMetrics {
         id: _barIcon
         font.family: root._fonts.family
         font.pixelSize: root._fonts.sizeTitle
         text: "󰥔"
     }
-    readonly property real _barRoom: (_bar.barHeight ?? 36) - 10
+    readonly property real _barRoom: (_bar.barHeight ?? 36) - 2 * (_bar.cellVerticalMargin ?? 5)
     readonly property bool _barCrowded: _barIcon.height > _barRoom + 2
 
     ColumnLayout {
@@ -81,7 +81,7 @@ Flickable {
             left: parent.left
             right: parent.right
             top: parent.top
-            margins: 14
+            margins: Theme.settings.pageMargin
         }
         spacing: 8
 
@@ -154,7 +154,7 @@ Flickable {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 200
-            radius: 6
+            radius: Theme.settings.cardRadius
             color: Theme.surfaceSunken
             clip: true
 
@@ -173,7 +173,7 @@ Flickable {
                     readonly property bool picked: modelData === root._fonts.family
                     width: ListView.view.width
                     height: Math.max(26, _familyName.implicitHeight + 6)
-                    radius: 4
+                    radius: Theme.listItem.radius
                     color: picked ? Theme.accentTint : (_familyArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

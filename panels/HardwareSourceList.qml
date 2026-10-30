@@ -61,9 +61,9 @@ Item {
             width: parent.width
             height: _container.implicitHeight
             color: Theme.surfaceSunken
-            radius: 6
+            radius: Theme.settings.cardRadius
             border.color: Theme.divider
-            border.width: 1
+            border.width: Theme.border.width
             clip: true
 
             Column {
@@ -136,7 +136,7 @@ Item {
                                 width: parent.width - 16
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
-                                radius: 1
+                                radius: height / 2
                                 color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row._lv.dropIndex === _row.index
@@ -152,7 +152,7 @@ Item {
                                 width: parent.width - 16
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 height: 2
-                                radius: 1
+                                radius: height / 2
                                 color: Theme.accent
                                 visible: _row._lv.dragging
                                          && _row.index === _row._lv.workingList.length - 1
@@ -235,7 +235,7 @@ Item {
                                     Layout.alignment: Qt.AlignVCenter
                                     // As tall as a line of its text, never less than 22 px
                                     height: Math.max(22, _labelInput.implicitHeight + 6)
-                                    radius: 3
+                                    radius: Theme.field.radius
                                     color: _labelInput.activeFocus
                                         ? Theme.fill
                                         : _labelHover.containsMouse
@@ -292,7 +292,7 @@ Item {
                                 Rectangle {
                                     width: 24
                                     height: 24
-                                    radius: 4
+                                    radius: Theme.iconButton.radius
                                     color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -386,7 +386,7 @@ Item {
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
-                                    radius: 4
+                                    radius: Theme.listItem.radius
                                     color: _pickerItemHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

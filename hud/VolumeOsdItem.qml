@@ -12,8 +12,8 @@ Item {
     required property int screenHeight
 
     // Wide enough for the widest volume label ("100%" already overflowed 50 px), and the
-    // card's 10 px margin either side
-    readonly property int cardWidth: Math.max(50, Math.ceil(_widestLabel.advanceWidth) + 20)
+    // card's padding either side
+    readonly property int cardWidth: Math.max(50, Math.ceil(_widestLabel.advanceWidth) + 2 * Theme.osdVolume.padding)
     TextMetrics {
         id: _widestLabel
         font.family: Theme.fontFamily
@@ -83,9 +83,11 @@ Item {
     Rectangle {
         width: root.cardWidth
         height: root.cardHeight
-        topLeftRadius: 6
-        bottomLeftRadius: 6
+        topLeftRadius: Theme.osdVolume.radius
+        bottomLeftRadius: Theme.osdVolume.radius
         color: Theme.surface
+        border.width: Theme.osdVolume.borderWidth
+        border.color: Theme.osdVolumeBorder
 
         ColumnLayout {
             anchors {
@@ -93,7 +95,7 @@ Item {
                 left: parent.left
                 right: parent.right
                 bottom: parent.bottom
-                margins: 10
+                margins: Theme.osdVolume.padding
             }
             spacing: 4
 

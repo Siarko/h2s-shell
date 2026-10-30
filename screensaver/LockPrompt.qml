@@ -47,10 +47,10 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 16
+        radius: Theme.lock.cardRadius
         color: Theme.overlay
         border.color: Theme.glassBorder
-        border.width: 1
+        border.width: Theme.border.width
     }
 
     ColumnLayout {
@@ -80,13 +80,13 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 40
-            radius: 8
+            implicitHeight: Theme.lock.controlHeight
+            radius: Theme.lock.controlRadius
             color: Theme.glass
             border.color: _failed
                 ? Theme.error
                 : (_input.activeFocus ? Theme.glassBorderFocus : Theme.glassBorder)
-            border.width: 1
+            border.width: Theme.border.width
 
             Text {
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
@@ -115,8 +115,8 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 40
-            radius: 8
+            implicitHeight: Theme.lock.controlHeight
+            radius: Theme.lock.controlRadius
             color: (_pam.active || _unlockHover.containsMouse)
                 ? Theme.glassHover
                 : Theme.glassRaised

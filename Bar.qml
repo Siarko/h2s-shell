@@ -42,7 +42,7 @@ PanelWindow {
     // re-tile them every frame. The window itself is as tall as the bar needs meanwhile.
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: Theme.bar.reservedSpace
-    implicitHeight: Math.max(Theme.bar.reservedSpace, Math.ceil(_shape.topOffset + _shape.barHeight))
+    implicitHeight: Math.max(Theme.bar.reservedSpace, Math.ceil(_shape.topOffset + _shape.barHeight + Theme.bar.borderWidth))
 
     // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
     // Component is set here, only where the widget has the property.
@@ -123,8 +123,8 @@ PanelWindow {
         clip: _shown < 1
         opacity: _shown
         Layout.fillHeight: true
-        Layout.topMargin: 5
-        Layout.bottomMargin: 5
+        Layout.topMargin: Theme.bar.cellVerticalMargin
+        Layout.bottomMargin: Theme.bar.cellVerticalMargin
         source: WidgetRegistry.widgetUrl(modelData.type)
         onLoaded: bar._wireWidget(item, widgetLoader)
     }
@@ -183,8 +183,32 @@ PanelWindow {
         SlideBehavior on radiusBottomRight {}
     }
 
+    // The screen edge the bar stands at — the top, for now (bar position: TODO 10.12) —
+    // and the edge facing the desktop, where its border goes (below)
+    readonly property string screenEdge: "top"
+    readonly property string _desktopEdge: ({ top: "bottom", bottom: "top", left: "right", right: "left" })[screenEdge]
+
+    // The bar's border, outside it, along the edge facing the desktop only: a shape like
+    // the bar's, grown by the border's width on that side, behind the bar. The bar keeps
+    // its full height, and a popup, opening from the bar's edge in a window above, covers
+    // the border where it joins the bar.
+    readonly property real _borderWidth: Theme.bar.borderWidth
+    Rectangle {
+        visible: bar._borderWidth > 0
+        x: _barShape.x - (bar._desktopEdge === "left" ? bar._borderWidth : 0)
+        y: _barShape.y - (bar._desktopEdge === "top" ? bar._borderWidth : 0)
+        width: _barShape.width + (bar._desktopEdge === "left" || bar._desktopEdge === "right" ? bar._borderWidth : 0)
+        height: _barShape.height + (bar._desktopEdge === "top" || bar._desktopEdge === "bottom" ? bar._borderWidth : 0)
+        color: Theme.barBorder
+        topLeftRadius: _barShape.topLeftRadius
+        topRightRadius: _barShape.topRightRadius
+        bottomLeftRadius: _barShape.bottomLeftRadius
+        bottomRightRadius: _barShape.bottomRightRadius
+    }
+
     // Visual bar rectangle — floats within the reserved space
     Rectangle {
+        id: _barShape
         anchors {
             top: parent.top
             left: parent.left
@@ -211,7 +235,7 @@ PanelWindow {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                spacing: 5
+                spacing: Theme.bar.widgetSpacing
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
@@ -229,6 +253,7 @@ PanelWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
+                spacing: Theme.bar.widgetSpacing
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
@@ -246,7 +271,7 @@ PanelWindow {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                spacing: 5
+                spacing: Theme.bar.widgetSpacing
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"

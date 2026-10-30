@@ -71,7 +71,7 @@ RowLayout {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
             height: 4
-            radius: 2
+            radius: height / 2
             color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -79,7 +79,7 @@ RowLayout {
             Rectangle {
                 width: parent.parent._lockedPos * parent.width
                 height: parent.height
-                radius: 2
+                radius: height / 2
                 color: Theme.accentTint
                 visible: parent.parent._lockedPos > 0
             }
@@ -89,7 +89,7 @@ RowLayout {
                 x: parent.parent._lockedPos * parent.width
                 width: Math.max(0, (parent.parent._pos - parent.parent._lockedPos) * parent.width)
                 height: parent.height
-                radius: 2
+                radius: height / 2
                 color: _trackArea.containsMouse ? Theme.accentHover : Theme.accent
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             }
@@ -101,7 +101,7 @@ RowLayout {
             anchors.verticalCenter: parent.verticalCenter
             width: 14
             height: 14
-            radius: 7
+            radius: width / 2
             color: _trackArea.pressed ? Theme.textSecondary : Theme.textPrimary
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         }

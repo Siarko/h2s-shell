@@ -232,7 +232,7 @@ Item {
                         // As big as the glyph, never less than 20 px
                         width: Math.max(20, _removeGlyph.implicitHeight)
                         height: width
-                        radius: 4
+                        radius: Theme.iconButton.radius
                         color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 

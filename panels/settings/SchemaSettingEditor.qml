@@ -139,7 +139,7 @@ Item {
                 // As big as the glyph, never less than 20 px
                 width: Math.max(20, _pinGlyph.implicitHeight)
                 height: width
-                radius: 4
+                radius: Theme.iconButton.radius
                 color: _pinArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -185,7 +185,7 @@ Item {
                 visible: !root.inherits && !root.global
                 width: _pin.width
                 height: width
-                radius: 4
+                radius: Theme.iconButton.radius
                 color: _resetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -323,7 +323,7 @@ Item {
                     Rectangle {
                         width: 24
                         height: 26
-                        radius: 4
+                        radius: Theme.iconButton.radius
                         color: _removeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -426,7 +426,7 @@ Item {
                             required property int index
                             width: _suggestionList.width
                             height: 24
-                            radius: 4
+                            radius: Theme.listItem.radius
                             color: index === _textInput.highlighted || _suggestionArea.containsMouse
                                 ? Theme.surfaceHover : Theme.surfaceHoverClear
                             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }

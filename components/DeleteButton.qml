@@ -31,12 +31,12 @@ Row {
 
     Rectangle {
         id: _button
-        implicitWidth: _label.implicitWidth + 14
-        // As tall as the label needs, never less than 24 px
-        implicitHeight: Math.max(24, _label.implicitHeight + 8)
+        implicitWidth: _label.implicitWidth + 2 * Theme.button.horizontalPadding
+        // As tall as the label needs, never less than the theme's button height
+        implicitHeight: Math.max(Theme.button.minHeight, _label.implicitHeight + 2 * Theme.button.verticalPadding)
         width: implicitWidth
         height: implicitHeight
-        radius: 6
+        radius: Theme.deleteButton.radius
         // Square on the side the cancel button attaches to, so the two read as one control
         topRightRadius: root.asking ? 0 : radius
         bottomRightRadius: root.asking ? 0 : radius
@@ -77,7 +77,7 @@ Row {
         visible: root.asking
         width: _button.height
         height: _button.height
-        radius: 6
+        radius: Theme.deleteButton.radius
         topLeftRadius: 0
         bottomLeftRadius: 0
         color: _cancelArea.containsMouse ? Theme.surfaceHover : Theme.surface

@@ -24,6 +24,9 @@ Rectangle {
 
     // The summary row: as tall as its two lines need, never less than 50 px
     readonly property real _summaryHeight: Math.max(50, _summaryLines.implicitHeight + 12)
+    // Where the text starts: the row's padding, and room for the calendar's colour bar at
+    // the left edge
+    readonly property real _textInset: Theme.row.horizontalPadding + 6
 
     readonly property real _cardHeight: {
         if (root.editing) return _editForm.implicitHeight + 16
@@ -34,7 +37,7 @@ Rectangle {
 
     width: ListView.view.width
     height: _cardHeight
-    radius: 6
+    radius: Theme.row.radius
     color: Theme.surface
     clip: true
 
@@ -69,7 +72,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 14
+            anchors.leftMargin: root._textInset
             anchors.rightMargin: GoogleCalendar.available ? 50 : (_birthdayIcon.visible ? _birthdayIcon.implicitWidth + 12 : 8)
             spacing: 2
 
@@ -131,7 +134,7 @@ Rectangle {
         anchors {
             top: parent.top; topMargin: root._summaryHeight
             left: parent.left; right: parent.right
-            leftMargin: 14; rightMargin: 6
+            leftMargin: root._textInset; rightMargin: 6
         }
         text: root.modelData.description || ""
         visible: root.expanded && !root.editing
@@ -159,11 +162,10 @@ Rectangle {
         visible: root.editing
         anchors {
             left: parent.left; right: parent.right; top: parent.top
-            topMargin: 8; leftMargin: 14; rightMargin: 6
+            topMargin: 8; leftMargin: root._textInset; rightMargin: 6
         }
         submitLabel: "Save"
-        submitColor: Theme.confirmSecondary
-        submitColorHover: Theme.confirmSecondaryHover
+        submitKind: "saveChange"
         onSubmitted: (title, description, startTime, endTime) => {
             GoogleCalendar.updateEvent({
                 year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
@@ -240,7 +242,7 @@ Rectangle {
     RowLayout {
         visible: root.confirmingDelete && !root.modelData.recurringEventId
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        anchors.leftMargin: 14
+        anchors.leftMargin: root._textInset
         anchors.rightMargin: 8
         height: root._summaryHeight
         spacing: 6
@@ -301,7 +303,7 @@ Rectangle {
         id: _recurDeleteCol
         visible: root.confirmingDelete && !!root.modelData.recurringEventId
         anchors { left: parent.left; right: parent.right; top: parent.top }
-        anchors.leftMargin: 14
+        anchors.leftMargin: root._textInset
         anchors.topMargin: 8
         spacing: 4
 

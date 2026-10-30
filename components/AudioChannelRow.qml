@@ -138,7 +138,7 @@ Item {
                         height: matches ? 28 : 0
                         color: deviceArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-                        radius: 4
+                        radius: Theme.listItem.radius
 
                         RowLayout {
                             anchors.fill: parent

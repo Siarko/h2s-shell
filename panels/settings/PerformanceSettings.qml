@@ -11,7 +11,7 @@ Flickable {
     id: root
 
     anchors.fill: parent
-    contentHeight: _column.implicitHeight + 28
+    contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
     boundsBehavior: Flickable.StopAtBounds
 
@@ -26,9 +26,9 @@ Flickable {
 
     ColumnLayout {
         id: _column
-        x: 14
-        y: 14
-        width: root.width - 28
+        x: Theme.settings.pageMargin
+        y: Theme.settings.pageMargin
+        width: root.width - 2 * Theme.settings.pageMargin
         spacing: 4
 
         Text {

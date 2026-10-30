@@ -10,7 +10,12 @@ Rectangle {
     property string timestamp: ""
     property bool compactDismiss: false
     property int imageMaxHeight: 120
-    property int contentPadding: 10
+    // From the theme: a card in the panel by default; a toast sets its own
+    property int contentPadding: Theme.notificationCard.padding
+    property real cornerRadius: Theme.notificationCard.radius
+    // A border: none in the panel; a toast sets the theme's
+    property int borderWidth: 0
+    property color borderColor: Theme.outline
     property color replyBackground: Theme.surfaceSunken
 
     property bool timerVisible: false
@@ -20,8 +25,10 @@ Rectangle {
     signal dismissRequested()
 
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
-    radius: 8
+    radius: cornerRadius
     color: Theme.surface
+    border.width: borderWidth
+    border.color: borderColor
     clip: true
 
     property var _activeEdit: null
@@ -151,7 +158,7 @@ Rectangle {
                     required property var modelData
                     implicitWidth: _actionLabel.implicitWidth + 16
                     height: 24
-                    radius: 5
+                    radius: Theme.notificationCard.controlRadius
                     color: Theme.accent
 
                     Text {
@@ -185,7 +192,7 @@ Rectangle {
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 28
-                radius: 5
+                radius: Theme.notificationCard.controlRadius
                 color: notifCard.replyBackground
 
                 Text {
@@ -212,7 +219,7 @@ Rectangle {
             Rectangle {
                 implicitWidth: 48
                 implicitHeight: 28
-                radius: 5
+                radius: Theme.notificationCard.controlRadius
                 color: Theme.accent
 
                 Text {
@@ -248,7 +255,7 @@ Rectangle {
                     required property string modelData
                     implicitWidth: _chipRow.implicitWidth + 12
                     height: 26
-                    radius: 5
+                    radius: Theme.notificationCard.controlRadius
                     color: _chipArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -316,7 +323,7 @@ Rectangle {
         anchors.margins: 8
         width: 28
         height: 28
-        radius: 6
+        radius: Theme.notificationCard.controlRadius
         z: 1
         color: _copyArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }

@@ -32,7 +32,7 @@ Column {
                 topMargin: -2
                 bottomMargin: -2
             }
-            radius: 4
+            radius: Theme.listItem.radius
             color: _rowArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         }

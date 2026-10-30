@@ -17,8 +17,9 @@ BarWidget {
     // Wake is the second, independent axis: the outline means the microphone is open,
     // whatever dictation happens to be doing. It stays on while dictation runs, so it
     // is clear that a stop phrase returns to listening rather than closing the mic.
-    borderColor: Stt.wake ? Theme.accent : "transparent"
-    borderWidth: Stt.wake ? 1 : 0
+    // Outlined in the accent while the wake word is listened for
+    borderColor: Stt.wake ? Theme.accent : Theme.capsuleBorder
+    borderWidth: Stt.wake ? Theme.border.width : Theme.capsule.borderWidth
 
     readonly property bool _dictating: Stt.dictation !== "idle"
     readonly property bool _pulsing: Stt.connected
