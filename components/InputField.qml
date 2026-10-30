@@ -48,6 +48,8 @@ Rectangle {
 
     TextInput {
         id: _input
+        selectionColor: Theme.selection
+        selectedTextColor: Theme.selectedText
         anchors {
             left: parent.left
             right: _eye.visible ? _eye.left : parent.right

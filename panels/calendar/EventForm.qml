@@ -361,6 +361,8 @@ Item {
 
             TextEdit {
                 id: _descInput
+                selectionColor: Theme.selection
+                selectedTextColor: Theme.selectedText
                 anchors {
                     fill: parent
                     margins: 4

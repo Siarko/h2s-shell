@@ -99,6 +99,8 @@ Item {
 
             TextInput {
                 id: _input
+                selectionColor: Theme.selection
+                selectedTextColor: Theme.selectedText
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
                 echoMode: TextInput.Password
                 color: _pam.active ? Theme.glassTextMuted : Theme.textPrimary

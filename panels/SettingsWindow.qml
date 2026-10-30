@@ -639,8 +639,8 @@ FloatingWindow {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textDisabled
-                        selectionColor: Theme.accent
-                        selectedTextColor: Theme.textPrimary
+                        selectionColor: Theme.selection
+                        selectedTextColor: Theme.selectedText
                     }
                 }
             }

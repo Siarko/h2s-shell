@@ -122,6 +122,8 @@ Singleton {
         { group: "Text", token: "textPrimary", label: "Primary", hint: "Labels, headings, the clock" },
         { group: "Text", token: "textSecondary", label: "Secondary", hint: "Secondary labels, body text" },
         { group: "Text", token: "textMuted", label: "Muted", hint: "Timestamps, links, empty states" },
+        { group: "Text", token: "selection", label: "Selection", hint: "Behind selected text: fields, notifications' text, the lock screen" },
+        { group: "Text", token: "selectedText", label: "Selected text", hint: "Text that is selected" },
         { group: "Text", token: "textDisabled", label: "Disabled", hint: "Disabled, other-month days, faint icons; dividers and faint fills derive from it" },
         { group: "Status", token: "error", label: "Error", hint: "Errors, destructive actions" },
         { group: "Status", token: "warning", label: "Warning", hint: "Warnings, volume above 100%" },

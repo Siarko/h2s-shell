@@ -149,6 +149,8 @@ Flickable {
                         spacing: 4
 
                         TextInput {
+                            selectionColor: Theme.selection
+                            selectedTextColor: Theme.selectedText
                             Layout.fillWidth: true
                             text: _card.modelData.name
                             font.family: Theme.fontFamily

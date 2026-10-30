@@ -254,6 +254,8 @@ Item {
 
                                     TextInput {
                                         id: _labelInput
+                                        selectionColor: Theme.selection
+                                        selectedTextColor: Theme.selectedText
                                         anchors { fill: parent; leftMargin: 4; rightMargin: 4 }
                                         verticalAlignment: Text.AlignVCenter
                                         font.family: Theme.fontFamily

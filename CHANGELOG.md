@@ -11,6 +11,9 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Text selection colours in themes (Colors → Text: Selection, Selected text), used by every
+  field and selectable text: the default is the dark accent with white text, instead of
+  Qt's navy that most fields fell back on.
 - Themes set the shape of every kind of element — corner radii, padding, spacing, border
   widths — by kind: bar cells, workspace pills, popups, rows, list items, dropdowns,
   buttons (general, save, cancel, delete, icon), pills, fields, notification cards and

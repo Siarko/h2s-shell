@@ -38,6 +38,8 @@ Singleton {
             "textSecondary": "#aaaaaa",      // secondary labels, body text
             "textMuted": "#888888",          // timestamps, links, empty states
             "textDisabled": "#777777",       // disabled, other-month days, faint icons
+            "selection": "#008000",          // behind selected text
+            "selectedText": "#ffffff",       // selected text
             // Status
             "error": "#e05555",              // errors, destructive actions
             "warning": "#e8a854",            // warnings, volume above 100%
@@ -989,6 +991,11 @@ Singleton {
     ThemeColorBehavior on textMuted {}
     property color textDisabled: _colors.textDisabled
     ThemeColorBehavior on textDisabled {}
+    // Selected text, in every field and selectable text
+    property color selection: _colors.selection
+    ThemeColorBehavior on selection {}
+    property color selectedText: _colors.selectedText
+    ThemeColorBehavior on selectedText {}
 
     // Lines and faint fills
     readonly property color divider: Qt.alpha(textDisabled, 0.3)    // separators, container borders

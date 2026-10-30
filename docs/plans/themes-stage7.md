@@ -1,6 +1,6 @@
 # Themes stage 7: radii, borders and spacing as theme tokens
 
-Part of [themes.md](themes.md). Status: **done 2026-10-30, verified on the host** (7a, 7b, 7c). Open: text selection colour. Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
+Part of [themes.md](themes.md). Status: **done 2026-10-30, verified on the host** (7a, 7b, 7c); text selection colour added after. Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
 spacings, ~250 margins).
 
 ## Decisions taken with the user
@@ -223,3 +223,12 @@ of the bar's border, and this carries it on.
 Tray icons have their own group `tray` (`pillRadius` 5, `pillWidth` 24, `iconSize` 18,
 `pillSpacing` 4), as workspace pills do (the user: every widget with pills inside); no
 other widget has any. The shape pages draw a line between their sections.
+
+*Text selection colour, 2026-10-30, verified on the host:* analysed — every selectable text
+(fields, the time field, the event description, notification text and reply, inline name
+edits, the lock screen's password, the settings sidebar's version) sits on a dark, solid
+theme background, or the lock screen's glass where an opaque selection reads too, so one
+pair of colours fits all: `selection` and `selectedText`, base colours (Colors → Text),
+default `#008000` (the dark accent) with white (the user's pick), replacing Qt's default
+navy (`#000080`) that all but one place fell back on. Per-element variants can come later
+if a place needs its own.

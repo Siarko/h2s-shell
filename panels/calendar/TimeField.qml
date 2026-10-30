@@ -98,6 +98,8 @@ Item {
 
         TextInput {
             id: _input
+            selectionColor: Theme.selection
+            selectedTextColor: Theme.selectedText
             anchors.fill: parent
             maximumLength: 2
             color: Theme.textPrimary

@@ -103,6 +103,8 @@ Rectangle {
         // Summary
         TextEdit {
             id: _summaryEdit
+            selectionColor: Theme.selection
+            selectedTextColor: Theme.selectedText
             text: notifCard.notification?.summary ?? ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
@@ -118,6 +120,8 @@ Rectangle {
         // Body (optional — hidden when empty)
         TextEdit {
             id: _bodyEdit
+            selectionColor: Theme.selection
+            selectedTextColor: Theme.selectedText
             text: notifCard.notification?.body ?? ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
@@ -207,6 +211,8 @@ Rectangle {
 
                 TextInput {
                     id: _replyInput
+                    selectionColor: Theme.selection
+                    selectedTextColor: Theme.selectedText
                     anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
@@ -301,6 +307,8 @@ Rectangle {
     // Hidden TextEdit for programmatic clipboard writes from code chips
     TextEdit {
         id: _clipHelper
+        selectionColor: Theme.selection
+        selectedTextColor: Theme.selectedText
         visible: false
     }
 
