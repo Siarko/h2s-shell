@@ -11,6 +11,7 @@ TestCase {
         "panels/BarSectionList.qml",
         "panels/HardwareSourceList.qml",
         "panels/WidgetSettingsPane.qml",
+        "panels/settings/AnimationsSettings.qml",
         "panels/settings/BarSettings.qml",
         "panels/settings/BarShapeSettings.qml",
         "panels/settings/CalendarSettings.qml",

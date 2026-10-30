@@ -78,6 +78,10 @@ section to the new version and date.
 - Settings → Appearance → Bar: the bar's size, margins and corners, moved from the Bar page
   (which keeps the widgets) into the theme's pages, as drafts with Reset and Undo.
 
+- Settings → Appearance → Animations: each animation role's duration and curve (a
+  popup's two), from the curves library or Qt's, with where each comes from, Reset, Undo
+  and a preview that plays it; drafts like the other theme pages.
+
 ### Changed
 - Settings pages are named by id: `qs ipc call settings openPage` takes a page's id
   (`profiles`, `bar_appearance`, …), not its label.

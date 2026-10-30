@@ -27,7 +27,7 @@ FloatingWindow {
     // shell (Shell.openSettings) and IPC (openPage) name it — and a label, free to change
     // or repeat across tabs. The window has two tabs: Behaviour, whose pages edit a
     // profile, and Appearance, whose pages edit a theme (docs/plans/themes.md, stage 6;
-    // TODO 10.10). `draftGroup`: the theme group a page edits through a draft, for its ✎;
+    // TODO 10.10). `draftGroups`: the theme groups a page edits through a draft, for its ✎;
     // `separatorBefore`: a line above it in the sidebar.
     readonly property var pages: [
         { id: "general", label: "General", tab: "behaviour", component: generalComp },
@@ -43,9 +43,10 @@ FloatingWindow {
         // picked theme's values
         { id: "themes", label: "Themes", tab: "appearance", component: themesComp },
         { id: "curves", label: "Curves", tab: "appearance", component: curvesComp },
-        { id: "colors", label: "Colors", tab: "appearance", component: colorsComp, draftGroup: "colors", separatorBefore: true },
-        { id: "fonts", label: "Fonts", tab: "appearance", component: fontsComp, draftGroup: "fonts" },
-        { id: "bar_appearance", label: "Bar", tab: "appearance", component: barShapeComp, draftGroup: "bar" }
+        { id: "colors", label: "Colors", tab: "appearance", component: colorsComp, draftGroups: ["colors"], separatorBefore: true },
+        { id: "fonts", label: "Fonts", tab: "appearance", component: fontsComp, draftGroups: ["fonts"] },
+        { id: "bar_appearance", label: "Bar", tab: "appearance", component: barShapeComp, draftGroups: ["bar"] },
+        { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves"] }
     ]
 
     function _pageIndex(id) {
@@ -580,7 +581,7 @@ FloatingWindow {
                             // own at the right, so cutting a long name never hides it.
                             Text {
                                 id: _changedMark
-                                visible: (Theme.drafts, !!parent.modelData.draftGroup && Theme.hasDraft(root.editTheme, parent.modelData.draftGroup))
+                                visible: (Theme.drafts, (parent.modelData.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
                                 anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
                                 text: "✎"
                                 font.family: Theme.fontFamily
@@ -694,6 +695,7 @@ FloatingWindow {
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }
     Component { id: fontsComp;         FontsSettings { themeName: root.editTheme } }
     Component { id: barShapeComp;      BarShapeSettings { themeName: root.editTheme } }
+    Component { id: animationsComp;    AnimationsSettings { themeName: root.editTheme } }
     Component {
         id: themesComp
         ThemesSettings {

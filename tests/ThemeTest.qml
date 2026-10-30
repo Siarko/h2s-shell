@@ -60,6 +60,14 @@ TestCase {
             assert(size >= entry.from && size <= entry.to, "and its slider reaches today's " + size + " px");
         }
         assertEqual(ThemeRules.fontTokens.length + 1, Object.keys(Theme.builtin.fonts).length, "every built-in size is listed, besides the family");
+        assertEqual(JSON.stringify(ThemeRules.animationRoles.map(entry => entry.role).sort()),
+            JSON.stringify(Object.keys(Theme.builtin.durations).sort()), "the Animations page lists every role");
+        assertEqual(JSON.stringify([].concat(...ThemeRules.animationRoles.map(entry => entry.curves)).sort()),
+            JSON.stringify(Object.keys(Theme.builtin.curves).sort()), "and every curve token, with its role");
+        for (const entry of ThemeRules.animationRoles)
+            assert(Theme.builtin.durations[entry.role] <= entry.to, "the slider for " + entry.role + " reaches the built-in duration");
+        for (const name of ThemeRules.qtCurveNames)
+            assert(ThemeRules.isQtCurve(name), name + " is one of Qt's curves");
         assertEqual(JSON.stringify(ThemeRules.barTokenInfo.map(entry => entry.token)), JSON.stringify(ThemeRules.barTokens),
             "the Bar shape page lists every geometry token, in order");
         for (const entry of ThemeRules.barTokenInfo)

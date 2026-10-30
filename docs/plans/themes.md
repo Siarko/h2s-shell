@@ -331,6 +331,11 @@ The ~50 hard-coded `duration:` values move to roles.
    `pages` with an id, a label, a tab and a draft group; `Shell.openSettings` and IPC
    `openPage` take the id. (A property named `_page` first shadowed the Loader's id `_page`: the tab never
    switched.)
+   *(e) Animations, 2026-10-30, verified on the host:* `ThemeRules.animationRoles` (label,
+   use, slider range, curve tokens; tested to cover every duration and curve) and
+   `qtCurveNames`; per role a duration slider, its curve(s) picked from the library and
+   Qt's, origin, Reset, Undo, and ▶ playing a square with the role's values (a popup's:
+   there opening, back closing). The sidebar's ✎ now takes several draft groups per page.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

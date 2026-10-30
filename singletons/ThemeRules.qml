@@ -142,6 +142,38 @@ Singleton {
         { token: "radiusBottomRight", group: "Corners", label: "Bottom right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" }
     ]
 
+    // The animation roles as the Animations page shows them: what each moves, the range of
+    // its duration's slider (ms), and its curve tokens — one per role, but a popup has one
+    // for opening and one for closing
+    readonly property var animationRoles: [
+        { role: "hover", label: "Hover", hint: "Colour under the pointer", to: 1000, curves: ["hover"] },
+        { role: "state", label: "State", hint: "A switch, a focused workspace, a field's state", to: 1000, curves: ["state"] },
+        { role: "expand", label: "Expand", hint: "Something growing or shrinking in place", to: 1000, curves: ["expand"] },
+        { role: "popup", label: "Popup", hint: "A popup opening or closing", to: 1000, curves: ["popupOpen", "popupClose"] },
+        { role: "popupResize", label: "Popup resize", hint: "A popup moving to another widget's size", to: 1000, curves: ["popupResize"] },
+        { role: "enter", label: "Enter", hint: "A toast, an OSD or a card arriving", to: 1500, curves: ["enter"] },
+        { role: "exit", label: "Exit", hint: "A toast, an OSD or a card leaving", to: 1500, curves: ["exit"] },
+        { role: "move", label: "Move", hint: "A small shift: toasts restacking, the selected week", to: 1500, curves: ["move"] },
+        { role: "slide", label: "Slide", hint: "A larger slide: pages, months, the bar's shape", to: 1500, curves: ["slide"] },
+        { role: "fade", label: "Fade", hint: "Appearing or disappearing in place", to: 1500, curves: ["fade"] },
+        { role: "value", label: "Value", hint: "A bar or slider following its value", to: 2000, curves: ["value"] },
+        { role: "heartbeat", label: "Heartbeat", hint: "The wave on graphs when a sample arrives", to: 2000, curves: ["heartbeat"] },
+        { role: "pop", label: "Pop", hint: "A mark popping in, the bell; \"Clear all\" is timed from it", to: 2000, curves: ["pop"] },
+        { role: "pulse", label: "Pulse", hint: "One breath of a pulsing indicator", to: 4000, curves: ["pulse"] },
+        { role: "spin", label: "Spin", hint: "One turn of a spinner", to: 4000, curves: ["spin"] },
+        { role: "themeChange", label: "Theme change", hint: "Colours moving to a new theme", to: 2000, curves: ["themeChange"] }
+    ]
+
+    // Qt's curves by name, for picking one: each kind in, out, in-out and out-in
+    readonly property var qtCurveNames: {
+        const names = ["Linear"];
+        for (const kind of ["Quad", "Cubic", "Quart", "Quint", "Sine", "Expo", "Circ", "Back", "Elastic", "Bounce"]) {
+            for (const way of ["In", "Out", "InOut", "OutIn"])
+                names.push(way + kind);
+        }
+        return names;
+    }
+
     // The font tokens: the family, and the sizes in pixels with what each is for and the
     // range its slider offers
     readonly property var fontTokens: [
