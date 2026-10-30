@@ -1,6 +1,6 @@
 # Themes stage 7: radii, borders and spacing as theme tokens
 
-Part of [themes.md](themes.md). Status: **token set agreed with the user 2026-10-30; 7a done, 7b in progress.** Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
+Part of [themes.md](themes.md). Status: **done 2026-10-30, verified on the host** (7a, 7b, 7c). Open: text selection colour. Based on an audit of every QML file (183 literal radii, 34 border widths, ~200
 spacings, ~250 margins).
 
 ## Decisions taken with the user
@@ -131,8 +131,6 @@ The toast's card controls take `notificationCard.controlRadius`.
 
 ## Open
 
-- A border on a popup has to follow its curved corners where it meets the bar
-  (PopupCurve), and meet the bar's own border there: to be designed.
 - Parts and order of work: consolidating hand-written buttons, pills, the slider tooltip,
   switches and fields into shared components first (7a), then the tokens (7b), then the
   Popups and Notifications pages and the Bar page's additions (7c).
@@ -197,3 +195,31 @@ bar (inside, it left a line between them). The side derives from `Bar.screenEdge
 for now, so it follows the bar when it can move (TODO 10.12). Bar cells, toasts and their badge, the volume OSD, the message pill. The popup's border
 waits for its design. The event form's Save and Cancel are `SmallButton`s
 (`submitKind`).
+
+*Popup border, 2026-10-30, verified on the host (design A, the user's pick):* one line around
+the popup's shape, open at the top where it joins the bar: down each ear's curve, the
+sides, the rounded bottom — so the bar's border, which the popup covers between its
+ears, carries on into it. A `Shape` with a `PathSvg` computed from the popup's width, the
+clip's (animated) height, the radius and which ears show; offset half a line inwards so
+all of it shows (the ears' arcs grow by half a line, the bottom corners shrink). Where
+an ear is off (the popup at the bar's end) the line goes straight up the side.
+
+*7c, pages, 2026-10-30, verified on the host:* `ThemeRules.shapeTokenInfo` (label, use,
+slider range per token; tested to cover every token of every shape group and reach the
+built-in values); `panels/settings/ShapeSections.qml` (a group's sliders with origin,
+Reset, Undo, as drafts) and `ShapeSettings.qml` (a page of them with Save / Cancel).
+Pages (ids): `popups` (popup, rows, list items, dropdowns, power menu), `controls`
+(buttons by kind, icon buttons, pills, fields, check boxes, tooltips, outlines),
+`notifications_appearance` (toasts, panel cards, volume OSD, messages),
+`other_appearance` (settings window, calendar, lock screen), `widgets_appearance` (bar
+cells, workspace pills — the user: the Bar page is about the bar only). The split into these pages (rather than only Popups and
+Notifications, as first written) was proposed on 2026-10-30, for the user to confirm.
+
+The popup's border meets the bar's (the user: it did not quite join): with a border on the
+bar, the popup's line starts with a straight piece along the middle of the bar's border,
+from the popup's edge, then turns down into the ear's curve — the popup covers that piece
+of the bar's border, and this carries it on.
+
+Tray icons have their own group `tray` (`pillRadius` 5, `pillWidth` 24, `iconSize` 18,
+`pillSpacing` 4), as workspace pills do (the user: every widget with pills inside); no
+other widget has any. The shape pages draw a line between their sections.

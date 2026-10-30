@@ -21,7 +21,7 @@ BarWidget {
     Row {
         anchors.centerIn: parent
         height: root.height
-        spacing: 4
+        spacing: Theme.tray.pillSpacing
 
         Repeater {
             // ScriptModel, never the bare array — see "The Repeater crash" in
@@ -45,7 +45,7 @@ BarWidget {
                 opacity: 0
                 clip: true
                 Component.onCompleted: {
-                    width = 24;
+                    width = Qt.binding(() => Theme.tray.pillWidth);
                     opacity = 1;
                 }
                 Behavior on width { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
@@ -54,7 +54,7 @@ BarWidget {
                 // Highlighted under the pointer and while its menu is open, like a cell
                 Rectangle {
                     anchors.fill: parent
-                    radius: Theme.capsule.radius
+                    radius: Theme.tray.pillRadius
                     color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.surfaceHover : Theme.surfaceHoverClear
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }
@@ -62,9 +62,9 @@ BarWidget {
                 Image {
                     anchors.centerIn: parent
                     source: trayDelegate.modelData.icon
-                    width: 18
-                    height: 18
-                    sourceSize: Qt.size(18, 18)
+                    width: Theme.tray.iconSize
+                    height: Theme.tray.iconSize
+                    sourceSize: Qt.size(Theme.tray.iconSize, Theme.tray.iconSize)
                 }
 
                 MouseArea {

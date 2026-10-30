@@ -98,6 +98,7 @@ Singleton {
         // and sizes in pixels.
         "capsule": { "radius": 5, "horizontalPadding": 8, "borderWidth": 0 },   // a widget's cell on the bar
         "workspace": { "pillRadius": 4, "pillHorizontalPadding": 4, "pillHeight": 22, "pillSpacing": 4 },
+        "tray": { "pillRadius": 5, "pillWidth": 24, "iconSize": 18, "pillSpacing": 4 },  // the tray's icons
         "popup": { "radius": 20, "contentPadding": 10, "borderWidth": 0 },
         "row": { "radius": 6, "horizontalPadding": 8 },                       // rows and cards in popups
         "listItem": { "radius": 4 },                                          // menu and list items
@@ -880,6 +881,7 @@ Singleton {
     // above; docs/plans/themes-stage7.md)
     readonly property var capsule: values.capsule
     readonly property var workspace: values.workspace
+    readonly property var tray: values.tray
     readonly property var popup: values.popup
     readonly property var row: values.row
     readonly property var listItem: values.listItem

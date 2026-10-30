@@ -1,7 +1,7 @@
 import QtQuick
 
 // The settings window and every page and control under panels/settings must compile, and
-// the forms that load only when opened (the calendar's event form). A
+// what loads only when opened (the popup frame, the calendar's event form). A
 // page is only loaded when its sidebar entry is clicked, so a broken one otherwise goes
 // unnoticed until then.
 TestCase {
@@ -12,6 +12,7 @@ TestCase {
         "panels/BarSectionList.qml",
         "panels/calendar/EventForm.qml",
         "panels/calendar/TimeField.qml",
+        "panels/Popup.qml",
         "panels/HardwareSourceList.qml",
         "panels/WidgetSettingsPane.qml",
         "panels/settings/AnimationsSettings.qml",
@@ -31,6 +32,8 @@ TestCase {
         "panels/settings/ProfilesSettings.qml",
         "panels/settings/SchemaSettingEditor.qml",
         "panels/settings/SttSettings.qml",
+        "panels/settings/ShapeSettings.qml",
+        "panels/settings/ShapeSections.qml",
         "panels/settings/ThemesSettings.qml",
         "screensaver/LockSurface.qml",
         "screensaver/NotificationPreview.qml",

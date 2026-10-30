@@ -70,6 +70,14 @@ TestCase {
             assert(ThemeRules.isQtCurve(name), name + " is one of Qt's curves");
         for (const group of ThemeRules.shapeGroups)
             assert(Object.keys(Theme.builtin[group] ?? {}).length > 0, "the shape group " + group + " has built-in tokens");
+        for (const group of ThemeRules.shapeGroups) {
+            const shown = (ThemeRules.shapeTokenInfo[group] ?? []).map(entry => entry.token).sort();
+            assertEqual(JSON.stringify(shown), JSON.stringify(Object.keys(Theme.builtin[group]).sort()),
+                "the Appearance pages show every token of " + group);
+            for (const entry of ThemeRules.shapeTokenInfo[group] ?? [])
+                assert(Theme.builtin[group][entry.token] >= entry.from && Theme.builtin[group][entry.token] <= entry.to,
+                    "the slider for " + group + "." + entry.token + " reaches the built-in value");
+        }
         for (const token of ThemeRules.barTokens)
             assert(token in Theme.builtin.bar, "the bar token " + token + " is built in");
         assertEqual(Theme.button.radius, Theme.builtin.button.radius, "a shape group reads as Theme.<group>.<token>");

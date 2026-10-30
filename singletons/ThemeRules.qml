@@ -32,7 +32,7 @@ Singleton {
     readonly property var groups: ["colors", "fonts", "bar", "durations", "curves"].concat(shapeGroups)
 
     // The groups of radii, borders and spacing by kind of element (themes stage 7)
-    readonly property var shapeGroups: ["capsule", "workspace", "popup", "row", "listItem", "dropdown",
+    readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
         "checkbox", "lock", "border"]
@@ -190,6 +190,85 @@ Singleton {
                 names.push(way + kind);
         }
         return names;
+    }
+
+    // The shape groups' tokens as the Appearance pages show them, by group: label, use,
+    // slider range and unit. A page lists groups from here (ShapeSettings).
+    readonly property var shapeTokenInfo: {
+        const px = " px";
+        const radius = (hint, to) => ({ token: "radius", label: "Corner radius", hint: hint, from: 0, to: to ?? 30, suffix: px });
+        const border = hint => ({ token: "borderWidth", label: "Border width", hint: hint, from: 0, to: 10, suffix: px });
+        return {
+            capsule: [radius("A widget's cell on the bar", 20),
+                { token: "horizontalPadding", label: "Padding", hint: "Between a cell's edge and its content", from: 0, to: 30, suffix: px },
+                border("Around each cell, in the colour Bar cells (Colors → Borders); 0: none")],
+            workspace: [
+                { token: "pillRadius", label: "Corner radius", hint: "A workspace's pill", from: 0, to: 20, suffix: px },
+                { token: "pillHorizontalPadding", label: "Padding", hint: "Between a pill's edge and its name", from: 0, to: 20, suffix: px },
+                { token: "pillHeight", label: "Height", hint: "And the narrowest a pill gets", from: 10, to: 40, suffix: px },
+                { token: "pillSpacing", label: "Spacing", hint: "Between the pills", from: 0, to: 20, suffix: px }],
+            tray: [
+                { token: "pillRadius", label: "Corner radius", hint: "An icon's highlight, under the pointer or with its menu open", from: 0, to: 20, suffix: px },
+                { token: "pillWidth", label: "Width", hint: "Each icon's place", from: 12, to: 48, suffix: px },
+                { token: "iconSize", label: "Icon size", hint: "The icons", from: 8, to: 40, suffix: px },
+                { token: "pillSpacing", label: "Spacing", hint: "Between the icons", from: 0, to: 20, suffix: px }],
+            popup: [radius("The curves joining a popup to the bar, and its bottom corners", 60),
+                { token: "contentPadding", label: "Padding", hint: "Around a popup's content", from: 0, to: 40, suffix: px },
+                border("Around a popup, open where it joins the bar, in the colour Popups (Colors → Borders); 0: none")],
+            row: [radius("Rows and cards in popups: networks, devices, events"),
+                { token: "horizontalPadding", label: "Padding", hint: "Between a row's edge and its content", from: 0, to: 30, suffix: px }],
+            listItem: [radius("Menu and list items: the tray menu, audio devices, a dropdown's options", 20)],
+            dropdown: [radius("A dropdown's button and its list", 20)],
+            powerMenu: [
+                { token: "buttonRadius", label: "Corner radius", hint: "The power menu's buttons", from: 0, to: 30, suffix: px },
+                { token: "buttonHeight", label: "Height", hint: "The power menu's buttons", from: 24, to: 80, suffix: px }],
+            button: [radius("General buttons", 20),
+                { token: "horizontalPadding", label: "Padding across", hint: "Every button: between its edge and its label", from: 0, to: 30, suffix: px },
+                { token: "verticalPadding", label: "Padding down", hint: "Every button: above and below its label", from: 0, to: 20, suffix: px },
+                { token: "minHeight", label: "Height", hint: "Every button's least height", from: 14, to: 48, suffix: px }],
+            saveButton: [radius("Buttons that save or confirm: Save, Connect", 20)],
+            cancelButton: [radius("Buttons that cancel", 20)],
+            deleteButton: [radius("Buttons that delete or disconnect, which ask first", 20)],
+            iconButton: [radius("Small buttons with an icon: pin, reset, remove", 20)],
+            pill: [radius("Choices: presets, options, days", 20),
+                { token: "horizontalPadding", label: "Padding", hint: "Between a pill's edge and its label", from: 0, to: 30, suffix: px },
+                { token: "minHeight", label: "Height", hint: "A pill's least height", from: 14, to: 48, suffix: px }],
+            field: [radius("Text fields", 20),
+                { token: "horizontalPadding", label: "Padding", hint: "Between a field's edge and its text", from: 0, to: 30, suffix: px }],
+            checkbox: [radius("Check boxes", 10)],
+            tooltip: [radius("Tooltips", 20),
+                { token: "horizontalPadding", label: "Padding across", hint: "Between a tooltip's edge and its text", from: 0, to: 30, suffix: px },
+                { token: "verticalPadding", label: "Padding down", hint: "Above and below a tooltip's text", from: 0, to: 30, suffix: px }],
+            border: [
+                { token: "width", label: "Outline width", hint: "Ordinary outlines: fields, lists, pills, tooltips", from: 0, to: 6, suffix: px },
+                { token: "selectedWidth", label: "Selection width", hint: "Selection rings: colour swatches, curve handles, an event's colour edge", from: 0, to: 8, suffix: px }],
+            osdToast: [radius("A notification toast, and the queue count beside it"),
+                { token: "padding", label: "Padding", hint: "Around a toast's content", from: 0, to: 40, suffix: px },
+                { token: "width", label: "Width", hint: "A toast's width", from: 200, to: 700, suffix: px },
+                { token: "screenGap", label: "Gap to the edge", hint: "Between toasts and the screen's edge, and below the bar", from: 0, to: 80, suffix: px },
+                { token: "spacing", label: "Spacing", hint: "Between toasts", from: 0, to: 40, suffix: px },
+                { token: "badgeWidth", label: "Queue count width", hint: "The count of waiting notifications", from: 20, to: 80, suffix: px },
+                border("Around toasts and the queue count, in the colour Notification toasts (Colors → Borders); 0: none")],
+            notificationCard: [radius("A notification in the notifications panel, and on the lock screen"),
+                { token: "padding", label: "Padding", hint: "Around a card's content in the panel", from: 0, to: 40, suffix: px },
+                { token: "controlRadius", label: "Controls' radius", hint: "A notification's buttons, reply field and chips, here and in toasts", from: 0, to: 20, suffix: px }],
+            osdVolume: [radius("The volume OSD at the screen's edge"),
+                { token: "padding", label: "Padding", hint: "Around the volume OSD's content", from: 0, to: 30, suffix: px },
+                border("Around the volume OSD, in the colour Volume OSD (Colors → Borders); 0: none")],
+            osdMessage: [{ token: "radius", label: "Corner radius", hint: "The shell's message pill (\"Settings saved\"); -1: fully round", from: -1, to: 30, suffix: px },
+                border("Around the message pill, in the colour Shell messages (Colors → Borders); 0: none")],
+            settings: [
+                { token: "pageMargin", label: "Page margin", hint: "Around a settings page", from: 0, to: 40, suffix: px },
+                { token: "sidebarItemRadius", label: "Sidebar radius", hint: "The sidebar's pages and the selection mark", from: 0, to: 20, suffix: px },
+                { token: "tabRadius", label: "Tab radius", hint: "The Behaviour and Appearance tabs", from: 0, to: 20, suffix: px },
+                { token: "tabHorizontalPadding", label: "Tab padding", hint: "Between a tab's edge and its label", from: 0, to: 40, suffix: px },
+                { token: "cardRadius", label: "Card radius", hint: "Cards and boxes on settings pages", from: 0, to: 20, suffix: px }],
+            calendar: [{ token: "dayRadius", label: "Day radius", hint: "A day in the month, and the week's frame", from: 0, to: 20, suffix: px }],
+            lock: [
+                { token: "cardRadius", label: "Card radius", hint: "The lock screen's password card", from: 0, to: 40, suffix: px },
+                { token: "controlRadius", label: "Controls' radius", hint: "Its password field and button", from: 0, to: 30, suffix: px },
+                { token: "controlHeight", label: "Controls' height", hint: "Its password field and button", from: 24, to: 80, suffix: px }]
+        };
     }
 
     // The font tokens: the family, and the sizes in pixels with what each is for and the

@@ -16,9 +16,10 @@ section to the new version and date.
   buttons (general, save, cancel, delete, icon), pills, fields, notification cards and
   toasts, the volume OSD, the message pill, tooltips, the settings window, calendar days,
   checkboxes, the lock screen (docs/plans/themes-stage7.md). New: borders along the
-  bar's edge facing the desktop (following it if the bar moves to another edge) and
-  around its cells, toasts, the volume OSD and the message pill, each with its own width
-  and colour (none by default). The Bar page sets the cells' margin, the widgets' spacing and
+  bar's edge facing the desktop (following it if the bar moves to another edge), around
+  popups — one line down their curved ears, sides and bottom, open where they join the
+  bar, so it carries on from the bar's — and around bar cells, toasts, the volume OSD and
+  the message pill, each with its own width and colour (none by default). The Bar page sets the cells' margin, the widgets' spacing and
   the bar's border.
 - Theme files: `~/.config/h2s_shell/themes/<name>.json` sets colours and fonts over the
   built-in look, can `extend` another theme and take colours from a palette file
@@ -90,6 +91,11 @@ section to the new version and date.
 - Settings → Appearance → Animations: each animation role's duration and curve (a
   popup's two), from the curves library or Qt's, with where each comes from, Reset, Undo
   and a preview that plays it; drafts like the other theme pages.
+
+- Settings → Appearance: Widgets (bar cells, workspace pills, tray icons), Popups, Controls,
+  Notifications and Other pages — every shape token of the theme (radii, padding,
+  sizes, border widths) with a slider, where its value comes from, Reset and Undo, as
+  drafts. Border colours are in Colors → Borders.
 
 ### Changed
 - Save buttons take the confirm colour (adding) or the second confirm colour (saving a

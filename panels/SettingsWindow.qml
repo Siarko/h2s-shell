@@ -47,7 +47,14 @@ FloatingWindow {
         { id: "colors", label: "Colors", tab: "appearance", component: colorsComp, draftGroups: ["colors"], separatorBefore: true },
         { id: "fonts", label: "Fonts", tab: "appearance", component: fontsComp, draftGroups: ["fonts"] },
         { id: "bar_appearance", label: "Bar", tab: "appearance", component: barShapeComp, draftGroups: ["bar"] },
-        { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves"] }
+        { id: "widgets_appearance", label: "Widgets", tab: "appearance", component: widgetsLookComp, draftGroups: ["capsule", "workspace", "tray"] },
+        { id: "popups", label: "Popups", tab: "appearance", component: popupsComp, draftGroups: ["popup", "row", "listItem", "dropdown", "powerMenu"] },
+        { id: "controls", label: "Controls", tab: "appearance", component: controlsComp,
+          draftGroups: ["button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field", "checkbox", "tooltip", "border"] },
+        { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
+          draftGroups: ["osdToast", "notificationCard", "osdVolume", "osdMessage"] },
+        { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves"] },
+        { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] }
     ]
 
     function _pageIndex(id) {
@@ -697,6 +704,81 @@ FloatingWindow {
     Component { id: fontsComp;         FontsSettings { themeName: root.editTheme } }
     Component { id: barShapeComp;      BarShapeSettings { themeName: root.editTheme } }
     Component { id: animationsComp;    AnimationsSettings { themeName: root.editTheme } }
+    // The theme's shapes by kind of element (themes stage 7)
+    Component {
+        id: widgetsLookComp
+        ShapeSettings {
+            themeName: root.editTheme
+            title: "Widgets"
+            hint: "The widgets on the bar: their cells, and the workspaces' pills. The bar itself is on the Bar page."
+            sections: [
+                { title: "Cells", group: "capsule", hint: "Each widget's cell on the bar" },
+                { title: "Workspace pills", group: "workspace" },
+                { title: "Tray icons", group: "tray" }
+            ]
+        }
+    }
+    Component {
+        id: popupsComp
+        ShapeSettings {
+            themeName: root.editTheme
+            title: "Popups"
+            hint: "The popups opening from the bar, and what is in them. Their colours, and the border's, are on the Colors page."
+            sections: [
+                { title: "Popup", group: "popup" },
+                { title: "Rows and cards", group: "row" },
+                { title: "Menu and list items", group: "listItem" },
+                { title: "Dropdowns", group: "dropdown" },
+                { title: "Power menu", group: "powerMenu" }
+            ]
+        }
+    }
+    Component {
+        id: controlsComp
+        ShapeSettings {
+            themeName: root.editTheme
+            title: "Controls"
+            hint: "Buttons, choices and fields everywhere: popups, settings, the calendar."
+            sections: [
+                { title: "Buttons", group: "button", hint: "Every button's padding and height; general buttons' corners" },
+                { title: "Save buttons", group: "saveButton" },
+                { title: "Cancel buttons", group: "cancelButton" },
+                { title: "Delete buttons", group: "deleteButton" },
+                { title: "Icon buttons", group: "iconButton" },
+                { title: "Pills", group: "pill" },
+                { title: "Text fields", group: "field" },
+                { title: "Check boxes", group: "checkbox" },
+                { title: "Tooltips", group: "tooltip" },
+                { title: "Outlines", group: "border" }
+            ]
+        }
+    }
+    Component {
+        id: notificationsLookComp
+        ShapeSettings {
+            themeName: root.editTheme
+            title: "Notifications"
+            hint: "Notifications on screen and in the panel, the volume OSD and the shell's messages. Borders' colours are on the Colors page."
+            sections: [
+                { title: "Toasts", group: "osdToast" },
+                { title: "In the panel", group: "notificationCard" },
+                { title: "Volume OSD", group: "osdVolume" },
+                { title: "Shell messages", group: "osdMessage" }
+            ]
+        }
+    }
+    Component {
+        id: otherLookComp
+        ShapeSettings {
+            themeName: root.editTheme
+            title: "Other"
+            sections: [
+                { title: "Settings window", group: "settings" },
+                { title: "Calendar", group: "calendar" },
+                { title: "Lock screen", group: "lock" }
+            ]
+        }
+    }
     Component {
         id: themesComp
         ThemesSettings {

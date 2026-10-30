@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Shapes
 import qs.components
 import qs.singletons
 
@@ -339,6 +340,64 @@ LazyLoader {
                             screenHeight: popup.screen.height
                             onCloseRequested: popupLoader.close()
                         }
+                    }
+                }
+
+                // The popup's border (popup.borderWidth, popupBorder): one line around its
+                // shape, open at the top where it joins the bar — down the curve of each
+                // ear, the side, the rounded bottom — so it carries on from the bar's
+                // border, which the popup covers there. Drawn half a line inside the edge,
+                // so all of it shows; as tall as the clip, so it follows the animation.
+                Shape {
+                    id: _outline
+                    readonly property real lineWidth: Theme.popup.borderWidth
+                    visible: lineWidth > 0
+                    anchors.fill: parent
+                    preferredRendererType: Shape.CurveRenderer
+
+                    readonly property string _path: {
+                        const d = lineWidth / 2;
+                        const radius = popup.panelRadius;
+                        const width = rect.width;
+                        const height = Math.max(clipWrapper.height, lineWidth);
+                        const left = popup.roundingLeft;
+                        const right = popup.roundingRight;
+                        // The ear's curve, offset inwards: a circle centred on the bar's edge
+                        // beside the popup, its radius grown by half the line
+                        const earRadius = radius + d;
+                        // With a border on the bar, the line starts along the middle of the
+                        // bar's border, from the popup's edge, and turns down into the ear:
+                        // the popup covers that piece of the bar's border, and this carries
+                        // it on into its own. Without one, it starts at the bar's edge.
+                        const joinY = Math.min(Theme.bar.borderWidth / 2, radius);
+                        const earTop = Math.sqrt(Math.max(0, earRadius * earRadius - (radius - joinY) * (radius - joinY)));
+                        const corner = Math.max(0, radius - d);
+                        const sideLeft = left ? radius + d : d;
+                        const sideRight = right ? width - radius - d : width - d;
+                        const bottom = height - d;
+                        let path = left ? (joinY > 0 ? `M 0 ${joinY} L ${earTop} ${joinY}` : `M ${earTop} 0`)
+                                + ` A ${earRadius} ${earRadius} 0 0 1 ${sideLeft} ${radius}`
+                                        : `M ${sideLeft} 0`;
+                        if (left)
+                            path += ` L ${sideLeft} ${bottom - corner} A ${corner} ${corner} 0 0 0 ${sideLeft + corner} ${bottom}`;
+                        else
+                            path += ` L ${sideLeft} ${bottom}`;
+                        if (right)
+                            path += ` L ${sideRight - corner} ${bottom} A ${corner} ${corner} 0 0 0 ${sideRight} ${bottom - corner}`
+                                + ` L ${sideRight} ${radius} A ${earRadius} ${earRadius} 0 0 1 ${width - earTop} ${joinY}`
+                                + (joinY > 0 ? ` L ${width} ${joinY}` : "");
+                        else
+                            path += ` L ${sideRight} ${bottom} L ${sideRight} 0`;
+                        return path;
+                    }
+
+                    ShapePath {
+                        strokeColor: Theme.popupBorder
+                        strokeWidth: _outline.lineWidth
+                        fillColor: "transparent"
+                        capStyle: ShapePath.FlatCap
+                        joinStyle: ShapePath.RoundJoin
+                        PathSvg { path: _outline._path }
                     }
                 }
             }
