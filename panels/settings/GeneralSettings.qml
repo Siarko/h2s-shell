@@ -39,15 +39,21 @@ ColumnLayout {
         }
     }
 
-    // The profile's appearance choices, here until the Appearance section exists
-    // (docs/plans/themes.md, stage 6)
+    // The profile's look: which theme it uses, and how much things move. Behaviour, so per
+    // profile; the theme itself is edited in the Appearance tab (docs/plans/themes.md)
     Text {
-        text: "Appearance"
+        text: "Theme and motion"
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeHeading
         font.bold: true
         color: Theme.textSecondary
         Layout.topMargin: 16
+        Layout.bottomMargin: 2
+    }
+
+    Hint {
+        text: "Which theme this profile uses, and how fast things move in it. The theme itself — colours, fonts, the bar's "
+            + "shape, animations — is edited in the Appearance tab."
         Layout.bottomMargin: 8
     }
 

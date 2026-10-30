@@ -336,6 +336,11 @@ The ~50 hard-coded `duration:` values move to roles.
    `qtCurveNames`; per role a duration slider, its curve(s) picked from the library and
    Qt's, origin, Reset, Undo, and ▶ playing a square with the role's values (a popup's:
    there opening, back closing). The sidebar's ✎ now takes several draft groups per page.
+   *(f) Tidying, 2026-10-30, verified on the host:* the General page's temporary
+   "Appearance" section stays, as agreed, renamed "Theme and motion" with a pointer to
+   the Appearance tab (the theme, animation speed and reduced motion are the profile's). Profiles
+   moved to the top of the Behaviour tab, above a line, as Themes and Curves sit above
+   Appearance's theme pages. FEATURES.md describes both tabs. **Stage 6 done.**
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

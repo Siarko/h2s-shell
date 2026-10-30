@@ -30,7 +30,9 @@ FloatingWindow {
     // TODO 10.10). `draftGroups`: the theme groups a page edits through a draft, for its ✎;
     // `separatorBefore`: a line above it in the sidebar.
     readonly property var pages: [
-        { id: "general", label: "General", tab: "behaviour", component: generalComp },
+        // Profiles manages the profiles; the pages below the line edit the picked one
+        { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
+        { id: "general", label: "General", tab: "behaviour", component: generalComp, separatorBefore: true },
         { id: "calendar", label: "Calendar", tab: "behaviour", component: calendarComp },
         { id: "media", label: "Media", tab: "behaviour", component: mediaComp },
         { id: "bar", label: "Bar", tab: "behaviour", component: barComp },
@@ -38,7 +40,6 @@ FloatingWindow {
         { id: "lockscreen", label: "Lockscreen", tab: "behaviour", component: lockscreenComp },
         { id: "dictation", label: "Dictation", tab: "behaviour", component: sttComp },
         { id: "performance", label: "Performance", tab: "behaviour", component: performanceComp },
-        { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
         // Themes and Curves manage the libraries; the pages below the line edit the
         // picked theme's values
         { id: "themes", label: "Themes", tab: "appearance", component: themesComp },

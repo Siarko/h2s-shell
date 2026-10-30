@@ -144,24 +144,47 @@ Two independent stages, both driven by Wayland idle notifications:
 A separate floating window, reachable from the Settings widget, from
 `Shell.openSettings(pageId)`, or over IPC — which also works with no Settings widget on
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
-`openPage bar_appearance`), `toggle`, `close`. The sidebar shows which profiles are active right now and
-picks the profile every page edits. Pages:
+`openPage bar_appearance`), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
+a profile, and **Appearance**, whose pages edit a theme. The sidebar shows which profiles
+are active right now, and picks what the tab's pages edit — the profile (with the theme it
+uses, a click away) or the theme (with the profiles that use it, and Preview to show it
+on the whole shell while editing).
+
+Behaviour pages:
 
 | Page | Covers |
 |---|---|
-| **General** | debug switches (always global) |
+| **Profiles** | the profile list: conditions, order, enable switch, rename, delete, simulation of conditions for testing |
+| **General** | debug switches (always global); the profile's theme, animation speed and reduced motion |
 | **Calendar** | enabling Google Calendar, the account connection, which calendars are enabled, debug |
 | **Media** | audio visualiser style, layout and frame rate |
-| **Bar** | geometry (height, reserved space, offsets, margins, padding, corner radii) and the content of the three sections, including each widget's popup mode and preset |
+| **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | code-extraction regex patterns |
 | **Lockscreen** | screensaver and lock timeouts, fade durations, notification visibility, screensaver commands |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
-| **Profiles** | the profile list: conditions, order, enable switch, rename, delete, simulation of conditions for testing |
 
 Every setting shows where its value comes from in the edited profile — set there,
 inherited from a profile above it, the default, or global — with a pin to make it the
 same in every profile and a reset to inherit again.
+
+Appearance pages:
+
+| Page | Covers |
+|---|---|
+| **Themes** | the picked theme: who uses it, what is wrong with it, what it extends; new theme (extending it, or a copy), rename, delete |
+| **Curves** | the curves library shared by every theme: a graph editor with any number of points, a looping preview, compare, save, rename, delete, where each is used |
+| **Colors** | the theme's base colours by group, with a colour picker |
+| **Fonts** | the font family (any installed; missing glyphs such as icons come from another font) and 13 sizes |
+| **Bar** | the bar's height, reserved space, offset, margins, padding and corner radii |
+| **Animations** | each animation role's duration and curve, with a preview |
+
+On the theme's pages each value shows where it comes from — changed, set in the theme,
+inherited from the theme it extends or its palette, built in — with Reset and Undo.
+Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also across
+restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
+changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
+`~/.config/h2s_shell/themes/`; see [plans/themes.md](plans/themes.md).
 
 ### Profiles
 
