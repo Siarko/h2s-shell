@@ -520,6 +520,15 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       theme; the theme list locked meanwhile, not offered for the theme in use, ended by
       "Stop preview", leaving Appearance or closing the window). Verified on the host
       2026-10-30.
+- [ ] **10.11 Popup widths and remaining fixed layouts that do not follow the font**
+      (found 2026-10-30, auditing for user-set font sizes, themes stage 6)
+      Popups grow with their content vertically but have fixed widths (Network and
+      Bluetooth 280, Tray 220, Power 200, Music 320, Sound 300, Notifications 350,
+      Hardware 280; the calendar 270 + 280 × 340), so with larger fonts long rows crowd
+      or overflow. Also: the event form's recurrence row (76 px dropdown + "Every" + 40 px
+      field + "month(s)" in a ~250 px card); NetworkPanel's expanded heights (76, 102) are
+      sums of fixed rows; EventsPanel's header in the 270 px column; the settings window's
+      160 px sidebar. Make popup widths follow content or the font, within limits.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

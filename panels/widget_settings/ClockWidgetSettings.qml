@@ -39,11 +39,14 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.preferredWidth: 60
+                    // A label longer than the column (a larger font) is cut, not run into the field
+                    elide: Text.ElideRight
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 22
+                    // As tall as a line of its text, never less than 22 px
+                    height: Math.max(22, _formatInput.implicitHeight + 6)
                     radius: 6
                     color: Theme.surface
 
@@ -78,6 +81,8 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.preferredWidth: 60
+                    // A label longer than the column (a larger font) is cut, not run into the field
+                    elide: Text.ElideRight
                 }
 
                 Text {

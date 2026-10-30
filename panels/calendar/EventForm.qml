@@ -208,6 +208,7 @@ Item {
                             border.width: 2
 
                             Text {
+                                font.family: Theme.fontFamily
                                 anchors.centerIn: parent
                                 text: "×"
                                 color: Theme.textPrimary
@@ -299,6 +300,7 @@ Item {
                 activeFocusOnTab: true
 
                 Text {
+                    font.family: Theme.fontFamily
                     anchors.centerIn: parent
                     text: "✓"
                     color: Theme.textPrimary
@@ -466,6 +468,7 @@ Item {
                 }
 
                 Text {
+                    font.family: Theme.fontFamily
                     text: "▾"
                     color: Theme.textMuted
                     font.pixelSize: Theme.fontSizeXSmall
@@ -578,6 +581,7 @@ Item {
                 border.width: 1
 
                 Text {
+                    font.family: Theme.fontFamily
                     anchors.centerIn: parent
                     text: "✓"
                     color: Theme.textPrimary
@@ -661,6 +665,7 @@ Item {
                             }
 
                             Text {
+                                font.family: Theme.fontFamily
                                 text: "▾"
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.fontSizeXSmall

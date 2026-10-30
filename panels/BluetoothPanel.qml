@@ -198,16 +198,19 @@ Item {
                     Rectangle {
                         required property var modelData
                         width: col.width
-                        height: 52
+                        // As tall as its two rows need, never less than 52 px
+                        height: Math.max(52, _deviceRows.implicitHeight + 12)
                         radius: 6
                         color: Theme.surface
 
                         Column {
-                            anchors.fill: parent
+                            id: _deviceRows
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.leftMargin: 8
                             anchors.rightMargin: 6
                             anchors.topMargin: 6
-                            anchors.bottomMargin: 6
                             spacing: 4
 
                             // Name row

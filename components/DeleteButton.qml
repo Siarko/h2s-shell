@@ -30,8 +30,10 @@ Row {
     spacing: 0
 
     Rectangle {
+        id: _button
         implicitWidth: _label.implicitWidth + 14
-        implicitHeight: 24
+        // As tall as the label needs, never less than 24 px
+        implicitHeight: Math.max(24, _label.implicitHeight + 8)
         width: implicitWidth
         height: implicitHeight
         radius: 6
@@ -73,8 +75,8 @@ Row {
     // Cancels the question, attached to the asking button
     Rectangle {
         visible: root.asking
-        width: 24
-        height: 24
+        width: _button.height
+        height: _button.height
         radius: 6
         topLeftRadius: 0
         bottomLeftRadius: 0
@@ -84,6 +86,7 @@ Row {
         Text {
             anchors.centerIn: parent
             text: "×"
+            font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.textSecondary
         }

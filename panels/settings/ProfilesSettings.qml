@@ -20,37 +20,6 @@ Flickable {
     // Name of the profile whose delete button is asking (DeleteButton), so only one asks
     property string _confirmingDelete: ""
 
-    component SmallButton: Rectangle {
-        property string label
-        property bool available: true
-        signal clicked
-
-        width: _label.implicitWidth + 14
-        height: 24
-        radius: 6
-        opacity: available ? 1 : 0.35
-        color: _area.containsMouse && available ? Theme.surfaceHover : Theme.surface
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-        Text {
-            id: _label
-            anchors.centerIn: parent
-            text: parent.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            color: Theme.textSecondary
-        }
-
-        MouseArea {
-            id: _area
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: parent.available
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
     ColumnLayout {
         id: _column
         x: 14
@@ -121,8 +90,8 @@ Flickable {
                 SmallButton {
                     required property var modelData
                     label: modelData.label
-                    color: JSON.stringify(Profiles.simulated) === JSON.stringify(modelData.facts)
-                        ? Theme.accent : Theme.surface
+                    // The simulation in force, filled with the accent
+                    primary: JSON.stringify(Profiles.simulated) === JSON.stringify(modelData.facts)
                     onClicked: Profiles.simulated = modelData.facts
                 }
             }

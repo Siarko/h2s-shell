@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.components
 import qs.singletons
 
 // One condition leaf of a profile: which fact, and the value it is compared with. The
@@ -34,34 +35,6 @@ Item {
     Layout.fillWidth: true
     implicitHeight: _column.implicitHeight + 6
 
-    component Pill: Rectangle {
-        property string label
-        property bool selected: false
-        signal clicked
-
-        width: _text.implicitWidth + 14
-        height: 24
-        radius: 6
-        color: selected ? Theme.accent : "transparent"
-        border.width: selected ? 0 : 1
-        border.color: Theme.outline
-
-        Text {
-            id: _text
-            anchors.centerIn: parent
-            text: parent.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            color: parent.selected ? Theme.textPrimary : Theme.textSecondary
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
     Column {
         id: _column
         width: root.width
@@ -73,36 +46,46 @@ Item {
 
             // The fact; clicking it opens the list of facts below
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 label: (root.factType?.label ?? root.leaf.fact) + " ▾"
-                selected: root._pickingFact
+                picked: root._pickingFact
                 onClicked: root._pickingFact = !root._pickingFact
             }
 
             // bool
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 visible: root.factType?.type === "bool"
                 label: "yes"
-                selected: root.leaf.is === true
+                picked: root.leaf.is === true
                 onClicked: root.changedTo({ fact: root.leaf.fact, is: true })
             }
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 visible: root.factType?.type === "bool"
                 label: "no"
-                selected: root.leaf.is === false
+                picked: root.leaf.is === false
                 onClicked: root.changedTo({ fact: root.leaf.fact, is: false })
             }
 
             // percent: below / above, and the number
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 visible: root.factType?.type === "percent"
                 label: "below"
-                selected: root.leaf.lt !== undefined
+                picked: root.leaf.lt !== undefined
                 onClicked: root.changedTo({ fact: root.leaf.fact, lt: root.leaf.gt ?? root.leaf.lt ?? 20 })
             }
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 visible: root.factType?.type === "percent"
                 label: "above"
-                selected: root.leaf.gt !== undefined
+                picked: root.leaf.gt !== undefined
                 onClicked: root.changedTo({ fact: root.leaf.fact, gt: root.leaf.lt ?? root.leaf.gt ?? 80 })
             }
             Rectangle {
@@ -148,14 +131,18 @@ Item {
                 }
 
                 Pill {
+                    fontSize: Theme.fontSizeBody
+                    minimumHeight: 24
                     required property string modelData
                     label: modelData
-                    selected: root.leaf.is === modelData
+                    picked: root.leaf.is === modelData
                     onClicked: root.changedTo({ fact: root.leaf.fact, is: modelData })
                 }
             }
 
             Pill {
+                fontSize: Theme.fontSizeBody
+                minimumHeight: 24
                 label: "×"
                 onClicked: root.removed()
             }
@@ -174,9 +161,11 @@ Item {
                 }
 
                 Pill {
+                    fontSize: Theme.fontSizeBody
+                    minimumHeight: 24
                     required property var modelData
                     label: modelData.label
-                    selected: modelData.fact === root.leaf.fact
+                    picked: modelData.fact === root.leaf.fact
                     onClicked: {
                         root._pickingFact = false;
                         if (modelData.fact !== root.leaf.fact)

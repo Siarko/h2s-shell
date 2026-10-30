@@ -9,6 +9,8 @@ PopupWidget {
         id: _bell
         text: "󰂚"
         font.family: Theme.fontFamily
+        // The size it had when it set none (the default 12 pt is 16 px), now from the theme
+        font.pixelSize: Theme.fontSizeSection
         // Accent while notifications are waiting to be read, same as the network and
         // dictation widgets use for "this is live". trackedNotifications is an
         // ObjectModel, which has no count property — only values.

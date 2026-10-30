@@ -182,6 +182,7 @@ FloatingWindow {
                 color: Theme.textPrimary
             }
             Text {
+                font.family: Theme.fontFamily
                 id: _arrow
                 anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
                 visible: !_picker.locked
@@ -358,29 +359,10 @@ FloatingWindow {
                     color: Theme.textPrimary
                 }
 
-                Rectangle {
-                    width: _saveAllLabel.implicitWidth + 14
-                    height: 24
-                    radius: 6
-                    color: _saveAllArea.containsMouse ? Theme.accentHover : Theme.accent
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                    Text {
-                        id: _saveAllLabel
-                        anchors.centerIn: parent
-                        text: "Save all"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.onAccent
-                    }
-
-                    MouseArea {
-                        id: _saveAllArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: Theme.saveDraft(root.editTheme)
-                    }
+                SmallButton {
+                    label: "Save all"
+                    primary: true
+                    onClicked: Theme.saveDraft(root.editTheme)
                 }
 
                 DeleteButton {
@@ -497,43 +479,18 @@ FloatingWindow {
                         Layout.fillWidth: true
                         spacing: 6
 
-                        Rectangle {
-                            id: _previewToggle
+                        SmallButton {
                             // Nothing to preview in the theme already in use, unless it has
                             // unsaved changes
-                            readonly property bool available: root.previewing || root.editTheme !== Theme.profileTheme
+                            available: root.previewing || root.editTheme !== Theme.profileTheme
                                 || (Theme.drafts, Theme.hasDraft(root.editTheme))
-                            width: _previewText.implicitWidth + 14
-                            height: 20
-                            radius: 6
-                            opacity: available ? 1 : 0.35
-                            color: root.previewing ? Theme.accent : (_previewToggleArea.containsMouse && available ? Theme.surfaceHover : Theme.surface)
-                            Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-                            Text {
-                                id: _previewText
-                                anchors.centerIn: parent
-                                text: root.previewing ? "Stop preview" : "Preview"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: root.previewing ? Theme.onAccent : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                id: _previewToggleArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: _previewToggle.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: if (_previewToggle.available) root.previewing = !root.previewing
-                            }
-
-                            HoverTip {
-                                target: _previewToggle
-                                shown: _previewToggleArea.containsMouse
-                                text: !_previewToggle.available ? "This theme is already in use, with nothing unsaved"
-                                    : root.previewing ? "Back to the profile's theme"
-                                    : "Show this theme, with its unsaved changes, on the whole shell. Leaving Appearance or closing the window ends it."
-                            }
+                            label: root.previewing ? "Stop preview" : "Preview"
+                            primary: root.previewing
+                            fontSize: Theme.fontSizeSmall
+                            tooltip: !available ? "This theme is already in use, with nothing unsaved"
+                                : root.previewing ? "Back to the profile's theme"
+                                : "Show this theme, with its unsaved changes, on the whole shell. Leaving Appearance or closing the window ends it."
+                            onClicked: root.previewing = !root.previewing
                         }
 
                         Text {
@@ -602,14 +559,29 @@ FloatingWindow {
                                 ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
                             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
+                            // ✎: the theme edited has unsaved changes on this page. On its
+                            // own at the right, so cutting a long name never hides it.
+                            Text {
+                                id: _changedMark
+                                visible: (Theme.drafts, root._pageGroup(parent.index) !== "" && Theme.hasDraft(root.editTheme, root._pageGroup(parent.index)))
+                                anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
+                                text: "✎"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBodyLarge
+                                color: Theme.warning
+                            }
+
                             Text {
                                 anchors {
                                     verticalCenter: parent.verticalCenter
                                     left: parent.left
                                     leftMargin: 10
+                                    right: _changedMark.visible ? _changedMark.left : parent.right
+                                    rightMargin: 6
                                 }
-                                // ✎: the theme edited has unsaved changes on this page
-                                text: modelData + ((Theme.drafts, root._pageGroup(index) !== "" && Theme.hasDraft(root.editTheme, root._pageGroup(index))) ? "  ✎" : "")
+                                // A name wider than the sidebar (a larger font) is cut
+                                elide: Text.ElideRight
+                                text: modelData
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
                                 color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary

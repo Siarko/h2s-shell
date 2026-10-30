@@ -301,6 +301,20 @@ The ~50 hard-coded `duration:` values move to roles.
    questions are disarmed when their target changes; a cancelled drag no longer leaves
    the picker deaf; the checkerboard and picker marks are Theme constants and one
    component. Left for later: each drag step writes the draft and reloads (every 80 ms).
+   *(c) Fonts, prepared 2026-10-30:* the family: there is no way to order fallback fonts
+   from QML (no `font.families`, no comma lists; fontconfig aliases only pick the first
+   font — all tried), `QFontDatabase::setApplicationFallbackFontFamilies` is C++ only.
+   Decided with the user: rely on Qt's automatic fallback (fontconfig's choice) for
+   glyphs a font lacks, e.g. Nerd Font icons under another text font. Before the page,
+   sizes: an audit (about 95 fixed-height and 20 fixed-width text containers) and the
+   fixes — shared `components/SmallButton.qml` and `Pill.qml` (and the settings pages'
+   `Heading`, `Hint`) replacing their copies; heights from text with today's as the
+   minimum; numeric columns measured with TextMetrics; elide where a cut is fine; card
+   heights from content; the bell and symbols on Theme fonts. Verified on the host. Found while
+   testing: shrinking from a taller popup to a shorter one jumped — the background took the new
+   height at once under the animating clip; it is now at least as tall as the clip.
+   Left for later (TODO 10.11): fixed popup widths, the calendar's 270 px column, the
+   event form's recurrence row, NetworkPanel's hand-summed expanded heights.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

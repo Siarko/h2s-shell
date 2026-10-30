@@ -250,85 +250,6 @@ Flickable {
             newCurve(ThemeRules.qtCurveApproximations.OutCubic, "curve");
     }
 
-    component SmallButton: Rectangle {
-        property string label
-        property bool available: true
-        property bool primary: false
-        signal clicked
-
-        width: _label.implicitWidth + 14
-        height: 24
-        radius: 6
-        opacity: available ? 1 : 0.35
-        color: primary
-            ? (_area.containsMouse && available ? Theme.accentHover : Theme.accent)
-            : (_area.containsMouse && available ? Theme.surfaceHover : Theme.surface)
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-        Text {
-            id: _label
-            anchors.centerIn: parent
-            text: parent.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            color: parent.primary ? Theme.onAccent : Theme.textSecondary
-        }
-
-        MouseArea {
-            id: _area
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: parent.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: if (parent.available) parent.clicked()
-        }
-    }
-
-    component Pill: Rectangle {
-        property string label
-        property bool picked: false
-        signal clicked
-
-        width: _pillLabel.implicitWidth + 14
-        height: 22
-        radius: 6
-        color: picked ? Theme.accent : (_pillArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-        border.width: picked ? 0 : 1
-        border.color: Theme.outline
-        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-        Text {
-            id: _pillLabel
-            anchors.centerIn: parent
-            text: parent.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: parent.picked ? Theme.onAccent : Theme.textSecondary
-        }
-
-        MouseArea {
-            id: _pillArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
-
-    component Heading: Text {
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
-    }
-
-    component Hint: Text {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.textMuted
-    }
-
     // Samples an easing for drawing (from onPaint, never a binding: it sets the sampler):
     // an animation's easing can be evaluated at any point
     NumberAnimation { id: _sampler }
@@ -663,9 +584,16 @@ Flickable {
                             }
 
                             Rectangle {
-                                width: 60
-                                height: 24
+                                // Wide enough for "-8.888" and its padding, as tall as a line
+                                width: Math.max(60, Math.ceil(_widestCoordinate.advanceWidth) + 14)
+                                height: Math.max(24, _coordinateInput.implicitHeight + 8)
                                 radius: 5
+
+                                TextMetrics {
+                                    id: _widestCoordinate
+                                    font: _coordinateInput.font
+                                    text: "-8.888"
+                                }
                                 color: Theme.surface
                                 border.width: 1
                                 border.color: _coordinateInput.activeFocus ? Theme.accent : Theme.surfaceHoverClear

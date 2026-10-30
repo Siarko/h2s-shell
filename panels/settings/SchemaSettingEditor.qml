@@ -136,13 +136,15 @@ Item {
             // Pin as global, or unpin; profile values are kept either way
             Rectangle {
                 id: _pin
-                width: 20
-                height: 20
+                // As big as the glyph, never less than 20 px
+                width: Math.max(20, _pinGlyph.implicitHeight)
+                height: width
                 radius: 4
                 color: _pinArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
+                    id: _pinGlyph
                     anchors.centerIn: parent
                     text: "󰐃"
                     font.family: Theme.fontFamily
@@ -181,13 +183,14 @@ Item {
             Rectangle {
                 id: _reset
                 visible: !root.inherits && !root.global
-                width: 20
-                height: 20
+                width: _pin.width
+                height: width
                 radius: 4
                 color: _resetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
+                    font.family: Theme.fontFamily
                     anchors.centerIn: parent
                     text: "×"
                     font.pixelSize: Theme.fontSizeMedium
@@ -367,6 +370,7 @@ Item {
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
+                            font.family: Theme.fontFamily
                             anchors.centerIn: parent
                             text: "×"
                             font.pixelSize: Theme.fontSizeMedium

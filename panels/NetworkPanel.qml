@@ -794,6 +794,7 @@ Item {
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
                                 Layout.fillWidth: true
+                                elide: Text.ElideRight
                             }
 
                             Text {

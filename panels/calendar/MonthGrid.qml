@@ -181,10 +181,11 @@ Item {
         // "Today" button — visible only when not viewing the current month/year
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 18
+            Layout.preferredHeight: Math.max(18, _todayText.implicitHeight)
             visible: root.displayMonth !== root.today.getMonth() || root.displayYear !== root.today.getFullYear()
 
             Text {
+                id: _todayText
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: "↩ Today"
@@ -203,10 +204,17 @@ Item {
             }
         }
 
-        // Day-of-week labels
+        // Day-of-week labels, as tall as a line of them, never less than 20 px
         Row {
             Layout.fillWidth: true
-            height: 20
+            height: Math.max(20, _dayNameMetrics.height)
+
+            TextMetrics {
+                id: _dayNameMetrics
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                text: "Mo"
+            }
 
             Repeater {
                 // ScriptModel, never the bare array — see "The Repeater crash" in

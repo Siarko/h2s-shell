@@ -179,6 +179,7 @@ Item {
                                     height: 32
 
                                     Text {
+                                        font.family: Theme.fontFamily
                                         anchors.centerIn: parent
                                         text: "⠿"
                                         font.pixelSize: Theme.fontSizeMedium
@@ -232,7 +233,8 @@ Item {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.alignment: Qt.AlignVCenter
-                                    height: 22
+                                    // As tall as a line of its text, never less than 22 px
+                                    height: Math.max(22, _labelInput.implicitHeight + 6)
                                     radius: 3
                                     color: _labelInput.activeFocus
                                         ? Theme.fill
@@ -295,6 +297,7 @@ Item {
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
+                                        font.family: Theme.fontFamily
                                         anchors.centerIn: parent
                                         text: "×"
                                         font.pixelSize: Theme.fontSizeMedium

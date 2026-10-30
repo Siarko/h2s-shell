@@ -237,7 +237,10 @@ LazyLoader {
             Rectangle {
                 id: rect
                 width: popup.shownWidth
-                height: popup.popupHeight
+                // At least as tall as the clip around it while that animates: shrinking to a
+                // smaller panel, the background staying at the old height until the clip has
+                // closed over it is what makes the shrink visible (it jumped before)
+                height: Math.max(popup.popupHeight, clipWrapper.height)
                 color: "transparent"
 
                 PopupCurve {
@@ -263,7 +266,7 @@ LazyLoader {
                     anchors.top: parent.top
                     anchors.left: popup.roundingLeft ? leftCurve.right : parent.left
                     anchors.right: popup.roundingRight ? rightCurve.left : parent.right
-                    implicitHeight: popup.popupHeight
+                    implicitHeight: rect.height
 
                     bottomLeftRadius: popup.roundingLeft ? popup.panelRadius : 0
                     bottomRightRadius: popup.roundingRight ? popup.panelRadius : 0
@@ -289,9 +292,13 @@ LazyLoader {
                                 || WidgetRegistry.popupPanelUrl("calendar");
                     }
 
+                    // Held at the top, not centred: the background may be taller than the
+                    // content while it shrinks
                     Loader {
                         id: contentLoader
-                        anchors.centerIn: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.topMargin: popup.paddingTop
                     }
 
                     // A click anywhere in the popup takes the focus from a field

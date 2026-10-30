@@ -13,7 +13,22 @@ import qs.singletons
 Item {
     id: root
 
-    implicitHeight: 28
+    implicitHeight: Math.max(28, _digits.height + 8)
+
+    // The segments are as wide as two digits and as tall as a line, in the theme's font
+    TextMetrics {
+        id: _digits
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeBody
+        text: "88"
+    }
+    TextMetrics {
+        id: _colon
+        font: _digits.font
+        text: ":"
+    }
+    readonly property real _segmentWidth: Math.max(18, Math.ceil(_digits.advanceWidth) + 2)
+    readonly property real _segmentHeight: Math.max(20, Math.ceil(_digits.height))
 
     readonly property string text: {
         var h = _hInput.text
@@ -72,8 +87,8 @@ Item {
             // Hours segment
             TextInput {
                 id: _hInput
-                width: 18
-                height: 20
+                width: root._segmentWidth
+                height: root._segmentHeight
                 maximumLength: 2
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
@@ -143,8 +158,8 @@ Item {
 
             Text {
                 text: ":"
-                width: 8
-                height: 20
+                width: Math.max(8, Math.ceil(_colon.advanceWidth) + 2)
+                height: root._segmentHeight
                 color: (_hInput.activeFocus || _mInput.activeFocus)
                     ? Theme.textSecondary : Theme.textMuted
                 font.family: Theme.fontFamily
@@ -156,8 +171,8 @@ Item {
             // Minutes segment
             TextInput {
                 id: _mInput
-                width: 18
-                height: 20
+                width: root._segmentWidth
+                height: root._segmentHeight
                 maximumLength: 2
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily

@@ -78,6 +78,8 @@ Item {
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
                 Layout.preferredWidth: 60
+                // A label longer than the column (a larger font) is cut, not run into the field
+                elide: Text.ElideRight
                 Layout.alignment: Qt.AlignTop
                 topPadding: 4
             }

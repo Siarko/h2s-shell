@@ -200,7 +200,14 @@ Item {
         // ── Before and after, and the hex ──
         Column {
             spacing: 8
-            width: 90
+            // Wide enough for the longest hex (#aarrggbb) and its padding
+            width: Math.max(90, Math.ceil(_widestHex.advanceWidth) + 14)
+
+            TextMetrics {
+                id: _widestHex
+                font: _hexInput.font
+                text: "#88888888"
+            }
 
             Rectangle {
                 width: parent.width
@@ -213,7 +220,7 @@ Item {
 
             Rectangle {
                 width: parent.width
-                height: 26
+                height: Math.max(26, _hexInput.implicitHeight + 8)
                 radius: 6
                 color: Theme.surface
                 border.width: 1
@@ -247,6 +254,7 @@ Item {
 
             Text {
                 width: parent.width
+                wrapMode: Text.WordWrap
                 text: "Opacity " + Math.round(root._alpha * 100) + "%"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall

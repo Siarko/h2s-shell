@@ -88,21 +88,6 @@ Flickable {
     // A question to throw the changes away does not outlive them
     on_ChangedChanged: if (!_changed) _cancelButton.asking = false
 
-    component Heading: Text {
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
-    }
-
-    component Hint: Text {
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.textMuted
-    }
-
     ColumnLayout {
         id: _column
         anchors {
@@ -142,31 +127,12 @@ Flickable {
                 color: Theme.warning
             }
 
-            Rectangle {
-                width: _saveLabel.implicitWidth + 14
-                height: 24
-                radius: 6
-                color: _saveArea.containsMouse ? Theme.accentHover : Theme.accent
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                Text {
-                    id: _saveLabel
-                    anchors.centerIn: parent
-                    text: "Save"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.onAccent
-                }
-
-                MouseArea {
-                    id: _saveArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root._write("", "", true);
-                        Theme.saveDraft(root.themeName, ["colors"]);
-                    }
+            SmallButton {
+                label: "Save"
+                primary: true
+                onClicked: {
+                    root._write("", "", true);
+                    Theme.saveDraft(root.themeName, ["colors"]);
                 }
             }
 
@@ -297,74 +263,21 @@ Flickable {
                         onCommitted: value => root._write(_entry.token, String(value), true)
                     }
 
-                    Rectangle {
-                        id: _resetButton
+                    SmallButton {
                         Layout.alignment: Qt.AlignTop
-                        readonly property bool available: root._setHere(_entry.token) || !!root._origins[_entry.token]?.draft
-                        width: _resetLabel.implicitWidth + 14
-                        height: 24
-                        radius: 6
-                        opacity: available ? 1 : 0.35
-                        color: _resetArea.containsMouse && available ? Theme.surfaceHover : Theme.surface
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                        Text {
-                            id: _resetLabel
-                            anchors.centerIn: parent
-                            text: "Reset"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: _resetArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: parent.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: if (parent.available) Theme.draftToken(root.themeName, "colors", _entry.token, null)
-                        }
-
-                        HoverTip {
-                            target: _resetButton
-                            shown: _resetArea.containsMouse
-                            text: _resetButton.available ? "Back to the inherited colour" : "Not set in this theme: nothing to reset"
-                        }
+                        label: "Reset"
+                        available: root._setHere(_entry.token) || !!root._origins[_entry.token]?.draft
+                        tooltip: available ? "Back to the inherited colour" : "Not set in this theme: nothing to reset"
+                        onClicked: Theme.draftToken(root.themeName, "colors", _entry.token, null)
                     }
 
                     // Takes back this colour's unsaved change only
-                    Rectangle {
-                        id: _undoButton
+                    SmallButton {
                         Layout.alignment: Qt.AlignTop
                         visible: root._drafted(_entry.token)
-                        width: _undoLabel.implicitWidth + 14
-                        height: 24
-                        radius: 6
-                        color: _undoArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                        Text {
-                            id: _undoLabel
-                            anchors.centerIn: parent
-                            text: "Undo"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textSecondary
-                        }
-
-                        MouseArea {
-                            id: _undoArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Theme.undraftToken(root.themeName, "colors", _entry.token)
-                        }
-
-                        HoverTip {
-                            target: _undoButton
-                            shown: _undoArea.containsMouse
-                            text: "Back to the saved colour"
-                        }
+                        label: "Undo"
+                        tooltip: "Back to the saved colour"
+                        onClicked: Theme.undraftToken(root.themeName, "colors", _entry.token)
                     }
                 }
             }

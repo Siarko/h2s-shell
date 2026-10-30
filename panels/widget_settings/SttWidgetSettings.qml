@@ -49,14 +49,24 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.preferredWidth: 60
+                    // A label longer than the column (a larger font) is cut, not run into the field
+                    elide: Text.ElideRight
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 22
+                    // As tall as a line of its labels, never less than 22 px
+                    height: Math.max(22, _lineMetrics.height + 6)
                     radius: 6
                     color: Theme.surface
                     clip: true
+
+                    TextMetrics {
+                        id: _lineMetrics
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        text: "Ag"
+                    }
 
                     RowLayout {
                         anchors.fill: parent
@@ -106,11 +116,14 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.preferredWidth: 60
+                    // A label longer than the column (a larger font) is cut, not run into the field
+                    elide: Text.ElideRight
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 22
+                    // As tall as a line of its text, never less than 22 px
+                    height: Math.max(22, _widthInput.implicitHeight + 6)
                     radius: 6
                     color: Theme.surface
 

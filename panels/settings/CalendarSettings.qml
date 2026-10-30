@@ -278,6 +278,7 @@ ColumnLayout {
                                 border.width: 1
 
                                 Text {
+                                    font.family: Theme.fontFamily
                                     anchors.centerIn: parent
                                     text: "✓"
                                     visible: _calCheckbox.checked

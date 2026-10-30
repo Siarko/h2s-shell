@@ -203,6 +203,7 @@ Item {
                                     height: 32
 
                                     Text {
+                                        font.family: Theme.fontFamily
                                         anchors.centerIn: parent
                                         text: "⠿"
                                         font.pixelSize: Theme.fontSizeMedium
@@ -274,6 +275,7 @@ Item {
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
+                                        font.family: Theme.fontFamily
                                         anchors.centerIn: parent
                                         text: "⚙"
                                         font.pixelSize: Theme.fontSizeBodyLarge
@@ -297,6 +299,7 @@ Item {
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
+                                        font.family: Theme.fontFamily
                                         anchors.centerIn: parent
                                         text: "×"
                                         font.pixelSize: Theme.fontSizeMedium

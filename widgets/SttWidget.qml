@@ -81,7 +81,8 @@ BarWidget {
             // padding, so a collapsed item contributes nothing at all — static padding
             // on a zero-width item would push the icon off the widget's centre.
             readonly property bool shown: (Profiles.value("stt.showPending") ?? true) && Stt.pending > 0
-            width: shown ? 18 : 0
+            // Room for the count and its gap: two digits overflowed a fixed 18 px
+            width: shown ? Math.max(18, contentWidth + leftPadding) : 0
             leftPadding: shown ? 4 : 0
             clip: true
             horizontalAlignment: Text.AlignHCenter

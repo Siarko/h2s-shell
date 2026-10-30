@@ -22,11 +22,14 @@ Rectangle {
     property bool editing: false
     property bool confirmingDelete: false
 
+    // The summary row: as tall as its two lines need, never less than 50 px
+    readonly property real _summaryHeight: Math.max(50, _summaryLines.implicitHeight + 12)
+
     readonly property real _cardHeight: {
         if (root.editing) return _editForm.implicitHeight + 16
         if (root.confirmingDelete)
-            return root.modelData.recurringEventId ? _recurDeleteCol.implicitHeight + 16 : 50
-        return (expanded && modelData.description) ? 50 + _desc.implicitHeight + 8 : 50
+            return root.modelData.recurringEventId ? _recurDeleteCol.implicitHeight + 16 : _summaryHeight
+        return (expanded && modelData.description) ? _summaryHeight + _desc.implicitHeight + 8 : _summaryHeight
     }
 
     width: ListView.view.width
@@ -55,13 +58,14 @@ Rectangle {
         }
     }
 
-    // Summary row — 50px, hidden while editing or confirming delete
+    // Summary row, hidden while editing or confirming delete
     Item {
         width: parent.width
-        height: 50
+        height: root._summaryHeight
         visible: !root.confirmingDelete && !root.editing
 
         Column {
+            id: _summaryLines
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
             anchors.right: parent.right
@@ -121,11 +125,11 @@ Rectangle {
         }
     }
 
-    // Description — below the 50px summary row
+    // Description — below the summary row
     Text {
         id: _desc
         anchors {
-            top: parent.top; topMargin: 50
+            top: parent.top; topMargin: root._summaryHeight
             left: parent.left; right: parent.right
             leftMargin: 14; rightMargin: 6
         }
@@ -238,7 +242,7 @@ Rectangle {
         anchors { left: parent.left; right: parent.right; top: parent.top }
         anchors.leftMargin: 14
         anchors.rightMargin: 8
-        height: 50
+        height: root._summaryHeight
         spacing: 6
 
         Text {

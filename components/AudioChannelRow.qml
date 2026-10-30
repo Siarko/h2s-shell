@@ -53,12 +53,15 @@ Item {
             }
 
             Text {
+                id: _volumeText
                 text: row.volume + "%"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: row.volume > 100 ? Theme.warning : Theme.textPrimary
-                Layout.preferredWidth: 38
+                // As wide as the widest volume, so the slider does not jump as it changes
+                Layout.preferredWidth: Math.ceil(_widestVolume.advanceWidth)
                 horizontalAlignment: Text.AlignRight
+                TextMetrics { id: _widestVolume; font: _volumeText.font; text: "888%" }
             }
 
             Text {
@@ -242,12 +245,14 @@ Item {
                             }
 
                             Text {
+                                id: _appVolumeText
                                 text: modelData?.audio ? Math.round((modelData.audio.volume ?? 0) * 100) + "%" : "0%"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textSecondary
-                                Layout.preferredWidth: 38
+                                Layout.preferredWidth: Math.ceil(_widestAppVolume.advanceWidth)
                                 horizontalAlignment: Text.AlignRight
+                                TextMetrics { id: _widestAppVolume; font: _appVolumeText.font; text: "888%" }
                             }
                         }
                     }

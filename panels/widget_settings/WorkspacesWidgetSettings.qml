@@ -94,11 +94,14 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
                     Layout.preferredWidth: 60
+                    // A label longer than the column (a larger font) is cut, not run into the field
+                    elide: Text.ElideRight
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 22
+                    // As tall as a line of its text, never less than 22 px
+                    height: Math.max(22, _titleInput.implicitHeight + 6)
                     radius: 6
                     color: Theme.surface
 
@@ -242,7 +245,8 @@ Item {
 
                     Rectangle {
                         width: 200
-                        height: 22
+                        // As tall as a line of its text, never less than 22 px
+                        height: Math.max(22, _sysInput.implicitHeight + 6)
                         radius: 6
                         color: Theme.surface
 
@@ -272,6 +276,7 @@ Item {
                     }
 
                     Text {
+                        font.family: Theme.fontFamily
                         text: "→"
                         font.pixelSize: Theme.fontSizeBody
                         color: Theme.textDisabled
@@ -279,7 +284,8 @@ Item {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 22
+                        // As tall as a line of its text, never less than 22 px
+                        height: Math.max(22, _custInput.implicitHeight + 6)
                         radius: 6
                         color: Theme.surface
 
@@ -309,13 +315,16 @@ Item {
                     }
 
                     Rectangle {
-                        width: 20
-                        height: 20
+                        // As big as the glyph, never less than 20 px
+                        width: Math.max(20, _removeGlyph.implicitHeight)
+                        height: width
                         radius: 4
                         color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
+                            id: _removeGlyph
+                            font.family: Theme.fontFamily
                             anchors.centerIn: parent
                             text: "×"
                             font.pixelSize: Theme.fontSizeMedium

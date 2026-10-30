@@ -11,7 +11,16 @@ Item {
     required property int screenWidth
     required property int screenHeight
 
-    readonly property int cardWidth: 50
+    // Wide enough for the widest volume label ("100%" already overflowed 50 px), and the
+    // card's 10 px margin either side
+    readonly property int cardWidth: Math.max(50, Math.ceil(_widestLabel.advanceWidth) + 20)
+    TextMetrics {
+        id: _widestLabel
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeMedium
+        font.bold: true
+        text: "888%"
+    }
     readonly property int cardHeight: 280
     readonly property int restX: screenWidth - cardWidth
 

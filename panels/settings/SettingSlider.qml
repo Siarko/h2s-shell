@@ -143,12 +143,20 @@ RowLayout {
     }
 
     Text {
+        id: _valueText
         text: slider.value + slider.suffix
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeBody
         color: Theme.textSecondary
         horizontalAlignment: Text.AlignRight
-        Layout.preferredWidth: 36
+        // As wide as the widest value it can show, so the slider does not jump as it changes
+        Layout.preferredWidth: Math.ceil(_widestValue.advanceWidth)
+    }
+
+    TextMetrics {
+        id: _widestValue
+        font: _valueText.font
+        text: (String(slider.to).length >= String(slider.from).length ? slider.to : slider.from) + slider.suffix
     }
 
     // Tooltip — zero-size layout item so the floating Rectangle doesn't affect row geometry

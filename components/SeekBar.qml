@@ -22,16 +22,26 @@ Item {
         return m + ":" + (s < 10 ? "0" : "") + s;
     }
 
+    // Both times as wide as the longest the track can show (its length, every digit an
+    // 8), so the track keeps its width as the position counts up
+    readonly property real _timeWidth: Math.ceil(_widestTime.advanceWidth)
+    TextMetrics {
+        id: _widestTime
+        font: _positionText.font
+        text: seekBar._formatTime(Math.max(seekBar.duration, 600)).replace(/[0-9]/g, "8")
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 8
 
         Text {
+            id: _positionText
             text: seekBar._formatTime(seekBar.position)
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textSecondary
-            Layout.preferredWidth: 32
+            Layout.preferredWidth: seekBar._timeWidth
             horizontalAlignment: Text.AlignRight
         }
 
@@ -87,7 +97,7 @@ Item {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textSecondary
-            Layout.preferredWidth: 32
+            Layout.preferredWidth: seekBar._timeWidth
         }
     }
 }

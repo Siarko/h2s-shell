@@ -71,6 +71,11 @@ section to the new version and date.
   the inherited value; Undo takes back one colour's unsaved change.
 
 ### Changed
+- Ready for larger fonts: buttons, pills, fields, icon buttons, Bluetooth device cards,
+  event cards and calendar rows grow with their text instead of letting it spill out
+  (today's sizes are the minimum, so nothing changes at the default sizes); long names in
+  the settings sidebar and label columns are cut with "…"; the notification bell and
+  the small symbols (×, ✓, ▾) take their font from the theme.
 - A click anywhere in the settings window or a popup — the background too — takes the
   focus from a text field; before, only clicking another control did.
 - The "Theme" setting suggests the theme files as you type (and "default"), and warns
@@ -90,6 +95,10 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- Switching from a taller popup to a shorter one animates the height too; the panel's
+  background used to drop to the new height at once.
+- Numbers no longer spill out of their columns: a slider's value ("3000 ms"), the
+  track's times, mixer volumes, the volume OSD's "100%", the hex and coordinate fields.
 - The lock screen never came on: locking and unlocking were lost when its settings
   became per profile.
 - The screensaver's first fade after start keeps its full duration.
