@@ -361,17 +361,30 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 9 — Hygiene, opportunistic  [P7]
 
-- [ ] **9.1 Route `console.log` through `Logger`** [#35]
+- [x] **9.1 Route `console.log` through `Logger`** [#35]
       `singletons/Config.qml:132`, `singletons/Notifications.qml:33`,
       `singletons/Lockscreen.qml:58`
-- [ ] **9.2 Fix stale comments** [#36] — `panels/Popup.qml:23`, `singletons/Shell.qml:8`,
+      Done 2026-10-30: the Notifications and Lockscreen calls were already gone; Config's
+      "Saved" goes through a Logger, so only with the debug switch on. The `console.*`
+      left in singletons are deliberate: one-time migration notes and themes that do not
+      parse, which should show whatever the switch says.
+- [x] **9.2 Fix stale comments** [#36] — `panels/Popup.qml:23`, `singletons/Shell.qml:8`,
       `singletons/Music.qml:74`
-- [ ] **9.3 One byte/rate formatter** [#19]
+      Done 2026-10-30: Shell's comment was already right (pages by id); Popup's
+      `contentType` and Music's polled position say what they are.
+- [x] **9.3 One byte/rate formatter** [#19]
+      Done 2026-10-30: `singletons/Format.qml` (`bytes`, `rate`), replacing four copies of
+      `formatBytes` and `NetworkManager.formatSpeed`; same output, except a size under a
+      megabyte now shows in KB rather than raw bytes. `tests/FormatTest.qml`.
 - [x] **9.4 Move stray colours into `Theme.qml`** [#18] — 17 hex + 20 named
       Done 2026-10-29 as stage 1 of plans/themes.md: colours named by role, all literals
       and hand-written alphas replaced; the only literals left are Google's calendar colour
       (account data) and the music visualizer's shades of a colour it is given.
-- [ ] **9.5 One scroll-notch implementation** [#16] — `BarWidget` vs `CustomMouseArea`
+- [x] **9.5 One scroll-notch implementation** [#16] — `BarWidget` vs `CustomMouseArea`
+      Done 2026-10-30: `components/ScrollNotches.qml`, used by both, the constant named
+      and explained. Fixed on the way: the direction was taken before the event was added,
+      so the first notch, and the first after turning back, went the wrong way.
+      `tests/ScrollNotchesTest.qml`.
 - [ ] **9.6 Move tray slide state out of the `Tray` singleton** [#20]
 - [x] **9.7 Implement or remove the screensaver exec commands** [#37]
       Config and UI exist; nothing runs them, so it looks finished to the user.
@@ -379,14 +392,19 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `sh -c` detached, tied to idleness rather than the screensaver's visibility — a lock
       during the screensaver is not "back"; the end command runs on return, even at the
       lock prompt, and only after a start command.
-- [ ] **9.8 Leftovers** [#37] — empty `assets/`, missing trailing newline in
+- [x] **9.8 Leftovers** [#37] — empty `assets/`, missing trailing newline in
       `LockscreenSettings.qml`, `Logger` as `Item` rather than `QtObject`.
-- [ ] **9.9 Hidden list editor fed objects** — `Unable to assign QJSValue to QString` at
+      Done 2026-10-30: `assets/` removed (untracked, nothing referred to it), newline
+      added, `Logger` is a `QtObject` (every instance sits in a `Singleton`). The
+      screensaver commands in the same CLEANUP entry are 9.7.
+- [x] **9.9 Hidden list editor fed objects** — `Unable to assign QJSValue to QString` at
       `panels/settings/SchemaSettingEditor.qml:338`, a dozen times when the Bar page opens.
       The text-list editor (`_listEditor`, line ~307) exists for every setting and takes
       any array as its items, so a bar section (`[{ type, preset }]`) reaches its
       `TextInput.text`. Feed it only for `type === "stringList"`, as the slider already is.
       Found 2026-10-29; harmless, predates the themes work.
+      Done 2026-10-30: the editor's items are the value only for a `stringList`; after
+      opening the Bar, General and Notifications pages the log has no such warning.
 
 ## Stage 10 — Requested features
 
@@ -567,6 +585,21 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       would take in QML (element identity, a resolver, live updates, cost). Exploration
       only; to discuss with the user before any design. Related: the user's earlier idea
       of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
+- [ ] **10.15 Scroll sensitivity setting** (requested 2026-10-30)
+      The shell's wheel handling has fixed steps: a notch is 112 of angleDelta
+      (`components/ScrollNotches.qml`) and the volume moves about 1 % per notch
+      (`widgets/SoundWidget.qml`). Wanted: a setting for how sensitive it is. Decided
+      with the user: **one multiplier for everything** that scrolls in the shell, plus
+      the **volume step** in the config too. Volume steps today: the bar widget ~1 % a
+      notch (`notches()`), the volume sliders 2 % (`VolumeSlider.step`,
+      `VerticalSlider.step`, also the arrow keys). (The horizontal-scroll volume step of 5
+      the user has is a Hyprland keybind, not the shell — leave it be.) Still to
+      settle: per profile or global, mouse vs touchpad (a touchpad sends many small
+      deltas, so it steps much faster). Other wheel handlers to bring under the
+      multiplier: `MonthGrid` (month/year), `CurvesSettings` zoom, `EventForm` colour
+      strip. Hyprland's `input:scroll_factor` / `input:touchpad:scroll_factor` scale
+      scrolling for every app, the shell included; this would be on top, for the shell
+      alone.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

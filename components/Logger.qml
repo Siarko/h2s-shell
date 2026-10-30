@@ -2,7 +2,7 @@ import Quickshell
 import QtQuick
 import qs.singletons
 
-Item {
+QtObject {
     id: root
 
     property string prefix: ""

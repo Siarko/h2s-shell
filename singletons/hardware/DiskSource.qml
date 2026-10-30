@@ -27,12 +27,6 @@ Singleton {
         history = History.append(history, v, _poll.interval)
     }
 
-    function formatBytes(bytes) {
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
-        if (bytes >= 1048576)    return (bytes / 1048576).toFixed(0) + " MB"
-        return bytes + " B"
-    }
-
     PollTimer {
         id: _poll
         interval: Profiles.value("polling.disk.interval")
@@ -60,7 +54,7 @@ Singleton {
                         root.usedBytes  = used
                         if (total > 0) {
                             root.value    = Math.round(used / total * 100)
-                            root.subtitle = root.formatBytes(used) + " / " + root.formatBytes(total)
+                            root.subtitle = Format.bytes(used) + " / " + Format.bytes(total)
                         }
                     }
                 }

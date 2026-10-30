@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtCore
 import QtQuick
+import qs.components
 
 // The config file. Settings are not here: they live in the profiles (see Profiles and
 // SettingsSchema, docs/plans/global-profiles.md). What is left is data that is not a
@@ -112,7 +113,15 @@ Singleton {
             _adapter.writtenBy = Version.number;
             _file.writeAdapter();
             root.saved();
-            console.log("[CONFIG] Saved");
+            _log.log("Saved");
         }
+    }
+
+    Logger {
+        id: _log
+        prefix: "[Config]"
+        // The debug setting comes from Profiles, which is built on this Config: it is read
+        // only once the file has loaded, so building Config does not need Profiles
+        enabled: root.ready && (Profiles.value("general.debug") ?? false)
     }
 }

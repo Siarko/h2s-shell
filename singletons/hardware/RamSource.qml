@@ -27,12 +27,6 @@ Singleton {
         history = History.append(history, v, _poll.interval)
     }
 
-    function formatBytes(bytes) {
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
-        if (bytes >= 1048576)    return (bytes / 1048576).toFixed(0) + " MB"
-        return bytes + " B"
-    }
-
     KernelFile {
         id: _meminfo
         path: "/proc/meminfo"
@@ -52,7 +46,7 @@ Singleton {
             root.totalBytes = total
             root.usedBytes  = total - avail
             root.value      = total > 0 ? Math.round((total - avail) / total * 100) : 0
-            root.subtitle   = root.formatBytes(root.usedBytes) + " / " + root.formatBytes(root.totalBytes)
+            root.subtitle   = Format.bytes(root.usedBytes) + " / " + Format.bytes(root.totalBytes)
             root._appendHistory(root.value)
         }
     }

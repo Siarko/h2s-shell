@@ -23,9 +23,9 @@ Item {
     signal clicked(cellColor: color)
     // Emitted on mouse enter (true) and exit (false)
     signal hover(status: bool)
-    // Emitted on scroll wheel
+    // Emitted on every wheel event, with its movement in notches (fractional)
     signal scrolled(delta: real)
-    // Emitted on scroll wheen notch change (only on full scroll clicks)
+    // Emitted for each whole notch, 1 for up, -1 for down (ScrollNotches)
     signal scrollNotch(direction: int)
     // Emitted on middle mouse button click
     signal middleClicked
@@ -39,8 +39,7 @@ Item {
 
     default property alias content: contentItem.data
 
-    property real scrollBuffer: 0
-    property real lastScrollAmount: 0
+    readonly property ScrollNotches _notches: ScrollNotches {}
 
     Rectangle {
         id: rectangle
@@ -75,18 +74,10 @@ Item {
         onEntered: container.hover(true)
         onExited: container.hover(false)
         onWheel: event => {
-            let amount = event.angleDelta.y * (1 / 8) / 14;
-            let direction = container.scrollBuffer > 0 ? 1 : -1;
-            container.scrolled(amount);
-            if (container.lastScrollAmount != 0 && container.lastScrollAmount * amount < 0) {
-                container.scrollBuffer = 0;
-            }
-            container.scrollBuffer += amount;
-            container.lastScrollAmount = amount;
-            if (Math.abs(container.scrollBuffer) >= 1) {
+            container.scrolled(container._notches.notches(event.angleDelta.y));
+            const direction = container._notches.feed(event.angleDelta.y);
+            if (direction !== 0)
                 container.scrollNotch(direction);
-                container.scrollBuffer -= direction;
-            }
         }
     }
 }

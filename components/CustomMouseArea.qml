@@ -1,28 +1,17 @@
 import QtQuick
 
+// A MouseArea that also reports the wheel in whole notches (ScrollNotches)
 MouseArea {
     id: root
 
-    signal scrollY(real amount)
+    // Emitted for each whole notch, 1 for up, -1 for down
     signal scrollNotchY(int direction)
 
-    property real scrollBufferY: 0
-    property real lastScrollAmountY: 0
-
-    property real scrollBufferX: 0
-    property real lastScrollAmountX: 0
+    readonly property ScrollNotches _notches: ScrollNotches {}
 
     onWheel: event => {
-        let amount = event.angleDelta.y * (1 / 8) / 14;
-        let direction = root.scrollBufferY > 0 ? 1 : -1;
-        if (root.lastScrollAmountY != 0 && root.lastScrollAmountY * amount < 0) {
-            root.scrollBufferY = 0;
-        }
-        root.scrollBufferY += amount;
-        root.lastScrollAmountY = amount;
-        if (Math.abs(root.scrollBufferY) >= 1) {
+        const direction = root._notches.feed(event.angleDelta.y);
+        if (direction !== 0)
             root.scrollNotchY(direction);
-            root.scrollBufferY -= direction;
-        }
     }
 }

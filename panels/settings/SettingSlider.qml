@@ -116,9 +116,6 @@ RowLayout {
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
 
-            property real scrollBuffer: 0
-            property real lastScrollAmount: 0
-
             onPressed: mouse => update(mouse.x)
             onPositionChanged: mouse => {
                 if (pressed)

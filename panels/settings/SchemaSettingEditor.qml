@@ -288,7 +288,9 @@ Item {
             spacing: 4
             opacity: root._dimmed ? 0.6 : 1
 
-            readonly property var items: Array.isArray(root.shownValue) ? root.shownValue : []
+            // Only a list of texts' own value: every setting has this hidden editor, and a
+            // list of something else (a bar section's widgets) reached its text fields
+            readonly property var items: root.entry?.type === "stringList" && Array.isArray(root.shownValue) ? root.shownValue : []
 
             function replaced(index, text) {
                 const list = items.slice();

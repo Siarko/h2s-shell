@@ -146,12 +146,4 @@ Singleton {
         statusProcess._lines = []
         statusProcess.running = true
     }
-
-    function formatSpeed(bytesPerSec) {
-        if (bytesPerSec >= 1048576)
-            return (bytesPerSec / 1048576).toFixed(1) + " MB/s"
-        if (bytesPerSec >= 1024)
-            return (bytesPerSec / 1024).toFixed(0) + " KB/s"
-        return bytesPerSec.toFixed(0) + " B/s"
-    }
 }

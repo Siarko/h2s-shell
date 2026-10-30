@@ -154,6 +154,9 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- Scrolling by notches (sliders, the music widget's next/previous track, the music
+  panel's player) went the wrong way on the first notch, and on the first notch after
+  turning the wheel back.
 - Wi-Fi list: an open network and its typed password stay with that network; after a scan
   or a connection they used to jump to whichever network took its place in the list.
 - The calendar's and the hardware popup's left curved corner no longer shows a faint seam

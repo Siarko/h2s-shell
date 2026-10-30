@@ -71,7 +71,8 @@ Singleton {
     readonly property bool canPlay: activePlayer?.canPlay ?? false
     readonly property bool canPause: activePlayer?.canPause ?? false
 
-    // Interpolated position — MPRIS position doesn't update continuously
+    // The player's position, polled every second while playing: MPRIS does not signal
+    // position changes, only seeks and track changes
     property real position: activePlayer?.positionSupported ? activePlayer.position : 0
 
     Timer {

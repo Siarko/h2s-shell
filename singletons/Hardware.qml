@@ -25,12 +25,6 @@ Singleton {
     readonly property real diskUsage: DiskSource.value
     readonly property int  cpuTemp:   CpuTempSource.value
 
-    function formatBytes(bytes) {
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
-        if (bytes >= 1048576)    return (bytes / 1048576).toFixed(0) + " MB"
-        return bytes + " B"
-    }
-
     function sourceForId(id) {
         const legacyPrefix = _legacyGpuIds[id]
         if (legacyPrefix !== undefined) {

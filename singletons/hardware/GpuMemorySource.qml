@@ -33,12 +33,6 @@ Scope {
         history = History.append(history, v, _poll.interval)
     }
 
-    function formatBytes(bytes) {
-        if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + " GB"
-        if (bytes >= 1048576)    return (bytes / 1048576).toFixed(0) + " MB"
-        return bytes + " B"
-    }
-
     KernelFile {
         id: _used
         path: root.card.path + "/mem_info_vram_used"
@@ -60,7 +54,7 @@ Scope {
                 root.usedBytes  = used
                 root.totalBytes = total
                 root.value      = Math.round(used / total * 100)
-                root.subtitle   = root.formatBytes(used) + " / " + root.formatBytes(total)
+                root.subtitle   = Format.bytes(used) + " / " + Format.bytes(total)
                 root._appendHistory(root.value)
             } else if (!root._checked) {
                 root._readable = false

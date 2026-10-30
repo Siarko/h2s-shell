@@ -21,7 +21,8 @@ LazyLoader {
     property bool closing: false
     // When true, the popup stays open until explicitly toggled (click-to-close)
     property bool persistent: false
-    // Which content to display in the popup ("calendar" or "power")
+    // Which content the popup shows: a widget type, whose panel WidgetRegistry gives, or
+    // one of the contents wired here ("tray-menu", "notifications" — see _componentMap)
     property string contentType: "calendar"
 
     // The panel on screen, reported to Profiles for its "panel.open" fact. Closed from the

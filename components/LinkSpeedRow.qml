@@ -42,7 +42,7 @@ Column {
             width: parent.width
 
             Text {
-                text: root._arrow("↓", Theme.accent) + " " + NetworkManager.formatSpeed(root.rxSpeed)
+                text: root._arrow("↓", Theme.accent) + " " + Format.rate(root.rxSpeed)
                 textFormat: Text.StyledText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -51,7 +51,7 @@ Column {
             }
 
             Text {
-                text: root._arrow("↑", Theme.accentSecondary) + " " + NetworkManager.formatSpeed(root.txSpeed)
+                text: root._arrow("↑", Theme.accentSecondary) + " " + Format.rate(root.txSpeed)
                 textFormat: Text.StyledText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -85,7 +85,7 @@ Column {
                 { history: root.rxHistory, color: Theme.accent },
                 { history: root.txHistory, color: Theme.accentSecondary }
             ]
-            formatPeak: NetworkManager.formatSpeed
+            formatPeak: Format.rate
         }
     }
 }
