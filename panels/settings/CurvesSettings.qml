@@ -27,10 +27,8 @@ Flickable {
     property var draftSmooth: []
     // The point selected on the graph, by the index of its x in draftPoints
     property int selectedPoint: 0
-    // Delete asks first: the curve whose Delete was clicked once, until it is clicked
-    // again, cancelled, or another curve is opened
-    property string _confirmingDelete: ""
-    onSelectedChanged: _confirmingDelete = ""
+    // A question to delete never carries over to another curve
+    onSelectedChanged: _deleteButton.asking = false
 
     readonly property int _segments: draftPoints.length / 6
     readonly property var _names: Object.keys(Theme.curveLibrary).sort()
@@ -256,16 +254,11 @@ Flickable {
         property string label
         property bool available: true
         property bool primary: false
-        property bool danger: false
-        // Square on the right, where a cancel button attaches
-        property bool joined: false
         signal clicked
 
         width: _label.implicitWidth + 14
         height: 24
         radius: 6
-        topRightRadius: joined ? 0 : radius
-        bottomRightRadius: joined ? 0 : radius
         opacity: available ? 1 : 0.35
         color: primary
             ? (_area.containsMouse && available ? Theme.accentHover : Theme.accent)
@@ -278,7 +271,7 @@ Flickable {
             text: parent.label
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
-            color: parent.primary ? Theme.onAccent : (parent.danger ? Theme.error : Theme.textSecondary)
+            color: parent.primary ? Theme.onAccent : Theme.textSecondary
         }
 
         MouseArea {
@@ -845,64 +838,27 @@ Flickable {
                 available: root._dirty && root.selected !== ""
                 onClicked: root.edit(root.selected)
             }
-            // Delete, which asks first, with a button attached to cancel the question
-            Row {
-                spacing: 0
-
-                SmallButton {
-                    readonly property bool _asking: root.selected !== "" && root._confirmingDelete === root.selected
-                    label: root.selected === "" ? "Discard"
-                        : !_asking ? "Delete"
-                        : root._usages.length > 0 ? "Delete? Used by " + root._usages.length : "Delete?"
-                    danger: _asking
-                    joined: _asking
-                    available: root.selected !== "" || root._names.length > 0
-                    onClicked: {
-                        if (root.selected !== "" && !_asking) {
-                            root._confirmingDelete = root.selected;
-                            return;
-                        }
-                        root._confirmingDelete = "";
-                        if (root.selected !== "")
-                            Theme.deleteCurve(root.selected);
-                        const rest = root._names.filter(name => name !== root.selected);
-                        if (rest.length > 0)
-                            root.edit(rest[0]);
-                        else
-                            root.newCurve([0.25, 0.1, 0.25, 1], "curve");
-                    }
-                }
-
-                Rectangle {
-                    visible: root.selected !== "" && root._confirmingDelete === root.selected
-                    width: 24
-                    height: 24
-                    radius: 6
-                    topLeftRadius: 0
-                    bottomLeftRadius: 0
-                    color: _cancelDeleteArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "×"
-                        font.pixelSize: Theme.fontSizeMedium
-                        color: Theme.textSecondary
-                    }
-
-                    MouseArea {
-                        id: _cancelDeleteArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root._confirmingDelete = ""
-                    }
-
-                    HoverTip {
-                        target: parent
-                        shown: _cancelDeleteArea.containsMouse
-                        text: "Cancel — keep the curve"
-                    }
+            // A new curve is only discarded; a saved one is deleted, asking first
+            SmallButton {
+                visible: root.selected === ""
+                label: "Discard"
+                available: root._names.length > 0
+                onClicked: root.edit(root._names[0])
+            }
+            DeleteButton {
+                id: _deleteButton
+                visible: root.selected !== ""
+                fontSize: Theme.fontSizeBody
+                confirmLabel: root._usages.length > 0 ? "Delete? Used by " + root._usages.length : "Delete?"
+                cancelTip: "Cancel — keep the curve"
+                onConfirmed: {
+                    const deleted = root.selected;
+                    Theme.deleteCurve(deleted);
+                    const rest = root._names.filter(name => name !== deleted);
+                    if (rest.length > 0)
+                        root.edit(rest[0]);
+                    else
+                        root.newCurve([0.25, 0.1, 0.25, 1], "curve");
                 }
             }
         }

@@ -190,7 +190,7 @@ Singleton {
 
         // ── Appearance ── the look itself is in the theme; the profile picks which
         { key: "appearance.theme", label: "Theme", group: "appearance",
-          type: "string", default: "default",
+          type: "string", default: "default", suggestions: "themes",
           hint: "A file in ~/.config/h2s_shell/themes/, without .json. \"default\" without a file is the built-in look." },
         { key: "animation.speed", label: "Animation speed", group: "appearance",
           type: "slider", min: 25, max: 400, suffix: "%", default: 100,

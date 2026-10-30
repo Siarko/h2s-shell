@@ -24,10 +24,9 @@ Item {
     // Where the current preset is used, across every shell profile
     readonly property var _usages: currentPreset !== "" ? WidgetPresets.usages(widgetType, currentPreset) : []
     property bool _renaming: false
-    property bool _confirmingDelete: false
     onCurrentPresetChanged: {
         _renaming = false
-        _confirmingDelete = false
+        _deletePreset.asking = false
     }
 
     // Creates the preset if it is new, then assigns it to this bar entry
@@ -239,94 +238,47 @@ Item {
                 }
             }
 
-            Repeater {
-                // A constant model; the labels follow the state in the delegate
-                model: ["rename", "delete"]
+            Rectangle {
+                // Implicit, not width: a layout overrides width, so the button would not
+                // grow with its label
+                implicitWidth: _renameText.implicitWidth + 14
+                implicitHeight: 24
+                radius: 6
+                color: _renameArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                Rectangle {
-                    required property string modelData
-                    readonly property string label: modelData === "rename"
-                        ? (root._renaming ? "Cancel" : "Rename")
-                        : (root._confirmingDelete ? "Delete everywhere?" : "Delete")
-                    // Implicit, not width: a layout overrides width, so the button would
-                    // not grow with its label
-                    implicitWidth: _actionText.implicitWidth + 14
-                    implicitHeight: 24
-                    radius: 6
-                    // Square on the side the cancel button attaches to, so the two read
-                    // as one control
-                    readonly property bool _joined: modelData === "delete" && root._confirmingDelete
-                    topRightRadius: _joined ? 0 : radius
-                    bottomRightRadius: _joined ? 0 : radius
-                    color: _actionArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+                Text {
+                    id: _renameText
+                    anchors.centerIn: parent
+                    text: root._renaming ? "Cancel" : "Rename"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textSecondary
+                }
 
-                    Text {
-                        id: _actionText
-                        anchors.centerIn: parent
-                        text: parent.label
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: parent.modelData === "delete" && root._confirmingDelete ? Theme.error : Theme.textSecondary
-                    }
-
-                    MouseArea {
-                        id: _actionArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (parent.modelData === "rename") {
-                                root._renaming = !root._renaming
-                                root._confirmingDelete = false
-                                if (root._renaming) {
-                                    _renameInput.text = root.currentPreset
-                                    _renameInput.forceActiveFocus()
-                                    _renameInput.selectAll()
-                                }
-                            } else if (root._confirmingDelete) {
-                                WidgetPresets.remove(root.widgetType, root.currentPreset)
-                            } else {
-                                root._confirmingDelete = true
-                                root._renaming = false
-                            }
+                MouseArea {
+                    id: _renameArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root._renaming = !root._renaming
+                        _deletePreset.asking = false
+                        if (root._renaming) {
+                            _renameInput.text = root.currentPreset
+                            _renameInput.forceActiveFocus()
+                            _renameInput.selectAll()
                         }
                     }
                 }
             }
 
-            // Cancels the delete, attached to the confirmation button
-            Rectangle {
-                visible: root._confirmingDelete
-                Layout.leftMargin: -4
-                implicitWidth: 24
-                implicitHeight: 24
-                radius: 6
-                topLeftRadius: 0
-                bottomLeftRadius: 0
-                color: _cancelDeleteArea.containsMouse ? Theme.surfaceHover : Theme.surface
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "×"
-                    font.pixelSize: Theme.fontSizeMedium
-                    color: Theme.textSecondary
-                }
-
-                MouseArea {
-                    id: _cancelDeleteArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root._confirmingDelete = false
-                }
-
-                HoverTip {
-                    target: parent
-                    shown: _cancelDeleteArea.containsMouse
-                    text: "Cancel — keep the preset"
-                }
+            DeleteButton {
+                id: _deletePreset
+                confirmLabel: "Delete everywhere?"
+                cancelTip: "Cancel — keep the preset"
+                onAskingStarted: root._renaming = false
+                onConfirmed: WidgetPresets.remove(root.widgetType, root.currentPreset)
             }
 
             // Takes the spare width, so the buttons stay packed at the left instead of the

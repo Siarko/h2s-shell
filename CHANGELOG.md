@@ -51,6 +51,10 @@ section to the new version and date.
   type its position, remove it, or switch off "Smooth" for a corner there.
 
 ### Changed
+- The "Theme" setting suggests the theme files as you type (and "default"), and warns
+  when the name has no file.
+- Deleting a profile, a widget preset or a curve asks the same way everywhere: the button
+  turns into a red question with a "×" attached to cancel.
 - Animations of a kind share one timing: expanding and collapsing takes 150 ms everywhere
   (was 120–200), a notification card arrives in 250 ms (was 200), the password field's
   colour changes in 150 ms (was 120).

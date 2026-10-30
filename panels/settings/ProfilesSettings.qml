@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs.components
 import qs.singletons
 
 // The profile list: what is active and why, each profile's conditions, order, enable
@@ -16,7 +17,7 @@ Flickable {
 
     signal editValuesRequested(string profileName)
 
-    // Name of the profile whose delete button was clicked once; a second click deletes
+    // Name of the profile whose delete button is asking (DeleteButton), so only one asks
     property string _confirmingDelete: ""
 
     component SmallButton: Rectangle {
@@ -237,14 +238,19 @@ Flickable {
                             available: _card.index < Profiles.profiles.length - 1
                             onClicked: Profiles.moveProfile(_card.index, 1)
                         }
-                        SmallButton {
-                            label: root._confirmingDelete === _card.modelData.name ? "Delete?" : "×"
-                            onClicked: {
-                                if (root._confirmingDelete === _card.modelData.name) {
-                                    root._confirmingDelete = "";
-                                    Profiles.removeProfile(_card.index);
-                                } else {
-                                    root._confirmingDelete = _card.modelData.name;
+                        DeleteButton {
+                            id: _deleteProfile
+                            label: "×"
+                            fontSize: Theme.fontSizeBody
+                            cancelTip: "Cancel — keep the profile"
+                            onConfirmed: Profiles.removeProfile(_card.index)
+                            // One question at a time, across the cards
+                            onAskingStarted: root._confirmingDelete = _card.modelData.name
+                            Connections {
+                                target: root
+                                function on_ConfirmingDeleteChanged() {
+                                    if (root._confirmingDelete !== _card.modelData.name)
+                                        _deleteProfile.asking = false;
                                 }
                             }
                         }

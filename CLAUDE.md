@@ -63,6 +63,10 @@ ticks, cells respond to clicks, and popups toggle.
 - **Never start a `Process` with a declarative `running: true`** — Quickshell writes
   `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
   `Timer`.
+- **Deleting from a click goes through `components/DeleteButton.qml`**: the first click
+  turns it into a red question ("Delete?") with a "×" attached that cancels, a second
+  click deletes. No time-outs. The owner resets `asking` when the item it deletes
+  changes. Don't hand-roll another confirm.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically.
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for config

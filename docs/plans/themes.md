@@ -243,11 +243,26 @@ The ~50 hard-coded `duration:` values move to roles.
    a curve is opened, so the library format is unchanged. Time only moves forward: a
    joint stays between its neighbours and takes its handles along, a handle stays within
    its segment's x range. One segment is still saved as four numbers.
+   *Decided with the user 2026-10-30, before stage 6:* deleting asks through the shared
+   `components/DeleteButton.qml` (a convention in CLAUDE.md); the profile's "Theme" field
+   suggests the theme files as you type (schema `suggestions: "themes"`); both
+   verified on the host.
 6. **Appearance pages**: theme picker, Colors (colour picker), Fonts, Bar, Popups,
    Notifications, Animations; create/copy/rename/delete themes. The Animations page lists
    every role with its **duration** (ms) and its **curve** (the user's requirement,
    2026-10-29) — popup with its two curves — each inherited from the extended theme
    until set, with a reset; plus a preview of the role.
+   *Scope agreed 2026-10-30:* in parts, each verified — (a) structure: an Appearance
+   group in the sidebar whose pages swap the profile picker for a theme picker (with
+   "used by"), theme new / copy as extends / full copy / rename / delete, theme errors;
+   (b) Colors with a picker of our own, showing where each value comes from, with reset;
+   (c) Fonts; (d) Bar, the geometry sliders moving from the Bar page; (e) Animations;
+   (f) Curves moves under Appearance, the General page's temporary section goes. The
+   Popups and Notifications pages wait for their tokens in stage 7. The profile's
+   theme, animation speed and reduce motion are behaviour and stay on General. A theme
+   in use may be deleted, after a question naming the profiles: they fall back to
+   "default", and themes extending it take over its `extends`. Renaming and deleting a
+   theme back the config up first.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a
