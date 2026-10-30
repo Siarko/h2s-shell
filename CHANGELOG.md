@@ -75,7 +75,12 @@ section to the new version and date.
   where its value comes from, Reset and Undo; drafts like colours. Warns when the bar's
   larger icons would not fit its cells.
 
+- Settings → Appearance → Bar: the bar's size, margins and corners, moved from the Bar page
+  (which keeps the widgets) into the theme's pages, as drafts with Reset and Undo.
+
 ### Changed
+- Settings pages are named by id: `qs ipc call settings openPage` takes a page's id
+  (`profiles`, `bar_appearance`, …), not its label.
 - Ready for larger fonts: buttons, pills, fields, icon buttons, Bluetooth device cards,
   event cards and calendar rows grow with their text instead of letting it spill out
   (today's sizes are the minimum, so nothing changes at the default sizes); long names in

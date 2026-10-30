@@ -56,59 +56,12 @@ Flickable {
         onTriggered: root._flushPending()
     }
 
-    // Where a value comes from, in words (as on the Colors page)
-    function _originText(token) {
-        const origin = _origins[token];
-        if (origin?.draft)
-            return "✎ changed";
-        const source = !origin?.theme ? "built in"
-            : origin.palette ? "palette of " + origin.theme
-            : origin.theme === themeName ? "set here"
-            : "from " + origin.theme;
-        return origin?.reset ? "✎ reset, " + source : source;
-    }
-
-    function _setHere(token) {
-        const origin = _origins[token];
-        return !!origin && !origin.palette && origin.theme === themeName;
-    }
-
-    function _drafted(token) {
-        return !!_origins[token]?.draft || !!_origins[token]?.reset;
-    }
-
-    // Where a value comes from, and Reset / Undo for it
-    component ValueActions: RowLayout {
-        id: _actions
-        required property string token
-        spacing: 6
-
-        Text {
-            text: root._originText(_actions.token)
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: root._drafted(_actions.token) ? Theme.warning : root._setHere(_actions.token) ? Theme.accent : Theme.textMuted
-        }
-        SmallButton {
-            label: "Reset"
-            fontSize: Theme.fontSizeSmall
-            available: root._editable && (root._setHere(_actions.token) || !!root._origins[_actions.token]?.draft)
-            tooltip: available ? "Back to the inherited value" : "Not set in this theme: nothing to reset"
-            onClicked: {
-                root._write("", null, true);
-                Theme.draftToken(root.themeName, "fonts", _actions.token, null);
-            }
-        }
-        SmallButton {
-            visible: root._drafted(_actions.token)
-            label: "Undo"
-            fontSize: Theme.fontSizeSmall
-            tooltip: "Back to the saved value"
-            onClicked: {
-                root._write("", null, true);
-                Theme.undraftToken(root.themeName, "fonts", _actions.token);
-            }
-        }
+    component ValueActions: TokenActions {
+        themeName: root.themeName
+        group: "fonts"
+        origins: root._origins
+        editable: root._editable
+        onAboutToChange: root._write("", null, true)
     }
 
     // The bar's icons at their size in this theme, against the room a bar cell has

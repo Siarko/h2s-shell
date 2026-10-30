@@ -60,6 +60,11 @@ TestCase {
             assert(size >= entry.from && size <= entry.to, "and its slider reaches today's " + size + " px");
         }
         assertEqual(ThemeRules.fontTokens.length + 1, Object.keys(Theme.builtin.fonts).length, "every built-in size is listed, besides the family");
+        assertEqual(JSON.stringify(ThemeRules.barTokenInfo.map(entry => entry.token)), JSON.stringify(ThemeRules.barTokens),
+            "the Bar shape page lists every geometry token, in order");
+        for (const entry of ThemeRules.barTokenInfo)
+            assert(Theme.builtin.bar[entry.token] >= entry.from && Theme.builtin.bar[entry.token] <= entry.to,
+                "the slider for " + entry.token + " reaches the built-in value");
 
         // --- drafts ---
         const file = { extends: "default", colors: { accent: "#111111", surface: "#222222" }, bar: { barHeight: 30 } };

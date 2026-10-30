@@ -209,7 +209,7 @@ Item {
                              && Config.gcal.clientId !== "" && Config.gcal.clientSecret !== "")
                         GoogleCalendarAuth.login();
                     else
-                        Shell.openSettings(1);
+                        Shell.openSettings("calendar");
                 }
             }
         }

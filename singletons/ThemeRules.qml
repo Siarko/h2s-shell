@@ -126,6 +126,22 @@ Singleton {
         { group: "Buttons", token: "confirmSecondaryHover", label: "Confirm a change, hovered", hint: "A confirm-a-change button under the pointer" }
     ]
 
+    // The bar's geometry tokens (barTokens) as the Bar shape page shows them: label, use,
+    // slider range and unit
+    readonly property var barTokenInfo: [
+        { token: "barHeight", group: "Size", label: "Bar height", hint: "Excluding the reserved space and top offset", from: 10, to: 80, suffix: " px" },
+        { token: "reservedSpace", group: "Size", label: "Reserved space", hint: "Kept free for the bar at the top of the screen: its height and offset", from: 10, to: 80, suffix: " px" },
+        { token: "topOffset", group: "Size", label: "Top offset", hint: "Between the bar and the top of the screen", from: 0, to: 80, suffix: " px" },
+        { token: "leftMargin", group: "Size", label: "Left margin", hint: "Between the bar and the screen's left edge", from: 0, to: 300, suffix: " px" },
+        { token: "rightMargin", group: "Size", label: "Right margin", hint: "Between the bar and the screen's right edge", from: 0, to: 300, suffix: " px" },
+        { token: "leftPadding", group: "Size", label: "Left padding", hint: "Inside the bar, before its first widget", from: 0, to: 300, suffix: " px" },
+        { token: "rightPadding", group: "Size", label: "Right padding", hint: "Inside the bar, after its last widget", from: 0, to: 300, suffix: " px" },
+        { token: "radiusTopLeft", group: "Corners", label: "Top left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusTopRight", group: "Corners", label: "Top right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusBottomLeft", group: "Corners", label: "Bottom left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusBottomRight", group: "Corners", label: "Bottom right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" }
+    ]
+
     // The font tokens: the family, and the sizes in pixels with what each is for and the
     // range its slider offers
     readonly property var fontTokens: [

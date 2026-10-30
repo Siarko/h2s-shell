@@ -64,8 +64,8 @@ QtObject {
 
     property var _settingsRequests: Connections {
         target: Shell
-        function onOpenSettings(category) {
-            settingsWindow.selectedCategory = category;
+        function onOpenSettings(pageId) {
+            settingsWindow.selectedPage = pageId;
             settingsWindow.visible = true;
         }
         function onToggleSettings() {
@@ -75,7 +75,7 @@ QtObject {
 
     // The settings window from outside, e.g. with no settings widget on the bar:
     //   qs ipc call settings open
-    //   qs ipc call settings openPage profiles     (any sidebar page, case-insensitive)
+    //   qs ipc call settings openPage profiles     (a page's id: SettingsWindow.pages)
     //   qs ipc call settings toggle
     //   qs ipc call settings close
     property var _settingsIpc: IpcHandler {
@@ -86,10 +86,9 @@ QtObject {
         }
 
         function openPage(page: string): string {
-            const index = settingsWindow.categoryNames.findIndex(name => name.toLowerCase() === page.toLowerCase());
-            if (index < 0)
-                return "No page \"" + page + "\"; pages: " + settingsWindow.categoryNames.join(", ");
-            Shell.openSettings(index);
+            if (!settingsWindow.pages.some(entry => entry.id === page))
+                return "No page \"" + page + "\"; pages: " + settingsWindow.pages.map(entry => entry.id).join(", ");
+            Shell.openSettings(page);
             return "";
         }
 

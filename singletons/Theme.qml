@@ -620,24 +620,6 @@ Singleton {
         return themesDir + "/" + name + ".json";
     }
 
-    // Sets one token in the theme file `name`, creating the file if needed. A file that
-    // does not parse is left alone — rewriting it would lose the user's hand edits.
-    function writeToken(name, group, token, value) {
-        if (Config.readOnly)
-            return false;
-        const path = _themePath(name);
-        let theme = _read(path);
-        if (theme === null && _reader.text() !== "") {
-            console.warn("[Theme] Not changing", path, "— it does not parse");
-            return false;
-        }
-        theme = theme ?? {};
-        theme[group] = Object.assign({}, theme[group] ?? {});
-        theme[group][token] = value;
-        _writeTheme(name, theme);
-        return true;
-    }
-
     function _writeTheme(name, theme) {
         _write(_themePath(name), theme);
         _quietReload = true;
@@ -785,7 +767,7 @@ Singleton {
     }
 
     // FileView does not create folders: the themes folder is made at start, for
-    // writeToken, and before the migration writes into it
+    // drafts and saves, and before the migration writes into it
     Process {
         id: _ensureThemesDir
         command: ["mkdir", "-p", root.themesDir, root.draftsDir]

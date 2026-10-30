@@ -321,6 +321,16 @@ The ~50 hard-coded `duration:` values move to roles.
    shared with Colors); the family from `Qt.fontFamilies()`, searchable, each shown in
    itself; per size a sample, a slider (writes at most every 80 ms), origin, Reset, Undo;
    a warning when a Title-size glyph is taller than a bar cell (bar height − 10).
+   *(d) Bar, 2026-10-30, verified on the host:* `panels/settings/BarShapeSettings.qml`
+   (page id `bar_appearance`, label "Bar"), from `ThemeRules.barTokenInfo` (tested to
+   list every geometry token and reach the built-in values); the ties between values
+   kept (bar height raises the reserved space, the offset fits between them); writes as
+   drafts every 80 ms. The Bar page keeps the widgets. `TokenActions` (origin, Reset,
+   Undo) shared with Fonts; `Theme.writeToken`, now unused, removed. The user pointed out
+   pages were found by their label (and indexed by number): the settings window now has
+   `pages` with an id, a label, a tab and a draft group; `Shell.openSettings` and IPC
+   `openPage` take the id. (A property named `_page` first shadowed the Loader's id `_page`: the tab never
+   switched.)
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a

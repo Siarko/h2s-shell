@@ -73,7 +73,7 @@ other Bar closes its own popup when `activeScreen` stops matching its own screen
 
 `SettingsWindow` is the exception: one instance for the whole shell, in `shell.qml`,
 opened with `Shell.openSettings(category)` and toggled with `Shell.toggleSettings()`, and
-over IPC (`qs ipc call settings open | openPage <page> | toggle | close`, in `shell.qml`).
+over IPC (`qs ipc call settings open | openPage <page id> | toggle | close`, in `shell.qml`).
 
 ## Key patterns
 

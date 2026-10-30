@@ -12,6 +12,7 @@ TestCase {
         "panels/HardwareSourceList.qml",
         "panels/WidgetSettingsPane.qml",
         "panels/settings/BarSettings.qml",
+        "panels/settings/BarShapeSettings.qml",
         "panels/settings/CalendarSettings.qml",
         "panels/settings/ConditionEditor.qml",
         "panels/settings/ColorsSettings.qml",

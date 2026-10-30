@@ -23,49 +23,71 @@ FloatingWindow {
     minimumSize: Qt.size(400, 300)
     visible: false
 
-    // Index into the sidebar list below
-    property int selectedCategory: 0
-    // The sidebar's pages, in order; also how IPC names a page
-    readonly property var categoryNames: ["General", "Calendar", "Media", "Bar", "Notifications", "Lockscreen", "Dictation", "Performance", "Profiles", "Themes", "Curves", "Colors", "Fonts"]
-    readonly property int _performanceCategory: 7
-    readonly property int _profilesCategory: 8
-    // The window has two tabs: Behaviour, whose pages edit a profile, and Appearance, from
-    // here on, whose pages edit a theme (docs/plans/themes.md, stage 6; TODO 10.10)
-    readonly property int _themesCategory: 9
-    readonly property int _curvesCategory: 10
-    // From here on, the pages that edit the picked theme's values (after a separator)
-    readonly property int _colorsCategory: 11
-    readonly property int _fontsCategory: 12
-    readonly property int _firstThemePage: _colorsCategory
-    readonly property bool _onAppearance: selectedCategory >= _themesCategory
+    // The pages, in the sidebar's order. Each has an id — how the window, the rest of the
+    // shell (Shell.openSettings) and IPC (openPage) name it — and a label, free to change
+    // or repeat across tabs. The window has two tabs: Behaviour, whose pages edit a
+    // profile, and Appearance, whose pages edit a theme (docs/plans/themes.md, stage 6;
+    // TODO 10.10). `draftGroup`: the theme group a page edits through a draft, for its ✎;
+    // `separatorBefore`: a line above it in the sidebar.
+    readonly property var pages: [
+        { id: "general", label: "General", tab: "behaviour", component: generalComp },
+        { id: "calendar", label: "Calendar", tab: "behaviour", component: calendarComp },
+        { id: "media", label: "Media", tab: "behaviour", component: mediaComp },
+        { id: "bar", label: "Bar", tab: "behaviour", component: barComp },
+        { id: "notifications", label: "Notifications", tab: "behaviour", component: notificationsComp },
+        { id: "lockscreen", label: "Lockscreen", tab: "behaviour", component: lockscreenComp },
+        { id: "dictation", label: "Dictation", tab: "behaviour", component: sttComp },
+        { id: "performance", label: "Performance", tab: "behaviour", component: performanceComp },
+        { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
+        // Themes and Curves manage the libraries; the pages below the line edit the
+        // picked theme's values
+        { id: "themes", label: "Themes", tab: "appearance", component: themesComp },
+        { id: "curves", label: "Curves", tab: "appearance", component: curvesComp },
+        { id: "colors", label: "Colors", tab: "appearance", component: colorsComp, draftGroup: "colors", separatorBefore: true },
+        { id: "fonts", label: "Fonts", tab: "appearance", component: fontsComp, draftGroup: "fonts" },
+        { id: "bar_appearance", label: "Bar", tab: "appearance", component: barShapeComp, draftGroup: "bar" }
+    ]
+
+    function _pageIndex(id) {
+        return pages.findIndex(page => page.id === id);
+    }
+
+    function _pageOf(id) {
+        return pages[_pageIndex(id)] ?? pages[0];
+    }
+
+    // The open page, by id
+    property string selectedPage: "general"
+    // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
+    readonly property var _currentPage: _pageOf(selectedPage)
+    readonly property bool _onAppearance: _currentPage.tab === "appearance"
 
     // The page last open in each tab, to come back to
-    property int _lastBehaviourPage: 0
-    property int _lastAppearancePage: _themesCategory
-    // From selectedCategory itself: _onAppearance may not have caught up yet when this runs
-    onSelectedCategoryChanged: {
-        const appearance = selectedCategory >= _themesCategory;
-        if (appearance)
-            _lastAppearancePage = selectedCategory;
+    property string _lastBehaviourPage: "general"
+    property string _lastAppearancePage: "themes"
+    // From the page itself: _onAppearance may not have caught up yet when this runs
+    onSelectedPageChanged: {
+        if (_pageOf(selectedPage).tab === "appearance")
+            _lastAppearancePage = selectedPage;
         else
-            _lastBehaviourPage = selectedCategory;
+            _lastBehaviourPage = selectedPage;
         _openList = null;
-        _slideMark(_previousCategory, selectedCategory);
-        _previousCategory = selectedCategory;
+        _slideMark(_previousPage, selectedPage);
+        _previousPage = selectedPage;
     }
 
     // The selected page's mark slides from the page before only when the page changes
     // within a tab: it sits at the page plus an offset that animates to nothing. Anything
     // else that moves the list (the picker above it growing, a change of tab) moves the
     // mark with it at once.
-    property int _previousCategory: 0
+    property string _previousPage: "general"
     property real _markOffset: 0
 
     function _slideMark(from, to) {
-        const fromItem = _categoryRepeater.itemAt(from);
-        const toItem = _categoryRepeater.itemAt(to);
+        const fromItem = _categoryRepeater.itemAt(_pageIndex(from));
+        const toItem = _categoryRepeater.itemAt(_pageIndex(to));
         _markSlide.stop();
-        if (!fromItem || !toItem || (from >= _themesCategory) !== (to >= _themesCategory)) {
+        if (!fromItem || !toItem || _pageOf(from).tab !== _pageOf(to).tab) {
             _markOffset = 0;
             return;
         }
@@ -105,18 +127,13 @@ FloatingWindow {
             previewing = false;
     }
 
-    // The theme group an Appearance page edits through a draft, or ""
-    function _pageGroup(category) {
-        return category === _colorsCategory ? "colors" : category === _fontsCategory ? "fonts" : "";
-    }
-
     function showBehaviour() {
-        selectedCategory = _lastBehaviourPage;
+        selectedPage = _lastBehaviourPage;
     }
 
     // Opens the Appearance tab, on `theme` if given
     function showAppearance(theme) {
-        selectedCategory = _lastAppearancePage;
+        selectedPage = _lastAppearancePage;
         if (theme)
             editedTheme = theme;
     }
@@ -389,8 +406,8 @@ FloatingWindow {
                 // The selected page's mark, one for the whole list, so it slides from the
                 // old page to the new one; drawn under the list
                 Rectangle {
-                    readonly property Item target: _categoryRepeater.count > root.selectedCategory
-                        ? _categoryRepeater.itemAt(root.selectedCategory) : null
+                    readonly property Item target: _categoryRepeater.count > root._pageIndex(root.selectedPage)
+                        ? _categoryRepeater.itemAt(root._pageIndex(root.selectedPage)) : null
                     visible: target !== null
                     x: _sidebar.x + (target?.x ?? 0)
                     // The offset slides it in from the page before (root._slideMark)
@@ -428,7 +445,7 @@ FloatingWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.selectedCategory = root._profilesCategory
+                            onClicked: root.selectedPage = "profiles"
                         }
                     }
 
@@ -498,10 +515,10 @@ FloatingWindow {
                             id: _usersText
                             Layout.fillWidth: true
                             readonly property var _users: (Profiles.profiles, Theme.usersOf(root.editTheme))
-                            readonly property string _full: root.selectedCategory === root._curvesCategory
+                            readonly property string _full: root.selectedPage === "curves"
                                 ? "Curves are shared by every theme"
                                 : _users.length > 0 ? "Used by " + _users.join(", ") : "Not used by any profile"
-                            text: root.selectedCategory === root._curvesCategory ? "Shared"
+                            text: root.selectedPage === "curves" ? "Shared"
                                 : _users.length > 0 ? "Used by " + _users.join(", ") : "Unused"
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignRight
@@ -534,21 +551,20 @@ FloatingWindow {
 
                     Repeater {
                         id: _categoryRepeater
-                        model: root.categoryNames
+                        model: root.pages
                         Rectangle {
-                            required property string modelData
+                            required property var modelData
                             required property int index
+                            readonly property bool selected: modelData.id === root.selectedPage
                             Layout.fillWidth: true
                             // Only the pages of the tab that is open
-                            visible: (index >= root._themesCategory) === root._onAppearance
-                            // A line above the pages that edit the theme's values: Themes and
-                            // Curves above it manage the library
-                            Layout.topMargin: index === root._firstThemePage ? 13 : 0
+                            visible: (modelData.tab === "appearance") === root._onAppearance
+                            Layout.topMargin: modelData.separatorBefore ? 13 : 0
                             height: 34
                             radius: 6
 
                             Rectangle {
-                                visible: parent.index === root._firstThemePage
+                                visible: !!parent.modelData.separatorBefore
                                 y: -8
                                 width: parent.width
                                 height: 1
@@ -556,7 +572,7 @@ FloatingWindow {
                                 opacity: 0.3
                             }
                             // The selected one is marked by the sliding mark above
-                            color: _categoryArea.containsMouse && index !== root.selectedCategory
+                            color: _categoryArea.containsMouse && !selected
                                 ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
                             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -564,7 +580,7 @@ FloatingWindow {
                             // own at the right, so cutting a long name never hides it.
                             Text {
                                 id: _changedMark
-                                visible: (Theme.drafts, root._pageGroup(parent.index) !== "" && Theme.hasDraft(root.editTheme, root._pageGroup(parent.index)))
+                                visible: (Theme.drafts, !!parent.modelData.draftGroup && Theme.hasDraft(root.editTheme, parent.modelData.draftGroup))
                                 anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
                                 text: "✎"
                                 font.family: Theme.fontFamily
@@ -582,10 +598,10 @@ FloatingWindow {
                                 }
                                 // A name wider than the sidebar (a larger font) is cut
                                 elide: Text.ElideRight
-                                text: modelData
+                                text: parent.modelData.label
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBodyLarge
-                                color: index === root.selectedCategory ? Theme.textPrimary : Theme.textSecondary
+                                color: parent.selected ? Theme.textPrimary : Theme.textSecondary
                                 Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                             }
 
@@ -594,7 +610,7 @@ FloatingWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selectedCategory = index
+                                onClicked: root.selectedPage = parent.modelData.id
                             }
                         }
                     }
@@ -639,21 +655,7 @@ FloatingWindow {
                     anchors.fill: parent
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
-                    sourceComponent: {
-                        if (root.selectedCategory === 0) return generalComp;
-                        if (root.selectedCategory === 1) return calendarComp;
-                        if (root.selectedCategory === 2) return mediaComp;
-                        if (root.selectedCategory === 3) return barComp;
-                        if (root.selectedCategory === 4) return notificationsComp;
-                        if (root.selectedCategory === 5) return lockscreenComp;
-                        if (root.selectedCategory === root._performanceCategory) return performanceComp;
-                        if (root.selectedCategory === root._profilesCategory) return profilesComp;
-                        if (root.selectedCategory === root._themesCategory) return themesComp;
-                        if (root.selectedCategory === root._colorsCategory) return colorsComp;
-                        if (root.selectedCategory === root._fontsCategory) return fontsComp;
-                        if (root.selectedCategory === root._curvesCategory) return curvesComp;
-                        return sttComp;
-                    }
+                    sourceComponent: root._currentPage.component
                 }
 
                 ParallelAnimation {
@@ -691,6 +693,7 @@ FloatingWindow {
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }
     Component { id: fontsComp;         FontsSettings { themeName: root.editTheme } }
+    Component { id: barShapeComp;      BarShapeSettings { themeName: root.editTheme } }
     Component {
         id: themesComp
         ThemesSettings {
@@ -707,7 +710,7 @@ FloatingWindow {
         ProfilesSettings {
             onEditValuesRequested: name => {
                 root.editedName = name;
-                root.selectedCategory = root._performanceCategory;
+                root.selectedPage = "performance";
             }
         }
     }
