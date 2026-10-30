@@ -202,7 +202,10 @@ LazyLoader {
             // With the width animating too, the held edge stays put while the other moves
             readonly property real _anchoredX: _anchor === "right" ? _right - popup.shownWidth
                 : _anchor === "left" ? _left : _centre - popup.shownWidth / 2
-            x: Math.max(_minX, Math.min(_anchoredX, _maxX))
+            // On whole pixels: at half a pixel (an odd width centred, e.g. the calendar's
+            // 551) the curved top corners and the panel met mid-pixel, and smoothing left a
+            // faint seam between them
+            x: Math.round(Math.max(_minX, Math.min(_anchoredX, _maxX)))
             width: popup.shownWidth
             height: popup.showPopup && !popupLoader.closing ? popup.popupHeight : 0
             clip: true

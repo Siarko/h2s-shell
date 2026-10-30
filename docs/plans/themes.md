@@ -343,6 +343,7 @@ The ~50 hard-coded `duration:` values move to roles.
    Appearance's theme pages. FEATURES.md describes both tabs. **Stage 6 done.**
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
+   *Token set agreed 2026-10-30:* [themes-stage7.md](themes-stage7.md).
 8. **matugen**: a template in the repo mapping its palette to our colour tokens, a
    "wallpaper" theme reading the generated file, and docs for adding the template to
    matugen's config.

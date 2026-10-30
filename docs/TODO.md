@@ -529,6 +529,27 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       field + "month(s)" in a ~250 px card); NetworkPanel's expanded heights (76, 102) are
       sums of fixed rows; EventsPanel's header in the 270 px column; the settings window's
       160 px sidebar. Make popup widths follow content or the font, within limits.
+- [ ] **10.12 Bar position: bottom, and vertical at a side** (requested 2026-10-30)
+      Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
+      screen, and — harder — a vertical bar along the left or right edge. Touches far more
+      than Bar.qml: the bar's anchors and exclusive zone; every widget's layout (a
+      vertical bar needs widgets that stack and fit a narrow width — text such as the
+      clock or the music title has to rotate, shorten or wrap); popups (they open
+      downwards from the bar today, with curved top corners joining it — PopupCurve —
+      and positions computed from the bar's height); the HUD and toasts placed relative
+      to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
+      Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
+      analysis and a plan, with the user, before any work.
+- [ ] **10.13 Bar shape and anchoring: e.g. a "dynamic island" bar** (requested
+      2026-10-30)
+      The bar's size can only be tuned with margins and padding today. Wanted: choosing
+      what the bar is anchored to, so it can be e.g. a floating island — centred, as wide
+      as its content, perhaps growing with what it shows (a dynamic island). The idea needs
+      working out with the user first: what can be anchored (the whole bar, or each of its
+      left / centre / right sections as separate islands), width from content or fixed,
+      how the exclusive zone behaves for a floating bar, how popups join an island (their
+      curved corners assume a bar running to its ends; see 8.12 for the margin case), and
+      animation when the island resizes. Related to 10.12 (position) and themes stage 7.
 - [x] **10.2 Heartbeat on graph updates**
       Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
       history graph takes a new sample — a semi-transparent wave travelling across the

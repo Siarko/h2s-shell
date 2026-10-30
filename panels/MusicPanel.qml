@@ -353,7 +353,8 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: 120
                 height: 120
-                radius: 50
+                // Only a frame: the cover's rounding comes from its mask below
+                color: "transparent"
                 clip: true
                 visible: Music.artUrl !== ""
                 // A new track's cover fades in once it has loaded

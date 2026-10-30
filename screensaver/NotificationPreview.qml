@@ -17,7 +17,8 @@ Rectangle {
     color: Theme.glass
     border.color: Theme.glassBorder
     border.width: 1
-    implicitHeight: _col.implicitHeight + 16
+    // The column's 12 px margin above and below it (16 left 4 px at the bottom)
+    implicitHeight: _col.implicitHeight + 24
 
     Column {
         id: _col

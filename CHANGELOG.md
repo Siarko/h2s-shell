@@ -109,6 +109,9 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- The calendar's and the hardware popup's left curved corner no longer shows a faint seam
+  next to the panel (the popup now sits on whole pixels).
+- Notifications on the lock screen and screensaver have the same padding below as above.
 - Switching from a taller popup to a shorter one animates the height too; the panel's
   background used to drop to the new height at once.
 - Numbers no longer spill out of their columns: a slider's value ("3000 ms"), the
