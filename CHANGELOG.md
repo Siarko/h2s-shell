@@ -104,6 +104,9 @@ section to the new version and date.
   drafts. Border colours are in Colors → Borders.
 
 ### Changed
+- Calendar: deleting a single event asks on its ✕ button, which turns into "Delete?"
+  with a × to cancel, like every other delete; an event of a series still offers what
+  to delete.
 - One checkbox everywhere: the calendar list in the calendar settings uses the event
   form's look (14 px, a muted outline when unchecked), and every checkbox takes the
   keyboard focus on Tab and toggles with Space.

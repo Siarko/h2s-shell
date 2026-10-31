@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs.components
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -20,7 +21,15 @@ Rectangle {
 
     property bool expanded: false
     property bool editing: false
+    // An event of a series being deleted: the choice of what to delete replaces the summary
+    // (RecurringDeleteChoice). A single event asks on its DeleteButton instead.
     property bool confirmingDelete: false
+    readonly property bool _recurring: !!modelData.recurringEventId
+    // A question never carries over to another event shown by this card
+    onModelDataChanged: {
+        confirmingDelete = false;
+        _deleteButton.asking = false;
+    }
 
     // The summary row: as tall as its two lines need, never less than 50 px
     readonly property real _summaryHeight: Math.max(50, _summaryLines.implicitHeight + 12)
@@ -31,7 +40,7 @@ Rectangle {
     readonly property real _cardHeight: {
         if (root.editing) return _editForm.implicitHeight + 16
         if (root.confirmingDelete)
-            return root.modelData.recurringEventId ? _recurDeleteCol.implicitHeight + 16 : _summaryHeight
+            return _recurringDelete.implicitHeight + 16
         return (expanded && modelData.description) ? _summaryHeight + _desc.implicitHeight + 8 : _summaryHeight
     }
 
@@ -73,7 +82,8 @@ Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: root._textInset
-            anchors.rightMargin: GoogleCalendar.available ? 50 : (_birthdayIcon.visible ? _birthdayIcon.implicitWidth + 12 : 8)
+            // Clear of the actions at the right, which widen while a delete asks
+            anchors.rightMargin: GoogleCalendar.available ? _actions.width + 12 : (_birthdayIcon.visible ? _birthdayIcon.implicitWidth + 12 : 8)
             spacing: 2
 
             Text {
@@ -120,7 +130,7 @@ Rectangle {
             id: _birthdayIcon
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.rightMargin: GoogleCalendar.available ? 50 : 8
+            anchors.rightMargin: GoogleCalendar.available ? _actions.width + 12 : 8
             text: "🎂"
             font.pixelSize: Theme.fontSizeSection
             visible: root.modelData.eventType === 'birthday'
@@ -195,14 +205,16 @@ Rectangle {
 
     // Edit / Delete action buttons — higher z, intercept clicks in their area
     Row {
+        id: _actions
         visible: !root.editing && !root.confirmingDelete && GoogleCalendar.available
         anchors.right: parent.right
-        anchors.top: parent.top
+        anchors.verticalCenter: parent.top
+        anchors.verticalCenterOffset: root._summaryHeight / 2
         anchors.rightMargin: 6
-        anchors.topMargin: 15
         spacing: 6
 
         Text {
+            anchors.verticalCenter: parent.verticalCenter
             text: "✏"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
@@ -215,21 +227,38 @@ Rectangle {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
+                    _deleteButton.asking = false
                     root.expanded = false
                     root.editing = true
                 }
             }
         }
 
+        // A single event: asks on the button, deletes on the second click
+        DeleteButton {
+            id: _deleteButton
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root._recurring
+            label: "✕"
+            confirmLabel: "Delete?"
+            cancelTip: "Keep the event"
+            onConfirmed: GoogleCalendar.deleteEvent({
+                year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                eventId: root.modelData.id, calendarId: root.modelData.calendarId })
+        }
+
+        // An event of a series: what to delete is chosen below
         Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root._recurring
             text: "✕"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
-            color: _deleteBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
+            color: _deleteSeriesArea.containsMouse ? Theme.textSecondary : Theme.textMuted
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             MouseArea {
-                id: _deleteBtnArea
+                id: _deleteSeriesArea
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
@@ -238,162 +267,23 @@ Rectangle {
         }
     }
 
-    // Delete confirmation — non-recurring: "Delete event? Yes / No"
-    RowLayout {
-        visible: root.confirmingDelete && !root.modelData.recurringEventId
-        anchors { left: parent.left; right: parent.right; top: parent.top }
-        anchors.leftMargin: root._textInset
-        anchors.rightMargin: 8
-        height: root._summaryHeight
-        spacing: 6
-
-        Text {
-            text: "Delete event?"
-            Layout.alignment: Qt.AlignVCenter
-            color: Theme.textSecondary
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-        }
-
-        Text {
-            text: "Yes"
-            Layout.alignment: Qt.AlignVCenter
-            color: _yesArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: true
-
-            MouseArea {
-                id: _yesArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    GoogleCalendar.deleteEvent({
-                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        eventId: root.modelData.id, calendarId: root.modelData.calendarId })
-                    root.confirmingDelete = false
-                }
-            }
-        }
-
-        Text {
-            text: "No"
-            Layout.alignment: Qt.AlignVCenter
-            color: _noArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-
-            MouseArea {
-                id: _noArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.confirmingDelete = false
-            }
-        }
-
-        Item { Layout.fillWidth: true }
-    }
-
-    // Delete confirmation — recurring: vertical list of options
-    Column {
-        id: _recurDeleteCol
-        visible: root.confirmingDelete && !!root.modelData.recurringEventId
+    RecurringDeleteChoice {
+        id: _recurringDelete
+        visible: root.confirmingDelete
         anchors { left: parent.left; right: parent.right; top: parent.top }
         anchors.leftMargin: root._textInset
         anchors.topMargin: 8
-        spacing: 4
-
-        Text {
-            text: "Delete:"
-            color: Theme.textSecondary
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-        }
-
-        Text {
-            text: "- This event"
-            color: _thisEventArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: true
-
-            MouseArea {
-                id: _thisEventArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    GoogleCalendar.deleteEvent({
-                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        eventId: root.modelData.id, calendarId: root.modelData.calendarId })
-                    root.confirmingDelete = false
-                }
-            }
-        }
-
-        Text {
-            text: "- This and following"
-            color: _thisAndFollowingArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: true
-
-            MouseArea {
-                id: _thisAndFollowingArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    GoogleCalendar.deleteFromEvent({
-                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        recurringEventId: root.modelData.recurringEventId, calendarId: root.modelData.calendarId })
-                    root.confirmingDelete = false
-                }
-            }
-        }
-
-        Text {
-            text: "- All events"
-            color: _allEventsArea.containsMouse ? Theme.textPrimary : Theme.accent
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: true
-
-            MouseArea {
-                id: _allEventsArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    GoogleCalendar.deleteEvent({
-                        year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        eventId: root.modelData.recurringEventId, calendarId: root.modelData.calendarId })
-                    root.confirmingDelete = false
-                }
-            }
-        }
-
-        Text {
-            text: "- Cancel"
-            color: _recurCancelArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-
-            MouseArea {
-                id: _recurCancelArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.confirmingDelete = false
-            }
+        onCancelled: root.confirmingDelete = false
+        onChosen: which => {
+            const event = { year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+                            calendarId: root.modelData.calendarId };
+            if (which === "this")
+                GoogleCalendar.deleteEvent(Object.assign(event, { eventId: root.modelData.id }));
+            else if (which === "following")
+                GoogleCalendar.deleteFromEvent(Object.assign(event, { recurringEventId: root.modelData.recurringEventId }));
+            else
+                GoogleCalendar.deleteEvent(Object.assign(event, { eventId: root.modelData.recurringEventId }));
+            root.confirmingDelete = false;
         }
     }
 }

@@ -306,7 +306,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       stays in WifiManager, having its own rescan and repeat logic.
       **Functional check on the host still owed** (user busy with Wi-Fi elsewhere,
       2026-10-31): radio toggle, connect/disconnect/forget, VPN, IP and DNS, bar icon.
-- [ ] **6.7 Remaining large files** [P3]
+- [x] **6.7 Remaining large files** [P3]
       `MusicPanel` 481, `BarSectionList` 425, `WorkspacesWidgetSettings` 394,
       `EventCard` 385, `HardwareSourceList` 378, `NotificationCard` 359.
       Re-measured 2026-10-31; order agreed with the user, one file at a time:
@@ -326,7 +326,10 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
         card — drag to reorder with auto-scroll, remove, add from a floating list — is
         `components/ReorderList.qml`; each list gives only its row content (and the bar
         its ⚙ detail). An empty `_dragGhost` item left from an older version is gone.
-      - [ ] Later: `EventCard` 399, `NotificationCard` 360.
+      - [x] `EventCard` (399 → 289): a single event deletes through `DeleteButton`, as the
+        convention says; an event of a series offers its three deletions in
+        `RecurringDeleteChoice.qml`. `NotificationCard` (360 → 252): the inline reply in
+        `NotificationReply.qml`, the code chips in `CodeChips.qml`.
 - [ ] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)
       Both start processes themselves, against "state and I/O live in singletons/"
       (CLAUDE.md), as MusicPanel did with cava.

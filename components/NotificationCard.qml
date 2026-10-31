@@ -3,6 +3,9 @@ import QtQuick.Layouts
 import Quickshell
 import qs.singletons
 
+// A notification as a card — in the panel, and as a toast: its app, summary, body and
+// image, its actions, an inline reply (NotificationReply) and the codes found in it
+// (CodeChips); text in it can be selected and copied.
 Rectangle {
     id: notifCard
 
@@ -36,12 +39,6 @@ Rectangle {
 
     readonly property var _regularActions: (notification?.actions ?? []).filter(function(a) { return a.id !== "inline-reply"; })
     readonly property var _replyAction: (notification?.actions ?? []).find(function(a) { return a.id === "inline-reply"; }) ?? null
-
-    function _sendReply() {
-        if (_replyInput.text.length === 0) return;
-        notifCard._replyAction.invoke(_replyInput.text);
-        notifCard.dismissRequested();
-    }
 
     ColumnLayout {
         id: _contentCol
@@ -187,129 +184,24 @@ Rectangle {
         }
 
         // Inline reply
-        RowLayout {
+        NotificationReply {
             visible: notifCard._replyAction !== null
             Layout.fillWidth: true
             Layout.topMargin: 4
-            spacing: 6
-
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 28
-                radius: Theme.notificationCard.controlRadius
-                color: notifCard.replyBackground
-
-                Text {
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    text: "Reply…"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textMuted
-                    verticalAlignment: Text.AlignVCenter
-                    visible: _replyInput.text.length === 0
-                }
-
-                TextInput {
-                    id: _replyInput
-                    selectionColor: Theme.selection
-                    selectedTextColor: Theme.selectedText
-                    anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textPrimary
-                    verticalAlignment: TextInput.AlignVCenter
-                    onAccepted: notifCard._sendReply()
-                }
-            }
-
-            Rectangle {
-                implicitWidth: 48
-                implicitHeight: 28
-                radius: Theme.notificationCard.controlRadius
-                color: Theme.accent
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Send"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textPrimary
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: notifCard._sendReply()
-                }
+            fieldColor: notifCard.replyBackground
+            onSent: text => {
+                notifCard._replyAction.invoke(text);
+                notifCard.dismissRequested();
             }
         }
 
-        // Extracted code chips — shown when Notifications detected patterns in this notification
-        Flow {
-            spacing: 6
+        // Codes Notifications found in this notification, to copy
+        CodeChips {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            visible: (Notifications.extractedCodes[notifCard.notification?.id ?? -1] ?? []).length > 0
-
-            Repeater {
-                // ScriptModel, never the bare array — see "The Repeater crash" in
-                // docs/ARCHITECTURE.md
-                model: ScriptModel {
-                    values: Notifications.extractedCodes[notifCard.notification?.id ?? -1] ?? []
-                }
-                delegate: Rectangle {
-                    required property string modelData
-                    implicitWidth: _chipRow.implicitWidth + 12
-                    height: 26
-                    radius: Theme.notificationCard.controlRadius
-                    color: _chipArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
-                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                    Row {
-                        id: _chipRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        Text {
-                            text: "󰆏"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textPrimary
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        Text {
-                            text: modelData
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeSmall
-                            color: Theme.textPrimary
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-
-                    MouseArea {
-                        id: _chipArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            _clipHelper.text = modelData;
-                            _clipHelper.selectAll();
-                            _clipHelper.copy();
-                            Notifier.send("Copied: " + modelData, { urgency: "low", category: "x-qs-shell" });
-                        }
-                    }
-                }
-            }
+            codes: Notifications.extractedCodes[notifCard.notification?.id ?? -1] ?? []
+            visible: codes.length > 0
         }
-    }
-
-    // Hidden TextEdit for programmatic clipboard writes from code chips
-    TextEdit {
-        id: _clipHelper
-        selectionColor: Theme.selection
-        selectedTextColor: Theme.selectedText
-        visible: false
     }
 
     // Timer bar — pinned to bottom edge, shrinks as auto-close timer counts down
