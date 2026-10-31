@@ -316,8 +316,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       - [x] `Theme.qml` (1088 → 673): the built-in theme in `ThemeBuiltin.qml`; reading
         and writing theme files, managing themes and the curves library, and the bar
         geometry migration in `ThemeFiles.qml`. Theme keeps resolution and drafts.
-      - [ ] `SettingsWindow.qml` (807): the Picker and WindowTab components and the page
-        list out.
+      - [x] `SettingsWindow.qml` (807 → 481): `SettingsPicker`, `WindowTab`,
+        `SettingsPageList` (with the sliding mark), and the five shape pages as files
+        (`WidgetsShapeSettings`, `PopupsShapeSettings`, …).
       - [ ] `CurvesSettings.qml` (772): the curve point maths (pure, testable) and the graph
         out.
       - [ ] Later: `BarSectionList` 447 and `HardwareSourceList` 422 (similar row

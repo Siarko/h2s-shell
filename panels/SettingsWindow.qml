@@ -84,36 +84,6 @@ FloatingWindow {
         else
             _lastBehaviourPage = selectedPage;
         _openList = null;
-        _slideMark(_previousPage, selectedPage);
-        _previousPage = selectedPage;
-    }
-
-    // The selected page's mark slides from the page before only when the page changes
-    // within a tab: it sits at the page plus an offset that animates to nothing. Anything
-    // else that moves the list (the picker above it growing, a change of tab) moves the
-    // mark with it at once.
-    property string _previousPage: "general"
-    property real _markOffset: 0
-
-    function _slideMark(from, to) {
-        const fromItem = _categoryRepeater.itemAt(_pageIndex(from));
-        const toItem = _categoryRepeater.itemAt(_pageIndex(to));
-        _markSlide.stop();
-        if (!fromItem || !toItem || _pageOf(from).tab !== _pageOf(to).tab) {
-            _markOffset = 0;
-            return;
-        }
-        _markOffset = fromItem.y - toItem.y;
-        _markSlide.start();
-    }
-
-    NumberAnimation {
-        id: _markSlide
-        target: root
-        property: "_markOffset"
-        to: 0
-        duration: Theme.duration("slide")
-        easing: Theme.curve("slide")
     }
 
     // The theme the Appearance pages edit, by name. Entering the tab starts at the theme of
@@ -159,170 +129,9 @@ FloatingWindow {
     }
 
     // What a tab edits, picked from a list that opens over the page list under it: the
-    // profile or the theme. One list open at a time; a click anywhere else closes it.
+    // profile or the theme (SettingsPicker). One list open at a time; a click anywhere else
+    // closes it.
     property Item _openList: null
-
-    component Picker: ColumnLayout {
-        id: _picker
-        property string label
-        property string current
-        property var options: []
-        // Options shown with a • after them: the active profiles, the theme in use; and with
-        // a ✎: themes with unsaved changes
-        property var marked: []
-        property var edited: []
-        function display(name) {
-            return name + (marked.includes(name) ? " •" : "") + (edited.includes(name) ? " ✎" : "");
-        }
-        // Shown, but not changed, e.g. while the theme picked is previewed
-        property bool locked: false
-        readonly property bool open: root._openList === _optionList
-        signal picked(string name)
-
-        Layout.fillWidth: true
-        spacing: 2
-        // Above the page list, which the open list covers
-        z: 10
-
-        Text {
-            text: _picker.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textDisabled
-        }
-
-        Rectangle {
-            id: _pickerButton
-            Layout.fillWidth: true
-            height: 28
-            radius: Theme.dropdown.radius
-            color: _pickerArea.containsMouse && !_picker.locked ? Theme.surfaceHover : Theme.surface
-            opacity: _picker.locked ? 0.5 : 1
-            border.width: Theme.border.width
-            border.color: _picker.open ? Theme.accent : Theme.surfaceHoverClear
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-            Text {
-                anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 10; right: _arrow.left; rightMargin: 4 }
-                text: _picker.display(_picker.current)
-                elide: Text.ElideRight
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                font.bold: true
-                color: Theme.textPrimary
-            }
-            Text {
-                font.family: Theme.fontFamily
-                id: _arrow
-                anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
-                visible: !_picker.locked
-                text: _picker.open ? "▴" : "▾"
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-            }
-
-            MouseArea {
-                id: _pickerArea
-                anchors.fill: parent
-                hoverEnabled: true
-                enabled: !_picker.locked
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root._openList = _picker.open ? null : _optionList
-            }
-
-            // The options, over whatever is below; outside the layout, so opening it moves
-            // nothing
-            Rectangle {
-                id: _optionList
-                visible: _picker.open
-                y: parent.height + 2
-                width: parent.width
-                height: _optionColumn.height + 6
-                radius: Theme.dropdown.radius
-                color: Theme.popupBackground
-                border.width: Theme.border.width
-                border.color: Theme.outline
-
-                Column {
-                    id: _optionColumn
-                    x: 3
-                    y: 3
-                    width: parent.width - 6
-
-                    Repeater {
-                        // ScriptModel, never the bare array — see "The Repeater crash"
-                        model: ScriptModel { values: _picker.options }
-
-                        Rectangle {
-                            required property string modelData
-                            readonly property bool picked: modelData === _picker.current
-                            width: _optionColumn.width
-                            height: 24
-                            radius: Theme.listItem.radius
-                            color: picked ? Theme.accentTint : (_optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                            Text {
-                                anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 8; right: parent.right; rightMargin: 6 }
-                                text: _picker.display(parent.modelData)
-                                elide: Text.ElideRight
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBody
-                                color: parent.picked ? Theme.textPrimary : Theme.textSecondary
-                            }
-
-                            MouseArea {
-                                id: _optionArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    // The name first: closing the list does not destroy the
-                                    // row, but picking may change what the list shows
-                                    const name = parent.modelData;
-                                    root._openList = null;
-                                    _picker.picked(name);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // A tab at the top of the window
-    component WindowTab: Rectangle {
-        property string label
-        property bool picked: false
-        signal clicked
-
-        width: _tabLabel.implicitWidth + 2 * Theme.settings.tabHorizontalPadding
-        height: 28
-        radius: Theme.settings.tabRadius
-        color: picked ? Theme.accentSecondaryTint : (_tabArea.containsMouse ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
-        border.width: picked ? Theme.border.width : 0
-        border.color: Theme.accent
-        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-
-        Text {
-            id: _tabLabel
-            anchors.centerIn: parent
-            text: parent.label
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBodyLarge
-            font.bold: parent.picked
-            color: parent.picked ? Theme.textPrimary : Theme.textSecondary
-        }
-
-        MouseArea {
-            id: _tabArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: parent.clicked()
-        }
-    }
 
     Rectangle {
         anchors.fill: parent
@@ -415,23 +224,6 @@ FloatingWindow {
                 width: root._sidebarWidth
                 height: parent.height
 
-                // The selected page's mark, one for the whole list, so it slides from the
-                // old page to the new one; drawn under the list
-                Rectangle {
-                    readonly property Item target: _categoryRepeater.count > root._pageIndex(root.selectedPage)
-                        ? _categoryRepeater.itemAt(root._pageIndex(root.selectedPage)) : null
-                    visible: target !== null
-                    x: _sidebar.x + (target?.x ?? 0)
-                    // The offset slides it in from the page before (root._slideMark)
-                    y: _sidebar.y + (target?.y ?? 0) + root._markOffset
-                    width: target?.width ?? 0
-                    height: target?.height ?? 0
-                    radius: Theme.settings.sidebarItemRadius
-                    color: Theme.accentSecondaryTint
-                    border.width: Theme.border.width
-                    border.color: Theme.accent
-                }
-
                 ColumnLayout {
                     id: _sidebar
                     anchors {
@@ -462,13 +254,18 @@ FloatingWindow {
                     }
 
                     // Behaviour: the profile its pages edit, and the theme that profile uses
-                    Picker {
+                    SettingsPicker {
                         visible: !root._onAppearance && Profiles.profiles.length > 0
+                        open: root._openList === optionList
+                        onToggleRequested: root._openList = open ? null : optionList
                         label: "Profile"
                         current: Profiles.profiles[root.editIndex]?.name ?? ""
                         options: Profiles.profiles.map(profile => profile.name)
                         marked: Profiles.activeProfiles
-                        onPicked: name => root.editedName = name
+                        onPicked: name => {
+                            root._openList = null;
+                            root.editedName = name;
+                        }
                     }
                     Text {
                         visible: !root._onAppearance && root.editIndex >= 0
@@ -491,8 +288,10 @@ FloatingWindow {
                     }
 
                     // Appearance: the theme its pages edit, and the profiles that use it
-                    Picker {
+                    SettingsPicker {
                         visible: root._onAppearance
+                        open: root._openList === optionList
+                        onToggleRequested: root._openList = open ? null : optionList
                         label: "Theme"
                         current: root.editTheme
                         options: (Theme.themeNames.includes("default") ? [] : ["default"]).concat(Theme.themeNames)
@@ -500,7 +299,10 @@ FloatingWindow {
                         edited: Object.keys(Theme.drafts)
                         // The preview shows the theme picked: stop it to pick another
                         locked: root.previewing
-                        onPicked: name => root.editedTheme = name
+                        onPicked: name => {
+                            root._openList = null;
+                            root.editedTheme = name;
+                        }
                     }
                     // Under the theme: previewing it on the shell, and who uses it — one
                     // line, the whole list on hover
@@ -561,70 +363,13 @@ FloatingWindow {
                         opacity: 0.3
                     }
 
-                    Repeater {
-                        id: _categoryRepeater
-                        model: root.pages
-                        Rectangle {
-                            required property var modelData
-                            required property int index
-                            readonly property bool selected: modelData.id === root.selectedPage
-                            Layout.fillWidth: true
-                            // Only the pages of the tab that is open
-                            visible: (modelData.tab === "appearance") === root._onAppearance
-                            Layout.topMargin: modelData.separatorBefore ? 13 : 0
-                            height: 34
-                            radius: Theme.settings.sidebarItemRadius
-
-                            Rectangle {
-                                visible: !!parent.modelData.separatorBefore
-                                y: -8
-                                width: parent.width
-                                height: 1
-                                color: Theme.textDisabled
-                                opacity: 0.3
-                            }
-                            // The selected one is marked by the sliding mark above
-                            color: _categoryArea.containsMouse && !selected
-                                ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
-                            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-                            // ✎: the theme edited has unsaved changes on this page. On its
-                            // own at the right, so cutting a long name never hides it.
-                            Text {
-                                id: _changedMark
-                                visible: (Theme.drafts, (parent.modelData.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
-                                anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
-                                text: "✎"
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBodyLarge
-                                color: Theme.warning
-                            }
-
-                            Text {
-                                anchors {
-                                    verticalCenter: parent.verticalCenter
-                                    left: parent.left
-                                    leftMargin: 10
-                                    right: _changedMark.visible ? _changedMark.left : parent.right
-                                    rightMargin: 6
-                                }
-                                // A name wider than the sidebar (a larger font) is cut
-                                elide: Text.ElideRight
-                                text: parent.modelData.label
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeBodyLarge
-                                color: parent.selected ? Theme.textPrimary : Theme.textSecondary
-                                Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                            }
-
-                            MouseArea {
-                                id: _categoryArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: root.selectedPage = parent.modelData.id
-                            }
-                        }
+                    SettingsPageList {
+                        Layout.fillWidth: true
+                        pages: root.pages
+                        selectedPage: root.selectedPage
+                        tab: root._onAppearance ? "appearance" : "behaviour"
+                        editTheme: root.editTheme
+                        onPageClicked: pageId => root.selectedPage = pageId
                     }
 
                     Item {
@@ -708,82 +453,11 @@ FloatingWindow {
     Component { id: barShapeComp;      BarShapeSettings { themeName: root.editTheme } }
     Component { id: animationsComp;    AnimationsSettings { themeName: root.editTheme } }
     // The theme's shapes by kind of element (themes stage 7)
-    Component {
-        id: widgetsLookComp
-        ShapeSettings {
-            themeName: root.editTheme
-            title: "Widgets"
-            hint: "The widgets on the bar: their cells, and the workspaces' pills. The bar itself is on the Bar page."
-            sections: [
-                { title: "Cells", group: "capsule", hint: "Each widget's cell on the bar" },
-                { title: "Workspace pills", group: "workspace" },
-                { title: "Tray icons", group: "tray" }
-            ]
-        }
-    }
-    Component {
-        id: popupsComp
-        ShapeSettings {
-            themeName: root.editTheme
-            title: "Popups"
-            hint: "The popups opening from the bar, and what is in them. Their colours, and the border's, are on the Colors page."
-            sections: [
-                { title: "Popup", group: "popup" },
-                { title: "Widths", group: "popupWidth",
-                  hint: "Popups grow with the theme's text; these widen or narrow them on top of that. Each one's width as it comes out is beside it." },
-                { title: "Rows and cards", group: "row" },
-                { title: "Menu and list items", group: "listItem" },
-                { title: "Dropdowns", group: "dropdown" },
-                { title: "Power menu", group: "powerMenu" }
-            ]
-        }
-    }
-    Component {
-        id: controlsComp
-        ShapeSettings {
-            themeName: root.editTheme
-            title: "Controls"
-            hint: "Buttons, choices and fields everywhere: popups, settings, the calendar."
-            sections: [
-                { title: "Buttons", group: "button", hint: "Every button's padding and height; general buttons' corners" },
-                { title: "Save buttons", group: "saveButton" },
-                { title: "Cancel buttons", group: "cancelButton" },
-                { title: "Delete buttons", group: "deleteButton" },
-                { title: "Icon buttons", group: "iconButton" },
-                { title: "Pills", group: "pill" },
-                { title: "Text fields", group: "field" },
-                { title: "Check boxes", group: "checkbox" },
-                { title: "Tooltips", group: "tooltip" },
-                { title: "Outlines", group: "border" }
-            ]
-        }
-    }
-    Component {
-        id: notificationsLookComp
-        ShapeSettings {
-            themeName: root.editTheme
-            title: "Notifications"
-            hint: "Notifications on screen and in the panel, the volume OSD and the shell's messages. Borders' colours are on the Colors page."
-            sections: [
-                { title: "Toasts", group: "osdToast" },
-                { title: "In the panel", group: "notificationCard" },
-                { title: "Volume OSD", group: "osdVolume" },
-                { title: "Shell messages", group: "osdMessage" }
-            ]
-        }
-    }
-    Component {
-        id: otherLookComp
-        ShapeSettings {
-            themeName: root.editTheme
-            title: "Other"
-            sections: [
-                { title: "Settings window", group: "settings" },
-                { title: "Calendar", group: "calendar" },
-                { title: "Lock screen", group: "lock" }
-            ]
-        }
-    }
+    Component { id: widgetsLookComp;       WidgetsShapeSettings       { themeName: root.editTheme } }
+    Component { id: popupsComp;            PopupsShapeSettings        { themeName: root.editTheme } }
+    Component { id: controlsComp;          ControlsShapeSettings      { themeName: root.editTheme } }
+    Component { id: notificationsLookComp; NotificationsShapeSettings { themeName: root.editTheme } }
+    Component { id: otherLookComp;         OtherShapeSettings         { themeName: root.editTheme } }
     Component {
         id: themesComp
         ThemesSettings {
