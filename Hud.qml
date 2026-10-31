@@ -31,6 +31,16 @@ PanelWindow {
         Region { item: queueBadge }
         Region { item: volumeOsd }
         Region { item: shellNotifItem }
+        Region { item: launchWarning }
+    }
+
+    // ---- Launch warning ----
+    // Started without scripts/launch.sh: a banner under the bar, centred
+    LaunchWarning {
+        id: launchWarning
+        x: (hud.implicitWidth - width) / 2
+        y: Theme.bar.reservedSpace + Theme.osdToast.screenGap
+        width: implicitWidth
     }
 
     // ---- Toasts ----

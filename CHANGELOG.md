@@ -11,6 +11,18 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Settings, General: an icon theme for the shell — its notifications, tray and every
+  other icon, picked from a list of the installed themes. Automatic, the default, is the
+  system's icon theme if it is installed, else the first one found; a row of sample icons
+  under the list shows the theme picked before it is applied. It applies when the shell
+  restarts, which a "Restart to apply" button next to it does. The shell now starts
+  through `scripts/launch.sh` (Hyprland's autostart calls it), as Quickshell takes the
+  icon theme only at launch. Before, the shell had none: app icons loaded, status icons
+  such as warnings did not.
+- A banner under the bar when the shell was started directly (`qs`, `qs -c default`)
+  rather than through `scripts/launch.sh`: the icon theme setting cannot apply then, and
+  it says why and how to start the shell instead. It restarts nothing by itself, so the
+  arguments the shell was started with are never dropped; × closes it for that run.
 - Calendar: events can span several days. The event form has a start and an end date
   (DD.MM.YYYY, typed like the times: digits only where they make a date, "." moves on,
   Up and Down step, a day past the month's end becomes its last); moving the start takes

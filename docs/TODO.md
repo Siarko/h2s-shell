@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.16, the icon theme setting.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.17, formatting in notification text.
 
 ---
 
@@ -683,7 +683,12 @@ end so the numbers above keep meaning what older notes say:
       urgency or kind of message, not for "clickable" (the user's call). A card keeps
       its content while it slides away after an action closed its notification. `components/NotificationCard.qml`,
       `components/RoundedImage.qml`.
-- [ ] **11.16 Icon theme in the settings** (requested 2026-10-31)
+- [x] **11.16 Icon theme in the settings** (requested 2026-10-31)
+      Done 2026-10-31, verified on the host: `scripts/launch.sh` (start, `--restart`,
+      `--list`, `--resolve`, `--preview`), `singletons/IconThemes.qml`, a dropdown on the
+      General page with sample icons and "Restart to apply", Hyprland's autostart calling
+      the script (`hyprland.lua` backed up first), and a banner (`hud/LaunchWarning.qml`)
+      when the shell was started without it. Plan as agreed:
       The shell has no icon theme: qt6ct sets none, so Qt looks only in `hicolor` — app
       icons load, status icons (`dialog-warning`…) do not. Quickshell sets the theme once,
       at launch (`QS_ICON_THEME` or `//@ pragma IconTheme`); nothing changes it live.

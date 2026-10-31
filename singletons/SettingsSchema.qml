@@ -19,6 +19,9 @@ import QtQuick
 //   suffix   — unit shown after a number or slider, e.g. "s"
 //   hint     — a short explanation shown under the setting
 //   options  — for enum: [{ value, label }]
+//   optionsFrom — for enum: where the options come from at run time instead
+//              ("iconThemes": the installed icon themes, IconThemes)
+//   presentation — for enum: "dropdown" for a list to pick from instead of pills
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
 //   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"],
@@ -192,6 +195,9 @@ Singleton {
         { key: "appearance.theme", label: "Theme", group: "appearance",
           type: "string", default: "default", suggestions: "themes",
           hint: "A file in ~/.config/h2s_shell/themes/, without .json. \"default\" without a file is the built-in look." },
+        { key: "appearance.iconTheme", label: "Icon theme", group: "appearance",
+          type: "enum", default: "", global: true, optionsFrom: "iconThemes", presentation: "dropdown",
+          hint: "Automatic is the system's icon theme if installed, else the first one found. Applies when the shell restarts." },
         { key: "animation.speed", label: "Animation speed", group: "appearance",
           type: "slider", min: 25, max: 400, suffix: "%", default: 100,
           hint: "200% is twice as fast. How each animation moves is up to the theme." },

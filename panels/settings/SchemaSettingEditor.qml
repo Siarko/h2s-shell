@@ -81,6 +81,10 @@ Item {
         return [];
     }
 
+    readonly property bool _isIconTheme: entry?.optionsFrom === "iconThemes"
+    on_IsIconThemeChanged: if (_isIconTheme) IconThemes.refresh()
+    Component.onCompleted: if (_isIconTheme) IconThemes.refresh()
+
     readonly property var _choices: {
         if (!entry)
             return [];
@@ -92,8 +96,21 @@ Item {
             return values.map(ms => ({ value: ms, label: _intervalLabel(ms) }));
         }
         if (entry.type === "enum")
-            return entry.options;
+            return entry.optionsFrom === "iconThemes" ? _iconThemeOptions : entry.options;
         return [];
+    }
+
+    // The icon theme's choices: automatic, the installed themes, and the stored one when it
+    // is not installed (any more), so the list still shows what is set
+    readonly property var _iconThemeOptions: {
+        if (!_isIconTheme)
+            return [];
+        const options = [{ value: "", label: "Automatic" }]
+            .concat(IconThemes.installed.map(name => ({ value: name, label: name })));
+        const stored = String(shownValue ?? "");
+        if (stored !== "" && !IconThemes.installed.includes(stored))
+            options.push({ value: stored, label: stored + " (not installed: automatic applies)" });
+        return options;
     }
 
     Layout.fillWidth: true
@@ -468,9 +485,86 @@ Item {
             }
         }
 
+        // An enum shown as a list to pick from (`presentation: "dropdown"`): many choices,
+        // or ones known only at run time
+        Dropdown {
+            visible: root.entry?.presentation === "dropdown"
+            width: Math.min(parent.width, 320)
+            options: root._choices
+            value: root.shownValue
+            opacity: root._dimmed ? 0.5 : 1
+            onPicked: value => {
+                if (value !== root.shownValue)
+                    root.edited(value);
+            }
+        }
+
+        // A few icons of the icon theme picked — or, automatic or not installed, of the one
+        // in use — drawn from their files (IconThemes.preview)
+        Flow {
+            id: _iconPreview
+            visible: root._isIconTheme && icons.length > 0
+            width: parent.width
+            spacing: 6
+            readonly property string theme: {
+                if (!root._isIconTheme)
+                    return "";
+                const picked = String(root.shownValue ?? "");
+                return IconThemes.installed.includes(picked) ? picked : IconThemes.current;
+            }
+            onThemeChanged: IconThemes.preview(theme)
+            Component.onCompleted: IconThemes.preview(theme)
+            readonly property var icons: IconThemes.previews[theme] ?? []
+
+            Repeater {
+                // ScriptModel, never the bare array (CLAUDE.md)
+                model: ScriptModel { values: _iconPreview.icons }
+                Image {
+                    id: _previewIcon
+                    required property var modelData
+                    width: 28
+                    height: 28
+                    sourceSize: Qt.size(56, 56)
+                    source: "file://" + modelData.file
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    HoverHandler { id: _previewHover }
+                    HoverTip { target: _previewIcon; shown: _previewHover.hovered; text: _previewIcon.modelData.name }
+                }
+            }
+        }
+
+        // The icon theme: the one in use, and a restart when the setting changed — it
+        // applies only at launch (IconThemes)
+        Row {
+            visible: root._isIconTheme
+            width: parent.width
+            spacing: 8
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - (_restartButton.visible ? _restartButton.width + parent.spacing : 0)
+                wrapMode: Text.WordWrap
+                text: IconThemes.current !== ""
+                    ? "In use: " + IconThemes.current + (IconThemes.restartNeeded ? " — the change applies after a restart." : "")
+                    : "In use: none — the shell was started without scripts/launch.sh."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: IconThemes.restartNeeded ? Theme.warning : Theme.textMuted
+            }
+
+            SmallButton {
+                id: _restartButton
+                anchors.verticalCenter: parent.verticalCenter
+                visible: IconThemes.restartNeeded
+                label: "Restart to apply"
+                onClicked: IconThemes.restart()
+            }
+        }
+
         // Intervals and enums: one pill per choice; an inherited value is shown dimmed
         Flow {
-            visible: root._choices.length > 0
+            visible: root._choices.length > 0 && root.entry?.presentation !== "dropdown"
             width: parent.width
             spacing: 4
 

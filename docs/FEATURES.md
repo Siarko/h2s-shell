@@ -155,7 +155,7 @@ Behaviour pages:
 | Page | Covers |
 |---|---|
 | **Profiles** | the profile list: conditions, order, enable switch, rename, delete, simulation of conditions for testing |
-| **General** | debug switches (always global); the profile's theme, animation speed and reduced motion |
+| **General** | debug switches and the icon theme (always global; the icon theme is picked from the installed ones, with sample icons, and applies on a restart — "Restart to apply"); the profile's theme, animation speed and reduced motion |
 | **Calendar** | enabling Google Calendar, the account connection, which calendars are enabled, debug |
 | **Media** | audio visualiser style, layout and frame rate |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
@@ -208,6 +208,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `hyprctl` / Hyprland IPC | workspaces, logout — expects a Lua config (`hyprland.lua`, Hyprland 0.5x): special workspaces and logout dispatch `hl.dsp.*` Lua expressions |
 | `systemctl` | restart, shutdown |
 | `notify-send` | the shell's own outbound notifications |
+| `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |
 | `pttd` / `ptt` | dictation (optional) |
