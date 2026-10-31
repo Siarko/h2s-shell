@@ -13,8 +13,8 @@ verified on the host — the dev container has no `quickshell`.
 **Status (2026-10-31, after 2.0.0):** stages 1–3 and 5–10 done. What is left is stage 11,
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
-(11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Next: 11.1, the
-tray menu's entrance.
+(11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Next: 11.2, multi-day
+events.
 
 ---
 
@@ -629,7 +629,7 @@ What is left, in the order the user set after 2.0.0: the small requests first, t
 bar's position and shape, selector styling, matugen, compositor integration, and touch
 input last. Each title says its old number, for older notes and commits.
 
-- [ ] **11.1 A tray menu opening fresh slides in from the bar** (was 10.16) (requested 2026-10-30; moved
+- [x] **11.1 A tray menu opening fresh slides in from the bar** (was 10.16) (requested 2026-10-30; moved
       from 9.10)
       Opening a tray menu with no popup open (not switching from another icon's menu),
       the menu slides in sideways from the right, as a switch would. It should come in
@@ -638,6 +638,8 @@ input last. Each title says its old number, for older notes and commits.
       a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
       `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
       open should show the menu in place and leave the entrance to the popup.
+      Done 2026-10-31, verified on the host: a fresh menu is put straight into the visible
+      slot in `Component.onCompleted`, without a transition.
 - [ ] **11.2 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
       The form takes one day — the one selected in the calendar — and, for a timed event,
       a start and end time on it; there is no way to give an end date. Google and the

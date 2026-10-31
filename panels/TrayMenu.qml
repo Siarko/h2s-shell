@@ -31,8 +31,12 @@ Item {
     // 0 → slot0/opener0 is showing, 1 → slot1/opener1 is showing.
     property int activeSlot: 0
 
+    // A menu opening fresh (no popup open, or another panel's) is shown in place: the
+    // popup brings it in from the bar, as it does every panel. Only a switch from another
+    // icon's menu slides sideways (onRequestChanged).
     Component.onCompleted: {
-        changeMenu();
+        anchorOpener.menu = root.request?.menu ?? null;
+        opener0.menu = root.request?.menu ?? null;
         _built = true;
     }
 

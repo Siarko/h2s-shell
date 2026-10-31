@@ -10,6 +10,10 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Fixed
+- A tray menu opening with no menu open comes in from the bar like every other popup;
+  it used to slide in sideways, as when switching from another icon's menu.
+
 ## [2.0.0] - 2026-10-31
 
 Themes: the shell's look — colours, fonts, shapes, animations and the bar's geometry —
