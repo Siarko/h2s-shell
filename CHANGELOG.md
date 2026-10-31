@@ -163,6 +163,8 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- Bluetooth: Scan scans. `bluetoothctl scan on` exits at once in recent BlueZ, and the
+  scan ended with it, so nothing was ever found and "Scanning…" never showed.
 - Curves page: the preview's second square moves with the curve compared with; both used
   to move with the curve being edited.
 - Music visualiser: the right channel of the vertical layout stays at the panel's edge

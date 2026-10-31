@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
-import Quickshell.Io
 import qs.components
 import qs.singletons
 
@@ -14,25 +13,8 @@ Item {
 
     property var adapter: Bluetooth.defaultAdapter
 
-    // Discovery is started/stopped via bluetoothctl — the only remaining process usage,
-    // since Quickshell exposes adapter.discovering as read-only.
-    Process {
-        id: scanProcess
-        command: ["bluetoothctl", "scan", "on"]
-        onRunningChanged: {
-            if (!running)
-                scanTimer.stop();
-        }
-    }
-
-    Timer {
-        id: scanTimer
-        interval: 30000
-        onTriggered: {
-            if (scanProcess.running)
-                scanProcess.running = false;
-        }
-    }
+    // A scan runs while the panel is open, at most (BluetoothDiscovery)
+    Component.onDestruction: BluetoothDiscovery.stop()
 
     Column {
         id: col
@@ -113,14 +95,7 @@ Item {
                 SmallButton {
                     label: root.adapter?.discovering ? "Stop" : "Scan"
                     checked: root.adapter?.discovering ?? false
-                    onClicked: {
-                        if (scanProcess.running) {
-                            scanProcess.running = false;
-                        } else {
-                            scanTimer.restart();
-                            scanProcess.running = true;
-                        }
-                    }
+                    onClicked: BluetoothDiscovery.toggle()
                 }
             }
 

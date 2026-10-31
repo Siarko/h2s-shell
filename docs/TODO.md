@@ -330,9 +330,15 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
         convention says; an event of a series offers its three deletions in
         `RecurringDeleteChoice.qml`. `NotificationCard` (360 → 252): the inline reply in
         `NotificationReply.qml`, the code chips in `CodeChips.qml`.
-- [ ] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)
+- [x] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)
       Both start processes themselves, against "state and I/O live in singletons/"
       (CLAUDE.md), as MusicPanel did with cava.
+      Done 2026-10-31: `Session` (shutdown, restart, logout — the scripts started
+      detached, so the popup closing cannot stop them) and `BluetoothDiscovery` (the
+      `bluetoothctl` scan, now `--timeout 30`: plain `scan on` exits at once in BlueZ 5.87
+      and the scan died with it, so Scan never found anything; the panel stops it when
+      it closes). No
+      view file under panels/, widgets/, hud/ or components/ starts a process now.
 
 ## Stage 7 — Security  [before the Google account is set up on the new machine]
 

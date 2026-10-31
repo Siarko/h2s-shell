@@ -1,8 +1,7 @@
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import qs.singletons
 
+// The power popup: shut down, restart, log out (Session)
 Item {
     id: powerMenu
     implicitWidth: Theme.popupWidth("power", 200)
@@ -18,17 +17,17 @@ Item {
                 {
                     icon: "⏻",
                     label: "Shutdown",
-                    script: "scripts/shutdown.sh"
+                    run: () => Session.shutdown()
                 },
                 {
                     icon: "↻",
                     label: "Restart",
-                    script: "scripts/restart.sh"
+                    run: () => Session.restart()
                 },
                 {
                     icon: "󰍃",
                     label: "Logout",
-                    script: "scripts/logout.sh"
+                    run: () => Session.logout()
                 }
             ]
 
@@ -46,7 +45,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: proc.running = true
+                    onClicked: modelData.run()
 
                     Row {
                         anchors.centerIn: parent
@@ -66,12 +65,6 @@ Item {
                             color: Theme.textPrimary
                         }
                     }
-                }
-
-                Process {
-                    id: proc
-                    command: ["bash", modelData.script]
-                    workingDirectory: Quickshell.shellDir
                 }
             }
         }
