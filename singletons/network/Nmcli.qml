@@ -50,15 +50,29 @@ Singleton {
             const signal = parseInt(parts[1]) || 0;
             const inUse = parts[3].trim() === "*";
             const frequency = parseInt(parts[4].trim()) || 0;
-            networks.push({
-                ssid: ssid,
-                signal: signal,
-                security: parts[2].trim(),
-                inUse: inUse,
-                band: frequency >= 3000 ? "5G" : (frequency > 0 ? "2.4G" : "")
-            });
+            const band = frequency >= 3000 ? "5G" : (frequency > 0 ? "2.4G" : "");
             if (inUse && signal > signalInUse)
                 signalInUse = signal;
+            // nmcli lists each access point: one network on two bands, or a mesh, is
+            // several lines with one SSID. The panel keeps a row's state by SSID, so a
+            // network is one entry — the strongest access point's signal and security,
+            // in use if any is, with every band it is on
+            const known = networks.find(network => network.ssid === ssid);
+            if (!known) {
+                networks.push({ ssid: ssid, signal: signal, security: parts[2].trim(), inUse: inUse, bands: band ? [band] : [] });
+                continue;
+            }
+            if (signal > known.signal) {
+                known.signal = signal;
+                known.security = parts[2].trim();
+            }
+            known.inUse = known.inUse || inUse;
+            if (band && !known.bands.includes(band))
+                known.bands.push(band);
+        }
+        for (const network of networks) {
+            network.band = network.bands.sort().join(" · ");
+            delete network.bands;
         }
         return { networks: networks, signalInUse: signalInUse };
     }

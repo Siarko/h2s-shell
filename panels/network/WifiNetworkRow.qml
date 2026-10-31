@@ -28,8 +28,11 @@ Rectangle {
     signal revealToggled
 
     readonly property string ssid: modelData.ssid
-    // A delegate now showing another network shows that network's password
-    onSsidChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
+    // The field follows the password kept for this row's network: when the row is given
+    // another network, it shows that one's. Not on ssidChanged — that can run before
+    // passwordText has followed the new SSID, and put the old network's password in the
+    // new one's field, so a typed password stayed with the place in the list.
+    onPasswordTextChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
     readonly property bool isSaved: WifiManager.savedSsids.includes(modelData.ssid)
     readonly property bool needsPassword: modelData.security !== "--" && modelData.security !== "" && !isSaved
 

@@ -80,6 +80,16 @@ TestCase {
             assertEqual(Nmcli.wifiNetworks(["Cafe:50:WPA2::2412 MHz"]).signalInUse, -1, "wifi list: none in use");
             assertEqual(Nmcli.wifiNetworks(["Home:40:WPA2:*:2412 MHz", "Home:81:WPA2:*:5180 MHz"]).signalInUse, 81,
                 "wifi list: listed twice in use (two bands): the stronger");
+            const merged = Nmcli.wifiNetworks([
+                "Home:40:WPA1:*:2412 MHz", "Cafe:50:WPA2::2437 MHz", "Home:81:WPA2::5180 MHz", "Home:20:WPA2::2462 MHz"
+            ]).networks;
+            assertEqual(merged.length, 2, "wifi list: one SSID from several access points is one network");
+            assertEqual(merged[0].ssid, "Home", "wifi list: merged network keeps its first place");
+            assertEqual(merged[0].signal, 81, "wifi list: merged network: the strongest signal");
+            assertEqual(merged[0].security, "WPA2", "wifi list: merged network: the strongest one's security");
+            assert(merged[0].inUse, "wifi list: merged network: in use if any access point is");
+            assertEqual(merged[0].band, "2.4G · 5G", "wifi list: merged network: every band");
+            assertEqual(merged[1].band, "2.4G", "wifi list: single network: its band");
         }
 
         // --- WifiManager._processSaved ---

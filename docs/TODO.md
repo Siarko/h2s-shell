@@ -289,8 +289,10 @@ Moved to stage 11 (11.9–11.14) on 2026-10-31, last in the agreed order: 4.1 �
       VPN, IP ×2), is `singletons/io/CommandQuery.qml`; the Wi-Fi list and saved-profile
       parsers are pure functions in `Nmcli`; the two connect functions are one. Scanning
       stays in WifiManager, having its own rescan and repeat logic.
-      **Functional check on the host still owed** (user busy with Wi-Fi elsewhere,
-      2026-10-31): radio toggle, connect/disconnect/forget, VPN, IP and DNS, bar icon.
+      Functional check on the host done 2026-10-31. It found a typed password jumping
+      to another network when the list refreshed (the row copied the password on
+      ssidChanged, before `passwordText` followed the new SSID) — fixed, and one SSID
+      from several access points is now one row, as the row state is kept by SSID.
 - [x] **6.7 Remaining large files** [P3]
       `MusicPanel` 481, `BarSectionList` 425, `WorkspacesWidgetSettings` 394,
       `EventCard` 385, `HardwareSourceList` 378, `NotificationCard` 359.

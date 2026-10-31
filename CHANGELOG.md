@@ -42,6 +42,10 @@ section to the new version and date.
   action used to be an empty button.
 
 ### Fixed
+- Wi-Fi: a password typed into an open network row stays with that network when the
+  list refreshes; it used to jump to whichever network took the row's place.
+- Wi-Fi: a network seen through several access points — on two bands, or a mesh — is one
+  row, with its strongest signal and every band it is on, instead of a row for each.
 - Notifications: an icon the icon theme lacks shows nothing instead of a purple
   checkerboard.
 - Notifications: a toast whose button was clicked keeps its content while it slides
