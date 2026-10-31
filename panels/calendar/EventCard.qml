@@ -19,8 +19,40 @@ Rectangle {
         return ["sun","mon","tue","wed","thu","fri","sat"][date.getDay()];
     }
 
+    // A card's button: a glyph on a button's background, square, as tall as a button
+    // (and as DeleteButton beside it), so it is clear what is clicked
+    component ActionButton: Rectangle {
+        id: _actionButton
+        property string glyph
+        signal clicked
+        width: height
+        height: Math.max(Theme.button.minHeight, _glyphText.implicitHeight + 2 * Theme.button.verticalPadding)
+        radius: Theme.button.radius
+        color: _actionArea.containsMouse ? Theme.surfaceHover : Theme.surface
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+        Text {
+            id: _glyphText
+            anchors.centerIn: parent
+            text: _actionButton.glyph
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeMedium
+            color: _actionArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+        }
+
+        MouseArea {
+            id: _actionArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: _actionButton.clicked()
+        }
+    }
+
     property bool expanded: false
     property bool editing: false
+    // The edit form, for the calendar to fill its dates
+    readonly property alias form: _editForm
     // An event of a series being deleted: the choice of what to delete replaces the summary
     // (RecurringDeleteChoice). A single event asks on its DeleteButton instead.
     property bool confirmingDelete: false
@@ -87,6 +119,7 @@ Rectangle {
             spacing: 2
 
             Text {
+                id: _titleText
                 width: parent.width
                 text: root.modelData.title
                 color: Theme.textPrimary
@@ -176,13 +209,14 @@ Rectangle {
         }
         submitLabel: "Save"
         submitKind: "saveChange"
-        onSubmitted: (title, description, startTime, endTime) => {
-            GoogleCalendar.updateEvent({
-                year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
+        // The event's own dates, never the day selected in the calendar: a multi-day event
+        // edited from its second day keeps its first
+        onSubmitted: event => {
+            GoogleCalendar.updateEvent(Object.assign(event, {
+                year: root.displayYear, month: root.displayMonth,
                 eventId: root.modelData.id, calendarId: root.modelData.calendarId,
-                title, description, startTime, endTime,
                 colorId: _editForm.selectedColorId || null,
-                rrule: _editForm.rrule || null })
+                rrule: _editForm.rrule || null }))
             root.editing = false
         }
         onCancelled: root.editing = false
@@ -191,46 +225,38 @@ Rectangle {
     // Pre-fill edit form when editing begins
     onEditingChanged: {
         if (editing) {
-            _editForm.populate(
-                modelData.title !== "(No title)" ? modelData.title : "",
-                modelData.startTimeStr,
-                modelData.endTimeStr,
-                modelData.description || "",
-                modelData.startTimeStr === "",
-                modelData.colorId ?? "",
-                modelData.rrule ?? ""
-            )
+            _editForm.populate({
+                title: modelData.title !== "(No title)" ? modelData.title : "",
+                description: modelData.description || "",
+                startDate: modelData.startDate,
+                endDate: modelData.endDate,
+                startTime: modelData.startTimeStr,
+                endTime: modelData.endTimeStr,
+                allDay: modelData.startTimeStr === "",
+                colorId: modelData.colorId ?? "",
+                rrule: modelData.rrule ?? ""
+            })
         }
     }
 
     // Edit / Delete action buttons — higher z, intercept clicks in their area
     Row {
         id: _actions
+        // Not for events of a read-only calendar (holidays, say): Google would refuse
         visible: !root.editing && !root.confirmingDelete && GoogleCalendar.available
+            && (GoogleCalendar.calendars[root.modelData.calendarId]?.writable ?? true)
         anchors.right: parent.right
-        anchors.verticalCenter: parent.top
-        anchors.verticalCenterOffset: root._summaryHeight / 2
         anchors.rightMargin: 6
-        spacing: 6
+        // Level with the title, so they read as the event's own buttons
+        y: _summaryLines.y + _titleText.y + _titleText.height / 2 - height / 2
+        spacing: 4
 
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "✏"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBodyLarge
-            color: _editBtnArea.containsMouse ? Theme.textSecondary : Theme.textMuted
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-            MouseArea {
-                id: _editBtnArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    _deleteButton.asking = false
-                    root.expanded = false
-                    root.editing = true
-                }
+        ActionButton {
+            glyph: "󰏫"  // nf-md-pencil: "✏" drew tiny and blurred in the theme font
+            onClicked: {
+                _deleteButton.asking = false
+                root.expanded = false
+                root.editing = true
             }
         }
 
@@ -240,6 +266,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             visible: !root._recurring
             label: "✕"
+            fontSize: Theme.fontSizeMedium
             confirmLabel: "Delete?"
             cancelTip: "Keep the event"
             onConfirmed: GoogleCalendar.deleteEvent({
@@ -248,22 +275,10 @@ Rectangle {
         }
 
         // An event of a series: what to delete is chosen below
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
+        ActionButton {
             visible: root._recurring
-            text: "✕"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBodyLarge
-            color: _deleteSeriesArea.containsMouse ? Theme.textSecondary : Theme.textMuted
-            Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
-
-            MouseArea {
-                id: _deleteSeriesArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.confirmingDelete = true
-            }
+            glyph: "✕"
+            onClicked: root.confirmingDelete = true
         }
     }
 

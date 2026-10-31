@@ -52,14 +52,28 @@ Singleton {
         const calendarColor = calendar ? (calendar?.primary ? null : calendar.color) : null;
 
         let startTime = null;
+        let endTime = null;
+        // The first and last day as keys, for the event form: a timed event's end date is
+        // the day it ends on, an all-day event's its last day (Google's end date is the
+        // day after)
+        let startDate = "";
+        let endDate = "";
+        // The last day it takes up in the calendar
+        let lastDate = "";
         let allDayDuration = 0;
         let allDayStartDate = null;
         let allDayEndDate = null;
 
         if (data.start && data.start.dateTime) {
             startTime = new Date(data.start.dateTime);
+            endTime = new Date(data.end?.dateTime ?? data.start.dateTime);
             startTimeText = _clock(startTime);
-            endTimeText = _clock(new Date(data.end.dateTime));
+            endTimeText = _clock(endTime);
+            startDate = CalendarDates.keyOfDate(startTime);
+            endDate = CalendarDates.keyOfDate(endTime);
+            // Ending at midnight, it does not reach into that day (as in eventDayKeys)
+            const endsAtMidnight = endTime.getHours() === 0 && endTime.getMinutes() === 0 && endTime.getSeconds() === 0;
+            lastDate = endsAtMidnight && endTime > startTime ? CalendarDates.addDays(endDate, -1) : endDate;
             timeText = startTimeText + " - " + endTimeText;
         } else if (data.start && data.start.date) {
             const startParts = data.start.date.split("-");
@@ -70,7 +84,10 @@ Singleton {
             if (endExclusive <= allDayStartDate)
                 endExclusive = new Date(allDayStartDate.getFullYear(), allDayStartDate.getMonth(), allDayStartDate.getDate() + 1);
             allDayEndDate = new Date(endExclusive.getTime() - 86400000);
-            allDayDuration = (endExclusive.getTime() - allDayStartDate.getTime()) / 86400000;
+            allDayDuration = Math.round((endExclusive.getTime() - allDayStartDate.getTime()) / 86400000);
+            startDate = CalendarDates.keyOfDate(allDayStartDate);
+            endDate = CalendarDates.keyOfDate(allDayEndDate);
+            lastDate = endDate;
         }
 
         return {
@@ -79,6 +96,10 @@ Singleton {
             description: data.description,
             eventType: data.eventType,
             startTime: startTime,
+            endTime: endTime,
+            startDate: startDate,
+            endDate: endDate,
+            lastDate: lastDate,
             startTimeStr: startTimeText,
             endTimeStr: endTimeText,
             time: timeText,
@@ -100,7 +121,11 @@ Singleton {
             id: item.id,
             name: item.summary || item.id,
             color: item.backgroundColor || "#5b9bf5",
-            primary: item.primary
+            primary: item.primary,
+            // Events can be added, changed and deleted only with the owner's or a writer's
+            // access; holiday and other subscribed calendars are read-only ("reader"). A
+            // calendar without a role (never so from Google) counts as writable, as before.
+            writable: !item.accessRole || item.accessRole === "owner" || item.accessRole === "writer"
         };
     }
 
@@ -115,11 +140,12 @@ Singleton {
         return first.startTime > second.startTime ? -1 : 1;
     }
 
-    // An event as Google takes it, from the event form's values — { year, month (0-based),
-    // day, title, description, colorId, rrule, startTime and endTime ("HH:MM", none for all
-    // day) } — in the time zone `offset` ("+02:00")
-    function eventBody(data, offset) {
-        const dateText = CalendarDates.dateKey(data.year, data.month, data.day);
+    // The body sent to Google for an event the form made: `data` has startDate and endDate
+    // ("YYYY-MM-DD"; for all day the last day, included), startTime and endTime ("HH:MM",
+    // empty for all day), title, description, colorId, rrule. `offsetFor(dateKey, time)`
+    // gives the UTC offset text at that moment — per moment, since a summer event made in
+    // winter has another offset than today's.
+    function eventBody(data, offsetFor) {
         const body = {
             summary: data.title
         };
@@ -138,17 +164,27 @@ Singleton {
             date: null,
             dateTime: null
         };
+        const endDate = data.endDate || data.startDate;
         if (data.startTime) {
-            body.start.dateTime = dateText + "T" + data.startTime + ":00" + offset;
-            body.end.dateTime = dateText + "T" + (data.endTime || data.startTime) + ":00" + offset;
+            const endTime = data.endTime || data.startTime;
+            body.start.dateTime = data.startDate + "T" + data.startTime + ":00" + offsetFor(data.startDate, data.startTime);
+            body.end.dateTime = endDate + "T" + endTime + ":00" + offsetFor(endDate, endTime);
         } else {
-            // Google's all-day end date is exclusive. Sending the start date again creates
-            // a zero-length event that the phone still shows but eventDayKeys drops.
-            const nextDay = new Date(data.year, data.month, data.day + 1);
-            body.start.date = dateText;
-            body.end.date = CalendarDates.dateKey(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
+            // Google's all-day end date is exclusive: the day after the last. Sending the
+            // last day itself creates a zero-length event that the phone still shows but
+            // eventDayKeys drops.
+            body.start.date = data.startDate;
+            body.end.date = CalendarDates.addDays(endDate, 1);
         }
         return body;
+    }
+
+    // The local UTC offset text at a moment: dateKey "YYYY-MM-DD", time "HH:MM"
+    function localOffsetAt(dateKey, time) {
+        const date = CalendarDates.parseDateKey(dateKey);
+        const parts = (time || "00:00").split(":");
+        date.setHours(parseInt(parts[0]), parseInt(parts[1]));
+        return offsetText(-date.getTimezoneOffset());
     }
 
     // A series' recurrence lines cut to end the day before the given one (month 0-based):

@@ -67,7 +67,9 @@ TestCase {
         assertEqual(GoogleCalendarData.offsetText(0), "+00:00", "UTC");
 
         const calendar = GoogleCalendarData.calendar({ id: "work@x", summary: "Work", backgroundColor: "#123456" });
-        assertEqual(JSON.stringify(calendar), JSON.stringify({ id: "work@x", name: "Work", color: "#123456" }), "a calendar: name and colour");
+        assertEqual(GoogleCalendarData.calendar({ id: "h", accessRole: "reader" }).writable, false, "a holiday calendar is read-only");
+        assertEqual(GoogleCalendarData.calendar({ id: "o", accessRole: "owner" }).writable, true, "one's own is writable");
+        assertEqual(JSON.stringify(calendar), JSON.stringify({ id: "work@x", name: "Work", color: "#123456", writable: true }), "a calendar: name and colour; no role, writable");
         assertEqual(GoogleCalendarData.calendar({ id: "a@x" }).name, "a@x", "a calendar without a name: its id");
 
         const timed = GoogleCalendarData.event({ id: "e1", summary: "Standup", start: { dateTime: "2026-03-05T09:30:00" }, end: { dateTime: "2026-03-05T10:00:00" } },
@@ -88,14 +90,61 @@ TestCase {
         assertEqual(GoogleCalendarData.event({ id: "e5", start: { date: "2026-03-05" }, end: { date: "2026-03-05" } }, calendar, {}, "#ffffff").allDayDuration,
             1, "zero-length all-day event: one day");
 
-        const body = GoogleCalendarData.eventBody({ year: 2026, month: 2, day: 5, title: "Lunch", startTime: "12:00", endTime: "13:00", colorId: "2", rrule: "RRULE:FREQ=WEEKLY;INTERVAL=1" }, "+01:00");
+        const plusOne = () => "+01:00";
+        const body = GoogleCalendarData.eventBody({ startDate: "2026-03-05", endDate: "2026-03-05", title: "Lunch", startTime: "12:00", endTime: "13:00", colorId: "2", rrule: "RRULE:FREQ=WEEKLY;INTERVAL=1" }, plusOne);
         assertEqual(body.start.dateTime, "2026-03-05T12:00:00+01:00", "a timed event's start, with the offset");
         assertEqual(body.end.dateTime, "2026-03-05T13:00:00+01:00", "and its end");
         assertEqual(body.recurrence.join(), "RRULE:FREQ=WEEKLY;INTERVAL=1", "its recurrence");
         assertEqual(body.description, undefined, "no description: none sent");
-        const allDayBody = GoogleCalendarData.eventBody({ year: 2026, month: 1, day: 28, title: "Trip" }, "+01:00");
+        const allDayBody = GoogleCalendarData.eventBody({ startDate: "2026-02-28", endDate: "2026-02-28", title: "Trip" }, plusOne);
         assertEqual(allDayBody.start.date + " " + allDayBody.end.date, "2026-02-28 2026-03-01", "all day: end date the next day, across a month");
         assertEqual(allDayBody.start.dateTime, null, "all day: no times");
+        const longTrip = GoogleCalendarData.eventBody({ startDate: "2026-10-30", endDate: "2026-11-02", title: "Trip" }, plusOne);
+        assertEqual(longTrip.start.date + " " + longTrip.end.date, "2026-10-30 2026-11-03", "several days: Google's end the day after the last");
+        const overnight = GoogleCalendarData.eventBody({ startDate: "2026-10-31", endDate: "2026-11-01", title: "Party", startTime: "22:00", endTime: "02:00" },
+            (dateKey, time) => dateKey === "2026-10-31" ? "+01:00" : "+00:00");
+        assertEqual(overnight.start.dateTime + " " + overnight.end.dateTime, "2026-10-31T22:00:00+01:00 2026-11-01T02:00:00+00:00",
+            "a timed event over days: each end its own date and offset");
+        assertEqual(GoogleCalendarData.localOffsetAt("2026-07-01", "12:00"),
+            GoogleCalendarData.offsetText(-new Date(2026, 6, 1, 12, 0).getTimezoneOffset()), "the local offset at a moment, not today's");
+
+        // --- dates for the event form ---
+        assertEqual(CalendarDates.parseDateKey("2026-02-29"), null, "no 29 February in 2026");
+        assertEqual(CalendarDates.parseDateKey("2028-02-29").getDate(), 29, "but in 2028");
+        assertEqual(CalendarDates.parseDateKey("31.10.2026"), null, "only YYYY-MM-DD");
+        assertEqual(CalendarDates.addDays("2026-12-30", 3), "2027-01-02", "days added across a year");
+        assertEqual(CalendarDates.daysBetween("2026-10-24", "2026-10-26"), 2, "days between, across the end of summer time");
+        const span = { start: "2026-10-30", end: "2026-11-01" };
+        assertEqual(JSON.stringify(CalendarDates.spanWithStart(span, "2026-11-05")), JSON.stringify({ start: "2026-11-05", end: "2026-11-07" }),
+            "a moved start takes the end along");
+        assertEqual(JSON.stringify(CalendarDates.spanWithEnd(span, "2026-11-04")), JSON.stringify({ start: "2026-10-30", end: "2026-11-04" }),
+            "a later end: only the end");
+        assertEqual(JSON.stringify(CalendarDates.spanWithEnd(span, "2026-10-28")), JSON.stringify({ start: "2026-10-28", end: "2026-10-30" }),
+            "an end before the start becomes the start, the length kept");
+
+        // --- bars of events spanning days ---
+        const spanEvent = (id, start, last) => ({ id: id, color: "#" + id, startDate: start, lastDate: last });
+        const bars = CalendarDates.dayBars([
+            spanEvent("a", "2026-10-29", "2026-11-03"),   // Thursday to Tuesday: across a week
+            spanEvent("b", "2026-10-30", "2026-10-31"),
+            spanEvent("c", "2026-11-02", "2026-11-02"),   // one day: no bar
+            spanEvent("d", "2026-11-01", "2026-11-02"),   // after b ends: b's lane again
+            spanEvent("e", "2026-09-20", "2026-09-30")    // before the grid starts
+        ], "2026-09-28", "2026-11-08");
+        assertEqual(bars["2026-10-29"].map(bar => bar.id + bar.lane).join(), "a0", "the first bar in the lowest lane");
+        assertEqual(bars["2026-10-30"].map(bar => bar.id + bar.lane).join(), "a0,b1", "a second one above it");
+        assertEqual(bars["2026-11-02"].map(bar => bar.id + bar.lane).join(), "a0,d1", "a lane free again is taken; single days have no bar");
+        assertEqual(bars["2026-11-03"][0].isEnd && !bars["2026-11-02"][0].isEnd, true, "the end marked on the last day only");
+        assertEqual(bars["2026-11-02"][0].isStart, false, "continuing on a new week: no rounded start");
+        assertEqual(bars["2026-09-28"][0].isStart, false, "cut off by the grid's start: not its start");
+        assertEqual(bars["2026-09-30"][0].isEnd, true, "but its real end is");
+        assertEqual(bars["2026-11-04"], undefined, "nothing after the last bar");
+
+        const timedOverDays = GoogleCalendarData.event({ id: "e6", start: { dateTime: _at(2026, 9, 31, 22, 0) }, end: { dateTime: _at(2026, 10, 1, 2, 0) } }, calendar, {}, "#ffffff");
+        assertEqual(timedOverDays.startDate + " " + timedOverDays.endDate, "2026-10-31 2026-11-01", "a timed event's dates: the day it ends on");
+        const untilMidnight = GoogleCalendarData.event({ id: "e7", start: { dateTime: _at(2026, 9, 31, 20, 0) }, end: { dateTime: _at(2026, 10, 1, 0, 0) } }, calendar, {}, "#ffffff");
+        assertEqual(untilMidnight.endDate + " " + untilMidnight.lastDate, "2026-11-01 2026-10-31", "ending at midnight: its last day is the one before");
+        assertEqual(allDay.startDate + " " + allDay.endDate, "2026-03-05 2026-03-07", "an all-day event's dates: its last day, not Google's end");
 
         assertEqual(GoogleCalendarData.recurrenceEndingBefore(["RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO"], 2026, 2, 1).join(),
             "RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20260228", "a series cut to end the day before: COUNT replaced, across a month");

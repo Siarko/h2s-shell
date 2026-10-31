@@ -101,7 +101,17 @@ Item {
             viewMode:     Config.gcal.viewMode
             onPrevMonthRequested: root._prevMonth()
             onNextMonthRequested: root._nextMonth()
-            onDayClicked:         day   => root.selectedDay   = day
+            // An open event form with an armed date takes the day; otherwise it is selected
+            onDayClicked: day => {
+                const form = _eventsPanel.activeForm;
+                if (form && form.pickTarget !== "")
+                    form.pickDay(CalendarDates.dateKey(root.displayYear, root.displayMonth, day));
+                else
+                    root.selectedDay = day;
+            }
+            rangeStart: _eventsPanel.activeForm?.startDate ?? ""
+            rangeEnd: _eventsPanel.activeForm?.endDate ?? ""
+            picking: (_eventsPanel.activeForm?.pickTarget ?? "") !== ""
             onTodayClicked:       {
                 root.displayMonth = root._today.getMonth()
                 root.displayYear  = root._today.getFullYear()

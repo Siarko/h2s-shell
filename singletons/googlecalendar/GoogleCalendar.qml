@@ -293,28 +293,28 @@ Singleton {
         }
     }
 
-    // month is 0-indexed (same as fetchMonthEvents)
-    // event: { year, month, day, title, description, startTime, endTime, calendarId }
+    // event: the form's values (see GoogleCalendarData.eventBody) with calendarId, and the
+    // month shown (year, month 0-based) to refresh
     function createEvent(event) {
         const calendarId = event.calendarId || "primary";
         const body = _eventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
             return GoogleCalendarApi.createEvent(calendarId, body);
         }).then(() => {
-            fetchMonthEvents(event.year, event.month, true);
+            _refreshMonthsOf(event);
         }).catch(e => {
             logger.error("createEvent failed:", e);
         });
     }
 
-    // event: { year, month, day, eventId, calendarId, title, description, startTime, endTime }
+    // event: as for createEvent, with eventId
     function updateEvent(event) {
         const calendarId = event.calendarId || "primary";
         const body = _eventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
             return GoogleCalendarApi.updateEvent(calendarId, event.eventId, body);
         }).then(() => {
-            fetchMonthEvents(event.year, event.month, true);
+            _refreshMonthsOf(event);
         }).catch(e => {
             logger.error("updateEvent failed:", e);
         });
@@ -355,9 +355,25 @@ Singleton {
 
     // The event as JSON text for Google, in the local time zone
     function _eventBody(event) {
-        const body = JSON.stringify(GoogleCalendarData.eventBody(event, GoogleCalendarData.localOffset()));
+        const body = JSON.stringify(GoogleCalendarData.eventBody(event, GoogleCalendarData.localOffsetAt));
         logger.log("Event data", body);
         return body;
+    }
+
+    // After an event was saved: the month shown (event.year, event.month) and every month
+    // the event's days touch, since the event may have moved out of the month shown or
+    // reach into the next
+    function _refreshMonthsOf(event) {
+        const months = {};
+        months[CalendarDates.monthKey(event.year, event.month)] = [event.year, event.month];
+        let date = CalendarDates.parseDateKey(event.startDate);
+        const last = CalendarDates.parseDateKey(event.endDate || event.startDate);
+        while (date && last && date <= last) {
+            months[CalendarDates.monthKey(date.getFullYear(), date.getMonth())] = [date.getFullYear(), date.getMonth()];
+            date = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+        }
+        for (const key in months)
+            fetchMonthEvents(months[key][0], months[key][1], true);
     }
 
     function _mergeEvents(year, month, day) {

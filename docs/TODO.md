@@ -13,8 +13,8 @@ verified on the host — the dev container has no `quickshell`.
 **Status (2026-10-31, after 2.0.0):** stages 1–3 and 5–10 done. What is left is stage 11,
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
-(11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Next: 11.2, multi-day
-events.
+(11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.16, the icon theme setting.
 
 ---
 
@@ -640,7 +640,12 @@ input last. Each title says its old number, for older notes and commits.
       open should show the menu in place and leave the entrance to the popup.
       Done 2026-10-31, verified on the host: a fresh menu is put straight into the visible
       slot in `Component.onCompleted`, without a transition.
-- [ ] **11.2 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
+- [x] **11.2 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
+      Done 2026-10-31, verified on the host: start and end dates (DateField, typed or
+      filled by clicking days in the calendar once armed), the span shaded in the grid,
+      the edited event pinned in the list, edits keeping their dates, per-date time zone
+      offsets; bars for spanning events above the day numbers and a coloured dot per
+      single-day event; read-only calendars without edit/delete; larger card buttons.
       The form takes one day — the one selected in the calendar — and, for a timed event,
       a start and end time on it; there is no way to give an end date. Google and the
       panel already handle multi-day events (`CalendarDates.eventDayKeys`,

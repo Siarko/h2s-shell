@@ -13,6 +13,34 @@ Item {
     property int selectedDay
 
     property bool _addingEvent: false
+    readonly property string _selectedKey: CalendarDates.dateKey(displayYear, displayMonth, selectedDay)
+
+    // The open event form (adding, or the card being edited — the one opened last), for
+    // the calendar: it fills the form's armed date and shades its span. Null when none.
+    property var activeForm: null
+    on_AddingEventChanged: {
+        if (_addingEvent)
+            activeForm = _addEventForm;
+        else if (activeForm === _addEventForm)
+            activeForm = null;
+    }
+    // The event being edited stays listed while other days are looked at, so the edit is
+    // not lost when the calendar moves on
+    property var _editingEvent: null
+    property var _editingCard: null
+    function _editStarted(card) {
+        _editingCard = card;
+        _editingEvent = card.modelData;
+        activeForm = card.form;
+    }
+    function _editEnded(card) {
+        if (_editingCard !== card)
+            return;
+        _editingCard = null;
+        _editingEvent = null;
+        if (activeForm === card.form)
+            activeForm = _addingEvent ? _addEventForm : null;
+    }
     property string viewMode: Config.gcal.viewMode
 
     function _dedupById(events) {
@@ -21,6 +49,13 @@ Item {
     }
 
     readonly property var _displayedEvents: {
+        const events = _eventsOfView;
+        if (_editingEvent && !events.some(event => event.id === _editingEvent.id))
+            return [_editingEvent].concat(events);
+        return events;
+    }
+
+    readonly property var _eventsOfView: {
         if (viewMode === "week") {
             let dow = new Date(displayYear, displayMonth, selectedDay).getDay();
             let monOffset = (dow + 6) % 7;
@@ -153,7 +188,10 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root._addingEvent = true
+                        onClicked: {
+                            _addEventForm.reset(root._selectedKey);
+                            root._addingEvent = true;
+                        }
                     }
                 }
 
@@ -246,19 +284,15 @@ Item {
                 submitLabel: "Add Event"
                 submitKind: "save"
                 showCalendarPicker: true
-                onSubmitted: (title, description, startTime, endTime) => {
-                    GoogleCalendar.createEvent({ year: root.displayYear, month: root.displayMonth, day: root.selectedDay,
-                        title, description, startTime, endTime,
+                onSubmitted: event => {
+                    GoogleCalendar.createEvent(Object.assign(event, {
+                        year: root.displayYear, month: root.displayMonth,
                         calendarId: _addEventForm.selectedCalendarId,
                         colorId: _addEventForm.selectedColorId || null,
-                        rrule: _addEventForm.rrule || null });
+                        rrule: _addEventForm.rrule || null }));
                     root._addingEvent = false;
-                    reset();
                 }
-                onCancelled: {
-                    root._addingEvent = false;
-                    reset();
-                }
+                onCancelled: root._addingEvent = false
             }
         }
 
@@ -285,6 +319,8 @@ Item {
                 displayMonth: root.displayMonth
                 selectedDay: root.selectedDay
                 showDate: root.viewMode !== "day"
+                onEditingChanged: editing ? root._editStarted(this) : root._editEnded(this)
+                Component.onDestruction: root._editEnded(this)
             }
 
             Text {

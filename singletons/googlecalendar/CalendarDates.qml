@@ -20,6 +20,86 @@ Singleton {
         return year + "-" + ("0" + (month + 1)).slice(-2);
     }
 
+    function daysInMonth(year: int, month: int): int {
+        return new Date(year, month + 1, 0).getDate();
+    }
+
+    // A "YYYY-MM-DD" key as a local date, or null when it is not one. Never new Date(key):
+    // that reads it as UTC, a day early west of Greenwich.
+    function parseDateKey(key) {
+        const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key ?? "");
+        if (!parts)
+            return null;
+        const year = parseInt(parts[1]), month = parseInt(parts[2]) - 1, day = parseInt(parts[3]);
+        if (month > 11 || day < 1 || day > daysInMonth(year, month))
+            return null;
+        return new Date(year, month, day);
+    }
+
+    function keyOfDate(date) {
+        return dateKey(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function addDays(key, days) {
+        const date = parseDateKey(key);
+        return keyOfDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + days));
+    }
+
+    // Whole days from one key to another; rounded, so a DST change between them (a 23 or
+    // 25 hour day) does not cut one off
+    function daysBetween(fromKey, toKey) {
+        return Math.round((parseDateKey(toKey) - parseDateKey(fromKey)) / 86400000);
+    }
+
+    // An event's span of days, { start, end } as keys, after its start moved: the end moves
+    // with it, so the event keeps its length
+    function spanWithStart(span, newStart) {
+        return { start: newStart, end: addDays(newStart, daysBetween(span.start, span.end)) };
+    }
+
+    // After its end moved: an end before the start becomes the new start, the length kept
+    function spanWithEnd(span, newEnd) {
+        if (daysBetween(span.start, newEnd) < 0)
+            return spanWithStart(span, newEnd);
+        return { start: span.start, end: newEnd };
+    }
+
+    // The bars of events spanning days, for a grid of days from firstKey to lastKey: by day
+    // key, the pieces of bar on that day — { id, color, lane, isStart, isEnd }. Each event
+    // keeps one lane (a row of bars, 0 the lowest) over all its days, so its bar runs on
+    // unbroken, across weeks too; lanes go to events by start, longer first, each in the
+    // lowest lane free by then. isStart and isEnd mark the event's real first and last
+    // day — not where the grid cuts it off — for the rounded ends. `events` are the
+    // panels' events (GoogleCalendarData.event), each once; single days are left out.
+    function dayBars(events, firstKey, lastKey) {
+        const spanning = events.filter(event => event.startDate && event.lastDate && event.lastDate > event.startDate
+                && event.lastDate >= firstKey && event.startDate <= lastKey)
+            .sort((a, b) => a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1
+                : daysBetween(b.startDate, b.lastDate) - daysBetween(a.startDate, a.lastDate));
+        // The last day taken in each lane so far
+        const laneEnds = [];
+        const bars = {};
+        for (const event of spanning) {
+            let lane = laneEnds.findIndex(end => end < event.startDate);
+            if (lane === -1)
+                lane = laneEnds.length;
+            laneEnds[lane] = event.lastDate;
+            let key = event.startDate < firstKey ? firstKey : event.startDate;
+            const last = event.lastDate > lastKey ? lastKey : event.lastDate;
+            while (key <= last) {
+                (bars[key] = bars[key] ?? []).push({
+                    id: event.id,
+                    color: event.color,
+                    lane: lane,
+                    isStart: key === event.startDate,
+                    isEnd: key === event.lastDate
+                });
+                key = addDays(key, 1);
+            }
+        }
+        return bars;
+    }
+
     // Returns all "YYYY-MM-DD" keys within [year, month] that rawItem covers.
     // Handles timed events, all-day events, and multi-day spans. Clamps to the
     // given month so callers don't receive keys outside the fetched range.

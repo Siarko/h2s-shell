@@ -22,6 +22,8 @@ TestCase {
         "panels/calendar/RecurrenceEditor.qml",
         "components/Checkbox.qml",
         "panels/calendar/TimeField.qml",
+        "panels/calendar/DateField.qml",
+        "panels/calendar/FieldSegment.qml",
         "panels/MusicPanel.qml",
         "panels/music/VisualizerCanvas.qml",
         "panels/NetworkPanel.qml",

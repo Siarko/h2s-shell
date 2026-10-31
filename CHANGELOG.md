@@ -10,7 +10,26 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Added
+- Calendar: events can span several days. The event form has a start and an end date
+  (DD.MM.YYYY, typed like the times: digits only where they make a date, "." moves on,
+  Up and Down step, a day past the month's end becomes its last); moving the start takes
+  the end along, an end before the start becomes the start. A timed event ending earlier
+  in the day than it starts goes on past midnight.
+- Calendar: going into a date field arms the calendar for it — the next day clicked fills
+  it (the start, then the end), and a hint says which; the event's days are shaded in the
+  grid while the form is open. Without an armed date a click only moves the calendar,
+  and an event being edited stays in the list while other days are looked at.
+- Calendar grid: an event spanning days is a bar in its colour above the day numbers,
+  running through its days — on into the next week's row, keeping its place, rounded
+  where it starts and ends — instead of a dot on each day; up to three stacked. Under the
+  number, a dot for each single-day event, in the event's colour (two rows of four at
+  most), instead of one accent dot for the day.
+
 ### Changed
+- Calendar: an event card's edit and delete buttons are larger, on a button's background
+  so it is clear what is clicked, and level with the event's title instead of the middle
+  of the card; editing is a pencil icon instead of the tiny "✏" character.
 - Notifications: each picture has its place. The app's icon stays small in the header;
   a square image (an avatar, album art, an app's logo sent as an image) is a rounded
   thumbnail beside the title and text; a wide or tall one (a screenshot) a preview across
@@ -29,6 +48,14 @@ section to the new version and date.
   away; it used to empty first, as the notification closes the moment its action runs.
 - Toasts no longer stop counting down after the shell reloads its files: a toast removed
   by the reload stayed first in line, and the ones after it waited for it for ever.
+- Calendar: events of a read-only calendar (a holiday calendar, say) have no edit and
+  delete buttons, which Google would refuse anyway, and new events can only go to
+  calendars that can be written to.
+- Calendar: editing an event keeps its dates. It used to move to the day selected in the
+  calendar — a multi-day event edited from its second day became a one-day event there,
+  and one going past midnight could not be saved at all.
+- Calendar: an event's times are sent with the time zone offset of its own date, not
+  today's, so an event across the end of summer time no longer lands an hour off.
 - A tray menu opening with no menu open comes in from the bar like every other popup;
   it used to slide in sideways, as when switching from another icon's menu.
 
