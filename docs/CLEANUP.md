@@ -482,7 +482,7 @@ usable.
 **Verified otherwise on the host (2026-10-28):** QML sizes are logical pixels, and
 Hyprland's per-monitor scale is applied by Qt — the whole shell scaled correctly with a
 monitor's scale changed. The analysis above assumed a compositor scale of 1. What is
-left is touch-target size, a design decision tracked as TODO 4.6.
+left is touch-target size, a design decision tracked as TODO 11.14.
 
 ### 28. Wheel-only interactions have no touch equivalent
 

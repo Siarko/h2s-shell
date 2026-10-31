@@ -183,7 +183,7 @@ PanelWindow {
         SlideBehavior on radiusBottomRight {}
     }
 
-    // The screen edge the bar stands at — the top, for now (bar position: TODO 10.12) —
+    // The screen edge the bar stands at — the top, for now (bar position: TODO 11.5) —
     // and the edge facing the desktop, where its border goes (below)
     readonly property string screenEdge: "top"
     readonly property string _desktopEdge: ({ top: "bottom", bottom: "top", left: "right", right: "left" })[screenEdge]

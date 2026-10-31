@@ -1,6 +1,6 @@
 # Plan: themes — every visual value in a theme, curves in a library
 
-Status: **agreed 2026-10-29, not started.** Replaces TODO 10.1 (configurable animations)
+Status: **stages 1–7 done (released in 2.0.0); stage 8, matugen, is TODO 11.8.** Replaces TODO 10.1 (configurable animations)
 and absorbs 9.4 (stray colours) and 6.x work where it touches visual constants.
 
 ## Why
@@ -344,8 +344,8 @@ The ~50 hard-coded `duration:` values move to roles.
 7. **Radii, borders, spacing** as tokens per element, with their controls — the user's
    next ideas (toast radius, borders, …) land here.
    *Token set agreed 2026-10-30:* [themes-stage7.md](themes-stage7.md).
-8. **matugen** (put off by the user 2026-10-30: to be done just before touch input,
-   TODO stage 4): a template in the repo mapping its palette to our colour tokens, a
+8. **matugen** (put off by the user 2026-10-30: to be done just before touch input;
+   TODO 11.8): a template in the repo mapping its palette to our colour tokens, a
    "wallpaper" theme reading the generated file, and docs for adding the template to
    matugen's config.
 

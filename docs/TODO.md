@@ -10,10 +10,10 @@ drawbacks of the proposed approach, and ask about anything genuinely unclear rat
 guessing. One item at a time. Commit only when asked. Tick a box only after the change is
 verified on the host — the dev container has no `quickshell`.
 
-**Status: Stages 1, 2, 3 and 5 done** (2026-10-29). Stage 4 (touch) is deferred until
-the Framework 12 is at hand, since it cannot be verified here. 10.3, every setting
-per profile, is done ([plans/global-profiles.md](plans/global-profiles.md)). Next: 10.9, themes —
-[plans/themes.md](plans/themes.md), stage 1 (colours in order).
+**Status (2026-10-31, after 2.0.0):** stages 1–3 and 5–10 done. What is left is stage 11,
+in the order agreed with the user: the small requests (11.1–11.4), the bar's position and
+shape (11.5, 11.6), selector styling (11.7), matugen (11.8) and touch input last
+(11.9–11.14, waiting for the Framework 12). Next: 11.1, scroll sensitivity.
 
 ---
 
@@ -200,7 +200,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       correctly when the user changed a monitor's scale. HiDPI on the Framework 12 is a
       `monitor=` line in Hyprland, as for every other app. What scaling does not cover
       is how big touch targets should be, which is a design decision and belongs to
-      Stage 4 (4.6).
+      11.14 (was 4.6).
 - [x] **3.2 Migrate sizes to the scale unit**
       Mechanical but wide. `panels/calendar/EventForm.qml` alone has 45. Worth doing
       per-file alongside the Stage 6 splits rather than in one sweep.
@@ -209,24 +209,8 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 4 — Touch input
 
-- [ ] **4.1 Popup must close on outside tap, not on pointer-exit** [#24]
-      `panels/Popup.qml:232-238`, and `focusable: hoverHandler.hovered` at `:74`.
-- [ ] **4.2 Pick the popup mode from the input type** [#25]
-      Hover mode is unusable on touch and is the default for clock, sound and bluetooth.
-      One place once 2.1 is done.
-- [ ] **4.3 Touch feedback for the 64 hover-only visual states** [#26]
-      Drive visual state from both `TapHandler.pressed` and `HoverHandler.hovered`,
-      through shared components so it is not 64 separate edits.
-- [ ] **4.4 Touch equivalents for the 7 wheel-only interactions** [#28]
-      Volume on the sound widget, workspace switching, sliders.
-- [ ] **4.5 Gestures** [#29]
-      Swipe to dismiss a notification, edge swipe for panels. New feature surface —
-      depends on 4.1–4.4.
-- [ ] **4.6 Touch-sized targets**
-      Split off 3.1. Compositor scaling makes everything proportionally larger but does
-      not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized
-      (~9 mm). Decide minimum target sizes, put them in `Theme.qml`, and apply them in the
-      shared components first.
+Moved to stage 11 (11.9–11.14) on 2026-10-31, last in the agreed order: 4.1 → 11.9,
+4.2 → 11.10, 4.3 → 11.11, 4.4 → 11.12, 4.5 → 11.13, 4.6 → 11.14.
 
 ## Stage 5 — Idle cost  [battery]
 
@@ -464,6 +448,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 
 ## Stage 10 — Requested features
 
+Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
+10.15–10.18 → 11.1–11.4, 10.12 → 11.5, 10.13 → 11.6, 10.14 → 11.7, 10.9 → 11.8.
+
 - [x] **10.3 Every setting per profile, with user-pinned global settings** [#11]
       Agreed 2026-10-29: [plans/global-profiles.md](plans/global-profiles.md). The
       editing-profile picker covers the whole settings window; every setting is saved per
@@ -568,11 +555,6 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       system power profile from the change handler of the effective value changed the
       `power.profile` fact while the facts were being re-evaluated. Deferred with
       `Qt.callLater`, as the seeding already was.
-- [ ] **10.9 Themes: every visual value in a theme, curves in a library**
-      Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
-      library, profiles pick one), behaviour stays in the profile; custom animation curves
-      with an editor; an Appearance section in settings; matugen-ready colours. Absorbs
-      10.1 and 9.4.
 - [x] **10.10 Settings window: make "editing a profile" and "editing a theme" clear**
       (reported 2026-10-30, while testing themes stage 6a)
       The window edits two kinds of thing: behaviour pages edit a profile, Appearance
@@ -611,37 +593,41 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       with the font. Appearance → Popups → Widths: the multipliers (50–200 %), each with
       the width it comes to. Network's rows take their heights from their content; the
       events header elides the date when narrow; the event form's repeat row is a Flow.
-- [ ] **10.12 Bar position: bottom, and vertical at a side** (requested 2026-10-30)
-      Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
-      screen, and — harder — a vertical bar along the left or right edge. Touches far more
-      than Bar.qml: the bar's anchors and exclusive zone; every widget's layout (a
-      vertical bar needs widgets that stack and fit a narrow width — text such as the
-      clock or the music title has to rotate, shorten or wrap); popups (they open
-      downwards from the bar today, with curved top corners joining it — PopupCurve —
-      and positions computed from the bar's height); the HUD and toasts placed relative
-      to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
-      Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
-      analysis and a plan, with the user, before any work.
-- [ ] **10.13 Bar shape and anchoring: e.g. a "dynamic island" bar** (requested
-      2026-10-30)
-      The bar's size can only be tuned with margins and padding today. Wanted: choosing
-      what the bar is anchored to, so it can be e.g. a floating island — centred, as wide
-      as its content, perhaps growing with what it shows (a dynamic island). The idea needs
-      working out with the user first: what can be anchored (the whole bar, or each of its
-      left / centre / right sections as separate islands), width from content or fixed,
-      how the exclusive zone behaves for a floating bar, how popups join an island (their
-      curved corners assume a bar running to its ends; see 8.12 for the margin case), and
-      animation when the island resizes. Related to 10.12 (position) and themes stage 7.
-- [ ] **10.14 Explore styling with CSS-like selectors** (requested 2026-10-30; after the
-      themes plan is finished)
-      Themes today set values per element kind (`button.radius`, `osdToast.padding`, …,
-      themes stage 7). Explore going further: styling by something like CSS selectors —
-      targeting an element by kind, place and state (e.g. `popup button:hover`,
-      `bar .clock`, `osdToast.critical`), with cascading and specificity — and what it
-      would take in QML (element identity, a resolver, live updates, cost). Exploration
-      only; to discuss with the user before any design. Related: the user's earlier idea
-      of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
-- [ ] **10.15 Scroll sensitivity setting** (requested 2026-10-30)
+- [x] **10.2 Heartbeat on graph updates**
+      Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
+      history graph takes a new sample — a semi-transparent wave travelling across the
+      graph from its right edge to the left. Matters more now that profiles can slow
+      sampling to 10–30 s: it shows the graph is alive and when it updated. Lives in
+      `components/HistoryChart.qml`; the look is to be settled with the user.
+      Done 2026-10-29, verified on the host: a 350 ms wave, right to left, brightening the
+      line and the fill under it in a lighter shade of each series' colour, over a
+      muted full-height band so it is visible where there is no data yet. Setting
+      `graphs.heartbeat` (on; Power save turns it off).
+
+- [x] **10.1 Configurable animations** — done within **10.9** (themes plan, stages 4–6:
+      animation roles, the curves library and editor, Animations page); what is left of
+      the themes plan is 11.8
+      Requested 2026-10-28: the user wants to tune animation speed and easing curves.
+      There are ~50 hard-coded `duration:` values across the QML, the popup open/close
+      ones being 100 ms with `OutQuad`/`InQuad` (`panels/Popup.qml`). Plan: named
+      durations and easings in `Theme.qml` (or a `Config.animations` section, if it
+      should be editable from settings), a global speed multiplier, and every
+      `NumberAnimation` reading from there.
+      Measured on the host (DP-2, 144 Hz) while looking into popups that felt not quite
+      smooth: frames come every ~6–7 ms as they should, but the calendar popup's first
+      frames have a 51 ms gap — creating the panel (~37 ms) lands inside the running
+      animation, so the 100 ms open took 161 ms and visibly jumps at the start. Worth
+      fixing alongside: start the height animation a frame after the content is
+      created. Do not move the content creation itself out of `Qt.callLater` — see
+      "The Repeater crash" in ARCHITECTURE.md.
+
+## Stage 11 — Next, in order  [agreed 2026-10-31]
+
+What is left, in the order the user set after 2.0.0: the small requests first, then the
+bar's position and shape, selector styling, matugen, and touch input last. Each title
+says its old number, for older notes and commits.
+
+- [ ] **11.1 Scroll sensitivity setting** (was 10.15) (requested 2026-10-30)
       The shell's wheel handling has fixed steps: a notch is 112 of angleDelta
       (`components/ScrollNotches.qml`) and the volume moves about 1 % per notch
       (`widgets/SoundWidget.qml`). Wanted: a setting for how sensitive it is. Decided
@@ -656,18 +642,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       strip. Hyprland's `input:scroll_factor` / `input:touchpad:scroll_factor` scale
       scrolling for every app, the shell included; this would be on top, for the shell
       alone.
-- [x] **10.2 Heartbeat on graph updates**
-      Requested 2026-10-29: an optional (on/off in config) visual cue at the moment a
-      history graph takes a new sample — a semi-transparent wave travelling across the
-      graph from its right edge to the left. Matters more now that profiles can slow
-      sampling to 10–30 s: it shows the graph is alive and when it updated. Lives in
-      `components/HistoryChart.qml`; the look is to be settled with the user.
-      Done 2026-10-29, verified on the host: a 350 ms wave, right to left, brightening the
-      line and the fill under it in a lighter shade of each series' colour, over a
-      muted full-height band so it is visible where there is no data yet. Setting
-      `graphs.heartbeat` (on; Power save turns it off).
-
-- [ ] **10.16 A tray menu opening fresh slides in from the bar** (requested 2026-10-30; moved
+- [ ] **11.2 A tray menu opening fresh slides in from the bar** (was 10.16) (requested 2026-10-30; moved
       from 9.10)
       Opening a tray menu with no popup open (not switching from another icon's menu),
       the menu slides in sideways from the right, as a switch would. It should come in
@@ -676,7 +651,7 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
       `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
       open should show the menu in place and leave the entrance to the popup.
-- [ ] **10.17 Multi-day events in the event form** (requested 2026-10-31)
+- [ ] **11.3 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
       The form takes one day — the one selected in the calendar — and, for a timed event,
       a start and end time on it; there is no way to give an end date. Google and the
       panel already handle multi-day events (`CalendarDates.eventDayKeys`,
@@ -687,23 +662,70 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `GoogleCalendarData.eventBody` (end date, exclusive for all day), and what
       `EventCard`/`EventsPanel` pass in. To settle with the user: how the end date is
       picked (a date field like the recurrence's, or a small calendar).
-- [ ] **10.18 Visualiser around the album cover** (requested 2026-10-31)
+- [ ] **11.4 Visualiser around the album cover** (was 10.18) (requested 2026-10-31)
       Another `media.visualizerStyle`: the levels drawn around the cover in the music
       panel — a ring, rays or a glow pulsing with the bass, say — instead of beside or
       below it. The levels are `Visualizer`'s; the drawing would be a new mode of
       `panels/music/VisualizerCanvas.qml` (or a sibling) laid over the cover. The look is
       to be settled with the user.
-- [ ] **10.1 Configurable animations** — now part of **10.9**
-      Requested 2026-10-28: the user wants to tune animation speed and easing curves.
-      There are ~50 hard-coded `duration:` values across the QML, the popup open/close
-      ones being 100 ms with `OutQuad`/`InQuad` (`panels/Popup.qml`). Plan: named
-      durations and easings in `Theme.qml` (or a `Config.animations` section, if it
-      should be editable from settings), a global speed multiplier, and every
-      `NumberAnimation` reading from there.
-      Measured on the host (DP-2, 144 Hz) while looking into popups that felt not quite
-      smooth: frames come every ~6–7 ms as they should, but the calendar popup's first
-      frames have a 51 ms gap — creating the panel (~37 ms) lands inside the running
-      animation, so the 100 ms open took 161 ms and visibly jumps at the start. Worth
-      fixing alongside: start the height animation a frame after the content is
-      created. Do not move the content creation itself out of `Qt.callLater` — see
-      "The Repeater crash" in ARCHITECTURE.md.
+
+- [ ] **11.5 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
+      Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
+      screen, and — harder — a vertical bar along the left or right edge. Touches far more
+      than Bar.qml: the bar's anchors and exclusive zone; every widget's layout (a
+      vertical bar needs widgets that stack and fit a narrow width — text such as the
+      clock or the music title has to rotate, shorten or wrap); popups (they open
+      downwards from the bar today, with curved top corners joining it — PopupCurve —
+      and positions computed from the bar's height); the HUD and toasts placed relative
+      to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
+      Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
+      analysis and a plan, with the user, before any work.
+- [ ] **11.6 Bar shape and anchoring: e.g. a "dynamic island" bar** (was 10.13) (requested
+      2026-10-30)
+      The bar's size can only be tuned with margins and padding today. Wanted: choosing
+      what the bar is anchored to, so it can be e.g. a floating island — centred, as wide
+      as its content, perhaps growing with what it shows (a dynamic island). The idea needs
+      working out with the user first: what can be anchored (the whole bar, or each of its
+      left / centre / right sections as separate islands), width from content or fixed,
+      how the exclusive zone behaves for a floating bar, how popups join an island (their
+      curved corners assume a bar running to its ends; see 8.12 for the margin case), and
+      animation when the island resizes. Related to 11.5 (position) and themes stage 7.
+- [ ] **11.7 Explore styling with CSS-like selectors** (was 10.14) (requested 2026-10-30)
+      First meant for after the whole themes plan; the user put it before matugen (11.8),
+      which it does not depend on.
+      Themes today set values per element kind (`button.radius`, `osdToast.padding`, …,
+      themes stage 7). Explore going further: styling by something like CSS selectors —
+      targeting an element by kind, place and state (e.g. `popup button:hover`,
+      `bar .clock`, `osdToast.critical`), with cascading and specificity — and what it
+      would take in QML (element identity, a resolver, live updates, cost). Exploration
+      only; to discuss with the user before any design. Related: the user's earlier idea
+      of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
+
+- [ ] **11.8 Themes: matugen, the rest of the themes plan** (was 10.9)
+      Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
+      library, profiles pick one), behaviour stays in the profile; custom animation curves
+      with an editor; an Appearance section in settings; matugen-ready colours. Absorbs
+      10.1 and 9.4. Stages 1–7 done and released in 2.0.0; left is stage 8, matugen: a
+      template mapping its palette to our colour tokens, a "wallpaper" theme reading the
+      generated file, and docs for adding the template to matugen's config.
+
+Touch input, last — it cannot be verified until the Framework 12 is at hand:
+
+- [ ] **11.9 Popup must close on outside tap, not on pointer-exit** (was 4.1) [#24]
+      `panels/Popup.qml:232-238`, and `focusable: hoverHandler.hovered` at `:74`.
+- [ ] **11.10 Pick the popup mode from the input type** (was 4.2) [#25]
+      Hover mode is unusable on touch and is the default for clock, sound and bluetooth.
+      One place once 2.1 is done.
+- [ ] **11.11 Touch feedback for the 64 hover-only visual states** (was 4.3) [#26]
+      Drive visual state from both `TapHandler.pressed` and `HoverHandler.hovered`,
+      through shared components so it is not 64 separate edits.
+- [ ] **11.12 Touch equivalents for the 7 wheel-only interactions** (was 4.4) [#28]
+      Volume on the sound widget, workspace switching, sliders.
+- [ ] **11.13 Gestures** (was 4.5) [#29]
+      Swipe to dismiss a notification, edge swipe for panels. New feature surface —
+      depends on 11.9–11.12.
+- [ ] **11.14 Touch-sized targets** (was 4.6)
+      Split off 3.1. Compositor scaling makes everything proportionally larger but does
+      not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized
+      (~9 mm). Decide minimum target sizes, put them in `Theme.qml`, and apply them in the
+      shared components first.
