@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.17, formatting in notification text.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.18, a count beside the notifications icon.
 
 ---
 
@@ -701,13 +701,23 @@ end so the numbers above keep meaning what older notes say:
       `~/.local/share/icons`, then `/usr/share/icons` — not `hicolor`, not cursor-only
       themes such as `default`. The list offers the installed themes. Covers every icon
       of the shell, the tray's too.
-- [ ] **11.17 Formatting in notification text** (requested 2026-10-31)
+- [x] **11.17 Formatting in notification text** (requested 2026-10-31) — done 2026-10-31,
+      verified on the host
       The shell tells senders it supports body markup (`bodyMarkupSupported`), but the
       card shows the tags as typed: `<b>`, `<i>`, `<u>`, `<a href>` (hyperlinks are
       advertised too) and `<img>`. Render the spec's subset — and only it: other tags and
       entities escaped, links opened on click (through `Qt.openUrlExternally`), so a
       notification cannot inject arbitrary rich text. Keep text selectable and the codes
       found in it (CodeChips) working on the plain text.
+      Decided 2026-10-31: `singletons/NotificationMarkup.qml`
+      — a small tokenizer, then b/i/u kept, br/p line breaks, other tags dropped (text
+      kept); http/https/mailto links open on a click, any other scheme in the warning
+      colour asks first (Open / Copy / Cancel); images never loaded, a tinted row with an
+      image glyph linking to them; `bodyImagesSupported` off. The screensaver preview
+      shows plain text (it drew the body's HTML unfiltered). Tests:
+      `tests/NotificationMarkupTest.qml`. Hovering a link shows its address over its
+      line (image rows show it in the row instead); HoverTip fixed on the way — it never
+      opened when its text and `shown` changed together.
 - [ ] **11.18 A count beside the notifications icon** (requested 2026-10-31)
       The bar's notifications widget only turns accent-coloured when there is any
       notification (`widgets/NotificationsWidget.qml`); how many is not shown. Wanted: the

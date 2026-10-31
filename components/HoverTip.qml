@@ -16,6 +16,9 @@ Rectangle {
     property bool shown: false
     property int delay: 500
     property int maxWidth: 260
+    // Where on the target to point at, in its coordinates — Qt.rect(x, top, 0, height) of a
+    // line, say (a link under the pointer); null for the whole target
+    property var anchorRect: null
 
     parent: target?.Window.window?.contentItem ?? target
     z: 1000
@@ -27,8 +30,12 @@ Rectangle {
     border.color: Theme.textDisabled
     border.width: Theme.border.width
 
-    onShownChanged: {
-        if (shown && text !== "") {
+    // Shown and with something to say, both read together: the two often change at once
+    // (a hovered link and its address), and a handler of one alone could still see the
+    // other's old value — the tip then never opened
+    readonly property bool _wanted: shown && text !== ""
+    on_WantedChanged: {
+        if (_wanted) {
             _delay.restart();
         } else {
             _delay.stop();
@@ -36,10 +43,14 @@ Rectangle {
         }
     }
 
-    // Placed when it opens; the target does not move while hovered
+    // Placed when it opens (the target does not move while hovered), and again when its
+    // text changes while open — the pointer moved straight onto another link
+    onTextChanged: if (visible && text !== "") _place()
     function _place() {
-        const below = target.mapToItem(parent, target.width / 2, target.height);
-        const above = target.mapToItem(parent, target.width / 2, 0);
+        const area = anchorRect ?? Qt.rect(0, 0, target.width, target.height);
+        const centre = area.x + area.width / 2;
+        const below = target.mapToItem(parent, centre, area.y + area.height);
+        const above = target.mapToItem(parent, centre, area.y);
         x = Math.max(4, Math.min(parent.width - width - 4, above.x - width / 2));
         y = above.y - height - 6 >= 0 ? above.y - height - 6 : below.y + 6;
     }
@@ -59,7 +70,8 @@ Rectangle {
         y: Theme.tooltip.verticalPadding
         width: Math.min(implicitWidth, root.maxWidth)
         text: root.text
-        wrapMode: Text.WordWrap
+        // At spaces where there are some, anywhere in a long run without (an address)
+        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeBody
         color: Theme.textPrimary

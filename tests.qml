@@ -25,6 +25,7 @@ QtObject {
     property var _format: FormatTest {}
     property var _scrollNotches: ScrollNotchesTest {}
     property var _curvePoints: CurvePointsTest {}
+    property var _notificationMarkup: NotificationMarkupTest {}
 
     // Exit after all Component.onCompleted handlers finish.
     // interval:0 fires on the next event loop tick, after all suites have run.

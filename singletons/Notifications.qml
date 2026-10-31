@@ -15,7 +15,8 @@ Singleton {
 
         bodyHyperlinksSupported: true
         bodyMarkupSupported: true
-        bodyImagesSupported: true
+        // Images in a body are not loaded (NotificationMarkup: a row linking to them)
+        bodyImagesSupported: false
         actionIconsSupported: true
         imageSupported: true
         actionsSupported: true
@@ -41,7 +42,9 @@ Singleton {
             timestamps = updatedTimestamps;
 
             // Extract codes from summary + body using configured regex patterns
-            var text = (notification.summary ?? "") + " " + (notification.body ?? "");
+            // In the body's text, not its markup: a link's address or an entity's digits
+            // are no code
+            var text = (notification.summary ?? "") + " " + NotificationMarkup.plainText(notification.body);
             var codes = [];
             var patterns = Profiles.value("notifications.codePatterns") ?? [];
             for (var i = 0; i < patterns.length; i++) {

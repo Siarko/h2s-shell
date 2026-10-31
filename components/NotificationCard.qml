@@ -123,6 +123,29 @@ Rectangle {
         asynchronous: true
     }
 
+    // Colours for the body's links and image rows (NotificationMarkup.richText): plain
+    // "#rrggbb" — the image row's tint mixed with the card, as Qt's table background takes
+    // no alpha
+    readonly property var _markupColors: ({
+        link: Theme.accent.toString(),
+        unusualLink: Theme.warning.toString(),
+        imageRow: Qt.tint(Theme.surface, Qt.alpha(Theme.accent, 0.12)).toString(),
+        imageGlyph: Theme.accent.toString(),
+        address: Theme.textMuted.toString()
+    })
+
+    readonly property var _imageLinks: NotificationMarkup.imageLinks(_body)
+
+    // A link clicked in the body: a web or mail one opens; any other waits for a yes
+    property string _pendingLink: ""
+    onNotificationChanged: _pendingLink = ""
+    function _openLink(link) {
+        if (NotificationMarkup.linkKind(link) === "standard")
+            Qt.openUrlExternally(link);
+        else
+            _pendingLink = link;
+    }
+
     property var _activeEdit: null
     readonly property string _selectedText: _activeEdit ? _activeEdit.selectedText : ""
 
@@ -264,7 +287,10 @@ Rectangle {
                     id: _bodyEdit
                     selectionColor: Theme.selection
                     selectedTextColor: Theme.selectedText
-                    text: notifCard._body
+                    // The body's markup, made safe: formatting, links, image rows
+                    // (NotificationMarkup)
+                    textFormat: TextEdit.RichText
+                    text: NotificationMarkup.richText(notifCard._body, notifCard._markupColors)
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textSecondary
@@ -280,21 +306,50 @@ Rectangle {
                             notifCard._selectionClearedAt = Date.now();
                     }
 
-                    // Text stays selectable by dragging, but on a card that is clicked
-                    // the pointer is the card's hand, not a text cursor
+                    // Text stays selectable by dragging, but over a link, or on a card
+                    // that is clicked, the pointer is a hand, not a text cursor
                     MouseArea {
                         anchors.fill: parent
-                        enabled: notifCard._defaultAction !== null
                         acceptedButtons: Qt.NoButton
-                        cursorShape: Qt.PointingHandCursor
+                        cursorShape: notifCard._defaultAction !== null || _bodyEdit.hoveredLink !== ""
+                            ? Qt.PointingHandCursor : Qt.IBeamCursor
                     }
+
+                    // A link clicked: rich text takes that click itself and reports it
+                    // here — opened, or asked about — and it is not the card's default
+                    // action
+                    onLinkActivated: link => notifCard._openLink(link)
 
                     // On the text itself: the text takes the press for selecting, so a
                     // handler further up never sees the click. A handler of the same item
-                    // sees it first, and a drag (a selection) is no tap.
+                    // sees it first, and a drag (a selection) is no tap. Not on a link.
                     TapHandler {
                         enabled: notifCard._defaultAction !== null
-                        onTapped: notifCard._activateDefault()
+                        onTapped: eventPoint => {
+                            if (_bodyEdit.linkAt(eventPoint.position.x, eventPoint.position.y) === "")
+                                notifCard._activateDefault();
+                        }
+                    }
+
+                    // Where a link goes, on hover — a link's text can say anything
+                    HoverTip {
+                        target: _bodyEdit
+                        // Not on an image row's link: the row shows its address
+                        shown: _bodyEdit.hoveredLink !== "" && !notifCard._imageLinks.includes(_bodyEdit.hoveredLink)
+                        text: _bodyEdit.hoveredLink
+                        // Room for an address, broken anywhere when it is longer
+                        maxWidth: 420
+                        delay: 300
+                        // Over the line of the link under the pointer, at the pointer
+                        anchorRect: {
+                            const point = _bodyHover.point.position;
+                            const line = _bodyEdit.positionToRectangle(_bodyEdit.positionAt(point.x, point.y));
+                            return Qt.rect(point.x, line.y, 0, line.height);
+                        }
+                    }
+
+                    HoverHandler {
+                        id: _bodyHover
                     }
                 }
             }
@@ -313,6 +368,68 @@ Rectangle {
             Layout.topMargin: 4
             radius: Theme.notificationCard.controlRadius
             source: visible ? notifCard._imageSource : ""
+        }
+
+        // An unusual link clicked (not http, https or mailto: a file, an app's own scheme):
+        // asked about before it is opened, as it may open something other than a page
+        ColumnLayout {
+            visible: notifCard._pendingLink !== ""
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            spacing: 4
+
+            Text {
+                Layout.fillWidth: true
+                text: "Not a web or mail link — open it?"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                font.bold: true
+                color: Theme.warning
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: notifCard._pendingLink
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.textSecondary
+                elide: Text.ElideMiddle
+            }
+
+            Row {
+                spacing: 6
+
+                SmallButton {
+                    label: "Open"
+                    onClicked: {
+                        Qt.openUrlExternally(notifCard._pendingLink);
+                        notifCard._pendingLink = "";
+                    }
+                }
+                SmallButton {
+                    label: "Copy"
+                    onClicked: {
+                        _linkClip.text = notifCard._pendingLink;
+                        _linkClip.selectAll();
+                        _linkClip.copy();
+                        Notifier.send("Copied: " + notifCard._pendingLink, { urgency: "low", category: "x-qs-shell" });
+                        notifCard._pendingLink = "";
+                    }
+                }
+                SmallButton {
+                    label: "Cancel"
+                    kind: "cancel"
+                    onClicked: notifCard._pendingLink = ""
+                }
+            }
+
+            // A hidden TextEdit, the way to put text on the clipboard (as CodeChips)
+            TextEdit {
+                id: _linkClip
+                visible: false
+                Layout.preferredWidth: 0
+                Layout.preferredHeight: 0
+            }
         }
 
         // Action buttons

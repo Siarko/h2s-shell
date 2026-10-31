@@ -11,6 +11,14 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Notifications: formatting in the text — bold, italic, underline, line breaks — and
+  links: web and mail links in the accent colour open on a click; any other kind (a file,
+  an app's own) is in the warning colour and asks first, with Open, Copy and Cancel. An
+  image in the text is never loaded: it is a tinted row of its own with an image icon,
+  linking to it, its address shown under its description. Hovering a link shows where
+  it goes. Other tags are dropped, their text kept; the body is read by a small
+  parser, so tags of any shape (self-closing, quoted ">" in attributes, comments) are
+  understood. Codes are found in the text, not in link addresses.
 - Settings, General: an icon theme for the shell — its notifications, tray and every
   other icon, picked from a list of the installed themes. Automatic, the default, is the
   system's icon theme if it is installed, else the first one found; a row of sample icons
@@ -54,6 +62,10 @@ section to the new version and date.
   action used to be an empty button.
 
 ### Fixed
+- Tooltips no longer fail to open when what they say changes at the moment they are
+  asked to show.
+- Screensaver: notification previews show the text, no longer the body's HTML drawn
+  as is (which could load images from the network).
 - Wi-Fi: a password typed into an open network row stays with that network when the
   list refreshes; it used to jump to whichever network took the row's place.
 - Wi-Fi: a network seen through several access points — on two bands, or a mesh — is one

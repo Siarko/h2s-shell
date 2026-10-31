@@ -49,7 +49,9 @@ Rectangle {
 
         Text {
             visible: root.detail === "full" && text !== ""
-            text: root.modelData.body ?? ""
+            // Plain: shown as Text guesses rich text, which would draw a body's HTML as is
+            text: NotificationMarkup.plainText(root.modelData.body)
+            textFormat: Text.PlainText
             color: Theme.textSecondary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
