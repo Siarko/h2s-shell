@@ -192,7 +192,7 @@ only along the edge facing the desktop (the user's call), outside the bar — a 
 the bar's, grown on that side, behind it — so the bar keeps its height (drawn inside, it
 took room from the content) and a popup, in a window above, covers it where it joins the
 bar (inside, it left a line between them). The side derives from `Bar.screenEdge`, top
-for now, so it follows the bar when it can move (TODO 11.5). Bar cells, toasts and their badge, the volume OSD, the message pill. The popup's border
+for now, so it follows the bar when it can move (TODO 11.4). Bar cells, toasts and their badge, the volume OSD, the message pill. The popup's border
 waits for its design. The event form's Save and Cancel are `SmallButton`s
 (`submitKind`).
 

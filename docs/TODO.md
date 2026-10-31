@@ -11,9 +11,10 @@ guessing. One item at a time. Commit only when asked. Tick a box only after the 
 verified on the host — the dev container has no `quickshell`.
 
 **Status (2026-10-31, after 2.0.0):** stages 1–3 and 5–10 done. What is left is stage 11,
-in the order agreed with the user: the small requests (11.1–11.4), the bar's position and
-shape (11.5, 11.6), selector styling (11.7), matugen (11.8) and touch input last
-(11.9–11.14, waiting for the Framework 12). Next: 11.1, scroll sensitivity.
+in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
+shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
+(11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Next: 11.1, the
+tray menu's entrance.
 
 ---
 
@@ -449,7 +450,8 @@ Moved to stage 11 (11.9–11.14) on 2026-10-31, last in the agreed order: 4.1 �
 ## Stage 10 — Requested features
 
 Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
-10.15–10.18 → 11.1–11.4, 10.12 → 11.5, 10.13 → 11.6, 10.14 → 11.7, 10.9 → 11.8.
+10.16–10.18 → 11.1–11.3, 10.12 → 11.4, 10.13 → 11.5, 10.14 → 11.6, 10.9 → 11.7, and
+10.15 (scroll sensitivity, widened into compositor integration) → 11.8.
 
 - [x] **10.3 Every setting per profile, with user-pinned global settings** [#11]
       Agreed 2026-10-29: [plans/global-profiles.md](plans/global-profiles.md). The
@@ -606,7 +608,7 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
 
 - [x] **10.1 Configurable animations** — done within **10.9** (themes plan, stages 4–6:
       animation roles, the curves library and editor, Animations page); what is left of
-      the themes plan is 11.8
+      the themes plan is 11.7
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close
       ones being 100 ms with `OutQuad`/`InQuad` (`panels/Popup.qml`). Plan: named
@@ -624,25 +626,10 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
 ## Stage 11 — Next, in order  [agreed 2026-10-31]
 
 What is left, in the order the user set after 2.0.0: the small requests first, then the
-bar's position and shape, selector styling, matugen, and touch input last. Each title
-says its old number, for older notes and commits.
+bar's position and shape, selector styling, matugen, compositor integration, and touch
+input last. Each title says its old number, for older notes and commits.
 
-- [ ] **11.1 Scroll sensitivity setting** (was 10.15) (requested 2026-10-30)
-      The shell's wheel handling has fixed steps: a notch is 112 of angleDelta
-      (`components/ScrollNotches.qml`) and the volume moves about 1 % per notch
-      (`widgets/SoundWidget.qml`). Wanted: a setting for how sensitive it is. Decided
-      with the user: **one multiplier for everything** that scrolls in the shell, plus
-      the **volume step** in the config too. Volume steps today: the bar widget ~1 % a
-      notch (`notches()`), the volume sliders 2 % (`VolumeSlider.step`,
-      `VerticalSlider.step`, also the arrow keys). (The horizontal-scroll volume step of 5
-      the user has is a Hyprland keybind, not the shell — leave it be.) Still to
-      settle: per profile or global, mouse vs touchpad (a touchpad sends many small
-      deltas, so it steps much faster). Other wheel handlers to bring under the
-      multiplier: `MonthGrid` (month/year), `CurvesSettings` zoom, `EventForm` colour
-      strip. Hyprland's `input:scroll_factor` / `input:touchpad:scroll_factor` scale
-      scrolling for every app, the shell included; this would be on top, for the shell
-      alone.
-- [ ] **11.2 A tray menu opening fresh slides in from the bar** (was 10.16) (requested 2026-10-30; moved
+- [ ] **11.1 A tray menu opening fresh slides in from the bar** (was 10.16) (requested 2026-10-30; moved
       from 9.10)
       Opening a tray menu with no popup open (not switching from another icon's menu),
       the menu slides in sideways from the right, as a switch would. It should come in
@@ -651,7 +638,7 @@ says its old number, for older notes and commits.
       a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
       `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
       open should show the menu in place and leave the entrance to the popup.
-- [ ] **11.3 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
+- [ ] **11.2 Multi-day events in the event form** (was 10.17) (requested 2026-10-31)
       The form takes one day — the one selected in the calendar — and, for a timed event,
       a start and end time on it; there is no way to give an end date. Google and the
       panel already handle multi-day events (`CalendarDates.eventDayKeys`,
@@ -662,14 +649,14 @@ says its old number, for older notes and commits.
       `GoogleCalendarData.eventBody` (end date, exclusive for all day), and what
       `EventCard`/`EventsPanel` pass in. To settle with the user: how the end date is
       picked (a date field like the recurrence's, or a small calendar).
-- [ ] **11.4 Visualiser around the album cover** (was 10.18) (requested 2026-10-31)
+- [ ] **11.3 Visualiser around the album cover** (was 10.18) (requested 2026-10-31)
       Another `media.visualizerStyle`: the levels drawn around the cover in the music
       panel — a ring, rays or a glow pulsing with the bass, say — instead of beside or
       below it. The levels are `Visualizer`'s; the drawing would be a new mode of
       `panels/music/VisualizerCanvas.qml` (or a sibling) laid over the cover. The look is
       to be settled with the user.
 
-- [ ] **11.5 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
+- [ ] **11.4 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
       Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
       screen, and — harder — a vertical bar along the left or right edge. Touches far more
       than Bar.qml: the bar's anchors and exclusive zone; every widget's layout (a
@@ -680,7 +667,7 @@ says its old number, for older notes and commits.
       to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
       Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
       analysis and a plan, with the user, before any work.
-- [ ] **11.6 Bar shape and anchoring: e.g. a "dynamic island" bar** (was 10.13) (requested
+- [ ] **11.5 Bar shape and anchoring: e.g. a "dynamic island" bar** (was 10.13) (requested
       2026-10-30)
       The bar's size can only be tuned with margins and padding today. Wanted: choosing
       what the bar is anchored to, so it can be e.g. a floating island — centred, as wide
@@ -689,9 +676,9 @@ says its old number, for older notes and commits.
       left / centre / right sections as separate islands), width from content or fixed,
       how the exclusive zone behaves for a floating bar, how popups join an island (their
       curved corners assume a bar running to its ends; see 8.12 for the margin case), and
-      animation when the island resizes. Related to 11.5 (position) and themes stage 7.
-- [ ] **11.7 Explore styling with CSS-like selectors** (was 10.14) (requested 2026-10-30)
-      First meant for after the whole themes plan; the user put it before matugen (11.8),
+      animation when the island resizes. Related to 11.4 (position) and themes stage 7.
+- [ ] **11.6 Explore styling with CSS-like selectors** (was 10.14) (requested 2026-10-30)
+      First meant for after the whole themes plan; the user put it before matugen (11.7),
       which it does not depend on.
       Themes today set values per element kind (`button.radius`, `osdToast.padding`, …,
       themes stage 7). Explore going further: styling by something like CSS selectors —
@@ -701,13 +688,55 @@ says its old number, for older notes and commits.
       only; to discuss with the user before any design. Related: the user's earlier idea
       of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
 
-- [ ] **11.8 Themes: matugen, the rest of the themes plan** (was 10.9)
+- [ ] **11.7 Themes: matugen, the rest of the themes plan** (was 10.9)
       Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
       library, profiles pick one), behaviour stays in the profile; custom animation curves
       with an editor; an Appearance section in settings; matugen-ready colours. Absorbs
       10.1 and 9.4. Stages 1–7 done and released in 2.0.0; left is stage 8, matugen: a
       template mapping its palette to our colour tokens, a "wallpaper" theme reading the
       generated file, and docs for adding the template to matugen's config.
+
+- [ ] **11.8 Compositor integration, Hyprland first** (was 10.15, scroll sensitivity;
+      widened 2026-10-31)
+      Decided with the user: the shell is a real shell — its settings change the system,
+      not only itself. Started from scroll sensitivity: the shell cannot scale the
+      scrolling of its own lists (Qt's `wheelScrollLines` is read-only from QML, checked),
+      while Hyprland's `input:scroll_factor` and `input:touchpad:scroll_factor` scale it
+      for every app, the shell's notches included. Principles agreed:
+      - **An integration layer, not Hyprland everywhere.** One singleton boundary
+        (`Compositor`, name to settle) with Hyprland as its first backend, so another
+        compositor can be added later. What talks to Hyprland today has to move behind
+        it: `singletons/Workspaces.qml` (workspaces, focus, `Hyprland.dispatch` with
+        `hl.dsp.*` Lua, the `activespecial` raw event), `widgets/WorkspacesWidget.qml`
+        (bound to the live Hyprland ObjectModel — keep that binding's crash-safety, see
+        "The Repeater crash"), `singletons/Profiles.qml` (the `window.fullscreen` fact),
+        `scripts/logout.sh` (`hyprctl dispatch 'hl.dsp.exit()'`).
+      - **The shell owns one generated file and never edits the user's.** The user's
+        config is Lua (`~/.config/hypr/hyprland.lua`, Hyprland 0.56); nwg-displays already
+        generates `monitors.lua`, loaded with `require("monitors")`. The shell writes its
+        own (e.g. `h2s_shell.lua`, "generated, do not edit"), and one `require` line in
+        `hyprland.lua` loads it — added by the user, or once by the shell with consent and
+        a backup. A change is applied live with `hyprctl eval <lua>` and written to the
+        file, so it holds without the shell running and across reloads. The shell's config
+        is the source of truth. Monitors stay nwg-displays'.
+      - **Conflicts shown plainly.** When the user's config sets an option after the
+        `require` and wins, the setting says so (read back with `hyprctl getoption`);
+        `hyprctl configerrors` reaches the settings window.
+      - **Profiles change the compositor too** (Power save turning off blur and
+        animations, say), so the shell and Hyprland feel like one environment. To work
+        out: the file holds base values and profiles apply through `eval`; reapplying
+        after a config reload (Hyprland's event) and what is left if the shell dies.
+      - **Scope grows step by step**, aiming at Hyprland's whole configuration through the
+        settings, the most important first. First case: scroll sensitivity, mouse and
+        touchpad. Candidates after: keyboard layout and repeat, natural scroll, pointer
+        sensitivity, window border colours from the theme (and matugen), Hyprland's
+        animations, hyprsunset, hypridle (overlaps our lock screen).
+      Shell-side, with the first case: the **volume step** per notch (the bar widget ~1 %
+      via `notches()`, the volume sliders 2 % — `VolumeSlider.step`,
+      `VerticalSlider.step`, also the arrow keys); keep the user's current steps. The
+      horizontal-scroll volume step of 5 is a Hyprland keybind of the user's — leave it.
+      Also fold `MonthGrid`'s own 120-step wheel counting into `ScrollNotches`.
+      Next: a plan, `docs/plans/compositor.md`, agreed with the user before any work.
 
 Touch input, last — it cannot be verified until the Framework 12 is at hand:
 
