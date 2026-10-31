@@ -674,14 +674,17 @@ Flickable {
             }
 
             component Track: Item {
+                id: _track
                 property var easing
                 property color squareColor
                 width: _preview.width
                 height: 28
 
                 // Its own sampler, bound rather than set: setting the shared one from a
-                // binding made the binding loop
-                NumberAnimation { id: _trackSampler; easing: parent.easing ?? root._draftEasing }
+                // binding made the binding loop. Through the id, not `parent`: an animation
+                // has no parent, and the name reached the Column holding the track — no
+                // easing there, so every track moved with the draft.
+                NumberAnimation { id: _trackSampler; easing: _track.easing ?? root._draftEasing }
 
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter

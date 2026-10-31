@@ -157,6 +157,8 @@ section to the new version and date.
   and the calendar's connection status change shade slightly).
 
 ### Fixed
+- Curves page: the preview's second square moves with the curve compared with; both used
+  to move with the curve being edited.
 - Music visualiser: the right channel of the vertical layout stays at the panel's edge
   when popups are made wider or narrower; the channels' order no longer depends on how
   often the canvases happened to repaint.
