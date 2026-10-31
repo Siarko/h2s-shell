@@ -11,6 +11,9 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Curves page: the graph pans and zooms freely — drag its background to move around,
+  scroll to zoom in at the pointer (up to 20×), double-click off the curve to fit it
+  again — for working on fine detail.
 - Text selection colours in themes (Colors → Text: Selection, Selected text), used by every
   field and selectable text: the default is the dark accent with white text, instead of
   Qt's navy that most fields fell back on.

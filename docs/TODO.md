@@ -319,8 +319,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       - [x] `SettingsWindow.qml` (807 → 481): `SettingsPicker`, `WindowTab`,
         `SettingsPageList` (with the sliding mark), and the five shape pages as files
         (`WidgetsShapeSettings`, `PopupsShapeSettings`, …).
-      - [ ] `CurvesSettings.qml` (772): the curve point maths (pure, testable) and the graph
-        out.
+      - [x] `CurvesSettings.qml` (772 → 431): the point maths in `CurvePoints` (pure,
+        tested), the graph in `CurveGraph.qml` — which also gained full pan and zoom (drag
+        the background, zoom at the pointer, to 20×) — and the preview in `CurvePreview.qml`.
       - [ ] Later: `BarSectionList` 447 and `HardwareSourceList` 422 (similar row
         dragging — a shared part?), `EventCard` 399, `NotificationCard` 360.
 - [ ] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)

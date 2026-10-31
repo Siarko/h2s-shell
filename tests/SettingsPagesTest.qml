@@ -45,6 +45,8 @@ TestCase {
         "panels/settings/SttSettings.qml",
         "panels/settings/ShapeSettings.qml",
         "panels/settings/ShapeSections.qml",
+        "panels/settings/CurveGraph.qml",
+        "panels/settings/CurvePreview.qml",
         "panels/settings/SettingsPicker.qml",
         "panels/settings/SettingsPageList.qml",
         "panels/settings/WindowTab.qml",
