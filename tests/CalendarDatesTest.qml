@@ -55,11 +55,53 @@ TestCase {
         assertEqual(_keys({}, 2026, 9), JSON.stringify([]), "event without a start gives no keys");
 
         // --- failures as the calendar panel shows them ---
-        assertEqual(GoogleCalendar._describe({ status: 0 }), "no connection", "status 0: offline");
-        assertEqual(GoogleCalendar._describe({ status: 0, timedOut: true }), "the request timed out", "a timeout says so");
-        assert(GoogleCalendar._describe({ status: 401 }).includes("sign-in expired"), "401: the sign-in");
-        assertEqual(GoogleCalendar._describe({ status: 500 }), "Google returned an error (HTTP 500)", "other statuses");
-        assertEqual(GoogleCalendar._describe(new Error("boom")), "boom", "anything else: its message");
+        assertEqual(GoogleCalendarData.describeFailure({ status: 0 }), "no connection", "status 0: offline");
+        assertEqual(GoogleCalendarData.describeFailure({ status: 0, timedOut: true }), "the request timed out", "a timeout says so");
+        assert(GoogleCalendarData.describeFailure({ status: 401 }).includes("sign-in expired"), "401: the sign-in");
+        assertEqual(GoogleCalendarData.describeFailure({ status: 500 }), "Google returned an error (HTTP 500)", "other statuses");
+        assertEqual(GoogleCalendarData.describeFailure(new Error("boom")), "boom", "anything else: its message");
+
+        // --- Google's JSON and the shell's shapes ---
+        assertEqual(GoogleCalendarData.offsetText(120), "+02:00", "offset east of UTC");
+        assertEqual(GoogleCalendarData.offsetText(-210), "-03:30", "offset west, with minutes");
+        assertEqual(GoogleCalendarData.offsetText(0), "+00:00", "UTC");
+
+        const calendar = GoogleCalendarData.calendar({ id: "work@x", summary: "Work", backgroundColor: "#123456" });
+        assertEqual(JSON.stringify(calendar), JSON.stringify({ id: "work@x", name: "Work", color: "#123456" }), "a calendar: name and colour");
+        assertEqual(GoogleCalendarData.calendar({ id: "a@x" }).name, "a@x", "a calendar without a name: its id");
+
+        const timed = GoogleCalendarData.event({ id: "e1", summary: "Standup", start: { dateTime: "2026-03-05T09:30:00" }, end: { dateTime: "2026-03-05T10:00:00" } },
+            calendar, {}, "#ffffff");
+        assertEqual(timed.time, "09:30 - 10:00", "a timed event's hours");
+        assertEqual(timed.color, "#123456", "no colour of its own: the calendar's");
+        assertEqual(timed.calendarColor, "#123456", "the calendar's colour shown beside it, not being the primary one");
+        const coloured = GoogleCalendarData.event({ id: "e2", colorId: "5", start: { dateTime: "2026-03-05T09:30:00" }, end: { dateTime: "2026-03-05T10:00:00" } },
+            calendar, { "5": "#fbd75b" }, "#ffffff");
+        assertEqual(coloured.color, "#fbd75b", "its own colour, from Google's palette");
+        assertEqual(coloured.title, "(No title)", "no title");
+        assertEqual(GoogleCalendarData.event({ id: "e3", colorId: "99", start: { date: "2026-03-05" }, end: { date: "2026-03-06" } },
+            calendar, {}, "#ffffff").color, "#ffffff", "a colour id not in the palette: the fallback");
+        const allDay = GoogleCalendarData.event({ id: "e4", start: { date: "2026-03-05" }, end: { date: "2026-03-08" } }, calendar, {}, "#ffffff");
+        assertEqual(allDay.time, "All day", "all day");
+        assertEqual(allDay.allDayDuration, 3, "end date exclusive: three days");
+        assertEqual(allDay.allDayEndDate.getDate(), 7, "the last day shown is the day before the end date");
+        assertEqual(GoogleCalendarData.event({ id: "e5", start: { date: "2026-03-05" }, end: { date: "2026-03-05" } }, calendar, {}, "#ffffff").allDayDuration,
+            1, "zero-length all-day event: one day");
+
+        const body = GoogleCalendarData.eventBody({ year: 2026, month: 2, day: 5, title: "Lunch", startTime: "12:00", endTime: "13:00", colorId: "2", rrule: "RRULE:FREQ=WEEKLY;INTERVAL=1" }, "+01:00");
+        assertEqual(body.start.dateTime, "2026-03-05T12:00:00+01:00", "a timed event's start, with the offset");
+        assertEqual(body.end.dateTime, "2026-03-05T13:00:00+01:00", "and its end");
+        assertEqual(body.recurrence.join(), "RRULE:FREQ=WEEKLY;INTERVAL=1", "its recurrence");
+        assertEqual(body.description, undefined, "no description: none sent");
+        const allDayBody = GoogleCalendarData.eventBody({ year: 2026, month: 1, day: 28, title: "Trip" }, "+01:00");
+        assertEqual(allDayBody.start.date + " " + allDayBody.end.date, "2026-02-28 2026-03-01", "all day: end date the next day, across a month");
+        assertEqual(allDayBody.start.dateTime, null, "all day: no times");
+
+        assertEqual(GoogleCalendarData.recurrenceEndingBefore(["RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO"], 2026, 2, 1).join(),
+            "RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20260228", "a series cut to end the day before: COUNT replaced, across a month");
+        assertEqual(GoogleCalendarData.recurrenceEndingBefore(["EXDATE:20260101", "RRULE:FREQ=DAILY;UNTIL=20270101"], 2026, 0, 1).join("|"),
+            "EXDATE:20260101|RRULE:FREQ=DAILY;UNTIL=20251231", "UNTIL replaced, other lines kept, across a year");
+        assertEqual(GoogleCalendarData.recurrenceEndingBefore(["EXDATE:20260101"], 2026, 0, 1), null, "no RRULE: nothing to cut");
 
         // --- recurrence rules ---
         const weekly = Object.assign({}, CalendarDates.defaultRecurrence, { days: ["MO", "WE"] });

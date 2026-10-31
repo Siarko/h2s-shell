@@ -291,8 +291,13 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `LinkInfo` (speeds, address, DNS; was written twice, for Ethernet and Wi-Fi),
       `WifiNetworkRow` (state still kept by SSID in the panel), `HiddenNetworkRow`,
       `SignalBars`.
-- [ ] **6.5 Split `singletons/googlecalendar/GoogleCalendar.qml`** (683 lines) [#17]
+- [x] **6.5 Split `singletons/googlecalendar/GoogleCalendar.qml`** (683 lines) [#17]
       API client / store / date+RRULE helpers.
+      Done 2026-10-31 (640 lines by then, 384 after): `GoogleCalendarApi` (endpoints and
+      requests), `GoogleCalendarData` (pure: Google's JSON to the panels' shapes and back,
+      the series cut for "delete from here", failures in words; tested), `GoogleCalendar`
+      the store. The store's hand-kept caches are unchanged — rethinking their
+      invalidation would be its own item, not part of a split.
 - [ ] **6.6 Split `singletons/network/WifiManager.qml`** (359 lines) [P3]
 - [ ] **6.7 Remaining large files** [P3]
       `MusicPanel` 481, `BarSectionList` 425, `WorkspacesWidgetSettings` 394,
@@ -634,6 +639,17 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       a submenu and back. Where: `panels/TrayMenu.qml` — `Component.onCompleted` runs
       `changeMenu()`, whose `beginTransition(direction)` is the sideways slide; a fresh
       open should show the menu in place and leave the entrance to the popup.
+- [ ] **10.17 Multi-day events in the event form** (requested 2026-10-31)
+      The form takes one day — the one selected in the calendar — and, for a timed event,
+      a start and end time on it; there is no way to give an end date. Google and the
+      panel already handle multi-day events (`CalendarDates.eventDayKeys`,
+      `GoogleCalendarData.event`'s `allDayDuration`), and editing one made elsewhere
+      would today squash it to its first day. Wanted: an end date (all day: the last
+      day; timed: the end's date and time), defaulting to the start day, and editing
+      keeping an existing event's span. Where: `panels/calendar/EventForm.qml`,
+      `GoogleCalendarData.eventBody` (end date, exclusive for all day), and what
+      `EventCard`/`EventsPanel` pass in. To settle with the user: how the end date is
+      picked (a date field like the recurrence's, or a small calendar).
 - [ ] **10.1 Configurable animations** — now part of **10.9**
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close

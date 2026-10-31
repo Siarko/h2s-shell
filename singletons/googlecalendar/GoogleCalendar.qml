@@ -5,16 +5,14 @@ import Quickshell.Io
 import QtQuick
 import qs.components
 import qs.singletons
-import qs.singletons.network
 import qs.singletons.googlecalendar
 
+// The calendar store: the account's calendars, their colours and the events of the
+// months asked for, fetched through GoogleCalendarApi and turned into the panels' shapes by
+// GoogleCalendarData; adding, changing and deleting events, each followed by a refetch of
+// its month. Signing in is GoogleCalendarAuth's.
 Singleton {
     id: root
-
-    readonly property string _ENDPOINT_COLORS: "https://www.googleapis.com/calendar/v3/colors"
-    readonly property string _ENDPOINT_CALENDARS: "https://www.googleapis.com/calendar/v3/users/me/calendarList"
-    readonly property string _ENDPOINT_EVENTS: "https://www.googleapis.com/calendar/v3/calendars/{0}/events"
-    readonly property string _ENDPOINT_EVENT: "https://www.googleapis.com/calendar/v3/calendars/{0}/events/{1}"
 
     readonly property bool isAuthorized: Config.gcal.refreshToken !== ""
     // The "gcal.enabled" profile setting — off, e.g. in Power save, the calendar fetches
@@ -27,21 +25,6 @@ Singleton {
     // last load worked. A failed load otherwise looked like a month without events.
     property string error: ""
 
-    // A failure as the user would put it
-    function _describe(reason) {
-        if (reason?.timedOut)
-            return "the request timed out";
-        if (reason?.status === 0)
-            return "no connection";
-        if (reason?.status === 401)
-            return "the sign-in expired — reconnect in Settings → Calendar";
-        if (reason?.status === 403)
-            return "access was denied";
-        if (reason?.status)
-            return "Google returned an error (HTTP " + reason.status + ")";
-        return reason?.message ?? String(reason);
-    }
-
     property var events: ({})
     property var eventsByCalendar: ({})
     property var eventsLoading: ({})
@@ -50,9 +33,8 @@ Singleton {
     property bool _initialized: false
     property var _initializatingPromise: null
 
-    property var _colorMapEvents: ({})
-    property var _colorMapCalendars: ({})
-    property var _busyRequests: ({})
+    // Google's event colours by colour id, for the event form's swatches
+    property var eventColors: ({})
     property var _fetchedMonths: ({})
 
     property var enabledCalendarIds: Config.gcal.enabledCalendarIds
@@ -115,7 +97,7 @@ Singleton {
                 logger.warn("Initialisation did not produce any calendars — will retry");
                 const failure = results[1]?.status === false ? results[1].reason : results[0]?.reason;
                 root.error = "Could not load your calendars: "
-                    + (failure !== undefined ? root._describe(failure) : "Google returned none");
+                    + (failure !== undefined ? GoogleCalendarData.describeFailure(failure) : "Google returned none");
             }
         });
         return root._initializatingPromise;
@@ -160,25 +142,22 @@ Singleton {
 
     function fetchColorMappings(invalidateCache = false) {
         return Promises.create((resolve, reject) => {
-            if (!invalidateCache && Object.keys(root._colorMapEvents).length > 0) {
+            if (!invalidateCache && Object.keys(root.eventColors).length > 0) {
                 resolve();
                 return;
             }
             // The callback must return the bare request: ensureAuthorized only sees a 401 if
             // the rejection reaches it, and a catch inside the callback would swallow it.
             GoogleCalendarAuth.ensureAuthorized(() => {
-                return _requestColors();
+                return GoogleCalendarApi.colors();
             }).then(response => {
                 return response.json();
             }).then(json => {
-                let mapBackgroundColor = objects => {
-                    return Object.keys(objects).reduce((result, key) => {
-                        result[key] = objects[key].background;
-                        return result;
-                    }, {});
-                };
-                _colorMapEvents = mapBackgroundColor(json.event || {});
-                _colorMapCalendars = mapBackgroundColor(json.calendar || {});
+                const colors = json.event || {};
+                root.eventColors = Object.keys(colors).reduce((result, key) => {
+                    result[key] = colors[key].background;
+                    return result;
+                }, {});
                 resolve();
             }).catch(reject);
         });
@@ -191,14 +170,14 @@ Singleton {
             }
             // Bare request in the callback, for the same reason as in fetchColorMappings
             return GoogleCalendarAuth.ensureAuthorized(() => {
-                return _requestCalendars();
+                return GoogleCalendarApi.calendars();
             }).then(result => {
                 return result.json();
             }).then(json => {
                 logger.log("Calendar json received");
                 let cals = {};
                 json.items.forEach((element, index) => {
-                    let item = _prepareCalendarData(json.items[index]);
+                    let item = GoogleCalendarData.calendar(json.items[index]);
                     cals[item.id] = item;
                 });
                 root.calendars = cals;
@@ -217,37 +196,30 @@ Singleton {
                 return resolve(null);
 
             let calendar = root.calendars[calendarId] ?? null;
-            let tz = _tzOffset();
-            let firstDay = _dateKey(year, month, 1);
-            let lastDay  = _dateKey(year, month, new Date(year, month + 1, 0).getDate());
+            let tz = GoogleCalendarData.localOffset();
+            let firstDay = CalendarDates.dateKey(year, month, 1);
+            let lastDay  = CalendarDates.dateKey(year, month, new Date(year, month + 1, 0).getDate());
 
             // Pre-initialise per-day buckets so stale events are cleared on invalidate
             let daysInMonth = new Date(year, month + 1, 0).getDate();
             for (let d = 1; d <= daysInMonth; d++) {
-                let dayKey = _dateKey(year, month, d);
+                let dayKey = CalendarDates.dateKey(year, month, d);
                 if (!root.eventsByCalendar[dayKey]) root.eventsByCalendar[dayKey] = {};
                 root.eventsByCalendar[dayKey][calendarId] = [];
             }
 
             return GoogleCalendarAuth.ensureAuthorized(() => {
-                return Fetch.request(root._ENDPOINT_EVENTS, {
-                    method: "GET",
-                    headers: { "Authorization": "Bearer " + Config.gcal.accessToken },
-                    params: [calendarId],
-                    query: {
-                        timeMin: firstDay + "T00:00:00" + tz,
-                        timeMax: lastDay  + "T23:59:59" + tz,
-                        singleEvents: true,
-                        orderBy: 'startTime',
-                        maxResults: 2500
-                    },
-                    id: _monthKey(year, month) + "_" + calendarId
+                return GoogleCalendarApi.events({
+                    calendarId: calendarId,
+                    timeMin: firstDay + "T00:00:00" + tz,
+                    timeMax: lastDay  + "T23:59:59" + tz,
+                    id: CalendarDates.monthKey(year, month) + "_" + calendarId
                 });
             }).then(response => {
                 return response.json().then(data => {
                     for (let item of (data.items || [])) {
-                        let prepared = _prepareEventData(item, calendar);
-                        let dayKeys  = _getEventDayKeys(item, year, month);
+                        let prepared = GoogleCalendarData.event(item, calendar, root.eventColors, Theme.accentDark);
+                        let dayKeys  = CalendarDates.eventDayKeys(item, year, month);
                         for (let dayKey of dayKeys) {
                             if (!root.eventsByCalendar[dayKey])
                                 root.eventsByCalendar[dayKey] = {};
@@ -269,7 +241,7 @@ Singleton {
             return;
         }
 
-        let monthKey = _monthKey(year, month);
+        let monthKey = CalendarDates.monthKey(year, month);
         if (!invalidateCache && root._fetchedMonths[monthKey]) return;
 
         delete root._fetchedMonths[monthKey];
@@ -290,7 +262,7 @@ Singleton {
                 const failed = (results ?? []).filter(result => result.status === false);
                 root.error = failed.length === 0 ? ""
                     : "Could not load events from " + failed.length + " of " + results.length
-                      + " calendars: " + root._describe(failed[0].reason);
+                      + " calendars: " + GoogleCalendarData.describeFailure(failed[0].reason);
                 let daysInMonth = new Date(year, month + 1, 0).getDate();
                 for (let d = 1; d <= daysInMonth; d++)
                     _mergeEvents(year, month, d);
@@ -301,7 +273,7 @@ Singleton {
                 // The chain can now reject for real, so the loading flag has to be cleared
                 // here too — otherwise EventsPanel shows its spinner forever.
                 setDayLoading(monthKey, false);
-                root.error = "Could not load events: " + root._describe(e);
+                root.error = "Could not load events: " + GoogleCalendarData.describeFailure(e);
                 logger.error("fetchMonthEvents failed: ", e);
                 logger.error("Stack: ", e?.stack);
             });
@@ -321,76 +293,13 @@ Singleton {
         }
     }
 
-    function _prepareEventData(data, calendar) {
-        let timeStr = "All day";
-        let startTimeStr = "";
-        let endTimeStr = "";
-        let color = data.colorId ? (root._colorMapEvents[data.colorId] || Theme.accentDark) : calendar.color;
-        let calendarColor = calendar ? (calendar?.primary ? null : calendar.color) : null;
-
-        let startTime = null;
-        let allDayDuration = 0;
-        let allDayStartDate = null;
-        let allDayEndDate = null;
-
-        if (data.start && data.start.dateTime) {
-            startTime = new Date(data.start.dateTime);
-            startTimeStr = ("0" + startTime.getHours()).slice(-2) + ":" + ("0" + startTime.getMinutes()).slice(-2);
-            let dt = new Date(data.end.dateTime);
-            endTimeStr = ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2);
-            timeStr = startTimeStr + " - " + endTimeStr;
-        } else if (data.start && data.start.date) {
-            let sp = data.start.date.split("-");
-            let ep = data.end.date.split("-");
-            allDayStartDate = new Date(parseInt(sp[0]), parseInt(sp[1]) - 1, parseInt(sp[2]));
-            let endExclusive = new Date(parseInt(ep[0]), parseInt(ep[1]) - 1, parseInt(ep[2]));
-            // Same zero-length case as in _getEventDayKeys: treat end == start as one day
-            if (endExclusive <= allDayStartDate)
-                endExclusive = new Date(allDayStartDate.getFullYear(), allDayStartDate.getMonth(), allDayStartDate.getDate() + 1);
-            allDayEndDate = new Date(endExclusive.getTime() - 86400000);
-            allDayDuration = (endExclusive.getTime() - allDayStartDate.getTime()) / 86400000;
-        }
-
-        return {
-            id: data.id,
-            title: data.summary || "(No title)",
-            description: data.description,
-            eventType: data.eventType,
-            startTime: startTime,
-            startTimeStr: startTimeStr,
-            endTimeStr: endTimeStr,
-            time: timeStr,
-            allDayDuration: allDayDuration,
-            allDayStartDate: allDayStartDate,
-            allDayEndDate: allDayEndDate,
-            color: color,
-            calendarColor: calendarColor ?? null,
-            calendarId: calendar?.id ?? null,
-            colorId: data.colorId ?? null,
-            rrule: (data.recurrence && data.recurrence.length > 0) ? data.recurrence[0] : null,
-            recurringEventId: data.recurringEventId ?? null
-        };
-    }
-
-    function _prepareCalendarData(item) {
-        return {
-            id: item.id,
-            name: item.summary || item.id,
-            color: item.backgroundColor || "#5b9bf5",
-            primary: item.primary
-        };
-    }
-
     // month is 0-indexed (same as fetchMonthEvents)
     // event: { year, month, day, title, description, startTime, endTime, calendarId }
     function createEvent(event) {
         const calendarId = event.calendarId || "primary";
-        const body = _buildEventBody(event);
+        const body = _eventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestCreateEvent({
-                calendarId: calendarId,
-                body: body
-            });
+            return GoogleCalendarApi.createEvent(calendarId, body);
         }).then(() => {
             fetchMonthEvents(event.year, event.month, true);
         }).catch(e => {
@@ -401,13 +310,9 @@ Singleton {
     // event: { year, month, day, eventId, calendarId, title, description, startTime, endTime }
     function updateEvent(event) {
         const calendarId = event.calendarId || "primary";
-        const body = _buildEventBody(event);
+        const body = _eventBody(event);
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestUpdateEvent({
-                calendarId: calendarId,
-                eventId: event.eventId,
-                body: body
-            });
+            return GoogleCalendarApi.updateEvent(calendarId, event.eventId, body);
         }).then(() => {
             fetchMonthEvents(event.year, event.month, true);
         }).catch(e => {
@@ -420,34 +325,14 @@ Singleton {
     function deleteFromEvent(event) {
         const calendarId = event.calendarId || "primary";
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestGetEvent({
-                calendarId: calendarId,
-                eventId: event.recurringEventId
-            }).then(response => response.json()).then(masterData => {
-                const recurrence = masterData.recurrence || [];
-                const rruleIdx = recurrence.findIndex(r => r.startsWith("RRULE:"));
-                if (rruleIdx === -1)
+            return GoogleCalendarApi.getEvent(calendarId, event.recurringEventId).then(response => response.json()).then(masterData => {
+                const newRecurrence = GoogleCalendarData.recurrenceEndingBefore(masterData.recurrence || [], event.year, event.month, event.day);
+                if (newRecurrence === null)
                     return;
-
-                // UNTIL = day before the selected instance, in iCal format YYYYMMDD
-                const dayBefore = new Date(event.year, event.month, event.day);
-                dayBefore.setDate(dayBefore.getDate() - 1);
-                const until = dayBefore.getFullYear().toString() + ("0" + (dayBefore.getMonth() + 1)).slice(-2) + ("0" + dayBefore.getDate()).slice(-2);
-
-                let rrule = recurrence[rruleIdx].replace(/;UNTIL=[^;]*/g, "").replace(/;COUNT=[^;]*/g, "");
-                rrule += ";UNTIL=" + until;
-
-                const newRecurrence = recurrence.slice();
-                newRecurrence[rruleIdx] = rrule;
                 logger.log("Changing event recurrence", newRecurrence);
-
-                return _requestUpdateEvent({
-                    calendarId: calendarId,
-                    eventId: event.recurringEventId,
-                    body: JSON.stringify({
-                        recurrence: newRecurrence
-                    })
-                });
+                return GoogleCalendarApi.updateEvent(calendarId, event.recurringEventId, JSON.stringify({
+                    recurrence: newRecurrence
+                }));
             });
         }).then(() => {
             fetchMonthEvents(event.year, event.month, true);
@@ -460,10 +345,7 @@ Singleton {
     function deleteEvent(event) {
         const calendarId = event.calendarId || "primary";
         GoogleCalendarAuth.ensureAuthorized(() => {
-            return _requestDeleteEvent({
-                calendarId: calendarId,
-                eventId: event.eventId
-            });
+            return GoogleCalendarApi.deleteEvent(calendarId, event.eventId);
         }).then(() => {
             fetchMonthEvents(event.year, event.month, true);
         }).catch(e => {
@@ -471,67 +353,15 @@ Singleton {
         });
     }
 
-    function _buildEventBody(data) {
-        const dateStr = _dateKey(data.year, data.month, data.day);
-        let body = {
-            summary: data.title
-        };
-        if (data.description) {
-            body.description = data.description;
-        }
-        if (data.colorId) {
-            body.colorId = data.colorId;
-        }
-        if (data.rrule) {
-            body.recurrence = [data.rrule];
-        }
-
-        body.start = {
-            date: null,
-            dateTime: null
-        };
-        body.end = {
-            date: null,
-            dateTime: null
-        };
-        if (data.startTime) {
-            const tz = _tzOffset();
-            body.start.dateTime = dateStr + "T" + data.startTime + ":00" + tz;
-            body.end.dateTime = dateStr + "T" + (data.endTime || data.startTime) + ":00" + tz;
-        } else {
-            // Google's all-day end date is exclusive. Sending the start date again creates
-            // a zero-length event that the phone still shows but _getEventDayKeys drops.
-            const nextDay = new Date(data.year, data.month, data.day + 1);
-            body.start.date = dateStr;
-            body.end.date = _dateKey(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate());
-        }
-        body = JSON.stringify(body);
+    // The event as JSON text for Google, in the local time zone
+    function _eventBody(event) {
+        const body = JSON.stringify(GoogleCalendarData.eventBody(event, GoogleCalendarData.localOffset()));
         logger.log("Event data", body);
         return body;
     }
 
-    function _tzOffset(): string {
-        let off = -(new Date().getTimezoneOffset());
-        let sign = off >= 0 ? "+" : "-";
-        let h = ("0" + Math.floor(Math.abs(off) / 60)).slice(-2);
-        let m = ("0" + (Math.abs(off) % 60)).slice(-2);
-        return sign + h + ":" + m;
-    }
-
-    function _dateKey(year: int, month: int, day: int): string {
-        return CalendarDates.dateKey(year, month, day);
-    }
-
-    function _monthKey(year: int, month: int): string {
-        return CalendarDates.monthKey(year, month);
-    }
-
-    function _getEventDayKeys(rawItem, year, month) {
-        return CalendarDates.eventDayKeys(rawItem, year, month);
-    }
-
     function _mergeEvents(year, month, day) {
-        let dateKey = _dateKey(year, month, day);
+        let dateKey = CalendarDates.dateKey(year, month, day);
         root.events[dateKey] = [];
         let result = [];
         for (const calendarId in root.eventsByCalendar[dateKey]) {
@@ -540,97 +370,10 @@ Singleton {
                 result.push(event);
             }
         }
-        result.sort(function (a, b) {
-            if (a.startTime === b.startTime)
-                return 0;
-            if (a.startTime === null)
-                return -1;
-            if (b.startTime === null)
-                return 1;
-            return a.startTime > b.startTime ? -1 : 1;
-        });
+        result.sort(GoogleCalendarData.compareEvents);
         root.events[dateKey] = result;
         root.eventsChanged();
         logger.log("Sorting done, found events:", result.length);
-    }
-
-    function _requestEvents(data) {
-        return Fetch.request(root._ENDPOINT_EVENTS, {
-            method: "GET",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken
-            },
-            params: [data.calendarId],
-            query: {
-                timeMin: data.timeMin,
-                timeMax: data.timeMax,
-                singleEvents: true,
-                orderBy: 'startTime'
-            },
-            id: data.id
-        });
-    }
-
-    function _requestCreateEvent(data) {
-        return Fetch.request(root._ENDPOINT_EVENTS, {
-            method: "POST",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken,
-                "Content-Type": "application/json"
-            },
-            params: [data.calendarId],
-            body: data.body
-        });
-    }
-
-    function _requestUpdateEvent(data) {
-        return Fetch.request(root._ENDPOINT_EVENT, {
-            method: "PATCH",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken,
-                "Content-Type": "application/json"
-            },
-            params: [data.calendarId, data.eventId],
-            body: data.body
-        });
-    }
-
-    function _requestGetEvent(data) {
-        return Fetch.request(root._ENDPOINT_EVENT, {
-            method: "GET",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken
-            },
-            params: [data.calendarId, data.eventId]
-        });
-    }
-
-    function _requestDeleteEvent(data) {
-        return Fetch.request(root._ENDPOINT_EVENT, {
-            method: "DELETE",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken
-            },
-            params: [data.calendarId, data.eventId]
-        });
-    }
-
-    function _requestColors() {
-        return Fetch.request(root._ENDPOINT_COLORS, {
-            method: "GET",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken
-            }
-        });
-    }
-
-    function _requestCalendars() {
-        return Fetch.request(root._ENDPOINT_CALENDARS, {
-            method: "GET",
-            headers: {
-                "Authorization": "Bearer " + Config.gcal.accessToken
-            }
-        });
     }
 
     function setDayLoading(day, state) {

@@ -323,7 +323,7 @@ Item {
                         }
 
                         Rectangle {
-                            visible: isCurrent && (GoogleCalendar.events[GoogleCalendar._dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
+                            visible: isCurrent && (GoogleCalendar.events[CalendarDates.dateKey(root.displayYear, root.displayMonth, dayNum)] ?? []).length > 0
                             width: 4
                             height: 4
                             radius: width / 2

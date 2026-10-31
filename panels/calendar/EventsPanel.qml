@@ -29,7 +29,7 @@ Item {
             for (let i = 0; i < 7; i++) {
                 let d = new Date(weekStart);
                 d.setDate(weekStart.getDate() + i);
-                let key = GoogleCalendar._dateKey(d.getFullYear(), d.getMonth(), d.getDate());
+                let key = CalendarDates.dateKey(d.getFullYear(), d.getMonth(), d.getDate());
                 result.push(...(GoogleCalendar.events[key] ?? []));
             }
             return _dedupById(result);
@@ -38,10 +38,10 @@ Item {
             let days = new Date(displayYear, displayMonth + 1, 0).getDate();
             let result = [];
             for (let d = 1; d <= days; d++)
-                result.push(...(GoogleCalendar.events[GoogleCalendar._dateKey(displayYear, displayMonth, d)] ?? []));
+                result.push(...(GoogleCalendar.events[CalendarDates.dateKey(displayYear, displayMonth, d)] ?? []));
             return _dedupById(result);
         }
-        return GoogleCalendar.events[GoogleCalendar._dateKey(displayYear, displayMonth, selectedDay)] ?? [];
+        return GoogleCalendar.events[CalendarDates.dateKey(displayYear, displayMonth, selectedDay)] ?? [];
     }
 
     // One banner at a time: switched off, not signed in, or the last load failed — each
@@ -299,7 +299,7 @@ Item {
     }
 
     // Loading spinner overlay
-    property bool _loading: GoogleCalendar.eventsLoading[GoogleCalendar._monthKey(displayYear, displayMonth)] ?? false
+    property bool _loading: GoogleCalendar.eventsLoading[CalendarDates.monthKey(displayYear, displayMonth)] ?? false
 
     // Spins around the centre of the glyph's ring. Rotating the Text spun it around the
     // middle of its box instead — Nerd Font icons are wider than the one-cell box and

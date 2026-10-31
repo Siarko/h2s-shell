@@ -13,10 +13,10 @@ Item {
     property string selectedColorId: ""
 
     readonly property var _colorEntries: {
-        const keys = Object.keys(GoogleCalendar._colorMapEvents).sort((a, b) => parseInt(a) - parseInt(b));
+        const keys = Object.keys(GoogleCalendar.eventColors).sort((a, b) => parseInt(a) - parseInt(b));
         return keys.map(key => ({
                     id: key,
-                    hex: GoogleCalendar._colorMapEvents[key]
+                    hex: GoogleCalendar.eventColors[key]
                 }));
     }
 
