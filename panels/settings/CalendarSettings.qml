@@ -224,30 +224,9 @@ ColumnLayout {
                                 elide: Text.ElideRight
                             }
 
-                            Rectangle {
-                                id: _calCheckbox
-                                property bool checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.modelData.id)
-                                width: 16
-                                height: 16
-                                radius: Theme.checkbox.radius
-                                color: checked ? Theme.accent : "transparent"
-                                border.color: Theme.accent
-                                border.width: Theme.border.width
-
-                                Text {
-                                    font.family: Theme.fontFamily
-                                    anchors.centerIn: parent
-                                    text: "✓"
-                                    visible: _calCheckbox.checked
-                                    font.pixelSize: Theme.fontSizeXSmall
-                                    color: Theme.textPrimary
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: GoogleCalendar.setCalendarEnabled(calendarRow.modelData.id, !_calCheckbox.checked)
-                                }
+                            Checkbox {
+                                checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.modelData.id)
+                                onToggled: GoogleCalendar.setCalendarEnabled(calendarRow.modelData.id, !checked)
                             }
                         }
                     }

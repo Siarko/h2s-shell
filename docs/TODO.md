@@ -278,9 +278,13 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       Done 2026-10-30: `availableContentHeight` in `Popup.qml` (screen height less the bar,
       the paddings and a 16 px gap), set on a panel with an `availableHeight` property.
       NetworkPanel's list and NotificationPanel (which had its own `- 40 - 16`) use it.
-- [ ] **6.3 Split `panels/calendar/EventForm.qml`** (1033 lines) [P3]
+- [x] **6.3 Split `panels/calendar/EventForm.qml`** (1033 lines) [P3]
       The RRULE editor, colour picker, calendar picker and all-day/time row are four
       independent components.
+      Done 2026-10-30 (667 lines by then, 222 after): `RecurrenceEditor.qml` (rule state
+      and editor; the rule text built and read by `CalendarDates.recurrenceRule` /
+      `parseRecurrence`, tested), `EventColorRow.qml`, and a shared
+      `components/Checkbox.qml` for All day, Recurring and the calendar settings list.
 - [ ] **6.4 Split `panels/NetworkPanel.qml`** (928 lines) [P3]
       Splits cleanly along the section comments already in the file.
 - [ ] **6.5 Split `singletons/googlecalendar/GoogleCalendar.qml`** (683 lines) [#17]

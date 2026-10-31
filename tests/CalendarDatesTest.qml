@@ -60,5 +60,20 @@ TestCase {
         assert(GoogleCalendar._describe({ status: 401 }).includes("sign-in expired"), "401: the sign-in");
         assertEqual(GoogleCalendar._describe({ status: 500 }), "Google returned an error (HTTP 500)", "other statuses");
         assertEqual(GoogleCalendar._describe(new Error("boom")), "boom", "anything else: its message");
+
+        // --- recurrence rules ---
+        const weekly = Object.assign({}, CalendarDates.defaultRecurrence, { days: ["MO", "WE"] });
+        assertEqual(CalendarDates.recurrenceRule(weekly), "RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE", "weekly on days, never ending");
+        assertEqual(CalendarDates.recurrenceRule(Object.assign({}, weekly, { freq: "MONTHLY", interval: 2, endType: "count", count: 5 })),
+            "RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=5", "days only for weekly; ending after a count");
+        assertEqual(CalendarDates.recurrenceRule(Object.assign({}, weekly, { days: [], endType: "date", endDate: "2026-12-31" })),
+            "RRULE:FREQ=WEEKLY;INTERVAL=1;UNTIL=20261231", "ending on a date");
+        assertEqual(CalendarDates.recurrenceRule(Object.assign({}, weekly, { days: [], endType: "date", endDate: "2026-12" })),
+            "RRULE:FREQ=WEEKLY;INTERVAL=1", "an unfinished end date is left out");
+        assertEqual(CalendarDates.parseRecurrence(""), null, "no rule: no recurrence");
+        assertEqual(JSON.stringify(CalendarDates.parseRecurrence("RRULE:FREQ=DAILY;INTERVAL=3;UNTIL=20270115")),
+            JSON.stringify({ freq: "DAILY", interval: 3, days: [], endType: "date", endDate: "2027-01-15", count: 1 }), "parses an end date");
+        for (const rule of ["RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE", "RRULE:FREQ=YEARLY;INTERVAL=1;COUNT=10", "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20261231"])
+            assertEqual(CalendarDates.recurrenceRule(CalendarDates.parseRecurrence(rule)), rule, "round trip: " + rule);
     }
 }

@@ -101,6 +101,9 @@ section to the new version and date.
   drafts. Border colours are in Colors → Borders.
 
 ### Changed
+- One checkbox everywhere: the calendar list in the calendar settings uses the event
+  form's look (14 px, a muted outline when unchecked), and every checkbox takes the
+  keyboard focus on Tab and toggles with Space.
 - Popups, the calendar and the settings window's sidebar grow with the theme's text size;
   each popup's width (and all of them at once) can be widened or narrowed in Appearance →
   Popups → Widths, shown with the width it comes to. Wi-Fi rows grow with their content,
