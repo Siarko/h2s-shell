@@ -10,7 +10,25 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Changed
+- Notifications: each picture has its place. The app's icon stays small in the header;
+  a square image (an avatar, album art, an app's logo sent as an image) is a rounded
+  thumbnail beside the title and text; a wide or tall one (a screenshot) a preview across
+  the card. It used to be one image for everything, centred under the text — app logos
+  included.
+- Notifications: clicking a notification that has a default action (opening the chat it
+  came from, say) runs it — the header, the text or the image; such a card lights up
+  under the pointer, which is a hand over it, the text included. The text can still be
+  selected by dragging, and a click that clears a selection only clears it. The default
+  action used to be an empty button.
+
 ### Fixed
+- Notifications: an icon the icon theme lacks shows nothing instead of a purple
+  checkerboard.
+- Notifications: a toast whose button was clicked keeps its content while it slides
+  away; it used to empty first, as the notification closes the moment its action runs.
+- Toasts no longer stop counting down after the shell reloads its files: a toast removed
+  by the reload stayed first in line, and the ones after it waited for it for ever.
 - A tray menu opening with no menu open comes in from the bar like every other popup;
   it used to slide in sideways, as when switching from another icon's menu.
 

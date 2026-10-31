@@ -15,6 +15,7 @@ TestCase {
         "panels/calendar/EventCard.qml",
         "panels/calendar/RecurringDeleteChoice.qml",
         "components/NotificationCard.qml",
+        "components/RoundedImage.qml",
         "components/NotificationReply.qml",
         "components/CodeChips.qml",
         "panels/calendar/EventColorRow.qml",

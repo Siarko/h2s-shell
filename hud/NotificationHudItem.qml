@@ -73,6 +73,10 @@ Item {
             Notifications.toastGone(currentNotif.id);
     }
 
+    // Gone without leaving — a reload rebuilding the HUD — it must still come off the list,
+    // or the toasts after it wait for it to count down, for ever
+    Component.onDestruction: _leave()
+
     // Whether this toast is the oldest on screen, the one counting down
     readonly property bool _counting: currentNotif !== null && Notifications.shownToasts[0] === currentNotif.id
 

@@ -658,6 +658,63 @@ input last. Each title says its old number, for older notes and commits.
       `panels/music/VisualizerCanvas.qml` (or a sibling) laid over the cover. The look is
       to be settled with the user.
 
+Added 2026-10-31, while testing notifications, to go after 11.2 — numbered on from the
+end so the numbers above keep meaning what older notes say:
+
+- [x] **11.15 Notification pictures, each in its place; the default action on the card**
+      (requested 2026-10-31) — done 2026-10-31, verified on the host
+      A notification has an app icon (`app_icon`, or its desktop entry's icon) and an
+      image (`image-data` / `image-path`: an avatar, album art, a screenshot — or, from
+      Chrome/Electron, the app's logo). The card showed every image centred under the
+      text. Now: the icon small in the header; a square image a rounded thumbnail left of
+      the text; a wide or tall one a preview across the card; an icon the theme lacks
+      shows nothing (no checkerboard). The `default` action (clicking the notification)
+      was an empty button (and never found: Quickshell's actions have `identifier`, not
+      `id`): now the card itself — header, text, image — runs it, shown by a hover
+      background and a hand cursor, over the text too (still selectable by dragging; a
+      click that clears a selection only clears it). Header colours stay free for
+      urgency or kind of message, not for "clickable" (the user's call). A card keeps
+      its content while it slides away after an action closed its notification. `components/NotificationCard.qml`,
+      `components/RoundedImage.qml`.
+- [ ] **11.16 Icon theme in the settings** (requested 2026-10-31)
+      The shell has no icon theme: qt6ct sets none, so Qt looks only in `hicolor` — app
+      icons load, status icons (`dialog-warning`…) do not. Quickshell sets the theme once,
+      at launch (`QS_ICON_THEME` or `//@ pragma IconTheme`); nothing changes it live.
+      Agreed: a `scripts/launch.sh` reads the setting from the config and starts
+      `QS_ICON_THEME=… qs`; Hyprland's autostart (`hyprland.lua`, `sleep 2 && qs`) calls
+      it instead (one change, backed up first); choosing a theme restarts the shell
+      through it, and the page says so. A global setting (a per-profile one would restart
+      the shell on a profile switch), on the theme page. "Automatic", the default: the
+      system theme (gsettings) if installed, else the first theme found in
+      `~/.local/share/icons`, then `/usr/share/icons` — not `hicolor`, not cursor-only
+      themes such as `default`. The list offers the installed themes. Covers every icon
+      of the shell, the tray's too.
+- [ ] **11.17 Formatting in notification text** (requested 2026-10-31)
+      The shell tells senders it supports body markup (`bodyMarkupSupported`), but the
+      card shows the tags as typed: `<b>`, `<i>`, `<u>`, `<a href>` (hyperlinks are
+      advertised too) and `<img>`. Render the spec's subset — and only it: other tags and
+      entities escaped, links opened on click (through `Qt.openUrlExternally`), so a
+      notification cannot inject arbitrary rich text. Keep text selectable and the codes
+      found in it (CodeChips) working on the plain text.
+- [ ] **11.18 A count beside the notifications icon** (requested 2026-10-31)
+      The bar's notifications widget only turns accent-coloured when there is any
+      notification (`widgets/NotificationsWidget.qml`); how many is not shown. Wanted: the
+      number beside or on the icon — a badge or plain digits, to settle with the user —
+      hidden at zero, capped ("9+") so the bar cell does not grow without end. The count
+      is `Notifications.notifications.values.length`; shell notifications included or
+      not, to decide.
+- [ ] **11.19 Inline reply does not work** (found 2026-10-31, with 11.15)
+      Pre-existing. The card looks for an action with `id === "inline-reply"`, but
+      Quickshell's actions have `identifier`, not `id` — so the reply field never shows,
+      and the action, if sent, is an ordinary button. Even found, `invoke()` takes no
+      text. Quickshell's way: `inlineReplySupported: true` on the `NotificationServer`
+      (`singletons/Notifications.qml`), then `notification.hasInlineReply`,
+      `inlineReplyPlaceholder` and `sendInlineReply(text)` in the card. Turning it on
+      changes what apps offer (those that can reply would start sending a reply field),
+      so it is a behaviour change to agree. Also `Notifier`'s `inlineReply` option passes
+      `--inline-reply` to notify-send, which has no such option (libnotify 0.8.8); nothing
+      uses it today.
+
 - [ ] **11.4 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
       Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
       screen, and — harder — a vertical bar along the left or right edge. Touches far more
