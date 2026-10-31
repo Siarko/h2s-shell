@@ -322,8 +322,11 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       - [x] `CurvesSettings.qml` (772 → 431): the point maths in `CurvePoints` (pure,
         tested), the graph in `CurveGraph.qml` — which also gained full pan and zoom (drag
         the background, zoom at the pointer, to 20×) — and the preview in `CurvePreview.qml`.
-      - [ ] Later: `BarSectionList` 447 and `HardwareSourceList` 422 (similar row
-        dragging — a shared part?), `EventCard` 399, `NotificationCard` 360.
+      - [x] `BarSectionList` (447 → 116) and `HardwareSourceList` (422 → 114): the shared
+        card — drag to reorder with auto-scroll, remove, add from a floating list — is
+        `components/ReorderList.qml`; each list gives only its row content (and the bar
+        its ⚙ detail). An empty `_dragGhost` item left from an older version is gone.
+      - [ ] Later: `EventCard` 399, `NotificationCard` 360.
 - [ ] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)
       Both start processes themselves, against "state and I/O live in singletons/"
       (CLAUDE.md), as MusicPanel did with cava.

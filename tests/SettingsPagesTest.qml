@@ -10,6 +10,7 @@ TestCase {
     readonly property var _files: [
         "panels/SettingsWindow.qml",
         "panels/BarSectionList.qml",
+        "components/ReorderList.qml",
         "panels/calendar/EventForm.qml",
         "panels/calendar/EventColorRow.qml",
         "panels/calendar/RecurrenceEditor.qml",
