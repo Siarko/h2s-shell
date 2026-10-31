@@ -285,8 +285,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       and editor; the rule text built and read by `CalendarDates.recurrenceRule` /
       `parseRecurrence`, tested), `EventColorRow.qml`, and a shared
       `components/Checkbox.qml` for All day, Recurring and the calendar settings list.
-- [ ] **6.4 Split `panels/NetworkPanel.qml`** (928 lines) [P3]
+- [x] **6.4 Split `panels/NetworkPanel.qml`** (928 lines) [P3]
       Splits cleanly along the section comments already in the file.
+      Done 2026-10-31 (706 lines by then, 303 after): `panels/network/` — `VpnSection`,
+      `LinkInfo` (speeds, address, DNS; was written twice, for Ethernet and Wi-Fi),
+      `WifiNetworkRow` (state still kept by SSID in the panel), `HiddenNetworkRow`,
+      `SignalBars`.
 - [ ] **6.5 Split `singletons/googlecalendar/GoogleCalendar.qml`** (683 lines) [#17]
       API client / store / date+RRULE helpers.
 - [ ] **6.6 Split `singletons/network/WifiManager.qml`** (359 lines) [P3]
