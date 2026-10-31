@@ -15,6 +15,8 @@ TestCase {
         "panels/calendar/RecurrenceEditor.qml",
         "components/Checkbox.qml",
         "panels/calendar/TimeField.qml",
+        "panels/MusicPanel.qml",
+        "panels/music/VisualizerCanvas.qml",
         "panels/NetworkPanel.qml",
         "panels/network/HiddenNetworkRow.qml",
         "panels/network/LinkInfo.qml",

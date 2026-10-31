@@ -309,6 +309,20 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
 - [ ] **6.7 Remaining large files** [P3]
       `MusicPanel` 481, `BarSectionList` 425, `WorkspacesWidgetSettings` 394,
       `EventCard` 385, `HardwareSourceList` 378, `NotificationCard` 359.
+      Re-measured 2026-10-31; order agreed with the user, one file at a time:
+      - [x] `MusicPanel` (549 → 304): cava, the ambient wave and the decay in the
+        `Visualizer` singleton (running only while the panel shows it), the drawing in
+        `panels/music/VisualizerCanvas.qml`.
+      - [ ] `Theme.qml` (1088): the built-in theme (data) and theme file management out.
+      - [ ] `SettingsWindow.qml` (807): the Picker and WindowTab components and the page
+        list out.
+      - [ ] `CurvesSettings.qml` (772): the curve point maths (pure, testable) and the graph
+        out.
+      - [ ] Later: `BarSectionList` 447 and `HardwareSourceList` 422 (similar row
+        dragging — a shared part?), `EventCard` 399, `NotificationCard` 360.
+- [ ] **6.8 I/O out of `PowerMenu` and `BluetoothPanel`** (found 2026-10-31)
+      Both start processes themselves, against "state and I/O live in singletons/"
+      (CLAUDE.md), as MusicPanel did with cava.
 
 ## Stage 7 — Security  [before the Google account is set up on the new machine]
 
@@ -657,6 +671,12 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       `GoogleCalendarData.eventBody` (end date, exclusive for all day), and what
       `EventCard`/`EventsPanel` pass in. To settle with the user: how the end date is
       picked (a date field like the recurrence's, or a small calendar).
+- [ ] **10.18 Visualiser around the album cover** (requested 2026-10-31)
+      Another `media.visualizerStyle`: the levels drawn around the cover in the music
+      panel — a ring, rays or a glow pulsing with the bass, say — instead of beside or
+      below it. The levels are `Visualizer`'s; the drawing would be a new mode of
+      `panels/music/VisualizerCanvas.qml` (or a sibling) laid over the cover. The look is
+      to be settled with the user.
 - [ ] **10.1 Configurable animations** — now part of **10.9**
       Requested 2026-10-28: the user wants to tune animation speed and easing curves.
       There are ~50 hard-coded `duration:` values across the QML, the popup open/close
