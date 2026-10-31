@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.io
 
 Singleton {
     id: root
@@ -34,72 +35,32 @@ Singleton {
         function onEthernetDeviceChanged() { root._poll() }
     }
 
-    // A change reported while this query is already running may have come too late
-    // for it, so it runs once more when it finishes rather than being skipped
+    // Each device that exists; asked while already running, a query runs once more after
+    // (CommandQuery)
     function _poll() {
-        var wifiDev = NetworkManager.wifiDevice
-        var ethDev = NetworkManager.ethernetDevice
-        if (wifiProcess.running)
-            wifiProcess._again = true
-        else if (wifiDev !== "") {
-            wifiProcess._lines = []
-            wifiProcess.command = ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", wifiDev]
-            wifiProcess.running = true
-        }
-        if (ethProcess.running)
-            ethProcess._again = true
-        else if (ethDev !== "") {
-            ethProcess._lines = []
-            ethProcess.command = ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", ethDev]
-            ethProcess.running = true
+        if (NetworkManager.wifiDevice !== "")
+            wifiQuery.request()
+        if (NetworkManager.ethernetDevice !== "")
+            ethernetQuery.request()
+    }
+
+    CommandQuery {
+        id: wifiQuery
+        command: ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", NetworkManager.wifiDevice]
+        onDone: lines => {
+            const result = root._parse(lines)
+            root.wifiAddress = result.address
+            root.wifiDns = result.dns
         }
     }
 
-    Process {
-        id: wifiProcess
-        property var _lines: []
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => { if (line.trim() !== "") wifiProcess._lines.push(line.trim()) }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                var result = root._parse(_lines)
-                root.wifiAddress = result.address
-                root.wifiDns = result.dns
-                _lines = []
-                if (_again) {
-                    _again = false
-                    root._poll()
-                }
-            }
-        }
-    }
-
-    Process {
-        id: ethProcess
-        property var _lines: []
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => { if (line.trim() !== "") ethProcess._lines.push(line.trim()) }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                var result = root._parse(_lines)
-                root.ethernetAddress = result.address
-                root.ethernetDns = result.dns
-                _lines = []
-                if (_again) {
-                    _again = false
-                    root._poll()
-                }
-            }
+    CommandQuery {
+        id: ethernetQuery
+        command: ["nmcli", "-t", "-f", "IP4.ADDRESS,IP4.DNS", "device", "show", NetworkManager.ethernetDevice]
+        onDone: lines => {
+            const result = root._parse(lines)
+            root.ethernetAddress = result.address
+            root.ethernetDns = result.dns
         }
     }
 
@@ -107,10 +68,11 @@ Singleton {
         var address = ""
         var dnsList = []
         for (var i = 0; i < lines.length; i++) {
-            var colonIdx = lines[i].indexOf(":")
+            var line = lines[i].trim()
+            var colonIdx = line.indexOf(":")
             if (colonIdx < 0) continue
-            var key = lines[i].substring(0, colonIdx)
-            var value = lines[i].substring(colonIdx + 1).trim()
+            var key = line.substring(0, colonIdx)
+            var value = line.substring(colonIdx + 1).trim()
             if (value === "" || value === "--") continue
             if (key.startsWith("IP4.ADDRESS") && address === "")
                 address = value

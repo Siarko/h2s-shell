@@ -75,6 +75,13 @@ TestCase {
                 "wifi list: connecting ends once the target is in use");
         }
 
+        // --- Nmcli.wifiNetworks: the signal in use ---
+        {
+            assertEqual(Nmcli.wifiNetworks(["Cafe:50:WPA2::2412 MHz"]).signalInUse, -1, "wifi list: none in use");
+            assertEqual(Nmcli.wifiNetworks(["Home:40:WPA2:*:2412 MHz", "Home:81:WPA2:*:5180 MHz"]).signalInUse, 81,
+                "wifi list: listed twice in use (two bands): the stronger");
+        }
+
         // --- WifiManager._processSaved ---
         {
             WifiManager._processSaved([

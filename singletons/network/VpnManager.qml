@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.io
 import qs.singletons.network
 
 Singleton {
@@ -33,38 +34,15 @@ Singleton {
         onTriggered: root._poll()
     }
 
-    // A change reported while this query is already running may have come too late
-    // for it, so it runs once more when it finishes rather than being skipped
+    // Asked while already running, it runs once more after (CommandQuery)
     function _poll() {
-        if (vpnProcess.running) {
-            vpnProcess._again = true
-            return
-        }
-        vpnProcess._lines = []
-        vpnProcess.running = true
+        vpnQuery.request()
     }
 
-    Process {
-        id: vpnProcess
+    CommandQuery {
+        id: vpnQuery
         command: ["nmcli", "-t", "-f", "name,type,state", "connection", "show"]
-        property var _lines: []
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => { if (line.trim() !== "") vpnProcess._lines.push(line) }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                root._processVpn(_lines)
-                _lines = []
-                if (_again) {
-                    _again = false
-                    root._poll()
-                }
-            }
-        }
+        onDone: lines => root._processVpn(lines)
     }
 
     function _processVpn(lines) {

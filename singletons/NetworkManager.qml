@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.io
 import qs.singletons.network
 
 Singleton {
@@ -50,30 +51,10 @@ Singleton {
         onTriggered: root.refresh()
     }
 
-    Process {
-        id: statusProcess
+    CommandQuery {
+        id: statusQuery
         command: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"]
-        property var _lines: []
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                if (line.trim() !== "")
-                    statusProcess._lines.push(line)
-            }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                root._processStatus(_lines)
-                _lines = []
-                if (_again) {
-                    _again = false
-                    root.refresh()
-                }
-            }
-        }
+        onDone: lines => root._processStatus(lines)
     }
 
     function _processStatus(lines) {
@@ -136,14 +117,8 @@ Singleton {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
-    // A change reported while this query is already running may have come too late
-    // for it, so it runs once more when it finishes rather than being skipped
+    // Asked while already running, it runs once more after (CommandQuery)
     function refresh() {
-        if (statusProcess.running) {
-            statusProcess._again = true
-            return
-        }
-        statusProcess._lines = []
-        statusProcess.running = true
+        statusQuery.request()
     }
 }

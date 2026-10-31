@@ -298,7 +298,14 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       the series cut for "delete from here", failures in words; tested), `GoogleCalendar`
       the store. The store's hand-kept caches are unchanged — rethinking their
       invalidation would be its own item, not part of a split.
-- [ ] **6.6 Split `singletons/network/WifiManager.qml`** (359 lines) [P3]
+- [x] **6.6 Split `singletons/network/WifiManager.qml`** (359 lines) [P3]
+      Done 2026-10-31 (394 lines by then, 314 after): the run-again-if-asked-mid-run nmcli
+      query, hand-written six times (Wi-Fi radio and saved profiles, NetworkManager status,
+      VPN, IP ×2), is `singletons/io/CommandQuery.qml`; the Wi-Fi list and saved-profile
+      parsers are pure functions in `Nmcli`; the two connect functions are one. Scanning
+      stays in WifiManager, having its own rescan and repeat logic.
+      **Functional check on the host still owed** (user busy with Wi-Fi elsewhere,
+      2026-10-31): radio toggle, connect/disconnect/forget, VPN, IP and DNS, bar icon.
 - [ ] **6.7 Remaining large files** [P3]
       `MusicPanel` 481, `BarSectionList` 425, `WorkspacesWidgetSettings` 394,
       `EventCard` 385, `HardwareSourceList` 378, `NotificationCard` 359.

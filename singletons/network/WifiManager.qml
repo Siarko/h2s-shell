@@ -4,8 +4,11 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.io
 import qs.singletons.network
 
+// Wi-Fi through nmcli: the radio, the networks in range, the saved profiles, and
+// connecting, disconnecting and forgetting. The device and its state are NetworkManager's.
 Singleton {
     id: root
 
@@ -73,41 +76,15 @@ Singleton {
         }
     }
 
-    // A change reported while this query is already running may have come too late
-    // for it, so it runs once more when it finishes rather than being skipped
+    // Asked while already running, a query runs once more after (CommandQuery)
     function _pollRadio() {
-        if (wifiRadioProcess.running) {
-            wifiRadioProcess._again = true
-            return
-        }
-        wifiRadioProcess._output = ""
-        wifiRadioProcess.running = true
+        radioQuery.request()
     }
 
-    Process {
-        id: wifiRadioProcess
+    CommandQuery {
+        id: radioQuery
         command: ["nmcli", "radio", "wifi"]
-        property string _output: ""
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                if (line.trim() !== "")
-                    wifiRadioProcess._output = line.trim()
-            }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                root.wifiEnabled = (_output === "enabled")
-                _output = ""
-                if (_again) {
-                    _again = false
-                    root._pollRadio()
-                }
-            }
-        }
+        onDone: lines => root.wifiEnabled = lines.length > 0 && lines[lines.length - 1].trim() === "enabled"
     }
 
     onWifiEnabledChanged: {
@@ -177,28 +154,10 @@ Singleton {
     }
 
     function _processWifiList(lines) {
-        var networks = []
-        var bestInUseSignal = -1
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim()
-            if (line === "") continue
-            // SSID,SIGNAL,SECURITY,IN-USE,FREQ
-            var parts = Nmcli.splitTerse(line)
-            if (parts.length < 5) continue
-            var ssid = parts[0]
-            var signal = parseInt(parts[1]) || 0
-            var security = parts[2].trim()
-            var inUse = parts[3].trim() === "*"
-            var freq = parts[4].trim()
-            if (ssid === "") continue
-            var freqNum = parseInt(freq) || 0
-            var band = freqNum >= 3000 ? "5G" : (freqNum > 0 ? "2.4G" : "")
-            networks.push({ ssid: ssid, signal: signal, security: security, inUse: inUse, band: band })
-            if (inUse && signal > bestInUseSignal) {
-                bestInUseSignal = signal
-                root.wifiSignal = signal
-            }
-        }
+        const result = Nmcli.wifiNetworks(lines)
+        const networks = result.networks
+        if (result.signalInUse >= 0)
+            root.wifiSignal = result.signalInUse
         root.wifiNetworks = networks
         var anyInUse = networks.some(n => n.inUse)
         if (root.connectingTo !== "" && networks.some(n => n.inUse && n.ssid === root.connectingTo)) {
@@ -216,50 +175,18 @@ Singleton {
     // -------------------------------------------------------------------------
     property var savedSsids: []
 
-    Process {
-        id: savedProcess
+    CommandQuery {
+        id: savedQuery
         command: ["nmcli", "-t", "-f", "name,type", "connection", "show"]
-        property var _lines: []
-        property bool _again: false
-
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => { if (line.trim() !== "") savedProcess._lines.push(line) }
-        }
-
-        onRunningChanged: {
-            if (!running) {
-                root._processSaved(_lines)
-                _lines = []
-                if (_again) {
-                    _again = false
-                    root._pollSaved()
-                }
-            }
-        }
+        onDone: lines => root._processSaved(lines)
     }
 
     function _pollSaved() {
-        if (savedProcess.running) {
-            savedProcess._again = true
-            return
-        }
-        savedProcess._lines = []
-        savedProcess.running = true
+        savedQuery.request()
     }
 
     function _processSaved(lines) {
-        var ssids = []
-        for (var i = 0; i < lines.length; i++) {
-            // NAME,TYPE
-            var parts = Nmcli.splitTerse(lines[i])
-            if (parts.length < 2) continue
-            var name = parts[0]
-            var type = parts[1].trim()
-            if (type === "802-11-wireless")
-                ssids.push(name)
-        }
-        root.savedSsids = ssids
+        root.savedSsids = Nmcli.savedWifi(lines)
     }
 
     // -------------------------------------------------------------------------
@@ -286,34 +213,27 @@ Singleton {
     }
 
     function connectToWifi(ssid, password) {
-        if (actionProcess.running) return
-        root.connecting = true
-        root.connectingTo = ssid
-        root.connectFailed = false
-        root.failedSsid = ""
-        connectTimeoutTimer.restart()
-        var cmd = ["nmcli", "device", "wifi", "connect", ssid]
-        if (password && password !== "") {
-            cmd.push("password")
-            cmd.push(password)
-        }
-        actionProcess.command = cmd
-        actionProcess.running = true
+        _connect(ssid, password, false)
     }
 
     function connectToHiddenWifi(ssid, password) {
+        _connect(ssid, password, true)
+    }
+
+    // A network not broadcasting its name has to be asked for by it ("hidden yes")
+    function _connect(ssid, password, hidden) {
         if (actionProcess.running) return
         root.connecting = true
         root.connectingTo = ssid
         root.connectFailed = false
         root.failedSsid = ""
         connectTimeoutTimer.restart()
-        var cmd = ["nmcli", "device", "wifi", "connect", ssid, "hidden", "yes"]
-        if (password && password !== "") {
-            cmd.push("password")
-            cmd.push(password)
-        }
-        actionProcess.command = cmd
+        const command = ["nmcli", "device", "wifi", "connect", ssid]
+        if (hidden)
+            command.push("hidden", "yes")
+        if (password && password !== "")
+            command.push("password", password)
+        actionProcess.command = command
         actionProcess.running = true
     }
 
