@@ -313,7 +313,9 @@ Tick 1.1's box once these pass. If something fails, the analysis behind the chan
       - [x] `MusicPanel` (549 → 304): cava, the ambient wave and the decay in the
         `Visualizer` singleton (running only while the panel shows it), the drawing in
         `panels/music/VisualizerCanvas.qml`.
-      - [ ] `Theme.qml` (1088): the built-in theme (data) and theme file management out.
+      - [x] `Theme.qml` (1088 → 673): the built-in theme in `ThemeBuiltin.qml`; reading
+        and writing theme files, managing themes and the curves library, and the bar
+        geometry migration in `ThemeFiles.qml`. Theme keeps resolution and drafts.
       - [ ] `SettingsWindow.qml` (807): the Picker and WindowTab components and the page
         list out.
       - [ ] `CurvesSettings.qml` (772): the curve point maths (pure, testable) and the graph

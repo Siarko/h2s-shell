@@ -18,155 +18,8 @@ import Qt.labs.folderlistmodel
 Singleton {
     id: root
 
-    // ---- The built-in theme: today's look, and every token a theme file may set ----
-    readonly property var builtin: ({
-        "colors": {
-            // Backgrounds
-            "barBackground": "#4b4b4b",      // the bar
-            "popupBackground": "#4d4d4d",    // popups and their curved corners
-            "surface": "#3b3b3b",            // an element: bar cell, card, field, row
-            "surfaceHover": "#5a5a5a",       // an element under the pointer, or whose popup is open
-            "scrim": "#000000",              // behind the screensaver and lock screen
-            // Accent
-            "accent": "#44d47a",             // selection, active state, progress, graphs
-            "accentHover": "#92db7a",        // accent under the pointer
-            "accentDark": "#008000",         // filled accent: focused workspace, code buttons
-            "onAccent": "#ffffff",           // text and icons on the accent
-            "accentSecondary": "#5aa9e6",    // a second series or highlight: upload, sidebar selection
-            // Text, brightest to dimmest
-            "textPrimary": "#ffffff",        // labels, headings, the clock
-            "textSecondary": "#aaaaaa",      // secondary labels, body text
-            "textMuted": "#888888",          // timestamps, links, empty states
-            "textDisabled": "#777777",       // disabled, other-month days, faint icons
-            "selection": "#008000",          // behind selected text
-            "selectedText": "#ffffff",       // selected text
-            // Status
-            "error": "#e05555",              // errors, destructive actions
-            "warning": "#e8a854",            // warnings, volume above 100%
-            "success": "#44d47a",            // connected, done
-            // Workspaces
-            "workspaceActive": "#4a6a4a",    // active but not focused
-            "workspaceSpecial": "#7a1a2a",   // a shown special (scratchpad) workspace
-            // Calendar
-            "calendarToday": "#666666",      // the circle behind today's date
-            // Filled buttons
-            "confirm": "#1e5c1e",            // confirming: add an event
-            "confirmHover": "#2d6a2d",
-            "confirmSecondary": "#1e3a5f",   // confirming a change: save an edited event
-            "confirmSecondaryHover": "#2d4a6d",
-            // Borders, drawn where their width is above 0
-            "barBorder": "#777777",
-            "capsuleBorder": "#777777",
-            "popupBorder": "#777777",
-            "osdToastBorder": "#777777",
-            "osdVolumeBorder": "#777777",
-            "osdMessageBorder": "#777777"
-        },
-        "fonts": {
-            "family": "JetBrainsMono Nerd Font",
-            "sizeTiny": 9,                   // smallest form labels
-            "sizeXSmall": 10,                // very small secondary labels
-            "sizeSmall": 11,                 // metadata, timestamps, captions
-            "sizeBody": 12,                  // default body text
-            "sizeBodyLarge": 13,             // slightly larger body/labels
-            "sizeMedium": 14,                // subheadings, medium text
-            "sizeSection": 16,               // panel section icons, calendar headers
-            "sizeHeading": 18,               // settings section headers, widget text
-            "sizeTitle": 20,                 // widget/panel titles, large icons
-            "sizeDisplay": 22,               // calendar event display
-            "sizeLargeDisplay": 24,          // music panel headers
-            "sizeXXLargeDisplay": 32,        // music track name
-            "sizeHero": 52                   // notification empty-state icon
-        },
-        // The bar's geometry (ThemeRules.barTokens): pixels, and corner radii in percent
-        // of half the bar's height
-        "bar": {
-            "barHeight": 36,                 // the bar itself
-            "reservedSpace": 40,             // space kept free for it at the top of the screen
-            "topOffset": 2,                  // between the bar and the top of the screen
-            "leftMargin": 0,                 // between the screen edges and the bar
-            "rightMargin": 0,
-            "leftPadding": 5,                // between the bar's ends and its widgets
-            "rightPadding": 5,
-            "radiusTopLeft": 0,
-            "radiusTopRight": 0,
-            "radiusBottomLeft": 20,
-            "radiusBottomRight": 20,
-            "cellVerticalMargin": 5,         // above and below each widget's cell
-            "widgetSpacing": 5,              // between the widgets of a section
-            "borderWidth": 0                 // along the edge facing the desktop (colour barBorder); 0: none
-        },
-        // Radii, borders and spacing by kind of element (docs/plans/themes-stage7.md). Radii
-        // and sizes in pixels.
-        "capsule": { "radius": 5, "horizontalPadding": 8, "borderWidth": 0 },   // a widget's cell on the bar
-        "workspace": { "pillRadius": 4, "pillHorizontalPadding": 4, "pillHeight": 22, "pillSpacing": 4 },
-        "tray": { "pillRadius": 5, "pillWidth": 24, "iconSize": 18, "pillSpacing": 4 },  // the tray's icons
-        "popup": { "radius": 20, "contentPadding": 10, "borderWidth": 0 },
-        "row": { "radius": 6, "horizontalPadding": 8 },                       // rows and cards in popups
-        "listItem": { "radius": 4 },                                          // menu and list items
-        "dropdown": { "radius": 6 },
-        "powerMenu": { "buttonRadius": 8, "buttonHeight": 44 },
-        "button": { "radius": 6, "horizontalPadding": 7, "verticalPadding": 4, "minHeight": 24 },
-        "saveButton": { "radius": 6 },
-        "cancelButton": { "radius": 6 },
-        "deleteButton": { "radius": 6 },
-        "iconButton": { "radius": 4 },
-        "pill": { "radius": 6, "horizontalPadding": 7, "minHeight": 22 },
-        "field": { "radius": 6, "horizontalPadding": 8 },
-        "notificationCard": { "radius": 8, "padding": 8, "controlRadius": 5 },  // in the panel
-        "osdToast": { "radius": 8, "padding": 10, "width": 360, "screenGap": 16, "spacing": 8, "badgeWidth": 36, "borderWidth": 0 },
-        "osdVolume": { "radius": 6, "padding": 10, "borderWidth": 0 },
-        // The shell's message pill; a radius of -1 rounds its ends fully
-        "osdMessage": { "radius": -1, "borderWidth": 0 },
-        "tooltip": { "radius": 4, "horizontalPadding": 8, "verticalPadding": 6 },
-        "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
-        "calendar": { "dayRadius": 4 },
-        "checkbox": { "radius": 3 },
-        "lock": { "cardRadius": 16, "controlRadius": 8, "controlHeight": 40 },
-        "border": { "width": 1, "selectedWidth": 2 },  // ordinary outlines; selection rings
-        // Popups' widths, in percent of their width at the built-in fonts: `all` for every
-        // popup, then each one's own, multiplied (popupWidth())
-        "popupWidth": { "all": 100, "network": 100, "bluetooth": 100, "hardware": 100, "sound": 100,
-                        "music": 100, "notifications": 100, "tray": 100, "power": 100, "calendar": 100 },
-        // Animations by role — the kind of motion, not where it happens (docs/plans/themes.md)
-        "durations": {
-            "hover": 100,                    // colour under the pointer
-            "state": 150,                    // a switch, a focused workspace, a field's state
-            "expand": 150,                   // something growing or shrinking in place
-            "popup": 100,                    // a popup opening or closing
-            "popupResize": 100,              // a popup moving to another widget's size
-            "enter": 250,                    // a toast, an OSD or a card arriving
-            "exit": 200,                     // and leaving
-            "move": 200,                     // a small shift: toasts restacking
-            "slide": 300,                    // a larger slide: menus, pages
-            "fade": 150,                     // appearing or disappearing in place
-            "value": 400,                    // a value bar following its data
-            "heartbeat": 350,                // the wave on graphs when a sample arrives
-            "pop": 380,                      // a mark popping in; "Clear all" is timed from it
-            "pulse": 1000,                   // one breath of a pulsing indicator
-            "spin": 800,                     // one turn of a spinner
-            "themeChange": 400               // colours moving to a new theme
-        },
-        "curves": {
-            "hover": "OutQuad",
-            "state": "OutQuad",
-            "expand": "OutQuad",
-            "popupOpen": "OutQuad",
-            "popupClose": "InQuad",
-            "popupResize": "OutQuad",
-            "enter": "OutCubic",
-            "exit": "InCubic",
-            "move": "OutCubic",
-            "slide": "OutCubic",
-            "fade": "OutQuad",
-            "value": "Linear",
-            "heartbeat": "OutQuad",
-            "pop": "OutBack",
-            "pulse": "InOutQuad",
-            "spin": "Linear",
-            "themeChange": "OutQuad"
-        }
-    })
+    // The built-in theme: every token, with the values a theme file lays its own over
+    readonly property var builtin: ThemeBuiltin.values
 
     // ---- Resolution ----
     // The theme the active profile picks, and the one shown: that, unless a theme is being
@@ -174,14 +27,10 @@ Singleton {
     readonly property string profileTheme: Profiles.value("appearance.theme") || "default"
     property string preview: ""
     readonly property string themeName: preview !== "" ? preview : profileTheme
-    // Where theme files live, next to the config
-    readonly property string themesDir: Config.path.toString().replace(/^file:\/\//, "")
-        .replace(/\/[^\/]*$/, "") + "/themes"
-    // The curves library, shared by every theme (ThemeRules, "Curves")
-    readonly property string curvesPath: _folder(themesDir) + "/curves.json"
-    // Drafts: changes made in the settings, not saved yet, one file per theme
-    // (ThemeRules, "Drafts")
-    readonly property string draftsDir: _folder(themesDir) + "/theme-drafts"
+    // Where theme files, the curves library and drafts live (ThemeFiles)
+    readonly property string themesDir: ThemeFiles.themesDir
+    readonly property string curvesPath: ThemeFiles.curvesPath
+    readonly property string draftsDir: ThemeFiles.draftsDir
 
     // The resolved values, the chain that produced them, and what went wrong (missing
     // themes, cycles, unreadable files) — for the settings page to show
@@ -199,12 +48,7 @@ Singleton {
     onThemeNameChanged: Qt.callLater(reload)
     // Previewing the theme in use changes no name, only whether its draft shows
     onPreviewChanged: Qt.callLater(reload)
-    Component.onCompleted: {
-        reload();
-        if (!Config.readOnly)
-            _ensureThemesDir.running = true;
-        _migrateBarLayoutIfNeeded();
-    }
+    Component.onCompleted: reload()
 
     function _path(file) {
         return file.startsWith("~/") ? Quickshell.env("HOME") + file.slice(1) : file;
@@ -217,18 +61,17 @@ Singleton {
     // Reads and parses a JSON file; null when it is missing or broken, adding why to
     // `errors` if given
     function _read(path, errors) {
-        _reader.path = path;
-        // The reader keeps what it read last for an unchanged path
-        _reader.reload();
-        const text = _reader.text();
-        if (text === "")
-            return null;
-        try {
-            return JSON.parse(text);
-        } catch (error) {
-            errors?.push(path + ": " + error.message);
-            return null;
-        }
+        const file = ThemeFiles.readFile(path);
+        if (file.error !== "")
+            errors?.push(path + ": " + file.error);
+        return file.value;
+    }
+
+    // Reloads after the shell's own edit of a theme file, without fading the colours over
+    // as a change from elsewhere does
+    function reloadQuietly() {
+        _quietReload = true;
+        Qt.callLater(reload);
     }
 
     // Resolves the theme `name`: { values, chain, errors, watched, folders }
@@ -242,16 +85,18 @@ Singleton {
         const watched = [];
         const folders = [themesDir];
         const readWatched = path => {
-            const parsed = _read(path, readErrors);
+            const file = ThemeFiles.readFile(path);
+            if (file.error !== "")
+                readErrors.push(path + ": " + file.error);
             // A broken file is watched too, so fixing it applies
-            if (_reader.text() !== "")
+            if (file.exists)
                 watched.push(path);
             if (!folders.includes(_folder(path)))
                 folders.push(_folder(path));
-            return parsed;
+            return file.value;
         };
         const result = ThemeRules.chainFor(name, themeName => {
-            const parsed = readWatched(_themePath(themeName));
+            const parsed = readWatched(ThemeFiles.themePath(themeName));
             return themeName === name && draft ? ThemeRules.applyDraft(parsed ?? {}, draft) : parsed;
         });
         const palettes = {};
@@ -331,7 +176,7 @@ Singleton {
         for (let i = 0; i < _themeFiles.count; i++) {
             const name = _themeFiles.get(i, "fileBaseName");
             allNames.push(name);
-            const theme = _read(_themePath(name));
+            const theme = _read(ThemeFiles.themePath(name));
             if (theme !== null)
                 allThemes[name] = theme;
         }
@@ -425,10 +270,6 @@ Singleton {
     property var drafts: ({})
     property bool _draftsLoaded: false
 
-    function _draftPath(name) {
-        return draftsDir + "/" + name + ".json";
-    }
-
     // Whether the active values are what the settings should show for `name`: the theme
     // shown, with its draft if it has one (it is shown with it only while previewed)
     function _showsDraftOf(name) {
@@ -442,7 +283,7 @@ Singleton {
         const read = Object.assign({}, drafts);
         for (let i = 0; i < _draftFiles.count; i++) {
             const name = _draftFiles.get(i, "fileBaseName");
-            const draft = _read(_draftPath(name));
+            const draft = _read(ThemeFiles.draftPath(name));
             if (draft !== null && Object.keys(draft).length > 0 && !(name in read))
                 read[name] = draft;
         }
@@ -454,25 +295,38 @@ Singleton {
         const all = Object.assign({}, drafts);
         if (Object.keys(draft).length > 0) {
             all[name] = draft;
-            _write(_draftPath(name), draft);
+            ThemeFiles.write(ThemeFiles.draftPath(name), draft);
         } else {
             delete all[name];
-            _removeFile(_draftPath(name));
+            ThemeFiles.remove(ThemeFiles.draftPath(name));
         }
         drafts = all;
-        _quietReload = true;
-        Qt.callLater(reload);
+        reloadQuietly();
+    }
+
+    // A theme renamed takes its draft along (ThemeFiles.renameTheme)
+    function moveDraft(oldName, newName) {
+        if (!(oldName in drafts))
+            return;
+        _writeDraft(newName, drafts[oldName]);
+        _writeDraft(oldName, {});
+    }
+
+    // A theme deleted loses its draft (ThemeFiles.deleteTheme)
+    function dropDraft(name) {
+        if (name in drafts)
+            _writeDraft(name, {});
     }
 
     // The theme file of `name` as it is on disk now, for changing it; null when it does
     // not parse (rewriting it would lose the user's hand edits), {} when there is none
     function _fileForEdit(name) {
-        const theme = _read(_themePath(name));
-        if (theme === null && _reader.text() !== "") {
-            console.warn("[Theme] Not changing", _themePath(name), "— it does not parse");
+        const file = ThemeFiles.readFile(ThemeFiles.themePath(name));
+        if (file.exists && file.value === null) {
+            console.warn("[Theme] Not changing", ThemeFiles.themePath(name), "— it does not parse");
             return null;
         }
-        return theme ?? {};
+        return file.value ?? {};
     }
 
     // Whether the theme `name` has unsaved changes, in `group` or in any
@@ -508,7 +362,7 @@ Singleton {
         if (file === null)
             return false;
         const split = ThemeRules.splitDraft(drafts[name], groups);
-        _writeTheme(name, ThemeRules.applyDraft(file, split.taken));
+        ThemeFiles.writeTheme(name, ThemeRules.applyDraft(file, split.taken));
         _writeDraft(name, split.rest);
         return true;
     }
@@ -530,124 +384,15 @@ Singleton {
         onStatusChanged: if (status === FolderListModel.Ready) Qt.callLater(root._loadDrafts)
     }
 
-    // ---- Managing themes (the Themes page) ----
+    // ---- The theme files (managed by ThemeFiles) ----
     // Every theme file's name, including files that do not parse, as of the last reload
     property var themeNames: []
+    // Every theme file that parses, { name: parsed }, as of the last reload
+    property var themeFiles: ({})
 
     // Whether a theme of this name exists: a file, or the built-in default
     function themeExists(name) {
         return name === "default" || themeNames.includes(name);
-    }
-
-    // Names of the profiles whose own `appearance.theme` is `name`, and "global" when it
-    // is pinned — what renaming or deleting it changes
-    function setters(name) {
-        return ThemeRules.retargetTheme(Profiles.profiles, Profiles.globals, name, name).changed;
-    }
-
-    // A new theme extending `base`
-    function createTheme(name, base) {
-        if (Config.readOnly || !ThemeRules.validThemeName(name) || themeExists(name))
-            return false;
-        _writeTheme(name, { extends: base || "default" });
-        return true;
-    }
-
-    // A copy of the file of `source` under a new name: the same values, extending the
-    // same theme
-    function duplicateTheme(source, name) {
-        if (Config.readOnly || !ThemeRules.validThemeName(name) || themeExists(name))
-            return false;
-        if (themeNames.includes(source) && !(source in themeFiles)) {
-            console.warn("[Theme] Not copying", _themePath(source), "— it does not parse");
-            return false;
-        }
-        _writeTheme(name, JSON.parse(JSON.stringify(themeFiles[source] ?? {})));
-        return true;
-    }
-
-    // Points the theme `name` at a new parent, unless that would make a cycle
-    function setExtends(name, base) {
-        if (Config.readOnly || !(name in themeFiles))
-            return false;
-        if (ThemeRules.extendsCycle(name, base, themeName => themeFiles[themeName] ?? null))
-            return false;
-        const theme = Object.assign({}, themeFiles[name]);
-        if (base === "default")
-            delete theme.extends;
-        else
-            theme.extends = base;
-        _writeTheme(name, theme);
-        return true;
-    }
-
-    // Renames a theme: the new file is written first, then the themes extending it and the
-    // profiles using it follow, and the old file goes. The config is backed up first.
-    function renameTheme(oldName, newName) {
-        if (Config.readOnly || oldName === "default" || !(oldName in themeFiles)
-                || !ThemeRules.validThemeName(newName) || themeExists(newName))
-            return false;
-        _writeTheme(newName, themeFiles[oldName]);
-        const changed = ThemeRules.renameExtends(themeFiles, oldName, newName);
-        for (const name in changed)
-            _writeTheme(name, changed[name]);
-        _retargetProfiles(oldName, newName);
-        if (oldName in drafts) {
-            _writeDraft(newName, drafts[oldName]);
-            _writeDraft(oldName, {});
-        }
-        _removeFile(_themePath(oldName));
-        return true;
-    }
-
-    // Deletes a theme: the themes extending it extend its parent instead, and the
-    // profiles using it fall back to the default theme. The config is backed up first.
-    function deleteTheme(name) {
-        if (Config.readOnly || !themeNames.includes(name))
-            return false;
-        const changed = ThemeRules.withoutExtends(themeFiles, name);
-        for (const other in changed)
-            _writeTheme(other, changed[other]);
-        _retargetProfiles(name, "default");
-        if (name in drafts)
-            _writeDraft(name, {});
-        _removeFile(_themePath(name));
-        return true;
-    }
-
-    function _retargetProfiles(oldName, newName) {
-        const result = ThemeRules.retargetTheme(Profiles.profiles, Profiles.globals, oldName, newName);
-        if (result.changed.length === 0)
-            return;
-        Profiles.backUpConfig();
-        console.log("[Theme] Theme", oldName, "is now", newName, "in:", result.changed.join(", "));
-        Config.profiles = JSON.stringify(result.profiles);
-        Config.globals = JSON.stringify(result.globals);
-    }
-
-    // Files are removed one at a time, in the order asked
-    property var _removals: []
-
-    function _removeFile(path) {
-        _removals = _removals.concat([path]);
-        if (!_remover.running)
-            _nextRemoval();
-    }
-
-    function _nextRemoval() {
-        if (_removals.length === 0)
-            return;
-        _remover.command = ["rm", "-f", "--", _removals[0]];
-        _removals = _removals.slice(1);
-        _remover.running = true;
-    }
-
-    Process {
-        id: _remover
-        onExited: {
-            root._nextRemoval();
-            Qt.callLater(root.reload);
-        }
     }
 
     // The theme a profile uses when it is active, as the settings window edits it
@@ -660,108 +405,7 @@ Singleton {
         return Profiles.profiles.filter((profile, index) => themeOf(index) === name).map(profile => profile.name);
     }
 
-    function _themePath(name) {
-        return themesDir + "/" + name + ".json";
-    }
-
-    function _writeTheme(name, theme) {
-        _write(_themePath(name), theme);
-        _quietReload = true;
-        Qt.callLater(reload);
-    }
-
-    FileView {
-        id: _writer
-        blockWrites: true
-        blockAllReads: true
-        printErrors: false
-    }
-
-    // Writes `value` as JSON to `path`. A FileView skips a write of the text it already
-    // holds, and after a change of path it still held the previous file's (until a read
-    // caught up — and reading a file that does not exist leaves it) — so a theme renamed
-    // or copied, the same text under a new name, was never written. Clearing the path
-    // first empties it.
-    function _write(path, value) {
-        _writer.path = "";
-        _writer.path = path;
-        _writer.reload();
-        _writer.setText(JSON.stringify(value, null, 2) + "\n");
-    }
-
-    // ---- The curves library ----
-    // Every theme file, { name: parsed }, as of the last reload
-    property var themeFiles: ({})
-
-    // Where the library curve `name` is used: [{ theme, role }]
-    function curveUsages(name) {
-        return ThemeRules.curveUsages(themeFiles, name);
-    }
-
-    // Reads the library file for changing it: null when it does not parse — rewriting it
-    // would lose the user's hand edits
-    function _libraryForEdit() {
-        const library = _read(curvesPath);
-        if (library === null && _reader.text() !== "") {
-            console.warn("[Theme] Not changing", curvesPath, "— it does not parse");
-            return null;
-        }
-        return library ?? {};
-    }
-
-    function _writeLibrary(library) {
-        _write(curvesPath, library);
-        Qt.callLater(reload);
-    }
-
-    // Adds or replaces the curve `name` ([x1, y1, x2, y2] or Qt's form)
-    function writeCurve(name, points) {
-        if (Config.readOnly || !ThemeRules.validCurveName(name) || ThemeRules.curvePoints(points) === null)
-            return false;
-        const library = _libraryForEdit();
-        if (library === null)
-            return false;
-        library[name] = points;
-        _writeLibrary(library);
-        return true;
-    }
-
-    // Removes the curve `name`; themes still naming it fall back (ThemeRules.fallbackCurve)
-    function deleteCurve(name) {
-        if (Config.readOnly)
-            return false;
-        const library = _libraryForEdit();
-        if (library === null || !(name in library))
-            return false;
-        delete library[name];
-        _writeLibrary(library);
-        return true;
-    }
-
-    // Renames the curve `oldName` and points every theme using it at the new name. A theme
-    // file that does not parse is left alone, and reported.
-    function renameCurve(oldName, newName) {
-        if (Config.readOnly || !ThemeRules.validCurveName(newName))
-            return false;
-        const library = _libraryForEdit();
-        if (library === null || !(oldName in library) || (newName in library))
-            return false;
-        const renamed = {};
-        for (const name of Object.keys(library))
-            renamed[name === oldName ? newName : name] = library[name];
-        _writeLibrary(renamed);
-        const changed = ThemeRules.renameCurveIn(themeFiles, oldName, newName);
-        for (const name in changed)
-            _writeTheme(name, changed[name]);
-        for (let i = 0; i < _themeFiles.count; i++) {
-            const name = _themeFiles.get(i, "fileBaseName");
-            if (!(name in themeFiles))
-                console.warn("[Theme] Not renaming curve", oldName, "in", _themePath(name), "— it does not parse");
-        }
-        return true;
-    }
-
-    // The theme files, listed for curveUsages and renameCurve
+    // The theme files, listed for themeNames and themeFiles
     FolderListModel {
         id: _themeFiles
         folder: "file://" + root.themesDir
@@ -769,65 +413,6 @@ Singleton {
         showDirs: false
         onCountChanged: Qt.callLater(root.reload)
         onStatusChanged: if (status === FolderListModel.Ready) Qt.callLater(root.reload)
-    }
-
-    // ---- Migration: the bar's geometry moves from profiles into themes, once ----
-    readonly property string _barLayoutMigration: "theme.barLayout"
-
-    function _migrateBarLayoutIfNeeded() {
-        if (!Config.ready || Config.readOnly || Config.profiles === "" || _pendingMigration !== null
-                || Config.migratedKeys.includes(_barLayoutMigration))
-            return;
-        // Geometry from before profiles that never reached one (the per-key migration
-        // marks the keys it copied)
-        const legacy = Config.migratedKeys.includes("bar.layout.barHeight")
-            ? undefined : Profiles.oldConfig().bar?.layout;
-        const result = ThemeRules.themesFromBarLayout(Profiles.profiles, Profiles.globals, legacy,
-            name => _read(_themePath(name)) !== null || _reader.text() !== "");
-        if (result.themes.length > 0)
-            Profiles.backUpConfig();
-        _pendingMigration = result;
-        // The theme files first, once their folder exists, then the profiles that pick them
-        _ensureThemesDir.running = true;
-    }
-
-    property var _pendingMigration: null
-
-    function _finishMigration() {
-        const result = _pendingMigration;
-        _pendingMigration = null;
-        if (result === null || Config.migratedKeys.includes(_barLayoutMigration))
-            return;
-        for (const entry of result.themes)
-            _writeTheme(entry.name, entry.theme);
-        if (result.themes.length > 0) {
-            // Always shown, not only in debug: a one-time change to the user's config
-            console.log("[Theme] Moved the bar geometry into themes:",
-                        result.themes.map(entry => entry.name + " (" + Object.keys(entry.theme.bar).join(", ") + ")").join("; "));
-        }
-        Config.profiles = JSON.stringify(result.profiles);
-        Config.globals = JSON.stringify(result.globals);
-        Config.migratedKeys = Config.migratedKeys.concat([_barLayoutMigration]);
-    }
-
-    // FileView does not create folders: the themes folder is made at start, for
-    // drafts and saves, and before the migration writes into it
-    Process {
-        id: _ensureThemesDir
-        command: ["mkdir", "-p", root.themesDir, root.draftsDir]
-        onExited: root._finishMigration()
-    }
-
-    Connections {
-        target: Config
-        function onReadyChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
-        function onProfilesChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
-    }
-
-    FileView {
-        id: _reader
-        blockAllReads: true
-        printErrors: false
     }
 
     // One watcher per file read, theme or palette: an edit applies at once

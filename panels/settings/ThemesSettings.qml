@@ -26,7 +26,7 @@ Flickable {
     readonly property var _file: Theme.themeFiles[themeName] ?? null
     readonly property string _extends: typeof _file?.extends === "string" ? _file.extends : "default"
     readonly property var _users: (Profiles.profiles, Theme.usersOf(themeName))
-    readonly property var _setters: (Profiles.profiles, Profiles.globals, Theme.setters(themeName))
+    readonly property var _setters: (Profiles.profiles, Profiles.globals, ThemeFiles.setters(themeName))
     readonly property var _errors: (Theme.revision, Theme.errorsOf(themeName))
     // Themes it may extend: not itself, nor one that extends it, directly or not
     readonly property var _parents: {
@@ -131,7 +131,7 @@ Flickable {
                         required property string modelData
                         label: modelData
                         picked: modelData === root._extends
-                        onClicked: if (!picked) Theme.setExtends(root.themeName, modelData)
+                        onClicked: if (!picked) ThemeFiles.setExtends(root.themeName, modelData)
                     }
                 }
             }
@@ -162,7 +162,7 @@ Flickable {
                 available: _newInput.text.trim() !== "" && root._nameProblem(_newInput.text) === "" && !root._broken
                 onClicked: {
                     const name = _newInput.text;
-                    if (Theme.createTheme(name, root.themeName))
+                    if (ThemeFiles.createTheme(name, root.themeName))
                         root.themePicked(name);
                 }
             }
@@ -171,7 +171,7 @@ Flickable {
                 available: _newInput.text.trim() !== "" && root._nameProblem(_newInput.text) === "" && !root._broken
                 onClicked: {
                     const name = _newInput.text;
-                    if (Theme.duplicateTheme(root.themeName, name))
+                    if (ThemeFiles.duplicateTheme(root.themeName, name))
                         root.themePicked(name);
                 }
             }
@@ -205,7 +205,7 @@ Flickable {
                     available: _renameInput.text.trim() !== "" && root._nameProblem(_renameInput.text) === "" && !root._broken
                     onClicked: {
                         const name = _renameInput.text;
-                        if (Theme.renameTheme(root.themeName, name))
+                        if (ThemeFiles.renameTheme(root.themeName, name))
                             root.themePicked(name);
                     }
                 }
@@ -229,7 +229,7 @@ Flickable {
                     : "Delete?"
                 cancelTip: "Cancel — keep the theme"
                 onConfirmed: {
-                    Theme.deleteTheme(root.themeName);
+                    ThemeFiles.deleteTheme(root.themeName);
                     root.themePicked("");
                 }
             }

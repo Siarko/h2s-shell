@@ -41,7 +41,7 @@ Flickable {
             return "There is already a curve with this name";
         return "";
     }
-    readonly property var _usages: (Theme.revision, Theme.curveUsages(selected))
+    readonly property var _usages: (Theme.revision, ThemeFiles.curveUsages(selected))
 
     // The graph's zoom: 1 shows y from -0.5 to 1.5 with the unit square filling the width;
     // 2 shows twice as much each way, around the square's centre. Scrolling zooms; opening
@@ -95,8 +95,8 @@ Flickable {
         if (_nameProblem !== "")
             return;
         if (selected !== "" && draftName !== selected)
-            Theme.renameCurve(selected, draftName);
-        Theme.writeCurve(draftName, _segments === 1 ? draftPoints.slice(0, 4) : draftPoints);
+            ThemeFiles.renameCurve(selected, draftName);
+        ThemeFiles.writeCurve(draftName, _segments === 1 ? draftPoints.slice(0, 4) : draftPoints);
         selected = draftName;
     }
 
@@ -752,7 +752,7 @@ Flickable {
                 cancelTip: "Cancel — keep the curve"
                 onConfirmed: {
                     const deleted = root.selected;
-                    Theme.deleteCurve(deleted);
+                    ThemeFiles.deleteCurve(deleted);
                     const rest = root._names.filter(name => name !== deleted);
                     if (rest.length > 0)
                         root.edit(rest[0]);
