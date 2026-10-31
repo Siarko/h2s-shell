@@ -10,6 +10,13 @@ section to the new version and date.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-31
+
+Themes: the shell's look — colours, fonts, shapes, animations and the bar's geometry —
+moved out of the profiles into theme files, edited in the settings window's new Appearance
+tab. Major because the bar's geometry is migrated out of the profiles into themes, and
+`qs ipc call settings openPage` now takes a page's id.
+
 ### Added
 - Curves page: the graph pans and zooms freely — drag its background to move around,
   scroll to zoom in at the pointer (up to 20×), double-click off the curve to fit it
@@ -54,7 +61,6 @@ section to the new version and date.
 - When a profile change adds or removes widgets on the bar, they grow in and shrink away
   ("enter", "exit"), and the widgets beside them slide over. The lock screen fades in,
   and waking it fades the notifications out and the password prompt in.
-
 - A curves library, `~/.config/h2s_shell/curves.json`: named cubic Béziers
   (`"springy": [0.3, 1.6, 0.4, 0.9]`) that a theme's `curves` can use by name, alongside
   Qt's own (OutQuad, OutBack, …). Watched, like themes; an unknown curve falls back to
@@ -65,7 +71,6 @@ section to the new version and date.
   (themes using the curve follow), delete (asking first), and where each curve is used.
   Curves can have more points: double-click the curve to add one, select a point to
   type its position, remove it, or switch off "Smooth" for a corner there.
-
 - Settings has two tabs: Behaviour, whose pages edit a profile (picked at the top of the
   sidebar, which also says which theme that profile uses, a click away), and Appearance,
   whose pages edit a theme (picked the same way, starting at the edited profile's theme,
@@ -76,7 +81,6 @@ section to the new version and date.
   new theme (extending it, or as a copy), renames it (themes and profiles follow) or
   deletes it (asking first; profiles using it go back to the default theme). Curves moved
   into the group.
-
 - Settings → Appearance → Colors: every base colour of the picked theme, by group, with
   what it is for and where its value comes from (set here, inherited, a palette, built
   in), and a colour picker (saturation and brightness, hue, opacity, hex). Changes are
@@ -85,19 +89,15 @@ section to the new version and date.
   changes, ✎ marks the pages and themes with unsaved changes, and Preview shows a theme
   with its changes (also the theme in use, when it has some). Reset returns a colour to
   the inherited value; Undo takes back one colour's unsaved change.
-
 - Settings → Appearance → Fonts: the theme's font family, picked from the installed fonts
   (searchable, each shown in itself), and its 13 sizes, each with a sample, a slider,
   where its value comes from, Reset and Undo; drafts like colours. Warns when the bar's
   larger icons would not fit its cells.
-
 - Settings → Appearance → Bar: the bar's size, margins and corners, moved from the Bar page
   (which keeps the widgets) into the theme's pages, as drafts with Reset and Undo.
-
 - Settings → Appearance → Animations: each animation role's duration and curve (a
   popup's two), from the curves library or Qt's, with where each comes from, Reset, Undo
   and a preview that plays it; drafts like the other theme pages.
-
 - Settings → Appearance: Widgets (bar cells, workspace pills, tray icons), Popups, Controls,
   Notifications and Other pages — every shape token of the theme (radii, padding,
   sizes, border widths) with a slider, where its value comes from, Reset and Undo, as
