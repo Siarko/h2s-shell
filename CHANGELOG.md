@@ -24,6 +24,9 @@ section to the new version and date.
   - Music: a player's icon given as a file path shows.
   - Notifications widget: a reload of the shell no longer makes every notification
     unread (the bell rang until the panel was opened).
+  - Notifications widget: a notification its sender replaces (same id: a download's
+    progress, what is playing) counts as new and rings — once, if the panel was opened
+    since; further updates before the panel is opened again do not ring.
   - Hiding a player never writes into a profile that is not in effect.
 - Popups under the middle of the bar (the calendar's top half) took no clicks: the hidden
   launch warning banner still caught them, over every popup there.

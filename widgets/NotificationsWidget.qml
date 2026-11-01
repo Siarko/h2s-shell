@@ -17,15 +17,15 @@ PopupWidget {
     readonly property string _animation: WidgetPresets.value("notifications", preset, "animation") ?? "once"
     readonly property bool _rings: _animation !== "off" && !Theme.reduceMotion
 
-    // A new notification rings the bell
-    readonly property int _count: Notifications.count
-    property int _seen: 0
-    on_CountChanged: {
-        if (_count > _seen && _rings)
-            _ring.restart();
-        _seen = _count;
+    // A notification coming rings the bell — a new one, or a seen one its sender replaced
+    // (Notifications.arrived)
+    Connections {
+        target: Notifications
+        function onArrived() {
+            if (root._rings)
+                _ring.restart();
+        }
     }
-    Component.onCompleted: _seen = _count
 
     // Again every few seconds: "untilOpened" while some came since the panel was last open,
     // "untilCleared" while any is left in it

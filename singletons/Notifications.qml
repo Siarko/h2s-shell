@@ -5,6 +5,7 @@ import Quickshell.Services.Notifications
 import QtQml
 
 Singleton {
+    id: root
     property alias notifications: server.trackedNotifications
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
@@ -75,6 +76,12 @@ Singleton {
             // One arriving while the panel is open is seen as it comes
             if (hudPanelOpen)
                 markSeen();
+            arrived();
+
+            // A sender replacing it (same id) changes it in place — no new notification
+            // comes, only new text
+            notification.summaryChanged.connect(() => root._replaced(notification));
+            notification.bodyChanged.connect(() => root._replaced(notification));
 
             // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
@@ -164,13 +171,33 @@ Singleton {
 
     // How many notifications the panel holds, and how many came since it was last open —
     // the bell widget shows the first and keeps ringing for the second ("until opened").
-    // Ids only grow, so "seen" is the highest id the panel has shown.
+    // Ids only grow, so "seen" is the highest id the panel has shown — and a seen one that
+    // its sender replaced since is unread again, by id in `_replacedSince`.
     readonly property int count: notifications.values.length
     property int _seenUpTo: 0
-    readonly property int unreadCount: notifications.values.filter(notification => notification.id > _seenUpTo).length
+    property var _replacedSince: []
+    readonly property int unreadCount: notifications.values.filter(notification => notification.id > _seenUpTo
+        || _replacedSince.includes(notification.id)).length
+
+    // A notification came — a new one, or a seen one replaced — for the bell to ring
+    signal arrived()
 
     function markSeen() {
         _seenUpTo = notifications.values.reduce((highest, notification) => Math.max(highest, notification.id), _seenUpTo);
+        _replacedSince = [];
+    }
+
+    // A replacement is news only if what it replaces was seen: a sender updating its
+    // notification again and again (a download's progress, what is playing) rings once
+    // between two openings of the panel, not at every update
+    function _replaced(notification) {
+        if (!notification.tracked || hudPanelOpen)
+            return;
+        const unread = notification.id > _seenUpTo || _replacedSince.includes(notification.id);
+        if (unread)
+            return;
+        _replacedSince = _replacedSince.concat([notification.id]);
+        arrived();
     }
     // The server keeps its notifications over a reload of the shell; this count starts
     // afresh — so what is there when it starts counts as seen, or after every reload each
