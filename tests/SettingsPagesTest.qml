@@ -29,6 +29,8 @@ TestCase {
         "panels/calendar/FieldSegment.qml",
         "panels/MusicPanel.qml",
         "panels/music/VisualizerCanvas.qml",
+        "panels/music/CoverArt.qml",
+        "panels/music/PanelVisualizer.qml",
         "panels/NetworkPanel.qml",
         "panels/network/HiddenNetworkRow.qml",
         "panels/network/LinkInfo.qml",
