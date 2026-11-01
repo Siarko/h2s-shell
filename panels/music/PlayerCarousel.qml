@@ -17,7 +17,9 @@ Item {
     property string visualizerStyle: "waveform"
     property bool showVisualizer: false
 
-    clip: true
+    // Cut at its edges only while sliding, so the view going out leaves by them; at rest the
+    // visualiser round the cover (a glow, a turned square's corners) may reach past them
+    clip: _slide.running
     implicitHeight: _slide.running ? Math.max(_first.implicitHeight, _second.implicitHeight)
         : (_slots[_current]?.implicitHeight ?? 0)
     Behavior on implicitHeight {

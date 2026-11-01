@@ -11,6 +11,20 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- After a review of the day's changes:
+  - Music: the ring round the cover no longer stays hidden for good when the cover fails
+    to load or its colours cannot be read; no small copy of the last cover shows where
+    the next has none; the cover's colours are read only when they are used.
+  - Music: dictation pauses every player that plays, hidden ones too, and resumes them.
+  - Music: the player list shows while any player is hidden, even with no other.
+  - Music: the ring round the cover is no longer cut at the top, and a glow no longer
+    spills outside the popup in any layout; the edge layouts follow the popup's real
+    edges at the bar's end.
+  - Music: cava keeps running through pauses instead of restarting each time.
+  - Music: a player's icon given as a file path shows.
+  - Notifications widget: a reload of the shell no longer makes every notification
+    unread (the bell rang until the panel was opened).
+  - Hiding a player never writes into a profile that is not in effect.
 - Popups under the middle of the bar (the calendar's top half) took no clicks: the hidden
   launch warning banner still caught them, over every popup there.
 - Music panel: the seek bar shows. It had been there all along, 0 px tall.

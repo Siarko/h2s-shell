@@ -2,6 +2,7 @@ pragma Singleton
 
 import Quickshell
 import Quickshell.Services.Notifications
+import QtQml
 
 Singleton {
     property alias notifications: server.trackedNotifications
@@ -171,6 +172,10 @@ Singleton {
     function markSeen() {
         _seenUpTo = notifications.values.reduce((highest, notification) => Math.max(highest, notification.id), _seenUpTo);
     }
+    // The server keeps its notifications over a reload of the shell; this count starts
+    // afresh — so what is there when it starts counts as seen, or after every reload each
+    // one was unread again and the bell rang ("until opened") until the panel was opened
+    Component.onCompleted: Qt.callLater(markSeen)
 
     function clearHudQueue() {
         hudQueue = [];

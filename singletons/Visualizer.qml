@@ -9,9 +9,11 @@ import qs.singletons
 // player is there, an ambient wave when cava gives nothing, falling flat while paused.
 // Runs only while something shows it — the music panel registers with addViewer() and
 // removeViewer() — so cava does not run with the panel closed. Cava hears everything the
-// speakers play, not one player, so it listens only while the shown player plays: shown a
-// paused player while another plays, the levels fall flat rather than move to the other's
-// sound.
+// speakers play, not one player, so its levels count only while the shown player plays:
+// shown a paused player while another plays, they fall flat rather than move to the
+// other's sound. Cava itself keeps running meanwhile — restarting it at every pause (and
+// every brief "paused" a player reports while seeking) dropped the bars and its
+// calibration each time.
 Singleton {
     id: root
 
@@ -28,7 +30,6 @@ Singleton {
 
     property int _viewers: 0
     readonly property bool _active: _viewers > 0 && Music.hasPlayer
-    readonly property bool _listening: _active && Music.playing
     property real _ambientPhase: 0
 
     function addViewer() {
@@ -45,8 +46,8 @@ Singleton {
     readonly property int _cavaFps: Profiles.value("polling.visualizer.fps") ?? 60
 
     on_CavaFpsChanged: _restartCava()
-    on_ListeningChanged: _restartCava()
     on_ActiveChanged: {
+        _restartCava();
         // Shown again, it starts afresh, as a newly opened panel did
         if (!_active) {
             leftBars = [];
@@ -59,11 +60,11 @@ Singleton {
     // a declarative `running:` binding — see CLAUDE.md.
     function _restartCava() {
         _cava.running = false;
-        if (!_listening)
+        if (!_active)
             return;
         const template = _cavaTemplate.text();
         _cavaGenerated.setText(template.replace(/^framerate\s*=.*$/m, "framerate = " + _cavaFps));
-        Qt.callLater(() => _cava.running = root._listening);
+        Qt.callLater(() => _cava.running = root._active);
     }
 
     FileView {
@@ -88,10 +89,16 @@ Singleton {
         command: ["cava", "-p", _cavaGenerated.path]
         stdout: SplitParser {
             onRead: line => {
-                // A last line after it was told to stop
-                if (!root._listening)
-                    return;
                 const levels = line.split(";").filter(part => part !== "").map(part => parseInt(part) / 100.0);
+                // The shown player is not playing: what cava hears is another's. Flat, but
+                // there — a ring or strip at rest rather than nothing, as cava's silence was
+                if (!Music.playing) {
+                    if (root.leftBars.length === 0) {
+                        root.leftBars = new Array(levels.length / 2).fill(0);
+                        root.rightBars = new Array(levels.length / 2).fill(0);
+                    }
+                    return;
+                }
                 root.useCava = true;
                 root.leftBars = levels.slice(0, levels.length / 2);
                 root.rightBars = levels.slice(levels.length / 2);

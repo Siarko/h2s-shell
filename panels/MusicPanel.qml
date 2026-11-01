@@ -21,6 +21,7 @@ Item {
     readonly property bool _showVisualizer: Music.hasPlayer && visualizerStyle !== "none"
 
     PanelVisualizer {
+        id: _visualizer
         anchors.fill: parent
         visualizerLayout: root.visualizerLayout
         visualizerStyle: root.visualizerStyle
@@ -116,16 +117,12 @@ Item {
             }
         }
 
-        // Horizontal layout: both channels in one strip, bass at both ends and treble
-        // meeting in the middle — cava's own stereo order the other way round, each channel
-        // turned so it stays on its side
-        VisualizerCanvas {
+        // The horizontal visualiser's place: PanelVisualizer draws it there, cut to the
+        // popup's shape with the rest
+        Item {
             width: parent.width
-            height: 36
+            height: _visualizer.stripHeight
             visible: root.visualizerLayout === "horizontal" && root._showVisualizer
-            style: root.visualizerStyle
-            bass: Visualizer.bass
-            bars: Visualizer.leftBars.slice().reverse().concat(Visualizer.rightBars.slice().reverse())
         }
     }
 }

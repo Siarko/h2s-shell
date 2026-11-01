@@ -6,13 +6,13 @@ import qs.singletons
 // The music panel's players (Music): a "Hidden" expander over the list when the user has
 // hidden some — open, it shows them, each to be shown again — then the listed players
 // (PlayerRow). Scrolling over the list steps through the listed ones. Shown when there is
-// more than one player, hidden ones included, so a lone listed player still leads to the
-// hidden.
+// more than one player, or any hidden one — a lone listed player, or none, still leads to
+// the hidden.
 Column {
     id: root
 
     spacing: 2
-    visible: Music.listedPlayers.length > 1
+    visible: Music.listedPlayers.length > 1 || Music.hiddenPlayers.length > 0
 
     // Open for this panel only: it starts closed each time
     property bool hiddenOpen: false

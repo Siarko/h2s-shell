@@ -41,15 +41,18 @@ Item {
     readonly property bool _coverColors: Profiles.value("media.coverColors") ?? false
     property var _coverPalette: []
 
-    // Reads the shown cover's colours — whenever a cover may have changed: it loaded, the
-    // track changed (a player may reuse the cover's address), the setting was turned on.
-    // What was read before for this cover shows at once. A Canvas asked to paint before its
-    // window can draw (a popup's content is made before the popup shows) never paints, so
-    // the read is asked again until it has really happened.
+    // Reads the shown cover's colours — only while they are wanted (around the cover, the
+    // setting on), and whenever a cover may have changed: it loaded, the track changed (a
+    // player may reuse the cover's address), they became wanted. What was read before for
+    // this cover shows at once. A Canvas asked to paint before its window can draw (a
+    // popup's content is made before the popup shows) never paints, so the read is asked
+    // again until it has really happened.
+    readonly property bool _wantsColors: _coverColors && _around
     readonly property string _coverKey: _artUrl + "\n" + (player?.trackTitle ?? "")
     property bool _samplePending: false
     property int _sampleTries: 0
-    // Whether the shown cover's colours are known (read, or remembered)
+    // Whether the shown cover's colours are settled: read, remembered, or found to be none
+    // (no cover, one that failed to load, one that never drew) — the theme's colour then
     property bool _paletteKnown: false
 
     // Around a cover being read, with its colours wanted, the visualiser waits unseen —
@@ -75,9 +78,14 @@ Item {
     }
 
     function _sampleCover() {
+        if (!_wantsColors) {
+            _samplePending = false;
+            return;
+        }
         if (image.status !== Image.Ready) {
             _coverPalette = [];
-            _paletteKnown = false;
+            // Still loading: wait for it. Failed, or none: nothing to wait for
+            _paletteKnown = image.status !== Image.Loading;
             _samplePending = false;
             return;
         }
@@ -96,14 +104,16 @@ Item {
         repeat: true
         running: root._samplePending
         onTriggered: {
-            // Ten seconds at most: a cover that never draws is left alone
-            if (++root._sampleTries > 50)
+            // Ten seconds at most: a cover that never draws is left alone, in the theme's
+            // colour
+            if (++root._sampleTries > 50) {
                 root._samplePending = false;
-            else
+                root._paletteKnown = true;
+            } else
                 _coverSample.requestPaint();
         }
     }
-    on_CoverColorsChanged: if (_coverColors) _sampleCover()
+    on_WantsColorsChanged: _sampleCover()
     Connections {
         target: root.player
         function onTrackTitleChanged() { _resample.restart() }
@@ -131,15 +141,17 @@ Item {
         coverHalf: root._coverSize / 2
         coverRadius: root._coverRadius
         coverAngle: root._coverAngle
-        colors: root._coverColors ? root._coverPalette : []
+        colors: root._wantsColors ? root._coverPalette : []
         // Clockwise from the top: the right channel treble to bass down the right,
-        // the left bass to treble up the left — bass meeting at the bottom
-        bars: Visualizer.rightBars.slice().reverse().concat(Visualizer.leftBars.slice().reverse())
+        // the left bass to treble up the left — bass meeting at the bottom. Hidden, none:
+        // nothing to rebuild at every frame
+        bars: visible ? Visualizer.rightBars.slice().reverse().concat(Visualizer.leftBars.slice().reverse()) : []
     }
 
     // The cover drawn small, to read its colours from (CoverColors). Under the cover,
     // never inside it: a Canvas that is not shown does not paint, and the cover is
-    // transparent while it fades in — just when it is read.
+    // transparent while it fades in — just when it is read. Cleared once read, so no small
+    // copy of a cover shows where the next has none, or while it loads.
     Canvas {
         id: _coverSample
         anchors.centerIn: parent
@@ -159,6 +171,7 @@ Item {
                 drawn = pixels[i] > 0;
             if (!drawn)
                 return;
+            ctx.clearRect(0, 0, width, height);
             root._coverPalette = CoverColors.palette(pixels, 3);
             CoverColors.remember(root._coverKey, root._coverPalette);
             root._paletteKnown = true;

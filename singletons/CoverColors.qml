@@ -36,28 +36,28 @@ Singleton {
 
     // [h 0–360, s 0–1, l 0–1] of an RGB colour (0–255 each)
     function _hsl(red, green, blue) {
-        const r = red / 255, g = green / 255, b = blue / 255;
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        const redShare = red / 255, greenShare = green / 255, blueShare = blue / 255;
+        const max = Math.max(redShare, greenShare, blueShare), min = Math.min(redShare, greenShare, blueShare);
         const lightness = (max + min) / 2;
         if (max === min)
             return [0, 0, lightness];
         const delta = max - min;
         const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
         let hue;
-        if (max === r)
-            hue = (g - b) / delta + (g < b ? 6 : 0);
-        else if (max === g)
-            hue = (b - r) / delta + 2;
+        if (max === redShare)
+            hue = (greenShare - blueShare) / delta + (greenShare < blueShare ? 6 : 0);
+        else if (max === greenShare)
+            hue = (blueShare - redShare) / delta + 2;
         else
-            hue = (r - g) / delta + 4;
+            hue = (redShare - greenShare) / delta + 4;
         return [hue * 60, saturation, lightness];
     }
 
-    function _hex(h, s, l) {
-        const a = s * Math.min(l, 1 - l);
-        const channel = n => {
-            const k = (n + h / 30) % 12;
-            const value = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    function _hex(hue, saturation, lightness) {
+        const chroma = saturation * Math.min(lightness, 1 - lightness);
+        const channel = part => {
+            const offset = (part + hue / 30) % 12;
+            const value = lightness - chroma * Math.max(-1, Math.min(offset - 3, 9 - offset, 1));
             return Math.round(value * 255).toString(16).padStart(2, "0");
         };
         return "#" + channel(0) + channel(8) + channel(4);

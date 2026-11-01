@@ -17,9 +17,11 @@ Singleton {
     // Only the idle/active edge matters; listening ↔ speaking flips constantly.
     readonly property bool _dictating: Stt.dictation !== "idle"
 
-    // The player this singleton paused, so only a pause it caused is ever undone. If
+    // The players this singleton paused, so only a pause it caused is ever undone. If
     // playback was already stopped when dictation began, dictation must not start it.
-    property MprisPlayer _pausedPlayer: null
+    // Every player that plays, not only the shown one: a player hidden from the music
+    // panel's list is never the active one, but the microphone hears it all the same.
+    property var _pausedPlayers: []
 
     Logger {
         id: logger
@@ -29,26 +31,28 @@ Singleton {
 
     on_DictatingChanged: {
         if (_dictating) {
-            if ((Profiles.value("stt.pauseMusicWhileDictating") ?? true) && Music.playing) {
-                logger.log("pausing", Music.activePlayer?.identity);
-                _pausedPlayer = Music.activePlayer;
-                Music.pause();
+            if (!(Profiles.value("stt.pauseMusicWhileDictating") ?? true))
+                return;
+            const playing = Music.listedPlayers.filter(player => player.playbackState === MprisPlaybackState.Playing && player.canPause);
+            for (const player of playing) {
+                logger.log("pausing", player.identity);
+                player.pause();
             }
+            _pausedPlayers = playing;
             return;
         }
-
-        if (_pausedPlayer === null)
-            return;
 
         // Resumed even if the setting was switched off in the meantime — this undoes a
         // pause that was already applied, rather than acting on the setting.
-        if (_isPlayerAlive(_pausedPlayer) && _pausedPlayer.canPlay) {
-            logger.log("resuming", _pausedPlayer.identity);
-            _pausedPlayer.play();
-        } else {
-            logger.log("player gone, nothing to resume");
+        for (const player of _pausedPlayers) {
+            if (_isPlayerAlive(player) && player.canPlay) {
+                logger.log("resuming", player.identity);
+                player.play();
+            } else {
+                logger.log("player gone, nothing to resume");
+            }
         }
-        _pausedPlayer = null;
+        _pausedPlayers = [];
     }
 
     // The stored player may have quit during dictation. Checked against the live list

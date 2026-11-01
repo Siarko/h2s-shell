@@ -97,12 +97,12 @@ Item {
     // a gradient about its centre, the same down the left as down the right
     function _paint(ctx, alpha, centreX, centreY) {
         if (!_multicolor) {
-            const c = Theme.visualizer;
-            return Qt.rgba(c.r, c.g, c.b, alpha);
+            const base = Theme.visualizer;
+            return Qt.rgba(base.r, base.g, base.b, alpha);
         }
         const list = colors.map(color => {
-            const c = Qt.color(color);
-            return Qt.rgba(c.r, c.g, c.b, alpha);
+            const parsed = Qt.color(color);
+            return Qt.rgba(parsed.r, parsed.g, parsed.b, alpha);
         });
         if (list.length === 1)
             return list[0];
@@ -178,8 +178,8 @@ Item {
     function _drawBars(ctx, bars, w, h, vertical, fromRight) {
         if (bars.length === 0)
             return;
-        var c = Theme.visualizer;
-        ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.7);
+        var base = Theme.visualizer;
+        ctx.fillStyle = Qt.rgba(base.r, base.g, base.b, 0.7);
 
         var n = bars.length;
         if (vertical) {
@@ -207,8 +207,8 @@ Item {
     function _drawDots(ctx, bars, w, h, vertical) {
         if (bars.length === 0)
             return;
-        var c = Theme.visualizer;
-        ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.9);
+        var base = Theme.visualizer;
+        ctx.fillStyle = Qt.rgba(base.r, base.g, base.b, 0.9);
 
         var n = bars.length;
         var r = 2.5;
@@ -252,19 +252,19 @@ Item {
     }
 
     function _drawEdge(ctx, bars, w, h, glow) {
-        const n = bars.length;
-        if (n === 0)
+        const count = bars.length;
+        if (count === 0)
             return;
-        const c = Theme.visualizer;
+        const base = Theme.visualizer;
         const at = (along, across) => _edgePoint(along, across, w, h);
 
         if (style === "bars" && !glow) {
             // A gap of 2 px between bars, as in the other layouts
             const length = edge === "bottom" ? w : h;
             const gap = 2 / Math.max(1, length);
-            const size = (1 - (n - 1) * gap) / n;
-            ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.7);
-            for (let i = 0; i < n; i++) {
+            const size = (1 - (count - 1) * gap) / count;
+            ctx.fillStyle = Qt.rgba(base.r, base.g, base.b, 0.7);
+            for (let i = 0; i < count; i++) {
                 const start = i * (size + gap), end = start + size;
                 const corners = [at(start, 0), at(end, 0), at(end, bars[i]), at(start, bars[i])];
                 ctx.beginPath();
@@ -277,31 +277,31 @@ Item {
             return;
         }
 
-        const step = 1 / (n > 1 ? n - 1 : 1);
+        const step = 1 / (count > 1 ? count - 1 : 1);
         if (style === "dots" && !glow) {
-            ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.9);
-            for (let i = 0; i < n; i++) {
+            ctx.fillStyle = Qt.rgba(base.r, base.g, base.b, 0.9);
+            for (let i = 0; i < count; i++) {
                 // Off the edge by a dot's size, so a silent band still shows
-                const p = at(i * step, 0.04 + bars[i] * 0.85);
+                const point = at(i * step, 0.04 + bars[i] * 0.85);
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                ctx.arc(point.x, point.y, 2.5, 0, Math.PI * 2);
                 ctx.fill();
             }
             return;
         }
 
         // Waveform and glow: a line through the bands, closed along the edge
-        if (n < 2)
+        if (count < 2)
             return;
         const start = at(0, 0);
         ctx.beginPath();
         ctx.moveTo(start.x, start.y);
-        for (let i = 0; i < n - 1; i++) {
+        for (let i = 0; i < count - 1; i++) {
             const control = at(i * step, bars[i] * 0.85);
             const next = at((i + 0.5) * step, (bars[i] + bars[i + 1]) / 2 * 0.85);
             ctx.quadraticCurveTo(control.x, control.y, next.x, next.y);
         }
-        const last = at(1, bars[n - 1] * 0.85);
+        const last = at(1, bars[count - 1] * 0.85);
         ctx.lineTo(last.x, last.y);
         const end = at(1, 0);
         ctx.lineTo(end.x, end.y);
@@ -312,8 +312,8 @@ Item {
     // Round the cover: rays out from its edge (bars), dots, or a closed wave — filled soft,
     // or as the source of a glow
     function _drawAround(ctx, bars, w, h) {
-        const n = bars.length;
-        if (n === 0)
+        const count = bars.length;
+        if (count === 0)
             return;
         const centreX = w / 2, centreY = h / 2;
         // A little off the cover's edge; an outline pushed out evenly keeps its corners'
@@ -322,19 +322,19 @@ Item {
         const half = coverHalf + gap;
         const radius = Math.min(half, coverRadius + gap);
         const reach = Math.max(4, (Math.min(w, h) / 2 - half) * 0.9);
-        const at = t => RoundedOutline.screenPoint(t, half, radius, coverAngle);
+        const at = fraction => RoundedOutline.screenPoint(fraction, half, radius, coverAngle);
 
         if (style === "bars") {
             const perimeter = 8 * (half - radius) + 2 * Math.PI * radius;
             ctx.strokeStyle = _paint(ctx, 0.75, centreX, centreY);
-            ctx.lineWidth = Math.max(1.5, perimeter / n * 0.45);
+            ctx.lineWidth = Math.max(1.5, perimeter / count * 0.45);
             ctx.lineCap = "round";
-            for (let i = 0; i < n; i++) {
-                const p = at((i + 0.5) / n);
+            for (let i = 0; i < count; i++) {
+                const point = at((i + 0.5) / count);
                 const length = 3 + bars[i] * reach;
                 ctx.beginPath();
-                ctx.moveTo(centreX + p.x, centreY + p.y);
-                ctx.lineTo(centreX + p.x + p.nx * length, centreY + p.y + p.ny * length);
+                ctx.moveTo(centreX + point.x, centreY + point.y);
+                ctx.lineTo(centreX + point.x + point.nx * length, centreY + point.y + point.ny * length);
                 ctx.stroke();
             }
             return;
@@ -342,29 +342,29 @@ Item {
 
         if (style === "dots") {
             ctx.fillStyle = _paint(ctx, 0.9, centreX, centreY);
-            for (let i = 0; i < n; i++) {
-                const p = at((i + 0.5) / n);
+            for (let i = 0; i < count; i++) {
+                const point = at((i + 0.5) / count);
                 const distance = 4 + bars[i] * reach * 0.85;
                 ctx.beginPath();
-                ctx.arc(centreX + p.x + p.nx * distance, centreY + p.y + p.ny * distance, 2.5, 0, Math.PI * 2);
+                ctx.arc(centreX + point.x + point.nx * distance, centreY + point.y + point.ny * distance, 2.5, 0, Math.PI * 2);
                 ctx.fill();
             }
             return;
         }
 
         // Waveform and glow: a closed line through the bands, eased between them
-        const steps = Math.max(120, n * 6);
+        const steps = Math.max(120, count * 6);
         ctx.beginPath();
         for (let k = 0; k <= steps; k++) {
-            const t = k / steps;
-            const position = t * n - 0.5;
-            const first = ((Math.floor(position) % n) + n) % n;
-            const second = (first + 1) % n;
+            const fraction = k / steps;
+            const position = fraction * count - 0.5;
+            const first = ((Math.floor(position) % count) + count) % count;
+            const second = (first + 1) % count;
             const blend = (1 - Math.cos((position - Math.floor(position)) * Math.PI)) / 2;
             const level = bars[first] * (1 - blend) + bars[second] * blend;
-            const p = at(t);
+            const point = at(fraction);
             const distance = 2 + level * reach * 0.8;
-            const x = centreX + p.x + p.nx * distance, y = centreY + p.y + p.ny * distance;
+            const x = centreX + point.x + point.nx * distance, y = centreY + point.y + point.ny * distance;
             if (k === 0)
                 ctx.moveTo(x, y);
             else

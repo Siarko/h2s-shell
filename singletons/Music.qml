@@ -59,12 +59,24 @@ Singleton {
             playOnly(player);
     }
 
-    // The application's icon for a player ("" when there is none): from the desktop entry
-    // it names, or the one its name or bus name points to (PlayerRules.desktopEntryFor)
-    readonly property var _apps: DesktopEntries.applications.values.map(entry => ({ id: entry.id, name: entry.name }))
+    // The application's icon for a player ("" when there is none): the desktop entry it
+    // names, else Quickshell's own guess from its name, else ours (PlayerRules
+    // .desktopEntryFor: by the application's name — Quickshell's finds no "Brave" — or bus
+    // name). An icon given as a file path is that file; a name, the icon theme's.
     function playerIcon(player) {
-        const id = PlayerRules.desktopEntryFor(player?.desktopEntry, player?.identity, player?.dbusName, _apps);
-        const icon = id !== "" ? DesktopEntries.byId(id)?.icon ?? "" : "";
+        if (!player)
+            return "";
+        // Read in a binding, this brings the icon in once the applications have been read
+        void DesktopEntries.applications.values.length;
+        let entry = DesktopEntries.byId(player.desktopEntry ?? "") ?? DesktopEntries.heuristicLookup(player.identity ?? "");
+        if (!entry) {
+            const apps = DesktopEntries.applications.values.map(application => ({ id: application.id, name: application.name }));
+            const id = PlayerRules.desktopEntryFor(player.desktopEntry, player.identity, player.dbusName, apps);
+            entry = id !== "" ? DesktopEntries.byId(id) : null;
+        }
+        const icon = entry?.icon ?? "";
+        if (icon.startsWith("/"))
+            return "file://" + icon;
         return icon !== "" ? Quickshell.iconPath(icon, true) : "";
     }
 
