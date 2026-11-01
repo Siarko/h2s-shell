@@ -189,6 +189,13 @@ Singleton {
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
 
         // ── Bar ──
+        // The screen edge the bar stands at (docs/plans/bar-position.md); the sides come
+        // with the vertical bar
+        { key: "bar.edge", label: "Position", group: "barPosition", type: "enum", default: "top",
+          options: [
+              { value: "top", label: "Top" },
+              { value: "bottom", label: "Bottom" }
+          ] },
         _sectionEntry("left", "Left section", ["power", "settings", "workspaces"]),
         _sectionEntry("center", "Center section", ["clock"]),
         _sectionEntry("right", "Right section", ["music", "sound", "bluetooth", "tray", "network", "notifications"]),

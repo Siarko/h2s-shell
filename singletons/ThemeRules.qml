@@ -154,19 +154,21 @@ Singleton {
     ]
 
     // The bar's geometry tokens (barTokens) as the Bar shape page shows them: label, use,
-    // slider range and unit
+    // slider range and unit. Named for a bar at the top, they apply relative to the bar's
+    // edge (BarGeometry): the "top" ones are at the screen's edge, the "bottom" ones face
+    // the desktop.
     readonly property var barTokenInfo: [
         { token: "barHeight", group: "Size", label: "Bar height", hint: "Excluding the reserved space and top offset", from: 10, to: 80, suffix: " px" },
-        { token: "reservedSpace", group: "Size", label: "Reserved space", hint: "Kept free for the bar at the top of the screen: its height and offset", from: 10, to: 80, suffix: " px" },
-        { token: "topOffset", group: "Size", label: "Top offset", hint: "Between the bar and the top of the screen", from: 0, to: 80, suffix: " px" },
+        { token: "reservedSpace", group: "Size", label: "Reserved space", hint: "Kept free for the bar at its screen edge: its height and offset", from: 10, to: 80, suffix: " px" },
+        { token: "topOffset", group: "Size", label: "Edge offset", hint: "Between the bar and its screen edge", from: 0, to: 80, suffix: " px" },
         { token: "leftMargin", group: "Size", label: "Left margin", hint: "Between the bar and the screen's left edge", from: 0, to: 300, suffix: " px" },
         { token: "rightMargin", group: "Size", label: "Right margin", hint: "Between the bar and the screen's right edge", from: 0, to: 300, suffix: " px" },
         { token: "leftPadding", group: "Size", label: "Left padding", hint: "Inside the bar, before its first widget", from: 0, to: 300, suffix: " px" },
         { token: "rightPadding", group: "Size", label: "Right padding", hint: "Inside the bar, after its last widget", from: 0, to: 300, suffix: " px" },
-        { token: "radiusTopLeft", group: "Corners", label: "Top left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
-        { token: "radiusTopRight", group: "Corners", label: "Top right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
-        { token: "radiusBottomLeft", group: "Corners", label: "Bottom left", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
-        { token: "radiusBottomRight", group: "Corners", label: "Bottom right", hint: "In percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusTopLeft", group: "Corners", label: "Screen edge, left", hint: "At the screen's edge; in percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusTopRight", group: "Corners", label: "Screen edge, right", hint: "At the screen's edge; in percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusBottomLeft", group: "Corners", label: "Desktop side, left", hint: "Facing the desktop, where popups open; in percent of half the bar's height", from: 0, to: 100, suffix: "%" },
+        { token: "radiusBottomRight", group: "Corners", label: "Desktop side, right", hint: "Facing the desktop, where popups open; in percent of half the bar's height", from: 0, to: 100, suffix: "%" },
         { token: "cellVerticalMargin", group: "Widgets", label: "Cell margin", hint: "Above and below each widget's cell", from: 0, to: 20, suffix: " px" },
         { token: "widgetSpacing", group: "Widgets", label: "Widget spacing", hint: "Between the widgets of a section", from: 0, to: 30, suffix: " px" },
         { token: "borderWidth", group: "Border", label: "Border width", hint: "Along the edge facing the desktop, in the colour Bar border (Colors); 0: none", from: 0, to: 10, suffix: " px" }

@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Bar popups: each opens on its own bar's screen. They went to the screen with the focus,
+  which at the top happened to be the bar's.
 - After a review of the day's changes:
   - Music: the ring round the cover no longer stays hidden for good when the cover fails
     to load or its colours cannot be read; no small copy of the last cover shows where
@@ -43,6 +45,10 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Bar: it can stand at the bottom of the screen (Behaviour → Bar → Position, per
+  profile); popups then open upward from it. The Bar shape page names the edge offset
+  and corners by the screen's edge and the desktop side, so a theme looks the same at
+  either edge.
 - Music panel: changing player slides the cover, its visualiser and the track sideways —
   a player further down the list comes in from the right, one further up from the left —
   each view keeping its own player, so the cover turns and the ring moves only for a

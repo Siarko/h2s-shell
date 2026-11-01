@@ -29,6 +29,7 @@ QtObject {
     property var _roundedOutline: RoundedOutlineTest {}
     property var _coverColors: CoverColorsTest {}
     property var _playerRules: PlayerRulesTest {}
+    property var _barGeometry: BarGeometryTest {}
 
     // Exit after all Component.onCompleted handlers finish.
     // interval:0 fires on the next event loop tick, after all suites have run.

@@ -71,8 +71,8 @@ Singleton {
         // of half the bar's height
         "bar": {
             "barHeight": 36,                 // the bar itself
-            "reservedSpace": 40,             // space kept free for it at the top of the screen
-            "topOffset": 2,                  // between the bar and the top of the screen
+            "reservedSpace": 40,             // space kept free for it at its screen edge
+            "topOffset": 2,                  // between the bar and its screen edge
             "leftMargin": 0,                 // between the screen edges and the bar
             "rightMargin": 0,
             "leftPadding": 5,                // between the bar's ends and its widgets

@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.4, the bar at the bottom or vertical at a side.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.4 stage B, a vertical bar at a side (the bottom edge is done).
 
 ---
 
@@ -812,6 +812,9 @@ end so the numbers above keep meaning what older notes say:
       to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
       Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
       analysis and a plan, with the user, before any work.
+      Plan: docs/plans/bar-position.md (setting per profile, tokens relative to the edge,
+      HUD left alone). **Stage A, the bottom edge: done (2026-11-01).** Stage B, a
+      vertical bar: in progress.
 - [ ] **11.5 Bar shape and anchoring: e.g. a "dynamic island" bar** (was 10.13) (requested
       2026-10-30)
       The bar's size can only be tuned with margins and padding today. Wanted: choosing

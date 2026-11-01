@@ -5,11 +5,18 @@ import QtQuick.Shapes
 import qs.components
 import qs.singletons
 
-// Lazily-loaded popup panel that appears below a triggering element.
-// Matches the width and horizontal position of the element that triggered it.
+// Lazily-loaded popup panel that opens from the bar by a triggering element — down from
+// a bar at the top, up from one at the bottom — centred on it.
 LazyLoader {
     id: popupLoader
     active: false
+
+    // The bar's screen: the popup's window is put on it. Left to the compositor, it went
+    // to the screen with the focus, which need not be the bar's
+    property ShellScreen barScreen: null
+    // The screen edge the bar stands at: the popup opens away from it
+    property string barEdge: "top"
+    readonly property bool _upward: barEdge === "bottom"
 
     // Horizontal offset and width inherited from the triggering element
     required property int popupPosition
@@ -66,12 +73,22 @@ LazyLoader {
         popupLoader.opened();
     }
 
-    // Popup window positioned at the top-left, offset by popupPosition
+    // Opening upward, the background is drawn as for a popup below a bar and turned
+    // over (only its shapes: the panel inside is not)
+    component Mirror: Scale {
+        required property Item target
+        origin.y: target.height / 2
+        yScale: popupLoader._upward ? -1 : 1
+    }
+
+    // Popup window over the whole screen from the bar's edge; the popup is placed in it
     PanelWindow {
         id: popup
+        screen: popupLoader.barScreen
 
         anchors {
-            top: true
+            top: !popupLoader._upward
+            bottom: popupLoader._upward
             left: true
         }
 
@@ -87,12 +104,12 @@ LazyLoader {
         property int contentWidth: _holding ? _heldWidth : contentLoader.item ? contentLoader.item.implicitWidth : 0
         property int contentHeight: _holding ? _heldHeight : contentLoader.item ? contentLoader.item.implicitHeight : 0
         property int popupHeight: contentHeight + paddingTop + paddingBottom
-        // The most height content can take and still end a gap above the screen's bottom
-        // edge: the popup opens at the bar's bottom edge, and adds its paddings. Given to
+        // The most height content can take and still end a gap short of the screen's far
+        // edge: the popup opens at the bar's desktop side, and adds its paddings. Given to
         // the panel as its `availableHeight`, if it has one.
         readonly property int _screenGap: 16
-        readonly property real availableContentHeight: popup.screen.height - Theme.bar.topOffset - Theme.bar.barHeight
-            - paddingTop - paddingBottom - _screenGap
+        readonly property real availableContentHeight: BarGeometry.popupContentLength(popup.screen.height, Theme.bar,
+            paddingTop + paddingBottom, _screenGap)
         property int totalWidth: contentWidth + (paddingSide * 2) + panelRadius * 2
         // The width on screen: follows totalWidth with an animation when switching
         // between popups of different widths, so it does not jump
@@ -101,7 +118,8 @@ LazyLoader {
             enabled: popup.showPopup
             NumberAnimation { duration: Theme.duration("popupResize"); easing: Theme.curve("popupResize") }
         }
-        // The bar's own extent and bottom corners: it need not reach the screen edges
+        // The bar's own extent and the corners on its desktop side (the theme's bottom
+        // ones, at either edge): it need not reach the screen edges
         function _layout(name) {
             return Theme.bar[name] ?? 0
         }
@@ -171,8 +189,9 @@ LazyLoader {
 
         focusable: hoverHandler.hovered
 
-        // Align to the bar's visual bottom, not the full reserved space
-        margins.top: Theme.bar.topOffset + Theme.bar.barHeight - Theme.bar.reservedSpace
+        // Align to the bar's desktop side, not the edge of its reserved space
+        margins.top: popupLoader._upward ? 0 : BarGeometry.popupMargin(Theme.bar)
+        margins.bottom: popupLoader._upward ? BarGeometry.popupMargin(Theme.bar) : 0
         margins.left: 0
         color: "transparent"
 
@@ -180,9 +199,11 @@ LazyLoader {
             item: clipWrapper
         }
 
-        // Clip wrapper — animates height; the window itself never resizes
+        // Clip wrapper — animates height, growing from the bar; the window itself never
+        // resizes
         Item {
             id: clipWrapper
+            y: popupLoader._upward ? popup.height - height : 0
             // Centred under its widget, but kept under the bar — not the screen, which the
             // bar may not reach. Where the bar's corner is rounded the popup stops short of
             // it, keeping its curve; under a square corner it may run to the end.
@@ -264,6 +285,8 @@ LazyLoader {
 
             Rectangle {
                 id: rect
+                // Held against the bar: the clip's end away from it is the one that moves
+                y: popupLoader._upward ? clipWrapper.height - height : 0
                 width: popup.shownWidth
                 // At least as tall as the clip around it while that animates: shrinking to a
                 // smaller panel, the background staying at the old height until the clip has
@@ -275,18 +298,22 @@ LazyLoader {
                     id: leftCurve
                     side: "left"
                     radius: popup.panelRadius
-                    anchors.top: parent.top
+                    anchors.top: popupLoader._upward ? undefined : parent.top
+                    anchors.bottom: popupLoader._upward ? parent.bottom : undefined
                     anchors.left: parent.left
                     visible: popup.roundingLeft
+                    transform: Mirror { target: leftCurve }
                 }
 
                 PopupCurve {
                     id: rightCurve
                     side: "right"
                     radius: popup.panelRadius
-                    anchors.top: parent.top
+                    anchors.top: popupLoader._upward ? undefined : parent.top
+                    anchors.bottom: popupLoader._upward ? parent.bottom : undefined
                     anchors.right: parent.right
                     visible: popup.roundingRight
+                    transform: Mirror { target: rightCurve }
                 }
 
                 Rectangle {
@@ -299,8 +326,11 @@ LazyLoader {
                     anchors.right: popup.roundingRight ? rightCurve.left : parent.right
                     implicitHeight: rect.height
 
-                    bottomLeftRadius: popup.roundingLeft ? popup.panelRadius : 0
-                    bottomRightRadius: popup.roundingRight ? popup.panelRadius : 0
+                    // Rounded at the end away from the bar
+                    topLeftRadius: popupLoader._upward && popup.roundingLeft ? popup.panelRadius : 0
+                    topRightRadius: popupLoader._upward && popup.roundingRight ? popup.panelRadius : 0
+                    bottomLeftRadius: !popupLoader._upward && popup.roundingLeft ? popup.panelRadius : 0
+                    bottomRightRadius: !popupLoader._upward && popup.roundingRight ? popup.panelRadius : 0
 
                     color: Theme.popupBackground
 
@@ -323,13 +353,15 @@ LazyLoader {
                                 || WidgetRegistry.popupPanelUrl("calendar");
                     }
 
-                    // Held at the top, not centred: the background may be taller than the
-                    // content while it shrinks
+                    // Held against the bar, not centred: the background may be taller than
+                    // the content while it shrinks
                     Loader {
                         id: contentLoader
                         anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
+                        anchors.top: popupLoader._upward ? undefined : parent.top
                         anchors.topMargin: popup.paddingTop
+                        anchors.bottom: popupLoader._upward ? parent.bottom : undefined
+                        anchors.bottomMargin: popup.paddingBottom
                         onLoaded: {
                             if (typeof item.availableHeight !== "undefined")
                                 item.availableHeight = Qt.binding(() => popup.availableContentHeight)
@@ -376,12 +408,14 @@ LazyLoader {
                 // ear, the side, the rounded bottom — so it carries on from the bar's
                 // border, which the popup covers there. Drawn half a line inside the edge,
                 // so all of it shows; as tall as the clip, so it follows the animation.
+                // Opening upward, turned over: the clip is then the background's bottom.
                 Shape {
                     id: _outline
                     readonly property real lineWidth: Theme.popup.borderWidth
                     visible: lineWidth > 0
                     anchors.fill: parent
                     preferredRendererType: Shape.CurveRenderer
+                    transform: Mirror { target: _outline }
 
                     readonly property string _path: {
                         const d = lineWidth / 2;

@@ -6,7 +6,8 @@ import qs.components
 import qs.panels
 import qs.singletons
 
-// Top-anchored horizontal bar spanning the full screen width
+// A horizontal bar across the screen, at its top or bottom edge (the bar.edge setting,
+// docs/plans/bar-position.md)
 PanelWindow {
     id: bar
     required property var modelData
@@ -32,7 +33,8 @@ PanelWindow {
     }
 
     anchors {
-        top: true
+        top: screenEdge !== "bottom"
+        bottom: screenEdge === "bottom"
         left: true
         right: true
     }
@@ -183,10 +185,17 @@ PanelWindow {
         SlideBehavior on radiusBottomRight {}
     }
 
-    // The screen edge the bar stands at — the top, for now (bar position: TODO 11.4) —
-    // and the edge facing the desktop, where its border goes (below)
-    readonly property string screenEdge: "top"
-    readonly property string _desktopEdge: ({ top: "bottom", bottom: "top", left: "right", right: "left" })[screenEdge]
+    // The screen edge the bar stands at, and the edge facing the desktop, where its border
+    // goes (below). The sides wait for the vertical bar.
+    readonly property string screenEdge: Profiles.value("bar.edge") === "bottom" ? "bottom" : "top"
+    readonly property string _desktopEdge: BarGeometry.desktopEdge(screenEdge)
+    readonly property bool _atBottom: screenEdge === "bottom"
+    // The corners on screen: the theme's are named for a bar at the top
+    readonly property var _corners: BarGeometry.corners(screenEdge, {
+        barHeight: _layout("barHeight"),
+        radiusTopLeft: _layout("radiusTopLeft"), radiusTopRight: _layout("radiusTopRight"),
+        radiusBottomLeft: _layout("radiusBottomLeft"), radiusBottomRight: _layout("radiusBottomRight")
+    })
 
     // The bar's border, outside it, along the edge facing the desktop only: a shape like
     // the bar's, grown by the border's width on that side, behind the bar. The bar keeps
@@ -209,20 +218,23 @@ PanelWindow {
     // Visual bar rectangle — floats within the reserved space
     Rectangle {
         id: _barShape
+        // The theme's top offset is the gap to the bar's own edge
         anchors {
-            top: parent.top
+            top: bar._atBottom ? undefined : parent.top
+            bottom: bar._atBottom ? parent.bottom : undefined
             left: parent.left
             right: parent.right
             topMargin: bar._layout("topOffset")
+            bottomMargin: bar._layout("topOffset")
             leftMargin: bar._layout("leftMargin")
             rightMargin: bar._layout("rightMargin")
         }
         height: bar._layout("barHeight")
         color: Theme.barBackground
-        topLeftRadius: bar._layout("radiusTopLeft") / 100 * (bar._layout("barHeight") / 2)
-        topRightRadius: bar._layout("radiusTopRight") / 100 * (bar._layout("barHeight") / 2)
-        bottomLeftRadius: bar._layout("radiusBottomLeft") / 100 * (bar._layout("barHeight") / 2)
-        bottomRightRadius: bar._layout("radiusBottomRight") / 100 * (bar._layout("barHeight") / 2)
+        topLeftRadius: bar._corners.topLeft
+        topRightRadius: bar._corners.topRight
+        bottomLeftRadius: bar._corners.bottomLeft
+        bottomRightRadius: bar._corners.bottomRight
 
         // Three-section bar layout: left-aligned, centered, right-aligned
         Item {
@@ -295,9 +307,11 @@ PanelWindow {
         }
     }
 
-    // Popup panel that appears below the hovered cell
+    // Popup panel that opens from the bar, by the hovered cell
     Popup {
         id: popupLoader
+        barEdge: bar.screenEdge
+        barScreen: bar.modelData
         popupPosition: 0
         popupWidth: 0
         // Notify parent so other screens close their popups

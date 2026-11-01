@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.panels
 
-// The bar's widgets, edited in the profile picked in the settings window. Each section
+// The bar's position and widgets, edited in the profile picked in the settings window. Each section
 // (left, center, right) is one setting: a profile either inherits it or has its own list
 // of widgets (docs/plans/global-profiles.md). The bar's shape is in the theme:
 // Appearance → Bar shape (BarShapeSettings).
@@ -28,6 +28,20 @@ Flickable {
         // The bar's size and corners are part of the theme now
         Hint {
             text: "The bar's size, margins and corners are part of the theme: Appearance → Bar shape."
+        }
+
+        Text {
+            text: "Position"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeHeading
+            font.bold: true
+            color: Theme.textSecondary
+            Layout.topMargin: 4
+        }
+
+        SchemaSettingEditor {
+            key: "bar.edge"
+            editIndex: root.editIndex
         }
 
         Text {

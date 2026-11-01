@@ -8,9 +8,9 @@ import qs.singletons
 // "verticalSides"). The ring round the cover is CoverArt's.
 //
 // All of it is drawn in one layer as large as the popup's background and cut to its shape
-// — its bottom corners rounded, or not by the screen's edge — so a glow, which reaches past
-// what it is drawn from, stops at the popup's edge instead of lighting the desktop beside
-// it. The background (the popup's "overlayHost") is measured, not assumed: at the bar's
+// — its corners away from the bar rounded, or not by the screen's edge — so a glow, which
+// reaches past what it is drawn from, stops at the popup's edge instead of lighting the
+// desktop beside it. The background (the popup's "overlayHost") is measured, not assumed: at the bar's
 // end the popup drops a curve, and the panel then sits off its centre.
 Item {
     id: root
@@ -157,6 +157,9 @@ Item {
 
         Rectangle {
             anchors.fill: parent
+            // Rounded where the background is: away from the bar, at either edge
+            topLeftRadius: root._popupBackground?.topLeftRadius ?? 0
+            topRightRadius: root._popupBackground?.topRightRadius ?? 0
             bottomLeftRadius: root._popupBackground?.bottomLeftRadius ?? Theme.popup.radius
             bottomRightRadius: root._popupBackground?.bottomRightRadius ?? Theme.popup.radius
         }
