@@ -35,13 +35,17 @@ PanelWindow {
     color: "transparent"
 
     // Input passthrough: only forward clicks to visible HUD card areas. The toast area is
-    // as tall as the visible toasts, so it covers nothing while there are none.
+    // as tall as the visible toasts, so it covers nothing while there are none. A Region
+    // takes its item's geometry whether the item is shown or not: the OSDs hide by moving
+    // off screen, but the launch warning stays where it is, hidden — so it is in the mask
+    // only while shown. In the mask while hidden, it took every click in a 640 px band under
+    // the bar's middle, over the popups there (the calendar's top half).
     mask: Region {
         Region { item: toastArea }
         Region { item: queueBadge }
         Region { item: volumeOsd }
         Region { item: shellNotifItem }
-        Region { item: launchWarning }
+        Region { item: launchWarning.visible ? launchWarning : null }
     }
 
     // ---- Launch warning ----

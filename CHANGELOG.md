@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Popups under the middle of the bar (the calendar's top half) took no clicks: the hidden
+  launch warning banner still caught them, over every popup there.
 - Music panel: the seek bar shows. It had been there all along, 0 px tall.
 - Music panel: playerctld no longer shows as a second copy of the last player used.
 - Music panel: showing a paused player while another plays, the visualiser falls flat
