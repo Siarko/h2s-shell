@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.18, a count beside the notifications icon.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.19, inline reply in notifications.
 
 ---
 
@@ -718,13 +718,30 @@ end so the numbers above keep meaning what older notes say:
       `tests/NotificationMarkupTest.qml`. Hovering a link shows its address over its
       line (image rows show it in the row instead); HoverTip fixed on the way — it never
       opened when its text and `shown` changed together.
-- [ ] **11.18 A count beside the notifications icon** (requested 2026-10-31)
+- [x] **11.18 A count beside the notifications icon** (requested 2026-10-31) — done
+      2026-11-01, verified on the host
+      Decided 2026-11-01: a badge on the bell ("9+" past
+      nine, hidden at zero); the bell rung — lifted, shaken, put back — "off", "once",
+      "untilOpened" (every 5 s while notifications came since the panel was last open:
+      `Notifications.unreadCount`) or "untilCleared" (every 5 s while any is left); both
+      in the widget's preset
+      (`panels/widget_settings/NotificationsWidgetSettings.qml`). Shell notifications
+      never enter the panel, so they are not counted. The old ring (a scale jump) was
+      there but never seen to play.
       The bar's notifications widget only turns accent-coloured when there is any
       notification (`widgets/NotificationsWidget.qml`); how many is not shown. Wanted: the
       number beside or on the icon — a badge or plain digits, to settle with the user —
       hidden at zero, capped ("9+") so the bar cell does not grow without end. The count
       is `Notifications.notifications.values.length`; shell notifications included or
       not, to decide.
+- [ ] **11.20 Animation editor, and animations assigned to elements** (requested 2026-11-01)
+      Today each animation is written in its element's code (the bell's ring, 11.18).
+      Wanted: animations as data — tracks for x, y, rotation and scale, each with a
+      duration and a curve from the Curves library (Appearance → Curves already edits
+      easing curves) — an editor with a live preview, a player in QML, and named slots
+      in elements ("bell: new notification", say) an animation is assigned to, played
+      once or in a loop. Likely kept in the theme. A feature of its own; the bell's ring
+      would be its first slot.
 - [ ] **11.19 Inline reply does not work** (found 2026-10-31, with 11.15)
       Pre-existing. The card looks for an action with `id === "inline-reply"`, but
       Quickshell's actions have `identifier`, not `id` — so the reply field never shows,

@@ -69,6 +69,9 @@ Singleton {
             notification.tracked = true;
             if (!hudPanelOpen && Profiles.value("notifications.toasts") !== false)
                 enqueueHudNotification(notification);
+            // One arriving while the panel is open is seen as it comes
+            if (hudPanelOpen)
+                markSeen();
 
             // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
@@ -150,8 +153,21 @@ Singleton {
 
     function setHudPanelOpen(open) {
         hudPanelOpen = open;
-        if (open)
+        if (open) {
             clearHudQueue();
+            markSeen();
+        }
+    }
+
+    // How many notifications the panel holds, and how many came since it was last open —
+    // the bell widget shows the first and keeps ringing for the second ("until opened").
+    // Ids only grow, so "seen" is the highest id the panel has shown.
+    readonly property int count: notifications.values.length
+    property int _seenUpTo: 0
+    readonly property int unreadCount: notifications.values.filter(notification => notification.id > _seenUpTo).length
+
+    function markSeen() {
+        _seenUpTo = notifications.values.reduce((highest, notification) => Math.max(highest, notification.id), _seenUpTo);
     }
 
     function clearHudQueue() {

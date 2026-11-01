@@ -17,6 +17,8 @@ TestCase {
         "components/NotificationCard.qml",
         "components/RoundedImage.qml",
         "hud/LaunchWarning.qml",
+        "panels/widget_settings/NotificationsWidgetSettings.qml",
+        "widgets/NotificationsWidget.qml",
         "components/NotificationReply.qml",
         "components/CodeChips.qml",
         "panels/calendar/EventColorRow.qml",

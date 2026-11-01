@@ -23,7 +23,10 @@ Singleton {
     readonly property var defaults: ({
         "clock": { format: "hh:mm:ss" },
         "workspaces": { title: "", showSpecial: true, showNormal: true, nameMap: [] },
-        "hardware": { capsule: ["cpu"], capsuleLabels: {} }
+        "hardware": { capsule: ["cpu"], capsuleLabels: {} },
+        // The count on the bell; how the bell rings: "off", "once" (each new one),
+        // "untilOpened", "untilCleared"
+        "notifications": { badge: true, animation: "once" }
     })
 
     function names(type) {

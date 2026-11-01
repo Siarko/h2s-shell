@@ -11,6 +11,12 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Notifications widget: a badge on the bell with how many notifications wait ("9+" past
+  nine), and the bell rings when one comes — lifted, shaken in the air, put back. Its
+  preset (Bar → Content → Notifications) turns the badge off and picks the ringing: off,
+  once for each notification, until opened (again every few seconds until the panel is
+  opened) or until cleared (again every few seconds while any notification is left). Not
+  with reduced motion.
 - Notifications: formatting in the text — bold, italic, underline, line breaks — and
   links: web and mail links in the accent colour open on a click; any other kind (a file,
   an app's own) is in the warning colour and asks first, with Open, Copy and Cancel. An
