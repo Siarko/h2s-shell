@@ -16,6 +16,8 @@ shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integrat
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
 after 11.2: 11.15–11.19 (notifications, icon theme). 11.4 is done (bottom edge, then a vertical
 bar at a side); its follow-ups: the HUD placed by the bar's edge, a floating dictation window.
+11.5 waits until after animations (11.20), when it can be done by configuration. Now: 11.6,
+styling with selectors (plans/selectors.md).
 
 ---
 
@@ -838,6 +840,13 @@ end so the numbers above keep meaning what older notes say:
       would take in QML (element identity, a resolver, live updates, cost). Exploration
       only; to discuss with the user before any design. Related: the user's earlier idea
       of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
+      Analysed and decided with the user 2026-11-01: plan
+      [plans/selectors.md](plans/selectors.md) (our CSS variant in `.css` files, resolved
+      statically into a table addressed by an element's key, descendant selectors over
+      contexts only, layered cascade, inheritance; an audit of every element, a read-only
+      inspector window, parser with a validator, themes rewritten in CSS and edited both
+      ways). The language reference grows in [STYLES.md](STYLES.md). Next: stage 0, a
+      prototype of contexts, keys and the table, measured.
 
 - [ ] **11.7 Themes: matugen, the rest of the themes plan** (was 10.9)
       Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
