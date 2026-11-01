@@ -654,6 +654,10 @@ Singleton {
     property color osdMessageBorder: _colors.osdMessageBorder
     ThemeColorBehavior on osdMessageBorder {}
 
+    // Music: the visualiser (follows the accent until a theme sets it)
+    property color visualizer: _colors.visualizer
+    ThemeColorBehavior on visualizer {}
+
     // Lock screen and screensaver: light "glass" cards over the scrim
     readonly property color glass: Qt.alpha("white", 0.08)          // a card or field
     readonly property color glassRaised: Qt.alpha("white", 0.14)    // a button

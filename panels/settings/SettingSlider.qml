@@ -11,6 +11,10 @@ RowLayout {
     property int to: 100
     property string suffix: ""
     property int lockedFrom: from   // thumb cannot go below this; region shown as locked
+    // Optional resting value inside the range (0 on a −360…360 speed, say): the fill runs
+    // from it to the value, either way, and a tick marks it. Unset, the fill runs from the
+    // start (or lockedFrom).
+    property var neutral: undefined
     property bool disabled: false   // fully disables interaction
     property real sliderRatio: 0.5  // 0.0–1.0; fraction of row width given to slider track
     property string tooltip: ""     // optional hover tooltip text; empty = no tooltip
@@ -65,6 +69,11 @@ RowLayout {
 
         readonly property real _pos: (slider.value - slider.from) / Math.max(1, slider.to - slider.from)
         readonly property real _lockedPos: (Math.max(slider.from, Math.min(slider.lockedFrom, slider.to)) - slider.from) / Math.max(1, slider.to - slider.from)
+        readonly property bool _hasNeutral: typeof slider.neutral === "number"
+        // Where the fill starts: the neutral value, or the end of the locked region
+        readonly property real _fillStart: _hasNeutral
+            ? Math.max(_lockedPos, (Math.max(slider.from, Math.min(slider.neutral, slider.to)) - slider.from) / Math.max(1, slider.to - slider.from))
+            : _lockedPos
 
         // Base track
         Rectangle {
@@ -84,15 +93,26 @@ RowLayout {
                 visible: parent.parent._lockedPos > 0
             }
 
-            // Fill (lockedFrom → value)
+            // Fill: from its start (neutral or lockedFrom) to the value, whichever side
             Rectangle {
-                x: parent.parent._lockedPos * parent.width
-                width: Math.max(0, (parent.parent._pos - parent.parent._lockedPos) * parent.width)
+                x: Math.min(parent.parent._fillStart, parent.parent._pos) * parent.width
+                width: Math.abs(parent.parent._pos - parent.parent._fillStart) * parent.width
                 height: parent.height
                 radius: height / 2
                 color: _trackArea.containsMouse ? Theme.accentHover : Theme.accent
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             }
+        }
+
+        // The neutral value's tick, across the track
+        Rectangle {
+            visible: parent._hasNeutral
+            x: Math.round(parent._fillStart * parent.width - width / 2)
+            anchors.verticalCenter: parent.verticalCenter
+            width: 2
+            height: 10
+            radius: 1
+            color: Theme.textSecondary
         }
 
         // Thumb

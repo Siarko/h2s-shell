@@ -19,6 +19,24 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Music: the visualiser can go around the cover (Settings → Media → Layout, "Around
+  cover") — waveform, rays, dots or glow following the cover's shape, bass at the bottom.
+  Two glow styles, in every layout: Glow, light reaching as far as each band; Even glow,
+  one halo pulsing with the bass. The cover's rounding is a slider, from square to a
+  circle (33 %, the old look, by default), and it can turn while playing, either way, up
+  to 360° a second (off by default; never with reduced motion).
+- Music: two more visualiser layouts glued to the popup's edges, growing inward only —
+  Horizontal (bottom) along the bottom edge, Vertical (sides) down both sides — cut to the
+  popup's rounded corners. The old two are now Horizontal (centered) and Vertical
+  (centered), unchanged.
+- Music: around the cover, the visualiser can take its colours from the cover (Settings →
+  Media, "Colours from the cover", off by default): two or three, read from each cover as
+  it loads, running round it — the visualiser fades in once they are known, never
+  first in the theme's colour. A grey cover keeps the theme's colour.
+- Themes: a colour of its own for the music visualiser (Appearance → Colours → Music).
+  Until a theme sets it, it follows the accent, as the visualiser always did.
+- Settings: a slider whose range goes both ways (the cover's rotation) is filled from
+  its resting value, marked on the track, rather than from its left end.
 - Notifications widget: a badge on the bell with how many notifications wait ("9+" past
   nine), and the bell rings when one comes — lifted, shaken in the air, put back. Its
   preset (Bar → Content → Notifications) turns the badge off and picks the ringing: off,

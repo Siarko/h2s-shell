@@ -65,7 +65,10 @@ Opened from their bar widget, rendered in the single popup below the bar.
   picker and a per-calendar picker.
 - **Music** — current track, art, seek bar, transport controls, player picker when more
   than one MPRIS player is running, and a live audio visualiser fed by `cava`
-  (waveform / bars / dots, horizontal or vertical, configurable in Settings → Media).
+  (waveform / bars / dots / glow / even glow, horizontal or vertical — centred or
+  glued to the popup's edges — or around the cover,
+  configurable in Settings → Media, with the cover's rounding and turning speed;
+  around the cover it can take its colours from the cover).
 - **Sound** — default sink and source with volume sliders, output/input device
   selection, and a per-application volume row for every Pipewire stream. Per-app volumes
   are remembered across restarts and reapplied when the app reappears.
@@ -158,7 +161,7 @@ Behaviour pages:
 | **Profiles** | the profile list: conditions, order, enable switch, rename, delete, simulation of conditions for testing |
 | **General** | debug switches and the icon theme (always global; the icon theme is picked from the installed ones, with sample icons, and applies on a restart — "Restart to apply"); the profile's theme, animation speed and reduced motion |
 | **Calendar** | enabling Google Calendar, the account connection, which calendars are enabled, debug |
-| **Media** | audio visualiser style, layout and frame rate |
+| **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | code-extraction regex patterns |
 | **Lockscreen** | screensaver and lock timeouts, fade durations, notification visibility, screensaver commands |

@@ -17,6 +17,8 @@ import QtQuick
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   suffix   — unit shown after a number or slider, e.g. "s"
+//   neutral  — for slider: the resting value inside the range, which its fill starts from
+//              (0 on a speed that can go either way); unset, the fill starts at min
 //   hint     — a short explanation shown under the setting
 //   options  — for enum: [{ value, label }]
 //   optionsFrom — for enum: where the options come from at run time instead
@@ -78,13 +80,33 @@ Singleton {
               { value: "waveform", label: "Waveform" },
               { value: "bars", label: "Bars" },
               { value: "dots", label: "Dots" },
+              // Glow: the waveform's shape as light, reaching out as far as each band;
+              // even glow: the same light, all bands at the bass's level
+              { value: "glow", label: "Glow" },
+              { value: "glowEven", label: "Even glow" },
               { value: "none", label: "None" }
           ] },
         { key: "media.visualizerLayout", label: "Layout", group: "media",
           type: "enum", default: "horizontal", legacy: ["media", "visualizerLayout"], options: [
-              { value: "horizontal", label: "Horizontal" },
-              { value: "vertical", label: "Vertical" }
+              // Centred: mirrored about a middle line, below the controls or down each
+              // side; bottom and sides: glued to the popup's edges, growing inward
+              { value: "horizontal", label: "Horizontal (centered)" },
+              { value: "horizontalBottom", label: "Horizontal (bottom)" },
+              { value: "vertical", label: "Vertical (centered)" },
+              { value: "verticalSides", label: "Vertical (sides)" },
+              { value: "around", label: "Around cover" }
           ] },
+        // Around the cover: two or three colours read from the cover, instead of the theme's
+        { key: "media.coverColors", label: "Colours from the cover", group: "media",
+          type: "bool", default: false,
+          hint: "Around cover: the visualiser in the cover's own colours" },
+        // 0 square, 100 a circle; 33 is the 20 px it always had on the 120 px cover
+        { key: "media.coverRounding", label: "Cover rounding", group: "media",
+          type: "slider", min: 0, max: 100, suffix: "%", default: 33 },
+        // Degrees a second, clockwise; below 0 the other way. While playing; never with
+        // reduced motion
+        { key: "media.coverRotation", label: "Cover rotation", group: "media",
+          type: "slider", min: -360, max: 360, neutral: 0, suffix: "°/s", default: 0 },
 
         // ── Lockscreen ──
         { key: "lockscreen.screensaverEnabled", label: "Enable screensaver", group: "lockscreen",

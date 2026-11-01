@@ -14,6 +14,12 @@ Singleton {
 
     property var leftBars: []
     property var rightBars: []
+    // How loud the bass is, 0–1: the lowest few bands of both channels, averaged (the even
+    // glow's level). The left channel ends with its bass, the right starts with it.
+    readonly property real bass: {
+        const bands = leftBars.slice(-4).concat(rightBars.slice(0, 4));
+        return bands.length === 0 ? 0 : bands.reduce((sum, level) => sum + level, 0) / bands.length;
+    }
     // Whether cava has sent levels since it started; until then the ambient wave shows
     property bool useCava: false
 

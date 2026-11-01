@@ -51,6 +51,14 @@ TestCase {
             "a value from its palette, over what it extends");
         assertEqual(ThemeRules.origins(chain.chain, {}).colors.surface.theme, "default", "a value from the theme it extends");
         assertEqual(origins.fonts.family, undefined, "a value set nowhere is built in");
+        {
+            const followed = ThemeRules.resolve(Theme.builtin, chain.chain, {});
+            assertEqual(followed.colors.visualizer, followed.colors.accent, "a follower unset takes its leader's colour");
+            const own = ThemeRules.resolve(Theme.builtin, [{ name: "x", theme: { colors: { visualizer: "#123456" } } }], {});
+            assertEqual(own.colors.visualizer, "#123456", "and its own once a theme sets it");
+            assertEqual(origins.colors.visualizer?.follows, "accent", "its origin says whom it follows");
+            assertEqual(Theme.builtin.colors.visualizer, "", "the built-in value stays empty");
+        }
         for (const entry of ThemeRules.colorTokens)
             assert(entry.token in Theme.builtin.colors, "the colour " + entry.token + " is a built-in token");
         assertEqual(ThemeRules.colorTokens.length, Object.keys(Theme.builtin.colors).length, "and every built-in colour is listed");

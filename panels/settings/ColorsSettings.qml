@@ -64,7 +64,9 @@ Flickable {
         const origin = _origins[token];
         if (origin?.draft)
             return "✎ changed";
-        const source = !origin?.theme ? "built in"
+        const leader = origin?.follows ? ThemeRules.colorTokens.find(entry => entry.token === origin.follows) : null;
+        const source = leader ? "follows " + leader.label
+            : !origin?.theme ? "built in"
             : origin.palette ? "palette of " + origin.theme
             : origin.theme === themeName ? "set here"
             : "from " + origin.theme;

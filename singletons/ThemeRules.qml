@@ -81,6 +81,10 @@ Singleton {
     // `palettes[name]`) comes before its own colours, so a theme can adjust a generated
     // palette. Tokens the built-in theme does not know are ignored. Inputs are not
     // modified. Returns { group: { token: value } } for every group.
+    // Colours that take another's value until a theme sets them — built in as "" — so a
+    // theme that changes the accent changes them too
+    readonly property var colorFollows: ({ visualizer: "accent" })
+
     function resolve(builtin, chain, palettes) {
         const result = {};
         for (const group of groups) {
@@ -100,6 +104,11 @@ Singleton {
                         result[layer.group][token] = layer.values[token];
                 }
             }
+        }
+        // Followers left unset take their leader's value
+        for (const token in colorFollows) {
+            if (result.colors && token in result.colors && !result.colors[token])
+                result.colors[token] = result.colors[colorFollows[token]];
         }
         return result;
     }
@@ -140,7 +149,8 @@ Singleton {
         { group: "Borders", token: "popupBorder", label: "Popups", hint: "Around popups, when their border width is above 0" },
         { group: "Borders", token: "osdToastBorder", label: "Notification toasts", hint: "Around toasts, when their border width is above 0" },
         { group: "Borders", token: "osdVolumeBorder", label: "Volume OSD", hint: "Around the volume OSD, when its border width is above 0" },
-        { group: "Borders", token: "osdMessageBorder", label: "Shell messages", hint: "Around the shell's message pill, when its border width is above 0" }
+        { group: "Borders", token: "osdMessageBorder", label: "Shell messages", hint: "Around the shell's message pill, when its border width is above 0" },
+        { group: "Music", token: "visualizer", label: "Visualiser", hint: "The music visualiser; follows the accent until set" }
     ]
 
     // The bar's geometry tokens (barTokens) as the Bar shape page shows them: label, use,
@@ -317,6 +327,11 @@ Singleton {
                 for (const token in entry.theme[group] ?? {})
                     result[group][token] = { theme: entry.name, palette: false };
             }
+        }
+        // A follower nothing sets: its leader's value
+        for (const token in colorFollows) {
+            if (!(token in result.colors))
+                result.colors[token] = { follows: colorFollows[token] };
         }
         return result;
     }

@@ -658,12 +658,31 @@ input last. Each title says its old number, for older notes and commits.
       `GoogleCalendarData.eventBody` (end date, exclusive for all day), and what
       `EventCard`/`EventsPanel` pass in. To settle with the user: how the end date is
       picked (a date field like the recurrence's, or a small calendar).
-- [ ] **11.3 Visualiser around the album cover** (was 10.18) (requested 2026-10-31)
+- [x] **11.3 Visualiser around the album cover** (was 10.18) (requested 2026-10-31)
       Another `media.visualizerStyle`: the levels drawn around the cover in the music
       panel — a ring, rays or a glow pulsing with the bass, say — instead of beside or
       below it. The levels are `Visualizer`'s; the drawing would be a new mode of
       `panels/music/VisualizerCanvas.qml` (or a sibling) laid over the cover. The look is
       to be settled with the user.
+      Done 2026-11-01, verified on the host. Decided from mockups: a layout "around"
+      (not a style) where waveform, bars (rays) and dots follow the cover's outline —
+      `singletons/RoundedOutline.qml`, tested — bass at the bottom, bands keeping their
+      places as the cover turns; styles "glow" (the waveform's shape, layered faint and
+      blurred) and "glowEven" (the same at `Visualizer.bass`) in every layout; settings
+      `media.coverRounding` (0–100 %, default 33 = the old 20 px) and
+      `media.coverRotation` (−360–360 °/s, below 0 anticlockwise, while playing, not
+      with reduced motion). The art row grows to 210 px around; no cover shows a
+      stand-in with a note.
+      Added on the way: layouts "horizontalBottom" and "verticalSides", glued to the
+      popup's edges and growing inward (`VisualizerCanvas.edge`), past the panel by the
+      popup's padding and masked to the popup background's corners (`overlayHost`); the
+      old two relabelled "(centered)". A slider's optional `neutral` value (schema
+      `neutral`), its fill starting there — the rotation's 0.
+      Then: a theme colour `visualizer`, following the accent until set
+      (`ThemeRules.colorFollows`: built in as "", filled from its leader on resolve, its
+      origin "follows Accent"); `media.coverColors`, around the cover only — the cover
+      sampled at 24×24 as it loads, `singletons/CoverColors.qml` (tested) picks up to
+      three colours by hue, drawn as a conical gradient symmetric about the vertical.
 
 Added 2026-10-31, while testing notifications, to go after 11.2 — numbered on from the
 end so the numbers above keep meaning what older notes say:

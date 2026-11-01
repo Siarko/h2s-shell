@@ -47,7 +47,9 @@ Singleton {
             "popupBorder": "#777777",
             "osdToastBorder": "#777777",
             "osdVolumeBorder": "#777777",
-            "osdMessageBorder": "#777777"
+            "osdMessageBorder": "#777777",
+            // Music: empty follows the accent (ThemeRules.colorFollows) until a theme sets it
+            "visualizer": ""                 // the music visualiser
         },
         "fonts": {
             "family": "JetBrainsMono Nerd Font",
