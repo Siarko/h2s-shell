@@ -96,6 +96,11 @@ Singleton {
               { value: "verticalSides", label: "Vertical (sides)" },
               { value: "around", label: "Around cover" }
           ] },
+        // Players left out of the music panel's list, by name (PlayerRules.key); hidden and
+        // shown again from the list itself
+        { key: "media.hiddenPlayers", label: "Hidden players", group: "media",
+          type: "stringList", default: [],
+          hint: "Left out of the music panel's player list; shown again from there" },
         // Around the cover: two or three colours read from the cover, instead of the theme's
         { key: "media.coverColors", label: "Colours from the cover", group: "media",
           type: "bool", default: false,

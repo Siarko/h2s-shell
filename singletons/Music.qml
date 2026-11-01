@@ -3,12 +3,70 @@ pragma Singleton
 import Quickshell
 import Quickshell.Services.Mpris
 import QtQuick
+import qs.singletons
 
+// The media players (MPRIS) and the one the shell shows and controls — the active player:
+// picked by hand, else one playing, else the first. The music panel lists the players
+// (`visiblePlayers`; those the user hid, by name in "media.hiddenPlayers", apart in
+// `hiddenPlayers`) — playerctld, a stand-in for another player, never among them. A hidden
+// player is never made active by itself.
 Singleton {
     id: root
 
     readonly property var players: Mpris.players
     property MprisPlayer activePlayer: null
+
+    readonly property var hiddenNames: Profiles.value("media.hiddenPlayers") ?? []
+    // Every real player, the proxy left out
+    readonly property var listedPlayers: players.values.filter(player => !PlayerRules.isProxy(player.dbusName))
+    readonly property var visiblePlayers: listedPlayers.filter(player => !_hidden(player))
+    readonly property var hiddenPlayers: listedPlayers.filter(player => _hidden(player))
+
+    function _hidden(player) {
+        return PlayerRules.isHidden(player.identity, player.dbusName, hiddenNames);
+    }
+
+    function hidePlayer(player) {
+        if (player === _manualPlayer)
+            _manualPlayer = null;
+        Profiles.writeInEffect("media.hiddenPlayers",
+            PlayerRules.withHidden(hiddenNames, PlayerRules.key(player.identity, player.dbusName), true));
+    }
+
+    function showPlayer(player) {
+        Profiles.writeInEffect("media.hiddenPlayers",
+            PlayerRules.withHidden(hiddenNames, PlayerRules.key(player.identity, player.dbusName), false));
+    }
+
+    // Plays `player` alone: every other listed player that is playing is paused (hidden
+    // ones too are left as they are — a phone's player the user keeps out of the way), and
+    // it becomes the active one
+    function playOnly(player) {
+        for (const other of visiblePlayers) {
+            if (other !== player && other.playbackState === MprisPlaybackState.Playing && other.canPause)
+                other.pause();
+        }
+        if (player.canPlay)
+            player.play();
+        selectPlayer(player);
+    }
+
+    // The play button beside a player: pauses it while it plays, else plays it alone
+    function togglePlayer(player) {
+        if (player.playbackState === MprisPlaybackState.Playing)
+            player.pause();
+        else
+            playOnly(player);
+    }
+
+    // The application's icon for a player ("" when there is none): from the desktop entry
+    // it names, or the one its name or bus name points to (PlayerRules.desktopEntryFor)
+    readonly property var _apps: DesktopEntries.applications.values.map(entry => ({ id: entry.id, name: entry.name }))
+    function playerIcon(player) {
+        const id = PlayerRules.desktopEntryFor(player?.desktopEntry, player?.identity, player?.dbusName, _apps);
+        const icon = id !== "" ? DesktopEntries.byId(id)?.icon ?? "" : "";
+        return icon !== "" ? Quickshell.iconPath(icon, true) : "";
+    }
 
     // Manual override — set by selectPlayer(), cleared when that player disappears
     property MprisPlayer _manualPlayer: null
@@ -18,35 +76,33 @@ Singleton {
         root.activePlayer = player;
     }
 
-    // Auto-select logic: prefer manual override, then a playing player, then first available
+    // Auto-select logic: prefer manual override, then a playing player, then first
+    // available — among the visible players
     function _updateActivePlayer() {
+        const candidates = visiblePlayers;
         // If manual override is still valid, keep it
         if (_manualPlayer !== null) {
-            for (var i = 0; i < players.values.length; i++) {
-                if (players.values[i] === _manualPlayer) {
-                    activePlayer = _manualPlayer;
-                    return;
-                }
+            if (candidates.includes(_manualPlayer)) {
+                activePlayer = _manualPlayer;
+                return;
             }
-            // Manual player disappeared
+            // Manual player disappeared, or was hidden
             _manualPlayer = null;
         }
 
         // Prefer a currently playing player
-        for (var j = 0; j < players.values.length; j++) {
-            if (players.values[j].playbackState === MprisPlaybackState.Playing) {
-                activePlayer = players.values[j];
-                return;
-            }
+        const playing = candidates.find(player => player.playbackState === MprisPlaybackState.Playing);
+        if (playing) {
+            activePlayer = playing;
+            return;
         }
 
         // Fall back to first available
-        activePlayer = players.values.length > 0 ? players.values[0] : null;
+        activePlayer = candidates.length > 0 ? candidates[0] : null;
     }
 
-    // Re-evaluate when the player list changes
-    property var _playersList: players.values
-    on_PlayersListChanged: _updateActivePlayer()
+    // Re-evaluate when the players, or which are hidden, change
+    onVisiblePlayersChanged: _updateActivePlayer()
 
     // Watch for playback state changes on all players
     Instantiator {

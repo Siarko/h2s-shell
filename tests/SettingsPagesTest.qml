@@ -31,6 +31,8 @@ TestCase {
         "panels/music/VisualizerCanvas.qml",
         "panels/music/CoverArt.qml",
         "panels/music/PanelVisualizer.qml",
+        "panels/music/PlayerList.qml",
+        "panels/music/PlayerRow.qml",
         "panels/NetworkPanel.qml",
         "panels/network/HiddenNetworkRow.qml",
         "panels/network/LinkInfo.qml",

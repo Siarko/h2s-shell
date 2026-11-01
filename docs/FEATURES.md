@@ -63,8 +63,9 @@ Opened from their bar widget, rendered in the single popup below the bar.
   day/week/month views of the event list. With Google Calendar connected it supports
   full event CRUD: create, edit (including recurrence rules), and delete, with a colour
   picker and a per-calendar picker.
-- **Music** — current track, art, seek bar, transport controls, player picker when more
-  than one MPRIS player is running, and a live audio visualiser fed by `cava`
+- **Music** — current track, art, seek bar, transport controls, player list when more
+  than one MPRIS player is running (application icons; play one alone, pausing the rest;
+  hide players, kept per profile, under a "Hidden" expander), and a live audio visualiser fed by `cava`
   (waveform / bars / dots / glow / even glow, horizontal or vertical — centred or
   glued to the popup's edges — or around the cover,
   configurable in Settings → Media, with the cover's rounding and turning speed;

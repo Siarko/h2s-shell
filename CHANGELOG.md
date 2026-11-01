@@ -11,6 +11,10 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Music panel: playerctld no longer shows as a second copy of the last player used.
+- Music panel: showing a paused player while another plays, the visualiser falls flat
+  instead of moving to the other's sound — smoothly, at the visualiser's frame rate, in
+  half a second (it fell in 10 steps a second, for up to two seconds).
 - Notifications: replying from the notification works. Apps that can take a reply (chat
   apps, say) now get a reply field on the card — in the panel and on the toast — with
   their own hint text; Enter or Send sends it, Escape clears it. A toast takes the
@@ -19,6 +23,12 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Music panel: the player list shows each player's application icon, and two buttons
+  beside each: play — pausing every other listed player, so switching between, say,
+  Spotify and a browser is one click (pause while it plays) — and hide. Hidden players
+  (a phone's, through KDE Connect, say) go under a "Hidden" expander over the list, to be
+  shown again with the eye beside them; they are never picked by themselves. The list
+  is kept per profile ("media.hiddenPlayers", also in Settings → Media).
 - Music: the visualiser can go around the cover (Settings → Media → Layout, "Around
   cover") — waveform, rays, dots or glow following the cover's shape, bass at the bottom.
   Two glow styles, in every layout: Glow, light reaching as far as each band; Even glow,

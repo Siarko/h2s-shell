@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.3, a visualiser around the album cover.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.21, the music panel's player list (in progress), then 11.4.
 
 ---
 
@@ -753,6 +753,18 @@ end so the numbers above keep meaning what older notes say:
       hidden at zero, capped ("9+") so the bar cell does not grow without end. The count
       is `Notifications.notifications.values.length`; shell notifications included or
       not, to decide.
+- [ ] **11.21 The music panel's player list** (requested 2026-11-01)
+      Built 2026-11-01 (awaiting host check). Each player with its application's icon
+      (`PlayerRules.desktopEntryFor`: the entry it names, else by name — Brave names
+      none — else by bus name), a play button that pauses the other listed players
+      (`Music.playOnly`; pause while it plays) and a hide button; hidden players by name
+      in `media.hiddenPlayers` (per profile, written by `Profiles.writeInEffect` into the
+      profile that sets it, else Full), under a "Hidden (n)" expander, shown again with an
+      eye; never made active by themselves. playerctld left out (a proxy: it listed the
+      last player twice, and a pause sent to it would reach the player just started).
+      The visualiser listens only while the shown player plays (cava hears every
+      player). `MusicPanel` split: `panels/music/{CoverArt,PanelVisualizer,PlayerList,
+      PlayerRow}.qml`; tests `tests/PlayerRulesTest.qml`.
 - [ ] **11.20 Animation editor, and animations assigned to elements** (requested 2026-11-01)
       Today each animation is written in its element's code (the bell's ring, 11.18).
       Wanted: animations as data — tracks for x, y, rotation and scale, each with a

@@ -242,6 +242,22 @@ Singleton {
         return setOverride(index, key, newValue)
     }
 
+    // Writes a setting from the shell itself (not a settings page, which edits a chosen
+    // profile): where its value comes from now — the global value if pinned, else the
+    // profile that sets it, else Full (the first profile, which the rest build on) — so the
+    // change shows at once, and in the profile it belongs to
+    function writeInEffect(key, newValue) {
+        if (key in effectiveGlobals)
+            return setGlobal(key, newValue)
+        if (profiles.length === 0)
+            return false
+        const setter = setBy(key)
+        let index = profiles.findIndex(profile => profile.name === setter)
+        if (index < 0)
+            index = Math.max(0, profiles.findIndex(profile => profile.name === "Full"))
+        return setOverride(index, key, newValue)
+    }
+
     function setOverride(index, key, newValue) {
         const list = _copy()
         list[index].set = list[index].set ?? {}

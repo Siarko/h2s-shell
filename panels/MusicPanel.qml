@@ -1,6 +1,4 @@
 import QtQuick
-import Quickshell
-import Quickshell.Services.Mpris
 import qs.components
 import qs.singletons
 import qs.panels.music
@@ -34,54 +32,9 @@ Item {
         width: parent.implicitWidth
         spacing: 8
 
-        // Player switcher list — hidden when 0 or 1 player
-        Item {
+        // The players, to pick, play alone, hide and show again
+        PlayerList {
             width: parent.width
-            implicitHeight: playerList.implicitHeight
-            visible: Music.players.values.length > 1
-
-            Column {
-                id: playerList
-                width: parent.width
-                spacing: 2
-
-                Repeater {
-                    // ScriptModel, never the bare array — see "The Repeater crash" in
-                    // docs/ARCHITECTURE.md
-                    model: ScriptModel {
-                        values: Music.players.values
-                    }
-
-                    delegate: Text {
-                        required property MprisPlayer modelData
-                        width: parent.width
-                        leftPadding: 8
-                        text: "• " + (modelData.identity || modelData.desktopEntry || "Player")
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        font.bold: modelData === Music.activePlayer
-                        color: modelData === Music.activePlayer ? Theme.accent : Theme.textSecondary
-                        elide: Text.ElideRight
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Music.selectPlayer(modelData)
-                        }
-                    }
-                }
-            }
-
-            CustomMouseArea {
-                anchors.fill: parent
-                z: -1
-                onScrollNotchY: direction => {
-                    let players = Music.players.values;
-                    let index = players.indexOf(Music.activePlayer);
-                    let next = Math.max(0, Math.min(players.length - 1, index - direction));
-                    Music.selectPlayer(players[next]);
-                }
-            }
         }
 
         CoverArt {

@@ -8,7 +8,10 @@ import qs.singletons
 // The music visualiser's levels, 0–1 per band, left and right channel: from cava while a
 // player is there, an ambient wave when cava gives nothing, falling flat while paused.
 // Runs only while something shows it — the music panel registers with addViewer() and
-// removeViewer() — so cava does not run with the panel closed.
+// removeViewer() — so cava does not run with the panel closed. Cava hears everything the
+// speakers play, not one player, so it listens only while the shown player plays: shown a
+// paused player while another plays, the levels fall flat rather than move to the other's
+// sound.
 Singleton {
     id: root
 
@@ -25,6 +28,7 @@ Singleton {
 
     property int _viewers: 0
     readonly property bool _active: _viewers > 0 && Music.hasPlayer
+    readonly property bool _listening: _active && Music.playing
     property real _ambientPhase: 0
 
     function addViewer() {
@@ -41,8 +45,8 @@ Singleton {
     readonly property int _cavaFps: Profiles.value("polling.visualizer.fps") ?? 60
 
     on_CavaFpsChanged: _restartCava()
+    on_ListeningChanged: _restartCava()
     on_ActiveChanged: {
-        _restartCava();
         // Shown again, it starts afresh, as a newly opened panel did
         if (!_active) {
             leftBars = [];
@@ -55,11 +59,11 @@ Singleton {
     // a declarative `running:` binding — see CLAUDE.md.
     function _restartCava() {
         _cava.running = false;
-        if (!_active)
+        if (!_listening)
             return;
         const template = _cavaTemplate.text();
         _cavaGenerated.setText(template.replace(/^framerate\s*=.*$/m, "framerate = " + _cavaFps));
-        Qt.callLater(() => _cava.running = root._active);
+        Qt.callLater(() => _cava.running = root._listening);
     }
 
     FileView {
@@ -84,6 +88,9 @@ Singleton {
         command: ["cava", "-p", _cavaGenerated.path]
         stdout: SplitParser {
             onRead: line => {
+                // A last line after it was told to stop
+                if (!root._listening)
+                    return;
                 const levels = line.split(";").filter(part => part !== "").map(part => parseInt(part) / 100.0);
                 root.useCava = true;
                 root.leftBars = levels.slice(0, levels.length / 2);
@@ -109,14 +116,22 @@ Singleton {
         }
     }
 
-    // Decay bars to flat line when paused
+    // Falls flat when the shown player is not playing: at cava's frame rate (the profile's),
+    // by the time that has really passed, from full to nothing in half a second; stops once
+    // flat
+    readonly property bool _flat: leftBars.every(value => value <= 0) && rightBars.every(value => value <= 0)
+    property double _lastFall: 0
     Timer {
-        interval: 100
-        running: root._active && !Music.playing
+        interval: Math.max(8, Math.round(1000 / Math.max(1, root._cavaFps)))
+        running: root._active && !Music.playing && !root._flat
         repeat: true
+        onRunningChanged: root._lastFall = Date.now()
         onTriggered: {
-            root.leftBars = root.leftBars.map(value => Math.max(0, value - 0.05));
-            root.rightBars = root.rightBars.map(value => Math.max(0, value - 0.05));
+            const now = Date.now();
+            const step = (now - root._lastFall) / 1000 * 2;
+            root._lastFall = now;
+            root.leftBars = root.leftBars.map(value => Math.max(0, value - step));
+            root.rightBars = root.rightBars.map(value => Math.max(0, value - step));
         }
     }
 }
