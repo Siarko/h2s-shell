@@ -14,7 +14,7 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.19, inline reply in notifications.
+after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.3, a visualiser around the album cover.
 
 ---
 
@@ -742,7 +742,15 @@ end so the numbers above keep meaning what older notes say:
       in elements ("bell: new notification", say) an animation is assigned to, played
       once or in a loop. Likely kept in the theme. A feature of its own; the bell's ring
       would be its first slot.
-- [ ] **11.19 Inline reply does not work** (found 2026-10-31, with 11.15)
+- [x] **11.19 Inline reply does not work** (found 2026-10-31, with 11.15) — done
+      2026-11-01, verified on the host, in the panel and on a toast: `inlineReplySupported` on the server;
+      the card shows `NotificationReply` for `hasInlineReply`, with the sender's
+      placeholder, and sends with `sendInlineReply`; an "inline-reply" action is never a
+      button. The HUD takes no keyboard, so a toast's reply could not be typed in: Hud's
+      `keyboardFocus` is OnDemand while any toast `wantsKeyboard` (its reply hovered or
+      being written), None otherwise — clicking a toast still leaves the keyboard with
+      the app. A toast with a reply being written does not count down. Escape clears
+      the field. `Notifier`'s `inlineReply` option removed.
       Pre-existing. The card looks for an action with `id === "inline-reply"`, but
       Quickshell's actions have `identifier`, not `id` — so the reply field never shows,
       and the action, if sent, is an ordinary button. Even found, `invoke()` takes no

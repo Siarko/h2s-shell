@@ -104,7 +104,8 @@ configured regex patterns extract codes from the summary and body so a verificat
 can be copied without opening the sending app.
 
 `singletons/Notifier.qml` is the outbound side: the shell can send its own
-notifications, with actions, inline replies and dismiss callbacks.
+notifications, with actions and dismiss callbacks (no inline reply: notify-send cannot
+ask for one).
 
 ## Dictation
 

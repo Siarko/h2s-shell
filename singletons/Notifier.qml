@@ -18,9 +18,9 @@ import QtQuick
 //   hints:       object                           — extra hints { key: value }
 //                                                   value type is inferred (bool/int/double/string)
 //   actions:     [{ id, label, onTriggered }]     — action buttons
-//   inlineReply: { placeholder?, onReply(text) }  — inline reply input
 //   onDismissed: function                         — called when dismissed without action
 // }
+// No inline reply: notify-send has no option to ask for one (libnotify 0.8.8).
 Singleton {
     id: root
 
@@ -65,7 +65,6 @@ Singleton {
         }
 
         let hasActions = options.actions && options.actions.length > 0;
-        let hasInlineReply = !!options.inlineReply;
 
         if (hasActions) {
             // notify-send's syntax is NAME=Text. With any other separator the whole string
@@ -74,13 +73,7 @@ Singleton {
                 cmd.push("--action=" + action.id + "=" + action.label);
         }
 
-        if (hasInlineReply) {
-            cmd.push("--inline-reply");
-            if (options.inlineReply.placeholder)
-                cmd.push("--inline-reply-placeholder=" + options.inlineReply.placeholder);
-        }
-
-        let needWait = hasActions || hasInlineReply || !!options.onDismissed;
+        let needWait = hasActions || !!options.onDismissed;
 
         cmd.push(summary);
         if (options.body)
@@ -95,7 +88,6 @@ Singleton {
             command: cmd,
             callbacks: needWait ? {
                 actions: options.actions ?? [],
-                inlineReply: options.inlineReply ?? null,
                 onDismissed: options.onDismissed ?? null
             } : null
         });
@@ -103,7 +95,7 @@ Singleton {
     }
 
     // Calls the callback that matches what notify-send printed when the notification
-    // closed: an action id, "inline-reply" and the text, or nothing for a dismissal
+    // closed: an action id, or nothing for a dismissal
     function _dispatch(callbacks, lines) {
         if (lines.length === 0) {
             if (callbacks.onDismissed)
@@ -112,11 +104,6 @@ Singleton {
         }
 
         let firstLine = lines[0];
-
-        if (callbacks.inlineReply && firstLine === "inline-reply" && lines.length > 1) {
-            callbacks.inlineReply.onReply(lines.slice(1).join("\n"));
-            return;
-        }
 
         let action = callbacks.actions.find(a => a.id === firstLine);
         if (action && action.onTriggered) {

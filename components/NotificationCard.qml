@@ -138,7 +138,11 @@ Rectangle {
 
     // A link clicked in the body: a web or mail one opens; any other waits for a yes
     property string _pendingLink: ""
-    onNotificationChanged: _pendingLink = ""
+    // A new notification in the card: no question about the last one's link, an empty reply
+    onNotificationChanged: {
+        _pendingLink = "";
+        _reply.clear();
+    }
     function _openLink(link) {
         if (NotificationMarkup.linkKind(link) === "standard")
             Qt.openUrlExternally(link);
@@ -150,9 +154,15 @@ Rectangle {
     readonly property string _selectedText: _activeEdit ? _activeEdit.selectedText : ""
 
     // "default" is clicking the notification itself: the card, not a button
-    readonly property var _regularActions: (notification?.actions ?? []).filter(function(a) { return a.identifier !== "default"; })
+    // "inline-reply" is the reply field's own, should a sender also list it as an action
+    readonly property var _regularActions: (notification?.actions ?? []).filter(function(a) { return a.identifier !== "default" && a.identifier !== "inline-reply"; })
     readonly property var _defaultAction: (notification?.actions ?? []).find(function(a) { return a.identifier === "default"; }) ?? null
-    readonly property var _replyAction: (notification?.actions ?? []).find(function(a) { return a.id === "inline-reply"; }) ?? null
+    // A reply typed on the card goes back to the sender (Quickshell's inline reply)
+    readonly property bool _hasReply: notification?.hasInlineReply ?? false
+    // While a reply is hovered or written the card's window needs the keyboard, and a
+    // toast holds its countdown
+    readonly property bool wantsKeyboard: _hasReply && _reply.wantsKeyboard
+    readonly property bool replying: _hasReply && _reply.engaged
 
     ColumnLayout {
         id: _contentCol
@@ -476,12 +486,14 @@ Rectangle {
 
         // Inline reply
         NotificationReply {
-            visible: notifCard._replyAction !== null
+            id: _reply
+            visible: notifCard._hasReply
             Layout.fillWidth: true
             Layout.topMargin: 4
             fieldColor: notifCard.replyBackground
+            placeholder: notifCard.notification?.inlineReplyPlaceholder ?? ""
             onSent: text => {
-                notifCard._replyAction.invoke(text);
+                notifCard.notification?.sendInlineReply(text);
                 notifCard.dismissRequested();
             }
         }

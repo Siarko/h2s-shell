@@ -28,6 +28,17 @@ Item {
     }
 
     property var currentNotif: null
+    // A reply hovered or being written: Hud gives its window the keyboard
+    readonly property bool wantsKeyboard: currentNotif !== null && notifCard.wantsKeyboard
+    // Held: under a resting pointer, or with a reply being written — no countdown either way,
+    // so a toast does not slide away mid-reply when the pointer wanders off
+    readonly property bool _held: cardHover.hovered || notifCard.replying
+    on_HeldChanged: {
+        if (_held)
+            countdown.pause();
+        else
+            countdown.resume();
+    }
     readonly property int cardWidth: Theme.osdToast.width
 
     // Resting x: the gap from the screen edge, or, while the queue badge shows, the badge
@@ -84,8 +95,8 @@ Item {
         if (!_counting)
             return;
         countdown.restart();
-        // A toast under a resting pointer does not count down either
-        if (cardHover.hovered)
+        // A held toast does not count down either
+        if (_held)
             countdown.pause();
     }
 
@@ -184,12 +195,6 @@ Item {
 
         HoverHandler {
             id: cardHover
-            onHoveredChanged: {
-                if (hovered)
-                    countdown.pause();
-                else
-                    countdown.resume();
-            }
         }
     }
 }

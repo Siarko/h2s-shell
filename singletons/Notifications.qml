@@ -20,6 +20,8 @@ Singleton {
         actionIconsSupported: true
         imageSupported: true
         actionsSupported: true
+        // A reply typed on the card (NotificationReply), sent back with sendInlineReply
+        inlineReplySupported: true
 
         onNotification: notification => {
             if (isShellNotification(notification)) {

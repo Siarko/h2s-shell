@@ -10,6 +10,14 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Fixed
+- Notifications: replying from the notification works. Apps that can take a reply (chat
+  apps, say) now get a reply field on the card — in the panel and on the toast — with
+  their own hint text; Enter or Send sends it, Escape clears it. A toast takes the
+  keyboard only while its reply field is under the pointer or being written, and does
+  not count down meanwhile. The field never showed before, and the shell did not tell
+  apps it could take replies.
+
 ### Added
 - Notifications widget: a badge on the bell with how many notifications wait ("9+" past
   nine), and the bell rings when one comes — lifted, shaken in the air, put back. Its

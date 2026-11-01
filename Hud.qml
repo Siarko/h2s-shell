@@ -12,7 +12,17 @@ PanelWindow {
     screen: modelData
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // No keyboard, so clicking a toast leaves it with the app underneath — except while a
+    // toast's reply is hovered or being written: then on demand, so a click in the field
+    // brings the keyboard, and clicking elsewhere takes it back
+    WlrLayershell.keyboardFocus: _wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    readonly property bool _wantsKeyboard: {
+        for (let i = 0; i < toastSlots.count; i++) {
+            if (toastSlots.itemAt(i)?.wantsKeyboard)
+                return true;
+        }
+        return false;
+    }
     WlrLayershell.namespace: "hud"
 
     anchors {
