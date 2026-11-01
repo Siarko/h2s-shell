@@ -37,54 +37,12 @@ Item {
             width: parent.width
         }
 
-        CoverArt {
+        // The active player's cover and track, sliding sideways to the next player's
+        PlayerCarousel {
             width: parent.width
             visualizerLayout: root.visualizerLayout
             visualizerStyle: root.visualizerStyle
             showVisualizer: root._showVisualizer
-        }
-
-        // Track info; a new track's title and artist fade in
-        Column {
-            id: _trackInfo
-            width: parent.width
-            spacing: 2
-
-            Connections {
-                target: Music
-                function onTitleChanged() { _trackFadeIn.restart() }
-            }
-            NumberAnimation {
-                id: _trackFadeIn
-                target: _trackInfo
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.duration("fade")
-                easing: Theme.curve("fade")
-            }
-
-            Text {
-                width: parent.width
-                text: Music.hasPlayer ? (Music.title || "Unknown") : "No media"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeMedium
-                font.bold: true
-                color: Theme.textPrimary
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            Text {
-                width: parent.width
-                text: Music.artist
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textSecondary
-                elide: Text.ElideRight
-                horizontalAlignment: Text.AlignHCenter
-                visible: Music.artist !== ""
-            }
         }
 
         // Seek bar

@@ -33,6 +33,8 @@ TestCase {
         "panels/music/PanelVisualizer.qml",
         "panels/music/PlayerList.qml",
         "panels/music/PlayerRow.qml",
+        "panels/music/PlayerView.qml",
+        "panels/music/PlayerCarousel.qml",
         "panels/NetworkPanel.qml",
         "panels/network/HiddenNetworkRow.qml",
         "panels/network/LinkInfo.qml",

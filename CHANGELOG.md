@@ -11,6 +11,7 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Music panel: the seek bar shows. It had been there all along, 0 px tall.
 - Music panel: playerctld no longer shows as a second copy of the last player used.
 - Music panel: showing a paused player while another plays, the visualiser falls flat
   instead of moving to the other's sound — smoothly, at the visualiser's frame rate, in
@@ -23,6 +24,10 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Music panel: changing player slides the cover, its visualiser and the track sideways —
+  a player further down the list comes in from the right, one further up from the left —
+  each view keeping its own player, so the cover turns and the ring moves only for a
+  player that is playing. Not with reduced motion.
 - Music panel: the player list shows each player's application icon, and two buttons
   beside each: play — pausing every other listed player, so switching between, say,
   Spotify and a browser is one click (pause while it plays) — and hide. Hidden players

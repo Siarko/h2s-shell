@@ -1,12 +1,19 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell.Services.Mpris
 import qs.singletons
 
-// The music panel's cover row: the cover (rounded, turning while playing), a stand-in when
-// the player gives none, and the visualiser around it — in the cover's own colours when
-// wanted (CoverColors). The rest of the visualiser layouts are PanelVisualizer's.
+// A player's cover row in the music panel: the cover (rounded, turning while that player
+// plays), a stand-in when it gives none, and the visualiser around it — in the cover's own
+// colours when wanted (CoverColors). Of its own player, not the active one: the panel
+// slides one player's view out and the next one's in (PlayerCarousel). The rest of the
+// visualiser layouts are PanelVisualizer's.
 Item {
     id: root
+
+    property MprisPlayer player: null
+    readonly property string _artUrl: player?.trackArtUrl ?? ""
+    readonly property bool _playing: player?.playbackState === MprisPlaybackState.Playing
 
     property string visualizerLayout: "horizontal"
     property string visualizerStyle: "waveform"
@@ -24,7 +31,7 @@ Item {
     property real _coverAngle: 0
     // Paused, it stops where it is; turned back off, it comes to rest upright
     FrameAnimation {
-        running: root._coverSpeed !== 0 && Music.playing && !Theme.reduceMotion && root.visible
+        running: root._coverSpeed !== 0 && root._playing && !Theme.reduceMotion && root.visible
         onTriggered: root._coverAngle = (root._coverAngle + root._coverSpeed * frameTime) % 360
     }
     on_CoverSpeedChanged: if (_coverSpeed === 0) _coverAngle = 0
@@ -39,7 +46,7 @@ Item {
     // What was read before for this cover shows at once. A Canvas asked to paint before its
     // window can draw (a popup's content is made before the popup shows) never paints, so
     // the read is asked again until it has really happened.
-    readonly property string _coverKey: Music.artUrl + "\n" + Music.title
+    readonly property string _coverKey: _artUrl + "\n" + (player?.trackTitle ?? "")
     property bool _samplePending: false
     property int _sampleTries: 0
     // Whether the shown cover's colours are known (read, or remembered)
@@ -48,7 +55,7 @@ Item {
     // Around a cover being read, with its colours wanted, the visualiser waits unseen —
     // not in the theme's colour first — and fades in once they are known (or found to be
     // none). Hidden at once, shown by a quick fade.
-    readonly property bool _waitsForColors: _coverColors && _around && Music.artUrl !== "" && !_paletteKnown
+    readonly property bool _waitsForColors: _coverColors && _around && _artUrl !== "" && !_paletteKnown
     property real _aroundOpacity: _waitsForColors ? 0 : 1
     on_WaitsForColorsChanged: {
         if (_waitsForColors) {
@@ -98,8 +105,8 @@ Item {
     }
     on_CoverColorsChanged: if (_coverColors) _sampleCover()
     Connections {
-        target: Music
-        function onTitleChanged() { _resample.restart() }
+        target: root.player
+        function onTrackTitleChanged() { _resample.restart() }
     }
     // After the new cover has had a moment to load
     Timer {
@@ -112,7 +119,7 @@ Item {
     height: root._around ? root._coverSize + 90 : root._coverSize
     // Vertical and around: whenever there's a player (the visualiser needs its
     // place without art too). Horizontal: only with art (as it always was).
-    visible: root.visualizerLayout.startsWith("horizontal") ? Music.artUrl !== "" : Music.hasPlayer
+    visible: root.visualizerLayout.startsWith("horizontal") ? root._artUrl !== "" : root.player !== null
 
     VisualizerCanvas {
         anchors.fill: parent
@@ -166,7 +173,7 @@ Item {
         height: root._coverSize
         radius: root._coverRadius
         rotation: root._coverAngle
-        visible: root._around && Music.artUrl === ""
+        visible: root._around && root._artUrl === ""
         color: Theme.surfaceSunken
 
         Text {
@@ -188,7 +195,7 @@ Item {
         // Only a frame: the cover's rounding comes from its mask below
         color: "transparent"
         clip: true
-        visible: Music.artUrl !== ""
+        visible: root._artUrl !== ""
         // A new track's cover fades in once it has loaded
         opacity: image.status === Image.Ready ? 1 : 0
         Connections {
@@ -224,7 +231,7 @@ Item {
         Image {
             id: image
             anchors.fill: parent
-            source: Music.artUrl
+            source: root._artUrl
             fillMode: Image.PreserveAspectCrop
             visible: false
         }

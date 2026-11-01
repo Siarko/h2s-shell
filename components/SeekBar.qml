@@ -7,6 +7,9 @@ Item {
     id: seekBar
     Layout.fillWidth: true
     Layout.preferredHeight: 30
+    // Its height outside a layout too: the music panel stacks it in a Column, which reads
+    // no Layout properties — with only those it was 0 tall there, and never seen
+    implicitHeight: 30
 
     property real position: 0   // current position in seconds
     property real duration: 0   // total duration in seconds
