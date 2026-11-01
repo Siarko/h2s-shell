@@ -40,5 +40,34 @@ TestCase {
 
         assert(BarGeometry.popupContentLength(1440, _bar, 20, 16) === 1440 - 4 - 40 - 20 - 16,
             "content reaches to the gap at the far edge");
+
+        // The bar frame on screen, in a 100 × 50 box: a piece 10 along, 5 across, 20 × 8
+        {
+            const piece = { along: 10, across: 5, alongLength: 20, acrossLength: 8 };
+            const placedAt = (placed, x, y, width, height) => placed.x === x && placed.y === y
+                && placed.width === width && placed.height === height;
+            assert(placedAt(BarGeometry.fromBarFrame("top", piece, 100, 50), 10, 5, 20, 8), "frame, top: as given");
+            assert(placedAt(BarGeometry.fromBarFrame("bottom", piece, 100, 50), 10, 37, 20, 8), "frame, bottom: across from the box's bottom");
+            assert(placedAt(BarGeometry.fromBarFrame("left", piece, 100, 50), 5, 10, 8, 20), "frame, left: along runs down");
+            assert(placedAt(BarGeometry.fromBarFrame("right", piece, 100, 50), 87, 10, 8, 20), "frame, right: across from the box's right");
+
+            // The matrix puts the frame's corners where fromBarFrame puts the rectangle's
+            for (const edge of BarGeometry.edges) {
+                const matrix = BarGeometry.frameMatrix(edge, 100, 50);
+                const map = (along, across) => ({ x: matrix[0] * along + matrix[1] * across + matrix[3],
+                                                  y: matrix[4] * along + matrix[5] * across + matrix[7] });
+                const first = map(10, 5), last = map(30, 13);
+                const placed = BarGeometry.fromBarFrame(edge, piece, 100, 50);
+                assert(Math.min(first.x, last.x) === placed.x && Math.min(first.y, last.y) === placed.y
+                    && Math.abs(first.x - last.x) === placed.width && Math.abs(first.y - last.y) === placed.height,
+                    "frameMatrix agrees with fromBarFrame: " + edge);
+            }
+        }
+
+        // A popup rounded away from the bar, at the ends curving into it
+        assert(_corners(BarGeometry.popupCorners("top", true, false, 9), 0, 0, 9, 0), "popup at the top: bottom corners, start only");
+        assert(_corners(BarGeometry.popupCorners("bottom", true, true, 9), 9, 9, 0, 0), "popup at the bottom: top corners");
+        assert(_corners(BarGeometry.popupCorners("left", true, true, 9), 0, 9, 0, 9), "popup by a left bar: right corners");
+        assert(_corners(BarGeometry.popupCorners("right", false, true, 9), 0, 0, 9, 0), "popup by a right bar: the end is the bottom left");
     }
 }

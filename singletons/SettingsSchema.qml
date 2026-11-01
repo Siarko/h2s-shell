@@ -189,12 +189,20 @@ Singleton {
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
 
         // ── Bar ──
-        // The screen edge the bar stands at (docs/plans/bar-position.md); the sides come
-        // with the vertical bar
+        // The screen edge the bar stands at (docs/plans/bar-position.md)
         { key: "bar.edge", label: "Position", group: "barPosition", type: "enum", default: "top",
           options: [
               { value: "top", label: "Top" },
-              { value: "bottom", label: "Bottom" }
+              { value: "bottom", label: "Bottom" },
+              { value: "left", label: "Left" },
+              { value: "right", label: "Right" }
+          ] },
+        // How text runs on a bar at a side, for every widget alike (BarText): turned — read
+        // down a bar at the right, up a bar at the left — or upright letters one under another
+        { key: "bar.verticalText", label: "Text on a vertical bar", group: "barPosition", type: "enum",
+          default: "rotated", options: [
+              { value: "rotated", label: "Rotated" },
+              { value: "stacked", label: "Letters in a column" }
           ] },
         _sectionEntry("left", "Left section", ["power", "settings", "workspaces"]),
         _sectionEntry("center", "Center section", ["clock"]),

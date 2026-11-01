@@ -261,6 +261,16 @@ targets of its own (the tray, the workspaces) sets `interactive: false`, which k
 cell's size and background but disables its full-size `MouseArea` — otherwise that sits
 above the content and takes every click and hover.
 
+The bar can stand at any screen edge (`bar.edge`; `singletons/BarLayout.qml` says where,
+for every widget, and `singletons/BarGeometry.qml` turns the theme's edge-relative tokens
+into geometry). On a bar at a side `BarWidget.vertical` is true, the cell is as wide as the
+bar and its height comes from its content. So that a widget works at every edge without
+code of its own, it lays out its pieces with `components/BarRow.qml` (a row, or a column at
+a side — its children set no anchors) and writes text with `components/BarText.qml`
+(plain, or turned or stacked as `bar.verticalText` says; a single character stays
+upright). A widget that animates a piece's size animates `BarText.length`, which runs
+along the bar at any edge.
+
 ### Hardware sources
 
 `singletons/hardware/HardwareSource.qml` is a non-instantiated template documenting the

@@ -59,4 +59,59 @@ Singleton {
     function popupContentLength(length, bar, paddings, gap) {
         return length - (bar.topOffset ?? 0) - (bar.barHeight ?? 0) - paddings - gap;
     }
+
+    // Things laid out by the bar — along it, and across it away from its desktop side —
+    // put on screen. The bar frame of a box `width` × `height` whose side against the bar
+    // is at `across` 0: `along` runs left to right on a horizontal bar, top to bottom on a
+    // vertical one.
+
+    // A rectangle { along, across, alongLength, acrossLength } of the frame, on screen:
+    // { x, y, width, height } in the box
+    function fromBarFrame(edge, frameRect, width, height) {
+        const along = frameRect.along ?? 0, across = frameRect.across ?? 0;
+        const alongLength = frameRect.alongLength ?? 0, acrossLength = frameRect.acrossLength ?? 0;
+        switch (edge) {
+        case "bottom":
+            return { x: along, y: height - across - acrossLength, width: alongLength, height: acrossLength };
+        case "left":
+            return { x: across, y: along, width: acrossLength, height: alongLength };
+        case "right":
+            return { x: width - across - acrossLength, y: along, width: acrossLength, height: alongLength };
+        default:
+            return { x: along, y: across, width: alongLength, height: acrossLength };
+        }
+    }
+
+    // The same as a transform, for an item drawn in the frame (as for a bar at the top:
+    // x along, y across) and put in the box at 0, 0 — shapes only, since it may turn them
+    // over. A row-major 4 × 4 matrix, for Qt.matrix4x4.
+    function frameMatrix(edge, width, height) {
+        switch (edge) {
+        case "bottom":
+            return [1, 0, 0, 0,  0, -1, 0, height,  0, 0, 1, 0,  0, 0, 0, 1];
+        case "left":
+            return [0, 1, 0, 0,  1, 0, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1];
+        case "right":
+            return [0, -1, 0, width,  1, 0, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1];
+        default:
+            return [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1];
+        }
+    }
+
+    // A popup's corners on screen: rounded on its side away from the bar, at the ends that
+    // curve into the bar (`start`, `end`: true) — { topLeft, topRight, bottomLeft,
+    // bottomRight }
+    function popupCorners(edge, start, end, radius) {
+        const atStart = start ? radius : 0, atEnd = end ? radius : 0;
+        switch (edge) {
+        case "bottom":
+            return { topLeft: atStart, topRight: atEnd, bottomLeft: 0, bottomRight: 0 };
+        case "left":
+            return { topLeft: 0, topRight: atStart, bottomLeft: 0, bottomRight: atEnd };
+        case "right":
+            return { topLeft: atStart, topRight: 0, bottomLeft: atEnd, bottomRight: 0 };
+        default:
+            return { topLeft: 0, topRight: 0, bottomLeft: atStart, bottomRight: atEnd };
+        }
+    }
 }

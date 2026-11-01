@@ -11,6 +11,9 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Music: the popup no longer opens short and grows to its height after.
+- A popup closed before it had appeared (another screen's opening at that moment) no
+  longer stays open for good, its widget lit and deaf to clicks.
 - Bar popups: each opens on its own bar's screen. They went to the screen with the focus,
   which at the top happened to be the bar's.
 - After a review of the day's changes:
@@ -45,6 +48,11 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Bar: it can stand at the left or right of the screen too. The widgets stack down it and
+  popups open sideways from it; text is turned — read down a bar at the right, up a bar
+  at the left — or written as letters one under another (Behaviour → Bar → Text on a
+  vertical bar, the same for every widget). A single character, such as an icon, stays
+  upright.
 - Bar: it can stand at the bottom of the screen (Behaviour → Bar → Position, per
   profile); popups then open upward from it. The Bar shape page names the edge offset
   and corners by the screen's edge and the desktop side, so a theme looks the same at
@@ -119,6 +127,14 @@ section to the new version and date.
   most), instead of one accent dot for the day.
 
 ### Changed
+- Popups slide out from under the bar as a whole, and back under it, instead of being
+  uncovered by a growing cut; the curves joining them to the bar stay until only the
+  popup's rounded end is left.
+- Popups grow and shrink with a panel's own animation (an expander opening a list of
+  devices, say) frame by frame, instead of trailing behind it.
+- Music: the player list and the controls stay in view while the popup changes size —
+  opening, or coming from another panel — and the cover between them is cut to the room
+  left.
 - Calendar: an event card's edit and delete buttons are larger, on a button's background
   so it is clear what is clicked, and level with the event's title instead of the middle
   of the card; editing is a pencil icon instead of the tiny "✏" character.

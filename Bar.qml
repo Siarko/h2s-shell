@@ -6,8 +6,8 @@ import qs.components
 import qs.panels
 import qs.singletons
 
-// A horizontal bar across the screen, at its top or bottom edge (the bar.edge setting,
-// docs/plans/bar-position.md)
+// The bar along one screen edge (the bar.edge setting, docs/plans/bar-position.md):
+// across the top or bottom, or down a side, its widgets then stacked down it
 PanelWindow {
     id: bar
     required property var modelData
@@ -34,9 +34,9 @@ PanelWindow {
 
     anchors {
         top: screenEdge !== "bottom"
-        bottom: screenEdge === "bottom"
-        left: true
-        right: true
+        bottom: screenEdge !== "top"
+        left: screenEdge !== "right"
+        right: screenEdge !== "left"
     }
     color: "transparent"
 
@@ -44,7 +44,10 @@ PanelWindow {
     // re-tile them every frame. The window itself is as tall as the bar needs meanwhile.
     exclusionMode: ExclusionMode.Normal
     exclusiveZone: Theme.bar.reservedSpace
-    implicitHeight: Math.max(Theme.bar.reservedSpace, Math.ceil(_shape.topOffset + _shape.barHeight + Theme.bar.borderWidth))
+    // Across the bar: its height at the top or bottom, its width at a side
+    readonly property int _thickness: Math.max(Theme.bar.reservedSpace, Math.ceil(_shape.topOffset + _shape.barHeight + Theme.bar.borderWidth))
+    implicitHeight: _vertical ? 0 : _thickness
+    implicitWidth: _vertical ? _thickness : 0
 
     // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
     // Component is set here, only where the widget has the property.
@@ -119,16 +122,32 @@ PanelWindow {
                 easing: Theme.curve(widgetLoader.leaving ? "exit" : "enter")
             }
         }
-        Layout.preferredWidth: _shown < 1 ? (item?.implicitWidth ?? 0) * _shown : -1
+        // Along the bar it grows; across it, it fills the bar less the cell margins
+        Layout.preferredWidth: !bar._vertical && _shown < 1 ? (item?.implicitWidth ?? 0) * _shown : -1
+        Layout.preferredHeight: bar._vertical && _shown < 1 ? (item?.implicitHeight ?? 0) * _shown : -1
         // The section's spacing shrinks with it, so nothing jumps when it is dropped
-        Layout.rightMargin: _shown < 1 ? -(parent?.spacing ?? 0) * (1 - _shown) : 0
+        readonly property real _spacingTaken: _shown < 1 ? -(parent?.columnSpacing ?? 0) * (1 - _shown) : 0
+        Layout.rightMargin: bar._vertical ? Theme.bar.cellVerticalMargin : _spacingTaken
+        Layout.bottomMargin: bar._vertical ? _spacingTaken : Theme.bar.cellVerticalMargin
+        Layout.topMargin: bar._vertical ? 0 : Theme.bar.cellVerticalMargin
+        Layout.leftMargin: bar._vertical ? Theme.bar.cellVerticalMargin : 0
         clip: _shown < 1
         opacity: _shown
-        Layout.fillHeight: true
-        Layout.topMargin: Theme.bar.cellVerticalMargin
-        Layout.bottomMargin: Theme.bar.cellVerticalMargin
+        Layout.fillHeight: !bar._vertical
+        Layout.fillWidth: bar._vertical
         source: WidgetRegistry.widgetUrl(modelData.type)
         onLoaded: bar._wireWidget(item, widgetLoader)
+    }
+
+    // A section's widgets in a row along the bar, or a column down a bar at a side; as
+    // thick as the bar, as long as its widgets. Sized, with fixed anchors, so nothing is
+    // swapped when the bar turns.
+    component WidgetSection: GridLayout {
+        flow: bar._vertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
+        columnSpacing: Theme.bar.widgetSpacing
+        rowSpacing: Theme.bar.widgetSpacing
+        width: bar._vertical ? parent.width : implicitWidth
+        height: bar._vertical ? implicitHeight : parent.height
     }
 
     // Geometry, from the theme. Moving to another theme — a profile switch, say — slides
@@ -185,17 +204,28 @@ PanelWindow {
         SlideBehavior on radiusBottomRight {}
     }
 
-    // The screen edge the bar stands at, and the edge facing the desktop, where its border
-    // goes (below). The sides wait for the vertical bar.
-    readonly property string screenEdge: Profiles.value("bar.edge") === "bottom" ? "bottom" : "top"
-    readonly property string _desktopEdge: BarGeometry.desktopEdge(screenEdge)
-    readonly property bool _atBottom: screenEdge === "bottom"
+    // The screen edge the bar stands at
+    readonly property string screenEdge: BarLayout.edge
+    readonly property bool _vertical: BarLayout.vertical
     // The corners on screen: the theme's are named for a bar at the top
     readonly property var _corners: BarGeometry.corners(screenEdge, {
         barHeight: _layout("barHeight"),
         radiusTopLeft: _layout("radiusTopLeft"), radiusTopRight: _layout("radiusTopRight"),
         radiusBottomLeft: _layout("radiusBottomLeft"), radiusBottomRight: _layout("radiusBottomRight")
     })
+
+    // The bar's shape on screen, placed in the bar's frame (BarGeometry), `grownBy` more
+    // across it towards the desktop: the theme's top offset is the gap to the bar's own
+    // edge, its left and right margins the gaps at its start and end — the top and bottom
+    // of a bar at a side
+    function _shapeRect(width, height, grownBy) {
+        return BarGeometry.fromBarFrame(screenEdge, {
+            along: _layout("leftMargin"),
+            across: _layout("topOffset"),
+            alongLength: (_vertical ? height : width) - _layout("leftMargin") - _layout("rightMargin"),
+            acrossLength: _layout("barHeight") + grownBy
+        }, width, height);
+    }
 
     // The bar's border, outside it, along the edge facing the desktop only: a shape like
     // the bar's, grown by the border's width on that side, behind the bar. The bar keeps
@@ -204,10 +234,11 @@ PanelWindow {
     readonly property real _borderWidth: Theme.bar.borderWidth
     Rectangle {
         visible: bar._borderWidth > 0
-        x: _barShape.x - (bar._desktopEdge === "left" ? bar._borderWidth : 0)
-        y: _barShape.y - (bar._desktopEdge === "top" ? bar._borderWidth : 0)
-        width: _barShape.width + (bar._desktopEdge === "left" || bar._desktopEdge === "right" ? bar._borderWidth : 0)
-        height: _barShape.height + (bar._desktopEdge === "top" || bar._desktopEdge === "bottom" ? bar._borderWidth : 0)
+        readonly property var _placed: bar._shapeRect(parent.width, parent.height, bar._borderWidth)
+        x: _placed.x
+        y: _placed.y
+        width: _placed.width
+        height: _placed.height
         color: Theme.barBorder
         topLeftRadius: _barShape.topLeftRadius
         topRightRadius: _barShape.topRightRadius
@@ -218,36 +249,31 @@ PanelWindow {
     // Visual bar rectangle — floats within the reserved space
     Rectangle {
         id: _barShape
-        // The theme's top offset is the gap to the bar's own edge
-        anchors {
-            top: bar._atBottom ? undefined : parent.top
-            bottom: bar._atBottom ? parent.bottom : undefined
-            left: parent.left
-            right: parent.right
-            topMargin: bar._layout("topOffset")
-            bottomMargin: bar._layout("topOffset")
-            leftMargin: bar._layout("leftMargin")
-            rightMargin: bar._layout("rightMargin")
-        }
-        height: bar._layout("barHeight")
+        // Positioned, not anchored: anchors swapped as the bar turns left sizes behind
+        readonly property var _placed: bar._shapeRect(parent.width, parent.height, 0)
+        x: _placed.x
+        y: _placed.y
+        width: _placed.width
+        height: _placed.height
         color: Theme.barBackground
         topLeftRadius: bar._corners.topLeft
         topRightRadius: bar._corners.topRight
         bottomLeftRadius: bar._corners.bottomLeft
         bottomRightRadius: bar._corners.bottomRight
 
-        // Three-section bar layout: left-aligned, centered, right-aligned
+        // Three sections: at the start, in the middle and at the end of the bar — left,
+        // centre, right; top, middle, bottom at a side. The paddings are at its ends.
         Item {
             anchors.fill: parent
-            anchors.leftMargin: bar._layout("leftPadding")
-            anchors.rightMargin: bar._layout("rightPadding")
+            anchors.leftMargin: bar._vertical ? 0 : bar._layout("leftPadding")
+            anchors.rightMargin: bar._vertical ? 0 : bar._layout("rightPadding")
+            anchors.topMargin: bar._vertical ? bar._layout("leftPadding") : 0
+            anchors.bottomMargin: bar._vertical ? bar._layout("rightPadding") : 0
 
-            // Left section
-            RowLayout {
+            // Left section, at the start
+            WidgetSection {
                 anchors.left: parent.left
                 anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                spacing: Theme.bar.widgetSpacing
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
@@ -261,11 +287,8 @@ PanelWindow {
             }
 
             // Center section
-            RowLayout {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                spacing: Theme.bar.widgetSpacing
+            WidgetSection {
+                anchors.centerIn: parent
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
@@ -278,12 +301,10 @@ PanelWindow {
                 }
             }
 
-            // Right section
-            RowLayout {
+            // Right section, at the end
+            WidgetSection {
                 anchors.right: parent.right
-                anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                spacing: Theme.bar.widgetSpacing
 
                 Repeater {
                     // ScriptModel, never the bare array — see "The Repeater crash"
@@ -313,7 +334,7 @@ PanelWindow {
         barEdge: bar.screenEdge
         barScreen: bar.modelData
         popupPosition: 0
-        popupWidth: 0
+        popupLength: 0
         // Notify parent so other screens close their popups
         onOpened: bar.popupOpened()
     }

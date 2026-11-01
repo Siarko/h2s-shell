@@ -45,7 +45,8 @@ Item {
         anchorOpener.menu = root.request?.menu ?? null;
         const next = root.activeSlot === 0 ? opener1 : opener0;
         next.menu = root.request?.menu ?? null;
-        root.beginTransition(root.request?.direction ?? 1);
+        // Between the tray's icons: the way they run — down a bar at a side
+        root.beginTransition(root.request?.direction ?? 1, BarLayout.vertical);
     }
 
     // Navigate into a submenu entry.
@@ -54,7 +55,7 @@ Item {
         const next = root.activeSlot === 0 ? opener1 : opener0;
         root.menuStack = root.menuStack.concat([curr.menu]);
         next.menu = entry;
-        root.beginTransition(1);
+        root.beginTransition(1, false);
     }
 
     // Navigate back to the previous menu level.
@@ -62,31 +63,44 @@ Item {
         const next = root.activeSlot === 0 ? opener1 : opener0;
         next.menu = root.menuStack[root.menuStack.length - 1];
         root.menuStack = root.menuStack.slice(0, root.menuStack.length - 1);
-        root.beginTransition(-1);
+        root.beginTransition(-1, false);
     }
 
-    // direction: +1 = new slides in from right, -1 = new slides in from left
-    function beginTransition(direction) {
-        const currSlot = root.activeSlot === 0 ? slot0 : slot1;
-        const nextSlot = root.activeSlot === 0 ? slot1 : slot0;
-
-        // Position next slot off-screen before the first frame renders
-        nextSlot.x = direction * root.implicitWidth;
-
+    // direction: +1 = the new menu comes in from the right (from below, `vertical`), -1 =
+    // from the left (from above). Sideways into and out of submenus; down or up between
+    // the icons of a tray running down a bar at a side.
+    function beginTransition(direction, vertical) {
+        root._direction = direction;
+        root._verticalSlide = vertical;
         // Switch activeSlot so implicitHeight immediately tracks new content
         root.activeSlot = 1 - root.activeSlot;
+        _slide.stop();
+        root._progress = 1;
+        _slide.start();
+    }
 
-        outAnim.stop();
-        inAnim.stop();
-        outAnim.target = currSlot;
-        outAnim.from = 0;
-        outAnim.to = -direction * root.implicitWidth;
-        outAnim.restart();
+    // The slide: 1 as it starts, 0 at rest. The menus' places follow from it and from the
+    // distance, worked out as they go — a new menu has no height until its entries arrive,
+    // a frame or more after it is asked for, and a distance taken at the start left a taller
+    // one sliding in already mostly in sight.
+    property real _progress: 0
+    property int _direction: 1
+    property bool _verticalSlide: false
+    // Far enough for the taller of the two menus (or the menu's width) to be out of sight
+    readonly property real _distance: _verticalSlide ? Math.max(slot0.height, slot1.height) : root.implicitWidth
+    // Where a slot is along the slide: the shown one coming in, the other going out
+    function _offset(slotIndex) {
+        return slotIndex === root.activeSlot ? root._direction * root._distance * root._progress
+            : -root._direction * root._distance * (1 - root._progress);
+    }
 
-        inAnim.target = nextSlot;
-        inAnim.from = direction * root.implicitWidth;
-        inAnim.to = 0;
-        inAnim.restart();
+    NumberAnimation {
+        id: _slide
+        target: root
+        property: "_progress"
+        to: 0
+        duration: Theme.duration("slide")
+        easing: Theme.curve("slide")
     }
 
     // Holds a permanent ref to the root handle so its refcount never hits zero
@@ -100,22 +114,6 @@ Item {
     }
     QsMenuOpener {
         id: opener1
-    }
-
-    // Outgoing slot slides out
-    NumberAnimation {
-        id: outAnim
-        property: "x"
-        duration: Theme.duration("slide")
-        easing: Theme.curve("slide")
-    }
-
-    // Incoming slot slides in
-    NumberAnimation {
-        id: inAnim
-        property: "x"
-        duration: Theme.duration("slide")
-        easing: Theme.curve("slide")
     }
 
     // Shared item delegate — defined once, used by both Repeaters
@@ -300,7 +298,8 @@ Item {
         id: slot0
         sourceComponent: menuSlotComponent
         width: root.width
-        x: 0
+        x: root._verticalSlide ? 0 : root._offset(0)
+        y: root._verticalSlide ? root._offset(0) : 0
         onLoaded: item.opener = opener0
     }
 
@@ -309,7 +308,8 @@ Item {
         id: slot1
         sourceComponent: menuSlotComponent
         width: root.width
-        x: 0
+        x: root._verticalSlide ? 0 : root._offset(1)
+        y: root._verticalSlide ? root._offset(1) : 0
         onLoaded: item.opener = opener1
     }
 }

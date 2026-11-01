@@ -29,17 +29,18 @@ BarWidget {
     readonly property bool _showSpecial: WidgetPresets.value("workspaces", preset, "showSpecial")
     readonly property bool _showNormal: WidgetPresets.value("workspaces", preset, "showNormal")
 
-    Row {
+    BarRow {
         id: wsRow
         anchors.centerIn: parent
         spacing: Theme.workspace.pillSpacing
 
+        // As long as its text along the bar, a pill's thickness across it
         Item {
             visible: _title !== ""
-            width: _titleText.implicitWidth
-            height: Theme.workspace.pillHeight
+            width: root.vertical ? Math.max(Theme.workspace.pillHeight, _titleText.implicitWidth) : _titleText.implicitWidth
+            height: root.vertical ? _titleText.implicitHeight : Theme.workspace.pillHeight
 
-            Text {
+            BarText {
                 id: _titleText
                 anchors.centerIn: parent
                 text: _title
@@ -63,8 +64,13 @@ BarWidget {
                 // Special workspaces wait for the config: until the preset's name map is
                 // read they would show their raw names ("special:music") for a moment
                 visible: Workspaces.isSpecial(modelData) ? _showSpecial && Config.ready : _showNormal
-                width: Math.max(Theme.workspace.pillHeight, wsText.implicitWidth + 2 * Theme.workspace.pillHorizontalPadding)
-                height: Theme.workspace.pillHeight
+                // Its padding at its ends along the bar; at least as long as it is thick
+                readonly property real _length: Math.max(Theme.workspace.pillHeight,
+                    (root.vertical ? wsText.implicitHeight : wsText.implicitWidth) + 2 * Theme.workspace.pillHorizontalPadding)
+                readonly property real _thickness: Math.max(Theme.workspace.pillHeight,
+                    root.vertical ? wsText.implicitWidth : 0)
+                width: root.vertical ? _thickness : _length
+                height: root.vertical ? _length : Theme.workspace.pillHeight
                 radius: Theme.workspace.pillRadius
                 color: {
                     if (Workspaces.isSpecial(modelData))
@@ -73,7 +79,7 @@ BarWidget {
                 }
                 Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
-                Text {
+                BarText {
                     id: wsText
                     text: (_nameMap[modelData.name] || "") !== "" ? _nameMap[modelData.name] : (modelData.name || modelData.id)
                     font.family: Theme.fontFamily

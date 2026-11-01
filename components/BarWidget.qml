@@ -35,7 +35,11 @@ Item {
     Layout.topMargin: 5
     Layout.bottomMargin: 5
     Layout.minimumWidth: 40
-    implicitWidth: contentItem.childrenRect.width + horizontalPadding * 2
+    // On a bar at a side the cell is as wide as the bar (its Loader sizes it) and as tall
+    // as its content, the padding then above and below it
+    readonly property bool vertical: BarLayout.vertical
+    implicitWidth: vertical ? 0 : contentItem.childrenRect.width + horizontalPadding * 2
+    implicitHeight: vertical ? contentItem.childrenRect.height + horizontalPadding * 2 : 0
 
     default property alias content: contentItem.data
 

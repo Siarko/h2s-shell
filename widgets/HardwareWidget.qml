@@ -25,7 +25,7 @@ PopupWidget {
         return parts.join("  ") || "—"
     }
 
-    Text {
+    BarText {
         anchors.centerIn: parent
         text: _capsuleText
         font.family: Theme.fontFamily

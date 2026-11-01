@@ -33,14 +33,13 @@ BarWidget {
 
     onClicked: Stt.toggle()
 
-    Row {
+    BarRow {
         anchors.centerIn: parent
         // Gaps live in the collapsible items' own padding, so a collapsed item leaves
         // no stray spacing behind
         spacing: 0
 
         Text {
-            anchors.verticalCenter: parent.verticalCenter
             text: (!Stt.connected || Stt.server === "error") ? "󰍭" : "󰍬"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
@@ -50,7 +49,8 @@ BarWidget {
             // the left edge looking wider. Since the collapsed cell sits at
             // BarWidget's 40px minimum width, padding the box on the right shifts the
             // ink back left by half this value.
-            rightPadding: 2
+            // (On a bar at a side the glyph is centred across it: no correction)
+            rightPadding: root.vertical ? 0 : 2
             color: {
                 if (!Stt.connected) return Theme.textDisabled
                 if (Stt.server === "error") return Theme.error
@@ -76,41 +76,38 @@ BarWidget {
 
         // Fragments waiting to be transcribed and typed. A digit rather than a glyph,
         // so this doesn't depend on an exotic Nerd Font codepoint.
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            // The gap is folded into the animated width rather than left as static
+        BarText {
+            id: _pending
+            // The gap is folded into the animated length rather than left as static
             // padding, so a collapsed item contributes nothing at all — static padding
-            // on a zero-width item would push the icon off the widget's centre.
+            // on a zero-length item would push the icon off the widget's centre.
             readonly property bool shown: (Profiles.value("stt.showPending") ?? true) && Stt.pending > 0
             // Room for the count and its gap: two digits overflowed a fixed 18 px
-            width: shown ? Math.max(18, contentWidth + leftPadding) : 0
-            leftPadding: shown ? 4 : 0
-            clip: true
-            horizontalAlignment: Text.AlignHCenter
+            length: shown ? Math.max(18, _pending._naturalLength) : 0
+            leadingGap: shown ? 4 : 0
+            alignment: Text.AlignHCenter
             text: Stt.pending > 0 ? String(Stt.pending) : ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeXSmall
             color: Theme.warning
 
-            Behavior on width {
+            Behavior on length {
                 NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
             }
         }
 
         // Slides open while dictation runs. Elided on the left to keep the newest
         // words visible.
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            width: root._previewExpanded ? root._previewWidth : 0
-            leftPadding: root._previewExpanded ? 6 : 0
-            clip: true
+        BarText {
+            length: root._previewExpanded ? root._previewWidth : 0
+            leadingGap: root._previewExpanded ? 6 : 0
             elide: Text.ElideLeft
             text: Stt.previewText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.textSecondary
 
-            Behavior on width {
+            Behavior on length {
                 NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
             }
         }

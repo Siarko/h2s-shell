@@ -6,7 +6,7 @@ import qs.singletons
 PopupWidget {
     widgetType: "bluetooth"
 
-    Row {
+    BarRow {
         anchors.centerIn: parent
         spacing: 4
 
@@ -16,16 +16,14 @@ PopupWidget {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: powered ? Theme.textPrimary : Theme.textDisabled
-            anchors.verticalCenter: parent.verticalCenter
         }
 
-        Text {
+        BarText {
             visible: (Bluetooth.defaultAdapter?.enabled ?? false) && Bluetooth.devices.count > 0
             text: Bluetooth.devices?.count ?? ""
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

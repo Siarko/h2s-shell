@@ -14,7 +14,8 @@ verified on the host — the dev container has no `quickshell`.
 in the order agreed with the user: the small requests (11.1–11.3), the bar's position and
 shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integration
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
-after 11.2: 11.15–11.19 (notifications, icon theme). Next: 11.4 stage B, a vertical bar at a side (the bottom edge is done).
+after 11.2: 11.15–11.19 (notifications, icon theme). 11.4 is done (bottom edge, then a vertical
+bar at a side); its follow-ups: the HUD placed by the bar's edge, a floating dictation window.
 
 ---
 
@@ -801,7 +802,7 @@ end so the numbers above keep meaning what older notes say:
       `--inline-reply` to notify-send, which has no such option (libnotify 0.8.8); nothing
       uses it today.
 
-- [ ] **11.4 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
+- [x] **11.4 Bar position: bottom, and vertical at a side** (was 10.12) (requested 2026-10-30)
       Today the bar is only horizontal at the top. Wanted: the bar at the bottom of the
       screen, and — harder — a vertical bar along the left or right edge. Touches far more
       than Bar.qml: the bar's anchors and exclusive zone; every widget's layout (a
@@ -814,7 +815,9 @@ end so the numbers above keep meaning what older notes say:
       analysis and a plan, with the user, before any work.
       Plan: docs/plans/bar-position.md (setting per profile, tokens relative to the edge,
       HUD left alone). **Stage A, the bottom edge: done (2026-11-01).** Stage B, a
-      vertical bar: in progress.
+      vertical bar at the left or right: done (2026-11-01). Left for other items: the
+      HUD placed relative to the bar's edge (it may collide with a side bar), and the
+      dictation preview as a floating window instead of text on the bar.
 - [ ] **11.5 Bar shape and anchoring: e.g. a "dynamic island" bar** (was 10.13) (requested
       2026-10-30)
       The bar's size can only be tuned with margins and padding today. Wanted: choosing

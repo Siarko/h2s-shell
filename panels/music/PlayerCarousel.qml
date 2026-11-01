@@ -20,10 +20,15 @@ Item {
     // Cut at its edges only while sliding, so the view going out leaves by them; at rest the
     // visualiser round the cover (a glow, a turned square's corners) may reach past them
     clip: _slide.running
-    implicitHeight: _slide.running ? Math.max(_first.implicitHeight, _second.implicitHeight)
+    readonly property real _shownHeight: _slide.running ? Math.max(_first.implicitHeight, _second.implicitHeight)
         : (_slots[_current]?.implicitHeight ?? 0)
+    implicitHeight: _shownHeight
+    // Not the first height: the view is laid out a frame after it is made, and growing from
+    // nothing then made the popup open short and grow after
+    property bool _laidOut: false
+    on_ShownHeightChanged: if (!_laidOut && _shownHeight > 0) Qt.callLater(() => root._laidOut = true)
     Behavior on implicitHeight {
-        enabled: !Theme.reduceMotion
+        enabled: root._laidOut && !Theme.reduceMotion
         NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") }
     }
 

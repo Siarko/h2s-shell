@@ -44,6 +44,12 @@ Flickable {
             editIndex: root.editIndex
         }
 
+        // Shown at any edge: the profile edited need not be the one in effect
+        SchemaSettingEditor {
+            key: "bar.verticalText"
+            editIndex: root.editIndex
+        }
+
         Text {
             text: "Content"
             font.family: Theme.fontFamily

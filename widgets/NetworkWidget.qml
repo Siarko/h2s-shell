@@ -8,7 +8,7 @@ PopupWidget {
 
     // One icon per link, each coloured by its own state: accent = carrying
     // traffic, white = powered on but not connected, dim = off/unavailable.
-    Row {
+    BarRow {
         anchors.centerIn: parent
         spacing: 9
 
@@ -26,7 +26,6 @@ PopupWidget {
                 : NetworkManager.ethernetState === "unavailable"
                     ? Theme.textDisabled
                     : Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         // WiFi — hidden outright while the radio is off, so the bar only ever
@@ -50,7 +49,6 @@ PopupWidget {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: NetworkManager.wifiConnected ? Theme.accent : Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         // VPN — shown only while a tunnel is actually up
@@ -60,7 +58,6 @@ PopupWidget {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.accent
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         // Placeholder so the cell is never empty — before the first nmcli poll
@@ -72,7 +69,6 @@ PopupWidget {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.textDisabled
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

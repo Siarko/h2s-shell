@@ -21,9 +21,8 @@ BarWidget {
     // An empty tray takes no space
     Layout.minimumWidth: 0
 
-    Row {
+    BarRow {
         anchors.centerIn: parent
-        height: root.height
         spacing: Theme.tray.pillSpacing
 
         Repeater {
@@ -42,16 +41,18 @@ BarWidget {
                     && root.popup?.contentType === "tray-menu"
                     && root.popup?.contentData?.menu === modelData.menu
 
-                // Grows in from nothing, so the icons beside it slide aside rather than jump
-                width: 0
-                height: parent.height
+                // Grows in from nothing along the bar, so the icons beside it slide aside
+                // rather than jump; as thick as the bar's cell across it
+                property real _length: 0
+                width: root.vertical ? root.width : _length
+                height: root.vertical ? _length : root.height
                 opacity: 0
                 clip: true
                 Component.onCompleted: {
-                    width = Qt.binding(() => Theme.tray.pillWidth);
+                    _length = Qt.binding(() => Theme.tray.pillWidth);
                     opacity = 1;
                 }
-                Behavior on width { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
+                Behavior on _length { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
                 Behavior on opacity { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
 
                 // Highlighted under the pointer and while its menu is open, like a cell

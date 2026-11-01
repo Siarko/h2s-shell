@@ -30,7 +30,19 @@ joins the bar (its window's margin) and how long a popup's content may get. `Bar
 4. The music visualiser's mask takes all four of the background's corners.
 5. Bar shape page: labels that do not name the top.
 
-## Stage B — a vertical bar, left or right
+## Stage B — a vertical bar, left or right (done, 2026-11-01)
+
+Decided with the user: text is not shortened or moved to tooltips — the user words labels
+to fit both orientations. Text on a vertical bar is either turned (reading down at the right, up at the left) or
+stacked letters, one setting for every widget (`bar.verticalText`, profile); a single
+character stays upright. Dictation is treated the same for now (later: a floating window
+of its own, since it only shows while dictating). The HUD may collide with a right bar
+for now. Popups keep their insides; they open sideways. Same `barHeight` for thickness.
+
+Done as: `BarLayout` (edge, vertical, text mode for every widget), `BarRow` and `BarText`
+in the widgets, `BarWidget.vertical`, sections as a `GridLayout` whose flow turns, the bar
+shape and popups placed in the bar's frame (`BarGeometry.fromBarFrame`, `frameMatrix`,
+`popupCorners`, tested).
 
 1. Sections as columns; a widget's grow-in animation and cell margins along the bar's axis.
 2. `BarWidget`: its thickness from the bar, its length from its content.

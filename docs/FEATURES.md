@@ -5,7 +5,12 @@ What the shell does, from the outside. For how it is put together see
 
 ## The bar
 
-A top-anchored panel on every monitor. It reserves 40 px of screen space
+A panel on every monitor, along the edge chosen in **Settings → Bar → Position** (top,
+bottom, left or right; per profile). At a side the widgets stack down it, and their text
+is turned — read down a bar at the right, up a bar at the left — or written as letters
+one under another (**Text on a
+vertical bar**, the same for every widget); popups open sideways from it. Popups open
+away from the bar at any edge. At the top it reserves 40 px of screen space
 (`bar.layout.reservedSpace`) and draws a 36 px rounded bar inside it
 (`bar.layout.barHeight`, `topOffset`), so the bar appears to float below the screen
 edge. Margins, padding and the four corner radii are configurable; the radii are

@@ -16,16 +16,15 @@ PopupWidget {
         }
     }
 
-    Row {
+    BarRow {
         anchors.centerIn: parent
         spacing: 4
 
-        Text {
+        BarText {
             text: Audio.volume + "%"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
             color: Audio.muted ? Theme.textDisabled : Audio.volume > 100 ? Theme.warning : Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
         }
 
         Text {
@@ -33,7 +32,6 @@ PopupWidget {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Audio.muted ? Theme.textDisabled : Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

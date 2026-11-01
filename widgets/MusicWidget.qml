@@ -13,7 +13,7 @@ PopupWidget {
             Music.previous();
     }
 
-    Row {
+    BarRow {
         anchors.centerIn: parent
         spacing: 4
 
@@ -23,15 +23,13 @@ PopupWidget {
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.textPrimary
             visible: Music.hasPlayer
-            anchors.verticalCenter: parent.verticalCenter
         }
 
-        Text {
+        BarText {
             text: Music.hasPlayer ? (Music.activePlayer.identity || "Player") : "󰎈"
             font.family: Theme.fontFamily
             font.pixelSize: Music.hasPlayer ? Theme.fontSizeMedium : Theme.fontSizeHeading
             color: Theme.textPrimary
-            anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideRight
         }
     }
