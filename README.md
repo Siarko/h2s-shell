@@ -1,20 +1,22 @@
 # h2s-shell
 
+**THIS IS ALL WORK IN PROGRESS. README AS WELL**
+
 A desktop shell for Hyprland, built with [Quickshell](https://quickshell.org) (Qt 6, QML):
-a bar on every monitor with popups, notifications, on-screen toasts, a lock screen and a
+a bar with popups, notifications, on-screen toasts, a lock screen and a
 settings window.
 
 ## Features
 
 - **Bar** along any screen edge (top, bottom, left, right): workspaces, clock, system
-  tray, music, sound, network, Bluetooth, hardware usage, dictation — each opening a popup.
+  tray, music, sound, network, Bluetooth, hardware usage, dictation - each opening a popup.
 - **Google Calendar** in the clock's popup: a month view, and events you can add, edit
   and delete.
 - **Notifications**: toasts on screen, a history panel, inline reply, a count on the bar.
 - **Music** controls for every player (MPRIS), with an audio visualiser.
 - **Screensaver and lock screen**, from Wayland idle notifications.
-- **Settings window**: what the bar shows, behaviour per profile (e.g. a power-saving
-  profile on battery), and themes — colours, fonts, shapes, animations and their curves.
+- **Settings**: what the bar shows, behaviour per profile (e.g. a power-saving
+  profile on battery), and themes - colours, fonts, shapes, animations and their curves.
 
 The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 
@@ -23,7 +25,7 @@ The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 - Hyprland with a Lua config (0.5x), Quickshell, Qt 6
 - NetworkManager (`nmcli`), `systemctl`, `notify-send`, `python3`
 - A JetBrainsMono Nerd Font
-- Optional: `cava` (visualiser), `jq` and `gsettings` (icon theme), `pttd` (dictation)
+- Optional: `cava` (visualiser), `jq` and `gsettings` (icon theme)
 
 ## Running
 
