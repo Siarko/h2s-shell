@@ -61,6 +61,18 @@ TestCase {
         assertEqual(GoogleCalendarData.describeFailure({ status: 500 }), "Google returned an error (HTTP 500)", "other statuses");
         assertEqual(GoogleCalendarData.describeFailure(new Error("boom")), "boom", "anything else: its message");
 
+        // --- a failed token refresh: only a dead refresh token logs out ---
+        const refreshFailure = (status, body) => ({ status: status, body: body });
+        assert(GoogleCalendarAuth.refreshFailureIsFinal(refreshFailure(400, '{"error":"invalid_grant","error_description":"Token has been expired or revoked."}')),
+            "invalid_grant: the refresh token is dead, log in again");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal({ status: 0 }), "offline (after a resume): keep the login");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal({ status: 0, timedOut: true }), "a timeout: keep the login");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal(refreshFailure(503, "")), "Google's 5xx: keep the login");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal(refreshFailure(401, '{"error":"invalid_client"}')),
+            "another 4xx error: not the refresh token's fault");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal(refreshFailure(400, "<html>")), "a body that is not JSON: keep the login");
+        assert(!GoogleCalendarAuth.refreshFailureIsFinal(new SyntaxError("bad JSON")), "a garbled success: keep the login");
+
         // --- Google's JSON and the shell's shapes ---
         assertEqual(GoogleCalendarData.offsetText(120), "+02:00", "offset east of UTC");
         assertEqual(GoogleCalendarData.offsetText(-210), "-03:30", "offset west, with minutes");

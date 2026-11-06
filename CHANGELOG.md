@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Google Calendar: losing the network (e.g. right after waking the laptop) no longer signs
+  you out; only a sign-in Google itself has expired or revoked asks for a new login.
 - Music: the popup no longer opens short and grows to its height after.
 - A popup closed before it had appeared (another screen's opening at that moment) no
   longer stays open for good, its widget lit and deaf to clicks.

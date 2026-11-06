@@ -147,15 +147,35 @@ Singleton {
                     Config.gcal.tokenExpiry = Math.floor(Date.now() / 1000) + (json.expires_in || 3600);
                     return resolve();
                 }).catch(reject);
-            }).catch(e => {
-                logger.error("Error while refreshing token", e);
+            }).catch(failure => {
+                // Offline after a resume, a timeout, Google's 5xx: the login is still good,
+                // the next request tries again. Logging out here threw the refresh token
+                // away and asked for a new login after every network hiccup.
+                if (!root.refreshFailureIsFinal(failure)) {
+                    logger.warn("Token refresh failed, keeping the login for the next request:", failure);
+                    return reject(failure);
+                }
+                logger.error("Google rejected the refresh token", failure);
                 Notifier.send("Google Calendar Token expired! You need to login again :/", {
                     actions: [{ id: "reconnect", label: "Reconnect", onTriggered: () => root.login() }]
                 });
                 logout();
-                return reject(e);
+                return reject(failure);
             });
         });
+    }
+
+    // Whether a failed refresh means the refresh token itself is dead — revoked, expired,
+    // the app's access removed — the one case only a new login fixes. Google answers that
+    // with "invalid_grant"; anything else is worth retrying.
+    function refreshFailureIsFinal(failure) {
+        if (!failure || (failure.status !== 400 && failure.status !== 401))
+            return false;
+        try {
+            return JSON.parse(failure.body ?? "").error === "invalid_grant";
+        } catch (error) {
+            return false;
+        }
     }
 
     function ensureAuthorized(callback) {
