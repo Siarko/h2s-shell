@@ -1,6 +1,7 @@
 # Plan: styling with CSS-like selectors (TODO 11.6)
 
-Status: **planned 2026-11-01; next: stage 0, a prototype.** The language itself is
+Status: **stage 0 done 2026-11-01; paused 2026-11-06** — the open questions, explained, are in
+[selectors-questions.md](selectors-questions.md), for the user to think over before stage 1. The language itself is
 documented, as it is decided and built, in [../STYLES.md](../STYLES.md) — keep the two
 apart: this file is the plan and the progress, STYLES.md is the reference for whoever
 writes a stylesheet.
@@ -135,7 +136,14 @@ Each verified on the host before the next.
    path, key) and geometry, its QML type and properties. The lock screen cannot be
    inspected from outside (a session lock lets nothing else in).
 4. **Parser, compiler, validator.** Pure functions with tests: tokenizer, syntax tree with
-   formatting, selectors, cascade, the table. The validator reports unknown properties,
+   formatting, selectors, cascade, the table. A real tokenizer and a recursive parser
+   following CSS Syntax Level 3 (its tokens, blocks and error recovery), not regular
+   expressions — the prototype's were throwaway. Every token keeps its position (line,
+   column, offset) for the validator and for edits in place; strings, `url()`, nested
+   blocks and at-rules parse by the same rules, so nesting, `@layer`-like rules or
+   animations later need no new parser. Parsing (on a file change) is kept apart from
+   compiling (the cascade, from the tree), so edits from the settings patch the tree
+   without parsing again; compile time is measured again against the prototype's 2.1 ms. The validator reports unknown properties,
    wrong value types, unsupported at-rules and selectors that cannot match (types or
    classes outside the registry), with line and column — in the settings (`Theme.errors`),
    over IPC, from the command line. The inspector shows an element's table entry and the
@@ -147,6 +155,40 @@ Each verified on the host before the next.
    first), edits that keep formatting, drafts as operations, the Appearance pages on top.
    No lasting support for two formats.
 7. **Tidying.** The old `Theme.*` path removed where nothing reads it.
+
+## Progress
+
+*Stage 0, prototype, 2026-11-01* (a scratch config outside the repo: a compiler in JS —
+selectors, layers, specificity, `var()`, inheritance along contexts, a memoised table —
+contexts and a button reading every value from its entry, against a control button
+written today's way). All 14 correctness checks passed: keys through a window link
+(`styleParent`) and through Repeater delegates, a later layer beating a more specific
+rule, inheritance and custom properties through contexts, a context's state restyling its
+descendants. Measured on the host, 314 rules, 500 buttons:
+
+| | styled | today's way |
+|---|---|---|
+| compile a stylesheet | 2.1 ms | — |
+| create 500 buttons | 9.6 ms | 5.6 ms |
+| one element's state change (hover) | 7.5 µs | 1.3 µs |
+| a row's state change restyling its 10 buttons | 75 µs | — |
+| theme change: compile + restyle everything | 8.6 ms | — |
+
+Slower per element, but in absolute terms far below a frame: a hover touches one to ten
+elements. The cost is in building the key and every bound value re-reading the new entry,
+not in matching (entries are memoised; a run needs about ten).
+
+Found:
+- **Popups under the bar: `bar button` matches every popup's buttons**, as CSS does — a
+  rule meant for the bar's cells reaches into popups. Either the bar's widgets are their
+  own context (`cell button`) and `bar` means the bar with its popups, or popups hang
+  elsewhere. To decide with the user.
+- **Layers beat specificity everywhere**: a theme writing `button:hover` also overrides
+  the built-in `button.save:hover` and `button.delete:hover`. Predictable, but a short
+  rule in a theme can flatten variants. To decide with the user; the validator could warn
+  about it.
+- **Every property needs a default** (from the registry): an element created before its
+  stylesheet loads, or a key no rule sets a property for, otherwise gets `undefined`.
 
 ## Open
 

@@ -845,8 +845,10 @@ end so the numbers above keep meaning what older notes say:
       statically into a table addressed by an element's key, descendant selectors over
       contexts only, layered cascade, inheritance; an audit of every element, a read-only
       inspector window, parser with a validator, themes rewritten in CSS and edited both
-      ways). The language reference grows in [STYLES.md](STYLES.md). Next: stage 0, a
-      prototype of contexts, keys and the table, measured.
+      ways). The language reference grows in [STYLES.md](STYLES.md). Stage 0, the
+      prototype, done 2026-11-01 (the model holds, cost far below a frame); paused 2026-11-06
+      while the user thinks over the open questions (plans/selectors-questions.md); then
+      stage 1, the audit.
 
 - [ ] **11.7 Themes: matugen, the rest of the themes plan** (was 10.9)
       Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared

@@ -5,6 +5,38 @@ designed** ([plans/selectors.md](plans/selectors.md), TODO 11.6) — nothing her
 implemented yet. Keep this file in step with the code: every syntax, selector, property or
 at-rule the compiler accepts is listed here, and nothing that it does not.
 
+## Glossary
+
+The words used in the code, the plan and this reference, each for one thing.
+
+| Term | Meaning | Example |
+|---|---|---|
+| **stylesheet** | a `.css` file: the built-in one, or a theme's | `Full.css` |
+| **rule** | a selector and the declarations it applies | `button:hover { background: #333; }` |
+| **declaration** | one property and its value | `border-radius: 6px` |
+| **property** | what a declaration sets | `background`, `border-radius` |
+| **selector** | which elements a rule applies to | `popup button.save:hover` |
+| **compound** | one step of a selector, describing one element | `button.save:hover` |
+| **element** | something on screen that takes a style; not every QML item is one | a button, a popup |
+| **type** | what kind of element it is | `button`, `pill`, `popup` |
+| **class** | a variant of a type | `.save`, `.delete` |
+| **state** | something true of an element now, changing as it lives | `:hover`, `:checked` |
+| **attribute** | a piece of data about an element | `[edge=left]` |
+| **part** | a piece of a composite element, styled on its own | `button::label` |
+| **context** | an element others can be addressed *inside*: only contexts may appear before the last step of a selector | `popup` in `popup button` |
+| **context path** | the contexts an element sits in, outermost first | `bar > popup > row` |
+| **key** | an element's context path and its own compound: what it looks itself up by | `bar > popup > row > button.save:hover` |
+| **registry** | the list of types, their classes, states, parts, properties and each property's type and default | `button`: `background` (colour, default …) |
+| **compiling** | turning stylesheets into the table | |
+| **table** | the compiled result: key → the element's computed values | |
+| **computed value** | the value an element ends up with for a property, after everything below | `border-radius` = 6 |
+| **cascade** | how one value is chosen when several rules set the same property for an element | |
+| **layer** | where a rule comes from, in a fixed order: built-in, the theme it extends, the theme, the palette, the draft | |
+| **specificity** | how precisely a selector targets: states, classes, attributes and parts count more than types | `button.save:hover` is more specific than `button` |
+| **inheritance** | an element taking a property it has no rule for from its context (text colour, font) | text in a popup takes the popup's colour |
+| **variable** | a value with a name, set in one rule and used in others; inherited | `--accent`, used as `var(--accent)` |
+| **tokenizer**, **syntax tree** | the parser's two steps: the file's characters into tokens, tokens into a tree that keeps positions and formatting | |
+
 ## Files
 
 - Plain `.css` files. Everything that is ours is still valid CSS syntax — an at-rule, a
