@@ -281,7 +281,8 @@ Singleton {
                 { token: "notifications", label: "Notifications", hint: "", from: 50, to: 200, suffix: "%", base: 350 },
                 { token: "tray", label: "Tray menu", hint: "", from: 50, to: 200, suffix: "%", base: 220 },
                 { token: "power", label: "Power menu", hint: "", from: 50, to: 200, suffix: "%", base: 200 },
-                { token: "calendar", label: "Calendar", hint: "Both columns, and its height", from: 50, to: 200, suffix: "%", base: 551 }],
+                { token: "calendar", label: "Calendar", hint: "Both columns, and its height", from: 50, to: 200, suffix: "%", base: 551 },
+                { token: "battery", label: "Battery", hint: "", from: 50, to: 200, suffix: "%", base: 320 }],
             settings: [
                 { token: "pageMargin", label: "Page margin", hint: "Around a settings page", from: 0, to: 40, suffix: px },
                 { token: "sidebarItemRadius", label: "Sidebar radius", hint: "The sidebar's pages and the selection mark", from: 0, to: 20, suffix: px },

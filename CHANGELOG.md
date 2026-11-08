@@ -74,8 +74,9 @@ section to the new version and date.
 - Bar: a battery widget. An icon showing the charge in tens, charging or not; the
   percentage left or right of it, or not at all; and colour thresholds — any number, each a
   charge and a hex colour, the icon taking the colour of the lowest one the charge is at or
-  below. It opens nothing, so it does not light up or take taps. Per preset, in the
-  widget's settings.
+  below. Per preset, in the widget's settings. It opens a popup: the charge, charging or
+  not, time left and the power drawn; the system power profile, to change by hand — it
+  stays until the shell's profiles next want another one, and the popup says which.
 - Google Calendar: no OAuth client of your own needed — the shell carries one (a client
   entered in the settings still takes its place). The sign-in uses PKCE and checks its
   `state`, since the client's secret is public.

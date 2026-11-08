@@ -7,14 +7,11 @@ import qs.singletons
 // percentage beside it. From the widget's preset (WidgetPresets): `percent` — "left",
 // "right" or "none"; `thresholds` — [{ value, color }], colouring the icon at or below
 // each value (the tightest wins). On a machine without a battery, or before UPower has
-// answered, the no-battery icon, dimmed, and no percentage.
-//
-// It opens nothing, so it is not a button: no hover, no highlight, no pointing hand, and
-// a tap goes nowhere (interactive: false).
-BarWidget {
+// answered, the no-battery icon, dimmed, and no percentage. Opens the battery popup: the
+// charge and the power profile (panels/BatteryPanel.qml).
+PopupWidget {
     id: root
     widgetType: "battery"
-    interactive: false
 
     property string preset: ""
     readonly property string _percentSide: WidgetPresets.value("battery", preset, "percent") ?? "right"

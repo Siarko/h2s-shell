@@ -116,7 +116,7 @@ Singleton {
         // Popups' widths, in percent of their width at the built-in fonts: `all` for every
         // popup, then each one's own, multiplied (popupWidth())
         "popupWidth": { "all": 100, "network": 100, "bluetooth": 100, "hardware": 100, "sound": 100,
-                        "music": 100, "notifications": 100, "tray": 100, "power": 100, "calendar": 100 },
+                        "music": 100, "notifications": 100, "tray": 100, "power": 100, "calendar": 100, "battery": 100 },
         // Animations by role — the kind of motion, not where it happens (docs/plans/themes.md)
         "durations": {
             "hover": 100,                    // colour under the pointer

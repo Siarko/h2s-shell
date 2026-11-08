@@ -382,6 +382,16 @@ Singleton {
     // battery, the profile that applies on AC (Full) names the one to use. A change by
     // hand stays until the effective value next changes; the shell does not fight it.
     readonly property string _wantedPowerProfile: value("system.powerProfile") ?? "unchanged"
+    // For the battery popup: what the profiles want ("unchanged" when none sets it) and
+    // the system's profile by name ("power-saver", "balanced", "performance")
+    readonly property string wantedPowerProfile: _wantedPowerProfile
+    readonly property string currentPowerProfile: _powerProfileName(PowerProfiles.profile) ?? ""
+
+    // Sets the system's power profile by hand. It stays until the profiles next want
+    // another one (above) — the battery popup's override.
+    function setPowerProfile(name) {
+        PowerProfiles.profile = _powerProfileValue(name);
+    }
 
     // Deferred: setting the system profile changes the "power.profile" fact, and doing it
     // while the facts are still being re-evaluated was a binding loop on facts and
