@@ -71,6 +71,11 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Bar: a battery widget. An icon showing the charge in tens, charging or not; the
+  percentage left or right of it, or not at all; and colour thresholds — any number, each a
+  charge and a hex colour, the icon taking the colour of the lowest one the charge is at or
+  below. It opens nothing, so it does not light up or take taps. Per preset, in the
+  widget's settings.
 - Google Calendar: no OAuth client of your own needed — the shell carries one (a client
   entered in the settings still takes its place). The sign-in uses PKCE and checks its
   `state`, since the client's secret is public.

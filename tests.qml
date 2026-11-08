@@ -31,6 +31,7 @@ QtObject {
     property var _playerRules: PlayerRulesTest {}
     property var _barGeometry: BarGeometryTest {}
     property var _pointerRules: PointerRulesTest {}
+    property var _batteryRules: BatteryRulesTest {}
     property var _pointerInput: PointerInputTest {}
 
     // The suites that run on the event loop (TestCase.asynchronous)

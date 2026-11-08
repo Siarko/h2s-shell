@@ -37,6 +37,7 @@ Widgets available to place:
 | **Network** | one icon per link — ethernet, wifi, VPN | opens the network panel |
 | **Notifications** | bell, accented while notifications are waiting | opens the notification panel |
 | **Hardware** | a compact sensor capsule, e.g. `CPU 12%` | opens the hardware panel |
+| **Battery** | the charge as an icon in tens (charging or not) and in percent, left or right of it or not at all; the icon coloured by the preset's thresholds (any number, each a charge and a hex colour); no-battery icon without one | none — not a button, no hover |
 | **Dictation** | microphone state, pending counter, live transcript | click toggles dictation |
 
 Only one popup is open at a time, across all monitors. Each widget can be set to open

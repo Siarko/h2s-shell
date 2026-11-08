@@ -26,7 +26,10 @@ Singleton {
         "hardware": { capsule: ["cpu"], capsuleLabels: {} },
         // The count on the bell; how the bell rings: "off", "once" (each new one),
         // "untilOpened", "untilCleared"
-        "notifications": { badge: true, animation: "once" }
+        "notifications": { badge: true, animation: "once" },
+        // The percentage "left", "right" or "none" of the icon; colour thresholds
+        // [{ value, color }] — none: the icon keeps the text colour
+        "battery": { percent: "right", thresholds: [] }
     })
 
     function names(type) {

@@ -50,6 +50,8 @@ Singleton {
         { type: "hardware", name: "Hardware", widget: "widgets/HardwareWidget.qml",
           popup: "hardware", popupPanel: "panels/HardwarePanel.qml",
           settings: "panels/widget_settings/HardwareWidgetSettings.qml", multiple: true },
+        { type: "battery", name: "Battery", widget: "widgets/BatteryWidget.qml",
+          settings: "panels/widget_settings/BatteryWidgetSettings.qml", multiple: true },
         { type: "stt", name: "Dictation", widget: "widgets/SttWidget.qml",
           settings: "panels/widget_settings/SttWidgetSettings.qml" }
     ]
