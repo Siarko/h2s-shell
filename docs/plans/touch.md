@@ -131,6 +131,77 @@ layer surface with four fields, `WAYLAND_DEBUG=1`):
   cell (hover now passed on after 60 ms) — it now closes 120 ms after the pointer leaves,
   and reopening cancels that.
 
+*On-screen keyboard, researched (2026-11-08, after four fixes that did not work).*
+From source — Hyprland v0.57.1 and qtbase v6.11.0/v6.12.0, read by two agents — then
+measured on the Framework with a virtual touchscreen (uinput; the user joined the group
+`uinput`) driving a probe, on an empty workspace with a neutral window (`wev`): oskbd
+shows only while some *window* has the focus, and a terminal on the workspace keeps it up
+on its own — both oskbd's rules, not ours.
+
+How it works:
+- **Hyprland**: any layer surface mapping (the keyboard's panel) re-hit-tests at the
+  *mouse cursor* and hands the keyboard to what is there (`LayerSurface::onMap` →
+  `simulateMouseMovement`); touch never moves the cursor. Only an exclusive layer, or a
+  layer without interactivity under the cursor, stops it. An on-demand layer also takes
+  the keyboard **at map**. Input-method activate/deactivate follow the client's
+  text-input enable/disable, nothing else. `hyprland_focus_grab_v1` is unusable here: a
+  tap on the keyboard (another client's surface) always clears it, switching a layer to
+  exclusive clears it (why the popup closed), and it hands the keyboard by cursor position,
+  bypassing the input-method relay (why the bar got it).
+- **Qt 6.11.0–6.11.2** (the Framework): text-input enabled on every keyboard *enter* of a
+  window, disabled only on *leave* — focus moving inside the window changes nothing.
+  **Qt 6.12.0** (Arch, nixpkgs-unstable): enabled only for a focus object that takes
+  input; disabling on focus leaving a field needs `Qt.inputMethod.update(…)`. The full fix
+  (per focus object) is on the 6.12 branch, not released. Qt never sends purpose
+  `password` — a password is normal + `hidden_text`.
+
+Measured (Qt 6.11), the working combination: the popup **maps without the keyboard**
+(interactivity none) and turns **on demand** after; a tap off a text field drops the
+window's keyboard (none for 100 ms, then on demand again); a **catcher** — a transparent
+layer without interactivity under the popup, a hole where the popup is — takes taps
+outside. Result: no text-input at open; tap a field → enable → keyboard shown, focus kept;
+tap empty space → disable → hidden; tap the keyboard → reaches the keyboard, popup stays;
+tap outside → the catcher. Control without the catcher: the focus was lost 11 ms after the
+keyboard's panel mapped (the original symptom). Exclusive interactivity keeps the focus
+but Qt 6.11 then never disables. Probe and scripts: the session's scratchpad
+(`touchtest/`), to move into the repo with the implementation.
+
+Then (same day) on Qt 6.12 too (Quickshell built against nixpkgs-unstable in a scratch
+folder), and a third variant from Hyprland's code: interactivity **none at map, exclusive
+on a tap on a text field, none on a tap anywhere else**, with the catcher. It works the
+same on 6.11 and 6.12, and exclusive keeps the focus wherever the mouse cursor is (the
+on-demand variant relies on the catcher covering the cursor: not on a second monitor).
+Ordinary windows (the settings): Qt 6.12 + `Qt.inputMethod.update()` after each focus
+change disables text-input when the focus leaves a field; Qt 6.11 cannot — so the
+Framework takes Qt 6.12 (the user's flake: `h2s-shell.inputs.nixpkgs.follows =
+"nixpkgs-unstable"`).
+
+**The design, for the whole shell:**
+- A tap watcher in every layer window with text fields (popups opened by touch, the HUD's
+  reply field): a passive handler *above* the content (a press goes to the topmost item
+  that takes it, so a watcher below saw only empty space), finding the text field under
+  the finger by trying every field's own outline (a walk down by parents' outlines missed
+  fields: children lie outside parents). A field → the window's keyboard exclusive; else
+  → none, and the focus to a neutral item. The keyboard mode is never changed otherwise.
+- A catcher layer (no interactivity, holes where the popup and the bar are) instead of
+  `hyprland_focus_grab_v1` for taps outside a popup opened by touch; a tap there closes it
+  and does not reach the window beneath (as on Android). Mouse-opened popups unchanged.
+- `Qt.inputMethod.update()` after focus changes in ordinary windows (Qt 6.12).
+- Tests: the components under QtTest on the host; `tests/device/` — the virtual
+  touchscreen and scripts that tap a probe built from the real components on the
+  Framework and check the protocol.
+
+*Implemented (2026-11-08):* `components/TouchTextFocus.qml` (the tap watcher, finger and
+stylus only) and `components/OutsideTapCatcher.qml`, in `Popup.qml` (the focus grab
+removed), `Hud.qml` (reply fields) and `SettingsWindow.qml` (focus off a field on a tap
+elsewhere, `Qt.inputMethod.update`). The window offset the catcher's hole needs: the popup
+window lies beyond the bar's reserved space (37 px on the Framework) — the first device run
+caught it. `tests/device/keyboard-popup.sh` taps the real shell's calendar on the
+Framework: 11/11 (Qt 6.11). `PointerInputTest` covers the watcher under QtTest. Not
+device-tested: the HUD's reply field (needs an app offering inline reply), the settings
+window. Left: panels keeping clear of the keyboard; the Framework on Qt 6.12 (the user's
+flake).
+
 *Stage 1, decided (2026-11-08):* tablet mode comes from Hyprland — switch bindings in
 `hyprland.lua` call `ipc call tablet set true|false` (`singletons/TabletMode.qml`, the
 profile fact `input.tabletMode`). No device access needed; Hyprland reports only changes,

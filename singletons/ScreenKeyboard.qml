@@ -8,8 +8,8 @@ import QtQuick
 // Whether an on-screen keyboard is on screen. It is another program's layer surface
 // (oskbd, squeekboard — namespace "osk"), which Wayland lets no client see; Hyprland tells
 // on its event socket (`openlayer>>osk`, `closelayer>>osk`), and `hyprctl layers` says
-// at start. A popup opened by touch must not close when the keyboard is tapped
-// (Popup, its focus grab) — docs/plans/touch.md.
+// at start. For panels to keep clear of it (docs/plans/touch.md, next); nothing reads it
+// since popups stopped using a focus grab.
 Singleton {
     id: root
 

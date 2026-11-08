@@ -487,4 +487,12 @@ FloatingWindow {
             }
         }
     }
+
+    // Text fields under touch, as in a browser: a tap off a field takes its focus, so an
+    // on-screen keyboard can hide. An ordinary window keeps the keyboard; Qt 6.12 stops
+    // asking for text only when told after a focus change (docs/plans/touch.md) — Qt 6.11
+    // cannot, there the keyboard stays until the window loses the focus.
+    TouchTextFocus {}
+    readonly property Item _focusItem: contentItem.Window.activeFocusItem
+    on_FocusItemChanged: Qt.callLater(() => Qt.inputMethod.update(Qt.ImQueryInput))
 }

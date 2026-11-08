@@ -372,6 +372,11 @@ hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check wh
 a finger do. It needs a Wayland session (the window shows in a corner for a moment). A
 stylus cannot be sent that way.
 
+`tests/device/` drives the running shell on a touch device through the whole stack — a
+virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —
+which QtTest, sending events to the Qt window directly, cannot reach. It finds what to tap
+through the `shelltest` IPC (`Bar.qml`). See its README.
+
 Everything else is verified by hand: run `quickshell` from the repo root and check that
 the bar renders, the clock ticks, cells respond, and popups toggle. There is no
 automated coverage of any singleton that touches the system.

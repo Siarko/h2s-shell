@@ -11,11 +11,14 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
-- On-screen keyboard: a text field in a popup opened by touch keeps the keyboard (it
-  used to lose it the moment the on-screen keyboard showed, which then hid again), and
-  tapping the keyboard no longer closes the popup. Fields say what they are — digits for
-  dates and times, password for passwords — so the keyboard can pick its layout, and a
-  tap anywhere on a field's box focuses it.
+- On-screen keyboard: it shows when you tap a text field in a popup opened by touch and
+  hides when you tap anywhere else, as in a browser; tapping it keeps the popup and the
+  field. The same for the reply field on a notification. A popup opened by touch closes on
+  a tap outside it, and that tap no longer goes on to the window beneath. Fields say what
+  they are — digits for dates and times, password for passwords — so the keyboard can pick
+  its layout; a tap anywhere on a field's box focuses it. In the settings window the
+  keyboard hides after a field too, with Qt 6.12.
+- Calendar: the + and refresh icons take a tap from around them, not only on the glyph.
 - A hover popup no longer closes when the pointer goes back from it onto its bar widget.
 - Touch: a tap on a bar widget opens its popup even when the widget opens it on hover —
   such a popup opened by a finger used to stay open for good. A popup opened by a tap

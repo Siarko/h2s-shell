@@ -177,6 +177,7 @@ Item {
                 visible: GoogleCalendar.available
 
                 Text {
+                    objectName: "calendarAdd"
                     text: "+"
                     color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
@@ -186,6 +187,8 @@ Item {
                     MouseArea {
                         id: _addArea
                         anchors.fill: parent
+                        // The glyph is small for a finger: the target reaches past it
+                        anchors.margins: -8
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
@@ -205,6 +208,7 @@ Item {
                     MouseArea {
                         id: _refreshArea
                         anchors.fill: parent
+                        anchors.margins: -8
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)

@@ -23,12 +23,24 @@ Singleton {
     // protection: anyone reading this file can undo it, and that is accepted (above).
     readonly property string _builtInClientId: _unscramble("XAFGGUddV1lZUApKAEBZCQsFG1tCFBVaDQ0AAAoRXwVYAlgeDVcRXRFQCR8NRlMDXQBGAgMDD14WWAANFw8DBkYWQwdGBgMB")
     readonly property string _builtInClientSecret: _unscramble("L30wfiMwSAsrG3sZZkclIRsIGkQcRBYiCz4kOXpLYgcZNDw=")
+    // Base64 by hand: Qt.atob(string) is deprecated (Qt 6.11 warns on every call)
     function _unscramble(encoded: string): string {
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         const key = "h2s-shell";
-        const bytes = Qt.atob(encoded);
         let text = "";
-        for (let i = 0; i < bytes.length; i++)
-            text += String.fromCharCode(bytes.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        let bits = 0;
+        let buffer = 0;
+        for (const character of encoded) {
+            if (character === "=")
+                break;
+            buffer = (buffer << 6) | alphabet.indexOf(character);
+            bits += 6;
+            if (bits >= 8) {
+                bits -= 8;
+                const byte = (buffer >> bits) & 0xff;
+                text += String.fromCharCode(byte ^ key.charCodeAt(text.length % key.length));
+            }
+        }
         return text;
     }
     readonly property bool usingOwnClient: Config.gcal.clientId !== "" && Config.gcal.clientSecret !== ""

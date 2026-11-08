@@ -20,7 +20,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 400
-        implicitHeight: 60
+        implicitHeight: 160
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -66,6 +66,44 @@ TestCase {
                 height: 40
                 widgetType: "clock"
                 popup: fakePopup
+            }
+        }
+
+        // Text fields under touch (TouchTextFocus): a field in a box, one inside an item of
+        // no size (children outside their parent — what defeated an earlier search), a
+        // button
+        Item {
+            id: fieldsArea
+            y: 60
+            width: 400
+            height: 100
+
+            InputField {
+                id: boxedField
+                x: 10; y: 10
+                width: 160
+            }
+            Item {
+                x: 200; y: 10
+                TextInput {
+                    id: bareField
+                    width: 120; height: 26
+                }
+            }
+            Rectangle {
+                id: fieldsButton
+                x: 10; y: 55
+                width: 80; height: 30
+                property int clicks: 0
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: fieldsButton.clicks++
+                }
+            }
+            TouchTextFocus {
+                id: touchText
+                property var taps: []
+                onFieldTapped: onField => taps.push(onField)
             }
         }
 
@@ -171,6 +209,26 @@ TestCase {
         _tap(popupCell);
         assertEqual(fakePopup.calls.join("; "), "open persistent=true byTouch=true",
                     "click mode: a tap opens it, as touch");
+
+        // --- text fields under touch ---
+        _reset();
+        _tap(boxedField, 60);
+        _tap(bareField, 60);
+        _tap(fieldsButton, 60);
+        assertEqual(touchText.taps.join(","), "true,true,false",
+                    "taps on a field, on a field inside an item of no size, on a button");
+        assertEqual(fieldsButton.clicks, 1, "the button still gets its tap");
+        touchText.taps = [];
+        const touch = driver.touchEvent(boxedField);
+        touch.press(0, boxedField, 3, boxedField.height / 2).commit();
+        driver.wait(40);
+        touch.release(0, boxedField, 3, boxedField.height / 2).commit();
+        driver.wait(80);
+        assertEqual(touchText.taps.join(","), "true", "a tap on a field's box, beside its text, is on the field");
+        touchText.taps = [];
+        driver.mouseClick(boxedField);
+        driver.wait(80);
+        assertEqual(touchText.taps.join(","), "", "a mouse click is not watched");
 
         _reset();
         finish();

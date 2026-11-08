@@ -167,6 +167,7 @@ Item {
         // Title
         InputField {
             id: _titleInput
+            objectName: "eventTitle"
             fieldColor: Theme.popupBackground
             outlined: true
             placeholder: "Title"

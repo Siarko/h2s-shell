@@ -1,5 +1,4 @@
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import QtQuick.Shapes
@@ -43,9 +42,13 @@ LazyLoader {
     // When true, the popup stays open until explicitly toggled (click-to-close)
     property bool persistent: false
     // Opened by a tap on a touch screen. Such a popup closes on a tap outside it and the
-    // bar, and holds the keyboard while open (below). One opened by the mouse does
-    // neither: it may stay open while you work elsewhere.
+    // bar (OutsideTapCatcher), and takes the keyboard only after a tap on a text field
+    // (TouchTextFocus). One opened by the mouse does neither: it may stay open while you
+    // work elsewhere, and takes the keyboard while the mouse is over it.
     property bool touchOpened: false
+    // Whether the last tap in a popup opened by touch was on a text field: the popup
+    // holds the keyboard exclusively until a tap anywhere else
+    property bool _typing: false
     // The bar's window: a tap on it does not close a popup opened by touch, so another
     // cell can be tapped
     property var barWindow: null
@@ -102,6 +105,7 @@ LazyLoader {
         _hoverClose.stop();
         popupLoader.persistent = persistent;
         popupLoader.touchOpened = byTouch;
+        popupLoader._typing = false;
         popupLoader.contentType = contentType;
         popupLoader.contentData = contentData;
         const mapped = element.mapToItem(null, 0, 0);
@@ -284,22 +288,41 @@ LazyLoader {
             })
         }
 
-        // The keyboard: under the mouse on demand, as before. Opened by touch, exclusively
-        // while open — on demand it lasted a few milliseconds: an on-screen keyboard showing
-        // for the field tapped made Hyprland take the focus back, the field lost it, and the
-        // keyboard hid again (measured on the Framework, docs/plans/touch.md).
-        WlrLayershell.keyboardFocus: popupLoader.touchOpened ? WlrKeyboardFocus.Exclusive
+        // The keyboard: under the mouse on demand, as before. Opened by touch: none, and
+        // exclusive from a tap on a text field to a tap anywhere else (TouchTextFocus).
+        WlrLayershell.keyboardFocus: popupLoader.touchOpened
+            ? (popupLoader._typing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None)
             : hoverHandler.hovered ? WlrKeyboardFocus.OnDemand
             : WlrKeyboardFocus.None
 
-        // A tap outside the popup and the bar closes one opened by touch. Hyprland says
-        // when a press lands outside the windows listed (hyprland-focus-grab). Not while an
-        // on-screen keyboard is up: it is another program's window, and typing on it is
-        // not leaving the popup.
-        HyprlandFocusGrab {
-            active: popupLoader.touchOpened && !popupLoader.closing && !ScreenKeyboard.visible
-            windows: [popup, popupLoader.barWindow].filter(window => !!window)
-            onCleared: popupLoader.close()
+        // Where this window lies on the screen: as large as the screen, put by the
+        // compositor beyond the bar's reserved space (the window keeps clear of exclusive
+        // zones) plus its margin there — measured on the Framework, a top bar: y = 37
+        readonly property int _fromEdge: Theme.bar.reservedSpace
+        readonly property point _screenOffset: Qt.point(
+            edge === "left" ? _fromEdge + margins.left : edge === "right" ? -(_fromEdge + margins.right) : 0,
+            edge === "top" ? _fromEdge + margins.top : edge === "bottom" ? -(_fromEdge + margins.bottom) : 0)
+
+        // A tap outside the popup and the bar closes one opened by touch
+        OutsideTapCatcher {
+            visible: popupLoader.touchOpened && !popupLoader.closing
+            screen: popupLoader.barScreen
+            popupHole: Qt.rect(clipWrapper.x + popup._screenOffset.x, clipWrapper.y + popup._screenOffset.y,
+                               clipWrapper.width, clipWrapper.height)
+            barHole: {
+                const bar = popupLoader.barWindow;
+                if (!bar)
+                    return Qt.rect(0, 0, 0, 0);
+                const screenWidth = popupLoader.barScreen?.width ?? 0;
+                const screenHeight = popupLoader.barScreen?.height ?? 0;
+                switch (popup.edge) {
+                case "bottom": return Qt.rect(0, screenHeight - bar.height, screenWidth, bar.height);
+                case "left": return Qt.rect(0, 0, bar.width, screenHeight);
+                case "right": return Qt.rect(screenWidth - bar.width, 0, bar.width, screenHeight);
+                default: return Qt.rect(0, 0, screenWidth, bar.height);
+                }
+            }
+            onTapped: popupLoader.close()
         }
 
         // Align to the bar's desktop side, not the edge of its reserved space
@@ -317,6 +340,7 @@ LazyLoader {
         // the window itself never resizes
         Item {
             id: clipWrapper
+            objectName: "popupBody"
             // Centred on its widget along the bar, but kept by the bar — not the screen,
             // which the bar may not reach. Where the bar's corner is rounded the popup stops
             // short of it, keeping its curve; by a square corner it may run to the end.
@@ -638,6 +662,13 @@ LazyLoader {
                         PathSvg { path: _outline._path }
                     }
                 }
+            }
+
+            // Text fields under touch: the keyboard for a field, none after (the window's
+            // keyboardFocus above)
+            TouchTextFocus {
+                watching: popupLoader.touchOpened
+                onFieldTapped: onField => popupLoader._typing = onField
             }
 
             // Close the popup when the mouse leaves the visible area

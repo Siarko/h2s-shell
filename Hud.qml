@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import qs.components
 import qs.hud
 import qs.singletons
 
@@ -15,7 +16,16 @@ PanelWindow {
     // No keyboard, so clicking a toast leaves it with the app underneath — except while a
     // toast's reply is hovered or being written: then on demand, so a click in the field
     // brings the keyboard, and clicking elsewhere takes it back
-    WlrLayershell.keyboardFocus: _wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // By touch: exclusive from a tap on a reply field to a tap anywhere else (TouchTextFocus,
+    // OutsideTapCatcher) — on demand, the on-screen keyboard appearing took it away
+    WlrLayershell.keyboardFocus: _touchTyping ? WlrKeyboardFocus.Exclusive
+        : _wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    property bool _touchTyping: false
+    // A reply sent or cleared lets the keyboard go
+    on_WantsKeyboardChanged: {
+        if (!_wantsKeyboard)
+            _touchTyping = false;
+    }
     readonly property bool _wantsKeyboard: {
         for (let i = 0; i < toastSlots.count; i++) {
             if (toastSlots.itemAt(i)?.wantsKeyboard)
@@ -83,6 +93,22 @@ PanelWindow {
                 + "NixOS: programs.h2s-shell.enable = true; (the module adds it), or "
                 + "fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];"
             onDismissed: Theme.nerdFontWarningDismissed = true
+        }
+    }
+
+    // ---- Typing a reply by touch ----
+    // A tap on a toast's reply field gives the window the keyboard, a tap elsewhere on the
+    // toasts or anywhere outside them takes it back (the catcher, under the HUD's layer)
+    TouchTextFocus {
+        id: touchText
+        onFieldTapped: onField => hud._touchTyping = onField
+    }
+    OutsideTapCatcher {
+        visible: hud._touchTyping
+        screen: hud.screen
+        onTapped: {
+            hud._touchTyping = false;
+            touchText.release();
         }
     }
 

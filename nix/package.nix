@@ -60,6 +60,8 @@ stdenvNoCC.mkDerivation {
       ../flake.lock
       ../.github
       ../.devcontainer
+      # A local `nix build` leaves this link; building from a checkout would copy it in
+      ../result
     ]));
   };
 

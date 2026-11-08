@@ -328,6 +328,60 @@ PanelWindow {
         }
     }
 
+    // Helpers for the shelltest IPC below (outside it: an IpcHandler offers every function)
+    function _testFind(root, test) {
+        if (!root)
+            return null;
+        for (const child of root.children) {
+            if (test(child))
+                return child;
+            const found = _testFind(child, test);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function _testRect(item, offset) {
+        if (!item)
+            return "{}";
+        const topLeft = item.mapToItem(null, 0, 0);
+        return JSON.stringify({ x: Math.round(topLeft.x + offset.x), y: Math.round(topLeft.y + offset.y),
+                                width: Math.round(item.width), height: Math.round(item.height) });
+    }
+
+    // For tests driving the shell from outside (tests/device/): where things are on the
+    // screen, in logical pixels, so a virtual touchscreen can tap them, and the popup's
+    // state. The first screen's bar answers.
+    //   qs ipc call shelltest cellRect clock
+    //   qs ipc call shelltest popupItemRect calendarAdd
+    //   qs ipc call shelltest popupState
+    IpcHandler {
+        target: "shelltest"
+        enabled: bar.modelData === Quickshell.screens[0]
+
+        function cellRect(widgetType: string): string {
+            const cell = bar._testFind(bar.contentItem, item => item.widgetType === widgetType && item.visible);
+            const screenWidth = bar.modelData.width;
+            const screenHeight = bar.modelData.height;
+            const offset = bar.screenEdge === "bottom" ? Qt.point(0, screenHeight - bar.height)
+                : bar.screenEdge === "right" ? Qt.point(screenWidth - bar.width, 0) : Qt.point(0, 0);
+            return bar._testRect(cell, offset);
+        }
+
+        function popupItemRect(name: string): string {
+            const window = popupLoader.item;
+            if (!window)
+                return "{}";
+            return bar._testRect(bar._testFind(window.contentItem, item => item.objectName === name && item.visible), window._screenOffset);
+        }
+
+        function popupState(): string {
+            return JSON.stringify({ open: popupLoader.active && !popupLoader.closing, content: popupLoader.contentType,
+                                    touchOpened: popupLoader.touchOpened, typing: popupLoader._typing });
+        }
+    }
+
     // Popup panel that opens from the bar, by the hovered cell
     Popup {
         id: popupLoader

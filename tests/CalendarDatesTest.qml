@@ -64,7 +64,8 @@ TestCase {
         // --- the built-in client: unscrambled into the shape Google gives ---
         assert(GoogleCalendarAuth._builtInClientId.endsWith(".apps.googleusercontent.com"), "the built-in client id unscrambles");
         assert(GoogleCalendarAuth._builtInClientSecret.startsWith("GOCSPX-"), "the built-in client secret unscrambles");
-        assertEqual(GoogleCalendarAuth._unscramble(Qt.btoa("")), "", "nothing unscrambles to nothing");
+        assertEqual(GoogleCalendarAuth._unscramble(""), "", "nothing unscrambles to nothing");
+        assertEqual(GoogleCalendarAuth._unscramble("CVAQ"), "abc", "base64 decoded and unscrambled by hand");
 
         // --- a failed token refresh: only a dead refresh token logs out ---
         const refreshFailure = (status, body) => ({ status: status, body: body });
