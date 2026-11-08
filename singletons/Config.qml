@@ -19,6 +19,7 @@ Singleton {
 
     property alias gcal: _gcal
     property alias audio: _audio
+    property alias bluetooth: _bluetooth
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
     // library a bar entry points into. "" until migrated from the old widgetProfiles.
     property alias widgetPresets: _adapter.widgetPresets
@@ -88,6 +89,13 @@ Singleton {
             property JsonObject audio: JsonObject {
                 id: _audio
                 property string appVolumes: "{}"
+            }
+
+            // Whether Bluetooth was left on, remembered by BluetoothPower, not a preference:
+            // "" until it is first seen switched, then "on" or "off"
+            property JsonObject bluetooth: JsonObject {
+                id: _bluetooth
+                property string powered: ""
             }
 
             // The Google account, its tokens and the calendars picked — data, not settings

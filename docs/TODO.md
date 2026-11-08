@@ -16,8 +16,10 @@ shape (11.4, 11.5), selector styling (11.6), matugen (11.7), compositor integrat
 (11.8) and touch input last (11.9–11.14, waiting for the Framework 12). Added on the way,
 after 11.2: 11.15–11.19 (notifications, icon theme). 11.4 is done (bottom edge, then a vertical
 bar at a side); its follow-ups: the HUD placed by the bar's edge, a floating dictation window.
-11.5 waits until after animations (11.20), when it can be done by configuration. Now: 11.6,
-styling with selectors (plans/selectors.md).
+11.5 waits until after animations (11.20), when it can be done by configuration. 11.6
+(selectors) is paused on the user's questions. **Now (2026-11-08): touch input on the
+Framework 12** — installing first (11.23), then [plans/touch.md](plans/touch.md); stage 0
+waits until the user frees the laptop.
 
 ---
 

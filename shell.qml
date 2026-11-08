@@ -54,6 +54,8 @@ QtObject {
     // Wires dictation state to music playback; needs to run whether or not the
     // dictation widget is on the bar
     property var _dictationMusicPause: DictationMusicPause
+    // Puts Bluetooth back on or off as it was left; needs to run from the start
+    property var _bluetoothPower: BluetoothPower
 
     // One for the whole shell: a window per screen meant two independent windows, both
     // opened by Shell.openSettings() and both announcing every save

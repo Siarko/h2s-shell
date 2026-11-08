@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Bluetooth stays off after a restart when you left it off. BlueZ powers the adapter on
+  whenever it starts; the shell now puts back the state it was last in.
 - Google Calendar: losing the network (e.g. right after waking the laptop) no longer signs
   you out; only a sign-in Google itself has expired or revoked asks for a new login.
 - Music: the popup no longer opens short and grows to its height after.
