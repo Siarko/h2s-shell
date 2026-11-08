@@ -122,7 +122,7 @@ Singleton {
         delegate: Connections {
             required property MprisPlayer modelData
             target: modelData
-            function onPlaybackStateChanged() { root._updateActivePlayer(); }
+            function onPlaybackStateChanged() { root._playbackStateChanged(modelData); }
         }
     }
 
@@ -175,12 +175,51 @@ Singleton {
         if (activePlayer && activePlayer.canPause) activePlayer.pause();
     }
 
+    // The way the last skip asked for went (1 next, -1 previous) and when (ms): the music
+    // panel slides the new track in from that side. A track that changes on its own (the
+    // last one ended) comes as a next one.
+    property int lastSkipDirection: 1
+    property double lastSkipAt: 0
+
+    // A skip from paused stays paused, as MPRIS has it ("if playback is paused or
+    // stopped, it remains paused or stopped") — but Spotify starts playing. So a player
+    // skipped while not playing is paused again if it starts within a moment after.
+    property MprisPlayer _keepPaused: null
+    property double _keepPausedUntil: 0
+
+    function _skip(direction) {
+        lastSkipDirection = direction;
+        lastSkipAt = Date.now();
+        const player = activePlayer;
+        if (player.playbackState !== MprisPlaybackState.Playing) {
+            _keepPaused = player;
+            _keepPausedUntil = Date.now() + 3000;
+        } else {
+            _keepPaused = null;
+        }
+        if (direction > 0)
+            player.next();
+        else
+            player.previous();
+    }
+
+    function _playbackStateChanged(player) {
+        if (player === _keepPaused && player.playbackState === MprisPlaybackState.Playing) {
+            _keepPaused = null;
+            if (Date.now() < _keepPausedUntil && player.canPause)
+                player.pause();
+        }
+        _updateActivePlayer();
+    }
+
     function next() {
-        if (activePlayer && activePlayer.canGoNext) activePlayer.next();
+        if (activePlayer && activePlayer.canGoNext)
+            _skip(1);
     }
 
     function previous() {
-        if (activePlayer && activePlayer.canGoPrevious) activePlayer.previous();
+        if (activePlayer && activePlayer.canGoPrevious)
+            _skip(-1);
     }
 
     function seek(offset) {

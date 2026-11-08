@@ -73,8 +73,12 @@ Opened from their bar widget, rendered in the single popup below the bar.
   picker and a per-calendar picker.
 - **Music** — current track, art, seek bar, transport controls, player list when more
   than one MPRIS player is running (application icons; play one alone, pausing the rest;
-  hide players, kept per profile, under a "Hidden" expander; changing player slides
-  the cover and track sideways), and a live audio visualiser fed by `cava`
+  hide players, kept per profile, under a "Hidden" expander), and a live audio
+  visualiser fed by `cava`. A change of player slides the cover and track vertically (a
+  player lower in the list from below), a new track sideways (next from the right,
+  previous from the left). With a finger, swiping the cover up or down changes the player
+  — the next one's view follows the finger in — and left or right skips the track,
+  ⏭/⏮ showing in the gap
   (waveform / bars / dots / glow / even glow, horizontal or vertical — centred or
   glued to the popup's edges — or around the cover,
   configurable in Settings → Media, with the cover's rounding and turning speed;

@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Music: skipping a paused track (the buttons or a swipe) no longer starts it playing in
+  players that do so against MPRIS, such as Spotify — the shell pauses it again.
 - `launch.sh --restart` (`h2s-shell --restart`) closes every running copy of the shell, not
   only its own folder's: restarting the package's copy with a checkout running
   (`H2S_SHELL_DIR`) left two shells.
@@ -78,6 +80,12 @@ section to the new version and date.
   right for the one before. The grid follows the finger with the month it brings in
   beside it, events and all, and slides on from where you let go; a tap still selects a
   day.
+- Music panel: a new track slides in sideways — the next from the right, the previous
+  from the left — and a change of player slides vertically, a player lower in the list
+  coming in from below (before, a change of player slid sideways and a new track only
+  faded its title in). With a finger: swipe the cover left or right to skip the track
+  (⏭/⏮ shows in the gap, lit once far enough), up or down to change the player, whose
+  view follows the finger in.
 - Calendar: the "Today" button's line is kept when it is hidden, so the grid stays the
   same size — its days no longer jump when you move to or from the current month.
 - On-screen keyboard: a popup no longer draws under it. While the keyboard is up, a popup

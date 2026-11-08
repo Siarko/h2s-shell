@@ -72,7 +72,14 @@ Each verified on the Framework before the next.
      and that changes what exists: today the cover slides *horizontally on a change of
      player* (`PlayerCarousel`, 11.22) and a change of track has no animation. To be:
      horizontal slide for a track, vertical for a player — by gesture and when it
-     happens on its own (a track ending, the active player changing).
+     happens on its own (a track ending, the active player changing). *Done
+     (2026-11-08):* `PlayerCarousel` slides players vertically and tracks sideways; the
+     track going out is a live snapshot frozen on MprisPlayer's `trackChanged` (the view
+     already shows the new track by then, and a cover can't be reloaded — some players
+     hand out a temp file). MPRIS tells no next track, so a sideways swipe shows ⏭/⏮ in
+     the gap and, let go, waits up to 1.2 s for the player (a "previous" well into a
+     track only restarts it). Which way a skip went is `Music.lastSkipDirection`.
+     Checked on the Framework with two muted mpv players (mpv-mpris).
    - **Notifications:** a sideways swipe dismisses a card, as on Android — the toasts in
      the HUD and the cards in the notifications panel. *Done (2026-11-08):* a touch-only
      `DragHandler` on `NotificationCard`, dismissing past a third of the width or on a
