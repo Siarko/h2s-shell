@@ -326,6 +326,7 @@ Singleton {
             ? Math.round(UPower.displayDevice.percentage * 100) : null,
         "power.profile": root._powerProfileName(PowerProfiles.profile),
         "screen.locked": root.screenLocked,
+        "input.tabletMode": TabletMode.active,
         "window.fullscreen": Hyprland.monitors.values.some(monitor => monitor.activeWorkspace?.hasFullscreen ?? false),
         "panel.open": Object.keys(root._openPanels)
     })

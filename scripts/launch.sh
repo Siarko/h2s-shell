@@ -7,6 +7,7 @@
 #
 #   launch.sh            start the shell (extra arguments go to qs)
 #   launch.sh --restart  stop the running shell and start it again, detached
+#   launch.sh ipc ARGS   `qs ipc ARGS` to this shell, e.g. `ipc call tablet set true`
 #   launch.sh --list     the installed icon themes, one per line
 #   launch.sh --resolve  the icon theme the shell would start with
 #   launch.sh --preview THEME
@@ -177,6 +178,8 @@ start() {
 }
 
 case "$1" in
+    # Straight to the running shell: no icon theme to work out
+    ipc) exec qs -p "$shell_dir" "$@" ;;
     --list) list_themes ;;
     --resolve) resolve_theme ;;
     --preview) preview_theme "$2" ;;

@@ -11,6 +11,8 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Settings: the list of pages scrolls when the window is too short for it (a small
+  laptop screen); the pages at the bottom could not be reached.
 - Bluetooth stays off after a restart when you left it off. BlueZ powers the adapter on
   whenever it starts; the shell now puts back the state it was last in.
 - Google Calendar: losing the network (e.g. right after waking the laptop) no longer signs
@@ -56,6 +58,9 @@ section to the new version and date.
   for its config), and a Nix flake for NixOS — an `h2s-shell` command carrying every
   program the shell calls, and a module (`programs.h2s-shell.enable`) adding the font and
   the services its widgets read. `launch.sh` now works from wherever the shell lies.
+- Profiles: "Tablet mode" as a condition, for convertibles. Hyprland tells the shell when
+  the device folds (two switch bindings, see the README); `ipc call tablet set|toggle`
+  sets it by hand.
 - A banner under the bar when no Nerd Font is installed — the icons are its glyphs and
   show as empty boxes without one — saying how to install it.
 - Bar: it can stand at the left or right of the screen too. The widgets stack down it and

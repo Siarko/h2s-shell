@@ -363,17 +363,26 @@ FloatingWindow {
                         opacity: 0.3
                     }
 
-                    SettingsPageList {
+                    // The page list takes the height left and scrolls in it: on a small
+                    // screen (the Framework 12) it did not fit, and could not be scrolled
+                    Flickable {
+                        id: _pageListScroll
                         Layout.fillWidth: true
-                        pages: root.pages
-                        selectedPage: root.selectedPage
-                        tab: root._onAppearance ? "appearance" : "behaviour"
-                        editTheme: root.editTheme
-                        onPageClicked: pageId => root.selectedPage = pageId
-                    }
-
-                    Item {
                         Layout.fillHeight: true
+                        contentWidth: width
+                        contentHeight: _pageList.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        SettingsPageList {
+                            id: _pageList
+                            width: _pageListScroll.width
+                            pages: root.pages
+                            selectedPage: root.selectedPage
+                            tab: root._onAppearance ? "appearance" : "behaviour"
+                            editTheme: root.editTheme
+                            onPageClicked: pageId => root.selectedPage = pageId
+                        }
                     }
 
                     // The shell's version, with the commit when not running a release;

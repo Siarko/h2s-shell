@@ -81,6 +81,22 @@ end)
 `launch.sh` (which `h2s-shell` runs) starts the shell with the icon theme chosen in its
 settings. Settings are kept in `~/.config/h2s_shell/`.
 
+### Tablet mode
+
+On a convertible, the shell can tell when it is folded into a tablet — a condition for
+profiles (Settings → Profiles: "Tablet mode"). Hyprland reads the switch and tells the
+shell, through two bindings in `hyprland.lua`:
+
+```lua
+local shell = "h2s-shell"  -- Arch: os.getenv("HOME") .. "/.config/quickshell/default/scripts/launch.sh"
+hl.bind("switch:on:Tablet Mode Switch", hl.dsp.exec_cmd(shell .. " ipc call tablet set true"), { locked = true })
+hl.bind("switch:off:Tablet Mode Switch", hl.dsp.exec_cmd(shell .. " ipc call tablet set false"), { locked = true })
+```
+
+The switch's name differs between machines (`gpio-keys` on the Framework 12): see the
+"Switches" in `hyprctl devices`. Hyprland reports only changes, so the shell starts as a
+laptop until the next one; `ipc call tablet set true` by hand corrects it.
+
 ## Google Calendar
 
 Connect an account in **Settings → Calendar**. For now this needs a Google Cloud OAuth

@@ -26,6 +26,7 @@ Singleton {
         { fact: "power.profile", label: "System power profile", type: "enum",
           options: ["power-saver", "balanced", "performance"] },
         { fact: "screen.locked", label: "Screen locked", type: "bool" },
+        { fact: "input.tabletMode", label: "Tablet mode", type: "bool" },
         { fact: "window.fullscreen", label: "Fullscreen window", type: "bool" },
         { fact: "panel.open", label: "Popup open", type: "panel" }
     ]

@@ -1,8 +1,7 @@
 # Plan: touch and stylus (TODO 11.9–11.14)
 
-Status: **planned 2026-11-08; stage 0 waits** — the Framework 12 is shared with another
-agent working on the on-screen keyboard (`~/src/oskbd`); the user says when the probe can
-run there.
+Status: **stage 0 under way 2026-11-08** (first probe run done, a second for the gaps);
+stage 1's way of reading the switch decided.
 
 ## Why
 
@@ -59,13 +58,46 @@ Each verified on the Framework before the next.
 3. **Feedback on touch and finger-sized targets** (11.11, 11.14) — through the shared
    components (buttons, rows, toggles), not 75 separate edits. Minimum sizes in the theme.
 4. **Instead of the wheel** (11.12): dragging sliders, swiping workspaces.
-5. **Gestures** (11.13): swipe a notification away, an edge swipe for panels.
+5. **Gestures** (11.13), the user's list after walking the shell by finger (2026-11-08):
+   - **Calendar:** a swipe changes the month (today only buttons and the wheel).
+   - **Music panel:** a swipe across the whole cover area — horizontal changes the track
+     (next / previous), vertical changes the player. The slides follow the same axes,
+     and that changes what exists: today the cover slides *horizontally on a change of
+     player* (`PlayerCarousel`, 11.22) and a change of track has no animation. To be:
+     horizontal slide for a track, vertical for a player — by gesture and when it
+     happens on its own (a track ending, the active player changing).
+   - **Notifications:** a sideways swipe dismisses a card, as on Android — the toasts in
+     the HUD and the cards in the notifications panel.
+   - Possibly an edge swipe for panels.
 6. **New for the tablet:**
    - a battery widget (the shell has none — it was never needed on a desktop);
    - a keyboard button (`osk`, configurable);
    - **the lock screen in tablet mode**: no keyboard to type the password. Check whether
      `oskbd` shows over a session lock; if not, a keyboard of the lock screen's own, or
      the fingerprint reader.
+
+## Progress
+
+*Stage 0, probe 1 (2026-11-08):* a scratch layer-shell window on the Framework, the user
+tapping with a finger, then the stylus.
+- **Finger:** `MouseArea` gets mouse events synthesised by Qt; `containsMouse` goes true
+  on the press and **false again on release — no stuck hover**. `TapHandler`,
+  `DragHandler` and flicking a `ListView` work; the device is reported as a touchscreen.
+- **Stylus:** works, reported as a stylus/pen (`QPointingDevice` type 16, pointer type
+  4). **It hovers**: held above the screen it sets `containsMouse` and `HoverHandler` — so
+  hover popups can stay for the stylus. Taps and drags work with the handlers.
+- Not in the log, re-run asked for: a stylus tap on a `MouseArea`, press-and-hold
+  (`pressAndHold`, `longPressed`), a press dragged out of an area.
+
+*Stage 1, decided (2026-11-08):* tablet mode comes from Hyprland — switch bindings in
+`hyprland.lua` call `ipc call tablet set true|false` (`singletons/TabletMode.qml`, the
+profile fact `input.tabletMode`). No device access needed; Hyprland reports only changes,
+so the shell starts as a laptop until the next flip. Kept in memory, not in the config
+(the user: a passing state; a write also showed "Settings saved"). Verified on the
+Framework: folding and unfolding reaches the shell. Considered: a udev `uaccess` rule on the switch
+device (the user has one for `gpio-keys`, for `~/.local/bin/tablet-mode`), the
+`cros-ec-lid-angle` sensor (sysfs, no permissions, ChromeOS EC hardware only), the `input`
+group (rejected: every device, keyboards included).
 
 ## Stylus
 
@@ -74,6 +106,6 @@ of the shell needs pressure or tilt. Stage 0 checks it sends anything at all.
 
 ## Open
 
-- How to read the tablet-mode switch without the `input` group (stage 1).
 - Whether hover-mode popups stay available for the stylus in tablet mode.
-- Rotation: whether the bar and popups follow when the screen turns.
+- Rotation: the user's own script (`~/.local/bin/autorotate`) turns the screen; check the
+  bar and popups follow.
