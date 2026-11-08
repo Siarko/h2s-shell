@@ -226,6 +226,16 @@ TestCase {
         driver.wait(80);
         assertEqual(touchText.taps.join(","), "true", "a tap on a field's box, beside its text, is on the field");
         touchText.taps = [];
+        // A drag starting on the button: scrolling, not a tap elsewhere
+        const drag = driver.touchEvent(fieldsButton);
+        drag.press(0, fieldsButton, 10, 15).commit();
+        driver.wait(30);
+        drag.move(0, fieldsButton, 10, -25).commit();
+        driver.wait(30);
+        drag.release(0, fieldsButton, 10, -25).commit();
+        driver.wait(80);
+        assertEqual(touchText.taps.join(","), "", "a drag is not a tap: nothing decided");
+        touchText.taps = [];
         driver.mouseClick(boxedField);
         driver.wait(80);
         assertEqual(touchText.taps.join(","), "", "a mouse click is not watched");

@@ -2,7 +2,7 @@
 # On a touch device with an on-screen keyboard (the Framework 12, oskbd): taps the running
 # shell's calendar popup with a virtual finger and checks each step — the keyboard shows
 # for a text field and hides after, tapping the keyboard keeps the popup, a tap outside
-# closes it. See tests/device/README.md.
+# closes it — on an empty workspace. See tests/device/README.md.
 #
 #   tests/device/keyboard-popup.sh            the shell started by `h2s-shell`
 #   H2S_SHELL_DIR=~/src/h2s-shell tests/device/keyboard-popup.sh
@@ -29,12 +29,15 @@ check() {  # check <description> <command…>
 }
 field() { state | grep -q "\"$1\":$2"; }
 
-# An empty workspace with a neutral window: oskbd shows only while some window has the
-# focus, and a terminal keeps it up on its own (oskbd's rules)
+# An empty workspace: a terminal there would keep the keyboard up on its own (oskbd's
+# terminal rule). Since oskbd 9896278 a field in a layer on an empty workspace raises it,
+# and the compositor's echo of the old field (1–2 ms after the window focus goes) does not.
 previous=$(hyprctl activeworkspace -j | grep -m1 '"id"' | tr -dc '0-9')
 hyprctl dispatch 'hl.dsp.focus({ workspace = 9 })' >/dev/null
-hyprctl dispatch 'hl.dsp.exec_cmd("nix shell nixpkgs#wev -c wev > /dev/null 2>&1")' >/dev/null
-sleep 3
+sleep 1.5
+
+echo "=== an empty workspace"
+check "going to an empty workspace raises no keyboard" keyboard_down
 
 echo "=== calendar popup, by touch"
 read -r x y < <(centre "$(ipc cellRect clock)")
@@ -65,7 +68,6 @@ check "and the field" field typing true
 tap "tap 40 500"; sleep 1.5
 check "a tap outside closes the popup" field open false
 
-pkill -x wev
 hyprctl dispatch "hl.dsp.focus({ workspace = $previous })" >/dev/null
 echo "--- $failures failed"
 exit $((failures > 0))

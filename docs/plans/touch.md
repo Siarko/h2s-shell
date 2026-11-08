@@ -202,6 +202,27 @@ device-tested: the HUD's reply field (needs an app offering inline reply), the s
 window. Left: panels keeping clear of the keyboard; the Framework on Qt 6.12 (the user's
 flake).
 
+*oskbd's side, closed (2026-11-08, its commits to 9896278, its reply in
+`~/src/oskbd/INTEGRACJA-H2S-SHELL.md`):* a field in a layer on an empty workspace raises
+the keyboard (after the window focus goes, Hyprland sends no `activate`, only the state —
+and echoes the old field's content type 1–2 ms later, which oskbd now tells apart by a
+50 ms window); a change of `purpose` without a new `activate` switches the layer; `digits`
+opens the numeric layer (built-in and the user's layout). `tests/device/keyboard-popup.sh`
+runs on an empty workspace without the neutral window and checks that going there raises
+no keyboard: 12/12.
+
+*Panels clear of the keyboard (2026-11-08):* `ScreenKeyboard` knows the keyboard's screen
+and top edge (`hyprctl layers` when it opens; global coordinates, a screen's y taken off).
+A popup by a bar at the top is cut to end above it (`Popup._keyboardLimit`, the content's
+height capped) and its content moved within it (`_keyboardScroll`): to the focused field by
+itself, by a DragHandler or the wheel. The tap watcher decides on release, not press — a
+drag scrolling the popup counted as a tap off the field and let the keyboard go. Measured
+on the Framework: the calendar with its form 691 px → 603 px, ending at 640 above the
+keyboard at 656; a drag moved the content 88 px with the keyboard kept; a tap off the field
+brought the full height back; `keyboard-popup.sh` 12/12. Left: a bar at the bottom (the
+keyboard covers the bar), popups by a bar at a side, the settings window (an ordinary
+window: oskbd's overlay covers it).
+
 *Stage 1, decided (2026-11-08):* tablet mode comes from Hyprland — switch bindings in
 `hyprland.lua` call `ipc call tablet set true|false` (`singletons/TabletMode.qml`, the
 profile fact `input.tabletMode`). No device access needed; Hyprland reports only changes,

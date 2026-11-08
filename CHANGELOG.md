@@ -71,6 +71,10 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- On-screen keyboard: a popup no longer draws under it. While the keyboard is up, a popup
+  by a bar at the top ends above it, and its content moves within it — by itself to keep
+  the field being typed in in sight, or by a drag or the wheel. A drag no longer counts as
+  a tap off the field, so scrolling keeps the keyboard.
 - Bar: a battery widget. An icon showing the charge in tens, charging or not; the
   percentage left or right of it, or not at all; and colour thresholds — any number, each a
   charge and a hex colour, the icon taking the colour of the lowest one the charge is at or

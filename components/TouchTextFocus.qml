@@ -18,6 +18,7 @@ import qs.singletons
 //   its window has no keyboard. Every field (or box holding one, as InputField) is tried
 //   against its own outline — children often lie outside their parents (a Loader, a Column
 //   of no size), so a walk down by the parents' outlines missed them.
+// - A drag is not a tap (decided on release, below).
 // - It sits above the content and watches passively: a press goes to the topmost item that
 //   takes it, so a watcher under the content saw only empty space; a PointHandler takes no
 //   press, so fields and buttons still get theirs.
@@ -75,18 +76,29 @@ Item {
         id: _neutral
     }
 
+    // Decided when the finger lifts, not when it lands: a press that then moves is a drag
+    // (scrolling a popup cut short by the keyboard — Popup), which must not let the keyboard
+    // go; only a tap counts
     PointHandler {
         enabled: root.watching
         acceptedDevices: root.acceptedDevices
+        property point _pressedAt
+        property point _lastAt
         onActiveChanged: {
-            if (!active)
+            if (active) {
+                _pressedAt = point.position;
+                _lastAt = point.position;
                 return;
-            const field = root.fieldAt(point.position.x, point.position.y);
+            }
+            if (Math.hypot(_lastAt.x - _pressedAt.x, _lastAt.y - _pressedAt.y) > 10)
+                return;
+            const field = root.fieldAt(_pressedAt.x, _pressedAt.y);
             if (!field)
                 _neutral.forceActiveFocus();
             root.fieldTapped(field !== null);
             // Qt 6.12 drops text-input for a focus that takes none only when asked
             Qt.callLater(() => Qt.inputMethod.update(Qt.ImQueryInput));
         }
+        onPointChanged: if (active) _lastAt = point.position
     }
 }

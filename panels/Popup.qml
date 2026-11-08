@@ -142,7 +142,46 @@ LazyLoader {
         property int _heldWidth: 0
         property int _heldHeight: 0
         property int contentWidth: _holding ? _heldWidth : contentLoader.item ? contentLoader.item.implicitWidth : 0
-        property int contentHeight: _holding ? _heldHeight : contentLoader.item ? contentLoader.item.implicitHeight : 0
+        property int contentHeight: _holding ? _heldHeight
+            : contentLoader.item ? Math.min(contentLoader.item.implicitHeight, _keyboardLimit) : 0
+
+        // ---- Keeping clear of an on-screen keyboard ----
+        // While one is up on this screen, a popup by a bar at the top is cut to end above it
+        // (ScreenKeyboard), its content moved within it: by itself to keep the focused field
+        // in sight, or dragged / wheeled. A bar at the bottom is under the keyboard itself,
+        // and popups by a bar at a side are not cut yet (docs/plans/touch.md).
+        readonly property real _keyboardLimit: {
+            if (!ScreenKeyboard.visible || edge !== "top" || ScreenKeyboard.screenName !== popup.screen?.name)
+                return Infinity;
+            const keyboardTop = ScreenKeyboard.top - (popup.screen?.y ?? 0);
+            return Math.max(80, keyboardTop - _screenOffset.y - paddingTop - paddingBottom - _screenGap);
+        }
+        readonly property real _overflow: contentLoader.item && isFinite(_keyboardLimit)
+            ? Math.max(0, contentLoader.item.implicitHeight - _keyboardLimit) : 0
+        property real _keyboardScroll: 0
+        on_OverflowChanged: {
+            _keyboardScroll = Math.min(_keyboardScroll, _overflow);
+            Qt.callLater(_revealFocus);
+        }
+
+        // The focused field in sight within the part shown, with a little room around it
+        function _revealFocus() {
+            if (_overflow <= 0 || !contentLoader.item)
+                return;
+            const focused = contentLoader.Window.activeFocusItem;
+            if (!focused || focused.cursorPosition === undefined)
+                return;
+            const inContent = focused.mapToItem(contentLoader, 0, 0);
+            const room = 12;
+            let scroll = _keyboardScroll;
+            if (inContent.y - room < scroll)
+                scroll = inContent.y - room;
+            else if (inContent.y + focused.height + room > scroll + _keyboardLimit)
+                scroll = inContent.y + focused.height + room - _keyboardLimit;
+            _keyboardScroll = Math.max(0, Math.min(_overflow, scroll));
+        }
+        readonly property Item _focusedItem: contentLoader.Window.activeFocusItem
+        on_FocusedItemChanged: Qt.callLater(_revealFocus)
         readonly property string edge: popupLoader.barEdge
         // The content's size along the bar and across it
         readonly property int _contentAlong: popupLoader._vertical ? contentHeight : contentWidth
@@ -515,7 +554,8 @@ LazyLoader {
                         anchors.horizontalCenter: popupLoader._vertical ? undefined : parent.horizontalCenter
                         anchors.verticalCenter: popupLoader._vertical ? parent.verticalCenter : undefined
                         anchors.top: popup.edge === "top" ? parent.top : undefined
-                        anchors.topMargin: popup.paddingTop
+                        // Moved up within the popup while it is cut short by an on-screen keyboard
+                        anchors.topMargin: popup.paddingTop - popup._keyboardScroll
                         anchors.bottom: popup.edge === "bottom" ? parent.bottom : undefined
                         anchors.bottomMargin: popup.paddingBottom
                         // The padding by the bar across it, as popupAcross counts it
@@ -537,6 +577,22 @@ LazyLoader {
 
                     // A click anywhere in the popup takes the focus from a field
                     FocusReleaser {}
+
+                    // Cut short by an on-screen keyboard: its content moved by a drag or the wheel
+                    DragHandler {
+                        target: null
+                        enabled: popup._overflow > 0
+                        xAxis.enabled: false
+                        property real _scrollAtStart: 0
+                        onActiveChanged: if (active) _scrollAtStart = popup._keyboardScroll
+                        onTranslationChanged: popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, _scrollAtStart - translation.y))
+                    }
+                    WheelHandler {
+                        enabled: popup._overflow > 0
+                        onWheel: event => {
+                            popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, popup._keyboardScroll - event.angleDelta.y / 2));
+                        }
+                    }
 
                     NumberAnimation {
                         id: _contentFadeIn

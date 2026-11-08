@@ -27,9 +27,13 @@ place, a popup item's place by `objectName`, the popup's state.
   ```
 
   The group lets any program running as you type and click as a keyboard and mouse would.
-- `nix` (python-evdev, `wev` and `jq` are fetched with `nix shell` for the run).
+- `nix` (python-evdev and grim are fetched with `nix shell` for the run).
 - oskbd awake (`oskbd -w`), for the keyboard checks.
 
 Run from the device (or over ssh): `tests/device/keyboard-popup.sh`. It switches to the
-empty workspace 9 for the run, with a neutral window there — oskbd shows only while some
-window has the focus, and a terminal keeps it up on its own — and goes back after.
+empty workspace 9 for the run — a terminal there keeps oskbd up on its own — and goes back
+after. (Before oskbd 9896278 a neutral window was needed too: oskbd showed only while some
+window had the focus.)
+
+oskbd also offers `oskbd --probe-text <purpose> [hold-ms [then-purpose]]`: a layer with an
+exclusive keyboard and a real text-input field, without touch or the shell.
