@@ -76,7 +76,9 @@ section to the new version and date.
   charge and a hex colour, the icon taking the colour of the lowest one the charge is at or
   below. Per preset, in the widget's settings. It opens a popup: the charge, charging or
   not, time left and the power drawn; the system power profile, to change by hand — it
-  stays until the shell's profiles next want another one, and the popup says which.
+  stays until the shell's profiles next want another one, and the popup says which; and the
+  history as UPower records it — the charge over 6 h, 24 h or 7 days with the time on the
+  charger shaded, and the power drawn beneath.
 - Google Calendar: no OAuth client of your own needed — the shell carries one (a client
   entered in the settings still takes its place). The sign-in uses PKCE and checks its
   `state`, since the client's secret is public.

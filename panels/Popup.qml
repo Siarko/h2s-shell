@@ -668,7 +668,7 @@ LazyLoader {
             // keyboardFocus above)
             TouchTextFocus {
                 watching: popupLoader.touchOpened
-                onFieldTapped: onField => popupLoader._typing = onField
+                onFieldTapped: onField => { popupLoader._typing = onField; }
             }
 
             // Close the popup when the mouse leaves the visible area

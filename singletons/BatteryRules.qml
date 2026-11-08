@@ -36,6 +36,43 @@ Singleton {
         return String.fromCodePoint((charging ? root._charging : root._discharging)[root.step(percent)]);
     }
 
+    // UPower's device states (org.freedesktop.UPower.Device.State) on the charger:
+    // charging, fully charged, pending charge
+    function isCharging(state: int): bool {
+        return state === 1 || state === 4 || state === 5;
+    }
+
+    // The laptop's battery among UPower's devices — EnumerateDevices through
+    // `busctl --json=short`: {"type":"ao","data":[[path, …]]}. Its path names the kernel's
+    // battery (battery_BAT0, battery_BAT1); another battery (a stylus's, a mouse's) only if
+    // there is no such one. "" when there is none.
+    function laptopBatteryPath(text: string): string {
+        let paths = [];
+        try {
+            paths = JSON.parse(text).data?.[0] ?? [];
+        } catch (error) {
+            return "";
+        }
+        return paths.find(path => /\/battery_BAT\d+$/.test(path))
+            ?? paths.find(path => /\/battery_/.test(path)) ?? "";
+    }
+
+    // A history from UPower — GetHistory through `busctl --json=short`:
+    // {"type":"a(udu)","data":[[[time, value, state], …]]}, newest first — as
+    // [{ t (seconds), v, state }] oldest first, without the entries of unknown state
+    // (UPower marks a restart with a zero of state 0)
+    function parseHistory(text: string): var {
+        let rows = [];
+        try {
+            rows = JSON.parse(text).data?.[0] ?? [];
+        } catch (error) {
+            return [];
+        }
+        return rows.filter(row => Array.isArray(row) && row.length === 3 && row[2] !== 0)
+            .map(row => ({ t: row[0], v: row[1], state: row[2] }))
+            .sort((a, b) => a.t - b.t);
+    }
+
     function isHexColor(text: string): bool {
         return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(text);
     }

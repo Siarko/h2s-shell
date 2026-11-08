@@ -103,7 +103,7 @@ TestCase {
             TouchTextFocus {
                 id: touchText
                 property var taps: []
-                onFieldTapped: onField => taps.push(onField)
+                onFieldTapped: onField => { taps.push(onField); }
             }
         }
 

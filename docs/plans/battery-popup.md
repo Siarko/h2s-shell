@@ -1,6 +1,7 @@
 # Plan: the battery widget's popup
 
-Status: **planned 2026-11-08; stage 1 under way.** Requested by the user with the battery
+Status: **stages 1 and 2 done 2026-11-08** (checked on the Framework by virtual taps and
+screenshots); stage 3 next. Requested by the user with the battery
 widget (`widgets/BatteryWidget.qml`): the power profile with an override, and — as on
 Android — a graph of energy use and use per app.
 
@@ -50,6 +51,19 @@ Android — a graph of energy use and use per app.
    CPU idle) is split by CPU and GPU share; the baseline goes to "System and screen". Sums
    since the last full charge in a state file (`~/.local/state/h2s_shell/`), shown as an
    estimate. First probe (15 s): 3.9 W, CPU 8 % busy, 90 % of it one terminal's process.
+
+## Progress
+
+- *Stage 1* (e3e9c53): `panels/BatteryPanel.qml`; `Profiles.wantedPowerProfile`,
+  `currentPowerProfile`, `setPowerProfile()`. Overriding to Balanced showed "Overridden.
+  The profile "Power save" will set Power saver again at its next change."
+- *Stage 2*: `singletons/BatteryHistory.qml` (busctl EnumerateDevices once, GetHistory
+  `charge` and `rate` on refresh — the popup asks when it opens and every minute while
+  open), `BatteryRules.laptopBatteryPath` / `parseHistory` / `isCharging` (tested; UPower
+  lists the stylus's battery too, and marks a restart with a zero of state 0),
+  `panels/battery/BatteryHistoryChart.qml`. The display device has no history — the
+  battery's own object path is asked. A function with typed parameters and no return
+  type has its result coerced to void (Qt 6.11 warns on each call): `parseHistory: var`.
 
 ## Open
 

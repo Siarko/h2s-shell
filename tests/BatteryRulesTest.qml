@@ -31,6 +31,28 @@ TestCase {
                    "an icon for " + percent + " %, charging or not");
         }
 
+        // --- UPower: the laptop's battery, its history ---
+        const devices = '{"type":"ao","data":[["/org/freedesktop/UPower/devices/battery_hid_0018o222Ao5539x0003_battery_13",'
+            + '"/org/freedesktop/UPower/devices/battery_BAT1","/org/freedesktop/UPower/devices/line_power_ACAD"]]}';
+        assertEqual(BatteryRules.laptopBatteryPath(devices), "/org/freedesktop/UPower/devices/battery_BAT1",
+                    "the laptop's battery, not the stylus's listed before it");
+        assertEqual(BatteryRules.laptopBatteryPath('{"type":"ao","data":[["/org/freedesktop/UPower/devices/battery_hid_x"]]}'),
+                    "/org/freedesktop/UPower/devices/battery_hid_x", "another battery only without a laptop one");
+        assertEqual(BatteryRules.laptopBatteryPath('{"type":"ao","data":[["/org/freedesktop/UPower/devices/line_power_ACAD"]]}'),
+                    "", "no battery: nothing");
+        assertEqual(BatteryRules.laptopBatteryPath("not json"), "", "garbage: nothing");
+
+        const history = BatteryRules.parseHistory('{"type":"a(udu)","data":[[[1794163121,5.7e+01,2],[1794162581,5.8e+01,2],'
+            + '[1794161320,0.0e+00,0],[1794160000,6.1e+01,1]]]}');
+        assertEqual(history.length, 3, "the restart marker (0, state 0) left out");
+        assertEqual(history[0].t, 1794160000, "oldest first");
+        assertEqual(history[2].v, 57, "the newest last, its value");
+        assertEqual(history[0].state, 1, "the state kept");
+        assertEqual(BatteryRules.parseHistory("{}").length, 0, "no data: empty");
+        assertEqual(BatteryRules.parseHistory("Call failed").length, 0, "an error: empty");
+        assert(BatteryRules.isCharging(1) && BatteryRules.isCharging(4) && BatteryRules.isCharging(5), "charging, full, pending charge: on the charger");
+        assert(!BatteryRules.isCharging(2) && !BatteryRules.isCharging(6) && !BatteryRules.isCharging(0), "discharging, pending discharge, unknown: not");
+
         // --- hex colours ---
         assert(BatteryRules.isHexColor("#e05252"), "#rrggbb");
         assert(BatteryRules.isHexColor("#80E05252"), "#aarrggbb, either case");

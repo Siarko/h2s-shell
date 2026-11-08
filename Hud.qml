@@ -101,7 +101,7 @@ PanelWindow {
     // toasts or anywhere outside them takes it back (the catcher, under the HUD's layer)
     TouchTextFocus {
         id: touchText
-        onFieldTapped: onField => hud._touchTyping = onField
+        onFieldTapped: onField => { hud._touchTyping = onField; }
     }
     OutsideTapCatcher {
         visible: hud._touchTyping

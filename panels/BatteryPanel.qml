@@ -3,10 +3,12 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Services.UPower
 import qs.components
+import qs.panels.battery
 import qs.singletons
 
-// The battery popup: the charge and what it is doing, and the system power profile with
-// an override (docs/plans/battery-popup.md, stage 1). The override lasts until the shell's
+// The battery popup: the charge and what it is doing, the system power profile with an
+// override (docs/plans/battery-popup.md, stage 1), and the history as UPower records it
+// (stage 2). The override lasts until the shell's
 // profiles next want another power profile — the rule Profiles keeps — and the popup says
 // which profile that is.
 Item {
@@ -20,6 +22,21 @@ Item {
     readonly property bool _charging: _device.state === UPowerDeviceState.Charging
         || _device.state === UPowerDeviceState.FullyCharged
         || _device.state === UPowerDeviceState.PendingCharge
+
+    readonly property var _spans: [
+        { value: 6 * 3600, label: "6 h" },
+        { value: 24 * 3600, label: "24 h" },
+        { value: 7 * 24 * 3600, label: "7 d" }
+    ]
+
+    // The history, fetched while the popup is open: at once, then every minute
+    Component.onCompleted: BatteryHistory.refresh()
+    Timer {
+        interval: 60000
+        repeat: true
+        running: true
+        onTriggered: BatteryHistory.refresh()
+    }
 
     readonly property var _profiles: [
         { value: "power-saver", label: "Power saver" },
@@ -159,6 +176,70 @@ Item {
             font.pixelSize: Theme.fontSizeSmall
             color: Profiles.wantedPowerProfile !== "unchanged" && Profiles.wantedPowerProfile !== Profiles.currentPowerProfile
                 ? Theme.warning : Theme.textMuted
+        }
+
+        // The history
+        Rectangle {
+            visible: BatteryHistory.available
+            width: parent.width
+            height: 1
+            color: Theme.textDisabled
+            opacity: 0.3
+        }
+
+        RowLayout {
+            visible: BatteryHistory.available
+            width: parent.width
+            spacing: 6
+
+            Text {
+                Layout.fillWidth: true
+                text: "History"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                font.bold: true
+                color: Theme.textPrimary
+            }
+
+            Repeater {
+                model: ScriptModel { values: root._spans }
+
+                Pill {
+                    required property var modelData
+                    label: modelData.label
+                    picked: modelData.value === BatteryHistory.span
+                    onClicked: BatteryHistory.span = modelData.value
+                }
+            }
+        }
+
+        BatteryHistoryChart {
+            visible: BatteryHistory.available
+            width: parent.width
+            charge: BatteryHistory.charge
+            rate: BatteryHistory.rate
+            span: BatteryHistory.span
+            active: visible
+        }
+
+        // What the shading means
+        Row {
+            visible: BatteryHistory.available
+            spacing: 6
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 10
+                height: 10
+                radius: 2
+                color: Qt.alpha(Theme.warning, 0.35)
+            }
+            Text {
+                text: "on the charger · the line beneath: power drawn"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.textMuted
+            }
         }
     }
 }
