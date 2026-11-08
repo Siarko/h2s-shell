@@ -1,17 +1,20 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import qs.singletons
 
-// A banner under the bar when the shell was not started through scripts/launch.sh: the
-// icon theme setting cannot apply then (Quickshell reads the theme only at launch, from
-// QS_ICON_THEME, which the script sets). It says so and how to start the shell instead,
-// and does not restart anything itself — a restart would drop whatever arguments the
-// shell was started with. Closed with ×, for this run of the shell.
+// A banner under the bar about something wrong with how the shell was started or set up
+// — it says what and how to fix it, and fixes nothing itself. The HUD stacks these
+// (Hud.qml); the owner decides when one shows and remembers the dismissal (×), for this
+// run of the shell.
 Rectangle {
     id: root
 
-    visible: !IconThemes.launchedByScript && !IconThemes.launchWarningDismissed
+    // A glyph every font has by default: one banner is about the icon font missing
+    property string icon: "⚠"
+    property string title: ""
+    property string body: ""
+
+    signal dismissed
 
     implicitWidth: Math.min(640, (parent?.width ?? 640) - 2 * Theme.osdToast.screenGap)
     implicitHeight: _content.implicitHeight + 2 * Theme.osdToast.padding
@@ -28,7 +31,7 @@ Rectangle {
 
         Text {
             Layout.alignment: Qt.AlignTop
-            text: "󰀦"
+            text: root.icon
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSection
             color: Theme.warning
@@ -40,7 +43,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: "The shell was started without scripts/launch.sh"
+                text: root.title
                 wrapMode: Text.WordWrap
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
@@ -50,12 +53,9 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: "Quickshell reads the icon theme only when it starts, from QS_ICON_THEME, and the script "
-                    + "sets that from Settings → General → Icon theme. Started directly (qs, qs -c default), "
-                    + "the shell has no icon theme: the setting does nothing and icons such as warnings may be "
-                    + "missing. Start it with " + Quickshell.shellDir + "/scripts/launch.sh — Hyprland's autostart "
-                    + "does — or restart it with launch.sh --restart."
+                text: root.body
                 wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
@@ -75,7 +75,7 @@ Rectangle {
                 anchors.margins: -4
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: IconThemes.launchWarningDismissed = true
+                onClicked: root.dismissed()
             }
         }
     }

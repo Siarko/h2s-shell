@@ -16,7 +16,7 @@ TestCase {
         "panels/calendar/RecurringDeleteChoice.qml",
         "components/NotificationCard.qml",
         "components/RoundedImage.qml",
-        "hud/LaunchWarning.qml",
+        "hud/StartupWarning.qml",
         "panels/widget_settings/NotificationsWidgetSettings.qml",
         "widgets/NotificationsWidget.qml",
         "components/NotificationReply.qml",

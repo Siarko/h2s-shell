@@ -50,6 +50,12 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Installing: `install.sh` for Arch (the packages, then a checkout where Quickshell looks
+  for its config), and a Nix flake for NixOS — an `h2s-shell` command carrying every
+  program the shell calls, and a module (`programs.h2s-shell.enable`) adding the font and
+  the services its widgets read. `launch.sh` now works from wherever the shell lies.
+- A banner under the bar when no Nerd Font is installed — the icons are its glyphs and
+  show as empty boxes without one — saying how to install it.
 - Bar: it can stand at the left or right of the screen too. The widgets stack down it and
   popups open sideways from it; text is turned — read down a bar at the right, up a bar
   at the left — or written as letters one under another (Behaviour → Bar → Text on a

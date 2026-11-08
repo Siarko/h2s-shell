@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Starts the shell with the icon theme from its settings.
 #
 # Quickshell sets the icon theme once, at launch, from QS_ICON_THEME — nothing changes it
@@ -21,6 +21,11 @@
 # themes, such as "default").
 
 config="${XDG_CONFIG_HOME:-$HOME/.config}/h2s_shell/config.json"
+
+# The shell's folder, wherever it is: a git checkout in ~/.config/quickshell/default, or
+# a package's copy (the Nix flake installs it read-only into the store). The instance is
+# addressed by this path rather than by Quickshell's config name, so every copy works.
+shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 
 icon_dirs() {
     echo "$HOME/.icons"
@@ -135,7 +140,7 @@ resolve_theme() {
 
 # The running shell's process ids
 shell_pids() {
-    qs list -c default 2> /dev/null | sed -n 's/^ *Process ID: *//p'
+    qs list -p "$shell_dir" 2> /dev/null | sed -n 's/^ *Process ID: *//p'
 }
 
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
@@ -144,7 +149,7 @@ stop_shell() {
     local pids
     pids=$(shell_pids)
     [ -n "$pids" ] || return
-    qs kill -c default > /dev/null 2>&1
+    qs kill -p "$shell_dir" > /dev/null 2>&1
     for signal in "" TERM KILL; do
         [ -n "$signal" ] && kill -s "$signal" $pids 2> /dev/null
         for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -168,7 +173,7 @@ start() {
     if [ -n "$theme" ]; then
         export QS_ICON_THEME="$theme"
     fi
-    exec qs -c default "$@"
+    exec qs -p "$shell_dir" "$@"
 }
 
 case "$1" in

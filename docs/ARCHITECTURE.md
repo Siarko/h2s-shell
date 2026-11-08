@@ -23,7 +23,7 @@ terminated by its process id; `--list` and `--resolve` print the installed theme
 the one that would be used, `--preview <theme>` the files of a few sample icons, which
 the settings show as images (`singletons/IconThemes.qml` asks it). The script marks the
 shell it starts with `H2S_SHELL_LAUNCHER=1`; a shell started without it (plain `qs`)
-shows a banner under the bar (`hud/LaunchWarning.qml`) explaining that the icon theme
+shows a banner under the bar (`hud/StartupWarning.qml`, placed by `Hud.qml`) explaining that the icon theme
 cannot apply — it does not restart itself, which would drop the arguments it was given.
 
 The target compositor is Hyprland on Wayland. The shell uses Wayland layer-shell

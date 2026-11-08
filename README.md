@@ -22,22 +22,64 @@ The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Requirements
 
-- Hyprland with a Lua config (0.5x), Quickshell, Qt 6
-- NetworkManager (`nmcli`), `systemctl`, `notify-send`, `python3`
+- Hyprland with a Lua config (`hyprland.lua`, 0.5x), Quickshell 0.3.2, Qt 6
+- NetworkManager, BlueZ, UPower, power-profiles-daemon
+- `notify-send`, `python3`, `jq`, `gsettings`, `cava`, `git`, `xdg-open`
 - A JetBrainsMono Nerd Font
-- Optional: `cava` (visualiser), `jq` and `gsettings` (icon theme)
 
-## Running
+The installers below bring all of these.
 
-Put the repository where Quickshell looks for configs, then start it:
+## Installing
+
+### Arch Linux
 
 ```sh
-git clone https://github.com/Siarko/h2s-shell ~/.config/quickshell/default
-~/.config/quickshell/default/scripts/launch.sh
+curl -fsSL https://raw.githubusercontent.com/Siarko/h2s-shell/master/install.sh | bash
 ```
 
-`launch.sh` starts the shell with the icon theme chosen in its settings; call it from
-Hyprland's autostart. Settings are kept in `~/.config/h2s_shell/`.
+It installs the packages with pacman (asking first) and clones the shell into
+`~/.config/quickshell/default`, then prints the two things left to you: enabling the
+services, and the autostart line for Hyprland. Update with `git pull` in that folder.
+
+### NixOS
+
+Add the flake to your system flake and enable the module:
+
+```nix
+{
+  inputs.h2s-shell.url = "github:Siarko/h2s-shell";
+
+  outputs = { nixpkgs, h2s-shell, ... }: {
+    nixosConfigurations.<host> = nixpkgs.lib.nixosSystem {
+      modules = [
+        h2s-shell.nixosModules.default
+        { programs.h2s-shell.enable = true; }
+        # ...
+      ];
+    };
+  };
+}
+```
+
+The module installs the `h2s-shell` command (the shell with every program it calls),
+the font, and turns on UPower, power-profiles-daemon, Bluetooth and NetworkManager
+unless your configuration says otherwise. Update with `nix flake update h2s-shell`.
+
+Without the module: `nix run github:Siarko/h2s-shell`.
+
+### Starting it
+
+From Hyprland's autostart, in `hyprland.lua`:
+
+```lua
+hl.on("hyprland.start", function()
+	hl.exec_cmd("h2s-shell")  -- NixOS
+	-- Arch: hl.exec_cmd(os.getenv("HOME") .. "/.config/quickshell/default/scripts/launch.sh")
+end)
+```
+
+`launch.sh` (which `h2s-shell` runs) starts the shell with the icon theme chosen in its
+settings. Settings are kept in `~/.config/h2s_shell/`.
 
 ## Google Calendar
 
@@ -48,6 +90,8 @@ the [privacy policy](https://siarko.github.io/h2s-shell/privacy.html).
 
 ## Development
 
-There is no build step. `quickshell -p tests.qml` runs the test suites. How the shell is
+There is no build step: the shell runs from a git checkout, and reloads itself when a
+file changes. `quickshell -p tests.qml` runs the test suites. On NixOS, run a checkout
+with the package's programs: `H2S_SHELL_DIR=~/src/h2s-shell h2s-shell`. How the shell is
 put together: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); changes:
 [CHANGELOG.md](CHANGELOG.md).

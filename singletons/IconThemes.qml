@@ -18,7 +18,7 @@ Singleton {
     // The theme the shell runs with; empty when it was started without the script
     readonly property string current: Quickshell.env("QS_ICON_THEME") ?? ""
     // Whether the shell was started through scripts/launch.sh, which marks it so: without
-    // it the setting cannot apply, and the HUD shows a banner saying why (LaunchWarning)
+    // it the setting cannot apply, and the HUD shows a banner saying why (Hud.qml, StartupWarning)
     readonly property bool launchedByScript: Quickshell.env("H2S_SHELL_LAUNCHER") === "1"
     // The banner closed, for this run of the shell
     property bool launchWarningDismissed: false

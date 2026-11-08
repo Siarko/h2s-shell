@@ -542,6 +542,13 @@ Singleton {
 
     // Typography
     readonly property string fontFamily: _fonts.family
+    // Whether any Nerd Font is installed. The icons are Nerd Font glyphs, and Qt draws a
+    // glyph the theme's family lacks from another installed font that has it — so any
+    // Nerd Font will do, but with none they are empty boxes; the HUD then says so. Read
+    // once: a font installed while the shell runs needs a restart anyway.
+    readonly property bool nerdFontInstalled: Qt.fontFamilies().some(family => family.indexOf("Nerd Font") >= 0)
+    // The HUD's warning about it closed, for this run
+    property bool nerdFontWarningDismissed: false
     readonly property int fontSizeTiny: _fonts.sizeTiny
     readonly property int fontSizeXSmall: _fonts.sizeXSmall
     readonly property int fontSizeSmall: _fonts.sizeSmall

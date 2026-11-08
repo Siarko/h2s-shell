@@ -37,24 +37,53 @@ PanelWindow {
     // Input passthrough: only forward clicks to visible HUD card areas. The toast area is
     // as tall as the visible toasts, so it covers nothing while there are none. A Region
     // takes its item's geometry whether the item is shown or not: the OSDs hide by moving
-    // off screen, but the launch warning stays where it is, hidden — so it is in the mask
-    // only while shown. In the mask while hidden, it took every click in a 640 px band under
-    // the bar's middle, over the popups there (the calendar's top half).
+    // off screen, but the startup warnings stay where they are, hidden — so they are in the
+    // mask only while one is shown. In the mask while hidden, the launch warning took every
+    // click in a 640 px band under the bar's middle, over the popups there (the calendar's
+    // top half).
     mask: Region {
         Region { item: toastArea }
         Region { item: queueBadge }
         Region { item: volumeOsd }
         Region { item: shellNotifItem }
-        Region { item: launchWarning.visible ? launchWarning : null }
+        Region { item: startupWarnings.height > 0 ? startupWarnings : null }
     }
 
-    // ---- Launch warning ----
-    // Started without scripts/launch.sh: a banner under the bar, centred
-    LaunchWarning {
-        id: launchWarning
+    // ---- Startup warnings ----
+    // Banners under the bar, centred, about how the shell was started or set up
+    Column {
+        id: startupWarnings
         x: (hud.implicitWidth - width) / 2
         y: Theme.bar.reservedSpace + Theme.osdToast.screenGap
-        width: implicitWidth
+        width: Math.min(640, hud.implicitWidth - 2 * Theme.osdToast.screenGap)
+        spacing: Theme.osdToast.screenGap
+
+        // Started without scripts/launch.sh: the icon theme setting cannot apply
+        StartupWarning {
+            width: parent.width
+            visible: !IconThemes.launchedByScript && !IconThemes.launchWarningDismissed
+            icon: "󰀦"
+            title: "The shell was started without scripts/launch.sh"
+            body: "Quickshell reads the icon theme only when it starts, from QS_ICON_THEME, and the script "
+                + "sets that from Settings → General → Icon theme. Started directly (qs, qs -c default), "
+                + "the shell has no icon theme: the setting does nothing and icons such as warnings may be "
+                + "missing. Start it with " + Quickshell.shellDir + "/scripts/launch.sh — Hyprland's autostart "
+                + "does — or restart it with launch.sh --restart."
+            onDismissed: IconThemes.launchWarningDismissed = true
+        }
+
+        // No Nerd Font: the bar's icons are its glyphs
+        StartupWarning {
+            width: parent.width
+            visible: !Theme.nerdFontInstalled && !Theme.nerdFontWarningDismissed
+            title: "No Nerd Font installed: icons show as empty boxes"
+            body: "The shell's icons are Nerd Font glyphs, and no font on this system has them. Install "
+                + "JetBrainsMono Nerd Font (any Nerd Font works), then restart the shell.\n"
+                + "Arch: sudo pacman -S ttf-jetbrains-mono-nerd\n"
+                + "NixOS: programs.h2s-shell.enable = true; (the module adds it), or "
+                + "fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];"
+            onDismissed: Theme.nerdFontWarningDismissed = true
+        }
     }
 
     // ---- Toasts ----

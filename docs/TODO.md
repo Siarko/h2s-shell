@@ -776,6 +776,25 @@ end so the numbers above keep meaning what older notes say:
       the cover turns, and its ring moves, only for a player that plays. The seek bar,
       transport and the panel-wide visualisers stay put. Found on the way: the seek bar
       had always been 0 px tall (Layout properties only, in a Column).
+- [ ] **11.23 Installing: Arch and NixOS** (requested 2026-11-08, before touch input —
+      the Framework 12 runs NixOS). `install.sh` for Arch (pacman, then a checkout in
+      `~/.config/quickshell/default`); `flake.nix` + `nix/package.nix` (an `h2s-shell`
+      command with Quickshell v0.3.2 from its own flake and every program the shell calls
+      on PATH; `H2S_SHELL_DIR=<checkout>` runs a checkout instead, for development) +
+      `nix/module.nix` (`programs.h2s-shell.enable`: font, UPower, power-profiles-daemon,
+      BlueZ, NetworkManager). `launch.sh` addresses the instance by its folder (`qs -p`),
+      scripts use `#!/usr/bin/env bash` (NixOS has no /bin/bash). A HUD banner when no
+      Nerd Font is installed (`Theme.nerdFontInstalled`, `hud/StartupWarning.qml`, which
+      the launch warning now uses too). Package built and run on the Framework
+      2026-11-08; left: the module in the user's system flake, `install.sh` untested (needs
+      sudo). For the user only so far; publishing (AUR, docs for others) later.
+      Found on the way, not fixed: on a first run `Config` chmods `config.json` before it
+      exists (one warning).
+- [ ] **11.24 Dictation as a separate, optional module** (requested 2026-11-08)
+      `pttd` is the user's private daemon: the dictation widget, its settings, the HUD
+      preview and the music pause should install separately, not ship with the shell.
+      Until then the user turns it off. Without the daemon the shell logs a socket error
+      every few seconds.
 - [ ] **11.20 Animation editor, and animations assigned to elements** (requested 2026-11-01)
       Today each animation is written in its element's code (the bell's ring, 11.18).
       Wanted: animations as data — tracks for x, y, rotation and scale, each with a
