@@ -139,9 +139,17 @@ resolve_theme() {
     head -n 1 <<< "$installed"
 }
 
-# The running shell's process ids
+# The running shell's process ids — every copy of it, not only this folder's: the
+# package's and a checkout's (H2S_SHELL_DIR) are both h2s-shell, and restarting one with
+# the other running left two shells. A copy is told by scripts/launch.sh beside its
+# shell.qml.
 shell_pids() {
-    qs list -p "$shell_dir" 2> /dev/null | sed -n 's/^ *Process ID: *//p'
+    qs list --all 2> /dev/null | awk '
+        /^ *Process ID:/ { pid = $3 }
+        /^ *Config path:/ { print pid "\t" $3 }' \
+    | while IFS=$'\t' read -r pid config; do
+        [ -f "$(dirname "$config")/scripts/launch.sh" ] && echo "$pid"
+    done
 }
 
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
@@ -150,7 +158,9 @@ stop_shell() {
     local pids
     pids=$(shell_pids)
     [ -n "$pids" ] || return
-    qs kill -p "$shell_dir" > /dev/null 2>&1
+    for pid in $pids; do
+        qs kill --pid "$pid" > /dev/null 2>&1
+    done
     for signal in "" TERM KILL; do
         [ -n "$signal" ] && kill -s "$signal" $pids 2> /dev/null
         for _ in 1 2 3 4 5 6 7 8 9 10; do

@@ -11,6 +11,9 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- `launch.sh --restart` (`h2s-shell --restart`) closes every running copy of the shell, not
+  only its own folder's: restarting the package's copy with a checkout running
+  (`H2S_SHELL_DIR`) left two shells.
 - On-screen keyboard: it shows when you tap a text field in a popup opened by touch and
   hides when you tap anywhere else, as in a browser; tapping it keeps the popup and the
   field. The same for the reply field on a notification. A popup opened by touch closes on
