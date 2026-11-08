@@ -492,7 +492,11 @@ Hyprland's per-monitor scale is applied by Qt — the whole shell scaled correct
 monitor's scale changed. The analysis above assumed a compositor scale of 1. What is
 left is touch-target size, a design decision tracked as TODO 11.14.
 
-### 28. Wheel-only interactions have no touch equivalent
+### 28. Wheel-only interactions have no touch equivalent — **FIXED**
+
+**Fixed (2026-11-08, TODO 11.12):** measured on the Framework, only two were wheel-only —
+the calendar's year (now a months view) and the curve graph's zoom (now a pinch); the rest
+had a way by finger already.
 
 Seven `onWheel` handlers — volume on the sound widget, workspace switching, sliders. A
 finger cannot scroll a wheel. Fix: add drag/swipe gestures for the same actions.

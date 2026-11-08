@@ -3,6 +3,8 @@
 (uinput → libinput → Hyprland → client), as a finger would.
 
   touchtap.py "tap 800 40" "sleep 1500" "tap 700 200" "swipe 100 500 600 500 300"
+  touchtap.py "pinch 900 400 40 120 400"   # two fingers round (900, 400), 40 px apart
+                                            # from the centre to 120, in 400 ms
 
 Needs write access to /dev/uinput (tests/device/README.md).
 
@@ -60,7 +62,44 @@ def move(device, x, y):
     device.syn()
 
 
+def pinch(device, cx, cy, start, end, duration):
+    """Two fingers either side of (cx, cy), `start` px from it, moving to `end` px. The
+    second lands a moment after the first, as a hand does — what takes the first finger
+    alone (a MouseArea dragging the view) has it already when the pinch begins."""
+    global tracking
+
+    def place(slot, offset):
+        device.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+        device.write(e.EV_ABS, e.ABS_MT_POSITION_X, int((cx + offset) * SCALE))
+        device.write(e.EV_ABS, e.ABS_MT_POSITION_Y, int(cy * SCALE))
+
+    for slot, side in ((0, -1), (1, 1)):
+        tracking += 1
+        device.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+        device.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, tracking)
+        place(slot, side * start)
+        if slot == 0:
+            device.write(e.EV_KEY, e.BTN_TOUCH, 1)
+            device.write(e.EV_KEY, e.BTN_TOOL_FINGER, 1)
+        device.syn()
+        time.sleep(0.05)
+    steps = max(2, int(duration / 16))
+    for step in range(1, steps + 1):
+        time.sleep(duration / 1000 / steps)
+        radius = start + (end - start) * step / steps
+        place(0, -radius)
+        place(1, radius)
+        device.syn()
+    for slot in (0, 1):
+        device.write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+        device.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+    device.write(e.EV_KEY, e.BTN_TOUCH, 0)
+    device.write(e.EV_KEY, e.BTN_TOOL_FINGER, 0)
+    device.syn()
+
+
 def up(device):
+    device.write(e.EV_ABS, e.ABS_MT_SLOT, 0)
     device.write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
     device.write(e.EV_KEY, e.BTN_TOUCH, 0)
     device.write(e.EV_KEY, e.BTN_TOOL_FINGER, 0)
@@ -92,6 +131,10 @@ def main(commands):
                     time.sleep(duration / 1000 / steps)
                     move(device, x1 + (x2 - x1) * step / steps, y1 + (y2 - y1) * step / steps)
                 up(device)
+            elif name == "pinch":
+                cx, cy, start, end, duration = numbers
+                log(f"pinch {cx:.0f},{cy:.0f} {start:.0f} → {end:.0f}")
+                pinch(device, cx, cy, start, end, duration)
             elif name == "sleep":
                 time.sleep(numbers[0] / 1000)
             else:

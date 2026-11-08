@@ -5,8 +5,9 @@ import qs.singletons
 
 // The Curves page's graph: time across, progress up. Draws the curve being edited with its
 // handles, the curve compared with, and where the preview has got on each; the points are
-// dragged, and the view pans and zooms — drag the background to move it, scroll to zoom
-// at the pointer, double-click off the curve to fit the curve again. Double-clicking the
+// dragged, and the view pans and zooms — drag the background to move it, scroll (or pinch
+// with two fingers) to zoom at the pointer, double-click off the curve to fit the curve
+// again. Double-clicking the
 // curve asks for a new point there. The points stay the page's: this reports what was done
 // to them (pointPressed, pointDragged, splitRequested).
 Item {
@@ -94,36 +95,60 @@ Item {
 
     clip: true
 
-    // The background: dragged, the view moves; scrolled, it zooms; double-clicked, a new
-    // point on the curve or the curve fitted again
-    MouseArea {
-        anchors.fill: parent
+    // The background: dragged, the view moves; scrolled or pinched, it zooms; double-clicked,
+    // a new point on the curve or the curve fitted again. Pointer handlers rather than a
+    // MouseArea: one keeping its drag from the page's Flickable (preventStealing) kept the
+    // first finger from a pinch too — the drag here lets a pinch take over, not the page.
+    DragHandler {
+        target: null
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
-        // Keeps the drag: otherwise the settings page's Flickable takes it and scrolls
-        preventStealing: true
-        property point _pressedAt
-        property real _pressedCenterX
-        property real _pressedCenterY
+        maximumPointCount: 1
+        cursorShape: active ? Qt.ClosedHandCursor : Qt.ArrowCursor
+        grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.ApprovesTakeOverByHandlersOfDifferentType
+        property real _startCenterX
+        property real _startCenterY
+        onActiveChanged: {
+            if (active) {
+                _startCenterX = root.centerX;
+                _startCenterY = root.centerY;
+            }
+        }
+        onTranslationChanged: {
+            if (active)
+                root._setCenter(_startCenterX - translation.x / root._xScale,
+                                _startCenterY + translation.y / root._yScale);
+        }
+    }
 
-        onPressed: mouse => {
-            _pressedAt = Qt.point(mouse.x, mouse.y);
-            _pressedCenterX = root.centerX;
-            _pressedCenterY = root.centerY;
+    // Two fingers zoom round the point between them: the wheel's zoom by touch
+    PinchHandler {
+        target: null
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        property real _lastScale: 1
+        onActiveChanged: _lastScale = 1
+        onActiveScaleChanged: {
+            if (!active)
+                return;
+            root._zoomAt(centroid.position, _lastScale / activeScale);
+            _lastScale = activeScale;
         }
-        onPositionChanged: mouse => {
-            if (pressed)
-                root._setCenter(_pressedCenterX - (mouse.x - _pressedAt.x) / root._xScale,
-                                _pressedCenterY + (mouse.y - _pressedAt.y) / root._yScale);
-        }
-        onWheel: wheel => root._zoomAt(Qt.point(wheel.x, wheel.y), Math.pow(1.15, -wheel.angleDelta.y / 120))
-        onDoubleClicked: mouse => {
-            const hit = root._hitCurve(Qt.point(mouse.x, mouse.y), 8);
+    }
+
+    TapHandler {
+        onDoubleTapped: eventPoint => {
+            const hit = root._hitCurve(eventPoint.position, 8);
             if (hit !== null && hit.t > 0.02 && hit.t < 0.98)
                 root.splitRequested(hit.segment, hit.t);
             else
                 root.fit();
         }
+    }
+
+    // The wheel alone: takes no button, so presses go to the handlers above
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.NoButton
+        onWheel: wheel => root._zoomAt(Qt.point(wheel.x, wheel.y), Math.pow(1.15, -wheel.angleDelta.y / 120))
     }
 
     Rectangle {

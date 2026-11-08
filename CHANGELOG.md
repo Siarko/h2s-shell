@@ -73,6 +73,10 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Calendar: a click or a tap on the month or the year shows the year's twelve months; the
+  arrows (or a swipe) move by years there and a month goes to it — moving by years no
+  longer needs the wheel over the year.
+- Curves settings: two fingers zoom the curve's graph, as the wheel does.
 - Touch and mouse alike: buttons, icons, rows and bar cells show their hover look when
   tapped (it holds a moment after the finger lifts, so a tap is seen), and small controls
   take a click or a tap a little past their edge — at least 36 px round them, the theme's

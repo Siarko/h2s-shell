@@ -12,7 +12,7 @@ guessing. One item at a time. Commit only when asked. An item is done once verif
 it can be — the host, or the Framework 12 for touch (the dev container has no
 `quickshell`) — and then moves to TODO-DONE.md.
 
-**Status (2026-11-08):** stages 1–10 done; stage 11 under way, touch input first (next: 11.12).
+**Status (2026-11-08):** stages 1–10 done; stage 11 under way, touch input first (next: 11.29).
 
 ---
 
@@ -20,8 +20,6 @@ it can be — the host, or the Framework 12 for touch (the dev container has no
 
 Touch input on the Framework 12 — the current work ([plans/touch.md](plans/touch.md)):
 
-- [ ] **11.12 Touch equivalents for the 7 wheel-only interactions** (was 4.4) [#28]
-      Volume on the sound widget, workspace switching, sliders.
 - [ ] **11.29 A keyboard button on the bar** (plans/touch.md stage 6) — calls `osk` (or
       a configured command): Hyprland's gestures cannot run commands, so a button is the
       only way to call the keyboard by finger. Shown by the "Tablet" profile.

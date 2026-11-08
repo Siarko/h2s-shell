@@ -134,6 +134,13 @@ Item {
     signal nextMonthRequested()
     signal dayClicked(int day)
     signal todayClicked()
+    // A month of the shown year picked in the months view
+    signal monthPicked(int month)
+
+    // The months view: the shown year's twelve months in place of the days, brought by a
+    // click or a tap on the month or the year. Its arrows and a swipe move by years and a
+    // month goes there — moving by years without a wheel (the year's own wheel stays).
+    property bool _choosingMonth: false
     signal yearDeltaRequested(int delta)
 
     ColumnLayout {
@@ -147,7 +154,7 @@ Item {
 
             ArrowButton {
                 text: "<"
-                onClicked: root.prevMonthRequested()
+                onClicked: root._choosingMonth ? root.yearDeltaRequested(-1) : root.prevMonthRequested()
             }
 
             Item {
@@ -159,6 +166,8 @@ Item {
                     spacing: 6
 
                     Text {
+                        // The months view shows the year alone
+                        visible: !root._choosingMonth
                         text: root.monthNames[root.displayMonth]
                         color: _monthArea.lit ? Theme.accent : Theme.textPrimary
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
@@ -168,6 +177,8 @@ Item {
 
                         PointerArea {
                             id: _monthArea
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root._choosingMonth = !root._choosingMonth
                             onWheel: event => {
                                 root._monthScrollAccum += event.angleDelta.y
                                 while (root._monthScrollAccum >= 120) {
@@ -192,6 +203,8 @@ Item {
 
                         PointerArea {
                             id: _yearArea
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root._choosingMonth = !root._choosingMonth
                             onWheel: event => {
                                 root._yearScrollAccum += event.angleDelta.y
                                 while (root._yearScrollAccum >= 120) {
@@ -210,7 +223,7 @@ Item {
 
             ArrowButton {
                 text: ">"
-                onClicked: root.nextMonthRequested()
+                onClicked: root._choosingMonth ? root.yearDeltaRequested(1) : root.nextMonthRequested()
             }
         }
 
@@ -238,14 +251,20 @@ Item {
                 PointerArea {
                     id: _todayArea
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.todayClicked()
+                    onClicked: {
+                        root._choosingMonth = false;
+                        root.todayClicked();
+                    }
                 }
             }
         }
 
         // Day-of-week labels, as tall as a line of them, never less than 20 px
         Row {
+            id: _dayNamesRow
             Layout.fillWidth: true
+            opacity: root._choosingMonth ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
             height: Math.max(20, _dayNameMetrics.height)
 
             TextMetrics {
@@ -279,6 +298,10 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            // Under the months view while it shows: unseen, and nothing in it to tap
+            opacity: root._choosingMonth ? 0 : 1
+            enabled: !root._choosingMonth
+            Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
             // The months sliding past stay inside the grid
             clip: true
 
@@ -389,6 +412,82 @@ Item {
                 rangeStart: root.rangeStart
                 rangeEnd: root.rangeEnd
                 picking: root.picking
+            }
+        }
+    }
+
+    // The months view, over where the day names and the days are
+    Item {
+        id: _monthsView
+        y: _dayNamesRow.y
+        width: root.width
+        height: root.height - y
+        opacity: root._choosingMonth ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
+
+        Grid {
+            id: _monthCells
+            anchors.fill: parent
+            columns: 3
+            rows: 4
+
+            Repeater {
+                model: 12
+
+                Rectangle {
+                    id: _monthCell
+                    required property int index
+                    // The month the days show, in the year shown; and this month of today
+                    readonly property bool _shown: index === root.displayMonth
+                    readonly property bool _current: index === root.today.getMonth() && root.displayYear === root.today.getFullYear()
+
+                    width: _monthCells.width / 3
+                    height: _monthCells.height / 4
+                    radius: Theme.calendar.dayRadius
+                    color: _current ? Theme.calendarToday
+                         : _shown ? Theme.accentTint
+                         : _cellArea.lit ? Qt.alpha(Theme.accentTint, 0.55)
+                         : Qt.alpha(Theme.accentTint, 0)
+                    Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
+                    border.width: _shown && _current ? Theme.border.width : 0
+                    border.color: Theme.accent
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.monthNames[_monthCell.index].slice(0, 3)
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: _monthCell._current
+                    }
+
+                    // The cells touch: no larger target than the cell
+                    PointerArea {
+                        id: _cellArea
+                        centred: false
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root._choosingMonth = false;
+                            root.monthPicked(_monthCell.index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Swiped by a finger: left for the next year, right for the one before
+        Item {
+            anchors.fill: parent
+            z: 2
+
+            SwipeGesture {
+                yAxis.enabled: false
+                onActiveChanged: {
+                    if (!active && meant(deltaX, velocity().x, _monthsView.width / 5))
+                        root.yearDeltaRequested(deltaX < 0 ? 1 : -1);
+                }
             }
         }
     }

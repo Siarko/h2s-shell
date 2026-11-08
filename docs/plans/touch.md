@@ -2,10 +2,9 @@
 
 Status (2026-11-08): stages 0–2 done (measured; tablet mode from Hyprland; popups by
 touch and the on-screen keyboard), stage 5's gestures done, and from stage 6 the battery
-widget, and stage 3 (touch feedback and target sizes). Left: stage 4 (instead of the
-wheel, 11.12), from stage 6 the keyboard button (11.29) and the lock
-screen (11.30), and popups clear of the keyboard by other bars and in the settings
-window (11.31).
+widget, stages 3 (touch feedback and target sizes) and 4 (instead of the wheel). Left:
+from stage 6 the keyboard button (11.29) and the lock screen (11.30), and popups clear
+of the keyboard by other bars and in the settings window (11.31).
 
 ## Why
 

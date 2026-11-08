@@ -717,6 +717,17 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       look on a tap, held 200 ms after the release (`components/PointerArea.qml`'s
       `lit`), about 60 areas moved to it; tooltips stay on `containsMouse`.
 
+- [x] **11.12 Touch equivalents for the 7 wheel-only interactions** (was 4.4) [#28]
+      Volume on the sound widget, workspace switching, sliders.
+      Done 2026-11-08, verified on the Framework. Measured first: almost nothing was
+      wheel-only — the bar's volume and track, the sliders, the player list, the colour
+      row and a popup cut by the keyboard all have a way by finger (a popup, a drag, a
+      swipe); workspaces have no wheel. Two gaps were real and are filled: the calendar's
+      year (a click or a tap on the month or year shows the year's months — arrows and a
+      swipe move by years, a month goes there) and the Curves graph's zoom (a pinch, with
+      the background's drag moved from a MouseArea to a DragHandler a pinch can take the
+      first finger from). `touchtap.py` learnt `pinch`.
+
 - [x] **11.14 Touch-sized targets** (was 4.6) — with 11.11, plans/touch.md stage 3
       Split off 3.1. Compositor scaling makes everything proportionally larger but does
       not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized

@@ -7,7 +7,7 @@ sends its events to the Qt window directly, past the compositor, so keyboard foc
 input method and layer stacking never come into it.
 
 - `touchtap.py` — the virtual touchscreen: `tap x y`, `hold x y ms`, `swipe x1 y1 x2 y2 ms`,
-  `sleep ms`, in the monitor's logical pixels.
+  `pinch cx cy start end ms` (two fingers), `sleep ms`, in the monitor's logical pixels.
 - `keyboard-popup.sh` — the calendar popup by touch: the keyboard shows for a text field
   and hides after, a tap on the keyboard keeps the popup, a tap outside closes it.
 

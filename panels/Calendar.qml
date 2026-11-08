@@ -117,6 +117,10 @@ Item {
                 root.displayYear  = root._today.getFullYear()
             }
             onYearDeltaRequested: delta => root.displayYear += delta
+            onMonthPicked: month => {
+                root.displayMonth = month;
+                root.selectedDay = Math.min(root.selectedDay, new Date(root.displayYear, month + 1, 0).getDate());
+            }
         }
     }
 }
