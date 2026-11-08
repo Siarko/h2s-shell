@@ -1,7 +1,11 @@
 # Plan: touch and stylus (TODO 11.9–11.14)
 
-Status: **stage 0 under way 2026-11-08** (first probe run done, a second for the gaps);
-stage 1's way of reading the switch decided.
+Status (2026-11-08): stages 0–2 done (measured; tablet mode from Hyprland; popups by
+touch and the on-screen keyboard), stage 5's gestures done, and from stage 6 the battery
+widget. Left: stage 3 (touch feedback and target sizes, TODO 11.11 and 11.14), stage 4
+(instead of the wheel, 11.12), from stage 6 the keyboard button (11.29) and the lock
+screen (11.30), and popups clear of the keyboard by other bars and in the settings
+window (11.31).
 
 ## Why
 

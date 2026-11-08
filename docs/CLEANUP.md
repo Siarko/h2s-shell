@@ -439,7 +439,10 @@ The shell is built entirely around a mouse pointer. Counted across the project:
 | `onWheel` | 7 |
 | `TapHandler` / `PinchHandler` / `DragHandler` | 0 |
 
-### 24. The popup closes on pointer-exit, which a touchscreen never reports
+### 24. The popup closes on pointer-exit, which a touchscreen never reports — **FIXED**
+
+**Fixed (2026-11-08, TODO 11.9):** a popup opened by a tap closes on a tap outside it
+(`OutsideTapCatcher`) and takes the keyboard without hover.
 
 `panels/Popup.qml:232-238` closes a non-persistent popup from
 `HoverHandler.onHoveredChanged`. With touch input there is no hover, so a hover-mode
@@ -450,7 +453,10 @@ hover-driven too.
 Fix: close on a tap outside the card (the full-screen window is already there — extend
 the mask or add an outside-press handler) and make `focusable` not depend on hover.
 
-### 25. "Hover" popup mode is meaningless on touch, and it is the default for three widgets
+### 25. "Hover" popup mode is meaningless on touch, and it is the default for three widgets — **FIXED**
+
+**Fixed (2026-11-08, TODO 11.10):** a tap toggles any popup as a click, whatever its
+mode; hover is told from a finger by timing (`PointerRules`, `BarWidget`).
 
 Clock, sound and bluetooth default to `_popupMode: "hover"`. On a touch-only session
 those three widgets become unusable. Fix: detect the input type, or force click mode when
@@ -460,6 +466,8 @@ the primary input is touch — one place once #13 is done.
 
 Buttons, list rows, cards and sliders change appearance only via `containsMouse`. Under
 touch they either never highlight, or highlight and stay stuck after the finger lifts.
+(Measured on the Framework 2026-11-08: a finger's `containsMouse` is true while pressed and
+false on release — nothing sticks; the gap is feedback, a press too short to see.)
 Fix: drive visual state from a handler that covers both (`TapHandler.pressed` plus
 `HoverHandler.hovered`), ideally through shared components so it is not 64 edits.
 
@@ -489,7 +497,10 @@ left is touch-target size, a design decision tracked as TODO 11.14.
 Seven `onWheel` handlers — volume on the sound widget, workspace switching, sliders. A
 finger cannot scroll a wheel. Fix: add drag/swipe gestures for the same actions.
 
-### 29. No gestures at all
+### 29. No gestures at all — **FIXED (the ones asked for)**
+
+**Fixed (2026-11-08, TODO 11.13):** swipes for notifications, the calendar's month and the
+music panel (`SwipeGesture`). No edge swipe or pinch — none asked for.
 
 No swipe to dismiss a notification, no edge swipe to open a panel, no pinch, nothing.
 This is the new feature surface rather than a defect, but it depends on #24–#27 being

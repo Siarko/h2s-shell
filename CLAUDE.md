@@ -22,6 +22,8 @@ Read these before making structural changes:
   with the analysis done.
 - **[docs/TODO.md](docs/TODO.md)** — the cleanup checklist derived from it, in the agreed
   order, with the current progress. Start here when resuming cleanup work.
+- **[docs/TODO-DONE.md](docs/TODO-DONE.md)** — the done items of TODO.md, numbers kept, with
+  their notes; look an item number up here when it is not in TODO.md.
 - **[docs/STYLES.md](docs/STYLES.md)** — the shell's CSS variant for themes: selectors,
   cascade, properties, at-rules. Keep it in step with what the compiler accepts.
 - **[docs/quickshell-integration.md](docs/quickshell-integration.md)** — the `pttd`
