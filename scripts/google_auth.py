@@ -7,9 +7,18 @@ process's arguments from /proc/<pid>/cmdline, while its environment is private t
 owner.
 Prints JSON to stdout: {"access_token":"...","refresh_token":"...","expiry":<unix_ts>}
 Exits 0 on success, 1 on failure (error to stderr).
+
+The shell ships its client secret (an installed app cannot keep one), so the sign-in is
+protected otherwise (RFC 7636, RFC 8252): PKCE — the code Google sends back is worth
+nothing without a verifier only this process knows, so another program catching it on the
+loopback port cannot use it — and a random `state`, so a redirect this process did not ask
+for is refused.
 """
 
+import base64
+import hashlib
 import os
+import secrets
 import sys
 import json
 import time
@@ -36,13 +45,24 @@ def main():
     port = find_free_port()
     redirect_uri = f"http://127.0.0.1:{port}"
 
+    code_verifier = secrets.token_urlsafe(64)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode("ascii")).digest()
+    ).rstrip(b"=").decode("ascii")
+    state = secrets.token_urlsafe(32)
+
     auth_code = [None]
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             params = urllib.parse.parse_qs(parsed.query)
-            if "code" in params:
+            if "code" in params and params.get("state", [""])[0] != state:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"<html><body><h2>Authorization failed: state mismatch</h2></body></html>")
+            elif "code" in params:
                 auth_code[0] = params["code"][0]
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html")
@@ -75,6 +95,9 @@ def main():
                 "scope": "https://www.googleapis.com/auth/calendar",
                 "access_type": "offline",
                 "prompt": "consent",
+                "state": state,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
             }
         )
     )
@@ -109,6 +132,7 @@ def main():
             "client_secret": client_secret,
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
+            "code_verifier": code_verifier,
         }
     ).encode()
 

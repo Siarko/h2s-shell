@@ -11,3 +11,6 @@
 # Quickshell writes this symlink into the config folder for qmlls; it points into
 # /run/user/<uid>, so it is machine-local, and a dangling link breaks the GitHub Pages build.
 /.qmlls.ini
+
+# Python bytecode, from running or checking the helper scripts
+__pycache__/

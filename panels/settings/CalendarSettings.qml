@@ -108,14 +108,21 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: 0
 
+        Hint {
+            Layout.bottomMargin: 6
+            text: "Connect signs in through the shell's own Google client. To use an OAuth client of "
+                + "your own instead (Google Cloud, type \"Desktop app\", Calendar API on), fill in both "
+                + "fields; leave them empty for the shell's."
+        }
+
         SettingInputRow {
-            label: "Client ID"
+            label: "Own client ID"
             value: Config.gcal.clientId
             onValueChanged: Config.gcal.clientId = value
         }
 
         SettingInputRow {
-            label: "Client Secret"
+            label: "Own client secret"
             value: Config.gcal.clientSecret
             onValueChanged: Config.gcal.clientSecret = value
             echoMode: TextInput.Password
@@ -131,7 +138,6 @@ ColumnLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 label: "Connect"
                 kind: "save"
-                available: Config.gcal.clientId !== "" && Config.gcal.clientSecret !== ""
                 onClicked: GoogleCalendarAuth.login()
             }
         }

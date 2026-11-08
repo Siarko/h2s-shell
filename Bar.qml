@@ -333,6 +333,7 @@ PanelWindow {
         id: popupLoader
         barEdge: bar.screenEdge
         barScreen: bar.modelData
+        barWindow: bar
         popupPosition: 0
         popupLength: 0
         // Notify parent so other screens close their popups

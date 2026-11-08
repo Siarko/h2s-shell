@@ -10,7 +10,8 @@ TestCase {
         assertEqual(new Set(keys).size, keys.length, "every setting key is listed once");
         for (const entry of SettingsSchema.entries) {
             assert(!!entry.label && !!entry.group && !!entry.type, entry.key + " has a label, group and type");
-            if (entry.type === "enum")
+            // Options worked out at runtime (optionsFrom, the icon themes) have no default to check
+            if (entry.type === "enum" && entry.options)
                 assert(entry.options.some(option => option.value === entry.default), entry.key + " default is one of its options");
         }
 

@@ -11,6 +11,11 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Touch: a tap on a bar widget opens its popup even when the widget opens it on hover —
+  such a popup opened by a finger used to stay open for good. A popup opened by a tap
+  closes on a tap outside it and the bar, and takes the keyboard (a text field in it gets
+  typing, the on-screen keyboard too) without the pointer over it. Popups opened by the
+  mouse behave as before; one opening on hover does so 60 ms later.
 - Settings: the list of pages scrolls when the window is too short for it (a small
   laptop screen); the pages at the bottom could not be reached.
 - Bluetooth stays off after a restart when you left it off. BlueZ powers the adapter on
@@ -54,6 +59,9 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Google Calendar: no OAuth client of your own needed — the shell carries one (a client
+  entered in the settings still takes its place). The sign-in uses PKCE and checks its
+  `state`, since the client's secret is public.
 - Installing: `install.sh` for Arch (the packages, then a checkout where Quickshell looks
   for its config), and a Nix flake for NixOS — an `h2s-shell` command carrying every
   program the shell calls, and a module (`programs.h2s-shell.enable`) adding the font and

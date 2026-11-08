@@ -21,8 +21,17 @@ Item {
     property int horizontalPadding: Theme.capsule.horizontalPadding
     // Emitted on click, carries the cell's color
     signal clicked(cellColor: color)
-    // Emitted on mouse enter (true) and exit (false)
+    // Emitted when a pointer that can hover — a mouse, a touchpad, a stylus held above the
+    // screen — comes over the cell (true) and leaves it (false). Not for a finger: a touch
+    // screen reports a press as hover, and a hover popup opened by it could not be closed.
+    // The device a hover names cannot tell them apart (a touch is reported as a touch
+    // screen, or as a touchpad when the finger slides in — docs/plans/touch.md), the timing
+    // can: a finger's hover comes with its press, within milliseconds. So hover is passed on
+    // only after a moment with no touch press (_hoverSettle).
     signal hover(status: bool)
+    // Whether the last press came from a touch screen (Qt makes it a mouse press), so a
+    // click can be told from a tap: a popup opened by a tap behaves for touch (PopupWidget)
+    property bool lastPressByTouch: false
     // Emitted on every wheel event, with its movement in notches (fractional)
     signal scrolled(delta: real)
     // Emitted for each whole notch, 1 for up, -1 for down (ScrollNotches)
@@ -69,19 +78,46 @@ Item {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 
+        onPressed: event => {
+            container.lastPressByTouch = PointerRules.pressIsTouch(event.source);
+            if (container.lastPressByTouch)
+                _hoverSettle.stop();
+        }
+        onContainsMouseChanged: {
+            if (containsMouse) {
+                _hoverSettle.restart();
+            } else {
+                _hoverSettle.stop();
+                if (container._hoverReported) {
+                    container._hoverReported = false;
+                    container.hover(false);
+                }
+            }
+        }
         onClicked: event => {
             if (event.button === Qt.MiddleButton)
                 container.middleClicked();
             else
                 container.clicked(container.cellColor);
         }
-        onEntered: container.hover(true)
-        onExited: container.hover(false)
         onWheel: event => {
             container.scrolled(container._notches.notches(event.angleDelta.y));
             const direction = container._notches.feed(event.angleDelta.y);
             if (direction !== 0)
                 container.scrollNotch(direction);
+        }
+    }
+
+    property bool _hoverReported: false
+
+    Timer {
+        id: _hoverSettle
+        interval: 60
+        onTriggered: {
+            if (!mouseArea.containsMouse || (mouseArea.pressed && container.lastPressByTouch))
+                return;
+            container._hoverReported = true;
+            container.hover(true);
         }
     }
 }

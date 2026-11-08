@@ -248,8 +248,7 @@ Item {
                 onClicked: {
                     if (root._statusKind === "error")
                         GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
-                    else if (root._statusKind === "unauthorized"
-                             && Config.gcal.clientId !== "" && Config.gcal.clientSecret !== "")
+                    else if (root._statusKind === "unauthorized")
                         GoogleCalendarAuth.login();
                     else
                         Shell.openSettings("calendar");

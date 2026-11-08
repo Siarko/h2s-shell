@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import QtQuick.Shapes
@@ -41,6 +42,13 @@ LazyLoader {
     property bool closing: false
     // When true, the popup stays open until explicitly toggled (click-to-close)
     property bool persistent: false
+    // Opened by a tap on a touch screen. Such a popup closes on a tap outside it and the
+    // bar, and takes the keyboard without a pointer over it (a finger never hovers). One
+    // opened by the mouse does neither: it may stay open while you work elsewhere.
+    property bool touchOpened: false
+    // The bar's window: a tap on it does not close a popup opened by touch, so another
+    // cell can be tapped
+    property var barWindow: null
     // Which content the popup shows: a widget type, whose panel WidgetRegistry gives, or
     // one of the contents wired here ("tray-menu", "notifications" — see _componentMap)
     property string contentType: "calendar"
@@ -81,8 +89,9 @@ LazyLoader {
     }
 
     // Open the popup aligned to the given element
-    function open(element, persistent = false, contentType = "calendar", contentData = null) {
+    function open(element, persistent = false, contentType = "calendar", contentData = null, byTouch = false) {
         popupLoader.persistent = persistent;
+        popupLoader.touchOpened = byTouch;
         popupLoader.contentType = contentType;
         popupLoader.contentData = contentData;
         const mapped = element.mapToItem(null, 0, 0);
@@ -265,7 +274,15 @@ LazyLoader {
             })
         }
 
-        focusable: hoverHandler.hovered
+        focusable: hoverHandler.hovered || popupLoader.touchOpened
+
+        // A tap outside the popup and the bar closes one opened by touch. Hyprland says
+        // when a press lands outside the windows listed (hyprland-focus-grab).
+        HyprlandFocusGrab {
+            active: popupLoader.touchOpened && !popupLoader.closing
+            windows: [popup, popupLoader.barWindow].filter(window => !!window)
+            onCleared: popupLoader.close()
+        }
 
         // Align to the bar's desktop side, not the edge of its reserved space
         margins.top: edge === "top" ? BarGeometry.popupMargin(Theme.bar) : 0

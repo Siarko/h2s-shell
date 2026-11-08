@@ -99,9 +99,10 @@ laptop until the next one; `ipc call tablet set true` by hand corrects it.
 
 ## Google Calendar
 
-Connect an account in **Settings → Calendar**. For now this needs a Google Cloud OAuth
-client of your own (type "Desktop app", with the Calendar API enabled): paste its client
-ID and secret there and sign in in the browser. The shell talks to Google directly; see
+Connect an account in **Settings → Calendar** and sign in in the browser. The shell
+carries its own Google OAuth client; Google has not verified the app yet, so the sign-in
+page warns about that ("Advanced" → continue). A client of your own (Google Cloud, type
+"Desktop app", Calendar API enabled) can be entered there instead. The shell talks to Google directly; see
 the [privacy policy](https://siarko.github.io/h2s-shell/privacy.html).
 
 ## Development

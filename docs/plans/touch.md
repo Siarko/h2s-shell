@@ -89,6 +89,27 @@ tapping with a finger, then the stylus.
 - Not in the log, re-run asked for: a stylus tap on a `MouseArea`, press-and-hold
   (`pressAndHold`, `longPressed`), a press dragged out of an area.
 
+*Touch works everywhere, not only in tablet mode* (the user, 2026-11-08): the shell tells
+a finger from a pointer per event; the "Tablet" profile is for preferences (larger
+targets, the keyboard button), not for making touch work.
+
+*Popups (11.9, 11.10), 2026-11-08:*
+- A hover popup opened by a finger stayed open for good (the finger's "hover" opened it,
+  nothing it does closes it); a tap now toggles it as a click (`PointerRules`,
+  `PopupWidget`).
+- **The device a hover names is no guide**: on the Framework a tap reported a touch
+  screen, a finger sliding into an item a touchpad; under QtTest every hover a touchpad.
+  `BarWidget` tells them by timing instead: hover is passed on 60 ms after the pointer
+  comes over, unless a touch press came meanwhile.
+- A popup opened by a tap (`touchOpened`) closes on a tap outside it and the bar
+  (`HyprlandFocusGrab`) and is keyboard-focusable without hover. Mouse-opened popups
+  unchanged — the user keeps popups open while working elsewhere.
+- Tests: `PointerRulesTest`, and `PointerInputTest` driving real components with QtTest
+  (mouse, touch) — the first test of the shell that sends input. It fails on the old
+  behaviour (checked by putting it back).
+- Found on the way: `ProfilesTest` had thrown since the icon theme setting (11.16, options
+  from `optionsFrom`) and printed nothing; the harness now counts a throw as a failure.
+
 *Stage 1, decided (2026-11-08):* tablet mode comes from Hyprland — switch bindings in
 `hyprland.lua` call `ipc call tablet set true|false` (`singletons/TabletMode.qml`, the
 profile fact `input.tabletMode`). No device access needed; Hyprland reports only changes,

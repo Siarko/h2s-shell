@@ -360,8 +360,17 @@ if-chain.
 ## Testing
 
 `tests/` holds a minimal harness (`TestCase.qml` with `assert`/`assertEqual`/`fail`) and
-one suite, `PromisesTest.qml`. Suites run their assertions in `Component.onCompleted`;
-`tests.qml` instantiates them and quits on the next event-loop tick.
+the suites `tests.qml` lists. Most run their assertions in `Component.onCompleted`, on pure
+functions (the `*Rules` and geometry singletons, parsers). A suite that throws counts as
+failed, not as missing.
+
+A suite that needs the event loop sets `asynchronous: true`, does its work in
+`runAsync()` and calls `finish()`; `tests.qml` lists it in `_asyncSuites` and waits for it
+(20 s at most). `PointerInputTest.qml` is one: it puts real components (`BarWidget`,
+`PopupWidget`) in a small layer window and drives them with QtTest's `TestCase` used by
+hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check what a mouse and
+a finger do. It needs a Wayland session (the window shows in a corner for a moment). A
+stylus cannot be sent that way.
 
 Everything else is verified by hand: run `quickshell` from the repo root and check that
 the bar renders, the clock ticks, cells respond, and popups toggle. There is no

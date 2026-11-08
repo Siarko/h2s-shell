@@ -30,12 +30,29 @@ QtObject {
     property var _coverColors: CoverColorsTest {}
     property var _playerRules: PlayerRulesTest {}
     property var _barGeometry: BarGeometryTest {}
+    property var _pointerRules: PointerRulesTest {}
+    property var _pointerInput: PointerInputTest {}
 
-    // Exit after all Component.onCompleted handlers finish.
-    // interval:0 fires on the next event loop tick, after all suites have run.
+    // The suites that run on the event loop (TestCase.asynchronous)
+    readonly property var _asyncSuites: [_pointerInput]
+
+    // Exit once the synchronous suites have run (all in Component.onCompleted) and the
+    // asynchronous ones are done — or after a deadline, counting those as failed
     property var _quit: Timer {
-        interval: 0
+        interval: 50
         running: true
-        onTriggered: Qt.quit()
+        repeat: true
+        property int _waited: 0
+        onTriggered: {
+            _waited += interval;
+            const pending = _asyncSuites.filter(suite => !suite.done);
+            if (pending.length > 0 && _waited < 20000)
+                return;
+            pending.forEach(suite => {
+                suite.fail("timed out");
+                suite.finish();
+            });
+            Qt.quit();
+        }
     }
 }
