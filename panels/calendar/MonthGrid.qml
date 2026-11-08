@@ -40,6 +40,42 @@ Item {
     property int _capturing: 0
     property bool _showOlder: false
     property bool _swapPending: false
+    // A finger swipe across the grid changes the month: the grid follows the finger, and
+    // the month it brings in follows beside it — a second grid, the preview, its events
+    // fetched as soon as it shows. Let go far enough, the grid takes the preview's place
+    // and the slide carries on from there. The preview covers the snapshots beside the
+    // grid, which hold whichever month was left last, not the one coming.
+    // 1: the next month, on the right; -1: the one before, on the left; 0: none
+    property int _previewDirection: 0
+    readonly property int _previewIndex: displayYear * 12 + displayMonth + (_previewDirection || 1)
+    property real _swipeBase: 0
+
+    function _showPreview(direction) {
+        if (direction === _previewDirection)
+            return;
+        _previewDirection = direction;
+        if (direction !== 0)
+            GoogleCalendar.fetchMonthEvents(Math.floor(_previewIndex / 12), _previewIndex % 12);
+    }
+
+    // Let go far enough: the grid moves to where the preview is and becomes that month —
+    // all before anything is drawn again — and slides on to rest from there
+    function _landSwipe(direction) {
+        _previewDirection = 0;
+        _showOlder = false;
+        _previousDirection = _slideDirection;
+        _slideDirection = direction;
+        _gridShift.x += direction * _dateGrid.width;
+        if (direction > 0)
+            nextMonthRequested();
+        else
+            prevMonthRequested();
+        // The month changed at once (_freezeOldMonth froze the live snapshot on the old
+        // one); the slide it queued would start from a grid's width further out
+        _shownMonthIndex = displayYear * 12 + displayMonth;
+        _monthSlide.fromX = _gridShift.x;
+        _monthSlide.start();
+    }
     Component.onCompleted: _shownMonthIndex = displayYear * 12 + displayMonth
     onDisplayMonthChanged: _freezeOldMonth()
     onDisplayYearChanged: _freezeOldMonth()
@@ -62,6 +98,8 @@ Item {
         _slideDirection = monthIndex > _shownMonthIndex ? 1 : -1;
         _shownMonthIndex = monthIndex;
         _showOlder = _monthSlide.running && _slideDirection === _previousDirection;
+        // A month changed otherwise (the arrows, the wheel) ends a swipe's preview
+        _previewDirection = 0;
         // The month sliding out starts where the grid is now
         const from = (_monthSlide.running ? _gridShift.x : 0) + _slideDirection * _dateGrid.width;
         _monthSlide.stop();
@@ -77,43 +115,15 @@ Item {
         width: _dateGrid.width
         height: _dateGrid.height
         live: role === 0
-        visible: role !== 2 || (root._showOlder && _monthSlide.running)
+        // The month sliding out gives way to a swipe's preview, which stands where it would
+        visible: role === 0 || (role === 1 && root._previewDirection === 0) || (root._showOlder && _monthSlide.running)
         x: role === 0 ? width + 1
             : role === 1 ? _gridShift.x - root._slideDirection * width
             : _gridShift.x - (root._slideDirection + root._previousDirection) * width
     }
 
-    // Derived grid geometry
-    readonly property int _startDow:      (new Date(displayYear, displayMonth, 1).getDay() + 6) % 7
-    readonly property int _daysInMonth:   new Date(displayYear, displayMonth + 1, 0).getDate()
-    readonly property int _prevMonthDays: new Date(displayYear, displayMonth, 0).getDate()
-
     property string viewMode: "day"
 
-    // The grid's 42 days, the month's with the ends of the months around it
-    function _cellKey(index) {
-        return CalendarDates.keyOfDate(new Date(displayYear, displayMonth, index - _startDow + 1));
-    }
-    readonly property string _firstKey: _cellKey(0)
-    readonly property string _lastKey: _cellKey(41)
-    // The month's events, each once, and the bars of those spanning days
-    // (CalendarDates.dayBars), by day key
-    readonly property var _monthEvents: {
-        const seen = {};
-        const events = [];
-        for (let day = 1; day <= _daysInMonth; day++) {
-            for (const event of GoogleCalendar.events[CalendarDates.dateKey(displayYear, displayMonth, day)] ?? []) {
-                if (!seen[event.id]) {
-                    seen[event.id] = true;
-                    events.push(event);
-                }
-            }
-        }
-        return events;
-    }
-    readonly property var _dayBars: CalendarDates.dayBars(_monthEvents, _firstKey, _lastKey)
-    // Lanes of bars drawn in a day; more are left out — the day's list shows them all
-    readonly property int _maxLanes: 3
     // The open event form's days, "YYYY-MM-DD" (empty when none), shaded; and whether a
     // click picks a date for it rather than selecting the day
     property string rangeStart: ""
@@ -208,11 +218,16 @@ Item {
             }
         }
 
-        // "Today" button — visible only when not viewing the current month/year
+        // "Today" button — shown only away from the current month, but its line is always
+        // there: a grid that lost a line to it would change size, its days jumping, on every
+        // swipe to and from the current month
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.max(18, _todayText.implicitHeight)
-            visible: root.displayMonth !== root.today.getMonth() || root.displayYear !== root.today.getFullYear()
+            readonly property bool _away: root.displayMonth !== root.today.getMonth() || root.displayYear !== root.today.getFullYear()
+            opacity: _away ? 1 : 0
+            enabled: _away
+            Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
 
             Text {
                 id: _todayText
@@ -281,12 +296,50 @@ Item {
             MonthSnapshot { snapshotIndex: 1 }
             MonthSnapshot { snapshotIndex: 2 }
 
+            // Swiped by a finger: left for the next month, right for the one before. Above
+            // the days, which still get a tap — the swipe takes the finger only once it
+            // moves.
+            Item {
+                anchors.fill: parent
+                z: 2
+
+                SwipeGesture {
+                    id: _swipe
+                    yAxis.enabled: false
+                    onActiveChanged: {
+                        if (active) {
+                            // Caught mid-slide: held where it is. The month before the one
+                            // sliding out is left behind for good.
+                            root._showOlder = false;
+                            _monthSlide.stop();
+                            root._swipeBase = _gridShift.x;
+                            return;
+                        }
+                        if (meant(deltaX, velocity().x, _dateGrid.width / 5))
+                            root._landSwipe(deltaX < 0 ? 1 : -1);
+                        else {
+                            // Back to rest, the preview with it (hidden once there)
+                            _monthSlide.fromX = _gridShift.x;
+                            _monthSlide.start();
+                        }
+                    }
+                    onDeltaXChanged: {
+                        if (!active)
+                            return;
+                        _gridShift.x = root._swipeBase + deltaX;
+                        // The side the grid has moved away from shows the month there
+                        if (_gridShift.x !== 0)
+                            root._showPreview(_gridShift.x < 0 ? 1 : -1);
+                    }
+                }
+            }
+
             // Week-range border — a single rectangle spanning the full row
             Rectangle {
                 visible: root.viewMode === "week"
                 x: 0
                 y: {
-                    let selectedIndex = root._startDow + root.selectedDay - 1;
+                    let selectedIndex = _dateGrid.startDow + root.selectedDay - 1;
                     return Math.floor(selectedIndex / 7) * (_dateGrid.height / 6);
                 }
                 width: _dateGrid.width
@@ -299,150 +352,49 @@ Item {
                 z: 1
             }
 
-            Grid {
+            NumberAnimation {
+                id: _monthSlide
+                property real fromX: 0
+                target: _gridShift
+                property: "x"
+                from: fromX
+                to: 0
+                duration: Theme.duration("slide")
+                easing: Theme.curve("slide")
+                // A swipe let go too soon has come back: its preview is done
+                onFinished: root._previewDirection = 0
+            }
+
+            MonthDays {
                 id: _dateGrid
                 anchors.fill: parent
-                columns: 7
-                rows: 6
                 transform: Translate { id: _gridShift }
+                year: root.displayYear
+                month: root.displayMonth
+                selectedDay: root.selectedDay
+                today: root.today
+                viewMode: root.viewMode
+                rangeStart: root.rangeStart
+                rangeEnd: root.rangeEnd
+                picking: root.picking
+                onDayClicked: day => root.dayClicked(day)
+            }
 
-                NumberAnimation {
-                    id: _monthSlide
-                    property real fromX: 0
-                    target: _gridShift
-                    property: "x"
-                    from: fromX
-                    to: 0
-                    duration: Theme.duration("slide")
-                    easing: Theme.curve("slide")
-                }
-
-                Repeater {
-                    model: 42
-
-                    Rectangle {
-                        id: _cell
-                        required property int index
-
-                        property bool isCurrent:  index >= root._startDow && index < root._startDow + root._daysInMonth
-                        property int  dayNum:     isCurrent
-                            ? index - root._startDow + 1
-                            : (index < root._startDow
-                                ? root._prevMonthDays - root._startDow + index + 1
-                                : index - root._startDow - root._daysInMonth + 1)
-                        property bool isToday:    isCurrent && dayNum === root.today.getDate() && root.displayMonth === root.today.getMonth() && root.displayYear === root.today.getFullYear()
-                        property bool isSelected: isCurrent && dayNum === root.selectedDay
-                        readonly property string _key: root._cellKey(index)
-                        readonly property var _bars: root._dayBars[_key] ?? []
-                        // Keys compare as dates: "YYYY-MM-DD" sorts in order
-                        property bool inRange: isCurrent && root.rangeStart !== ""
-                            && _key >= root.rangeStart && _key <= (root.rangeEnd || root.rangeStart)
-
-                        width: _dateGrid.width / 7
-                        height: _dateGrid.height / 6
-                        color: isToday    ? Theme.calendarToday
-                             : isSelected ? Theme.accentTint
-                             : inRange    ? Qt.alpha(Theme.accentTint, 0.55)
-                             : Qt.alpha(Theme.accentTint, 0)
-                        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
-                        radius: Theme.calendar.dayRadius
-                        // Border shows selected range: day→cell, week→handled by overlay, month→none
-                        // While picking a date, the first and last day of the span are outlined
-                        // instead, so where it begins and ends shows
-                        readonly property bool _spanEnd: root.picking && inRange
-                            && (_key === root.rangeStart || _key === (root.rangeEnd || root.rangeStart))
-                        border.width: _spanEnd || (!root.picking && root.viewMode === "day" && isSelected && !isToday) ? Theme.border.width : 0
-                        border.color: Theme.accent
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: dayNum
-                            color: isCurrent ? Theme.textPrimary : Theme.textDisabled
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeMedium
-                            font.bold: isToday
-                        }
-
-                        // Events of this day alone: a dot each, in the event's colour, under
-                        // the day's number — two rows of four at most; the day's list shows
-                        // them all
-                        readonly property var _dots: isCurrent
-                            ? (GoogleCalendar.events[_key] ?? []).filter(event => !event.lastDate || event.lastDate === event.startDate).slice(0, 8)
-                            : []
-
-                        Column {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 3
-                            spacing: 2
-
-                            Repeater {
-                                // The first four, then the rest; each row centred
-                                model: ScriptModel {
-                                    values: [_cell._dots.slice(0, 4), _cell._dots.slice(4)].filter(row => row.length > 0)
-                                }
-
-                                Row {
-                                    id: _dotRow
-                                    required property var modelData
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    spacing: 2
-
-                                    Repeater {
-                                        // ScriptModel, never the bare array — see "The Repeater
-                                        // crash" in docs/ARCHITECTURE.md
-                                        model: ScriptModel {
-                                            values: _dotRow.modelData
-                                        }
-
-                                        Rectangle {
-                                            required property var modelData
-                                            width: 4
-                                            height: 4
-                                            radius: width / 2
-                                            color: modelData.color
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Events spanning days: a bar above the day's number, in the event's
-                        // colour through all its days, its pieces meeting at the cells' edges
-                        // (across weeks too, the lane kept), rounded where the event starts
-                        // and ends; lanes stack downwards from the top
-                        Repeater {
-                            // ScriptModel, never the bare array — see "The Repeater crash"
-                            // in docs/ARCHITECTURE.md
-                            model: ScriptModel {
-                                values: _cell._bars.filter(bar => bar.lane < root._maxLanes)
-                            }
-
-                            Rectangle {
-                                required property var modelData
-                                readonly property real _inset: 3
-                                x: modelData.isStart ? _inset : 0
-                                width: _cell.width - (modelData.isStart ? _inset : 0) - (modelData.isEnd ? _inset : 0)
-                                height: 3
-                                anchors.top: _cell.top
-                                anchors.topMargin: 2 + modelData.lane * 4
-                                color: modelData.color
-                                opacity: _cell.isCurrent ? 1 : 0.4
-                                topLeftRadius: modelData.isStart ? height / 2 : 0
-                                bottomLeftRadius: modelData.isStart ? height / 2 : 0
-                                topRightRadius: modelData.isEnd ? height / 2 : 0
-                                bottomRightRadius: modelData.isEnd ? height / 2 : 0
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            enabled: parent.isCurrent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.dayClicked(parent.dayNum)
-                        }
-                    }
-                }
+            // The month a swipe is bringing in, beside the grid; nothing to click in it
+            MonthDays {
+                visible: root._previewDirection !== 0
+                enabled: false
+                z: 0.5
+                width: _dateGrid.width
+                height: _dateGrid.height
+                x: _gridShift.x + root._previewDirection * width
+                year: Math.floor(root._previewIndex / 12)
+                month: root._previewIndex % 12
+                today: root.today
+                viewMode: root.viewMode
+                rangeStart: root.rangeStart
+                rangeEnd: root.rangeEnd
+                picking: root.picking
             }
         }
     }

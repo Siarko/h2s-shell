@@ -59,7 +59,14 @@ Each verified on the Framework before the next.
    components (buttons, rows, toggles), not 75 separate edits. Minimum sizes in the theme.
 4. **Instead of the wheel** (11.12): dragging sliders, swiping workspaces.
 5. **Gestures** (11.13), the user's list after walking the shell by finger (2026-11-08):
-   - **Calendar:** a swipe changes the month (today only buttons and the wheel).
+   - **Calendar:** a swipe changes the month (today only buttons and the wheel). *Done
+     (2026-11-08):* `SwipeGesture` over `MonthGrid`'s days; the grid follows the finger
+     and the existing month slide carries on from there. The side a drag uncovers shows
+     the month there for real — a second grid (`MonthDays`, the days split out of
+     `MonthGrid` for it), its events fetched as it first shows; let go, the grid takes
+     its place and becomes that month. `components/SwipeGesture.qml`
+     is the shared part (scene deltas, speed from samples, the far-or-fast rule), for the
+     music panel next.
    - **Music panel:** a swipe across the whole cover area — horizontal changes the track
      (next / previous), vertical changes the player. The slides follow the same axes,
      and that changes what exists: today the cover slides *horizontally on a change of

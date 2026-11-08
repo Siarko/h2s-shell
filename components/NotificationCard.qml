@@ -573,48 +573,29 @@ Rectangle {
         anchors.fill: parent
         z: 20
 
-        DragHandler {
+        SwipeGesture {
             id: _swipe
-            target: null
-            acceptedDevices: PointerDevice.TouchScreen
             yAxis.enabled: false
             property real _restX: 0
-            // In the scene, not this item's own coordinates: the card moves with the finger
-            readonly property real _dx: centroid.scenePosition.x - centroid.scenePressPosition.x
-            // Recent positions, for the speed at release: worked out here, not taken from
-            // centroid.velocity, which two events close together made huge — a slow short
-            // drag was taken for a fling
-            property var _recent: []
-            function _speed() {
-                const now = Date.now();
-                const old = _recent.find(sample => now - sample.t <= 120) ?? _recent[_recent.length - 1];
-                if (!old || now - old.t < 16)
-                    return 0;
-                return (_dx - old.dx) / ((now - old.t) / 1000);
-            }
             onActiveChanged: {
                 if (active) {
                     _swipeBack.stop();
                     _restX = notifCard.x;
-                    _recent = [];
                     return;
                 }
-                const flung = Math.abs(_speed()) > 800 && Math.abs(_dx) > 30;
-                if (Math.abs(_dx) > notifCard.width / 3 || flung) {
-                    _swipeOut.to = _restX + (_dx > 0 ? 1 : -1) * notifCard.width * 1.2;
+                if (meant(deltaX, velocity().x, notifCard.width / 3)) {
+                    _swipeOut.to = _restX + (deltaX > 0 ? 1 : -1) * notifCard.width * 1.2;
                     _swipeOut.start();
                 } else {
                     _swipeBack.to = _restX;
                     _swipeBack.start();
                 }
             }
-            on_DxChanged: {
+            onDeltaXChanged: {
                 if (!active)
                     return;
-                const now = Date.now();
-                _recent = _recent.filter(sample => now - sample.t <= 250).concat([{ t: now, dx: _dx }]);
-                notifCard.x = _restX + _dx;
-                notifCard.opacity = Math.max(0.2, 1 - Math.abs(_dx) / notifCard.width);
+                notifCard.x = _restX + deltaX;
+                notifCard.opacity = Math.max(0.2, 1 - Math.abs(deltaX) / notifCard.width);
             }
         }
     }

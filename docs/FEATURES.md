@@ -65,7 +65,9 @@ NetworkManager but are unmanaged, and are ignored when picking which port to rep
 
 Opened from their bar widget, rendered in the single popup below the bar.
 
-- **Calendar** — month grid with navigation, event dots on days that have events, and
+- **Calendar** — month grid with navigation (arrows, the wheel over the month or year, or
+  a finger swipe across the grid, which follows the finger with the coming month beside
+  it), event dots on days that have events, and
   day/week/month views of the event list. With Google Calendar connected it supports
   full event CRUD: create, edit (including recurrence rules), and delete, with a colour
   picker and a per-calendar picker.

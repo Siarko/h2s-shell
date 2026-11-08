@@ -74,6 +74,12 @@ section to the new version and date.
 - Notifications: swipe a card sideways with a finger to dismiss it — a toast in the HUD
   (its countdown waits while the finger is down) or a card in the notifications panel. A
   short swipe lets it go back. The mouse still selects text by dragging.
+- Calendar: swipe the month grid with a finger to change the month — left for the next,
+  right for the one before. The grid follows the finger with the month it brings in
+  beside it, events and all, and slides on from where you let go; a tap still selects a
+  day.
+- Calendar: the "Today" button's line is kept when it is hidden, so the grid stays the
+  same size — its days no longer jump when you move to or from the current month.
 - On-screen keyboard: a popup no longer draws under it. While the keyboard is up, a popup
   by a bar at the top ends above it, and its content moves within it — by itself to keep
   the field being typed in in sight, or by a drag or the wheel. A drag no longer counts as
