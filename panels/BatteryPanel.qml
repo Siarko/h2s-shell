@@ -13,8 +13,15 @@ import qs.singletons
 // which profile that is.
 Item {
     id: root
-    implicitWidth: Theme.popupWidth("battery", 320)
-    implicitHeight: _col.implicitHeight
+    // The charge, profile and history on the left; use per app beside them, as the calendar
+    // puts its two columns — only with a battery
+    readonly property real _scale: Theme.popupWidth("battery", 320) / 320
+    readonly property int _leftWidth: Math.round(320 * _scale)
+    readonly property int _rightWidth: Math.round(260 * _scale)
+    readonly property int _gap: 14
+    readonly property bool _showUsage: _present
+    implicitWidth: _leftWidth + (_showUsage ? 2 * _gap + 1 + _rightWidth : 0)
+    implicitHeight: Math.max(_col.implicitHeight, _showUsage ? _usage.implicitHeight : 0)
 
     readonly property var _device: UPower.displayDevice
     readonly property bool _present: _device.ready && _device.isPresent
@@ -83,9 +90,37 @@ Item {
             + " will set " + _label(wanted) + " again at its next change.";
     }
 
+    Rectangle {
+        visible: root._showUsage
+        x: root._leftWidth + root._gap
+        width: 1
+        height: root.height
+        color: Theme.textDisabled
+        opacity: 0.3
+    }
+
+    // A stretch picked on the history graph narrows the use per app to it (seconds; NaN:
+    // since the full charge)
+    property real _rangeFrom: NaN
+    property real _rangeTo: NaN
+
+    EnergyUsageList {
+        id: _usage
+        visible: root._showUsage
+        rangeFrom: root._rangeFrom
+        rangeTo: root._rangeTo
+        onRangeCleared: {
+            root._rangeFrom = NaN;
+            root._rangeTo = NaN;
+        }
+        x: root._leftWidth + 2 * root._gap + 1
+        width: root._rightWidth
+        height: root.height
+    }
+
     Column {
         id: _col
-        width: parent.width
+        width: root._leftWidth
         spacing: 12
 
         // The charge and what it is doing
@@ -220,22 +255,36 @@ Item {
             rate: BatteryHistory.rate
             span: BatteryHistory.span
             active: visible
+            selectionFrom: root._rangeFrom
+            selectionTo: root._rangeTo
+            onRangePicked: (from, to) => {
+                root._rangeFrom = from;
+                root._rangeTo = to;
+            }
+            onRangeCleared: {
+                root._rangeFrom = NaN;
+                root._rangeTo = NaN;
+            }
         }
 
-        // What the shading means
-        Row {
+        // What the shading means; wrapped within the column, not run into the next
+        RowLayout {
             visible: BatteryHistory.available
+            width: parent.width
             spacing: 6
 
             Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 10
-                height: 10
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: 3
+                implicitWidth: 10
+                implicitHeight: 10
                 radius: 2
                 color: Qt.alpha(Theme.warning, 0.35)
             }
             Text {
-                text: "on the charger · the line beneath: power drawn"
+                Layout.fillWidth: true
+                text: "on the charger · beneath: power drawn · drag across to pick a stretch"
+                wrapMode: Text.WordWrap
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textMuted

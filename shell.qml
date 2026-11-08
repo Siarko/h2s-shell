@@ -56,6 +56,8 @@ QtObject {
     property var _dictationMusicPause: DictationMusicPause
     // Puts Bluetooth back on or off as it was left; needs to run from the start
     property var _bluetoothPower: BluetoothPower
+    // Counts use per app on battery, popup open or not (the battery popup shows it)
+    property var _energyUsage: EnergyUsage
 
     // One for the whole shell: a window per screen meant two independent windows, both
     // opened by Shell.openSettings() and both announcing every save

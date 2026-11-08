@@ -78,7 +78,10 @@ section to the new version and date.
   not, time left and the power drawn; the system power profile, to change by hand — it
   stays until the shell's profiles next want another one, and the popup says which; and the
   history as UPower records it — the charge over 6 h, 24 h or 7 days with the time on the
-  charger shaded, and the power drawn beneath.
+  charger shaded, and the power drawn beneath; and beside it, as on Android, use per app
+  since the last full charge — estimated from each app's CPU and GPU time while on
+  battery, the screen and the rest as "System and screen". Dragging across the graph picks
+  a stretch of time, and the list shows the use within it; a tap, or ×, goes back.
 - Google Calendar: no OAuth client of your own needed — the shell carries one (a client
   entered in the settings still takes its place). The sign-in uses PKCE and checks its
   `state`, since the client's secret is public.

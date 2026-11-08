@@ -65,6 +65,23 @@ Android — a graph of energy use and use per app.
   battery's own object path is asked. A function with typed parameters and no return
   type has its result coerced to void (Qt 6.11 warns on each call): `parseHistory: var`.
 
+- *Stage 3*: `scripts/energy-sample.py` (per process: CPU ticks, GPU cycles, the app;
+  0.18 s a run; names from the program's path, the kernel cutting `comm` at 15
+  characters; `app-org.chromium.Chromium` units → Chromium), `singletons/EnergyRules.qml`
+  (usage between samples, baseline as the 20th percentile of the last 60 readings, the
+  split — CPU 0.75, GPU 0.25 — a new charge when unplugged at ≥ 95 %; tested),
+  `singletons/EnergyUsage.qml` (every 30 s on battery, an interval over 120 s not counted,
+  totals in `$XDG_STATE_HOME/h2s_shell/energy-usage.json` written every 4 samples),
+  `panels/battery/EnergyUsageList.qml` beside the left column, as the calendar's two.
+- *A stretch picked on the graph* (the user, same day): use per app is kept in five-minute
+  buckets (`EnergyRules.bucketStart` / `addToBucket` / `sumBuckets` / `keepBuckets`,
+  tested), appended to `energy-usage.jsonl` as each closes — one line each, never the
+  whole file rewritten while running — and kept 7 days, the graph's longest span;
+  `since` (seconds) in `energy-usage.json`. Since the full charge is a sum of buckets like
+  any stretch. Dragging across the graph (mouse or finger; `preventStealing`) picks the
+  stretch, shown on both graphs; a tap without a drag, or × on the list, lets it go. The
+  filling bucket is lost if the shell stops (at most five minutes).
+
 ## Open
 
 - How long UPower keeps its history; whether the graph needs its own record beyond it.

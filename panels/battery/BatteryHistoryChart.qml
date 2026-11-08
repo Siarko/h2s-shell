@@ -5,6 +5,10 @@ import qs.singletons
 // spent on the charger shaded behind it, and the power drawn beneath. From UPower's record
 // (BatteryHistory); the charge comes as a point at each percent it changes, so the line
 // runs on flat from the last one to now.
+//
+// Dragging across it (mouse or finger) picks a stretch of time — `rangePicked`, for the use
+// per app beside it; a tap without a drag lets it go (`rangeCleared`). The stretch picked
+// is shown from `selectionFrom`/`selectionTo` (seconds; NaN for none).
 Column {
     id: root
 
@@ -14,6 +18,72 @@ Column {
     property int span: 24 * 3600
     // Paints only while true
     property bool active: true
+    property real selectionFrom: NaN
+    property real selectionTo: NaN
+
+    signal rangePicked(real from, real to)
+    signal rangeCleared
+
+    // While dragging, the stretch so far (seconds), shown instead of the one picked
+    property real _dragFrom: NaN
+    property real _dragTo: NaN
+    readonly property bool _dragging: !isNaN(_dragTo)
+    readonly property real _shownFrom: _dragging ? Math.min(_dragFrom, _dragTo) : selectionFrom
+    readonly property real _shownTo: _dragging ? Math.max(_dragFrom, _dragTo) : selectionTo
+    on_ShownFromChanged: _repaint()
+    on_ShownToChanged: _repaint()
+
+    function _time(x, width) {
+        return Math.max(root._start, Math.min(root._now, root._start + x / width * root.span));
+    }
+
+    // The stretch picked, shaded with its edges, on either graph
+    function _paintSelection(context, width, height) {
+        if (isNaN(root._shownFrom) || isNaN(root._shownTo))
+            return;
+        const from = root._x(root._shownFrom, width);
+        const to = root._x(root._shownTo, width);
+        context.fillStyle = Qt.alpha(Theme.accent, 0.22);
+        context.fillRect(from, 0, Math.max(1, to - from), height);
+        context.strokeStyle = Theme.accent;
+        context.lineWidth = 1;
+        for (const x of [from, to]) {
+            context.beginPath();
+            context.moveTo(Math.round(x) + 0.5, 0);
+            context.lineTo(Math.round(x) + 0.5, height);
+            context.stroke();
+        }
+    }
+
+    // Drag to pick, tap to let go; on either graph
+    // An inline component does not see this file's ids: the chart is given to it
+    component Picker: MouseArea {
+        required property Item chart
+        anchors.fill: parent
+        preventStealing: true
+        property real _pressX: 0
+        onPressed: mouse => {
+            _pressX = mouse.x;
+            chart._now = Date.now() / 1000;
+            chart._dragFrom = chart._time(mouse.x, width);
+        }
+        onPositionChanged: mouse => {
+            if (Math.abs(mouse.x - _pressX) > 6)
+                chart._dragTo = chart._time(mouse.x, width);
+        }
+        onReleased: {
+            if (chart._dragging && chart._shownTo - chart._shownFrom > 60)
+                chart.rangePicked(chart._shownFrom, chart._shownTo);
+            else
+                chart.rangeCleared();
+            chart._dragFrom = NaN;
+            chart._dragTo = NaN;
+        }
+        onCanceled: {
+            chart._dragFrom = NaN;
+            chart._dragTo = NaN;
+        }
+    }
 
     property double _now: Date.now() / 1000
     readonly property double _start: _now - span
@@ -70,6 +140,7 @@ Column {
                     context.lineTo(width, y);
                     context.stroke();
                 }
+                root._paintSelection(context, width, height);
                 if (points.length === 0)
                     return;
 
@@ -100,6 +171,8 @@ Column {
                 context.fill();
             }
         }
+
+        Picker { chart: root }
 
         Text {
             anchors { top: parent.top; left: parent.left; leftMargin: 2 }
@@ -151,6 +224,7 @@ Column {
                 context.moveTo(0, height - 0.5);
                 context.lineTo(width, height - 0.5);
                 context.stroke();
+                root._paintSelection(context, width, height);
                 if (points.length === 0)
                     return;
 
@@ -170,6 +244,8 @@ Column {
                 context.stroke();
             }
         }
+
+        Picker { chart: root }
 
         Text {
             visible: _rateBox._peak > 0
