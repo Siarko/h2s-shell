@@ -46,6 +46,12 @@ Rectangle {
         : outlined ? Theme.outline : Qt.alpha(Theme.outline, 0)
     Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
+    // A tap on the box's padding focuses the input too: the input is a line of text, short
+    // for a finger
+    TapHandler {
+        onTapped: _input.forceActiveFocus()
+    }
+
     TextInput {
         id: _input
         selectionColor: Theme.selection
@@ -59,6 +65,11 @@ Rectangle {
         }
         verticalAlignment: TextInput.AlignVCenter
         echoMode: root.password && !root.revealed ? TextInput.Password : TextInput.Normal
+        // What kind of field this is, for an on-screen keyboard (its layout, no suggestions
+        // for a password). An owner sets `input.inputMethodHints` for others (digits…).
+        inputMethodHints: root.password
+            ? Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+            : Qt.ImhNone
         font.family: Theme.fontFamily
         font.pixelSize: root.fontSize
         color: Theme.textPrimary

@@ -110,6 +110,27 @@ targets, the keyboard button), not for making touch work.
 - Found on the way: `ProfilesTest` had thrown since the icon theme setting (11.16, options
   from `optionsFrom`) and printed nothing; the harness now counts a throw as a failure.
 
+*On-screen keyboard (oskbd), 2026-11-08* — the user: fields did not open the keyboard,
+tapping the keyboard closed the popup, panels drew under it. Measured with a probe (a
+layer surface with four fields, `WAYLAND_DEBUG=1`):
+- Qt does its part: a focused field sends `text_input.enable` with the right content type
+  (digits → purpose 2, url → 5, a password → hint `sensitive_data` only, no `hidden_text`).
+- An **on-demand** layer gets the keyboard on the tap and **loses it 3–4 ms later when
+  oskbd's panel appears** (Hyprland refocusing on the new layer); with oskbd asleep the
+  focus stays. **Exclusive** keyboard focus keeps it — popups opened by touch now take it.
+- The focus grab closed the popup on a tap on the keyboard (another client's surface):
+  suspended while a layer "osk" is up (`ScreenKeyboard`, from Hyprland's
+  `openlayer`/`closelayer` events).
+- oskbd's side, for its agent: the user's `layout.toml` has no `opens_for`; the default
+  layout maps no layer to `digits`; Qt sends no `hidden_text`; unknown whether oskbd
+  switches layer on a content-type change without a new `activate` (what switching fields
+  in an exclusive popup does).
+- Left: panels avoiding the keyboard (dock mode reserves space the popup windows ignore;
+  overlay mode reserves none). Not yet checked by the user on the shell itself.
+- Regression found and fixed: a hover popup closed when the pointer went back onto its
+  cell (hover now passed on after 60 ms) — it now closes 120 ms after the pointer leaves,
+  and reopening cancels that.
+
 *Stage 1, decided (2026-11-08):* tablet mode comes from Hyprland — switch bindings in
 `hyprland.lua` call `ipc call tablet set true|false` (`singletons/TabletMode.qml`, the
 profile fact `input.tabletMode`). No device access needed; Hyprland reports only changes,

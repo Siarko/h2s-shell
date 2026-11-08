@@ -66,6 +66,8 @@ Item {
         selectedTextColor: Theme.selectedText
         anchors.fill: parent
         maximumLength: _segment.digits
+        // Digits only: an on-screen keyboard opens its number layout
+        inputMethodHints: Qt.ImhDigitsOnly
         color: Theme.textPrimary
         font: _segment.font
         horizontalAlignment: TextInput.AlignHCenter

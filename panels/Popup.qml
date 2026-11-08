@@ -43,8 +43,8 @@ LazyLoader {
     // When true, the popup stays open until explicitly toggled (click-to-close)
     property bool persistent: false
     // Opened by a tap on a touch screen. Such a popup closes on a tap outside it and the
-    // bar, and takes the keyboard without a pointer over it (a finger never hovers). One
-    // opened by the mouse does neither: it may stay open while you work elsewhere.
+    // bar, and holds the keyboard while open (below). One opened by the mouse does
+    // neither: it may stay open while you work elsewhere.
     property bool touchOpened: false
     // The bar's window: a tap on it does not close a popup opened by touch, so another
     // cell can be tapped
@@ -74,6 +74,15 @@ LazyLoader {
             Profiles.panelClosed(_reportedPanel);
     }
 
+    // A hover popup closes a moment after the pointer leaves it, and opening it again in
+    // that moment keeps it: the pointer going back from the popup onto its cell reopens it
+    // (the cell passes hover on after 60 ms — BarWidget), which used to happen in the same
+    // instant as the leave, before the close could start
+    property Timer _hoverClose: Timer {
+        interval: 120
+        onTriggered: popupLoader.close()
+    }
+
     // Start the close animation instead of immediately deactivating
     function close() {
         if (!popupLoader.active || popupLoader.closing)
@@ -90,6 +99,7 @@ LazyLoader {
 
     // Open the popup aligned to the given element
     function open(element, persistent = false, contentType = "calendar", contentData = null, byTouch = false) {
+        _hoverClose.stop();
         popupLoader.persistent = persistent;
         popupLoader.touchOpened = byTouch;
         popupLoader.contentType = contentType;
@@ -274,12 +284,20 @@ LazyLoader {
             })
         }
 
-        focusable: hoverHandler.hovered || popupLoader.touchOpened
+        // The keyboard: under the mouse on demand, as before. Opened by touch, exclusively
+        // while open — on demand it lasted a few milliseconds: an on-screen keyboard showing
+        // for the field tapped made Hyprland take the focus back, the field lost it, and the
+        // keyboard hid again (measured on the Framework, docs/plans/touch.md).
+        WlrLayershell.keyboardFocus: popupLoader.touchOpened ? WlrKeyboardFocus.Exclusive
+            : hoverHandler.hovered ? WlrKeyboardFocus.OnDemand
+            : WlrKeyboardFocus.None
 
         // A tap outside the popup and the bar closes one opened by touch. Hyprland says
-        // when a press lands outside the windows listed (hyprland-focus-grab).
+        // when a press lands outside the windows listed (hyprland-focus-grab). Not while an
+        // on-screen keyboard is up: it is another program's window, and typing on it is
+        // not leaving the popup.
         HyprlandFocusGrab {
-            active: popupLoader.touchOpened && !popupLoader.closing
+            active: popupLoader.touchOpened && !popupLoader.closing && !ScreenKeyboard.visible
             windows: [popup, popupLoader.barWindow].filter(window => !!window)
             onCleared: popupLoader.close()
         }
@@ -626,8 +644,10 @@ LazyLoader {
             HoverHandler {
                 id: hoverHandler
                 onHoveredChanged: {
-                    if (!hovered && !popupLoader.persistent)
-                        popupLoader.close();
+                    if (hovered)
+                        popupLoader._hoverClose.stop();
+                    else if (!popupLoader.persistent)
+                        popupLoader._hoverClose.restart();
                 }
             }
         }

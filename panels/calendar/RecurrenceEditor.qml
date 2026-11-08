@@ -112,6 +112,7 @@ Column {
                     text: "1"
                     input.horizontalAlignment: TextInput.AlignHCenter
                     input.validator: IntValidator { bottom: 1; top: 999 }
+                    input.inputMethodHints: Qt.ImhDigitsOnly
                     onTextEdited: {
                         const value = parseInt(text);
                         if (!isNaN(value) && value >= 1)
@@ -221,6 +222,7 @@ Column {
                     text: "1"
                     input.horizontalAlignment: TextInput.AlignHCenter
                     input.validator: IntValidator { bottom: 1; top: 999 }
+                    input.inputMethodHints: Qt.ImhDigitsOnly
                     onTextEdited: {
                         const value = parseInt(text);
                         if (!isNaN(value) && value >= 1)
