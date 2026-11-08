@@ -28,6 +28,16 @@ Rectangle {
 
     signal dismissRequested()
 
+    // ---- Swiped away with a finger, as on Android ----
+    // Dragged sideways the card follows the finger and fades; let go past a third of its
+    // width, or flung, it goes on out that way and asks to be dismissed (`swipedAway` set,
+    // so the owner skips its own slide out); short of that it comes back. A finger only:
+    // the mouse keeps selecting text and its dismiss button. An overlay above the content
+    // watches (the press reaches the buttons, the reply and the text beneath), taking the
+    // touch only once it moves sideways.
+    readonly property bool swiping: _swipe.active
+    property bool swipedAway: false
+
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
     radius: cornerRadius
     // A card that does something when clicked shows it as rows and menu items do: a
@@ -138,10 +148,16 @@ Rectangle {
 
     // A link clicked in the body: a web or mail one opens; any other waits for a yes
     property string _pendingLink: ""
-    // A new notification in the card: no question about the last one's link, an empty reply
+    // A new notification in the card: no question about the last one's link, an empty
+    // reply; and, after a swipe (a toast's next one), back in place
     onNotificationChanged: {
         _pendingLink = "";
         _reply.clear();
+        _swipeBack.stop();
+        _swipeOut.stop();
+        x = 0;
+        opacity = 1;
+        swipedAway = false;
     }
     function _openLink(link) {
         if (NotificationMarkup.linkKind(link) === "standard")
@@ -550,6 +566,74 @@ Rectangle {
                     Notifier.send("Copied selected text", { urgency: "low", category: "x-qs-shell" });
                 }
             }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        z: 20
+
+        DragHandler {
+            id: _swipe
+            target: null
+            acceptedDevices: PointerDevice.TouchScreen
+            yAxis.enabled: false
+            property real _restX: 0
+            // In the scene, not this item's own coordinates: the card moves with the finger
+            readonly property real _dx: centroid.scenePosition.x - centroid.scenePressPosition.x
+            // Recent positions, for the speed at release: worked out here, not taken from
+            // centroid.velocity, which two events close together made huge — a slow short
+            // drag was taken for a fling
+            property var _recent: []
+            function _speed() {
+                const now = Date.now();
+                const old = _recent.find(sample => now - sample.t <= 120) ?? _recent[_recent.length - 1];
+                if (!old || now - old.t < 16)
+                    return 0;
+                return (_dx - old.dx) / ((now - old.t) / 1000);
+            }
+            onActiveChanged: {
+                if (active) {
+                    _swipeBack.stop();
+                    _restX = notifCard.x;
+                    _recent = [];
+                    return;
+                }
+                const flung = Math.abs(_speed()) > 800 && Math.abs(_dx) > 30;
+                if (Math.abs(_dx) > notifCard.width / 3 || flung) {
+                    _swipeOut.to = _restX + (_dx > 0 ? 1 : -1) * notifCard.width * 1.2;
+                    _swipeOut.start();
+                } else {
+                    _swipeBack.to = _restX;
+                    _swipeBack.start();
+                }
+            }
+            on_DxChanged: {
+                if (!active)
+                    return;
+                const now = Date.now();
+                _recent = _recent.filter(sample => now - sample.t <= 250).concat([{ t: now, dx: _dx }]);
+                notifCard.x = _restX + _dx;
+                notifCard.opacity = Math.max(0.2, 1 - Math.abs(_dx) / notifCard.width);
+            }
+        }
+    }
+
+    ParallelAnimation {
+        id: _swipeBack
+        property alias to: _backX.to
+        NumberAnimation { id: _backX; target: notifCard; property: "x"; duration: Theme.duration("move"); easing: Theme.curve("move") }
+        NumberAnimation { target: notifCard; property: "opacity"; to: 1; duration: Theme.duration("move"); easing: Theme.curve("move") }
+    }
+
+    ParallelAnimation {
+        id: _swipeOut
+        property alias to: _outX.to
+        NumberAnimation { id: _outX; target: notifCard; property: "x"; duration: Theme.duration("exit"); easing: Theme.curve("exit") }
+        NumberAnimation { target: notifCard; property: "opacity"; to: 0; duration: Theme.duration("exit"); easing: Theme.curve("exit") }
+        onFinished: {
+            notifCard.swipedAway = true;
+            notifCard.dismissRequested();
         }
     }
 }

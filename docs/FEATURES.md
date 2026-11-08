@@ -87,7 +87,7 @@ Opened from their bar widget, rendered in the single popup below the bar.
   download/upload history graph), IP and DNS per link.
 - **Notifications** — the list of unread notifications with per-item dismiss, dismiss
   all, and codes (one-time passwords and similar) extracted by the regexes in
-  Settings → Notifications.
+  Settings → Notifications. A card swiped sideways by finger is dismissed.
 - **Hardware** — every sensor source with its current value, a history graph and a
   progress bar.
 - **Power** — shutdown, restart, logout.
@@ -101,7 +101,8 @@ input through except where a card is actually visible.
 - **Notification toasts** slide in from the right as notifications arrive. When several
   queue up, a badge on the right screen edge shows how many are waiting; clicking it
   opens the notification panel. Toasts are suppressed while the notification panel is
-  open.
+  open. A finger swipe sideways dismisses a toast (past a third of its width, or flung);
+  its countdown pauses while it is being dragged.
 - **Volume OSD** appears on volume or mute changes.
 - **Shell toasts** — a bottom pill for the shell's own messages (notifications sent with
   category `x-qs-shell`), kept separate from application notifications.

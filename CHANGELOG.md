@@ -71,6 +71,9 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Notifications: swipe a card sideways with a finger to dismiss it — a toast in the HUD
+  (its countdown waits while the finger is down) or a card in the notifications panel. A
+  short swipe lets it go back. The mouse still selects text by dragging.
 - On-screen keyboard: a popup no longer draws under it. While the keyboard is up, a popup
   by a bar at the top ends above it, and its content moves within it — by itself to keep
   the field being typed in in sight, or by a drag or the wheel. A drag no longer counts as

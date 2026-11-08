@@ -3,6 +3,7 @@ import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.components
+import qs.singletons
 
 // The bar's cells under real input events: a mouse, a finger (QtTest's touch screen),
 // and what each does to hover and to a popup. What Qt makes of a touch is what this
@@ -20,7 +21,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 400
-        implicitHeight: 160
+        implicitHeight: 300
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -105,6 +106,25 @@ TestCase {
                 property var taps: []
                 onFieldTapped: onField => { taps.push(onField); }
             }
+        }
+
+        // A notification card, swiped away with a finger
+        NotificationCard {
+            id: swipeCard
+            y: 170
+            width: 300
+            notification: QtObject {
+                property int id: 1
+                property string appName: "Test"
+                property string appIcon: ""
+                property string summary: "A summary"
+                property string body: "Some text in the body"
+                property string image: ""
+                property var actions: []
+                property bool hasInlineReply: false
+            }
+            property int dismissals: 0
+            onDismissRequested: dismissals++
         }
 
         QT.TestCase {
@@ -239,6 +259,40 @@ TestCase {
         driver.mouseClick(boxedField);
         driver.wait(80);
         assertEqual(touchText.taps.join(","), "", "a mouse click is not watched");
+
+        // --- a notification swiped away ---
+        _reset();
+        // Positions on the card's parent, which stays put: on the card itself every step would
+        // go further, the card having moved with the finger
+        const fixed = swipeCard.parent;
+        const start = swipeCard.mapToItem(fixed, 60, 20);
+        const swipe = (dx, steps) => {
+            const touch = driver.touchEvent(fixed);
+            touch.press(0, fixed, start.x, start.y).commit();
+            for (let i = 1; i <= steps; i++) {
+                driver.wait(30);
+                touch.move(0, fixed, start.x + dx * i / steps, start.y).commit();
+            }
+            driver.wait(30);
+            touch.release(0, fixed, start.x + dx, start.y).commit();
+            driver.wait(Theme.duration("exit") + Theme.duration("move") + 120);
+        };
+        swipe(40, 8);
+        assertEqual(swipeCard.dismissals, 0, "a short slow swipe: kept");
+        assert(Math.abs(swipeCard.x) < 1 && swipeCard.opacity > 0.99, "and back in place");
+        swipe(200, 10);
+        assertEqual(swipeCard.dismissals, 1, "past a third of the card: dismissed");
+        assert(swipeCard.swipedAway, "marked as swiped away, for the owner");
+        assert(swipeCard.x > swipeCard.width, "gone out to the right");
+        // A new notification brings it back
+        swipeCard.notification = { id: 2, appName: "Test", summary: "Another", body: "", actions: [] };
+        driver.wait(50);
+        assert(Math.abs(swipeCard.x) < 1 && !swipeCard.swipedAway, "the next notification starts in place");
+        driver.mousePress(fixed, start.x, start.y);
+        driver.mouseMove(fixed, start.x + 200, start.y);
+        driver.mouseRelease(fixed, start.x + 200, start.y);
+        driver.wait(Theme.duration("exit") + 120);
+        assertEqual(swipeCard.dismissals, 1, "a mouse drag dismisses nothing: it selects text");
 
         _reset();
         finish();

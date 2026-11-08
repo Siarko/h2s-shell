@@ -32,7 +32,7 @@ Item {
     readonly property bool wantsKeyboard: currentNotif !== null && notifCard.wantsKeyboard
     // Held: under a resting pointer, or with a reply being written — no countdown either way,
     // so a toast does not slide away mid-reply when the pointer wanders off
-    readonly property bool _held: cardHover.hovered || notifCard.replying
+    readonly property bool _held: cardHover.hovered || notifCard.replying || notifCard.swiping
     on_HeldChanged: {
         if (_held)
             countdown.pause();

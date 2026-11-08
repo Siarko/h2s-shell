@@ -94,11 +94,12 @@ Item {
                 SequentialAnimation {
                     id: slideOut
 
+                    // Swiped away with a finger, the card is already out: straight to closing up
                     NumberAnimation {
                         target: card
                         property: "x"
                         to: delegateRoot.width
-                        duration: Theme.duration("exit")
+                        duration: card.swipedAway ? 0 : Theme.duration("exit")
                         easing: Theme.curve("exit")
                     }
 

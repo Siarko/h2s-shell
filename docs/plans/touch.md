@@ -67,7 +67,12 @@ Each verified on the Framework before the next.
      horizontal slide for a track, vertical for a player — by gesture and when it
      happens on its own (a track ending, the active player changing).
    - **Notifications:** a sideways swipe dismisses a card, as on Android — the toasts in
-     the HUD and the cards in the notifications panel.
+     the HUD and the cards in the notifications panel. *Done (2026-11-08):* a touch-only
+     `DragHandler` on `NotificationCard`, dismissing past a third of the width or on a
+     fling (speed from its own samples — `centroid.velocity` took a slow drag for a
+     fling); checked on the Framework by virtual touch. Note for device tests: the HUD
+     keeps a toast for `notifications.toastDuration` (5 s) whatever `-t` says, so the
+     swipe has to come within that.
    - Possibly an edge swipe for panels.
 6. **New for the tablet:**
    - a battery widget (the shell has none — it was never needed on a desktop);
