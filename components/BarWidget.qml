@@ -58,7 +58,7 @@ Item {
         id: rectangle
         radius: Theme.capsule.radius
         anchors.fill: parent
-        color: (mouseArea.containsMouse || container.active) ? Theme.surfaceHover : container.cellColor
+        color: (mouseArea.lit || container.active) ? Theme.surfaceHover : container.cellColor
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         border.color: container.borderColor
         border.width: container.borderWidth
@@ -70,12 +70,10 @@ Item {
         anchors.centerIn: parent
     }
 
-    // Extends 5px below the cell to prevent hover gaps between bar and popup
-    MouseArea {
+    // At least Theme.target.minSize around the cell (PointerArea): the bar's whole height
+    PointerArea {
         id: mouseArea
-        anchors.fill: parent
         enabled: container.interactive
-        hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 
         onPressed: event => {

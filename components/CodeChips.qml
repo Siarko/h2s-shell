@@ -23,7 +23,7 @@ Flow {
             implicitWidth: _chipRow.implicitWidth + 12
             height: 26
             radius: Theme.notificationCard.controlRadius
-            color: _chipArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
+            color: _chipArea.lit ? Theme.surfaceHover : Theme.accentDark
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             Row {
@@ -48,10 +48,8 @@ Flow {
                 }
             }
 
-            MouseArea {
+            PointerArea {
                 id: _chipArea
-                anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     _clipHelper.text = _chip.modelData;

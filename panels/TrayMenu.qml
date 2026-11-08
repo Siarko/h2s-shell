@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
@@ -142,7 +143,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 2
                 radius: Theme.listItem.radius
-                color: itemArea.containsMouse && modelData.enabled ? Theme.surfaceHover : Theme.surfaceHoverClear
+                color: itemArea.lit && modelData.enabled ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 RowLayout {
@@ -196,10 +197,10 @@ Item {
                     }
                 }
 
-                MouseArea {
+                PointerArea {
                     id: itemArea
+                    centred: false
                     anchors.fill: parent
-                    hoverEnabled: true
                     enabled: modelData.enabled
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
@@ -236,7 +237,7 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: Theme.listItem.radius
-                    color: backArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                    color: backArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     RowLayout {
@@ -260,10 +261,10 @@ Item {
                         }
                     }
 
-                    MouseArea {
+                    PointerArea {
                         id: backArea
+                        centred: false
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.navigateBack()
                     }

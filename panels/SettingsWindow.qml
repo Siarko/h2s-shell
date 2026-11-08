@@ -50,7 +50,7 @@ FloatingWindow {
         { id: "widgets_appearance", label: "Widgets", tab: "appearance", component: widgetsLookComp, draftGroups: ["capsule", "workspace", "tray"] },
         { id: "popups", label: "Popups", tab: "appearance", component: popupsComp, draftGroups: ["popup", "popupWidth", "row", "listItem", "dropdown", "powerMenu"] },
         { id: "controls", label: "Controls", tab: "appearance", component: controlsComp,
-          draftGroups: ["button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field", "checkbox", "tooltip", "border"] },
+          draftGroups: ["button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field", "checkbox", "tooltip", "border", "target"] },
         { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
           draftGroups: ["osdToast", "notificationCard", "osdVolume", "osdMessage"] },
         { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves"] },
@@ -241,13 +241,11 @@ FloatingWindow {
                             + (Object.keys(Profiles.simulated).length > 0 ? " (simulated)" : "")
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: _profileIndicator.containsMouse ? Theme.textPrimary : Theme.accent
+                        color: _profileIndicator.lit ? Theme.textPrimary : Theme.accent
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                        MouseArea {
+                        PointerArea {
                             id: _profileIndicator
-                            anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.selectedPage = "profiles"
                         }
@@ -275,13 +273,11 @@ FloatingWindow {
                         text: "Uses theme " + _theme + " ↗"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
-                        color: _usesThemeArea.containsMouse ? Theme.textPrimary : Theme.textMuted
+                        color: _usesThemeArea.lit ? Theme.textPrimary : Theme.textMuted
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                        MouseArea {
+                        PointerArea {
                             id: _usesThemeArea
-                            anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.showAppearance(parent._theme)
                         }

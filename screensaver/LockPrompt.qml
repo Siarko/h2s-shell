@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import QtQuick.Layouts
 import Quickshell.Services.Pam
 import qs.singletons
@@ -120,7 +121,7 @@ Item {
             Layout.fillWidth: true
             implicitHeight: Theme.lock.controlHeight
             radius: Theme.lock.controlRadius
-            color: (_pam.active || _unlockHover.containsMouse)
+            color: (_pam.active || _unlockHover.lit)
                 ? Theme.glassHover
                 : Theme.glassRaised
 
@@ -134,10 +135,8 @@ Item {
                 font.pixelSize: Theme.fontSizeBody
             }
 
-            MouseArea {
+            PointerArea {
                 id: _unlockHover
-                anchors.fill: parent
-                hoverEnabled: true
                 enabled: !_pam.active
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root._tryAuth()

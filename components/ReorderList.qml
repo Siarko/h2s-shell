@@ -213,14 +213,12 @@ Item {
                                     anchors.centerIn: parent
                                     text: "⠿"
                                     font.pixelSize: Theme.fontSizeMedium
-                                    color: _handleArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
+                                    color: _handleArea.lit ? Theme.textSecondary : Theme.textDisabled
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                                 }
 
-                                MouseArea {
+                                PointerArea {
                                     id: _handleArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
                                     cursorShape: Qt.SizeVerCursor
                                     // Keeps the drag from the settings page's Flickable
                                     preventStealing: true
@@ -257,7 +255,7 @@ Item {
                                 width: 24
                                 height: 24
                                 radius: Theme.iconButton.radius
-                                color: _removeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                                color: _removeArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                 Text {
@@ -268,10 +266,8 @@ Item {
                                     color: Theme.textDisabled
                                 }
 
-                                MouseArea {
+                                PointerArea {
                                     id: _removeArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: root._remove(_row.index)
                                 }
@@ -355,7 +351,7 @@ Item {
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
                                     radius: Theme.listItem.radius
-                                    color: _optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                                    color: _optionArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
@@ -370,10 +366,10 @@ Item {
                                         color: Theme.textPrimary
                                     }
 
-                                    MouseArea {
+                                    PointerArea {
                                         id: _optionArea
+                                        centred: false
                                         anchors.fill: parent
-                                        hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: root._add(_option.modelData)
                                     }

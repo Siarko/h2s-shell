@@ -71,6 +71,10 @@ ticks, cells respond to clicks, and popups toggle.
   turns it into a red question ("Delete?") with a "×" attached that cancels, a second
   click deletes. No time-outs. The owner resets `asking` when the item it deletes
   changes. Don't hand-roll another confirm.
+- **A control's hover look comes from `components/PointerArea.qml`'s `lit`**, not a
+  `MouseArea`'s `containsMouse` — so a tap shows too, and small controls get a larger
+  target. Rows of a list that touch take `centred: false`. See "Conventions" in
+  `docs/ARCHITECTURE.md`.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically.
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for config

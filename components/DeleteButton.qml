@@ -41,7 +41,7 @@ Row {
         topRightRadius: root.asking ? 0 : radius
         bottomRightRadius: root.asking ? 0 : radius
         opacity: root.available ? 1 : 0.35
-        color: _area.containsMouse && root.available ? Theme.surfaceHover : Theme.surface
+        color: _area.lit && root.available ? Theme.surfaceHover : Theme.surface
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
@@ -53,10 +53,8 @@ Row {
             color: root.asking ? Theme.error : Theme.textSecondary
         }
 
-        MouseArea {
+        PointerArea {
             id: _area
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: {
                 if (!root.available)
@@ -80,7 +78,7 @@ Row {
         radius: Theme.deleteButton.radius
         topLeftRadius: 0
         bottomLeftRadius: 0
-        color: _cancelArea.containsMouse ? Theme.surfaceHover : Theme.surface
+        color: _cancelArea.lit ? Theme.surfaceHover : Theme.surface
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
@@ -91,10 +89,10 @@ Row {
             color: Theme.textSecondary
         }
 
-        MouseArea {
+        PointerArea {
             id: _cancelArea
+            centred: false
             anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.asking = false
         }

@@ -14,6 +14,7 @@ ShapeSettings {
         { title: "Text fields", group: "field" },
         { title: "Check boxes", group: "checkbox" },
         { title: "Tooltips", group: "tooltip" },
-        { title: "Outlines", group: "border" }
+        { title: "Outlines", group: "border" },
+        { title: "Targets", group: "target", hint: "How far around a control a click or a tap still reaches it" }
     ]
 }

@@ -157,7 +157,7 @@ Item {
                 width: Math.max(20, _pinGlyph.implicitHeight)
                 height: width
                 radius: Theme.iconButton.radius
-                color: _pinArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                color: _pinArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
@@ -167,13 +167,11 @@ Item {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
                     color: root.global ? Theme.accent : Theme.textDisabled
-                    opacity: root.global || _pinArea.containsMouse ? (root.systemGlobal ? 0.6 : 1) : 0.5
+                    opacity: root.global || _pinArea.lit ? (root.systemGlobal ? 0.6 : 1) : 0.5
                 }
 
-                MouseArea {
+                PointerArea {
                     id: _pinArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: root.systemGlobal ? Qt.ArrowCursor : Qt.PointingHandCursor
                     onClicked: {
                         if (root.systemGlobal)
@@ -203,7 +201,7 @@ Item {
                 width: _pin.width
                 height: width
                 radius: Theme.iconButton.radius
-                color: _resetArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                color: _resetArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Text {
@@ -214,10 +212,8 @@ Item {
                     color: Theme.textDisabled
                 }
 
-                MouseArea {
+                PointerArea {
                     id: _resetArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.reset()
                 }
@@ -344,7 +340,7 @@ Item {
                         width: 24
                         height: 26
                         radius: Theme.iconButton.radius
-                        color: _removeArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        color: _removeArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
@@ -355,10 +351,8 @@ Item {
                             color: Theme.textDisabled
                         }
 
-                        MouseArea {
+                        PointerArea {
                             id: _removeArea
-                            anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: _listEditor.replaced(_listRow.modelData.index, null)
                         }
@@ -447,7 +441,7 @@ Item {
                             width: _suggestionList.width
                             height: 24
                             radius: Theme.listItem.radius
-                            color: index === _textInput.highlighted || _suggestionArea.containsMouse
+                            color: index === _textInput.highlighted || _suggestionArea.lit
                                 ? Theme.surfaceHover : Theme.surfaceHoverClear
                             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -459,10 +453,10 @@ Item {
                                 color: parent.modelData === root.shownValue ? Theme.accent : Theme.textSecondary
                             }
 
-                            MouseArea {
+                            PointerArea {
                                 id: _suggestionArea
+                                centred: false
                                 anchors.fill: parent
-                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onPressed: _textInput.pick(parent.modelData)
                             }

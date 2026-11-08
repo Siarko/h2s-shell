@@ -35,14 +35,14 @@ Item {
         width: parent.width
         height: 4
         radius: height / 2
-        color: sliderArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
+        color: sliderArea.lit ? Theme.textSecondary : Theme.textDisabled
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Rectangle {
             width: slider._position * parent.width
             height: parent.height
             radius: height / 2
-            color: sliderArea.containsMouse ? slider.fillColorHover : slider.fillColor
+            color: sliderArea.lit ? slider.fillColorHover : slider.fillColor
         }
     }
 
@@ -54,10 +54,8 @@ Item {
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
     }
 
-    MouseArea {
+    PointerArea {
         id: sliderArea
-        anchors.fill: parent
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onPressed: mouse => { slider.forceActiveFocus(); update(mouse.x); }
         onPositionChanged: mouse => { if (pressed) update(mouse.x); }

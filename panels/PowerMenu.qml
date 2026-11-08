@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import qs.singletons
 
 // The power popup: shut down, restart, log out (Session)
@@ -37,13 +38,11 @@ Item {
                 width: powerMenu.width
                 height: Theme.powerMenu.buttonHeight
                 radius: Theme.powerMenu.buttonRadius
-                color: buttonArea.containsMouse ? Theme.surfaceHover : Theme.surface
+                color: buttonArea.lit ? Theme.surfaceHover : Theme.surface
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                MouseArea {
+                PointerArea {
                     id: buttonArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: modelData.run()
 

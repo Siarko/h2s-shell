@@ -2,8 +2,8 @@
 
 Status (2026-11-08): stages 0–2 done (measured; tablet mode from Hyprland; popups by
 touch and the on-screen keyboard), stage 5's gestures done, and from stage 6 the battery
-widget. Left: stage 3 (touch feedback and target sizes, TODO 11.11 and 11.14), stage 4
-(instead of the wheel, 11.12), from stage 6 the keyboard button (11.29) and the lock
+widget, and stage 3 (touch feedback and target sizes). Left: stage 4 (instead of the
+wheel, 11.12), from stage 6 the keyboard button (11.29) and the lock
 screen (11.30), and popups clear of the keyboard by other bars and in the settings
 window (11.31).
 
@@ -61,6 +61,13 @@ Each verified on the Framework before the next.
 2. **Popups close on a tap outside** (11.9), and focus stops depending on hover.
 3. **Feedback on touch and finger-sized targets** (11.11, 11.14) — through the shared
    components (buttons, rows, toggles), not 75 separate edits. Minimum sizes in the theme.
+   *Done (2026-11-08):* decided with the user — the shell does not change for touch: the
+   hover look on a tap, held 200 ms after the release; invisible targets of at least
+   36 px (`target.minSize`), the look and layout unchanged; no "Touch" theme.
+   `components/PointerArea.qml`, about 60 areas moved to it; rows of a list that touch,
+   adjacent words and the delete button's "×" keep their own size (`centred: false`).
+   Checked on the Framework: a tap on the bar's edge above the clock opened the calendar;
+   the calendar's arrow lit on a tap and went back.
 4. **Instead of the wheel** (11.12): dragging sliders, swiping workspaces.
 5. **Gestures** (11.13), the user's list after walking the shell by finger (2026-11-08):
    - **Calendar:** a swipe changes the month (today only buttons and the wheel). *Done

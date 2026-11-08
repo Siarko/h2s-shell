@@ -11,13 +11,11 @@ Text {
     font.pixelSize: Theme.fontSizeHeading
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
-    color: area.containsMouse ? Theme.textPrimary : Theme.textSecondary
+    color: area.lit ? Theme.textPrimary : Theme.textSecondary
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-    MouseArea {
+    PointerArea {
         id: area
-        anchors.fill: parent
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
     }

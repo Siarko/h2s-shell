@@ -111,6 +111,9 @@ Singleton {
         "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
         "calendar": { "dayRadius": 4 },
         "checkbox": { "radius": 3 },
+        // The least area a control takes a click or a tap in, centred on it, beyond its
+        // look (PointerArea): room for a finger without the shell changing for it
+        "target": { "minSize": 36 },
         "lock": { "cardRadius": 16, "controlRadius": 8, "controlHeight": 40 },
         "border": { "width": 1, "selectedWidth": 2 },  // ordinary outlines; selection rings
         // Popups' widths, in percent of their width at the built-in fonts: `all` for every

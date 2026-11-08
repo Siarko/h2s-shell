@@ -58,14 +58,14 @@ Item {
                 width: parent.width
                 height: 4
                 radius: height / 2
-                color: seekArea.containsMouse && seekBar.canSeek ? Theme.textSecondary : Theme.textDisabled
+                color: seekArea.lit && seekBar.canSeek ? Theme.textSecondary : Theme.textDisabled
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Rectangle {
                     width: seekBar._fraction * parent.width
                     height: parent.height
                     radius: height / 2
-                    color: seekArea.containsMouse && seekBar.canSeek ? Theme.accentHover : Theme.accent
+                    color: seekArea.lit && seekBar.canSeek ? Theme.accentHover : Theme.accent
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }
             }
@@ -79,10 +79,8 @@ Item {
                 visible: seekBar.canSeek
             }
 
-            MouseArea {
+            PointerArea {
                 id: seekArea
-                anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: seekBar.canSeek ? Qt.PointingHandCursor : Qt.ArrowCursor
                 enabled: seekBar.canSeek
                 onPressed: mouse => update(mouse.x)

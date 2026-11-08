@@ -70,15 +70,13 @@ Item {
                 text: "󰒓"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSection
-                color: deviceToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: deviceToggleArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
 
-                MouseArea {
+                PointerArea {
                     id: deviceToggleArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: deviceToggle.expanded = !deviceToggle.expanded
                 }
@@ -90,15 +88,13 @@ Item {
                 text: "󰎹"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSection
-                color: appMixerToggleArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: appMixerToggleArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 Layout.preferredWidth: 20
                 horizontalAlignment: Text.AlignHCenter
 
-                MouseArea {
+                PointerArea {
                     id: appMixerToggleArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: appMixerToggle.expanded = !appMixerToggle.expanded
                 }
@@ -136,7 +132,7 @@ Item {
                         visible: matches
                         width: deviceCol.width
                         height: matches ? 28 : 0
-                        color: deviceArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        color: deviceArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                         radius: Theme.listItem.radius
 
@@ -164,10 +160,10 @@ Item {
                             }
                         }
 
-                        MouseArea {
+                        PointerArea {
                             id: deviceArea
+                            centred: false
                             anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (row.isSink)

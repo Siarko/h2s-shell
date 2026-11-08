@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
@@ -77,13 +78,11 @@ ColumnLayout {
             text: "×"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSection
-            color: _clearArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+            color: _clearArea.lit ? Theme.textPrimary : Theme.textSecondary
 
-            MouseArea {
+            PointerArea {
                 id: _clearArea
-                anchors.fill: parent
-                anchors.margins: -8
-                hoverEnabled: true
+                reach: 8
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.rangeCleared()
             }

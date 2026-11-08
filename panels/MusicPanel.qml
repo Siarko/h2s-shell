@@ -101,14 +101,12 @@ Item {
                 text: "󰒮"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
-                color: !Music.canPrev ? Theme.textDisabled : prevArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: !Music.canPrev ? Theme.textDisabled : prevArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
-                MouseArea {
+                PointerArea {
                     id: prevArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Music.canPrev ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: Music.previous()
                 }
@@ -119,14 +117,12 @@ Item {
                 text: Music.playing ? "󰏤" : "󰐊"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeXXLargeDisplay
-                color: playArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: playArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
-                MouseArea {
+                PointerArea {
                     id: playArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: Music.togglePlay()
                 }
@@ -137,14 +133,12 @@ Item {
                 text: "󰒭"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeLargeDisplay
-                color: !Music.canNext ? Theme.textDisabled : nextArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                color: !Music.canNext ? Theme.textDisabled : nextArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 anchors.verticalCenter: parent.verticalCenter
 
-                MouseArea {
+                PointerArea {
                     id: nextArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Music.canNext ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: Music.next()
                 }

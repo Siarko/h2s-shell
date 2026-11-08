@@ -59,7 +59,7 @@ BarWidget {
                 Rectangle {
                     anchors.fill: parent
                     radius: Theme.tray.pillRadius
-                    color: iconMouseArea.containsMouse || trayDelegate.menuOpen ? Theme.surfaceHover : Theme.surfaceHoverClear
+                    color: iconMouseArea.lit || trayDelegate.menuOpen ? Theme.surfaceHover : Theme.surfaceHoverClear
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 }
 
@@ -71,10 +71,8 @@ BarWidget {
                     sourceSize: Qt.size(Theme.tray.iconSize, Theme.tray.iconSize)
                 }
 
-                MouseArea {
+                PointerArea {
                     id: iconMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
                     onClicked: event => {

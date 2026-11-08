@@ -73,6 +73,11 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Touch and mouse alike: buttons, icons, rows and bar cells show their hover look when
+  tapped (it holds a moment after the finger lifts, so a tap is seen), and small controls
+  take a click or a tap a little past their edge — at least 36 px round them, the theme's
+  new Appearance → Controls → Targets — without changing how anything looks. A tap on
+  the bar's edge above a cell now reaches it.
 - Notifications: swipe a card sideways with a finger to dismiss it — a toast in the HUD
   (its countdown waits while the finger is down) or a card in the notifications panel. A
   short swipe lets it go back. The mouse still selects text by dragging.

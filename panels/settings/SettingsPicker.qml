@@ -46,7 +46,7 @@ ColumnLayout {
         Layout.fillWidth: true
         height: 28
         radius: Theme.dropdown.radius
-        color: _pickerArea.containsMouse && !_picker.locked ? Theme.surfaceHover : Theme.surface
+        color: _pickerArea.lit && !_picker.locked ? Theme.surfaceHover : Theme.surface
         opacity: _picker.locked ? 0.5 : 1
         border.width: Theme.border.width
         border.color: _picker.open ? Theme.accent : Theme.surfaceHoverClear
@@ -71,10 +71,8 @@ ColumnLayout {
             color: Theme.textSecondary
         }
 
-        MouseArea {
+        PointerArea {
             id: _pickerArea
-            anchors.fill: parent
-            hoverEnabled: true
             enabled: !_picker.locked
             cursorShape: Qt.PointingHandCursor
             onClicked: _picker.toggleRequested()
@@ -109,7 +107,7 @@ ColumnLayout {
                         width: _optionColumn.width
                         height: 24
                         radius: Theme.listItem.radius
-                        color: picked ? Theme.accentTint : (_optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                        color: picked ? Theme.accentTint : (_optionArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
@@ -121,10 +119,10 @@ ColumnLayout {
                             color: parent.picked ? Theme.textPrimary : Theme.textSecondary
                         }
 
-                        MouseArea {
+                        PointerArea {
                             id: _optionArea
+                            centred: false
                             anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: _picker.picked(parent.modelData)
                         }

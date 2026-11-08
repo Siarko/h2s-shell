@@ -98,13 +98,11 @@ Rectangle {
         text: root.revealed ? "󰛐" : "󰛑"
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeMedium
-        color: _eyeArea.containsMouse ? Theme.textSecondary : Theme.textMuted
+        color: _eyeArea.lit ? Theme.textSecondary : Theme.textMuted
 
-        MouseArea {
+        PointerArea {
             id: _eyeArea
-            anchors.fill: parent
-            anchors.margins: -4
-            hoverEnabled: true
+            reach: 4
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 if (root.ownsReveal)

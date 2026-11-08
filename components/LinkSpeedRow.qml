@@ -33,7 +33,7 @@ Column {
                 bottomMargin: -2
             }
             radius: Theme.listItem.radius
-            color: _rowArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+            color: _rowArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         }
 
@@ -59,10 +59,10 @@ Column {
             }
         }
 
-        MouseArea {
+        PointerArea {
             id: _rowArea
+            centred: false
             anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.expanded = !root.expanded
         }

@@ -35,7 +35,7 @@ Singleton {
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
-        "checkbox", "lock", "border", "popupWidth"]
+        "checkbox", "lock", "border", "target", "popupWidth"]
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
@@ -250,6 +250,8 @@ Singleton {
             field: [radius("Text fields", 20),
                 { token: "horizontalPadding", label: "Padding", hint: "Between a field's edge and its text", from: 0, to: 30, suffix: px }],
             checkbox: [radius("Check boxes", 10)],
+            target: [
+                { token: "minSize", label: "Least target", hint: "Every control takes a click or a tap this far around it at least, though it looks smaller: room for a finger", from: 0, to: 60, suffix: px }],
             tooltip: [radius("Tooltips", 20),
                 { token: "horizontalPadding", label: "Padding across", hint: "Between a tooltip's edge and its text", from: 0, to: 30, suffix: px },
                 { token: "verticalPadding", label: "Padding down", hint: "Above and below a tooltip's text", from: 0, to: 30, suffix: px }],

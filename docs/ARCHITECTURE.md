@@ -334,6 +334,13 @@ Logger { id: logger; prefix: "[STT]"; enabled: Config.stt.debug }
   the identity key so only changed delegates are rebuilt. The history and the second
   rule that goes with it are in [The Repeater crash](#the-repeater-crash).
 - **`ShapePath` has no `visible` property.**
+- **A control that looks different under the pointer uses `components/PointerArea.qml`**
+  and its `lit`, not a `MouseArea` and `containsMouse`. The same for a mouse and a finger:
+  `lit` holds a moment after a press, so a tap — over in ~80 ms — is seen, and the area
+  is at least `Theme.target.minSize` (36 px) round the control, past its look, so a small
+  control is easy to hit. Rows of a list that touch each other take `centred: false`
+  (no larger area: it would take clicks from the next row); `reach` asks for more room
+  than the minimum. Tooltips (`HoverTip`) stay on `containsMouse`: they are the cursor's.
 - Only commit when explicitly asked.
 
 ## Adding a widget

@@ -22,7 +22,7 @@ Rectangle {
     radius: Theme.dropdown.radius
     color: Theme.popupBackground
     border.width: Theme.border.width
-    border.color: open ? Theme.accent : (_area.containsMouse ? Theme.textMuted : Theme.outline)
+    border.color: open ? Theme.accent : (_area.lit ? Theme.textMuted : Theme.outline)
     Behavior on border.color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
     // A colour dot, when the option has a colour
@@ -61,10 +61,8 @@ Rectangle {
         color: Theme.textMuted
     }
 
-    MouseArea {
+    PointerArea {
         id: _area
-        anchors.fill: parent
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.open = !root.open
     }
@@ -85,7 +83,7 @@ Rectangle {
                 width: parent.width
                 height: Math.max(24, _optionLabel.implicitHeight + 6)
                 radius: Theme.listItem.radius
-                color: picked ? Theme.accentTint : (_optionArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                color: picked ? Theme.accentTint : (_optionArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                 Row {
@@ -108,10 +106,10 @@ Rectangle {
                     }
                 }
 
-                MouseArea {
+                PointerArea {
                     id: _optionArea
+                    centred: false
                     anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.open = false;

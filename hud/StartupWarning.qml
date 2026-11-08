@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import QtQuick.Layouts
 import qs.singletons
 
@@ -67,13 +68,11 @@ Rectangle {
             text: "×"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSection
-            color: _closeArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+            color: _closeArea.lit ? Theme.textPrimary : Theme.textSecondary
 
-            MouseArea {
+            PointerArea {
                 id: _closeArea
-                anchors.fill: parent
-                anchors.margins: -4
-                hoverEnabled: true
+                reach: 4
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.dismissed()
             }

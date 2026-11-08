@@ -709,6 +709,26 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       device a hover names is no guide. The stylus hovers, so hover popups stay for it.
       Tests: `PointerRulesTest`, `PointerInputTest`.
 
+- [x] **11.11 Touch feedback for the 64 hover-only visual states** (was 4.3) [#26]
+      Drive visual state from both `TapHandler.pressed` and `HoverHandler.hovered`,
+      through shared components so it is not 64 separate edits.
+      Done 2026-11-08 with 11.14, verified on the Framework and by the user with the mouse
+      on the host. Decided with the user: the shell does not change for touch — the hover
+      look on a tap, held 200 ms after the release (`components/PointerArea.qml`'s
+      `lit`), about 60 areas moved to it; tooltips stay on `containsMouse`.
+
+- [x] **11.14 Touch-sized targets** (was 4.6) — with 11.11, plans/touch.md stage 3
+      Split off 3.1. Compositor scaling makes everything proportionally larger but does
+      not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized
+      (~9 mm). Decide minimum target sizes, put them in `Theme.qml`, and apply them in the
+      shared components first.
+      Done 2026-11-08 with 11.11. Decided with the user: no "Touch" theme, invisible
+      targets — `PointerArea` is at least `target.minSize` (36 px, a theme token,
+      Appearance → Controls → Targets) round its control, look and layout unchanged;
+      `reach` for more. Rows of a list that touch, adjacent words, the delete button's
+      "×", check boxes and the vertical sliders keep their own size (`centred: false` or
+      untouched): a larger area would take clicks from the neighbour.
+
 - [x] **11.13 Gestures** (was 4.5) [#29]
       Swipe to dismiss a notification, edge swipe for panels. New feature surface —
       depends on 11.9–11.12.

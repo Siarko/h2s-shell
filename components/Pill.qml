@@ -17,7 +17,7 @@ Rectangle {
     width: implicitWidth
     height: implicitHeight
     radius: Theme.pill.radius
-    color: picked ? Theme.accent : (_area.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+    color: picked ? Theme.accent : (_area.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)
     border.width: picked ? 0 : Theme.border.width
     border.color: Theme.outline
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
@@ -31,10 +31,8 @@ Rectangle {
         color: root.picked ? Theme.onAccent : Theme.textSecondary
     }
 
-    MouseArea {
+    PointerArea {
         id: _area
-        anchors.fill: parent
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
     }

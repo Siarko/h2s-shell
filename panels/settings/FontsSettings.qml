@@ -174,7 +174,7 @@ Flickable {
                     width: ListView.view.width
                     height: Math.max(26, _familyName.implicitHeight + 6)
                     radius: Theme.listItem.radius
-                    color: picked ? Theme.accentTint : (_familyArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                    color: picked ? Theme.accentTint : (_familyArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     Text {
@@ -187,10 +187,10 @@ Flickable {
                         color: parent.picked ? Theme.textPrimary : Theme.textSecondary
                     }
 
-                    MouseArea {
+                    PointerArea {
                         id: _familyArea
+                        centred: false
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: root._editable ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: if (root._editable && !parent.picked) root._write("family", parent.modelData, true)
                     }

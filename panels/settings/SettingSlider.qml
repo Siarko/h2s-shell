@@ -81,7 +81,7 @@ RowLayout {
             width: parent.width
             height: 4
             radius: height / 2
-            color: _trackArea.containsMouse ? Theme.textSecondary : Theme.textDisabled
+            color: (_trackArea.containsMouse || _trackArea.pressed) ? Theme.textSecondary : Theme.textDisabled
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             // Locked region overlay (from → lockedFrom)
@@ -99,7 +99,7 @@ RowLayout {
                 width: Math.abs(parent.parent._pos - parent.parent._fillStart) * parent.width
                 height: parent.height
                 radius: height / 2
-                color: _trackArea.containsMouse ? Theme.accentHover : Theme.accent
+                color: (_trackArea.containsMouse || _trackArea.pressed) ? Theme.accentHover : Theme.accent
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
             }
         }

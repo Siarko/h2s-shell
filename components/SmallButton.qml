@@ -23,7 +23,7 @@ Rectangle {
 
     readonly property bool _confirms: kind === "save" || kind === "saveChange"
     readonly property bool _filled: _confirms || checked
-    readonly property bool _hot: _area.containsMouse && available
+    readonly property bool _hot: _area.lit && available
     // The theme's group for this kind of button: its own radius; padding and height are
     // the general button's
     readonly property var _shape: kind === "save" || kind === "saveChange" ? Theme.saveButton
@@ -56,10 +56,8 @@ Rectangle {
             : Theme.textSecondary
     }
 
-    MouseArea {
+    PointerArea {
         id: _area
-        anchors.fill: parent
-        hoverEnabled: true
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: if (root.available) root.clicked()
     }

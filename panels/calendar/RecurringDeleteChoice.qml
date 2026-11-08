@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import qs.singletons
 
 // What deleting an event of a series deletes: this one, this and the ones after it, or
@@ -16,16 +17,14 @@ Column {
         id: _choice
         property bool main: true
         signal clicked
-        color: _area.containsMouse ? Theme.textPrimary : (main ? Theme.accent : Theme.textSecondary)
+        color: _area.lit ? Theme.textPrimary : (main ? Theme.accent : Theme.textSecondary)
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall
         font.bold: main
 
-        MouseArea {
+        PointerArea {
             id: _area
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: _choice.clicked()
         }

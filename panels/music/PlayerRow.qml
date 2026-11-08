@@ -27,16 +27,14 @@ Item {
         signal clicked
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeBodyLarge
-        color: _buttonArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+        color: _buttonArea.lit ? Theme.textPrimary : Theme.textSecondary
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
         horizontalAlignment: Text.AlignHCenter
         Layout.preferredWidth: 22
 
-        MouseArea {
+        PointerArea {
             id: _buttonArea
-            anchors.fill: parent
-            anchors.margins: -3
-            hoverEnabled: true
+            reach: 3
             cursorShape: Qt.PointingHandCursor
             onClicked: _button.clicked()
         }
@@ -53,7 +51,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Theme.button.radius
-        color: _nameArea.containsMouse ? Theme.fillSubtle : "transparent"
+        color: _nameArea.lit ? Theme.fillSubtle : "transparent"
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
     }
 
@@ -95,11 +93,11 @@ Item {
             color: root._active ? Theme.accent : Theme.textSecondary
             elide: Text.ElideRight
 
-            MouseArea {
+            PointerArea {
                 id: _nameArea
+                centred: false
                 anchors.fill: parent
                 enabled: !root.hidden
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: Music.selectPlayer(root.player)
             }

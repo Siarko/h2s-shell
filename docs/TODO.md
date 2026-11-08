@@ -12,7 +12,7 @@ guessing. One item at a time. Commit only when asked. An item is done once verif
 it can be — the host, or the Framework 12 for touch (the dev container has no
 `quickshell`) — and then moves to TODO-DONE.md.
 
-**Status (2026-11-08):** stages 1–10 done; stage 11 under way, touch input first.
+**Status (2026-11-08):** stages 1–10 done; stage 11 under way, touch input first (next: 11.12).
 
 ---
 
@@ -20,14 +20,6 @@ it can be — the host, or the Framework 12 for touch (the dev container has no
 
 Touch input on the Framework 12 — the current work ([plans/touch.md](plans/touch.md)):
 
-- [ ] **11.11 Touch feedback for the 64 hover-only visual states** (was 4.3) [#26]
-      Drive visual state from both `TapHandler.pressed` and `HoverHandler.hovered`,
-      through shared components so it is not 64 separate edits.
-- [ ] **11.14 Touch-sized targets** (was 4.6) — with 11.11, plans/touch.md stage 3
-      Split off 3.1. Compositor scaling makes everything proportionally larger but does
-      not make a 40 px bar cell, a 44×24 toggle or an 18 px tray icon finger-sized
-      (~9 mm). Decide minimum target sizes, put them in `Theme.qml`, and apply them in the
-      shared components first.
 - [ ] **11.12 Touch equivalents for the 7 wheel-only interactions** (was 4.4) [#28]
       Volume on the sound widget, workspace switching, sliders.
 - [ ] **11.29 A keyboard button on the bar** (plans/touch.md stage 6) — calls `osk` (or

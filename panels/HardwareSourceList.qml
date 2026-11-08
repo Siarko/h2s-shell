@@ -64,7 +64,7 @@ ReorderList {
             radius: Theme.field.radius
             color: _labelInput.activeFocus
                 ? Theme.fill
-                : _labelHover.containsMouse
+                : _labelHover.lit
                     ? Theme.fillSubtle
                     : "transparent"
 
@@ -101,10 +101,10 @@ ReorderList {
                     text !== "" && text.trim() === "" ? " " : text.trim())
             }
 
-            MouseArea {
+            PointerArea {
                 id: _labelHover
+                centred: false
                 anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.IBeamCursor
                 onClicked: _labelInput.forceActiveFocus()
                 enabled: !_labelInput.activeFocus

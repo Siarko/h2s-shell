@@ -123,6 +123,7 @@ The toast's card controls take `notificationCard.controlRadius`.
 | Settings cards (lists, condition editor, profile cards) | corner radius (6; profiles 8) | `settings.cardRadius` |
 | Calendar day cells, the week frame | corner radius (4) | `calendar.dayRadius` |
 | Checkboxes | corner radius (3) | `checkbox.radius` |
+| Targets (added with TODO 11.14) | least area a click or a tap reaches a control in (36) | `target.minSize` |
 | Lock screen card | corner radius (16) | `lock.cardRadius` |
 | Lock screen field and button | corner radius (8) | `lock.controlRadius` |
 | Lock screen field and button | height (40) | `lock.controlHeight` |

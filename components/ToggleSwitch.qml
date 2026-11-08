@@ -30,8 +30,8 @@ Rectangle {
         Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
     }
 
-    MouseArea {
-        anchors.fill: parent
+    // At least Theme.target.minSize round it: a 24 px switch is small for a finger
+    PointerArea {
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled()

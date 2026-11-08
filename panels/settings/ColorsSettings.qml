@@ -145,7 +145,7 @@ Flickable {
                     Layout.fillWidth: true
                     implicitHeight: _rowContent.implicitHeight + 12
                     radius: Theme.settings.cardRadius
-                    color: _entry.open ? Theme.surface : (_rowArea.containsMouse ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
+                    color: _entry.open ? Theme.surface : (_rowArea.lit ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     RowLayout {
@@ -211,10 +211,10 @@ Flickable {
                         }
                     }
 
-                    MouseArea {
+                    PointerArea {
                         id: _rowArea
+                        centred: false
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: root._editable ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: if (root._editable) root.expanded = _entry.open ? "" : _entry.token
                     }

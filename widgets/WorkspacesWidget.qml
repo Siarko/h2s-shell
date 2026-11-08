@@ -74,8 +74,8 @@ BarWidget {
                 radius: Theme.workspace.pillRadius
                 color: {
                     if (Workspaces.isSpecial(modelData))
-                        return Workspaces.isSpecialVisible(modelData) ? Theme.workspaceSpecial : (_wsHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                    return modelData.focused ? Theme.accentDark : (modelData.active ? Theme.workspaceActive : (_wsHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear))
+                        return Workspaces.isSpecialVisible(modelData) ? Theme.workspaceSpecial : (_wsHover.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                    return modelData.focused ? Theme.accentDark : (modelData.active ? Theme.workspaceActive : (_wsHover.lit ? Theme.surfaceHover : Theme.surfaceHoverClear))
                 }
                 Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
@@ -88,10 +88,8 @@ BarWidget {
                     anchors.centerIn: parent
                 }
 
-                MouseArea {
+                PointerArea {
                     id: _wsHover
-                    anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         if (Workspaces.isSpecial(modelData) && Workspaces.isSpecialVisible(modelData))

@@ -83,7 +83,7 @@ ReorderList {
             width: 24
             height: 24
             radius: Theme.iconButton.radius
-            color: _gearArea.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+            color: _gearArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
             Text {
@@ -94,10 +94,8 @@ ReorderList {
                 color: root.expandedRows[_content.index] === true ? Theme.accent : Theme.textSecondary
             }
 
-            MouseArea {
+            PointerArea {
                 id: _gearArea
-                anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root._toggleExpanded(_content.index)
             }

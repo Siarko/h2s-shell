@@ -28,7 +28,7 @@ Rectangle {
         width: height
         height: Math.max(Theme.button.minHeight, _glyphText.implicitHeight + 2 * Theme.button.verticalPadding)
         radius: Theme.button.radius
-        color: _actionArea.containsMouse ? Theme.surfaceHover : Theme.surface
+        color: _actionArea.lit ? Theme.surfaceHover : Theme.surface
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
@@ -37,13 +37,11 @@ Rectangle {
             text: _actionButton.glyph
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeMedium
-            color: _actionArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+            color: _actionArea.lit ? Theme.textPrimary : Theme.textSecondary
         }
 
-        MouseArea {
+        PointerArea {
             id: _actionArea
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: _actionButton.clicked()
         }

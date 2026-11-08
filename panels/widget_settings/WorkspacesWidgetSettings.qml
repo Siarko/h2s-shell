@@ -233,7 +233,7 @@ Item {
                         width: Math.max(20, _removeGlyph.implicitHeight)
                         height: width
                         radius: Theme.iconButton.radius
-                        color: _removeHover.containsMouse ? Theme.surfaceHover : Theme.surfaceHoverClear
+                        color: _removeHover.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
                         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                         Text {
@@ -245,10 +245,8 @@ Item {
                             color: Theme.textDisabled
                         }
 
-                        MouseArea {
+                        PointerArea {
                             id: _removeHover
-                            anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: _removeNameMapRow(_mapRow.index)
                         }

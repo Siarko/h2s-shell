@@ -33,7 +33,7 @@ Column {
                 Behavior on rotation { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
-                color: _hiddenArea.containsMouse ? Theme.textPrimary : Theme.textMuted
+                color: _hiddenArea.lit ? Theme.textPrimary : Theme.textMuted
                 anchors.verticalCenter: parent.verticalCenter
             }
 
@@ -42,15 +42,13 @@ Column {
                 text: "Hidden (" + Music.hiddenPlayers.length + ")"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                color: _hiddenArea.containsMouse ? Theme.textPrimary : Theme.textMuted
+                color: _hiddenArea.lit ? Theme.textPrimary : Theme.textMuted
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
 
-        MouseArea {
+        PointerArea {
             id: _hiddenArea
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.hiddenOpen = !root.hiddenOpen
         }

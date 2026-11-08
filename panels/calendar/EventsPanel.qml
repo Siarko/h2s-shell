@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
@@ -153,15 +154,15 @@ Item {
                             text: modelData
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
-                            font.bold: _modeArea.containsMouse || root.viewMode === modelData.toLowerCase()
+                            font.bold: _modeArea.lit || root.viewMode === modelData.toLowerCase()
                             color: (root.viewMode === modelData.toLowerCase()) ? Theme.textPrimary
-                                 : _modeArea.containsMouse                     ? Theme.textSecondary
+                                 : _modeArea.lit                     ? Theme.textSecondary
                                  : Theme.textSecondary
 
-                            MouseArea {
+                            PointerArea {
                                 id: _modeArea
+                                centred: false
                                 anchors.fill: parent
-                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: Config.gcal.viewMode = modelData.toLowerCase()
                             }
@@ -179,17 +180,15 @@ Item {
                 Text {
                     objectName: "calendarAdd"
                     text: "+"
-                    color: _addArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    color: _addArea.lit ? Theme.textPrimary : Theme.textSecondary
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSection
 
-                    MouseArea {
+                    PointerArea {
                         id: _addArea
-                        anchors.fill: parent
                         // The glyph is small for a finger: the target reaches past it
-                        anchors.margins: -8
-                        hoverEnabled: true
+                        reach: 8
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             _addEventForm.reset(root._selectedKey);
@@ -200,16 +199,14 @@ Item {
 
                 Text {
                     text: "󰑓"
-                    color: _refreshArea.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                    color: _refreshArea.lit ? Theme.textPrimary : Theme.textSecondary
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
 
-                    MouseArea {
+                    PointerArea {
                         id: _refreshArea
-                        anchors.fill: parent
-                        anchors.margins: -8
-                        hoverEnabled: true
+                        reach: 8
                         cursorShape: Qt.PointingHandCursor
                         onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
                     }
@@ -238,16 +235,14 @@ Item {
             Text {
                 anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                 text: "→"
-                color: _bannerArea.containsMouse ? Theme.textPrimary : Theme.error
+                color: _bannerArea.lit ? Theme.textPrimary : Theme.error
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeMedium
             }
 
-            MouseArea {
+            PointerArea {
                 id: _bannerArea
-                anchors.fill: parent
-                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     if (root._statusKind === "error")

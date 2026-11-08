@@ -544,7 +544,7 @@ Rectangle {
         height: 28
         radius: Theme.notificationCard.controlRadius
         z: 1
-        color: _copyArea.containsMouse ? Theme.surfaceHover : Theme.accentDark
+        color: _copyArea.lit ? Theme.surfaceHover : Theme.accentDark
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
@@ -555,10 +555,8 @@ Rectangle {
             color: Theme.textPrimary
         }
 
-        MouseArea {
+        PointerArea {
             id: _copyArea
-            anchors.fill: parent
-            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 if (notifCard._activeEdit) {

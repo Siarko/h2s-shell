@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import qs.singletons
 
 // The settings window's page list for the tab that is open, with a mark on the selected
@@ -115,7 +116,7 @@ Item {
                     height: 34
                     radius: Theme.settings.sidebarItemRadius
                     // The selected one is marked by the sliding mark above
-                    color: _rowArea.containsMouse && !_delegate.selected
+                    color: _rowArea.lit && !_delegate.selected
                         ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
@@ -148,10 +149,10 @@ Item {
                         Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                     }
 
-                    MouseArea {
+                    PointerArea {
                         id: _rowArea
+                        centred: false
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.pageClicked(_delegate.modelData.id)
                     }

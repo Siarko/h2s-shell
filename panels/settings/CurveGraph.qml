@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import Quickshell
 import qs.singletons
 
@@ -214,16 +215,14 @@ Item {
             x: root.toX(root.points[modelData] ?? 0) - width / 2
             y: root.toY(root.points[modelData + 1] ?? 0) - height / 2
             color: joint ? Theme.textPrimary
-                : (_handleArea.pressed || _handleArea.containsMouse ? Theme.accentHover : Theme.accent)
+                : (_handleArea.pressed || _handleArea.lit ? Theme.accentHover : Theme.accent)
             border.width: Theme.border.selectedWidth
             border.color: picked ? Theme.warning : (joint ? Theme.accent : Theme.popupBackground)
             Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-            MouseArea {
+            PointerArea {
                 id: _handleArea
-                anchors.fill: parent
-                anchors.margins: -6
-                hoverEnabled: true
+                reach: 6
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                 preventStealing: true
                 onPressed: root.pointPressed(_handle.modelData)
