@@ -7,3 +7,7 @@
 # Machine-local Claude Code settings (permission grants). Hidden by a global ignore
 # inside the dev container, but not necessarily on the host.
 /.claude/
+
+# Quickshell writes this symlink into the config folder for qmlls; it points into
+# /run/user/<uid>, so it is machine-local, and a dangling link breaks the GitHub Pages build.
+/.qmlls.ini

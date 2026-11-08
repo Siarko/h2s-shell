@@ -1,0 +1,5 @@
+# The public pages (homepage and privacy policy, which Google's OAuth consent screen
+# links to), built by .github/workflows/pages.yml. Only this folder is published.
+title: h2s-shell
+description: A desktop shell for Hyprland, built with Quickshell
+theme: jekyll-theme-primer
