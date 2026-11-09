@@ -7,6 +7,21 @@ import QtQml
 Singleton {
     id: root
     property alias notifications: server.trackedNotifications
+
+    // The screen toasts show on — notifications' and the shell's messages — by port, or ""
+    // for none: a fullscreen window there, by the settings (ToastRules). None: a toast is
+    // not shown at all, the notification only in the panel; those waiting are dropped.
+    readonly property string toastScreen: ToastRules.screenFor({
+        screen: Profiles.value("notifications.toastScreen") ?? "",
+        fullscreen: Profiles.value("notifications.toastFullscreen") ?? "show",
+        fullscreenScreen: Profiles.value("notifications.toastFullscreenScreen") ?? ""
+    }, Workspaces.screens)
+    onToastScreenChanged: {
+        if (toastScreen === "") {
+            clearHudQueue();
+            clearShellQueue();
+        }
+    }
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
     // Map of notification id -> string[] of extracted codes matching the notifications.codePatterns setting
@@ -27,6 +42,9 @@ Singleton {
 
         onNotification: notification => {
             if (isShellNotification(notification)) {
+                // Nowhere to show it (a fullscreen window, ToastRules): dropped
+                if (root.toastScreen === "")
+                    return;
                 // Copy summary immediately — the notification object is not tracked
                 // and may be freed by Quickshell before ShellNotificationHudItem reads it
                 shellQueue = shellQueue.concat([{ summary: notification.summary }]);
@@ -71,7 +89,7 @@ Singleton {
             }
 
             notification.tracked = true;
-            if (!hudPanelOpen && Profiles.value("notifications.toasts") !== false)
+            if (!hudPanelOpen && Profiles.value("notifications.toasts") !== false && root.toastScreen !== "")
                 enqueueHudNotification(notification);
             // One arriving while the panel is open is seen as it comes
             if (hudPanelOpen)

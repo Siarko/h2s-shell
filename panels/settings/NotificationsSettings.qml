@@ -11,6 +11,7 @@ ColumnLayout {
 
     readonly property bool _toastsOn: Profiles.editedValue(editIndex, "notifications.toasts") !== false
     readonly property bool _column: Profiles.editedValue(editIndex, "notifications.toastLayout") === "column"
+    readonly property bool _elsewhere: Profiles.editedValue(editIndex, "notifications.toastFullscreen") === "elsewhere"
 
     anchors {
         fill: parent
@@ -34,6 +35,13 @@ ColumnLayout {
         key: "notifications.toastColumnSize"
         editIndex: root.editIndex
         available: root._toastsOn && root._column
+    }
+    SchemaSettingEditor { key: "notifications.toastScreen"; editIndex: root.editIndex; available: root._toastsOn }
+    SchemaSettingEditor { key: "notifications.toastFullscreen"; editIndex: root.editIndex; available: root._toastsOn }
+    SchemaSettingEditor {
+        key: "notifications.toastFullscreenScreen"
+        editIndex: root.editIndex
+        available: root._toastsOn && root._elsewhere
     }
 
     Text {

@@ -75,5 +75,15 @@ TestCase {
                     "a threshold with no number is left out");
         assertEqual(String(BatteryRules.color(100, [{ value: 100, color: "#00ff00" }], fallback)), "#00ff00",
                     "a threshold at 100 colours a full battery");
+
+        // --- colour while plugged in ---
+        assertEqual(String(BatteryRules.widgetColor(10, thresholds, true, "#52a0e0", fallback)), "#52a0e0",
+                    "plugged in with a colour: that colour, whatever the thresholds say");
+        assertEqual(String(BatteryRules.widgetColor(10, thresholds, false, "#52a0e0", fallback)), "#e05252",
+                    "on battery: the thresholds");
+        assertEqual(String(BatteryRules.widgetColor(10, thresholds, true, "", fallback)), "#e05252",
+                    "plugged in with no colour: the thresholds");
+        assertEqual(String(BatteryRules.widgetColor(50, thresholds, true, "blue", fallback)), fallback,
+                    "plugged in with an invalid colour: as with none");
     }
 }

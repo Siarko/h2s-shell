@@ -32,6 +32,7 @@ QtObject {
     property var _barGeometry: BarGeometryTest {}
     property var _pointerRules: PointerRulesTest {}
     property var _batteryRules: BatteryRulesTest {}
+    property var _toastRules: ToastRulesTest {}
     property var _energyRules: EnergyRulesTest {}
     property var _pointerInput: PointerInputTest {}
 

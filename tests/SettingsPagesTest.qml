@@ -17,6 +17,8 @@ TestCase {
         "components/LinkSpeedRow.qml",
         "components/Pill.qml",
         "components/PointerArea.qml",
+        "widgets/BatteryWidget.qml",
+        "panels/widget_settings/BatteryWidgetSettings.qml",
         "components/ToggleSwitch.qml",
         "components/SeekBar.qml",
         "components/SmallButton.qml",

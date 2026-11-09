@@ -8,6 +8,19 @@ Singleton {
     property var workspaces: Hyprland.workspaces
     property var focused: Hyprland.focusedWorkspace
 
+    // The screens as the compositor has them, in its order: [{ name (the port, "DP-2"),
+    // focused — the one with the focused workspace, fullscreen — a fullscreen window on its
+    // shown workspace }] (ToastRules). Focused from the focused workspace, as the toasts
+    // always went: the monitor's own `focused` was seen to stay on the first screen.
+    readonly property var screens: {
+        const focusedName = Hyprland.focusedWorkspace?.monitor?.name ?? "";
+        return Hyprland.monitors.values.map(monitor => ({
+            name: monitor.name,
+            focused: monitor.name === focusedName,
+            fullscreen: monitor.activeWorkspace?.hasFullscreen ?? false
+        }));
+    }
+
     // monitorName -> active special workspace name ("" when none)
     property var _activeSpecials: ({})
 

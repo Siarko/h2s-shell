@@ -95,8 +95,15 @@ Item {
             values.sort((a, b) => a - b);
             return values.map(ms => ({ value: ms, label: _intervalLabel(ms) }));
         }
-        if (entry.type === "enum")
-            return entry.optionsFrom === "iconThemes" ? _iconThemeOptions : entry.options;
+        if (entry.type === "enum") {
+            if (entry.optionsFrom === "iconThemes")
+                return _iconThemeOptions;
+            if (entry.optionsFrom === "screens")
+                return _screenOptions("The focused screen");
+            if (entry.optionsFrom === "freeScreens")
+                return _screenOptions("Any without a fullscreen window");
+            return entry.options;
+        }
         return [];
     }
 
@@ -110,6 +117,20 @@ Item {
         const stored = String(shownValue ?? "");
         if (stored !== "" && !IconThemes.installed.includes(stored))
             options.push({ value: stored, label: stored + " (not installed: automatic applies)" });
+        return options;
+    }
+
+    // The connected screens by port, after `first` for "", and the stored one when it is
+    // not connected (any more), so the list still shows what is set
+    function _screenOptions(first) {
+        const options = [{ value: "", label: first }]
+            .concat(Quickshell.screens.map(screen => ({
+                value: screen.name,
+                label: screen.name + (screen.model ? " — " + screen.model : "")
+            })));
+        const stored = String(shownValue ?? "");
+        if (stored !== "" && !options.some(option => option.value === stored))
+            options.push({ value: stored, label: stored + " (not connected)" });
         return options;
     }
 

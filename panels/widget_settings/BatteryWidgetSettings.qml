@@ -6,7 +6,8 @@ import qs.singletons
 
 // The battery widget's preset (BatteryWidget): where the percentage stands, and the
 // colour thresholds — any number of them, each a charge and a hex colour; the icon takes
-// the colour of the tightest threshold at or above the charge (BatteryRules.color).
+// the colour of the tightest threshold at or above the charge (BatteryRules.color); and a
+// colour while plugged in, which wins over them (BatteryRules.widgetColor).
 Item {
     id: root
     property string presetName: ""
@@ -16,6 +17,7 @@ Item {
 
     readonly property string _percentSide: WidgetPresets.value(widgetType, presetName, "percent") ?? "right"
     readonly property var _thresholds: WidgetPresets.value(widgetType, presetName, "thresholds") ?? []
+    readonly property string _chargingColor: WidgetPresets.value(widgetType, presetName, "chargingColor") ?? ""
 
     readonly property var _sides: [
         { value: "left", label: "Left" },
@@ -187,6 +189,49 @@ Item {
             label: "Add threshold"
             // A new one starts low and in the warning colour, to be changed
             onClicked: root._writeThresholds(list => list.push({ value: 20, color: String(Theme.warning) }))
+        }
+
+        // The colour while plugged in
+        RowLayout {
+            width: _col.width
+            spacing: 6
+
+            Label { text: "Charging" }
+
+            // What the colour looks like; outlined only while the hex is not one
+            Rectangle {
+                implicitWidth: 22
+                implicitHeight: 22
+                radius: Theme.field.radius
+                color: BatteryRules.isHexColor(root._chargingColor) ? root._chargingColor : "transparent"
+                border.width: Theme.border.width
+                border.color: Theme.outline
+            }
+
+            InputField {
+                implicitWidth: 96
+                text: root._chargingColor
+                placeholder: "#rrggbb"
+                outlined: true
+                // Empty is allowed: no colour of its own
+                problem: text !== "" && !BatteryRules.isHexColor(text)
+                input.maximumLength: 9
+                input.inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | Qt.ImhPreferLowercase
+                onEditingFinished: {
+                    if (text !== root._chargingColor)
+                        WidgetPresets.set(root.widgetType, root.presetName, "chargingColor", text);
+                }
+            }
+
+            Item { Layout.fillWidth: true }
+        }
+
+        Hint {
+            x: 88
+            width: _col.width - 88
+            text: root._chargingColor === ""
+                ? "Empty: plugged in, the icon follows the thresholds as on battery."
+                : "Plugged in — charging, full on the charger or holding off — the icon and the percentage take this colour, over the thresholds."
         }
     }
 }

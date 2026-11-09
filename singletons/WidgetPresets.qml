@@ -28,8 +28,9 @@ Singleton {
         // "untilOpened", "untilCleared"
         "notifications": { badge: true, animation: "once" },
         // The percentage "left", "right" or "none" of the icon; colour thresholds
-        // [{ value, color }] — none: the icon keeps the text colour
-        "battery": { percent: "right", thresholds: [] }
+        // [{ value, color }] — none: the icon keeps the text colour; a colour while plugged
+        // in ("" — the thresholds, as on battery)
+        "battery": { percent: "right", thresholds: [], chargingColor: "" }
     })
 
     function names(type) {

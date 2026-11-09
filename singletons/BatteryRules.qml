@@ -92,4 +92,12 @@ Singleton {
         }
         return best !== null ? best.color : fallback;
     }
+
+    // The widget's colour: plugged in (`charging`) with a valid `chargingColor`, that;
+    // otherwise the thresholds' (color())
+    function widgetColor(percent: real, thresholds, charging: bool, chargingColor, fallback: color): color {
+        if (charging && root.isHexColor(String(chargingColor ?? "")))
+            return chargingColor;
+        return root.color(percent, thresholds, fallback);
+    }
 }

@@ -219,7 +219,8 @@ PanelWindow {
         border.width: Theme.osdToast.borderWidth
         border.color: Theme.osdToastBorder
 
-        opacity: Notifications.hudQueue.length > 0 ? 1.0 : 0.0
+        // On the toasts' screen only
+        opacity: Notifications.hudQueue.length > 0 && Notifications.toastScreen === hud.modelData.name ? 1.0 : 0.0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
 

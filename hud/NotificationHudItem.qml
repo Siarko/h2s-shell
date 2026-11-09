@@ -104,8 +104,8 @@ Item {
         target: Notifications
 
         function onHudQueueChanged() {
-            // Only the screen that owns the focused workspace shows toasts
-            if (Workspaces.focused?.monitor?.name !== root.screenModelData.name) return;
+            // Only the toasts' screen shows them (Notifications.toastScreen)
+            if (Notifications.toastScreen !== root.screenModelData.name) return;
             if (root.currentNotif !== null) {
                 // Toast already visible — nudge its x to account for badge appearing/disappearing
                 if (!slideIn.running && !slideOut.running) {
@@ -116,6 +116,12 @@ Item {
             // Don't interrupt an ongoing slide-out
             if (slideOut.running) return;
             root.showNext();
+        }
+
+        // Toasts moved here (focus, a fullscreen window elsewhere): those waiting show
+        function onToastScreenChanged() {
+            if (Notifications.toastScreen === root.screenModelData.name && root.currentNotif === null && !slideOut.running)
+                root.showNext();
         }
 
         function onHudQueueCleared() {

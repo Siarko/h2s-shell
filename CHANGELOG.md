@@ -11,6 +11,7 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- The count of waiting toasts showed on every screen; it shows on the toasts' screen.
 - Music: skipping a paused track (the buttons or a swipe) no longer starts it playing in
   players that do so against MPRIS, such as Spotify — the shell pauses it again.
 - `launch.sh --restart` (`h2s-shell --restart`) closes every running copy of the shell, not
@@ -73,6 +74,13 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Notifications: where toasts show — the screen with the focused workspace, as before, or
+  a chosen screen — and what a fullscreen window on that screen changes: show anyway,
+  don't show (the notification goes to the panel only), or show on another screen, a
+  chosen one or any without a fullscreen window. The shell's own messages follow them.
+  Settings → Notifications.
+- Battery widget: a colour of its own while plugged in (charging, full on the charger),
+  over the colour thresholds; empty keeps the thresholds. Widget settings → Charging.
 - Calendar: a click or a tap on the month or the year shows the year's twelve months; the
   arrows (or a swipe) move by years there and a month goes to it — moving by years no
   longer needs the wheel over the year.

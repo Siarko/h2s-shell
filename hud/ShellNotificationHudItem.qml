@@ -42,7 +42,7 @@ Item {
         target: Notifications
 
         function onShellQueueChanged() {
-            if (Workspaces.focused?.monitor?.name !== root.screenModelData.name)
+            if (Notifications.toastScreen !== root.screenModelData.name)
                 return;
             if (root.currentNotif !== null)
                 return;

@@ -108,7 +108,10 @@ input through except where a card is actually visible.
 - **Notification toasts** slide in from the right as notifications arrive. When several
   queue up, a badge on the right screen edge shows how many are waiting; clicking it
   opens the notification panel. Toasts are suppressed while the notification panel is
-  open. A finger swipe sideways dismisses a toast (past a third of its width, or flung);
+  open. They show on the screen with the focused workspace, or on a chosen screen; when
+  that screen has a fullscreen window they show anyway, not at all (the notification in
+  the panel only), or on another screen — a chosen one, or any without a fullscreen
+  window. The shell's own messages follow the same rules (Settings → Notifications). A finger swipe sideways dismisses a toast (past a third of its width, or flung);
   its countdown pauses while it is being dragged.
 - **Volume OSD** appears on volume or mute changes.
 - **Shell toasts** — a bottom pill for the shell's own messages (notifications sent with

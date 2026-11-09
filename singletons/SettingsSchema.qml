@@ -22,7 +22,9 @@ import QtQuick
 //   hint     — a short explanation shown under the setting
 //   options  — for enum: [{ value, label }]
 //   optionsFrom — for enum: where the options come from at run time instead
-//              ("iconThemes": the installed icon themes, IconThemes)
+//              ("iconThemes": the installed icon themes, IconThemes; "screens": the
+//              connected screens by port, "" the focused one; "freeScreens": the same, ""
+//              any without a fullscreen window)
 //   presentation — for enum: "dropdown" for a list to pick from instead of pills
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
@@ -232,6 +234,21 @@ Singleton {
         { key: "notifications.toastColumnSize", label: "Toasts in the column", group: "notifications",
           type: "number", min: 2, max: 10, default: 3,
           hint: "More wait in the queue, counted beside the column." },
+        // Where toasts show, and what a fullscreen window on that screen changes (ToastRules).
+        // The shell's own messages follow them. Screens by port ("DP-2").
+        { key: "notifications.toastScreen", label: "Show toasts on", group: "notifications",
+          type: "enum", default: "", optionsFrom: "screens", presentation: "dropdown",
+          hint: "The shell's own messages show there too. A chosen screen that is not connected: the focused one." },
+        { key: "notifications.toastFullscreen", label: "Fullscreen window there", group: "notifications",
+          type: "enum", default: "show", options: [
+              { value: "show", label: "Show anyway" },
+              { value: "hide", label: "Don't show" },
+              { value: "elsewhere", label: "Another screen" }
+          ],
+          hint: "Only a fullscreen window on the toasts' screen counts. Not shown: the notification is in the panel only." },
+        { key: "notifications.toastFullscreenScreen", label: "Which screen", group: "notifications",
+          type: "enum", default: "", optionsFrom: "freeScreens", presentation: "dropdown",
+          hint: "One with a fullscreen window too, or none free: not shown." },
 
         // ── Appearance ── the look itself is in the theme; the profile picks which
         { key: "appearance.theme", label: "Theme", group: "appearance",
