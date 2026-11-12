@@ -137,7 +137,9 @@ Singleton {
             "pop": 380,                      // a mark popping in; "Clear all" is timed from it
             "pulse": 1000,                   // one breath of a pulsing indicator
             "spin": 800,                     // one turn of a spinner
-            "themeChange": 400               // colours moving to a new theme
+            "themeChange": 400,              // colours moving to a new theme
+            "wallpaperWorkspace": 350,       // the wallpaper following a workspace switch
+            "wallpaper": 900                 // a new wallpaper
         },
         "curves": {
             "hover": "OutQuad",
@@ -156,7 +158,11 @@ Singleton {
             "pop": "OutBack",
             "pulse": "InOutQuad",
             "spin": "Linear",
-            "themeChange": "OutQuad"
-        }
+            "themeChange": "OutQuad",
+            "wallpaperWorkspace": "OutCubic",
+            "wallpaper": "InOutCubic"
+        },
+        // How the wallpaper changes (ThemeRules.wallpaperTransitions)
+        "wallpaper": { "transition": "fade", "workspaceTransition": "slide" }
     })
 }

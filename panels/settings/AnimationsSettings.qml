@@ -87,7 +87,7 @@ Flickable {
 
         DraftActions {
             themeName: root.themeName
-            groups: ["durations", "curves"]
+            groups: ["durations", "curves", "wallpaper"]
             message: "Animations changed, not saved"
             onAboutToSave: root._flushPending()
         }
@@ -275,6 +275,69 @@ Flickable {
                     }
                 }
             }
+        }
+
+        // ── How the wallpaper changes (WallpaperSurface); timed by the two wallpaper roles above ──
+        Text {
+            Layout.topMargin: 18
+            text: "Wallpaper transitions"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeBody
+            font.bold: true
+            color: Theme.textPrimary
+        }
+        Hint {
+            text: "Timed and eased by the two Wallpaper roles above. Reduced motion changes the wallpaper at once."
+        }
+
+        component TransitionChoice: ColumnLayout {
+            id: _choice
+            property string token: ""
+            property string label: ""
+            property string hint: ""
+            property var choices: []
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            spacing: 4
+            Text {
+                text: _choice.label
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBody
+                color: Theme.textSecondary
+            }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 4
+                Repeater {
+                    model: ScriptModel { values: _choice.choices }
+                    Pill {
+                        required property var modelData
+                        label: modelData.label
+                        fontSize: Theme.fontSizeBody
+                        minimumHeight: 26
+                        picked: modelData.value === root._values.wallpaper?.[_choice.token]
+                        onClicked: if (!picked && root._editable) Theme.draftToken(root.themeName, "wallpaper", _choice.token, modelData.value)
+                    }
+                }
+            }
+            Hint { visible: _choice.hint !== ""; text: _choice.hint }
+        }
+
+        TransitionChoice {
+            token: "transition"
+            label: "A new image"
+            hint: "Drawn at random, picked, or the next day's."
+            choices: [
+                { value: "fade", label: "Fade" }, { value: "zoom", label: "Zoom" }, { value: "slide", label: "Slide" },
+                { value: "wipe", label: "Wipe" }, { value: "circle", label: "Circle" }, { value: "dissolve", label: "Dissolve" },
+                { value: "pixelate", label: "Pixelate" }
+            ]
+        }
+        TransitionChoice {
+            token: "workspaceTransition"
+            label: "Switching to a workspace with its own image"
+            hint: "Slide goes the way the workspaces do: to a higher number, from the right."
+            choices: [{ value: "slide", label: "Slide" }, { value: "same", label: "As a new image" }]
         }
     }
 }

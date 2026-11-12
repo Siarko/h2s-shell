@@ -74,6 +74,10 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Wallpaper transitions, set in the theme (Appearance → Animations): a switch to a
+  workspace with its own image slides the way the workspaces go (or changes as a new image
+  does); a new image fades, zooms, slides, wipes, opens as a circle, dissolves or
+  pixelates. Two animation roles time and ease them, with curves from the library.
 - Wallpapers drawn by the shell (Settings → Wallpaper; off by default): an image, or a
   folder (subfolders to a chosen depth) chosen by you, at random — at start, every so
   often, or on Shuffle (`ipc call wallpaper shuffle`) — or by weekday; one everywhere, per

@@ -29,7 +29,13 @@ Singleton {
     id: root
 
     // Groups of tokens a theme file may set
-    readonly property var groups: ["colors", "fonts", "bar", "durations", "curves"].concat(shapeGroups)
+    readonly property var groups: ["colors", "fonts", "bar", "durations", "curves", "wallpaper"].concat(shapeGroups)
+
+    // How the wallpaper changes (WallpaperSurface): `transition` for a new image, and
+    // `workspaceTransition` for a switch to a workspace with its own — "slide" follows the
+    // switch's direction, "same" uses `transition`
+    readonly property var wallpaperTransitions: ["fade", "zoom", "slide", "wipe", "circle", "dissolve", "pixelate"]
+    readonly property var wallpaperWorkspaceTransitions: ["slide", "same"]
 
     // The groups of radii, borders and spacing by kind of element (themes stage 7)
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
@@ -193,7 +199,9 @@ Singleton {
         { role: "pop", label: "Pop", hint: "A mark popping in, the bell; \"Clear all\" is timed from it", to: 2000, curves: ["pop"] },
         { role: "pulse", label: "Pulse", hint: "One breath of a pulsing indicator", to: 4000, curves: ["pulse"] },
         { role: "spin", label: "Spin", hint: "One turn of a spinner", to: 4000, curves: ["spin"] },
-        { role: "themeChange", label: "Theme change", hint: "Colours moving to a new theme", to: 2000, curves: ["themeChange"] }
+        { role: "themeChange", label: "Theme change", hint: "Colours moving to a new theme", to: 2000, curves: ["themeChange"] },
+        { role: "wallpaperWorkspace", label: "Wallpaper: workspace", hint: "The wallpaper following a switch to a workspace with its own", to: 2000, curves: ["wallpaperWorkspace"] },
+        { role: "wallpaper", label: "Wallpaper: new image", hint: "A new wallpaper drawn, picked or the day's", to: 4000, curves: ["wallpaper"] }
     ]
 
     // Qt's curves by name, for picking one: each kind in, out, in-out and out-in

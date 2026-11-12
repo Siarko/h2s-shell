@@ -239,6 +239,20 @@ be reused; ScriptModel diffs the values instead of resetting. A literal constant
 especially inside anything a popup loads, and for any path that builds popup content
 during the `PanelWindow` incubation.
 
+### Shaders
+
+Qt 6 loads only precompiled shaders. A shader's GLSL source and its compiled `.qsb` sit
+side by side and both are committed (`wallpaper/shaders/transition.frag` and
+`transition.frag.qsb`), so neither machine needs Qt's shader tools to run the shell. After
+changing a source, compile it again on the host (Arch: `qt6-shadertools`):
+
+```
+/usr/lib/qt6/bin/qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o transition.frag.qsb transition.frag
+```
+
+A shader runs only while it has work: the wallpaper's for the length of a transition,
+the image drawn plainly before and after.
+
 ### Widget contract
 
 A bar widget extends `components/BarWidget.qml`, which provides the cell background,

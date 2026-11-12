@@ -120,3 +120,15 @@ for later if that proves slow.
   pinned places plus Add — then Look (fit, background). Alternatives kept as a
   throwaway prototype (`prototype-wallpaper.qml`, not committed): a sentence of
   choices, a screens map (one rule, places that differ), a summary with steps.
+- 2026-11-12: transitions, in the theme (group `wallpaper`: `transition`,
+  `workspaceTransition`; roles `wallpaper`, `wallpaperWorkspace` with library curves). A
+  workspace switch slides the way the numbers go, or changes as a new image; a new image
+  fades, zooms, slides, or runs the shader (wipe, circle, dissolve, pixelate) only for the
+  change. Circle, pixelate and slide checked on the Framework.
+- 2026-11-12: a workspace switch showed its wallpaper about a second late — decoding:
+  measured on the Framework, a 4K JPEG at screen size 180 ms, a 19 MB PNG 586 ms (37 of
+  the folder's 137 are PNG); Hyprland's workspace event reaches Quickshell within 25 ms.
+  The surface now decodes the nearest workspaces' images ahead (up to four, kept in Qt's
+  pixmap cache and shared with the image shown), and the random draw covers the existing
+  workspaces and the ones beside those shown, so there is something to preload.
+

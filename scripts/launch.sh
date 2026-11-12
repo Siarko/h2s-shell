@@ -153,11 +153,16 @@ shell_pids() {
 }
 
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
-# the request over its socket) is terminated, then killed
+# the request over its socket) is terminated, then killed. The settings window is closed
+# first: Quickshell tearing it down with a text field focused crashed it on the way out
+# (QInputMethod::commit on the dying window), and the crash report popped up.
 stop_shell() {
     local pids
     pids=$(shell_pids)
     [ -n "$pids" ] || return
+    for pid in $pids; do
+        qs ipc --pid "$pid" call settings close > /dev/null 2>&1
+    done
     for pid in $pids; do
         qs kill --pid "$pid" > /dev/null 2>&1
     done

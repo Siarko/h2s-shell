@@ -4,9 +4,13 @@ import Quickshell.Wayland
 import qs.singletons
 
 // A screen's wallpaper: a window on the background layer, the whole screen, under every
-// other surface, taking no input. The image is Wallpapers.fileFor(the screen) — a new one
-// fades in over the old (Theme's "fade"), then the old is let go; none fades the old out
-// to the background colour. Only what is shown is decoded, at the screen's size. With
+// other surface, taking no input. The image is Wallpapers.fileFor(the screen). A new one
+// comes in over the old as the theme says (Theme.wallpaper): a switch to a workspace with
+// its own image slides the way the workspaces go, or not; any other change fades, zooms,
+// slides, or runs a shader (shaders/transition.frag: wipe, circle, dissolve, pixelate) —
+// the shader only while the change runs, the image drawn plainly before and after. Then
+// the old image is let go; none fades the old out to the background colour. Only what is
+// shown is decoded, at the screen's size. With
 // `wallpaper.backgroundFromImage` the background is the colour the image's edge averages
 // to (WallpaperRules.edgeColor), read from a small copy as each image comes in.
 PanelWindow {
@@ -27,6 +31,11 @@ PanelWindow {
 
     readonly property string _fit: Profiles.value("wallpaper.fit") ?? "cover"
     readonly property real _scale: root.screen?.devicePixelRatio ?? 1
+    // Decoded at the screen's size; centred and tiled show the image's own pixels. One
+    // value for the images and their preloaded copies: the size asked for is part of what
+    // makes Qt's cache share a decoded image
+    readonly property var _requestSize: _fit === "cover" || _fit === "contain"
+        ? Qt.size(width * _scale, height * _scale) : undefined
     // null: keep what is shown (WallpaperRules.fileFor)
     readonly property var _wanted: Wallpapers.fileFor(modelData.name)
     readonly property bool _fromImage: Profiles.value("wallpaper.backgroundFromImage") === true
@@ -47,7 +56,7 @@ PanelWindow {
     // Turned on with an image shown: read it now
     on_FromImageChanged: _sample(_front.status === Image.Ready ? _front : null)
 
-    // The image on top and the one coming in; they swap when a fade ends
+    // The image on top and the one coming in; they swap when a change ends
     property Image _front: _first
     property Image _back: _second
     // What was asked for last, as a path ("" for none). Compared as paths, never as URLs:
@@ -56,6 +65,28 @@ PanelWindow {
     property string _target: ""
     property bool _started: false
 
+    // The change under way: what kind ("fade", "zoom", "slide", "wipe", "circle",
+    // "dissolve", "pixelate"; "out" for none fading out), which way a slide goes (1: the
+    // new image from the right), and how far it is, 0 → 1
+    property bool _changing: false
+    property string _kind: "fade"
+    property int _direction: 1
+    property real _progress: 0
+    readonly property bool _shaderKind: ["wipe", "circle", "dissolve", "pixelate"].includes(_kind)
+    readonly property string _role: _workspaceSwitch ? "wallpaperWorkspace" : "wallpaper"
+    property bool _workspaceSwitch: false
+
+    // The screen's workspace, and the last switch: { from, to, at } — a new image asked for
+    // right after a switch is the switch's
+    readonly property int _workspace: Workspaces.screens.find(entry => entry.name === modelData.name)?.workspace ?? 0
+    property var _lastSwitch: null
+    property int _previousWorkspace: 0
+    on_WorkspaceChanged: {
+        if (_previousWorkspace > 0 && _workspace > 0)
+            _lastSwitch = { from: _previousWorkspace, to: _workspace, at: Date.now() };
+        _previousWorkspace = _workspace;
+    }
+
     function _url(path) {
         return path === "" ? "" : "file://" + path.split("/").map(encodeURIComponent).join("/");
     }
@@ -63,47 +94,93 @@ PanelWindow {
     function _show(path) {
         if (_started && path === _target)
             return;
+        const first = !_started;
         _started = true;
         _target = path;
         _finish();
+        const theme = Theme.wallpaper ?? {};
+        // Which bindings update first on a switch is not ours to know: read the workspace
+        // itself, and take the switch whether its handler has run yet or not
+        const now = Workspaces.screens.find(entry => entry.name === modelData.name)?.workspace ?? 0;
+        const sw = _previousWorkspace > 0 && now > 0 && now !== _previousWorkspace ? { from: _previousWorkspace, to: now }
+            : _lastSwitch !== null && _lastSwitch.to === now && Date.now() - _lastSwitch.at < 500 ? _lastSwitch
+            : null;
+        const switched = sw !== null;
+        _workspaceSwitch = switched;
+        _direction = switched && sw.to < sw.from ? -1 : 1;
+        if (path === "")
+            _kind = "out";
+        else if (first)
+            _kind = "fade";
+        else if (switched && (theme.workspaceTransition ?? "slide") === "slide")
+            _kind = "slide";
+        else
+            _kind = theme.transition ?? "fade";
         if (path === "") {
-            _fadeOut.start();
+            _begin();
             return;
         }
-        _back.opacity = 0;
         _back.path = path;
         _back.source = _url(path);
         if (_back.status === Image.Ready) {
             _sample(_back);
-            _fadeIn.start();
+            _begin();
         }
     }
 
-    // A fade under way is ended at once: the next starts from what it was going to
+    function _begin() {
+        _progress = 0;
+        _changing = true;
+        _change.restart();
+    }
+
+    // A change under way is ended at once: the next starts from what it was going to
     function _finish() {
-        if (_fadeIn.running) {
-            _fadeIn.stop();
-            _swap();
-        }
-        if (_fadeOut.running) {
-            _fadeOut.stop();
+        if (!_change.running)
+            return;
+        _change.stop();
+        _end();
+    }
+
+    function _end() {
+        _changing = false;
+        _progress = 0;
+        if (_kind === "out") {
             _front.source = "";
             _front.path = "";
-            _front.opacity = 1;
+            return;
         }
-    }
-
-    // The faded-in image goes on top for good; the old one is let go and waits behind
-    function _swap() {
+        // The new image goes on top for good; the old one is let go and waits behind
         const shown = _back;
         _front.source = "";
         _front.path = "";
         _back = _front;
         _front = shown;
-        _front.opacity = 1;
-        _front.z = 1;
-        _back.opacity = 0;
-        _back.z = 2;
+    }
+
+    // Images of the nearest workspaces on this screen, decoded ahead (at most four): a
+    // 4K image takes about a second to decode and scale, which a switch showed as a delay.
+    // They share the decoded copy with the images shown (Qt's pixmap cache), so a switch
+    // finds the image ready.
+    readonly property var _preload: {
+        const current = _workspace;
+        if (current <= 0)
+            return [];
+        const numbers = new Set([current - 1, current + 1]);
+        for (const workspace of Workspaces.workspaces?.values ?? []) {
+            if (workspace.id > 0 && workspace.monitor?.name === modelData.name)
+                numbers.add(workspace.id);
+        }
+        numbers.delete(current);
+        const nearest = Array.from(numbers).filter(number => number > 0)
+            .sort((a, b) => Math.abs(a - current) - Math.abs(b - current)).slice(0, 4);
+        const paths = [];
+        for (const number of nearest) {
+            const path = Wallpapers.workspaceFileFor(modelData.name, number);
+            if (path !== "" && path !== _target && !paths.includes(path))
+                paths.push(path);
+        }
+        return paths;
     }
 
     on_WantedChanged: if (_wanted !== null) _show(_wanted)
@@ -113,23 +190,36 @@ PanelWindow {
         id: _image
         // The path its source was made from (see `_target`)
         property string path: ""
-        anchors.fill: parent
+        readonly property bool _coming: _image === root._back
+        width: parent.width
+        height: parent.height
         asynchronous: true
-        cache: false
+        // Shared with the preloaded copies below, so a switch finds its image decoded
+        cache: true
         smooth: true
         fillMode: root._fit === "contain" ? Image.PreserveAspectFit
                 : root._fit === "centre" ? Image.Pad
                 : root._fit === "tile" ? Image.Tile
                 : Image.PreserveAspectCrop
-        // Decoded at the screen's size; centred and tiled show the image's own pixels
-        sourceSize: root._fit === "cover" || root._fit === "contain"
-            ? Qt.size(root.width * root._scale, root.height * root._scale) : undefined
+        sourceSize: root._requestSize
+        z: _coming ? 2 : 1
+
+        // Where the change has it: the one coming in shows only while it comes
+        opacity: !root._changing ? (_coming ? 0 : 1)
+            : root._kind === "out" ? (_coming ? 0 : 1 - root._progress)
+            : root._kind === "fade" || root._kind === "zoom" ? (_coming ? root._progress : 1)
+            : 1
+        x: root._changing && root._kind === "slide"
+            ? (_coming ? root._direction * root.width * (1 - root._progress) : -root._direction * root.width * root._progress)
+            : 0
+        scale: root._changing && root._kind === "zoom" && _coming ? 1.08 - 0.08 * root._progress : 1
+
         onStatusChanged: {
-            if (_image !== root._back || _image.path !== root._target)
+            if (!_coming || _image.path !== root._target)
                 return;
             if (status === Image.Ready) {
                 root._sample(_image);
-                _fadeIn.start();
+                root._begin();
             }
             else if (status === Image.Error)
                 console.warn("Wallpaper: cannot read", source);
@@ -170,31 +260,61 @@ PanelWindow {
         }
     }
 
-    Wallpaper { id: _first; z: 1 }
-    Wallpaper { id: _second; z: 2; opacity: 0 }
+    Wallpaper { id: _first }
+    Wallpaper { id: _second }
 
-    NumberAnimation {
-        id: _fadeIn
-        target: root._back
-        property: "opacity"
-        from: 0
-        to: 1
-        duration: Theme.duration("fade")
-        easing: Theme.curve("fade")
-        onFinished: root._swap()
+    // The nearest workspaces' images, decoded and kept, never shown (see `_preload`)
+    Repeater {
+        // ScriptModel, never the bare array (CLAUDE.md)
+        model: ScriptModel { values: root._preload }
+        Image {
+            required property string modelData
+            visible: false
+            asynchronous: true
+            cache: true
+            source: root._url(modelData)
+            fillMode: _first.fillMode
+            sourceSize: root._requestSize
+        }
+    }
+
+    // The shader's view of the two images while it runs; they are hidden meanwhile
+    ShaderEffectSource {
+        id: _outgoingView
+        sourceItem: root._front
+        hideSource: _shader.visible
+        visible: false
+    }
+    ShaderEffectSource {
+        id: _incomingView
+        sourceItem: root._back
+        hideSource: _shader.visible
+        visible: false
+    }
+
+    ShaderEffect {
+        id: _shader
+        anchors.fill: parent
+        z: 3
+        visible: root._changing && root._shaderKind
+        property variant outgoing: _outgoingView
+        property variant incoming: _incomingView
+        property real progress: root._progress
+        property real mode: ["wipe", "circle", "dissolve", "pixelate"].indexOf(root._kind)
+        property real aspect: width / Math.max(1, height)
+        property size size: Qt.size(width * root._scale, height * root._scale)
+        property real softness: 0.08
+        fragmentShader: Qt.resolvedUrl("shaders/transition.frag.qsb")
     }
 
     NumberAnimation {
-        id: _fadeOut
-        target: root._front
-        property: "opacity"
-        to: 0
-        duration: Theme.duration("fade")
-        easing: Theme.curve("fade")
-        onFinished: {
-            root._front.source = "";
-            root._front.path = "";
-            root._front.opacity = 1;
-        }
+        id: _change
+        target: root
+        property: "_progress"
+        from: 0
+        to: 1
+        duration: Theme.duration(root._role)
+        easing: Theme.curve(root._role)
+        onFinished: root._end()
     }
 }

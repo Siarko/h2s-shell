@@ -161,7 +161,11 @@ start, every so often, and on Shuffle — `ipc call wallpaper shuffle`) or by we
 pinned monitors or workspaces keep theirs. Fit: fill, fit, centre or tile, over a
 background colour; a small preview beside the choice plays what the picked fit does
 with an image of other proportions (`components/WallpaperFitPreview.qml`). When another program (hyprpaper, swww) also draws on the background
-layer, the page warns. Rules: `singletons/WallpaperRules.qml`; state:
+layer, the page warns. How it changes is the theme's (Appearance → Animations): a switch
+to a workspace with its own image slides with the workspaces, or changes like a new image,
+which fades, zooms, slides, wipes, opens as a circle, dissolves or pixelates
+(`wallpaper/shaders/transition.frag`, run only during the change); timed and eased by the
+roles "Wallpaper: workspace" and "Wallpaper: new image". Rules: `singletons/WallpaperRules.qml`; state:
 `singletons/Wallpapers.qml`; plan: `docs/plans/wallpapers.md`.
 
 ## Screensaver and lock screen

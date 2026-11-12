@@ -495,6 +495,7 @@ Singleton {
     readonly property var checkbox: values.checkbox
     readonly property var target: values.target
     readonly property var lock: values.lock
+    readonly property var wallpaper: values.wallpaper
     readonly property var border: values.border
     readonly property var popupWidthScale: values.popupWidth
 

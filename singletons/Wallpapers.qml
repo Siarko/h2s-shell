@@ -57,6 +57,33 @@ Singleton {
 
     readonly property var pool: WallpaperRules.pool(files, subset)
     readonly property var _slotsShown: WallpaperRules.slotsShown(scope, Workspaces.screens)
+    // What is drawn for: the slots shown, and per workspace also the workspaces there are
+    // and the ones beside those shown — so their images can be decoded before a switch
+    // reaches them (WallpaperSurface preloads them)
+    readonly property var _slotsDrawn: {
+        if (scope !== "workspace")
+            return _slotsShown;
+        const numbers = new Set(_slotsShown.map(Number));
+        for (const workspace of Workspaces.workspaces?.values ?? []) {
+            if (workspace.id > 0)
+                numbers.add(workspace.id);
+        }
+        for (const shown of _slotsShown.map(Number)) {
+            numbers.add(shown + 1);
+            if (shown > 1)
+                numbers.add(shown - 1);
+        }
+        return Array.from(numbers).sort((a, b) => a - b).map(String);
+    }
+
+    // The image a screen would show on `workspace` (absolute; "" for none) — for preloading
+    function workspaceFileFor(screenName: string, workspace: int): string {
+        const screens = Workspaces.screens;
+        const file = WallpaperRules.fileFor(settings, { name: screenName, workspace: workspace }, {
+            kind: kind, source: source, files: files, draws: draws, date: today, screens: screens
+        });
+        return typeof file === "string" ? file : "";
+    }
 
     // The image the screen named `screenName` shows (absolute), "" for none, null to keep
     // what it shows
@@ -93,7 +120,7 @@ Singleton {
     function _drawAll() {
         if (mode !== "random")
             return;
-        draws = WallpaperRules.draw(_slotsShown, pool, {}, draws, Math.random);
+        draws = WallpaperRules.draw(_slotsDrawn, pool, {}, draws, Math.random);
     }
 
     // Slots shown without a draw (a workspace seen for the first time, a drawn image
@@ -107,9 +134,9 @@ Singleton {
             if (present.has(draws[slot]))
                 kept[slot] = draws[slot];
         }
-        if (_slotsShown.every(slot => slot in kept) && Object.keys(kept).length === Object.keys(draws).length)
+        if (_slotsDrawn.every(slot => slot in kept) && Object.keys(kept).length === Object.keys(draws).length)
             return;
-        draws = WallpaperRules.draw(_slotsShown, pool, kept, {}, Math.random);
+        draws = WallpaperRules.draw(_slotsDrawn, pool, kept, {}, Math.random);
     }
 
     // The source or how deep to look changed: listed again, a little later, so a few
@@ -121,7 +148,7 @@ Singleton {
     onScopeChanged: _drawAll()
     onModeChanged: _drawAll()
     onSubsetChanged: _drawAll()
-    on_SlotsShownChanged: _drawMissing()
+    on_SlotsDrawnChanged: _drawMissing()
 
     Timer {
         id: _relist

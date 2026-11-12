@@ -54,7 +54,7 @@ FloatingWindow {
           draftGroups: ["button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field", "checkbox", "tooltip", "border", "target"] },
         { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
           draftGroups: ["osdToast", "notificationCard", "osdVolume", "osdMessage"] },
-        { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves"] },
+        { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves", "wallpaper"] },
         { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] }
     ]
 
