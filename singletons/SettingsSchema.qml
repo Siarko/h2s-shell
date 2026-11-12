@@ -255,6 +255,15 @@ Singleton {
           type: "enum", default: "", optionsFrom: "freeScreens", presentation: "dropdown",
           hint: "One with a fullscreen window too, or none free: not shown." },
 
+        // ── System ── the computer's own settings; this one the shell holds, never per profile
+        { key: "system.polkitAgent", label: "The shell's authentication prompt", group: "system",
+          type: "enum", default: "", global: true, options: [
+              { value: "", label: "Decide at the first start" },
+              { value: "on", label: "On" },
+              { value: "off", label: "Off" }
+          ],
+          hint: "Asks for an administrator's password when a program needs one (polkit). Only one agent can answer: turn this off if you run your own (hyprpolkitagent, polkit-gnome)." },
+
         // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; docs/plans/wallpapers.md)
         { key: "wallpaper.enabled", label: "Draw the wallpaper", group: "wallpaper",
           type: "bool", default: false,

@@ -74,6 +74,17 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Critical notifications' toasts stay until dismissed or answered, as the notification
+  spec asks — no countdown, no timer bar — and the toasts after them count down meanwhile.
+  Their cards, toast or in the panel, are outlined in the error colour.
+  The authentication agent's warnings are critical.
+- The shell can be the session's authentication agent (polkit): a themed prompt for an
+  administrator's password when a program needs one — what asks, the account, PAM's
+  messages, a wrong password asked again. Decided at the first start: off when another
+  agent runs, on when none does; notifications when no agent answers or two collide.
+  Settings → System → Authentication, with a button to try the prompt.
+- Settings: a System tab for this computer's settings, which apply at once in every
+  profile; Authentication is its first page.
 - Wallpaper transitions, set in the theme (Appearance → Animations): a switch to a
   workspace with its own image slides the way the workspaces go (or changes as a new image
   does); a new image fades, zooms, slides, wipes, opens as a circle, dissolves or

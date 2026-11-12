@@ -149,13 +149,27 @@ Singleton {
     // Ids of the toasts on screen, oldest first. Only the oldest counts down to its
     // dismissal; the others wait their turn, so a column of toasts leaves one at a time.
     property var shownToasts: []
+    // Of those, the ones that stay until dismissed (isPersistent): they never count down,
+    // and the next toast counts instead, so they hold up nothing
+    property var persistentToasts: []
+    // The toast counting down now: the oldest that is not persistent
+    readonly property var countingToast: shownToasts.find(id => !persistentToasts.includes(id)) ?? null
 
-    function toastShown(id) {
+    // A critical notification's toast stays until dismissed, as the notification spec asks
+    // (a battery about to die, the shell's authentication prompt failing)
+    function isPersistent(notification) {
+        return notification?.urgency === NotificationUrgency.Critical;
+    }
+
+    function toastShown(id, persistent) {
         shownToasts = shownToasts.concat([id]);
+        if (persistent)
+            persistentToasts = persistentToasts.concat([id]);
     }
 
     function toastGone(id) {
         shownToasts = shownToasts.filter(shown => shown !== id);
+        persistentToasts = persistentToasts.filter(shown => shown !== id);
     }
 
     // Toasts switched off — by the user or a profile — drop the ones still waiting

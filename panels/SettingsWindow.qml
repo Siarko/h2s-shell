@@ -55,7 +55,10 @@ FloatingWindow {
         { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
           draftGroups: ["osdToast", "notificationCard", "osdVolume", "osdMessage"] },
         { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves", "wallpaper"] },
-        { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] }
+        { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] },
+        // System: this computer's settings, kept by the system or at least never per profile
+        // (docs/plans/polkit.md, TODO 11.36)
+        { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp }
     ]
 
     function _pageIndex(id) {
@@ -70,7 +73,8 @@ FloatingWindow {
     property string selectedPage: "general"
     // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
     readonly property var _currentPage: _pageOf(selectedPage)
-    readonly property bool _onAppearance: _currentPage.tab === "appearance"
+    readonly property string _tab: _currentPage.tab
+    readonly property bool _onAppearance: _tab === "appearance"
 
     // The sidebar, wide enough for its names at the theme's fonts
     readonly property int _sidebarWidth: Theme.scaled(160)
@@ -78,10 +82,14 @@ FloatingWindow {
     // The page last open in each tab, to come back to
     property string _lastBehaviourPage: "general"
     property string _lastAppearancePage: "themes"
+    property string _lastSystemPage: "authentication"
     // From the page itself: _onAppearance may not have caught up yet when this runs
     onSelectedPageChanged: {
-        if (_pageOf(selectedPage).tab === "appearance")
+        const tab = _pageOf(selectedPage).tab;
+        if (tab === "appearance")
             _lastAppearancePage = selectedPage;
+        else if (tab === "system")
+            _lastSystemPage = selectedPage;
         else
             _lastBehaviourPage = selectedPage;
         _openList = null;
@@ -112,6 +120,10 @@ FloatingWindow {
 
     function showBehaviour() {
         selectedPage = _lastBehaviourPage;
+    }
+
+    function showSystem() {
+        selectedPage = _lastSystemPage;
     }
 
     // Opens the Appearance tab, on `theme` if given
@@ -158,13 +170,18 @@ FloatingWindow {
                 spacing: 4
                 WindowTab {
                     label: "Behaviour"
-                    picked: !root._onAppearance
-                    onClicked: if (root._onAppearance) root.showBehaviour()
+                    picked: root._tab === "behaviour"
+                    onClicked: if (!picked) root.showBehaviour()
                 }
                 WindowTab {
                     label: "Appearance"
                     picked: root._onAppearance
-                    onClicked: if (!root._onAppearance) root.showAppearance()
+                    onClicked: if (!picked) root.showAppearance()
+                }
+                WindowTab {
+                    label: "System"
+                    picked: root._tab === "system"
+                    onClicked: if (!picked) root.showSystem()
                 }
             }
 
@@ -254,7 +271,7 @@ FloatingWindow {
 
                     // Behaviour: the profile its pages edit, and the theme that profile uses
                     SettingsPicker {
-                        visible: !root._onAppearance && Profiles.profiles.length > 0
+                        visible: root._tab === "behaviour" && Profiles.profiles.length > 0
                         open: root._openList === optionList
                         onToggleRequested: root._openList = open ? null : optionList
                         label: "Profile"
@@ -267,7 +284,7 @@ FloatingWindow {
                         }
                     }
                     Text {
-                        visible: !root._onAppearance && root.editIndex >= 0
+                        visible: root._tab === "behaviour" && root.editIndex >= 0
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         readonly property string _theme: Theme.themeOf(root.editIndex)
@@ -282,6 +299,17 @@ FloatingWindow {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.showAppearance(parent._theme)
                         }
+                    }
+
+                    // System: no profile and no theme — what these pages change is the computer's
+                    Text {
+                        visible: root._tab === "system"
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "This computer's settings: they apply at once, in every profile."
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
                     }
 
                     // Appearance: the theme its pages edit, and the profiles that use it
@@ -376,7 +404,7 @@ FloatingWindow {
                             width: _pageListScroll.width
                             pages: root.pages
                             selectedPage: root.selectedPage
-                            tab: root._onAppearance ? "appearance" : "behaviour"
+                            tab: root._tab
                             editTheme: root.editTheme
                             onPageClicked: pageId => root.selectedPage = pageId
                         }
@@ -453,6 +481,7 @@ FloatingWindow {
     Component { id: notificationsComp; NotificationsSettings { editIndex: root.editIndex } }
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: wallpaperComp;     WallpaperSettings     { editIndex: root.editIndex } }
+    Component { id: authenticationComp; AuthenticationSettings {} }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }

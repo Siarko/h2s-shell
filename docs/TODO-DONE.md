@@ -894,4 +894,13 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       dropped from the shell 2026-11-12: they belong to the keyboard's project (oskbd),
       not the shell. What the shell can offer is a general command button (11.34), which
       can call the keyboard among other things.
+- [x] **11.35 Authentication prompts: the shell as the polkit agent** (requested
+      2026-11-12) — done 2026-11-12: `Authentication` + `polkit/AuthPrompt.qml`, a themed
+      prompt over the focused screen (message, action, account, PAM's messages, a wrong
+      password asked again). Decided at the first start (a known agent running → off; the
+      shell registers → on), retried registrations, a probe telling an unknown agent from
+      none, critical notifications when no agent answers or two collide (critical toasts
+      now stay, outlined in the error colour). Settings → System → Authentication, with
+      "Try the prompt". Verified on both machines by the user. Plan:
+      [plans/polkit.md](plans/polkit.md).
 

@@ -39,16 +39,7 @@ A finding to look into:
 
 Then, in the user's order:
 
-- [ ] **11.35 Authentication prompts: the shell as the polkit agent** (requested
-      2026-11-12) — neither machine runs a polkit agent, so anything asking for an admin
-      password through polkit is refused silently today. Quickshell's
-      `Quickshell.Services.Polkit` (`PolkitAgent`, `AuthFlow`: message, action, identities,
-      prompt, `submit`/cancel) lets the shell be the agent with its own themed prompt: an
-      overlay with exclusive keyboard focus, saying which action and program ask, never
-      logging the password; shared look with the lock screen. A note in the settings when
-      another agent holds the session. Needed before the System tab's privileged changes
-      (11.36); the shell itself uses services that ask polkit, or `pkexec`, never `sudo`.
-- [ ] **11.36 A System tab in the settings** (agreed 2026-11-12) — beside Behaviour and
+- [ ] **11.36 A System tab in the settings** (agreed 2026-11-12; the tab exists since 11.35, with Authentication) — beside Behaviour and
       Appearance: "Settings of this computer, kept by the system — they apply at once, in
       every profile." The rule, by who holds the value: what the shell holds and applies
       (the power profile, polling, later Hyprland options it generates) can vary by

@@ -6,6 +6,7 @@ import qs.singletons
 import qs.screensaver
 import qs.panels
 import qs.wallpaper
+import qs.polkit
 
 // Top-level shell root: one Bar, one Hud and a wallpaper per screen, one settings window
 QtObject {
@@ -37,6 +38,18 @@ QtObject {
                 active: Wallpapers.enabled
                 WallpaperSurface { modelData: _wallpaperLoader.modelData }
             }
+        }
+    }
+
+    // The polkit agent decides at start whether it answers (Authentication); its prompt
+    // exists while a request is open, on the focused screen
+    property var _authentication: Authentication
+    property var _authPrompt: LazyLoader {
+        active: Authentication.flow !== null
+        AuthPrompt {
+            flow: Authentication.flow
+            screen: Quickshell.screens.find(screen => screen.name === Workspaces.screens.find(entry => entry.focused)?.name)
+                ?? Quickshell.screens[0]
         }
     }
 

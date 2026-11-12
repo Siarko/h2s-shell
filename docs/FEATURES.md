@@ -121,7 +121,8 @@ input through except where a card is actually visible.
 
 The shell *is* the notification server (`org.freedesktop.Notifications`), with support
 for body markup, hyperlinks, images, action buttons, action icons and inline replies.
-Notifications stay in the panel until dismissed. Arrival timestamps are recorded, and
+Notifications stay in the panel until dismissed. A critical notification's toast stays
+on screen too, until dismissed or answered (no countdown); the others count down past it. Arrival timestamps are recorded, and
 configured regex patterns extract codes from the summary and body so a verification code
 can be copied without opening the sending app.
 
@@ -184,6 +185,17 @@ Two independent stages, both driven by Wayland idle notifications:
   reached either after the screensaver or on its own idle timer, and shows a password
   prompt and optionally the notification list. On multi-monitor only one screen shows
   the prompt.
+
+## Authentication prompts (polkit)
+
+The shell can be the session's polkit agent (`singletons/Authentication.qml`,
+`polkit/AuthPrompt.qml`): when a program needs an administrator's rights, a prompt over
+the focused screen, the rest dimmed and the keyboard held, says what asks, lets the
+account be picked, shows PAM's messages and asks again after a wrong password. Only one
+agent can answer per session, so `system.polkitAgent` is decided at the first start (off
+when a known agent runs, on when the shell registers) and changed in Settings → System →
+Authentication, which also shows what answers now. Notifications say when no agent answers
+or another one cannot register beside the shell's. Plan: `docs/plans/polkit.md`.
 
 ## Settings
 

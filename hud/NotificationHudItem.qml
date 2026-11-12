@@ -66,7 +66,7 @@ Item {
         _placing = true;
         currentNotif = notif;
         remaining = 1.0;
-        Notifications.toastShown(notif.id);
+        Notifications.toastShown(notif.id, Notifications.isPersistent(notif));
         Qt.callLater(() => root._placing = false);
         slideIn.start();
     }
@@ -88,8 +88,10 @@ Item {
     // or the toasts after it wait for it to count down, for ever
     Component.onDestruction: _leave()
 
-    // Whether this toast is the oldest on screen, the one counting down
-    readonly property bool _counting: currentNotif !== null && Notifications.shownToasts[0] === currentNotif.id
+    // Critical: stays until dismissed, no countdown (Notifications.isPersistent)
+    readonly property bool _persistent: currentNotif !== null && Notifications.isPersistent(currentNotif)
+    // Whether this toast is the one counting down: the oldest on screen that is not persistent
+    readonly property bool _counting: currentNotif !== null && !_persistent && Notifications.countingToast === currentNotif.id
 
     on_CountingChanged: {
         if (!_counting)
@@ -196,7 +198,8 @@ Item {
         replyBackground: Theme.surfaceSunken
         width: root.cardWidth
         onDismissRequested: root.dismiss()
-        timerVisible: true
+        // No bar on a toast that stays
+        timerVisible: !root._persistent
         timerProgress: root.remaining
 
         HoverHandler {

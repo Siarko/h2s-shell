@@ -26,6 +26,8 @@ TestCase {
         "components/WallpaperSlot.qml",
         "components/WallpaperFitPreview.qml",
         "components/WallpaperPicker.qml",
+        "panels/settings/AuthenticationSettings.qml",
+        "polkit/AuthPrompt.qml",
         "components/ToggleSwitch.qml",
         "components/SeekBar.qml",
         "components/SmallButton.qml",
