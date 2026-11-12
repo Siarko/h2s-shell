@@ -131,4 +131,12 @@ for later if that proves slow.
   The surface now decodes the nearest workspaces' images ahead (up to four, kept in Qt's
   pixmap cache and shared with the image shown), and the random draw covers the existing
   workspaces and the ones beside those shown, so there is something to preload.
+- 2026-11-12: copies resized to the screen (the user's idea): vipsthumbnail, at low
+  priority, a JPEG Q92 per image, screen size and fit in `~/.cache/h2s_shell/wallpapers`,
+  named by WallpaperRules.screenCopyName (path, modification time and size, physical
+  pixels, fit), 300 MB at most, oldest first. Measured on the Framework at screen size:
+  JPEG 80 ms, BMP 50 ms, PPM 23 ms (16 MB each), PNG 323 ms, the 19 MB original PNG 586 ms;
+  WebP does not load there at all (no Qt plugin) — the copies fix that too. ~/.cache
+  rather than /tmp: /tmp is RAM on the host but disk on the Framework, never cleared.
+  libvips joins the dependencies (install.sh, nix/package.nix).
 

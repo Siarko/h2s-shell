@@ -78,6 +78,9 @@ section to the new version and date.
   workspace with its own image slides the way the workspaces go (or changes as a new image
   does); a new image fades, zooms, slides, wipes, opens as a circle, dissolves or
   pixelates. Two animation roles time and ease them, with curves from the library.
+- Wallpapers load fast: each image is resized once to each screen it shows on and kept in
+  `~/.cache/h2s_shell/wallpapers` (300 MB at most, the oldest go first), and the nearest
+  workspaces' images are decoded ahead. Needs `vipsthumbnail` (libvips), now a dependency.
 - Wallpapers drawn by the shell (Settings → Wallpaper; off by default): an image, or a
   folder (subfolders to a chosen depth) chosen by you, at random — at start, every so
   often, or on Shuffle (`ipc call wallpaper shuffle`) — or by weekday; one everywhere, per

@@ -203,6 +203,18 @@ Singleton {
         return "#" + hex(red) + hex(green) + hex(blue);
     }
 
+    // The name of an image's copy resized to a screen (kept in ~/.cache/h2s_shell/
+    // wallpapers): a hash of the image's path, its stamp (modification time and size, so a
+    // replaced image gets a new copy), the screen's size in physical pixels (a larger screen
+    // never shows a smaller copy) and the fit — Fill keeps the screen's shape, cropped; Fit
+    // the image's, inside the screen. Centre and Tile show the image's own pixels: no copy,
+    // "". "" too without a stamp or a size.
+    function screenCopyName(path: string, stamp: string, width: int, height: int, fit: string): string {
+        if ((fit !== "cover" && fit !== "contain") || path === "" || stamp === "" || width <= 0 || height <= 0)
+            return "";
+        return Qt.md5([path, stamp, width + "x" + height, fit].join("|")) + ".jpg";
+    }
+
     // Wallpapers another program draws: the background-layer surfaces in `hyprctl layers
     // -j` that are not ours → [{ monitor, namespace }]
     function foreignBackgrounds(layers) {

@@ -20,6 +20,7 @@
 , cava
 , git
 , xdg-utils
+, vips
 , coreutils
 , gnused
 , gnugrep
@@ -39,6 +40,7 @@ let
     cava # the audio visualiser
     git # the version shown in the settings
     xdg-utils # the browser for the Google sign-in
+    vips # vipsthumbnail: wallpapers resized to the screen, kept in ~/.cache
     coreutils
     gnused
     gnugrep

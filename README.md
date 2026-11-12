@@ -24,7 +24,7 @@ The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 - Hyprland with a Lua config (`hyprland.lua`, 0.5x), Quickshell 0.3.2, Qt 6
 - NetworkManager, BlueZ, UPower, power-profiles-daemon
-- `notify-send`, `python3`, `jq`, `gsettings`, `cava`, `git`, `xdg-open`
+- `notify-send`, `python3`, `jq`, `gsettings`, `cava`, `git`, `xdg-open`, `vipsthumbnail` (libvips: wallpapers resized to the screen)
 - A JetBrainsMono Nerd Font
 
 The installers below bring all of these.

@@ -27,6 +27,7 @@ packages=(
     cava                  # audio visualiser
     git
     xdg-utils             # opens the browser for the Google sign-in
+    libvips               # vipsthumbnail: wallpapers resized to the screen, kept in ~/.cache
     ttf-jetbrains-mono-nerd
 )
 

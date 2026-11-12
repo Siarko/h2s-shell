@@ -30,12 +30,17 @@ PanelWindow {
     mask: Region {}
 
     readonly property string _fit: Profiles.value("wallpaper.fit") ?? "cover"
-    readonly property real _scale: root.screen?.devicePixelRatio ?? 1
+    // The window's own scale, not the screen's: at a fractional scale (1.2 on the
+    // Framework) the screen reports it rounded up (2) while windows draw at 1.2 — taking
+    // the screen's decoded the wallpaper at 3200×2000 for a 1920×1200 panel
+    readonly property real _scale: root.devicePixelRatio > 0 ? root.devicePixelRatio : 1
     // Decoded at the screen's size; centred and tiled show the image's own pixels. One
     // value for the images and their preloaded copies: the size asked for is part of what
     // makes Qt's cache share a decoded image
+    readonly property real _pixelWidth: Math.round(width * _scale)
+    readonly property real _pixelHeight: Math.round(height * _scale)
     readonly property var _requestSize: _fit === "cover" || _fit === "contain"
-        ? Qt.size(width * _scale, height * _scale) : undefined
+        ? Qt.size(_pixelWidth, _pixelHeight) : undefined
     // null: keep what is shown (WallpaperRules.fileFor)
     readonly property var _wanted: Wallpapers.fileFor(modelData.name)
     readonly property bool _fromImage: Profiles.value("wallpaper.backgroundFromImage") === true
@@ -121,7 +126,10 @@ PanelWindow {
             return;
         }
         _back.path = path;
-        _back.source = _url(path);
+        // Its copy resized to this screen when there is one (Wallpapers, "Copies"); asked
+        // for when not, for the next time
+        _back.source = _url(Wallpapers.displayPath(path, _pixelWidth, _pixelHeight, _fit));
+        Wallpapers.prepare(path, _pixelWidth, _pixelHeight, _fit);
         if (_back.status === Image.Ready) {
             _sample(_back);
             _begin();
@@ -181,6 +189,12 @@ PanelWindow {
                 paths.push(path);
         }
         return paths;
+    }
+
+    // Their copies too, so a switch finds one
+    on_PreloadChanged: {
+        for (const path of _preload)
+            Wallpapers.prepare(path, _pixelWidth, _pixelHeight, _fit);
     }
 
     on_WantedChanged: if (_wanted !== null) _show(_wanted)
@@ -272,7 +286,7 @@ PanelWindow {
             visible: false
             asynchronous: true
             cache: true
-            source: root._url(modelData)
+            source: root._url(Wallpapers.displayPath(modelData, root._pixelWidth, root._pixelHeight, root._fit))
             fillMode: _first.fillMode
             sourceSize: root._requestSize
         }

@@ -165,7 +165,12 @@ layer, the page warns. How it changes is the theme's (Appearance → Animations)
 to a workspace with its own image slides with the workspaces, or changes like a new image,
 which fades, zooms, slides, wipes, opens as a circle, dissolves or pixelates
 (`wallpaper/shaders/transition.frag`, run only during the change); timed and eased by the
-roles "Wallpaper: workspace" and "Wallpaper: new image". Rules: `singletons/WallpaperRules.qml`; state:
+roles "Wallpaper: workspace" and "Wallpaper: new image". Each image is resized once to
+each screen it shows on (vipsthumbnail, in the background, at low priority) and kept as a
+JPEG in `~/.cache/h2s_shell/wallpapers`, named by the image, its modification time and
+size, the screen's pixels and the fit — so a larger screen never gets a smaller copy; the
+oldest copies go past 300 MB. The nearest workspaces' images are decoded ahead, so a switch
+shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
 `singletons/Wallpapers.qml`; plan: `docs/plans/wallpapers.md`.
 
 ## Screensaver and lock screen
@@ -251,6 +256,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `notify-send` | the shell's own outbound notifications |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
+| `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |
 | `pttd` / `ptt` | dictation (optional) |
 | sysfs | CPU, RAM, disk, temperatures, GPU, network throughput |

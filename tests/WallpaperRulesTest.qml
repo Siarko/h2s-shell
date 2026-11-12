@@ -122,6 +122,16 @@ TestCase {
         assertEqual(rules.edgeColor([10, 20, 30, 0, 100, 100, 100, 255], 2, 1), "#646464", "transparent pixels left out");
         assertEqual(rules.edgeColor([0, 0, 0, 0], 1, 1), "", "nothing to go by: none");
 
+        // --- copies resized to a screen ---
+        const copy = rules.screenCopyName("/w/a.png", "100 2000", 2880, 1920, "cover");
+        assert(/^[0-9a-f]{32}\.jpg$/.test(copy), "a hashed name, a JPEG");
+        assertEqual(rules.screenCopyName("/w/a.png", "100 2000", 2880, 1920, "cover"), copy, "the same image, screen and fit: the same copy");
+        assert(rules.screenCopyName("/w/a.png", "100 2000", 3840, 2160, "cover") !== copy, "a larger screen: another copy, never the smaller one");
+        assert(rules.screenCopyName("/w/a.png", "101 2000", 2880, 1920, "cover") !== copy, "the image replaced: another copy");
+        assert(rules.screenCopyName("/w/a.png", "100 2000", 2880, 1920, "contain") !== copy, "another fit: another copy");
+        assertEqual(rules.screenCopyName("/w/a.png", "100 2000", 2880, 1920, "tile"), "", "tile shows the image's own pixels: none");
+        assertEqual(rules.screenCopyName("/w/a.png", "", 2880, 1920, "cover"), "", "no stamp: none");
+
         // --- another program's wallpaper ---
         const layers = {
             "DP-2": { levels: { "0": [{ namespace: "hyprpaper" }, { namespace: "h2s-wallpaper" }], "2": [{ namespace: "quickshell" }] } },
