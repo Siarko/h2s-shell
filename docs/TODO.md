@@ -12,7 +12,7 @@ guessing. One item at a time. Commit only when asked. An item is done once verif
 it can be — the host, or the Framework 12 for touch (the dev container has no
 `quickshell`) — and then moves to TODO-DONE.md.
 
-**Status (2026-11-08):** stages 1–10 done; stage 11 under way, touch input first (next: 11.29).
+**Status (2026-11-12):** stages 1–10 done; stage 11 under way, touch input first (next: 11.34). Wallpapers (11.33) done.
 
 ---
 
@@ -20,12 +20,11 @@ it can be — the host, or the Framework 12 for touch (the dev container has no
 
 Touch input on the Framework 12 — the current work ([plans/touch.md](plans/touch.md)):
 
-- [ ] **11.29 A keyboard button on the bar** (plans/touch.md stage 6) — calls `osk` (or
-      a configured command): Hyprland's gestures cannot run commands, so a button is the
-      only way to call the keyboard by finger. Shown by the "Tablet" profile.
-- [ ] **11.30 The lock screen in tablet mode** (plans/touch.md stage 6) — no keyboard to
-      type the password. Check whether oskbd shows over a session lock; if not, a
-      keyboard of the lock screen's own, or the fingerprint reader.
+- [ ] **11.34 A command button widget** (requested 2026-11-12) — a bar widget that does
+      nothing by itself: each instance (a preset) is given a label and/or icon and a
+      command (or one per click: left, right, middle; maybe a long press for touch), run
+      detached. Covers what 11.29 wanted (calling the on-screen keyboard: `osk`) without
+      the shell knowing about keyboards, and anything else the user wants a button for.
 - [ ] **11.31 Popups clear of the on-screen keyboard everywhere** — done for a bar at the
       top; left: a bar at the bottom (the keyboard covers the bar), popups by a bar at a
       side, the settings window (an ordinary window, which oskbd's overlay covers).
@@ -40,13 +39,29 @@ A finding to look into:
 
 Then, in the user's order:
 
-- [ ] **11.33 Wallpapers managed by the shell** (requested 2026-11-11, for the Framework
-      12, where nothing sets one) — the shell draws them on the background layer: a file,
-      or a folder (with subfolders to a depth, an optional subset) shown fixed, random or
-      by weekday, one everywhere, per monitor or per workspace, pinned slots, thumbnails
-      to pick from, shuffle by button and IPC. Plan: [plans/wallpapers.md](plans/wallpapers.md).
-      Done 2026-11-12 (stages 1–4, the page rebuilt mode first, colour from the image);
-      left, optional: a bar widget to shuffle.
+- [ ] **11.35 Authentication prompts: the shell as the polkit agent** (requested
+      2026-11-12) — neither machine runs a polkit agent, so anything asking for an admin
+      password through polkit is refused silently today. Quickshell's
+      `Quickshell.Services.Polkit` (`PolkitAgent`, `AuthFlow`: message, action, identities,
+      prompt, `submit`/cancel) lets the shell be the agent with its own themed prompt: an
+      overlay with exclusive keyboard focus, saying which action and program ask, never
+      logging the password; shared look with the lock screen. A note in the settings when
+      another agent holds the session. Needed before the System tab's privileged changes
+      (11.36); the shell itself uses services that ask polkit, or `pkexec`, never `sudo`.
+- [ ] **11.36 A System tab in the settings** (agreed 2026-11-12) — beside Behaviour and
+      Appearance: "Settings of this computer, kept by the system — they apply at once, in
+      every profile." The rule, by who holds the value: what the shell holds and applies
+      (the power profile, polling, later Hyprland options it generates) can vary by
+      profile and stays in Behaviour; what a system service holds (NetworkManager, BlueZ,
+      PipeWire…) is edited in System, with no profile and no profile picker. A profile may
+      still pick among system things (Power save turning Wi-Fi off, joining a VPN), as it
+      picks a power profile today. 11.8 (Hyprland) is decided by the same rule.
+- [ ] **11.37 Network management, the System tab's first page** (requested 2026-11-12) —
+      today the network popup connects to Wi-Fi and VPNs and nothing more. Through
+      `nmcli`: saved Wi-Fi networks (forget, autoconnect, priority, password), hidden
+      networks; VPNs (list, import `.ovpn` and WireGuard `.conf`, edit the basics, delete);
+      a connection's IPv4/IPv6 (DHCP or manual: addresses, gateway), DNS; Ethernet; later a
+      hotspot. A plan in `docs/plans/` first.
 
 - [ ] **11.23 Installing: Arch and NixOS** (requested 2026-11-08, before touch input —
       the Framework 12 runs NixOS). `install.sh` for Arch (pacman, then a checkout in
@@ -87,25 +102,6 @@ Then, in the user's order:
       how the exclusive zone behaves for a floating bar, how popups join an island (their
       curved corners assume a bar running to its ends; see 8.12 for the margin case), and
       animation when the island resizes. Related to 11.4 (position) and themes stage 7.
-- [ ] **11.6 Explore styling with CSS-like selectors** (was 10.14) (requested 2026-10-30)
-      First meant for after the whole themes plan; the user put it before matugen (11.7),
-      which it does not depend on.
-      Themes today set values per element kind (`button.radius`, `osdToast.padding`, …,
-      themes stage 7). Explore going further: styling by something like CSS selectors —
-      targeting an element by kind, place and state (e.g. `popup button:hover`,
-      `bar .clock`, `osdToast.critical`), with cascading and specificity — and what it
-      would take in QML (element identity, a resolver, live updates, cost). Exploration
-      only; to discuss with the user before any design. Related: the user's earlier idea
-      of per-element variants (`expand.dictate` falling back to `expand`, themes plan).
-      Analysed and decided with the user 2026-11-01: plan
-      [plans/selectors.md](plans/selectors.md) (our CSS variant in `.css` files, resolved
-      statically into a table addressed by an element's key, descendant selectors over
-      contexts only, layered cascade, inheritance; an audit of every element, a read-only
-      inspector window, parser with a validator, themes rewritten in CSS and edited both
-      ways). The language reference grows in [STYLES.md](STYLES.md). Stage 0, the
-      prototype, done 2026-11-01 (the model holds, cost far below a frame); paused 2026-11-06
-      while the user thinks over the open questions (plans/selectors-questions.md); then
-      stage 1, the audit.
 - [ ] **11.7 Themes: matugen, the rest of the themes plan** (was 10.9)
       Agreed 2026-10-29: [plans/themes.md](plans/themes.md). Look goes in a theme (shared
       library, profiles pick one), behaviour stays in the profile; custom animation curves
@@ -154,3 +150,19 @@ Then, in the user's order:
       horizontal-scroll volume step of 5 is a Hyprland keybind of the user's — leave it.
       Also fold `MonthGrid`'s own 120-step wheel counting into `ScrollNotches`.
       Next: a plan, `docs/plans/compositor.md`, agreed with the user before any work.
+
+---
+
+## Later — ideas kept, not planned
+
+- **11.6 Styling with CSS-like selectors** — shelved 2026-11-12 with the user: likely more
+  than a personal shell needs (seven stages, the state logic of ~120 QML files moved into
+  a stylesheet, a parser, an inspector, themes migrated) while today's themes already
+  cover what is wanted. Instead, a token is added to the themes when a concrete need comes
+  up. Worth reopening if such exceptions pile up, or if the shell is published and others
+  are to write themes. The analysis, the prototype's results and the open questions stay
+  in [plans/selectors.md](plans/selectors.md) and
+  [plans/selectors-questions.md](plans/selectors-questions.md).
+- **A bar widget to shuffle the wallpaper** (left from 11.33) — until then,
+  `ipc call wallpaper shuffle` from a keybind, or a command button (11.34).
+

@@ -880,3 +880,18 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
 - [x] **11.28 The Google client built in, and a site** (requested 2026-11-08) — done: a
       scrambled built-in OAuth client (own credentials still possible); the homepage and
       privacy policy in `site/`, published to GitHub Pages by Actions.
+- [x] **11.33 Wallpapers managed by the shell** (requested 2026-11-11, for the Framework
+      12) — done 2026-11-12: the shell draws them on the background layer (Settings →
+      Wallpaper): an image or a folder (to a depth), by you, at random (no repeats,
+      interval, Shuffle by button or IPC) or by weekday; one for all screens, each monitor
+      or each workspace, exceptions kept fixed; thumbnails opened per place; fit with a
+      preview, background colour set or from the image's edge; a warning when another
+      program draws a wallpaper. Transitions in the theme (slide with the workspaces;
+      fade, zoom, slide, wipe, circle, dissolve, pixelate), nearby workspaces preloaded,
+      copies resized to each screen in ~/.cache (libvips). Plan:
+      [plans/wallpapers.md](plans/wallpapers.md). Left as an idea: a bar widget to shuffle.
+- [x] **11.29 A keyboard button on the bar** and **11.30 The lock screen in tablet mode** —
+      dropped from the shell 2026-11-12: they belong to the keyboard's project (oskbd),
+      not the shell. What the shell can offer is a general command button (11.34), which
+      can call the keyboard among other things.
+

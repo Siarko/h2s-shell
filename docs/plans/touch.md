@@ -3,8 +3,10 @@
 Status (2026-11-08): stages 0–2 done (measured; tablet mode from Hyprland; popups by
 touch and the on-screen keyboard), stage 5's gestures done, and from stage 6 the battery
 widget, stages 3 (touch feedback and target sizes) and 4 (instead of the wheel). Left:
-from stage 6 the keyboard button (11.29) and the lock screen (11.30), and popups clear
-of the keyboard by other bars and in the settings window (11.31).
+popups clear of the keyboard by other bars and in the settings window (11.31). The
+keyboard button (11.29) and the lock screen in tablet mode (11.30) were dropped
+2026-11-12 — the keyboard's project, not the shell's; a general command button (11.34)
+can call the keyboard instead.
 
 ## Why
 

@@ -6,6 +6,9 @@ documented, as it is decided and built, in [../STYLES.md](../STYLES.md) — keep
 apart: this file is the plan and the progress, STYLES.md is the reference for whoever
 writes a stylesheet.
 
+
+**Shelved 2026-11-12** with the user (TODO, "Later"): more than the shell needs for now; themes grow by single tokens instead.
+
 ## Why
 
 Themes today are flat values per kind of element (`button.radius`, `osdToast.padding`,
