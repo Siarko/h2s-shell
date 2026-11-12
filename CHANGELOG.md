@@ -74,6 +74,13 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Wallpapers drawn by the shell (Settings → Wallpaper; off by default): an image, or a
+  folder (subfolders to a chosen depth) chosen by you, at random — at start, every so
+  often, or on Shuffle (`ipc call wallpaper shuffle`) — or by weekday; one everywhere, per
+  monitor or per workspace, faded in on a change. Picked from the folder's thumbnails:
+  the images to use, one per monitor or workspace, one per day, and monitors or
+  workspaces that keep theirs while the rest are drawn. A warning when another program
+  (hyprpaper, swww) draws a wallpaper too.
 - Notifications: where toasts show — the screen with the focused workspace, as before, or
   a chosen screen — and what a fullscreen window on that screen changes: show anyway,
   don't show (the notification goes to the panel only), or show on another screen, a
@@ -81,6 +88,8 @@ section to the new version and date.
   Settings → Notifications.
 - Battery widget: a colour of its own while plugged in (charging, full on the charger),
   over the colour thresholds; empty keeps the thresholds. Widget settings → Charging.
+- Battery widget settings: clicking a colour's swatch opens a colour picker under it, as on
+  the Colors page; typing the hex still works.
 - Calendar: a click or a tap on the month or the year shows the year's twelve months; the
   arrows (or a swipe) move by years there and a month goes to it — moving by years no
   longer needs the wheel over the year.

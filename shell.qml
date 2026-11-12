@@ -5,8 +5,9 @@ import Quickshell.Io
 import qs.singletons
 import qs.screensaver
 import qs.panels
+import qs.wallpaper
 
-// Top-level shell root: one Bar and one Hud per screen, one settings window
+// Top-level shell root: one Bar, one Hud and a wallpaper per screen, one settings window
 QtObject {
     id: root
 
@@ -22,6 +23,19 @@ QtObject {
             Bar {
                 activeScreen: root.activeScreen
                 onPopupOpened: root.activeScreen = modelData
+            }
+        }
+    }
+
+    // The wallpaper, under everything, only while it is turned on (Wallpapers)
+    property var _wallpapers: Variants {
+        model: Quickshell.screens
+        delegate: Component {
+            LazyLoader {
+                id: _wallpaperLoader
+                required property var modelData
+                active: Wallpapers.enabled
+                WallpaperSurface { modelData: _wallpaperLoader.modelData }
             }
         }
     }

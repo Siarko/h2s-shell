@@ -150,6 +150,20 @@ While dictating, music is paused and resumed afterwards — but only if the shel
 one that paused it, so a track paused by hand stays paused. This runs from `shell.qml`,
 so it works with the keyboard shortcut whether or not the widget is on the bar.
 
+## Wallpaper
+
+Off by default (Settings → Wallpaper). The shell draws the wallpaper itself, on the
+background layer of each screen (`wallpaper/WallpaperSurface.qml`), a new image fading in
+over the old. The source is an image (the same everywhere) or a folder, searched to a
+chosen depth of subfolders. A folder's images are shown one everywhere, per monitor or
+per workspace, and chosen by the user, at random (no repeats while others are left; at
+start, every so often, and on Shuffle — `ipc call wallpaper shuffle`) or by weekday;
+pinned monitors or workspaces keep theirs. Fit: fill, fit, centre or tile, over a
+background colour; a small preview beside the choice plays what the picked fit does
+with an image of other proportions (`components/WallpaperFitPreview.qml`). When another program (hyprpaper, swww) also draws on the background
+layer, the page warns. Rules: `singletons/WallpaperRules.qml`; state:
+`singletons/Wallpapers.qml`; plan: `docs/plans/wallpapers.md`.
+
 ## Screensaver and lock screen
 
 Two independent stages, both driven by Wayland idle notifications:

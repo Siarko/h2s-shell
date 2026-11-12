@@ -38,6 +38,7 @@ FloatingWindow {
         { id: "bar", label: "Bar", tab: "behaviour", component: barComp },
         { id: "notifications", label: "Notifications", tab: "behaviour", component: notificationsComp },
         { id: "lockscreen", label: "Lockscreen", tab: "behaviour", component: lockscreenComp },
+        { id: "wallpaper", label: "Wallpaper", tab: "behaviour", component: wallpaperComp },
         { id: "dictation", label: "Dictation", tab: "behaviour", component: sttComp },
         { id: "performance", label: "Performance", tab: "behaviour", component: performanceComp },
         // Themes and Curves manage the libraries; the pages below the line edit the
@@ -451,6 +452,7 @@ FloatingWindow {
     Component { id: barComp;           BarSettings           { editIndex: root.editIndex } }
     Component { id: notificationsComp; NotificationsSettings { editIndex: root.editIndex } }
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
+    Component { id: wallpaperComp;     WallpaperSettings     { editIndex: root.editIndex } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }

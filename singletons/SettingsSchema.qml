@@ -13,9 +13,12 @@ import QtQuick
 //   group    — settings section the key is edited in
 //   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
 //              "bool", "string", "stringList"; or a structured value with its own editor
-//              on its page ("barSection", "hardwarePopup"), overridden as a whole
+//              on its page ("barSection", "hardwarePopup", "color", "wallpaperSubset",
+//              "wallpaperSlots", "wallpaperWeekdays"), overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
+//   presets  — for interval: the values offered, in ms, instead of the polling ones;
+//              zeroLabel: what 0 is called there ("Paused" unset)
 //   suffix   — unit shown after a number or slider, e.g. "s"
 //   neutral  — for slider: the resting value inside the range, which its fill starts from
 //              (0 on a speed that can go either way); unset, the fill starts at min
@@ -25,7 +28,9 @@ import QtQuick
 //              ("iconThemes": the installed icon themes, IconThemes; "screens": the
 //              connected screens by port, "" the focused one; "freeScreens": the same, ""
 //              any without a fullscreen window)
-//   presentation — for enum: "dropdown" for a list to pick from instead of pills
+//   presentation — for enum: "dropdown" for a list to pick from instead of pills; "cards"
+//              for a few choices each with a line saying what it means (the option's
+//              `description`)
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
 //   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"],
@@ -249,6 +254,55 @@ Singleton {
         { key: "notifications.toastFullscreenScreen", label: "Which screen", group: "notifications",
           type: "enum", default: "", optionsFrom: "freeScreens", presentation: "dropdown",
           hint: "One with a fullscreen window too, or none free: not shown." },
+
+        // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; docs/plans/wallpapers.md)
+        { key: "wallpaper.enabled", label: "Draw the wallpaper", group: "wallpaper",
+          type: "bool", default: false,
+          hint: "Off: the shell draws none, and another program (hyprpaper, swww) can." },
+        { key: "wallpaper.source", label: "Image or folder", group: "wallpaper",
+          type: "string", default: "",
+          hint: "A file: that image everywhere. A folder: its images, chosen as below." },
+        { key: "wallpaper.depth", label: "Look in subfolders", group: "wallpaper",
+          type: "slider", min: 0, max: 5, default: 2, suffix: " deep",
+          hint: "How deep into subfolders images are looked for; 0 is the folder only." },
+        { key: "wallpaper.fit", label: "Fit", group: "wallpaper",
+          type: "enum", default: "cover", options: [
+              { value: "cover", label: "Fill" },
+              { value: "contain", label: "Fit" },
+              { value: "centre", label: "Centre" },
+              { value: "tile", label: "Tile" }
+          ] },
+        { key: "wallpaper.background", label: "Background colour", group: "wallpaper",
+          type: "color", default: "#000000",
+          hint: "Around an image that does not fill the screen, and with no image." },
+        { key: "wallpaper.backgroundFromImage", label: "Colour from the image", group: "wallpaper",
+          type: "bool", default: false,
+          hint: "The colour the image's edge averages to, so the space beside it looks like the image carried on. The colour above stays for no image." },
+        { key: "wallpaper.mode", label: "How images are chosen", group: "wallpaper",
+          type: "enum", default: "fixed", presentation: "cards", options: [
+              { value: "fixed", label: "By me", description: "I pick the image for each screen or workspace." },
+              { value: "random", label: "At random", description: "A new one when the shell starts, now and then, or on Shuffle." },
+              { value: "weekday", label: "By day", description: "One image for each day of the week, on every screen." }
+          ] },
+        { key: "wallpaper.scope", label: "One image for", group: "wallpaper",
+          type: "enum", default: "everywhere", options: [
+              { value: "everywhere", label: "All screens" },
+              { value: "monitor", label: "Each monitor" },
+              { value: "workspace", label: "Each workspace" }
+          ] },
+        { key: "wallpaper.interval", label: "New image every", group: "wallpaper",
+          type: "interval", min: 0, max: 86400000, default: 0, zeroLabel: "Never",
+          presets: [0, 300000, 900000, 1800000, 3600000, 10800000, 86400000],
+          hint: "Never: only when the shell starts and on Shuffle." },
+        // Relative to the folder; overridden as a whole, edited with the thumbnails
+        { key: "wallpaper.subset", label: "Draw from", group: "wallpaper",
+          type: "wallpaperSubset", default: [] },
+        { key: "wallpaper.assignments", label: "Images", group: "wallpaper",
+          type: "wallpaperSlots", default: ({}) },
+        { key: "wallpaper.pinned", label: "Keep the same image", group: "wallpaper",
+          type: "wallpaperSlots", default: ({}) },
+        { key: "wallpaper.weekdays", label: "Images", group: "wallpaper",
+          type: "wallpaperWeekdays", default: ["", "", "", "", "", "", ""] },
 
         // ── Appearance ── the look itself is in the theme; the profile picks which
         { key: "appearance.theme", label: "Theme", group: "appearance",

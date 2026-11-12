@@ -7,7 +7,8 @@ import qs.singletons
 // The battery widget's preset (BatteryWidget): where the percentage stands, and the
 // colour thresholds — any number of them, each a charge and a hex colour; the icon takes
 // the colour of the tightest threshold at or above the charge (BatteryRules.color); and a
-// colour while plugged in, which wins over them (BatteryRules.widgetColor).
+// colour while plugged in, which wins over them (BatteryRules.widgetColor). Each colour is
+// typed as hex or picked: its swatch opens a ColorPicker under the row, one at a time.
 Item {
     id: root
     property string presetName: ""
@@ -18,6 +19,8 @@ Item {
     readonly property string _percentSide: WidgetPresets.value(widgetType, presetName, "percent") ?? "right"
     readonly property var _thresholds: WidgetPresets.value(widgetType, presetName, "thresholds") ?? []
     readonly property string _chargingColor: WidgetPresets.value(widgetType, presetName, "chargingColor") ?? ""
+    // Whose colour picker is open: "charging", a threshold's index as text, or "" for none
+    property string _picking: ""
 
     readonly property var _sides: [
         { value: "left", label: "Left" },
@@ -105,81 +108,94 @@ Item {
         Repeater {
             model: ScriptModel { values: root._thresholds.map((threshold, index) => ({ index: index, threshold: threshold })) }
 
-            RowLayout {
+            Column {
                 id: _row
                 required property var modelData
                 readonly property int _index: modelData.index
                 readonly property var _threshold: modelData.threshold
-                readonly property bool _colorValid: BatteryRules.isHexColor(String(_threshold.color ?? ""))
+                readonly property bool _picking: root._picking === String(_index)
 
                 width: _col.width
                 spacing: 6
 
-                Text {
-                    Layout.leftMargin: 88
-                    text: "At or below"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textSecondary
-                }
+                RowLayout {
+                    width: _col.width
+                    spacing: 6
 
-                InputField {
-                    implicitWidth: 52
-                    text: String(_row._threshold.value ?? "")
-                    outlined: true
-                    input.horizontalAlignment: TextInput.AlignHCenter
-                    input.validator: IntValidator { bottom: 0; top: 100 }
-                    input.inputMethodHints: Qt.ImhDigitsOnly
-                    problem: text === ""
-                    onEditingFinished: {
-                        const value = parseInt(text, 10);
-                        if (isNaN(value) || value === _row._threshold.value)
-                            return;
-                        root._writeThresholds(list => list[_row._index].value = value);
+                    Text {
+                        Layout.leftMargin: 88
+                        text: "At or below"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textSecondary
+                    }
+
+                    InputField {
+                        implicitWidth: 52
+                        text: String(_row._threshold.value ?? "")
+                        outlined: true
+                        input.horizontalAlignment: TextInput.AlignHCenter
+                        input.validator: IntValidator { bottom: 0; top: 100 }
+                        input.inputMethodHints: Qt.ImhDigitsOnly
+                        problem: text === ""
+                        onEditingFinished: {
+                            const value = parseInt(text, 10);
+                            if (isNaN(value) || value === _row._threshold.value)
+                                return;
+                            root._writeThresholds(list => list[_row._index].value = value);
+                        }
+                    }
+
+                    Text {
+                        text: "%"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textSecondary
+                    }
+
+                    // What the colour looks like; a click opens the picker under the row
+                    ColorSwatch {
+                        Layout.leftMargin: 6
+                        color: String(_row._threshold.color ?? "")
+                        open: _row._picking
+                        onClicked: root._picking = open ? "" : String(_row._index)
+                    }
+
+                    InputField {
+                        id: _hex
+                        implicitWidth: 96
+                        text: String(_row._threshold.color ?? "")
+                        placeholder: "#rrggbb"
+                        outlined: true
+                        problem: !BatteryRules.isHexColor(text)
+                        input.maximumLength: 9
+                        input.inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | Qt.ImhPreferLowercase
+                        onEditingFinished: {
+                            if (text === _row._threshold.color)
+                                return;
+                            root._writeThresholds(list => list[_row._index].color = text);
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    DeleteButton {
+                        label: "Remove"
+                        confirmLabel: "Remove?"
+                        cancelTip: "Cancel — keep the threshold"
+                        onConfirmed: {
+                            root._picking = "";
+                            root._writeThresholds(list => list.splice(_row._index, 1));
+                        }
                     }
                 }
 
-                Text {
-                    text: "%"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textSecondary
-                }
-
-                // What the colour looks like; outlined only while the hex is not one
-                Rectangle {
-                    Layout.leftMargin: 6
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: Theme.field.radius
-                    color: _row._colorValid ? _row._threshold.color : "transparent"
-                    border.width: Theme.border.width
-                    border.color: Theme.outline
-                }
-
-                InputField {
-                    id: _hex
-                    implicitWidth: 96
-                    text: String(_row._threshold.color ?? "")
-                    placeholder: "#rrggbb"
-                    outlined: true
-                    problem: !BatteryRules.isHexColor(text)
-                    input.maximumLength: 9
-                    input.inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | Qt.ImhPreferLowercase
-                    onEditingFinished: {
-                        if (text === _row._threshold.color)
-                            return;
-                        root._writeThresholds(list => list[_row._index].color = text);
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                DeleteButton {
-                    label: "Remove"
-                    confirmLabel: "Remove?"
-                    cancelTip: "Cancel — keep the threshold"
-                    onConfirmed: root._writeThresholds(list => list.splice(_row._index, 1))
+                // Written once a drag ends or a hex is typed: not the preset file on every move
+                ColorPicker {
+                    x: 88
+                    visible: _row._picking
+                    color: BatteryRules.isHexColor(String(_row._threshold.color ?? "")) ? _row._threshold.color : Theme.warning
+                    onCommitted: value => root._writeThresholds(list => list[_row._index].color = String(value))
                 }
             }
         }
@@ -198,14 +214,11 @@ Item {
 
             Label { text: "Charging" }
 
-            // What the colour looks like; outlined only while the hex is not one
-            Rectangle {
-                implicitWidth: 22
-                implicitHeight: 22
-                radius: Theme.field.radius
-                color: BatteryRules.isHexColor(root._chargingColor) ? root._chargingColor : "transparent"
-                border.width: Theme.border.width
-                border.color: Theme.outline
+            // What the colour looks like; a click opens the picker under the row
+            ColorSwatch {
+                color: root._chargingColor
+                open: root._picking === "charging"
+                onClicked: root._picking = open ? "" : "charging"
             }
 
             InputField {
@@ -224,6 +237,13 @@ Item {
             }
 
             Item { Layout.fillWidth: true }
+        }
+
+        ColorPicker {
+            x: 88
+            visible: root._picking === "charging"
+            color: BatteryRules.isHexColor(root._chargingColor) ? root._chargingColor : Theme.success
+            onCommitted: value => WidgetPresets.set(root.widgetType, root.presetName, "chargingColor", String(value))
         }
 
         Hint {

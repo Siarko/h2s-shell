@@ -40,6 +40,14 @@ A finding to look into:
 
 Then, in the user's order:
 
+- [ ] **11.33 Wallpapers managed by the shell** (requested 2026-11-11, for the Framework
+      12, where nothing sets one) — the shell draws them on the background layer: a file,
+      or a folder (with subfolders to a depth, an optional subset) shown fixed, random or
+      by weekday, one everywhere, per monitor or per workspace, pinned slots, thumbnails
+      to pick from, shuffle by button and IPC. Plan: [plans/wallpapers.md](plans/wallpapers.md).
+      Done 2026-11-12 (stages 1–4, the page rebuilt mode first, colour from the image);
+      left, optional: a bar widget to shuffle.
+
 - [ ] **11.23 Installing: Arch and NixOS** (requested 2026-11-08, before touch input —
       the Framework 12 runs NixOS). `install.sh` for Arch (pacman, then a checkout in
       `~/.config/quickshell/default`); `flake.nix` + `nix/package.nix` (an `h2s-shell`

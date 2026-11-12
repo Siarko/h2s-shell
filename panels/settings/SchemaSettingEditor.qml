@@ -60,6 +60,9 @@ Item {
     readonly property var shownValue: global ? Profiles.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
     // Shown dimmed: the value is not this profile's own
     readonly property bool _dimmed: inherits && !global
+    // The value as a field's text — only a number or a string: the hidden fields of other
+    // types bind it too, and an object value (a structured setting) is not text
+    readonly property string _asText: typeof shownValue === "string" || typeof shownValue === "number" ? String(shownValue) : ""
 
     // Interval presets; the current value is added when it is not one of them, so a value
     // written by hand still shows as selected
@@ -67,7 +70,9 @@ Item {
 
     function _intervalLabel(ms) {
         if (ms === 0)
-            return "Paused";
+            return entry?.zeroLabel ?? "Paused";
+        if (ms % 3600000 === 0)
+            return (ms / 3600000) + " h";
         if (ms % 60000 === 0)
             return (ms / 60000) + " min";
         return (ms / 1000) + " s";
@@ -89,7 +94,7 @@ Item {
         if (!entry)
             return [];
         if (entry.type === "interval") {
-            const values = _intervalPresets.slice();
+            const values = (entry.presets ?? _intervalPresets).slice();
             if (typeof shownValue === "number" && !values.includes(shownValue))
                 values.push(shownValue);
             values.sort((a, b) => a - b);
@@ -275,7 +280,7 @@ Item {
                 id: _numberInput
                 width: 90
                 readonly property bool acceptableInput: input.acceptableInput
-                text: root.shownValue ?? ""
+                text: root._asText
                 opacity: root._dimmed && !editing ? 0.5 : 1
                 problem: editing && !acceptableInput
                 input.inputMethodHints: Qt.ImhDigitsOnly
@@ -284,7 +289,7 @@ Item {
                     if (acceptableInput && parseInt(text) !== root.shownValue)
                         root.edited(parseInt(text));
                 }
-                onEditingChanged: if (!editing) text = Qt.binding(() => root.shownValue ?? "")
+                onEditingChanged: if (!editing) text = Qt.binding(() => root._asText)
             }
 
             Text {
@@ -397,7 +402,7 @@ Item {
             InputField {
                 id: _textInput
                 width: parent.width
-                text: root.shownValue ?? ""
+                text: root._asText
                 opacity: root._dimmed && !editing ? 0.5 : 1
                 // The suggestions that match what is typed, and the one picked with the arrow keys
                 // (-1: none)
@@ -412,7 +417,7 @@ Item {
                 onEditingChanged: {
                     highlighted = -1;
                     if (!editing)
-                        text = Qt.binding(() => root.shownValue ?? "");
+                        text = Qt.binding(() => root._asText);
                 }
 
                 function pick(name) {
@@ -578,9 +583,78 @@ Item {
             }
         }
 
+        // An enum as cards (`presentation: "cards"`): a few choices that each need a line
+        // to say what they mean (the option's `description`)
+        Flow {
+            id: _cards
+            visible: root.entry?.presentation === "cards"
+            width: parent.width
+            spacing: 6
+            // All as tall as the tallest: a longer description must not make one stand out
+            readonly property real tallest: {
+                let height = 0;
+                for (const card of children)
+                    height = Math.max(height, card.contentHeight ?? 0);
+                return height;
+            }
+
+            Repeater {
+                model: ScriptModel { values: root.entry?.presentation === "cards" ? root._choices : [] }
+
+                Rectangle {
+                    id: _card
+                    required property var modelData
+                    readonly property bool _picked: modelData.value === root.shownValue
+
+                    width: Math.min(220, (parent.width - 12) / 3)
+                    readonly property real contentHeight: _cardText.implicitHeight + 16
+                    implicitHeight: Math.max(contentHeight, _cards.tallest)
+                    radius: Theme.field.radius
+                    color: _picked ? Theme.accentTint : (_cardArea.lit ? Theme.fillSubtle : "transparent")
+                    border.width: _picked ? Theme.border.selectedWidth : Theme.border.width
+                    border.color: _picked ? Theme.accent : Theme.outline
+                    opacity: _picked && root._dimmed ? 0.6 : 1
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+                    Column {
+                        id: _cardText
+                        x: 10
+                        y: 8
+                        width: parent.width - 20
+                        spacing: 2
+                        Text {
+                            width: parent.width
+                            text: (_card._picked ? "● " : "○ ") + _card.modelData.label
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            font.bold: _card._picked
+                            color: _card._picked ? Theme.textPrimary : Theme.textSecondary
+                        }
+                        Text {
+                            width: parent.width
+                            visible: !!_card.modelData.description
+                            wrapMode: Text.WordWrap
+                            text: _card.modelData.description ?? ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    PointerArea {
+                        id: _cardArea
+                        centred: false
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.edited(_card.modelData.value)
+                    }
+                }
+            }
+        }
+
         // Intervals and enums: one pill per choice; an inherited value is shown dimmed
         Flow {
-            visible: root._choices.length > 0 && root.entry?.presentation !== "dropdown"
+            visible: root._choices.length > 0 && root.entry?.presentation !== "dropdown" && root.entry?.presentation !== "cards"
             width: parent.width
             spacing: 4
 
