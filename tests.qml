@@ -43,9 +43,10 @@ QtObject {
     property var _moduleRules: ModuleRulesTest {}
     property var _quickshellPin: QuickshellPinTest {}
     property var _modules: ModulesTest {}
+    property var _moduleRegistries: ModuleRegistriesTest { after: _modules }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _lockView, _modules]
+    readonly property var _asyncSuites: [_pointerInput, _lockView, _modules, _moduleRegistries]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed
@@ -57,7 +58,7 @@ QtObject {
         onTriggered: {
             _waited += interval;
             const pending = _asyncSuites.filter(suite => !suite.done);
-            if (pending.length > 0 && _waited < 20000)
+            if (pending.length > 0 && _waited < 60000)
                 return;
             pending.forEach(suite => {
                 suite.fail("timed out");

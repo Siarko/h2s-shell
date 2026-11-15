@@ -20,13 +20,16 @@ import QtQuick
 //                 the popup is built from Popup.qml's _componentMap instead, which wins.
 //   settings    — its preset settings page, if the widget has presets
 //   multiple    — true if a section may hold more than one, each with its own preset
+//   module      — (a module's entry only) its module's id; its files are file:// URLs
+//   presetDefaults — (a module's entry only) its presets' defaults (WidgetPresets)
 Singleton {
     id: root
 
     // Hover cannot fire on a touch screen, so click is the default for every widget
     readonly property string defaultPopupMode: "click"
 
-    readonly property var entries: [
+    // The core's own widget types
+    readonly property var coreEntries: [
         { type: "power", name: "Power", widget: "widgets/PowerWidget.qml",
           popup: "power", popupPanel: "panels/PowerMenu.qml" },
         { type: "settings", name: "Settings", widget: "widgets/SettingsWidget.qml" },
@@ -57,6 +60,11 @@ Singleton {
           settings: "panels/widget_settings/SttWidgetSettings.qml" }
     ]
 
+    // Every widget type: the core's, then the loaded modules' (Modules.widgetEntries — their
+    // files absolute file:// URLs, each entry naming its `module`). A module turned off takes
+    // its types with it: a bar section naming one keeps the entry and shows nothing there.
+    readonly property var entries: ModuleRules.mergeWidgetEntries(coreEntries, Modules.widgetEntries)
+
     readonly property var types: entries.map(entry => entry.type)
 
     readonly property var _byType: {
@@ -74,9 +82,22 @@ Singleton {
         return entry(type)?.name ?? type;
     }
 
-    // Files are listed relative to the repo root; this file lives one level below it
+    // The core's files are listed relative to the repo root (this file lives one level below
+    // it); a module's are absolute URLs already
     function _url(path) {
-        return path ? Qt.resolvedUrl("../" + path) : "";
+        if (!path)
+            return "";
+        return /^[a-z]+:\/\//.test(path) ? path : Qt.resolvedUrl("../" + path);
+    }
+
+    // The module a type comes from ("" for the core's, or an unknown type)
+    function moduleOf(type) {
+        return entry(type)?.module ?? "";
+    }
+
+    // The module whose widget opens popup content `content` ("" for the core's)
+    function popupModule(content) {
+        return entries.find(entry => entry.popup === content)?.module ?? "";
     }
 
     function widgetUrl(type) {

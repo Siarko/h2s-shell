@@ -26,9 +26,13 @@ import QtQuick
 //                 IPC handlers, its facts, its long-lived objects. A module of widgets only
 //                 needs none.
 //   widgets       optional list of bar widget types, WidgetRegistry's fields:
-//                 { type, name, widget, popup?, popupPanel?, settings?, multiple? }
+//                 { type, name, widget, popup?, popupPanel?, settings?, multiple?,
+//                   presetDefaults? }
 //                 type and popup are <id> or <id>.<name>; widget, popupPanel, settings are
-//                 files of the module; popupPanel needs popup.
+//                 files of the module; popupPanel needs popup. presetDefaults (API 1.0): an
+//                 object { key: value } — what a key of the widget's presets is when the preset
+//                 does not set it (WidgetPresets.defaults); keys are names, values plain JSON,
+//                 at most 50 keys and 16 KiB.
 //   settingsPages optional list: { id, label, component, tab?, parent? } — id <id> or
 //                 <id>.<name>; tab "behaviour" (default), "appearance" or "system"; parent
 //                 the id of a core group of pages (such as "network").
@@ -42,7 +46,9 @@ import QtQuick
 //                 { fact, label, type, options? } — fact <id>.<name>; type bool, number,
 //                 percent, string or enum (options: strings).
 //   slots         optional list of contributions to slots the core declares:
-//                 { slot, component } — slot a dotted name ("network.vpn.row").
+//                 { slot, component } — slot a dotted name; the ones this shell offers are
+//                 `slotTable` (a name it does not offer is a warning: the contribution is
+//                 kept, and shows nowhere).
 //   requires      optional: { programs: [names] } — programs that must be on PATH; without
 //                 them the module is not loaded (state missing-program) and its setupHints
 //                 are shown.
@@ -68,6 +74,36 @@ Singleton {
 
     readonly property var idPattern: /^[a-z][a-z0-9_-]{0,31}$/
 
+    // The module API this shell offers, "major.minor" — published as Api.version (qs.api).
+    // Kept here, not in api/, so that the host (qs.singletons) never imports qs.api: qs.api
+    // imports qs.singletons, and the two importing each other would be a cycle. Adding to
+    // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
+    // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
+    readonly property string apiVersion: "1.0"
+
+    // ---- The slots the core offers (API 1.0) ----
+    //
+    // A slot is a place in a panel the core owns where modules may put content
+    // (components/ModuleSlot.qml). Each contribution is built in a guard of its own, with
+    // the context below as its `context` property (passed again only when its value
+    // changes) and the module's handle as `module`. Adding a slot bumps the API's minor.
+    //
+    // NEVER a slot on the lock screen, the screensaver or anything under singletons/lock:
+    // nothing foreign is drawn or run there (docs/plans/modules.md §4, item 1).
+    // tests/ModuleRegistriesTest.qml checks that no file there names ModuleSlot.
+    readonly property var slotTable: [
+        { name: "network.popup.sections", since: "1.0",
+          where: "the network popup (panels/NetworkPanel.qml), under the VPN, Ethernet and Wi-Fi sections, above the network list",
+          context: "{ slot, wifiEnabled: bool, wifiConnected: bool, ethernetConnected: bool }" },
+        { name: "notifications.popup.top", since: "1.0",
+          where: "the notifications popup (panels/NotificationPanel.qml), above the list",
+          context: "{ slot, count: the number of notifications in the list }" },
+        { name: "settings.general.bottom", since: "1.0",
+          where: "Settings → Behaviour → General, at the end of the page",
+          context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" }
+    ]
+    readonly property var slotNames: slotTable.map(entry => entry.name)
+
     // Ids a module cannot take: the core's own namespaces (settings groups and key prefixes,
     // fact prefixes, IPC targets, directories) — a module with id "battery" would own the
     // facts battery.* — and words that mean the shell itself. ModuleRulesTest checks that
@@ -81,7 +117,13 @@ Singleton {
         "panels", "performance", "polkit", "polling", "power", "profile", "profiles", "prototype", "qs",
         "quickshell", "safe-mode", "screen", "screensaver", "settings", "shell", "singletons",
         "sound", "stt", "system", "test", "tests", "theme", "themes", "tray", "vpn", "wallpaper",
-        "wallpapers", "widget", "widgets", "window", "workspaces"
+        "wallpapers", "widget", "widgets", "window", "workspaces",
+        // IPC targets of the core (a module's IpcHandler targets are <id> or <id>.<name>),
+        // including the test seams' and the VPN branch's fake provider's
+        "tablet", "locktest", "shelltest", "fakevpn",
+        // Settings page ids and popup keys of the core that are module-id shaped
+        "bar_appearance", "controls", "popups", "network_ethernet", "network_overview", "network_vpn",
+        "network_wifi", "notifications_appearance", "other_appearance", "widgets_appearance", "tray-menu"
     ]
 
     // What a module's QML may import without a warning (plan §4, a warning by the owner's
@@ -345,7 +387,36 @@ Singleton {
         if (multiple !== undefined && typeof multiple !== "boolean")
             return "multiple is not true or false";
         result.multiple = multiple === true;
+        const presetDefaults = _get(entry, "presetDefaults");
+        if (presetDefaults !== undefined) {
+            const problem = presetDefaultsProblem(presetDefaults);
+            if (problem !== "")
+                return "presetDefaults: " + problem;
+            result.presetDefaults = JSON.parse(JSON.stringify(presetDefaults));
+        }
         return result;
+    }
+
+    // A widget's presetDefaults: "" when fine, else why not
+    function presetDefaultsProblem(value) {
+        if (!_isObject(value))
+            return "not an object";
+        const keys = Object.keys(value);
+        if (keys.length > 50)
+            return "more than 50 keys";
+        for (const key of keys) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) || key === "__proto__")
+                return "the key " + _show(key) + " is not a name";
+        }
+        let text;
+        try {
+            text = JSON.stringify(value);
+        } catch (error) {
+            return "not plain JSON";
+        }
+        if (typeof text !== "string" || text.length > 16 * 1024)
+            return "larger than 16 KiB";
+        return "";
     }
 
     function _checkPage(id, entry) {
@@ -569,7 +640,8 @@ Singleton {
             return result;
 
         const moduleId = result.id;
-        result.widgets = _entries(raw, "widgets", ["type", "name", "widget", "popup", "popupPanel", "settings", "multiple"],
+        result.widgets = _entries(raw, "widgets", ["type", "name", "widget", "popup", "popupPanel", "settings", "multiple",
+                                                   "presetDefaults"],
                                   entry => _checkWidget(moduleId, entry), errors, warnings);
         result.settingsPages = _entries(raw, "settingsPages", ["id", "label", "component", "tab", "parent"],
                                         entry => _checkPage(moduleId, entry), errors, warnings);
@@ -682,6 +754,230 @@ Singleton {
         return files;
     }
 
+    // ---- The file check (part of the format, enforced before anything is loaded) ----
+    //
+    // Every file a module names — main, each entry's components, its tests, what its qmldir
+    // lists — must resolve, symlinks followed, to a regular file inside the module's canonical
+    // directory, of at most maxFileBytes. The host asks a process (a FIFO opened by
+    // Qt.createComponent would block the GUI thread for as long as it has no writer; a link
+    // can lead anywhere) before it reads or loads any of them. An entry whose file fails is
+    // dropped with an error; a failing main or qmldir file fails the module (every file of
+    // the module imports its directory, so a broken qmldir breaks them all).
+
+    readonly property int maxFileBytes: 1024 * 1024
+
+    // The files of a module the check looks at: { file, kind } — kind "main", "entry",
+    // "test" or "qmldir"; each file once (the first kind wins)
+    function filesToCheck(manifest, qmldirText) {
+        const files = [];
+        const add = (file, kind) => {
+            if (typeof file === "string" && file !== "" && !files.some(entry => entry.file === file))
+                files.push({ file: file, kind: kind });
+        };
+        add(manifest?.main, "main");
+        for (const file of manifestFiles(manifest))
+            add(file, "entry");
+        for (const file of qmldirFiles(qmldirText))
+            add(file, "qmldir");
+        for (const file of manifest?.tests ?? [])
+            add(file, "test");
+        return files;
+    }
+
+    // The check's shell script: arguments cap, then pairs of (directory, file); prints one
+    // line per pair, "<index>\tok" or "<index>\t<why not>" — by index, so no path is echoed
+    // back and parsed
+    readonly property string fileCheckScript: "cap=$1; shift; i=0; "
+        + "while [ $# -ge 2 ]; do dir=$1; file=$2; shift 2; "
+        + "real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; "
+        + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
+        + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
+        + "else case \"$real\" in \"$real_dir\"/*) "
+        + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
+        + "else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; "
+        + "if [ \"$size\" -ge 0 ] && [ \"$size\" -le \"$cap\" ]; then printf '%s\\tok\\n' $i; "
+        + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
+        + "*) printf '%s\\tleaves the module directory through a link\\n' $i ;; esac; fi; "
+        + "i=$((i+1)); done"
+
+    // The check's output lines → { index: "ok" | why not }
+    function parseFileCheck(lines) {
+        const result = {};
+        for (const line of lines ?? []) {
+            const match = /^([0-9]+)\t(.*)$/.exec(String(line));
+            if (match)
+                result[match[1]] = match[2].slice(0, 200);
+        }
+        return result;
+    }
+
+    // A manifest without the entries whose files failed the check. `bad`: { file: why }.
+    // → { manifest (a copy), errors, fatal: "" or why the module fails }
+    function withoutBadFiles(manifest, bad, qmldirText) {
+        const errors = [];
+        const failing = file => typeof file === "string" && file !== "" && _has(bad ?? {}, file);
+        const why = file => file + " " + bad[file];
+        let fatal = "";
+        if (failing(manifest?.main))
+            fatal = "main " + why(manifest.main);
+        for (const file of qmldirFiles(qmldirText)) {
+            if (fatal === "" && failing(file))
+                fatal = "qmldir names " + why(file);
+        }
+        const copy = Object.assign({}, manifest ?? {});
+        const keep = (list, files, what) => (list ?? []).filter(entry => {
+            const broken = files(entry).find(failing);
+            if (broken !== undefined)
+                errors.push(what(entry) + ": " + why(broken) + " (dropped)");
+            return broken === undefined;
+        });
+        copy.widgets = keep(manifest?.widgets, entry => [entry.widget, entry.popupPanel, entry.settings], entry => "widget " + entry.type);
+        copy.settingsPages = keep(manifest?.settingsPages, entry => [entry.component], entry => "settings page " + entry.id);
+        copy.slots = keep(manifest?.slots, entry => [entry.component], entry => "slot " + entry.slot);
+        copy.tests = (manifest?.tests ?? []).filter(file => {
+            if (failing(file))
+                errors.push("test " + why(file) + " (dropped)");
+            return !failing(file);
+        });
+        return { manifest: copy, errors: errors, fatal: fatal };
+    }
+
+    // ---- The start guard (crash loops the launcher cannot see) ----
+    //
+    // Quickshell restarts a crashed shell in place — the same process, exec'd again — unless
+    // it crashed within 10 s of starting; the launcher sees only processes, so it misses a
+    // module that crashes the shell later, and `launch.sh -d` has no supervisor at all. So the
+    // shell counts those relaunches itself: before any module is loaded the host runs
+    // startGuardScript on $XDG_RUNTIME_DIR/h2s-shell-module-starts, which holds
+    // "<identity> <count>". The identity is "<pid>:<crash>" — the shell's pid, and the
+    // coredump pid Quickshell's crash handler put in the environment it exec'd the relaunch
+    // with (__QUICKSHELL_CRASH_DUMP_PID, still readable in /proc/<pid>/environ after
+    // Quickshell unsets it), "" for a process not relaunched after a crash. So:
+    //   no crash marker                  a fresh process (a launch, a --restart, a launcher
+    //                                    restart — which the launcher counts): 0
+    //   the same identity as stored      a reload of the same relaunched process: unchanged
+    //   the same pid, another crash      one more relaunch after a crash: count + 1
+    // A start that lives guardClearMs writes its count back to 0. An orderly quit needs
+    // nothing (the next start is a fresh process) — and could not do anything: Quickshell
+    // stops all JavaScript before it tears a generation down. guardLimit or more: safe mode.
+    readonly property int guardLimit: 2
+    // The same window as the launcher's quick deaths (scripts/launch.sh: 30 s), so the two
+    // counters tell one story: a start that lived 30 s was not a crash loop
+    readonly property int guardClearMs: 30000
+
+    // The guard's shell script: arguments the file and an identity to use instead of the
+    // process's own ("" — the suites give one). Refuses anything but a plain file (a link, a
+    // FIFO: "refused <identity>"), prints "<count> <identity>", writes the same (atomically)
+    readonly property string startGuardScript: "file=$1; identity=$2; "
+        + "if [ -z \"$identity\" ]; then "
+        + "crash=$(tr '\\000' '\\n' < /proc/$PPID/environ 2>/dev/null | sed -n 's/^__QUICKSHELL_CRASH_DUMP_PID=//p' | head -n 1 | tr -cd 0-9); "
+        + "identity=\"$PPID:$crash\"; fi; "
+        + "if [ -L \"$file\" ] || { [ -e \"$file\" ] && [ ! -f \"$file\" ]; }; then echo \"refused $identity\"; exit 0; fi; "
+        + "stored=; old=0; if [ -f \"$file\" ]; then line=$(head -c 80 -- \"$file\" | head -n 1); stored=${line%% *}; "
+        + "old=$(printf '%s' \"${line#* }\" | tr -cd 0-9 | cut -c1-4); fi; old=${old:-0}; "
+        + "case \"$identity\" in *:) count=0 ;; *) "
+        + "if [ \"$stored\" = \"$identity\" ]; then count=$old; "
+        + "elif [ \"${stored%%:*}\" = \"${identity%%:*}\" ]; then count=$((old + 1)); else count=1; fi ;; esac; "
+        + "echo \"$count $identity\"; "
+        + "printf '%s %s\\n' \"$identity\" \"$count\" > \"$file.$$\" && mv -f -- \"$file.$$\" \"$file\""
+
+    // Writes a start's count back to 0 once it has lived guardClearMs: arguments the file and
+    // the identity (only a plain file, or none, is written)
+    readonly property string guardClearScript: "file=$1; "
+        + "if [ -L \"$file\" ] || { [ -e \"$file\" ] && [ ! -f \"$file\" ]; }; then exit 0; fi; "
+        + "printf '%s 0\\n' \"$2\" > \"$file.$$\" && mv -f -- \"$file.$$\" \"$file\""
+
+    // What the guard's output means → { safeMode, count, identity, reason }. Garbage, nothing
+    // (the script failed) or "refused": counts as 0 — the guard must never be what keeps
+    // modules off for good.
+    function startGuard(output) {
+        const text = String(output ?? "").trim();
+        const match = /^([0-9]{1,4}) ([0-9]*:[0-9]*)$/.exec(text);
+        if (!match)
+            return { safeMode: false, count: 0, identity: "", reason: text.startsWith("refused") ? "the start counter is not a plain file: not counted" : "" };
+        const count = Number(match[1]);
+        return {
+            safeMode: count >= guardLimit, count: count, identity: match[2],
+            reason: count >= guardLimit ? "Quickshell relaunched the shell after a crash " + count + " times in a row, none living "
+                + guardClearMs / 1000 + " s (a module may crash it): safe mode" : ""
+        };
+    }
+
+    // ---- What a module file's root object declares ----
+    //
+    // The core hands a module's objects `module` (and a slot's `context`, a page's `editIndex`)
+    // as initial properties, only when the file's root object declares them: a Loader warns
+    // about an initial property its item does not have. Read from the text the import check
+    // reads anyway.
+
+    // The writable properties the root object of a QML file declares directly (not a nested
+    // object's; not readonly ones), by name. Never throws.
+    function rootProperties(text) {
+        if (typeof text !== "string")
+            return [];
+        const source = text.slice(0, maxFileBytes);
+        let depth = 0;
+        let rootText = "";
+        for (let i = 0; i < source.length; i++) {
+            const character = source[i];
+            const next = source[i + 1];
+            // Comments and strings are skipped whole
+            if (character === "/" && next === "/") {
+                const end = source.indexOf("\n", i);
+                i = end < 0 ? source.length : end - 1;
+                continue;
+            }
+            if (character === "/" && next === "*") {
+                const end = source.indexOf("*/", i + 2);
+                i = end < 0 ? source.length : end + 1;
+                continue;
+            }
+            if (character === "\"" || character === "'" || character === "`") {
+                let j = i + 1;
+                while (j < source.length && source[j] !== character) {
+                    if (source[j] === "\\")
+                        j++;
+                    j++;
+                }
+                i = j;
+                if (depth === 1)
+                    rootText += " ";
+                continue;
+            }
+            if (character === "{") {
+                depth++;
+                if (depth === 2)
+                    rootText += ";";
+                continue;
+            }
+            if (character === "}") {
+                depth--;
+                continue;
+            }
+            if (depth === 1)
+                rootText += character;
+        }
+        const names = [];
+        const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+[A-Za-z_][\w.]*(?:<[\w.]+>)?\s+([A-Za-z_]\w*)/g;
+        let match;
+        while ((match = pattern.exec(rootText)) !== null) {
+            if (!/\breadonly\s+property/.test(match[0]) && !names.includes(match[2]))
+                names.push(match[2]);
+        }
+        return names;
+    }
+
+    // Of `wanted` ({ name: value }), the ones the root object declares (`declared`, from
+    // rootProperties)
+    function initialProperties(declared, wanted) {
+        const result = {};
+        for (const key of Object.keys(wanted ?? {})) {
+            if ((declared ?? []).includes(key))
+                result[key] = wanted[key];
+        }
+        return result;
+    }
+
     // ---- The import check (a warning, never a refusal) ----
 
     // The imports at the top of a QML file: [{ name, directory }] — `name` a module name
@@ -708,19 +1004,35 @@ Singleton {
     }
 
     // An import a module may make: an allowed module, or a directory inside its own
-    function importAllowed(entry) {
+    // (`file`: the importing file, relative to the module's directory — a quoted import is
+    // resolved from the file's own directory: tests/T.qml importing ".." is the module's)
+    function importAllowed(entry, file) {
         if (entry.directory) {
             const path = entry.name;
-            return path !== "" && !path.includes(":") && !path.startsWith("/")
-                && !path.split("/").includes("..");
+            if (path === "" || path.includes(":") || path.startsWith("/"))
+                return false;
+            const parts = String(file ?? "").split("/").slice(0, -1);
+            for (const part of path.split("/")) {
+                if (part === "..") {
+                    if (parts.length === 0)
+                        return false;
+                    parts.pop();
+                } else if (part !== "" && part !== ".") {
+                    parts.push(part);
+                }
+            }
+            return true;
         }
         return allowedImports.includes(entry.name)
             || allowedImportPrefixes.some(prefix => entry.name === prefix || entry.name.startsWith(prefix + "."));
     }
 
-    // The warnings for one file of a module: one per import outside the allowlist
-    function importWarnings(file, text) {
-        return importsOf(text).filter(entry => !importAllowed(entry)).map(entry =>
+    // The warnings for one file of a module: one per import outside the allowlist. A test
+    // suite (`isTest`: listed in the manifest's tests) may also import qs.tests — the shell's
+    // TestCase, which tests/run-modules.sh provides and the running shell does not: a module's
+    // own file importing it would pass its suites and fail in the shell.
+    function importWarnings(file, text, isTest) {
+        return importsOf(text).filter(entry => !importAllowed(entry, file) && !(isTest === true && !entry.directory && entry.name === "qs.tests")).map(entry =>
             file + " imports " + (entry.directory ? "\"" + entry.name + "\"" : entry.name)
             + ", outside what modules may import (" + allowedImports.concat(allowedImportPrefixes.map(prefix => prefix + "*")).join(", ")
             + ", the module's own directory)");
@@ -751,6 +1063,8 @@ Singleton {
     //   programsKnown      the check of requires.programs has answered (true when none)
     //   missingPrograms    the ones not found
     //   mainError          why its main could not be created ("" for none)
+    //   filesChecked       the check of the module's files has answered (false: pending)
+    //   guardKnown         the start guard has answered (false: pending; see startGuard)
     function stateOf(facts) {
         if (!facts?.valid)
             return "failed";
@@ -758,6 +1072,12 @@ Singleton {
             return "duplicate";
         if (!facts.compatible)
             return "incompatible";
+        if (facts.filesChecked === false)
+            return "pending";
+        if (facts.mainFileError)
+            return "failed";
+        if (facts.guardKnown === false)
+            return "pending";
         if (facts.safeMode)
             return "safe-mode";
         if (facts.settingsKnown === false)
@@ -799,6 +1119,8 @@ Singleton {
                     entry.popupPanel = url(widget.popupPanel);
                 if (widget.settings)
                     entry.settings = url(widget.settings);
+                if (widget.presetDefaults)
+                    entry.presetDefaults = JSON.parse(JSON.stringify(widget.presetDefaults));
                 result.widgetEntries.push(entry);
             }
             for (const page of module.manifest.settingsPages ?? [])
@@ -849,5 +1171,293 @@ Singleton {
             setupHints: state === "missing-program" ? (manifest?.setupHints ?? []).slice() : [],
             shadowedBy: record?.shadowedBy ?? ""
         };
+    }
+
+    // A manifest's slot contributions to slots this shell does not offer: one warning each
+    function unknownSlotWarnings(manifest) {
+        return (manifest?.slots ?? []).filter(entry => !slotNames.includes(entry.slot)).map(entry =>
+            "slots: " + _show(entry.slot) + " is not a slot this shell offers (module API " + apiVersion
+            + "; offered: " + slotNames.join(", ") + ") — " + entry.component + " shows nowhere");
+    }
+
+    // ---- The core's registries, merged with the modules' lists (M2) ----
+    //
+    // Each takes the core's own list and the host's merged list and returns the list the
+    // registry publishes. With no module entries the result has the core's entries, in the
+    // core's order, unchanged (the suites check it). A module entry that collides with a core
+    // one (it cannot, with the namespaces, but the core never depends on that) is dropped.
+
+    // WidgetRegistry.entries: the core's, then the modules' (a type or popup key the core
+    // has, or "tray-menu"/"notifications" Popup wires itself, is dropped)
+    function mergeWidgetEntries(core, modules) {
+        const coreList = Array.isArray(core) ? core : [];
+        const types = coreList.map(entry => entry.type);
+        const popups = coreList.filter(entry => entry.popup).map(entry => entry.popup).concat(["tray-menu", "notifications"]);
+        const added = [];
+        for (const entry of Array.isArray(modules) ? modules : []) {
+            if (!entry || types.includes(entry.type) || (entry.popup && popups.includes(entry.popup)))
+                continue;
+            types.push(entry.type);
+            if (entry.popup)
+                popups.push(entry.popup);
+            added.push(entry);
+        }
+        return added.length === 0 ? coreList : coreList.concat(added);
+    }
+
+    // WidgetPresets.defaults: the core's, plus { type: presetDefaults } of the modules' widgets
+    function mergePresetDefaults(core, moduleWidgets) {
+        const result = Object.assign({}, core ?? {});
+        for (const entry of Array.isArray(moduleWidgets) ? moduleWidgets : []) {
+            if (entry?.presetDefaults && !_has(result, entry.type))
+                result[entry.type] = entry.presetDefaults;
+        }
+        return result;
+    }
+
+    // SettingsSchema.entries: the core's, then the modules' (a key the core has: dropped).
+    // A module entry has the schema's fields and `module`.
+    function mergeSettingEntries(core, modules) {
+        const coreList = Array.isArray(core) ? core : [];
+        const keys = new Set(coreList.map(entry => entry.key));
+        const added = (Array.isArray(modules) ? modules : []).filter(entry => entry && !keys.has(entry.key));
+        return added.length === 0 ? coreList : coreList.concat(added);
+    }
+
+    // ProfileRules.factTypes: the core's, then the modules' (a fact the core has: dropped)
+    function mergeFactTypes(core, modules) {
+        const coreList = Array.isArray(core) ? core : [];
+        const facts = new Set(coreList.map(entry => entry.fact));
+        const added = (Array.isArray(modules) ? modules : []).filter(entry => entry && !facts.has(entry.fact));
+        return added.length === 0 ? coreList : coreList.concat(added);
+    }
+
+    // The group the module pages without a usable parent go under, on the System tab
+    readonly property var modulesGroup: ({ id: "modules", label: "Modules", tab: "system", group: true })
+
+    // SettingsWindow.pages: the core's pages with the modules' pages put in. A module page
+    // becomes { id, label, tab, url, module, parent? }:
+    //   parent a core group → under it, on the group's tab (after the group's own pages);
+    //   parent "modules", or a parent the core does not have → under the Modules group
+    //     (System tab; the group exists only while it has pages);
+    //   no parent → on its tab, after the core's pages.
+    // An id the core has is dropped. → { pages, problems: [text] }
+    function mergeSettingsPages(corePages, modulePages) {
+        const core = Array.isArray(corePages) ? corePages : [];
+        const problems = [];
+        const ids = new Set(core.map(page => page.id));
+        const groups = new Map(core.filter(page => page.group).map(page => [page.id, page.tab]));
+        const children = new Map();
+        const topLevel = [];
+        const underModules = [];
+        for (const page of Array.isArray(modulePages) ? modulePages : []) {
+            if (!page || typeof page.id !== "string")
+                continue;
+            if (ids.has(page.id) || page.id === modulesGroup.id) {
+                problems.push(page.module + ": settings page " + _show(page.id) + " has the id of a core page (dropped)");
+                continue;
+            }
+            ids.add(page.id);
+            const made = { id: page.id, label: page.label, tab: settingsTabs.includes(page.tab) ? page.tab : "behaviour",
+                           url: page.component, module: page.module };
+            const parent = page.parent ?? "";
+            if (parent === "") {
+                topLevel.push(made);
+            } else if (groups.has(parent)) {
+                made.parent = parent;
+                made.tab = groups.get(parent);
+                if (!children.has(parent))
+                    children.set(parent, []);
+                children.get(parent).push(made);
+            } else {
+                if (parent !== modulesGroup.id)
+                    problems.push(page.module + ": settings page " + _show(page.id) + ": no group " + _show(parent)
+                                  + " — shown under Modules");
+                made.parent = modulesGroup.id;
+                made.tab = modulesGroup.tab;
+                underModules.push(made);
+            }
+        }
+        if (topLevel.length === 0 && underModules.length === 0 && children.size === 0)
+            return { pages: core, problems: problems };
+        const pages = [];
+        core.forEach((page, index) => {
+            pages.push(page);
+            // A group's module pages after its last own page
+            const group = page.group ? page.id : (page.parent ?? "");
+            const next = core[index + 1];
+            if (group !== "" && children.has(group) && !(next && next.parent === group))
+                pages.push(...children.get(group));
+        });
+        pages.push(...topLevel);
+        if (underModules.length > 0)
+            pages.push(Object.assign({}, modulesGroup), ...underModules);
+        return { pages: pages, problems: problems };
+    }
+
+    // ---- What a module hands the core at run time ----
+
+    // A fact's value checked against its declared type → { ok, value, error }. null and
+    // undefined are "not known" (value null: no condition on it holds). Never throws.
+    function factValue(type, value, options) {
+        if (value === undefined || value === null)
+            return { ok: true, value: null, error: "" };
+        const bad = what => ({ ok: false, value: null, error: "not " + what + ": " + _show(value) });
+        switch (type) {
+        case "bool":
+            return typeof value === "boolean" ? { ok: true, value: value, error: "" } : bad("true or false");
+        case "number":
+            return _isNumber(value) ? { ok: true, value: value, error: "" } : bad("a number");
+        case "percent":
+            return _isNumber(value) && value >= 0 && value <= 100 ? { ok: true, value: value, error: "" } : bad("a number from 0 to 100");
+        case "string":
+            return typeof value === "string" && value.length <= 200 ? { ok: true, value: value, error: "" } : bad("a text of at most 200 characters");
+        case "enum":
+            return typeof value === "string" && (options ?? []).includes(value) ? { ok: true, value: value, error: "" }
+                : bad("one of " + (options ?? []).join(", "));
+        }
+        return { ok: false, value: null, error: "the fact's type " + _show(type) + " is unknown" };
+    }
+
+    // A module's setting key: its full key ("mod.<id>.<name>") for "<name>" or the full key
+    // itself; "" when it is not the module's
+    function ownSettingKey(id, key) {
+        if (typeof key !== "string")
+            return "";
+        const full = key.startsWith("mod.") ? key : "mod." + id + "." + key;
+        return isOwnSettingKey(id, full) ? full : "";
+    }
+
+    // A module's fact name: "<id>.<name>" for "<name>" or the full name; "" when not its
+    function ownFactName(id, name) {
+        if (typeof name !== "string")
+            return "";
+        const full = name.startsWith(id + ".") ? name : id + "." + name;
+        return isOwnFact(id, full) ? full : "";
+    }
+
+    // Whether `value` may be written to a setting declared by `entry` (a schema entry): ""
+    // when it may, else why not
+    function settingValueProblem(entry, value) {
+        if (!entry)
+            return "not a declared setting";
+        switch (entry.type) {
+        case "bool":
+            return typeof value === "boolean" ? "" : "not true or false";
+        case "number":
+        case "slider":
+        case "interval":
+            if (!_isNumber(value))
+                return "not a number";
+            if ((entry.min !== undefined && value < entry.min) || (entry.max !== undefined && value > entry.max))
+                return "outside " + entry.min + ".." + entry.max;
+            return "";
+        case "string":
+            return typeof value === "string" && value.length <= 10000 ? "" : "not a text (at most 10000 characters)";
+        case "stringList":
+            return Array.isArray(value) && value.length <= 1000 && value.every(item => typeof item === "string") ? "" : "not a list of texts";
+        case "enum":
+            return (entry.options ?? []).some(option => option.value === value) ? "" : "not one of the options";
+        }
+        return "a setting of type " + _show(entry.type) + " cannot be written by a module";
+    }
+
+    // The largest store a module may keep (its JSON, ModuleStore)
+    readonly property int maxStoreBytes: 1024 * 1024
+
+    // A store's content as JSON text, or null when it is not plain JSON or too large
+    function storeText(data) {
+        let text;
+        try {
+            text = JSON.stringify(data ?? {});
+        } catch (error) {
+            return null;
+        }
+        return typeof text === "string" && text.length <= maxStoreBytes ? text : null;
+    }
+
+    // A store file's text → its object ({} when missing, empty or not a JSON object)
+    function parseStore(text) {
+        if (typeof text !== "string" || text.trim() === "")
+            return {};
+        try {
+            const parsed = JSON.parse(text);
+            return _isObject(parsed) ? parsed : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    // Whether a slot contribution's context has changed by value: plain data compared as
+    // JSON, objects of Qt (a provider, an item) and functions by identity — one level deep,
+    // as contexts are written ({ slot, editIndex, provider, close }). Never throws.
+    function sameContext(a, b) {
+        if (a === b)
+            return true;
+        if (!_isObject(a) || !_isObject(b))
+            return false;
+        const keys = Object.keys(a);
+        if (keys.length !== Object.keys(b).length)
+            return false;
+        for (const key of keys) {
+            if (!_has(b, key))
+                return false;
+            const left = a[key];
+            const right = b[key];
+            if (left === right)
+                continue;
+            if (typeof left !== "object" || typeof right !== "object" || left === null || right === null
+                    || _isQtObject(left) || _isQtObject(right))
+                return false;
+            let same = false;
+            try {
+                same = JSON.stringify(left) === JSON.stringify(right);
+            } catch (error) {
+                same = false;
+            }
+            if (!same)
+                return false;
+        }
+        return true;
+    }
+
+    // An object of Qt's (a QtObject, an Item) rather than plain data
+    function _isQtObject(value) {
+        try {
+            return typeof value.objectName === "string" && typeof value.destroy === "function";
+        } catch (error) {
+            return true;
+        }
+    }
+
+    // The identity of a slot contribution, for the slot's ScriptModel
+    function contributionKey(contribution) {
+        return (contribution?.module ?? "") + "|" + (contribution?.component ?? "");
+    }
+
+    // The module whose directory holds `url` (a file:// URL or a path): its index in
+    // `directories` (canonical paths), or -1. The deepest directory wins (a module inside
+    // another's tree is its own).
+    function directoryIndexOf(directories, url) {
+        if (typeof url !== "string" && !(url && typeof url.toString === "function"))
+            return -1;
+        let path = String(url);
+        if (path.startsWith("file://"))
+            path = path.slice(7);
+        try {
+            path = decodeURIComponent(path);
+        } catch (error) {
+            return -1;
+        }
+        path = canonicalPath(path);
+        if (path === "")
+            return -1;
+        let best = -1;
+        (directories ?? []).forEach((directory, index) => {
+            if ((path === directory || path.startsWith(directory + "/"))
+                    && (best < 0 || directory.length > directories[best].length))
+                best = index;
+        });
+        return best;
     }
 }

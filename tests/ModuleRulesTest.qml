@@ -360,5 +360,150 @@ TestCase {
         const again = rules.merge([{ id: "alpha", directory: "/a", manifest: alpha }, { id: "zeta", directory: "/z", manifest: zeta }]);
         assertEqual(JSON.stringify(again.widgetEntries), JSON.stringify(merged.widgetEntries), "stable: the input order does not matter");
         assertEqual(rules.merge(null).widgetEntries.length, 0, "nothing to merge: empty lists");
+
+        _m2(rules, alpha, zeta);
+    }
+
+    // M2: the API version's home, presetDefaults, the slot table, the registries' merges, the
+    // values a module hands over, the file check, the start guard
+    function _m2(rules, alpha, zeta) {
+        assertEqual(rules.apiVersion, Api.version, "Api.version is ModuleRules.apiVersion");
+
+        // presetDefaults
+        const presets = rules.parseManifest(_manifest({ widgets: [
+            { type: "tailscale", name: "T", widget: "W.qml", presetDefaults: { showIp: true, hosts: ["a"] } },
+            { type: "tailscale.b", name: "B", widget: "W.qml", presetDefaults: [] },
+            { type: "tailscale.c", name: "C", widget: "W.qml", presetDefaults: { "bad key": 1 } },
+            { type: "tailscale.d", name: "D", widget: "W.qml", presetDefaults: { big: "x".repeat(20000) } }] }));
+        assertEqual(presets.widgets.map(widget => widget.type).join(","), "tailscale", "presetDefaults: only a small object of names kept");
+        assertEqual(presets.widgets[0].presetDefaults.hosts[0], "a", "… its values kept");
+        assertEqual(presets.warnings.length, 0, "… presetDefaults is a known field");
+
+        // The slot table
+        assert(rules.slotNames.length >= 3 && rules.slotTable.every(slot => slot.name && slot.where && slot.context && slot.since),
+               "the slot table: each slot with where, context, since");
+        assertEqual(rules.unknownSlotWarnings({ slots: [{ slot: "network.popup.sections", component: "A.qml" },
+                                                        { slot: "network.popup.nowhere", component: "B.qml" }] }).length, 1,
+                    "a contribution to a slot not offered: one warning");
+        for (const slot of rules.slotNames)
+            assert(!/lock|screensaver/.test(slot), "no slot on the lock screen: " + slot);
+
+        // Registries: no module → the core's list, unchanged
+        const core = [{ type: "clock", popup: "calendar" }, { type: "tray" }];
+        assert(rules.mergeWidgetEntries(core, []) === core, "widgets, no module: the core's list itself");
+        const widgets = rules.mergeWidgetEntries(core, [{ type: "alpha", popup: "alpha", module: "alpha" },
+            { type: "clock", module: "x" }, { type: "x2", popup: "calendar", module: "x" }, { type: "x3", popup: "tray-menu", module: "x" }]);
+        assertEqual(widgets.map(entry => entry.type).join(","), "clock,tray,alpha", "widgets: the core's first; a module's type or popup the core has is dropped");
+        const pageCore = [{ id: "general", tab: "behaviour" }, { id: "network", tab: "system", group: true },
+                          { id: "network_vpn", tab: "system", parent: "network" }, { id: "themes", tab: "appearance" }];
+        assert(rules.mergeSettingsPages(pageCore, []).pages === pageCore, "pages, no module: the core's list itself");
+        const pages = rules.mergeSettingsPages(pageCore, [
+            { id: "ts", label: "T", tab: "behaviour", component: "file:///t/P.qml", module: "ts", parent: "network" },
+            { id: "ts.top", label: "Top", tab: "appearance", component: "file:///t/Q.qml", module: "ts" },
+            { id: "ts.lost", label: "Lost", tab: "behaviour", component: "file:///t/R.qml", module: "ts", parent: "nowhere" },
+            { id: "general", label: "Mine", tab: "behaviour", component: "file:///t/S.qml", module: "ts" }]);
+        assertEqual(pages.pages.map(page => page.id + (page.parent ? "<" + page.parent : "")).join(","),
+                    "general,network,network_vpn<network,ts<network,themes,ts.top,modules,ts.lost<modules",
+                    "pages: under a core group after its pages (on its tab), at the end of their tab, the rest under Modules");
+        assertEqual(pages.pages.find(page => page.id === "ts").tab, "system", "… a group's page takes the group's tab");
+        assertEqual(pages.pages.find(page => page.id === "ts").url, "file:///t/P.qml", "… a module's page has a url");
+        assertEqual(pages.problems.length, 2, "… the lost parent and the core's id: said");
+        const settingCore = [{ key: "general.debug" }];
+        assert(rules.mergeSettingEntries(settingCore, []) === settingCore, "settings, no module: the core's list itself");
+        assertEqual(rules.mergeSettingEntries(settingCore, [{ key: "general.debug" }, { key: "mod.x.a" }]).length, 2, "settings: a core key dropped");
+        const factCore = [{ fact: "power.onBattery" }];
+        assert(rules.mergeFactTypes(factCore, []) === factCore, "facts, no module: the core's list itself");
+        assertEqual(JSON.stringify(rules.mergePresetDefaults({ clock: { format: "x" } }, [{ type: "alpha", presetDefaults: { a: 1 } }, { type: "clock", presetDefaults: { format: "evil" } }])),
+                    "{\"clock\":{\"format\":\"x\"},\"alpha\":{\"a\":1}}", "preset defaults: a module's added, never over the core's");
+
+        // Facts a module sets
+        assert(rules.factValue("bool", true).ok && !rules.factValue("bool", 1).ok, "a bool fact");
+        assert(rules.factValue("percent", 100).ok && !rules.factValue("percent", 101).ok && !rules.factValue("percent", NaN).ok, "a percent fact");
+        assert(rules.factValue("enum", "a", ["a"]).ok && !rules.factValue("enum", "b", ["a"]).ok, "an enum fact");
+        assert(rules.factValue("number", -5.5).ok && !rules.factValue("number", "5").ok, "a number fact");
+        assert(!rules.factValue("string", "x".repeat(201)).ok, "a string fact: at most 200");
+        assertEqual(rules.factValue("bool", null).value, null, "null: not known");
+        assert(!rules.factValue("color", "red").ok, "an unknown type: refused");
+        for (const hostile of [{}, [], () => 1, { valueOf: () => { throw "x"; } }])
+            assert(!rules.factValue("number", hostile).ok, "hostile values: refused, no throw");
+        assertEqual(rules.ownFactName("ts", "up"), "ts.up", "ownFactName: <name>");
+        assertEqual(rules.ownFactName("ts", "x.y"), "ts.x.y", "ownFactName: a dotted name is its own too");
+        assertEqual(rules.ownFactName("ts", "") + rules.ownFactName("ts", 5), "", "ownFactName: nothing, not a name");
+        assertEqual(rules.ownSettingKey("ts", "a"), "mod.ts.a", "ownSettingKey: <name>");
+        assertEqual(rules.ownSettingKey("ts", "mod.other.a"), "", "ownSettingKey: not another's");
+        const enumEntry = { type: "enum", options: [{ value: "a", label: "A" }] };
+        assert(rules.settingValueProblem(enumEntry, "a") === "" && rules.settingValueProblem(enumEntry, "b") !== "", "a setting's value: enum");
+        assert(rules.settingValueProblem({ type: "number", min: 0, max: 5 }, 6) !== "", "… a number out of range");
+        assert(rules.settingValueProblem({ type: "stringList" }, ["a", 1]) !== "", "… a list with a number");
+        assert(rules.settingValueProblem(null, 1) !== "", "… an undeclared key");
+
+        // The store
+        assertEqual(rules.storeText({ a: 1 }), "{\"a\":1}", "storeText");
+        assertEqual(rules.storeText({ huge: "x".repeat(rules.maxStoreBytes) }), null, "storeText: too large");
+        const cyclic = {};
+        cyclic.self = cyclic;
+        assertEqual(rules.storeText(cyclic), null, "storeText: not plain JSON");
+        assertEqual(JSON.stringify(rules.parseStore("[1]")) + JSON.stringify(rules.parseStore("{")) + JSON.stringify(rules.parseStore(null)), "{}{}{}",
+                    "parseStore: anything but an object is an empty store");
+
+        // Contexts compared by value
+        const object = Qt.createQmlObject("import QtQuick; QtObject {}", this);
+        const close = () => 1;
+        assert(rules.sameContext({ slot: "a", n: [1, { b: 2 }] }, { slot: "a", n: [1, { b: 2 }] }), "sameContext: equal plain data");
+        assert(!rules.sameContext({ slot: "a" }, { slot: "b" }), "… a changed value");
+        assert(!rules.sameContext({ slot: "a" }, { slot: "a", x: 1 }), "… a key more");
+        assert(rules.sameContext({ provider: object, close: close }, { provider: object, close: close }), "… the same object and function");
+        assert(!rules.sameContext({ close: close }, { close: () => 1 }), "… another function");
+        assert(!rules.sameContext(null, {}) && rules.sameContext(null, null), "… null");
+        object.destroy();
+        assertEqual(rules.contributionKey({ module: "a", component: "file:///x" }), "a|file:///x", "a contribution's identity");
+        assertEqual(rules.directoryIndexOf(["/m/a", "/m/a/b"], "file:///m/a/b/c/X.qml"), 1, "directoryIndexOf: the deepest");
+        assertEqual(rules.directoryIndexOf(["/m/a"], "file:///m/ab/X.qml"), -1, "… not a prefix of another name");
+        assertEqual(rules.directoryIndexOf(["/m/a"], "file:///m/a/../b/X.qml"), -1, "… .. leaves it");
+        assertEqual(rules.directoryIndexOf(["/m/a b"], "file:///m/a%20b/X.qml"), 0, "… escaped");
+
+        // The file check
+        const files = rules.filesToCheck(alpha, "singleton S 1.0 S.qml\n");
+        assertEqual(files.map(entry => entry.file + ":" + entry.kind).join(","), "A1.qml:entry,P.qml:entry,A2.qml:entry,Page.qml:entry,Row.qml:entry,S.qml:qmldir",
+                    "filesToCheck: every file named, each once, with its kind");
+        assertEqual(JSON.stringify(rules.parseFileCheck(["0\tok", "1\tis not a regular file", "junk", "2\t"])),
+                    "{\"0\":\"ok\",\"1\":\"is not a regular file\",\"2\":\"\"}", "parseFileCheck");
+        const checked = rules.withoutBadFiles(alpha, { "P.qml": "is not a regular file", "Row.qml": "leaves the module directory through a link" }, "");
+        assertEqual(checked.manifest.widgets.map(widget => widget.type).join(","), "alpha.two", "withoutBadFiles: a widget with a bad file dropped");
+        assertEqual(checked.manifest.slots.length, 0, "… a slot with one dropped");
+        assertEqual(checked.errors.length, 2, "… each said");
+        assertEqual(checked.fatal, "", "… the module still loads");
+        assertEqual(alpha.widgets.length, 2, "… the manifest given is not changed");
+        assert(rules.withoutBadFiles({ main: "Main.qml" }, { "Main.qml": "x" }, "").fatal !== "", "a bad main: fatal");
+        assert(rules.withoutBadFiles({}, { "S.qml": "x" }, "singleton S 1.0 S.qml").fatal !== "", "a bad qmldir file: fatal");
+
+        // The start guard
+        assertEqual(JSON.stringify(rules.startGuard("0 77:")), JSON.stringify({ safeMode: false, count: 0, identity: "77:", reason: "" }), "guard: a fresh process, 0");
+        assert(!rules.startGuard("1 77:5").safeMode, "guard: one relaunch after a crash — not yet");
+        assert(rules.startGuard("2 77:6").safeMode && rules.startGuard("17 77:9").safeMode, "guard: 2 or more in a row — safe mode");
+        assertEqual(rules.startGuard("2 77:6").identity, "77:6", "… its identity, to clear it with");
+        assert(rules.startGuard("refused 77:").reason !== "", "guard: a counter that is not a plain file — said, not counted");
+        for (const junk of ["", "abc", "2", "-3 1:2", "99999 1:2", null, "refused", "1\n2", "2 x:y"])
+            assert(!rules.startGuard(junk).safeMode, "guard: garbage counts as 0 — " + JSON.stringify(junk));
+        assertEqual(rules.guardClearMs, 30000, "the guard's window is the launcher's quick-death window (30 s)");
+
+        // What a root object declares (the initial properties the core gives it)
+        const declared = rules.rootProperties("import QtQuick\n// property var top\nItem {\n    property var module: null\n    readonly property int x: 1\n"
+            + "    required property var context\n    Rectangle { property var inner }\n    property list<string> names\n    // property var commented\n"
+            + "    /* property var blocked */ property string text: \"property var fake; {\"\n    default property alias content: c.data\n}\n");
+        assertEqual(declared.join(","), "module,context,names,text,content", "rootProperties: the root's own, writable ones; not nested, commented or quoted");
+        assertEqual(JSON.stringify(rules.initialProperties(["module"], { module: 1, context: 2 })), "{\"module\":1}", "initialProperties: only the declared");
+        assertEqual(rules.rootProperties(null).length, 0, "rootProperties: no text, none");
+
+        // The import check: qs.tests only in a module's tests
+        assertEqual(rules.importWarnings("tests/T.qml", "import qs.tests\nItem {}", true).length, 0, "a test suite may import qs.tests");
+        assertEqual(rules.importWarnings("tests/T.qml", "import \"..\"\nItem {}", true).length, 0, "a suite in tests/ importing \"..\": the module's own directory");
+        assertEqual(rules.importWarnings("tests/T.qml", "import \"../..\"\nItem {}", true).length, 1, "… \"../..\" leaves it");
+        assertEqual(rules.importWarnings("Main.qml", "import qs.tests\nItem {}", false).length, 1, "… a module's own file may not (the shell has no qs.tests)");
+
+        // Reserved ids: every core IPC target and settings page id shaped like a module id
+        for (const target of ["tablet", "locktest", "shelltest", "lockscreen", "settings", "modules", "profiles", "fakevpn",
+                              "authentication", "wallpaper", "popups", "controls", "tray-menu"])
+            assert(rules.reservedIds.includes(target), "reserved: " + target);
     }
 }

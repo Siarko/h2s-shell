@@ -1,8 +1,8 @@
 # Modules: integrations as separate packages
 
-Written 2026-11-15. M0 and M1 are implemented (the test bed, the rules, the host,
-discovery and safe mode in the launcher; §3 and §5 say what was built); the rest is a
-plan. The first module is Tailscale ([tailscale.md](tailscale.md)); dictation (TODO
+Written 2026-11-15. M0, M1 and M2 are implemented (the test bed, the rules, the host,
+discovery and safe mode; the module API 1.0, the registries and slots — §3, §3a and §5 say
+what was built); the rest is a plan. The first module is Tailscale ([tailscale.md](tailscale.md)); dictation (TODO
 11.24) is the natural second.
 
 "Verified" below means read in Quickshell 0.3.2's source or tried in a headless
@@ -62,28 +62,36 @@ h2s-shell-tailscale/              its own repository and flake
 ```
 
 - **Discovery** (built, M1): `scripts/launch.sh` (`discover_modules`) builds
-  `H2S_SHELL_MODULES` — colon-separated canonical (`pwd -P`) directories holding a
-  `module.json`, each once — from the entries the variable held when the launcher started
-  (each a module directory or a directory of modules), then
-  `${XDG_DATA_HOME:-~/.local/share}/h2s-shell/modules/*`, then each
-  `$XDG_DATA_DIRS/h2s-shell/modules/*`. Before every start of the shell, so a restart picks
-  up what was installed since. An inherited list (a `--restart` run from inside the shell)
-  does not reorder: entries the search finds again keep their search place. The shell takes
-  the first module of an id and reports the later ones (`duplicate`).
+  `H2S_SHELL_MODULES` — colon-separated canonical (`cd -P`) directories holding a
+  `module.json`, each once — searching, in this order: the entries of
+  `H2S_SHELL_MODULE_PATH` (a developer's checkouts: each a module directory or a directory of
+  modules), `${XDG_DATA_HOME:-~/.local/share}/h2s-shell/modules/*`, then each data dir's
+  `h2s-shell/modules/*` — the data dirs are `H2S_SHELL_MODULE_DATA_DIRS` if set (empty: none;
+  the lock test bed's default), else `$XDG_DATA_DIRS`. Input and output are separate
+  variables: `H2S_SHELL_MODULE_PATH` is only read, `H2S_SHELL_MODULES` only written (the shell
+  and all it starts inherit it; a `--restart` from there ignores it, so an updated module's
+  old path or a removed module is not kept). Before every start of the shell, so a restart
+  picks up what was installed since; in a process of its own under a hard 3 s bound (a hung
+  mount must not keep a crashed lock screen from coming back): late or failed, the shell
+  starts without modules, logged. At most 200 modules and 64 KiB (beyond ~128 KiB the
+  shell's execve would fail); the rest is dropped, logged. The shell takes the first module
+  of an id and reports the later ones (`duplicate`).
 - **NixOS**: `programs.h2s-shell.modules = [ pkg ];` re-wraps the launcher with the
   modules' paths; a module flake also exports a NixOS module for its system side.
   The API version is checked at evaluation.
-- **API**: modules import `qs.api` (a facade: theme read-only, notify, setFact, own
-  settings, a per-module store) and `qs.components`. The API has its own `major.minor`,
-  separate from the shell's version, with its own CHANGELOG heading. Built so far (M1):
-  only the version, `Api.version` in `api/Api.qml` ("1.0"); a module's `api` is
-  compatible when the major is the same and the shell's minor is not below the one asked.
+- **API**: modules import `qs.api` and `qs.components` — the surface is §3a ("Module API
+  1.0", built in M2). The API has its own `major.minor` (`Api.version`, kept in
+  `ModuleRules.apiVersion` so the host never imports `qs.api`), separate from the shell's
+  version, with its own CHANGELOG heading ("Module API"); a module's `api` is compatible
+  when the major is the same and the shell's minor is not below the one asked.
 - **Enable/disable**: global, in Settings → Modules, which also lists version, API
-  status, load errors and missing tools. Built (M1): `Config.disabledModules` (ids; a module
-  is on unless listed), `ModuleHost.setEnabled(id, on)`; turning one off destroys its main
-  and drops its contributions, on again re-creates them.
+  status, load errors and missing tools (M4). Built: `Config.disabledModules` (ids; a module
+  is on unless listed), `ModuleHost.setEnabled(id, on)` and, since M2, `qs ipc call modules
+  setEnabled <id> <bool>` (the lock test bed uses it; Settings → Modules will call the same);
+  turning one off destroys its main, drops its contributions and facts and turns its
+  handle's `active` off; on again re-creates them.
 
-### The manifest, as built (M1; `singletons/ModuleRules.qml` is the reference)
+### The manifest, as built (M1–M2; `singletons/ModuleRules.qml` is the reference)
 
 | Field | | Rule |
 |---|---|---|
@@ -93,48 +101,210 @@ h2s-shell-tailscale/              its own repository and flake
 | `api` | required | `"major.minor"` |
 | `description` | optional | text ≤ 1000 (else a warning) |
 | `main` | optional | a `.qml` file of the module, created while it is enabled; a bad path fails the module |
-| `widgets` | optional | `[{ type, name, widget, popup?, popupPanel?, settings?, multiple? }]` (WidgetRegistry's fields); `type`, `popup`: `<id>` or `<id>.<name>` |
-| `settingsPages` | optional | `[{ id, label, component, tab?, parent? }]`; `id`: `<id>` or `<id>.<name>`; `tab`: behaviour (default) / appearance / system; `parent`: a core page group |
+| `widgets` | optional | `[{ type, name, widget, popup?, popupPanel?, settings?, multiple?, presetDefaults? }]` (WidgetRegistry's fields); `type`, `popup`: `<id>` or `<id>.<name>`; `presetDefaults` (API 1.0): `{ key: plain JSON }`, ≤ 50 keys, 16 KiB — WidgetPresets' defaults for the type |
+| `settingsPages` | optional | `[{ id, label, component, tab?, parent? }]`; `id`: `<id>` or `<id>.<name>`; `tab`: behaviour (default) / appearance / system; `parent`: a core page group (its tab wins) or `modules`; another parent: shown under Modules, with a warning in the log |
 | `settings` | optional | `[{ key, label, type, default, group?, global?, hint?, suffix?, min?, max?, options? }]` (SettingsSchema's fields); `key`: `mod.<id>.<name>`; `type`: bool, number, slider, interval, enum, string, stringList; the default must fit; `group` defaults to `mod.<id>` |
 | `facts` | optional | `[{ fact, label, type, options? }]` (ProfileRules.factTypes' fields); `fact`: `<id>.<name>`; `type`: bool, number, percent, string, enum |
-| `slots` | optional | `[{ slot, component }]`; `slot` a dotted name |
+| `slots` | optional | `[{ slot, component }]`; `slot` a dotted name, one of the slot table (§3a; another: a warning, shown nowhere) |
 | `requires.programs` | optional | program names looked up on PATH |
 | `setupHints` | optional | texts, shown while a program is missing |
 | `tests` | optional | `.qml` suites (`tests/run-modules.sh`) |
 
-Files are relative paths inside the module's directory (no `..`, no leading `/`, `.qml`).
-A required field missing or malformed: the module fails. A bad entry in a list (outside the
-namespace, a default of the wrong type, a path outside the directory, listed twice): that
-entry is dropped with an error, the module still loads. Unknown fields (top level and in
-entries) are kept (`raw`) and reported as warnings. At most 256 KiB, 200 entries per list.
+Files are relative paths inside the module's directory (no `..`, no leading `/`, `.qml`), and
+(M2, enforced before any is read or loaded) each must resolve, symlinks followed, to a
+regular file inside the module's canonical directory of at most 1 MiB — the files the
+manifest names (main, components, tests) and those its `qmldir` lists. A required field
+missing or malformed, a bad `main` or a bad `qmldir` file: the module fails. A bad entry in a
+list (outside the namespace, a default of the wrong type, a path outside the directory or
+failing the file check, listed twice): that entry is dropped with an error, the module still
+loads. Unknown top-level fields are kept (`raw`) and reported as warnings; unknown fields in
+an entry are dropped with a warning (nothing would read them). At most 256 KiB, 200 entries
+per list. A module's IPC targets are `<id>` or `<id>.<name>` (convention: the core's
+targets are reserved ids, which a suite derives from the tree).
 
-### The host and the status model, as built (M1)
+### The host and the status model, as built (M1–M2)
 
 `singletons/ModuleHost.qml` (an instance per host; the shell's is in the `Modules`
 singleton, fed from the environment; `shell.qml` touches it first). It reads each manifest
-with a blocking `FileView` read (missing or unreadable: the module fails with FileView's
-reason), checks it, reads the files the manifest and the module's `qmldir` name for the
-import check, looks the required programs up on PATH (one process; the module is `pending`
-until it answers), waits for the config (which modules are off), then creates each `main` by
-`file://` URL. Each module's status (`ModuleRules.statusOf`): `id, name, version, api,
-description, directory, state, enabled, errors, warnings, missingPrograms, setupHints,
-shadowedBy`; `state` is one of `loaded`, `disabled`, `failed`, `incompatible`,
-`missing-program`, `duplicate`, `pending`, `safe-mode`. The merged contributions of the
-loaded modules (`widgetEntries`, `settingsPages`, `settingEntries`, `factTypes`,
-`slotContributions(name)`) are ordered by module id, then manifest order, with absolute
-`file://` URLs. `qs ipc call modules list` prints all of it as JSON (read-only).
+with a blocking `FileView` read (only a regular file is read; missing or unreadable: the
+module fails with FileView's reason), checks it, checks every file the module names (one
+process: resolved inside the directory, regular, ≤ 1 MiB — entries failing it dropped, a
+failing main or qmldir file fails the module), reads the files left for the import check
+(and for the properties their root objects declare), counts the start (the start guard),
+looks the required programs up on PATH (one process), waits for the config (which modules
+are off), then creates each `main` by `file://` URL with its handle as `module`. Each check
+has a 5 s deadline (`checkTimeoutMs`): what it did not answer counts as failed (a program as
+missing, with the reason), so nothing stays `pending` for good. Each module's status
+(`ModuleRules.statusOf`): `id, name, version, api, description, directory, state, enabled,
+errors, warnings, missingPrograms, setupHints, shadowedBy`; `state` is one of `loaded`,
+`disabled`, `failed`, `incompatible`, `missing-program`, `duplicate`, `pending`,
+`safe-mode`; run-time failures (a slot contribution or a page that did not build) are added
+to `errors` and the module stays loaded. The merged contributions of the loaded modules
+(`widgetEntries`, `settingsPages`, `settingEntries`, `factTypes`, `slotContributions(name)`,
+`factValues`) are ordered by module id, then manifest order, with absolute `file://` URLs,
+and are reassigned only when they change. `qs ipc call modules list` prints all of it as JSON,
+with `safeModeReason` (which counter put the shell in safe mode) and `startGuard`.
+
+The start guard (M2): Quickshell relaunches a crashed shell in place (execve, same pid)
+unless it crashed within 10 s of starting, so the launcher — which sees processes — misses a
+module that crashes the shell later, and `launch.sh -d` has no supervisor. Before loading any
+module the host runs `ModuleRules.startGuardScript` on `$XDG_RUNTIME_DIR/h2s-shell-module-starts`
+(a plain file only; garbage counts as nothing), which holds `<pid>:<crash> <count>` — `crash`
+the coredump pid Quickshell's handler put in the relaunch's environment
+(`__QUICKSHELL_CRASH_DUMP_PID`, still in `/proc/<pid>/environ` after Quickshell unsets it).
+A fresh process counts 0 (a launch, a `--restart`, a launcher restart: the launcher's to
+count); a relaunch of the same pid after another crash counts one more; a reload of the same
+relaunched process changes nothing. A start that lives 30 s — the launcher's quick-death
+window, so the two counters tell one story; `H2S_SHELL_TEST_MODULE_GUARD_MS` shortens it —
+writes its count back to 0. Two relaunches in a row: safe mode, `safeModeReason` says so (as
+it says when the launcher asked). An orderly quit needs nothing — and could do nothing:
+Quickshell stops all JavaScript before it tears a generation down (read in its source: `qs
+kill` → `EngineGeneration::quit` → the engine interrupted), so neither
+`Component.onDestruction` nor `aboutToQuit` runs a handler then. Not under the test runners
+(`Config.readOnly`); a host's `guardFile` and `guardIdentity` are the suites' seams.
 
 What the guard contains: a file that does not compile or imports something missing, a main
-that cannot be created (`failed`, with the error). What it cannot even see: an exception in
-a module's signal handler (`Component.onCompleted` included) or binding — the engine prints
-it and carries on; anything a module's singletons do later; a module that blocks the event
-loop or crashes the process (safe mode, §4 item 5). A module's singletons outlive its main:
-turning it off destroys the main, not them.
+that cannot be created (`failed`, with the error), a file that is a link out of the module,
+a FIFO or too large (never opened). What it cannot even see: an exception in a module's
+signal handler (`Component.onCompleted` included) or binding — the engine prints it and
+carries on; anything a module's singletons do later (the contract below); a module that
+blocks the event loop or crashes the process (safe mode, §4 item 5). A module's singletons
+outlive its main: turning it off destroys the main, not them.
+
+## 3a. Module API 1.0 (built in M2)
+
+The module author's whole world: `import qs.api` and `import qs.components` (the VPN
+provider base type, `components/VpnProvider.qml`, comes with the VPN branch). Everything
+below is API 1.0; adding anything is a minor bump, changing or removing anything a major
+one (`ModuleRules.apiVersion`, the CHANGELOG's "Module API" heading). The doc comments in
+`api/*.qml`, `components/ModuleSlot.qml` and `ModuleRules.slotTable` are the specification.
+
+**How a module's file gets its handle.** The host gives the module's `main`, and the core
+every object it builds from the manifest — bar widgets, popup panels, widget settings panes,
+settings pages, slot contributions — the module's handle as the initial property `module`,
+set before `Component.onCompleted`, when the file's root object declares it
+(`property var module`; the core reads what the root declares from the text the host already
+read, so a Loader is never handed a property it would warn about). Anything else — a
+singleton, an object the module makes itself — calls `Api.moduleAt(Qt.resolvedUrl("."))`:
+the handle of the module whose directory holds the file. A module's own assets:
+`Qt.resolvedUrl("icons/x.svg")` or `module.url("icons/x.svg")`.
+
+| `Api.` | Signature | What it does |
+|---|---|---|
+| `version` | string | "1.0" |
+| `theme` | ThemeTokens | the theme's tokens, read-only, following the theme in use: colours (`accent`, `textPrimary`, … the core's semantic ones), `fontFamily`, `fontSize*`, `fontScale`, frozen groups (`capsule`, `popup`, `row`, `listItem`, `button`, `iconButton`, `pill`, `field`, `checkbox`, `tooltip`, `border`, `settings`), `reduceMotion`, `animationSpeed`, `scaled(w)`, `popupWidth(name, base)`, `duration(role)`, `curve(name)` |
+| `slots` | [{ name, where, context, since }] | the slot table (frozen) |
+| `module(id)` | → handle or null | a module's handle |
+| `moduleAt(url)` | → handle or null | the handle of the module whose directory holds `url` |
+| `notify(summary, options)` | | a notification (Notifier's options: body, urgency, icon, expireTime, actions, …) |
+| `openUrl(url)` | → bool | `xdg-open` through CommandAction; refuses "" and what starts with "-" |
+| `copy(text)` | | the clipboard |
+| `openSettings(pageId)` | | the settings window on a page (a core one's id or a module's) |
+
+| handle (`module.`) | Signature | What it does |
+|---|---|---|
+| `moduleId`, `name`, `version`, `directory` | strings | who it is (QML reserves `id`) |
+| `status` | object | its status, as `modules list` has it |
+| `active` | bool | true while enabled and loaded — what acts follows it |
+| `manifest` | object | the checked manifest, frozen |
+| `url(relative)` | → string | a file of the module as a URL |
+| `settingKey(key)` | → string | "greeting" → "mod.<id>.greeting"; "" when not its own |
+| `value(key)` | → value | its own setting as the profiles in effect have it (`Profiles.value`); undefined for any other key |
+| `setValue(key, value)` | → "" or why not | writes its own setting the way the shell writes from outside a settings page (`Profiles.writeInEffect`: pinned global, else the profile it comes from, else Full), checked against its declaration |
+| `setFact(name, value)` | → "" or why not | one of its declared facts ("ready" or "<id>.ready"), checked against its type (null: not known); only while active; pushed into `Profiles.facts` |
+| `facts` | object | its facts as the profiles see them |
+| `store` | ModuleStore | `data`, `ready`, `get(key, fallback)`, `set(key, value)` → bool, `remove(key)`, `flush()` — a JSON object in `~/.config/h2s_shell/modules/<id>.json` (the shell's private config directory), written a second after the last change as Config is, never while `Config.readOnly`; ≤ 1 MiB |
+| `notify(summary, options)` | | a notification under the module's name |
+| `openSettings(page)` | | its page: "" → "<id>", "x" → "<id>.x" |
+| `reportError(text)` | | a run-time failure, shown in its status |
+
+| Types | |
+|---|---|
+| `SettingEditor { key; editIndex? }` | the core's SchemaSettingEditor for one of its keys: the control for its type, where the value comes from, the global pin. `editIndex`: the profile edited — a Behaviour-tab page declares `property int editIndex` and passes it; the default is the profile a change from the shell lands in |
+| `SectionTitle`, `Heading`, `Hint`, `DetailRow { label; value }`, `SwitchRow { label; hint; checked; need; toggled() }` | the settings window's building blocks (thin wrappers of `panels/settings/*`, which stay where they are) |
+| `CommandAction` | `run(command, done, environment)` → done({ ok, code, lines, error }); one after another |
+| `CommandQuery` | a `Process`: `command`, `request()`, `done(lines)` |
+| `PrivilegedAction` | `run(command, what, done, environment)` through pkexec (`elevate`, a stand-in in suites) → done({ ok, code, dismissed (126: nothing shown), refused (127: `Authentication.reportDenied(what)`), lines, error }); other failures notified "<what> failed" unless `notifyFailures: false` |
+| `ThemeTokens`, `ModuleHandle`, `ModuleStore` | what `Api.theme`, a handle and its store are |
+
+**Settings pages.** A page (manifest `settingsPages`) is a plain Item — a `ColumnLayout` —
+laid out at the page's width and scrolled by the window by its `implicitHeight` (it must not
+scroll itself), built in a guard (`ModuleContribution`), with `module` and, when it declares
+it, `editIndex` kept current. Its place: under a core group (`parent`: `network`; the group's
+tab wins), under the Modules group (System tab; `parent: "modules"` or a parent the core does
+not have), or at the end of its tab.
+
+**Slots** (`components/ModuleSlot.qml`): `ModuleSlot { name; context; orientation; spacing }`
+in a core panel builds every loaded module's contribution to `name`, each in its own guard
+(`ModuleContribution`: compiled first; one that fails shows nothing and is recorded in its
+module's status), with `module` and `context` = `{ slot: name, …context }` passed again only
+when it changes by value (`ModuleRules.sameContext`: plain data by value, Qt objects and
+functions by identity), laid out in a column (or a row); zero-size and inert with none; a
+ScriptModel keyed by module + file. `Modules.slotComponent(slot, id)` hands one module's
+contribution out as a Component (the same guard, forwarding a `context` set on it) and
+`Modules.slotUrl(slot, id)` its URL, for core places that take one per module.
+
+| Slot | Where | Context (besides `slot`) | Since |
+|---|---|---|---|
+| `network.popup.sections` | the network popup, under the VPN, Ethernet and Wi-Fi sections, above the network list (whose height counts it) | `wifiEnabled`, `wifiConnected`, `ethernetConnected` | 1.0 |
+| `notifications.popup.top` | the notifications popup, above the list | `count` | 1.0 |
+| `settings.general.bottom` | Settings → Behaviour → General, at the end | `editIndex` (for SettingEditor) | 1.0 |
+| `network.vpn.row`, `network.vpn.card`, `network.vpn.page` | the VPN branch's three (tailscale.md §3), offered once it is merged: rows added here then | `vpnId`, `entryId`, `vpn`, `provider` (+ `open` / `close`) | 1.x (merge) |
+
+**Never on the lock screen**: no slot, no module object, nothing of `Modules` in
+`screensaver/`, `singletons/lock/`, `Lockscreen` or `pam/` — ever (§4 item 1;
+`tests/ModuleRegistriesTest.qml` checks the tree).
+
+**Lifetime: what turning a module off stops.** The host destroys the module's `main`; the
+core destroys every widget, popup, page and slot contribution built from it (a popup open on
+its panel closes; a bar entry of its type stays in the section, showing nothing). Its
+singletons survive (QML cannot unload them). So, the contract: **everything that acts — an
+IpcHandler, a Process, a Timer, a VPN provider, a registration anywhere — lives under the
+main object, or binds to `module.active`** (a singleton's timer: `running: module.active`);
+a singleton resets what it must on `activeChanged`. On again, a new main is made next to the
+singletons' old state. A module's IPC targets are `<id>` or `<id>.<name>`. The `good` fixture
+follows all of it, and `ModuleRegistriesTest` checks that nothing of it acts while it is off.
+
+**The registries** (§1's table, as built): `WidgetRegistry.entries` = `coreEntries` + the
+modules' (`moduleOf(type)`, `popupModule(content)`; `file://` URLs accepted);
+`WidgetPresets.defaults` = `coreDefaults` + `presetDefaults`; `SettingsSchema.entries` =
+`coreEntries` + `settingEntries` (popup-mode entries follow the registry; `coreDefaults` is
+what a new config's Full spells out, so a module's defaults are never frozen into it);
+`ProfileRules.factTypes` = `coreFactTypes` + the modules'; `Profiles.facts` = the modules'
+`factValues` under the core's and the simulated ones; `SettingsWindow.pages` = `corePages`
+merged (`ModuleRules.mergeSettingsPages`); `Popup` loads a module's panel by URL from the
+registry (created from `Qt.callLater` like every panel); the panel warm-up in `shell.qml`
+compiles modules' panels too; the bar section editor offers modules' types and names a type
+that is gone "(not installed)". With no module, each is the core's list itself.
+
+**After the VPN merge** (`VpnManager`, the VPN branch's one place): the three VPN slots
+become ordinary slots by changing `extrasFor` and `pageOf` to ask the registry, falling back
+to the provider's own properties (its test provider, a provider that is not a module's):
+
+```qml
+function extrasFor(slot: string, vpn) {
+    const read = providerOf(vpn);
+    if (read === null)
+        return null;
+    return Modules.slotComponent(slot, read.providerId)
+        ?? (slot === slots.row ? read.rowExtras : slot === slots.card ? read.cardExtras : null);
+}
+function pageOf(vpn): string {
+    const read = providerOf(vpn);
+    return read === null ? "" : (Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "");
+}
+```
+
+with the convention that a module's provider's `providerId` is its module's id
+(`VpnProvider { providerId: module.moduleId }`; VpnManager already imports `qs.singletons`, where `Modules` is), and three rows added to `ModuleRules.slotTable`.
+The page then gets its handle through `Api.moduleAt(Qt.resolvedUrl("."))` (the frame loads it
+by URL). VpnExtras needs no change: the Component forwards the `context` it sets.
 
 ## 4. Safety
 
 Enforced:
-1. No extension point in `screensaver/`, `singletons/lock/`, `Lockscreen`.
+1. No extension point in `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` (checked by
+   `ModuleRegistriesTest` from the tree).
 2. Settings keys forced into `mod.<id>.*`, facts into `<id>.*`: a module cannot touch
    `lockscreen.*` or any core key.
 3. Facts arrive as checked plain values; a module cannot break `Profiles`.
@@ -143,7 +313,12 @@ Enforced:
    Built (M1, the banner not yet): `supervise` counts deaths within 30 s of starting, in a
    row; from two on, the next start gets `H2S_SHELL_SAFE_MODE=1` (logged), and the host
    reads the manifests but loads nothing (state `safe-mode`). A start that lives 30 s ends
-   it. The variable is never inherited (a `--restart` from a safe-mode shell starts normally).
+   it — unless it then ends with status 255: the launcher sees the process, not Quickshell's
+   in-place crash relaunch, and 255 is Quickshell giving up on a crash within 10 s of a
+   (re)start, so it counts as quick. The variable is never inherited (a `--restart` from a safe-mode shell starts normally).
+   The shell's own counter (M2, §3 "the start guard"): two of Quickshell's in-place relaunches
+   after a crash in a row, neither living 30 s, put it in safe mode too — what the launcher
+   cannot see (`launch.sh -d` included). `modules list` says which one (`safeModeReason`).
 6. A lock-bed test: a broken and a busy module installed — the lock still locks and
    unlocks.
    Built (M1) with the broken fixtures (`tests/lock/tests/modules.sh`); a busy one is not
@@ -153,7 +328,9 @@ Convention only (QML has no sandbox): a load-time check warns about a module who
 import anything outside an allowlist (`QtQuick*`, `Quickshell`, `Quickshell.Io`,
 `qs.api`, `qs.components`, its own directory) — a warning in its status, by the owner's
 decision (§7), not a refusal. Built (M1): `QtQml*` is allowed too; the files checked are
-those the manifest and the module's `qmldir` name. It guards against mistakes, not malice.
+those the manifest and the module's `qmldir` name; a quoted import is resolved from the
+importing file (`tests/` importing ".." is the module's own); `qs.tests` is allowed only in
+the manifest's `tests` (the running shell has no `qs.tests`). It guards against mistakes, not malice.
 
 Not solvable in-process: a module that blocks the event loop freezes the shell, the
 lock screen with it. The compositor keeps the session locked, but nobody can unlock
@@ -179,8 +356,15 @@ stage; the unit suites and a module test runner are the gate.
   `Modules` singleton (guarded loading, status, merged lists, enable/disable, the
   `modules` IPC) with `ModulesTest`; discovery and safe mode in `launch.sh`, with the
   lock-bed tests `modules` and `modules-launcher`.
-- **M2 — the API and the registries.** `qs.api`; WidgetRegistry, WidgetPresets,
-  SettingsSchema, facts, settings pages take modules' entries.
+- **M2 — the API, the registries and slots.** Done: `qs.api` 1.0 (§3a: the facade, the
+  handle injected as `module`, the per-module store, facts, the settings building blocks,
+  command helpers with pkexec); WidgetRegistry, WidgetPresets, SettingsSchema, profile facts,
+  settings pages, popups and the panel warm-up take modules' entries, reactively;
+  `ModuleSlot` and three slots; `presetDefaults` in the manifest; the file check, the start
+  guard, check deadlines and the `module.active` contract (from the M1 review);
+  `modules setEnabled` over IPC. Fixtures `broken-slot` and `link-escape`; suites
+  `ModuleRegistriesTest`, the `good` fixture's own (`GoodApiTest`), the lock-bed `modules`
+  test with the `good` widget in the bar.
 - **M3 — the VPN provider seam** in the core, with a lasting "needs attention" state
   (tailscale.md §3). Independent of M1–M2; can run beside them.
 - **M4 — packaging and operation.** `withModules` and the NixOS option; Settings →
@@ -221,7 +405,10 @@ stage; the unit suites and a module test runner are the gate.
   - Needs `git` on PATH (already a runtime program). A failed fetch never blocks the
     shell: the module is simply absent, with the reason shown.
   - NixOS keeps its own declarative route as well (`programs.h2s-shell.modules`), for
-    modules pinned by the system flake; a module installed both ways: the Nix one wins.
+    modules pinned by the system flake; a module installed both ways: the Nix one wins
+    (its paths go into the wrapper's `H2S_SHELL_MODULE_PATH`, searched before
+    `~/.local/share/h2s-shell/modules`; set, not prefixed — the shell's environment, which a
+    `--restart` from inside it inherits, carries the previous generation's value).
 - **Signatures** (optional, later stage): a module's commit or tag may be signed (git's
   SSH or GPG signatures); the user keeps a list of trusted keys; Settings → Modules
   shows "signed by …" / "unsigned" / "signature does not match", and a setting can

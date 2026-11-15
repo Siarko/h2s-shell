@@ -17,8 +17,9 @@ ReorderList {
 
     signal edited(var newEntries)
 
+    // A type no longer known (its module turned off or uninstalled) is kept, and said so
     function displayName(type) {
-        return WidgetRegistry.displayName(type)
+        return WidgetRegistry.entry(type) ? WidgetRegistry.displayName(type) : type + " (not installed)"
     }
 
     items: (entries ?? []).map(entry => entry.type)

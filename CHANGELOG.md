@@ -10,12 +10,35 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Module API
+The interface modules are written against (`qs.api`), versioned on its own
+(`Api.version`, docs/plans/modules.md "Module API 1.0").
+- 1.0: `Api` (version, theme tokens, slot table, `module(id)`, `moduleAt(url)`, notify,
+  openUrl, copy, openSettings); a module's handle (its status, `active`, manifest, files, own
+  settings read and written, facts, a JSON store, notifications, its settings pages, runtime
+  errors), injected as `module`; `SettingEditor`, `SectionTitle`, `Heading`, `Hint`,
+  `DetailRow`, `SwitchRow`; `CommandAction`, `CommandQuery`, `PrivilegedAction` (pkexec);
+  slots `network.popup.sections`, `notifications.popup.top`, `settings.general.bottom`;
+  manifest field `widgets[].presetDefaults`; every file a manifest names must be a regular
+  file inside the module's directory (≤ 1 MiB).
+
 ### Added
-- Modules (first stage, no module UI yet): the launcher finds modules in
-  `~/.local/share/h2s-shell/modules`, each `$XDG_DATA_DIRS/h2s-shell/modules` and
-  `H2S_SHELL_MODULES`; `ipc call modules list` reports each one's state, errors and warnings.
-- Safe mode: after the shell died within 30 s of starting twice in a row, the launcher
-  starts it without modules (and says so in its log); a start that lasts ends it.
+- Modules (no Settings → Modules page yet): the launcher finds modules in
+  `~/.local/share/h2s-shell/modules`, each system data directory's `h2s-shell/modules` and the
+  directories `H2S_SHELL_MODULE_PATH` names, and hands them to the shell in
+  `H2S_SHELL_MODULES`; `ipc call modules list` reports each one's state, errors and warnings,
+  `ipc call modules setEnabled <id> <true|false>` turns one off or on.
+- Modules contribute to the shell: bar widgets with their popups, preset defaults and preset
+  panes; settings pages (under a core group, a "Modules" group, or at the end of a tab);
+  settings of their own (`mod.<id>.*`, per profile or global, with the popup-mode setting of
+  their widgets made automatically); profile facts (`<id>.*`) that profile conditions can test
+  (the condition editor now also compares numbers and texts); and content in named slots of
+  the network popup, the notifications popup and Settings → General. Turning a module off
+  takes all of it away at once, without a restart; a bar entry of a widget that is gone stays
+  and shows nothing ("not installed" in the section editor).
+- Safe mode: after the shell died within 30 s of starting twice in a row — seen by the
+  launcher, or by the shell itself when Quickshell restarted it in place — it starts without
+  modules (and says why in `modules list` and the log); a start that lasts 30 s ends it.
 - Lock screen: locks when systemd-logind asks for it — `loginctl lock-session`, or a power
   key or lid switch set to `lock` in logind.conf — and on `ipc call lockscreen lock`; and
   unlocks on logind's Unlock for the shell's own session (`loginctl unlock-session`, the

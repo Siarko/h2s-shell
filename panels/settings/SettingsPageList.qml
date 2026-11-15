@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.components
 import qs.singletons
 
@@ -99,7 +100,12 @@ Item {
 
         Repeater {
             id: _rows
-            model: root.pages
+            // ScriptModel, never the bare array (modules' pages come and go) — "The Repeater
+            // crash" in docs/ARCHITECTURE.md; a page keeps its row while its id stays
+            model: ScriptModel {
+                objectProp: "id"
+                values: root.pages
+            }
 
             // A page's row, with room above it for a separator when it has one
             Item {

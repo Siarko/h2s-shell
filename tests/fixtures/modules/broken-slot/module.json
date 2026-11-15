@@ -1,0 +1,10 @@
+{
+    "id": "broken-slot",
+    "name": "Broken slot fixture",
+    "version": "0.1.0",
+    "api": "1.0",
+    "description": "Loads; its contribution to a slot does not compile — the slot shows nothing of it, its status says why",
+    "slots": [
+        { "slot": "notifications.popup.top", "component": "Broken.qml" }
+    ]
+}

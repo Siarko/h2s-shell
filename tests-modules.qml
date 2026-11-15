@@ -6,7 +6,8 @@ import qs.tests
 
 // Run with: tests/run-modules.sh <module dir>… (headless, as tests/run-unit.sh runs
 // tests.qml). Loads the modules named in H2S_TEST_MODULES (canonical, colon-separated) with
-// a ModuleHost — exactly as the shell does — then creates each loaded module's suites (its
+// the shell's own module host (the Modules singleton's, so the core's registries see the
+// modules as in the shell) — exactly as the shell loads them — then creates each loaded module's suites (its
 // manifest's "tests") by URL. A module that did not load, one that lists no suites and a
 // suite that does not compile are FAILs. Imports qs.tests so that Quickshell makes the
 // TestCase type available to the modules' suites (they are loaded by URL).
@@ -16,7 +17,9 @@ QtObject {
     // First: the suites use the real Config singleton, whose file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
 
-    property var host: ModuleHost {}
+    // The shell's host: a module's suites see the registries, handles and slots as they are in
+    // the shell (its environment gave it no module: H2S_SHELL_MODULES is not set here)
+    readonly property var host: Modules.host
     property var _suites: []
     property string _phase: "loading"
     property int _waited: 0

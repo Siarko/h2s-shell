@@ -1,0 +1,11 @@
+{
+    "id": "link-escape",
+    "name": "Link escape fixture",
+    "version": "0.1.0",
+    "api": "1.0",
+    "description": "Its main and a widget are links out of its directory: never loaded (the main fails the module)",
+    "main": "Main.qml",
+    "widgets": [
+        { "type": "link-escape", "name": "Outside", "widget": "Outside.qml" }
+    ]
+}

@@ -8,6 +8,9 @@ import qs.screensaver
 import qs.panels
 import qs.wallpaper
 import qs.polkit
+// Not used here: imported so that Quickshell makes qs.api, which modules import (loaded by
+// URL, they are not reached by its scan of this tree)
+import qs.api
 
 // Top-level shell root: one Bar, one Hud and a wallpaper per screen, one settings window
 QtObject {

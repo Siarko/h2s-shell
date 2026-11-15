@@ -24,7 +24,7 @@ Singleton {
     // from a handler of a binding on it is a binding loop.
     function _seedIfNeeded() {
         if (Config.ready && _powerProfilesKnown && Config.profiles === "")
-            Config.profiles = JSON.stringify(ProfileRules.seedProfiles(SettingsSchema.defaults,
+            Config.profiles = JSON.stringify(ProfileRules.seedProfiles(SettingsSchema.coreDefaults,
                                                                         _powerProfileName(PowerProfiles.profile)))
     }
 
@@ -151,7 +151,7 @@ Singleton {
 
     function _parse(json) {
         if (json === "")
-            return ProfileRules.seedProfiles(SettingsSchema.defaults)
+            return ProfileRules.seedProfiles(SettingsSchema.coreDefaults)
         try {
             const parsed = JSON.parse(json)
             if (Array.isArray(parsed))
@@ -335,7 +335,10 @@ Singleton {
         "panel.open": Object.keys(root._openPanels)
     })
 
-    readonly property var facts: Object.assign({}, realFacts, simulated)
+    // The modules' facts (Modules.factValues: <id>.*, plain values checked against their
+    // declared types — nothing a module sets can throw here) under the core's, then what is
+    // simulated
+    readonly property var facts: Object.assign({}, Modules.factValues, realFacts, simulated)
 
     // Settings pinned as global: { key: value }
     readonly property var globals: {

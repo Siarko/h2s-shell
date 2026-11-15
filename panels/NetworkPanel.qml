@@ -215,6 +215,15 @@ Item {
             onClicked: WifiManager.disconnect()
         }
 
+        // Modules' content under the connection sections (slot network.popup.sections,
+        // ModuleRules.slotTable). Above the network list, whose height already counts it
+        ModuleSlot {
+            width: parent.width
+            name: "network.popup.sections"
+            context: ({ wifiEnabled: WifiManager.wifiEnabled, wifiConnected: WifiManager.wifiConnected,
+                        ethernetConnected: EthernetManager.ethernetConnected })
+        }
+
         // ---- Divider above available networks ----
         Rectangle {
             visible: WifiManager.wifiEnabled

@@ -218,7 +218,17 @@ Item {
             width: parent.width
             height: item ? item.implicitHeight : 0
             visible: root.currentPreset !== ""
-            source: visible ? WidgetRegistry.settingsUrl(root.widgetType) : ""
+            // A module's pane gets its module's handle as `module` before it completes
+            readonly property string _url: visible ? WidgetRegistry.settingsUrl(root.widgetType) : ""
+            function _load() {
+                const owner = WidgetRegistry.moduleOf(root.widgetType)
+                if (_url === "")
+                    source = ""
+                else
+                    setSource(_url, owner !== "" ? Modules.initialProperties(_url) : {})
+            }
+            on_UrlChanged: _load()
+            Component.onCompleted: _load()
             onLoaded: {
                 item.presetName = Qt.binding(() => root.currentPreset)
                 if (item.editIndex !== undefined)

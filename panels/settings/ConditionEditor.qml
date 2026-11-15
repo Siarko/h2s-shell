@@ -15,6 +15,10 @@ Item {
     signal removed
 
     readonly property var factType: ProfileRules.factType(leaf.fact)
+    // Compared with a number: below / above (percent; a module's number)
+    readonly property bool _compared: factType?.type === "percent" || factType?.type === "number"
+    property IntValidator _percentRange: IntValidator { bottom: 0; top: 100 }
+    property DoubleValidator _anyNumber: DoubleValidator { notation: DoubleValidator.StandardNotation }
     property bool _pickingFact: false
 
     // Popup content keys, for "Popup open"
@@ -25,6 +29,10 @@ Item {
         const type = ProfileRules.factType(fact)?.type;
         if (type === "percent")
             return { fact: fact, lt: 20 };
+        if (type === "number")
+            return { fact: fact, gt: 0 };
+        if (type === "string")
+            return { fact: fact, is: "" };
         if (type === "enum")
             return { fact: fact, is: ProfileRules.factType(fact).options[0] };
         if (type === "panel")
@@ -71,11 +79,11 @@ Item {
                 onClicked: root.changedTo({ fact: root.leaf.fact, is: false })
             }
 
-            // percent: below / above, and the number
+            // percent and number (a module's fact): below / above, and the number
             Pill {
                 fontSize: Theme.fontSizeBody
                 minimumHeight: 24
-                visible: root.factType?.type === "percent"
+                visible: root._compared
                 label: "below"
                 picked: root.leaf.lt !== undefined
                 onClicked: root.changedTo({ fact: root.leaf.fact, lt: root.leaf.gt ?? root.leaf.lt ?? 20 })
@@ -83,21 +91,21 @@ Item {
             Pill {
                 fontSize: Theme.fontSizeBody
                 minimumHeight: 24
-                visible: root.factType?.type === "percent"
+                visible: root._compared
                 label: "above"
                 picked: root.leaf.gt !== undefined
                 onClicked: root.changedTo({ fact: root.leaf.fact, gt: root.leaf.lt ?? root.leaf.gt ?? 80 })
             }
             InputField {
                 id: _percentInput
-                visible: root.factType?.type === "percent"
+                visible: root._compared
                 width: 52
                 text: root.leaf.lt ?? root.leaf.gt ?? ""
-                input.validator: IntValidator { bottom: 0; top: 100 }
+                input.validator: root.factType?.type === "percent" ? root._percentRange : root._anyNumber
                 onEditingFinished: {
                     if (!input.acceptableInput)
                         return;
-                    const number = parseInt(text);
+                    const number = Number(text);
                     root.changedTo(root.leaf.gt !== undefined
                         ? { fact: root.leaf.fact, gt: number }
                         : { fact: root.leaf.fact, lt: number });
@@ -111,6 +119,14 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary
+            }
+
+            // string (a module's fact): is this text
+            InputField {
+                visible: root.factType?.type === "string"
+                width: 120
+                text: typeof root.leaf.is === "string" ? root.leaf.is : ""
+                onEditingFinished: root.changedTo({ fact: root.leaf.fact, is: text })
             }
 
             // enum and panel: one pill per value

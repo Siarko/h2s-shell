@@ -20,7 +20,7 @@ Singleton {
     //   percent — { fact, lt|gt: 0–100 }
     //   enum    — { fact, is: one of `options` }
     //   panel   — { fact, is: a popup content key } (the fact is the list of open ones)
-    readonly property var factTypes: [
+    readonly property var coreFactTypes: [
         { fact: "power.onBattery", label: "On battery", type: "bool" },
         { fact: "battery.percent", label: "Battery level", type: "percent" },
         { fact: "power.profile", label: "System power profile", type: "enum",
@@ -30,6 +30,9 @@ Singleton {
         { fact: "window.fullscreen", label: "Fullscreen window", type: "bool" },
         { fact: "panel.open", label: "Popup open", type: "panel" }
     ]
+    // The core's, then the loaded modules' (Modules.factTypes: <id>.*; types bool, number,
+    // percent, string, enum), which go with their module
+    readonly property var factTypes: ModuleRules.mergeFactTypes(coreFactTypes, Modules.factTypes)
 
     function factType(fact) {
         return factTypes.find(type => type.fact === fact) ?? null;

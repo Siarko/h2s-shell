@@ -115,7 +115,10 @@ PanelWindow {
         // 0 to 1 as it grows in, back to 0 as it goes; drawn at full size meanwhile and
         // clipped, so its content does not squeeze
         property real _shown: bar._contentAnimated ? 0 : 1
-        Component.onCompleted: _shown = Qt.binding(() => leaving ? 0 : 1)
+        Component.onCompleted: {
+            _shown = Qt.binding(() => leaving ? 0 : 1)
+            _load()
+        }
         Behavior on _shown {
             NumberAnimation {
                 duration: Theme.duration(widgetLoader.leaving ? "exit" : "enter")
@@ -135,7 +138,25 @@ PanelWindow {
         opacity: _shown
         Layout.fillHeight: !bar._vertical
         Layout.fillWidth: bar._vertical
-        source: WidgetRegistry.widgetUrl(modelData.type)
+        // By URL from WidgetRegistry; a module's widget gets its module's handle as `module`
+        // before it completes. A type that is gone (its module turned off, uninstalled) leaves
+        // the entry in its section and shows nothing; back, it shows again.
+        readonly property string _url: WidgetRegistry.widgetUrl(modelData.type)
+        on_UrlChanged: _load()
+        // The module looked up here, not bound: a binding of its own may not have caught up
+        // when the URL changes
+        function _load() {
+            const owner = WidgetRegistry.moduleOf(modelData.type)
+            if (_url === "")
+                source = ""
+            else
+                setSource(_url, owner !== "" ? Modules.initialProperties(_url) : {})
+        }
+        onStatusChanged: {
+            const owner = WidgetRegistry.moduleOf(modelData.type)
+            if (status === Loader.Error && owner !== "")
+                Modules.reportError(owner, "widget " + modelData.type + ": " + _url + " could not be loaded")
+        }
         onLoaded: bar._wireWidget(item, widgetLoader)
     }
 

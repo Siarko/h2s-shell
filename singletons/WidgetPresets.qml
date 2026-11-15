@@ -20,7 +20,7 @@ Singleton {
 
     // What a preset key is when the preset does not set it, or when an entry has no
     // preset at all. stt has none: its keys fall back to the Dictation profile settings.
-    readonly property var defaults: ({
+    readonly property var coreDefaults: ({
         "clock": { format: "hh:mm:ss" },
         "workspaces": { title: "", showSpecial: true, showNormal: true, nameMap: [] },
         "hardware": { capsule: ["cpu"], capsuleLabels: {} },
@@ -32,6 +32,9 @@ Singleton {
         // in ("" — the thresholds, as on battery)
         "battery": { percent: "right", thresholds: [], chargingColor: "" }
     })
+
+    // The core's, plus each loaded module widget's presetDefaults (its manifest)
+    readonly property var defaults: ModuleRules.mergePresetDefaults(coreDefaults, WidgetRegistry.entries.filter(entry => entry.module))
 
     function names(type) {
         return Object.keys(all[type] ?? {});

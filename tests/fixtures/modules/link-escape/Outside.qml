@@ -1,0 +1,1 @@
+../good/GoodPanel.qml

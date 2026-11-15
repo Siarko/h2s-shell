@@ -29,7 +29,7 @@ FloatingWindow {
     // profile, and Appearance, whose pages edit a theme (docs/plans/themes.md, stage 6;
     // TODO 10.10). `draftGroups`: the theme groups a page edits through a draft, for its ✎;
     // `separatorBefore`: a line above it in the sidebar.
-    readonly property var pages: [
+    readonly property var corePages: [
         // Profiles manages the profiles; the pages below the line edit the picked one
         { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
         { id: "general", label: "General", tab: "behaviour", component: generalComp, separatorBefore: true },
@@ -71,8 +71,27 @@ FloatingWindow {
         { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp }
     ]
 
+    // Every page: the core's, with the loaded modules' put in (ModuleRules.mergeSettingsPages:
+    // under a core group, under Modules, or at the end of their tab). A module's page has a
+    // `url` instead of a `component`, and is shown in the core's frame (_modulePageComp).
+    readonly property var _mergedPages: ModuleRules.mergeSettingsPages(corePages, Modules.settingsPages)
+    readonly property var pages: _mergedPages.pages
+    on_MergedPagesChanged: {
+        for (const problem of _mergedPages.problems)
+            console.warn("[Modules] " + problem);
+        // The open page went with its module: back to General
+        if (_pageIndex(selectedPage) < 0)
+            selectedPage = "general";
+        if (_pageIndex(_lastBehaviourPage) < 0)
+            _lastBehaviourPage = "general";
+        if (_pageIndex(_lastAppearancePage) < 0)
+            _lastAppearancePage = "themes";
+        if (_pageIndex(_lastSystemPage) < 0)
+            _lastSystemPage = "authentication";
+    }
+
     function _pageIndex(id) {
-        return pages.findIndex(page => page.id === id);
+        return (pages ?? []).findIndex(page => page.id === id);
     }
 
     function _pageOf(id) {
@@ -464,7 +483,7 @@ FloatingWindow {
                     anchors.fill: parent
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
-                    sourceComponent: root._currentPage.component
+                    sourceComponent: root._currentPage.component ?? (root._currentPage.url ? _modulePageComp : null)
                 }
 
                 ParallelAnimation {
@@ -488,6 +507,31 @@ FloatingWindow {
                     mouse.accepted = false;
                 else
                     root._openList = null;
+            }
+        }
+    }
+
+    // A module's page (its manifest's settingsPages), in the core's frame: the page's margins
+    // and scrolling are the window's; the page is a plain Item (a ColumnLayout) laid out at
+    // the page's width and scrolled by its implicitHeight — it must not scroll itself. Built
+    // in a guard (ModuleContribution): it gets its module's handle as `module` and, when it
+    // declares it, `editIndex` (the profile picked), kept current.
+    Component {
+        id: _modulePageComp
+        Flickable {
+            contentWidth: width
+            contentHeight: _modulePage.implicitHeight + 2 * Theme.settings.pageMargin
+            flickableDirection: Flickable.VerticalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            clip: true
+            ModuleContribution {
+                id: _modulePage
+                x: Theme.settings.pageMargin
+                y: Theme.settings.pageMargin
+                width: parent.width - 2 * Theme.settings.pageMargin
+                moduleId: root._currentPage.module ?? ""
+                url: root._currentPage.url ?? ""
+                properties: ({ editIndex: root.editIndex })
             }
         }
     }

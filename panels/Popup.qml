@@ -59,6 +59,12 @@ LazyLoader {
     // { menu, direction }. Kept per popup, so each screen's bar has its own.
     property var contentData: null
 
+    // A module's panel whose module was turned off: the popup closes (its panel was built
+    // from the module's file, which must not stay on screen)
+    readonly property bool _contentGone: active && contentType !== "tray-menu" && contentType !== "notifications"
+        && WidgetRegistry.popupPanelUrl(contentType) === ""
+    on_ContentGoneChanged: if (_contentGone) Qt.callLater(close)
+
     // The panel on screen, reported to Profiles for its "panel.open" fact. Closed from the
     // moment the close animation starts.
     readonly property string _shownPanel: active && !closing ? contentType : ""
@@ -540,11 +546,15 @@ LazyLoader {
                         // Clear both, since the loader is switched between the two kinds
                         contentLoader.sourceComponent = null;
                         contentLoader.source = "";
-                        if (wired)
+                        if (wired) {
                             contentLoader.sourceComponent = wired;
-                        else
-                            contentLoader.source = WidgetRegistry.popupPanelUrl(popupLoader.contentType)
-                                || WidgetRegistry.popupPanelUrl("calendar");
+                        } else {
+                            // A module's panel gets its module's handle as `module` before it
+                            // completes (and is created here, from Qt.callLater, like the rest)
+                            const owner = WidgetRegistry.popupModule(popupLoader.contentType);
+                            const url = WidgetRegistry.popupPanelUrl(popupLoader.contentType) || WidgetRegistry.popupPanelUrl("calendar");
+                            contentLoader.setSource(url, owner !== "" ? Modules.initialProperties(url) : {});
+                        }
                     }
 
                     // Held against the bar, centred along it: the background may reach

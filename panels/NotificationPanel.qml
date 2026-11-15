@@ -56,6 +56,15 @@ Item {
             }
         }
 
+        // Modules' content above the list (slot notifications.popup.top, ModuleRules.slotTable)
+        ModuleSlot {
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            name: "notifications.popup.top"
+            context: ({ count: notificationList.count })
+        }
+
         // Notification list
         ListView {
             id: notificationList

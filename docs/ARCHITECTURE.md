@@ -469,35 +469,101 @@ launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
 
 ### Modules
 
-Integrations as separate packages; the design and its state are in
-[plans/modules.md](plans/modules.md). What exists (stages M0–M1): the rules, the host and
-discovery — no registry reads the modules' contributions yet, and there is no `qs.api`
-facade beyond its version.
+Integrations as separate packages; the design, its state and the module API's reference
+(the facade, the slot table, the handle, the lifetime rules) are in
+[plans/modules.md](plans/modules.md). What exists (M0–M2): the rules, the host, discovery,
+the `qs.api` facade, the registries taking modules' contributions, and slots.
 
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleRules.qml`'s
   header and the plan's §3), a `qmldir` for its singletons, and QML loaded by `file://` URL —
-  never imported statically (a broken one would fail the whole config).
+  never imported statically (a broken one would fail the whole config). Every file the
+  manifest names must be a regular file inside the directory (a link out of it, a FIFO, a
+  file over 1 MiB: the entry is dropped, or the module fails for its main).
 - **Discovery**: `scripts/launch.sh` (`discover_modules`, before every start of the shell)
-  builds `H2S_SHELL_MODULES` — canonical module directories from the variable's own
-  entries, `~/.local/share/h2s-shell/modules/*`, each `$XDG_DATA_DIRS/h2s-shell/modules/*`.
-  After two deaths within 30 s of starting in a row, the supervisor starts the shell with
-  `H2S_SHELL_SAFE_MODE=1`: no module is loaded.
+  builds `H2S_SHELL_MODULES` (the shell's input; the launcher's output) — canonical module
+  directories from `H2S_SHELL_MODULE_PATH` (the developer's list), then
+  `~/.local/share/h2s-shell/modules/*`, then the system data directories'
+  `h2s-shell/modules/*` (`H2S_SHELL_MODULE_DATA_DIRS`). Safe mode (no module loads): after
+  two deaths within 30 s of starting in a row (the launcher: `H2S_SHELL_SAFE_MODE=1`), or two of
+  Quickshell's in-place relaunches after a crash in a row, neither living 30 s — which the
+  launcher does not see; the shell counts them (`$XDG_RUNTIME_DIR/h2s-shell-module-starts`).
 - **The host**: `singletons/ModuleHost.qml`, one instance in the `Modules` singleton, which
-  `shell.qml` touches before the bars. It reads the manifests at once, checks them with
-  `ModuleRules` (API version from `api/Api.qml`, namespaces `mod.<id>.*` / `<id>.*`, the
-  import allowlist as warnings, the first module of an id wins), checks required programs,
-  creates each enabled module's `main` inside a guard, and exposes each module's status and
-  the merged contributions (`widgetEntries`, `settingsPages`, `settingEntries`, `factTypes`,
-  `slotContributions(name)`). Modules are turned off through `Config.disabledModules`.
-  `qs ipc call modules list` prints the statuses as JSON.
+  `shell.qml` touches before the bars. It reads and checks the manifests, checks the files and
+  required programs (processes, with a deadline), creates each enabled module's `main` inside
+  a guard, keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
+  exposes the statuses and the merged contributions. `qs ipc call modules list` prints them;
+  `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`).
+- **The registries** read the merged lists: `WidgetRegistry.entries` (the core's
+  `coreEntries`, then modules' — files as `file://` URLs, each entry naming its `module`),
+  `WidgetPresets.defaults`, `SettingsSchema.entries` (popup-mode entries follow the registry),
+  `ProfileRules.factTypes` and `Profiles.facts`, `SettingsWindow.pages` (`corePages`, then
+  `ModuleRules.mergeSettingsPages`). With no module each is the core's list itself (the
+  suites check it). Everything is reactive: a module turned off leaves its bar entries in
+  place showing nothing, closes its popup, takes its pages, settings, facts and slot content.
+  The core builds a module's objects by URL and gives each the module's handle as `module`
+  (only when its root object declares it: `Modules.initialProperties`).
+- **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
+  lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
+  screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/`).
+
+Writing a module, from the author's side (everything through `import qs.api` and
+`import qs.components`; nothing from `qs.singletons`):
+
+```qml
+// module.json: "widgets": [{ "type": "example", "name": "Example", "widget": "Widget.qml",
+//   "popup": "example", "popupPanel": "Panel.qml" }],
+//   "settings": [{ "key": "mod.example.greeting", "label": "Greeting", "type": "string", "default": "hi" }],
+//   "facts": [{ "fact": "example.up", "label": "Example up", "type": "bool" }],
+//   "settingsPages": [{ "id": "example", "label": "Example", "component": "Page.qml", "tab": "system" }],
+//   "slots": [{ "slot": "network.popup.sections", "component": "NetworkLine.qml" }]
+
+// Widget.qml — a bar cell; PopupWidget opens the popup the manifest names
+import QtQuick
+import qs.api
+import qs.components
+PopupWidget {
+    widgetType: "example"
+    property var module: null          // the handle, set before Component.onCompleted
+    Text { text: module?.value("greeting") ?? ""; color: Api.theme.textPrimary
+           font.family: Api.theme.fontFamily; font.pixelSize: Api.theme.fontSizeBody }
+}
+
+// Page.qml — a settings page: a plain ColumnLayout, framed and scrolled by the window
+import QtQuick.Layouts
+import qs.api
+ColumnLayout {
+    property var module: null
+    property int editIndex: -1         // the profile picked (Behaviour tab)
+    Heading { text: "Example" }
+    SettingEditor { key: "mod.example.greeting"; editIndex: parent.editIndex; Layout.fillWidth: true }
+}
+
+// NetworkLine.qml — a slot contribution; `context` as the slot table says
+import QtQuick
+import qs.api
+Text { property var module: null; property var context: null
+       text: context?.wifiConnected ? "online" : "offline"; color: Api.theme.textMuted }
+```
+
+What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the module's
+`main`, which the host destroys when the module is turned off, or binds to `module.active`
+(a singleton's timer: `running: module.active`) — a module's singletons outlive the main.
+A singleton finds its handle with `Api.moduleAt(Qt.resolvedUrl("."))`. Commands go through
+`CommandAction` / `CommandQuery` / `PrivilegedAction` (pkexec: 126 dismissed, quietly; 127
+refused, said once). Preferences are settings (`mod.<id>.*`, `module.value` /
+`module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
+
 - **Tests**: `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
-  the fixtures in `tests/fixtures/modules`), `tests/QuickshellPinTest.qml` (the Quickshell
-  behaviour it all rests on — if it fails after a Quickshell upgrade, modules are broken by
-  the upgrade), and the lock-bed tests `modules` and `modules-launcher`. A module's own
-  suites run with `tests/run-modules.sh <module dir>…` — the module may live in another
-  repository; it is loaded the way the host loads it, with this tree as the config root, so
-  its suites extend `TestCase` (`import qs.tests`) and reach the module's singletons
-  (`import ".."` from its `tests/`).
+  the fixtures in `tests/fixtures/modules`: guard, file check, start guard),
+  `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
+  the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
+  on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the
+  lock-bed tests `modules`, `modules-launcher` and `modules-discovery`. A module's own suites
+  run with `tests/run-modules.sh <module dir>…` — the module may live in another repository;
+  it is loaded into the shell's own host, with this tree as the config root, so its suites
+  extend `TestCase` (`import qs.tests`, allowed in its tests only), use `qs.api` as in the
+  shell and reach the module's singletons (`import ".."` from its `tests/`).
+  `tests/fixtures/modules/good` is the worked example of everything above.
 
 ### Logging
 

@@ -3,22 +3,26 @@
     "name": "Good fixture",
     "version": "1.2.3",
     "api": "1.0",
-    "description": "A module that does everything right (tests/fixtures/modules)",
+    "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
     "widgets": [
-        { "type": "good", "name": "Good", "widget": "GoodWidget.qml" }
+        { "type": "good", "name": "Good", "widget": "GoodWidget.qml", "popup": "good", "popupPanel": "GoodPanel.qml",
+          "settings": "GoodWidgetSettings.qml", "presetDefaults": { "label": "G", "count": 3 } }
     ],
     "settingsPages": [
         { "id": "good", "label": "Good", "component": "GoodSettings.qml", "tab": "system" }
     ],
     "settings": [
-        { "key": "mod.good.greeting", "label": "Greeting", "type": "string", "default": "hello" }
+        { "key": "mod.good.greeting", "label": "Greeting", "type": "string", "default": "hello",
+          "hint": "Shown by the fixture's widget; per profile" },
+        { "key": "mod.good.loud", "label": "Loud", "type": "bool", "default": false, "global": true }
     ],
     "facts": [
-        { "fact": "good.ready", "label": "Good fixture ready", "type": "bool" }
+        { "fact": "good.ready", "label": "Good fixture ready", "type": "bool" },
+        { "fact": "good.level", "label": "Good fixture level", "type": "percent" }
     ],
     "slots": [
-        { "slot": "network.vpn.row", "component": "GoodSlot.qml" }
+        { "slot": "network.popup.sections", "component": "GoodSlot.qml" }
     ],
-    "tests": ["tests/GoodStateTest.qml"]
+    "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml"]
 }

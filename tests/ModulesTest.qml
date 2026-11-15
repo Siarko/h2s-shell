@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.singletons
 
 // The module host (singletons/ModuleHost.qml) pointed at the fixture modules
@@ -15,7 +16,8 @@ TestCase {
 
     readonly property string fixtures: Quickshell.shellDir + "/tests/fixtures/modules"
     readonly property var names: ["good", "broken", "broken-main", "wrong-api", "key-collision", "bad-manifest",
-                                  "bad-manifest-fields", "forbidden-import", "duplicate-id", "duplicate-id-2", "needs-program"]
+                                  "bad-manifest-fields", "forbidden-import", "duplicate-id", "duplicate-id-2", "needs-program",
+                                  "broken-slot", "link-escape"]
 
     property ModuleHost host: ModuleHost {
         logStates: false
@@ -154,14 +156,20 @@ TestCase {
             assertEqual(needs?.setupHints.length, 1, "needs-program: its setup hint shown");
             assertEqual(host.mainObject("needs-program"), null, "needs-program: no main");
 
+            const escape = _expectState("link-escape", "failed");
+            assert(_has(escape?.errors, "main Main.qml leaves the module directory"), "link-escape: a main that links out of the module fails it, never loaded: " + escape?.errors.join("; "));
+            assertEqual(host.mainObject("link-escape"), null, "link-escape: no main");
+            const brokenSlot = _expectState("broken-slot", "loaded");
+            assertEqual(brokenSlot?.errors.length, 0, "broken-slot: loaded — its slot file is only built where the slot is");
+
             // The merged lists: only loaded modules, by id
             assertEqual(host.widgetEntries.map(entry => entry.module + ":" + entry.type).join(","), "good:good,key-collision:key-collision",
-                        "widgetEntries: good's and key-collision's own, by id");
+                        "widgetEntries: good's and key-collision's own, by id (link-escape's never: it failed)");
             assertEqual(host.widgetEntries[0]?.widget, "file://" + fixtures + "/good/GoodWidget.qml", "… with absolute URLs");
-            assertEqual(host.settingEntries.map(entry => entry.key).join(","), "mod.good.greeting,mod.key-collision.fine", "settingEntries");
-            assertEqual(host.factTypes.map(entry => entry.fact).join(","), "good.ready,key-collision.fine", "factTypes");
+            assertEqual(host.settingEntries.map(entry => entry.key).join(","), "mod.good.greeting,mod.good.loud,mod.key-collision.fine", "settingEntries");
+            assertEqual(host.factTypes.map(entry => entry.fact).join(","), "good.ready,good.level,key-collision.fine", "factTypes");
             assertEqual(host.settingsPages.map(entry => entry.id).join(","), "good", "settingsPages");
-            assertEqual(host.slotContributions("network.vpn.row").map(entry => entry.module).join(","), "good", "slotContributions");
+            assertEqual(host.slotContributions("network.popup.sections").map(entry => entry.module).join(","), "good", "slotContributions");
             assertEqual(host.slotContributions("network.vpn.card").length, 0, "… none for an empty slot");
 
             // A module file the core will load from those URLs shares the module's singleton
@@ -185,7 +193,7 @@ TestCase {
             assertEqual(host.mainObject("good"), null, "disabled: no main");
             assertEqual(_goodState.mains, 0, "disabled: its main was destroyed (its onDestruction ran)");
             assertEqual(host.widgetEntries.map(entry => entry.module).join(","), "key-collision", "disabled: its widget gone");
-            assertEqual(host.slotContributions("network.vpn.row").length, 0, "disabled: its slot contribution gone");
+            assertEqual(host.slotContributions("network.popup.sections").length, 0, "disabled: its slot contribution gone");
             assertEqual(_status("broken-main")?.state, "loaded", "the others untouched");
             assert(host.setEnabled("good", true), "setEnabled(good, true)");
         });
@@ -200,7 +208,7 @@ TestCase {
             // Safe mode: manifests read, nothing loaded
             host.load(_dirs(names), { safeMode: true });
         });
-        _then("safe mode settles", () => host.statuses.length > 0 && _goodState.mains === 0, () => {
+        _then("safe mode settles", () => _settled() && _goodState.mains === 0, () => {
             assert(host.safeMode, "safe mode on");
             _expectState("good", "safe-mode");
             _expectState("needs-program", "safe-mode");
@@ -230,9 +238,104 @@ TestCase {
         _then("unloaded", () => _goodState.mains === 0, () => {
             assertEqual(host.statuses.length, 0, "unload(): no statuses");
             assertEqual(_goodState.mains, 0, "unload(): the main destroyed");
+
+            // A FIFO as a module's main, and as a widget of another: never opened (opening one
+            // blocks the GUI thread until something writes to it)
+            _sh("rm -rf \"$1\"; mkdir -p \"$1/fifo-main\" \"$1/fifo-widget\" && "
+                + "printf '{\"id\":\"fifo-main\",\"name\":\"F\",\"version\":\"1\",\"api\":\"1.0\",\"main\":\"Main.qml\"}' > \"$1/fifo-main/module.json\" && "
+                + "printf '{\"id\":\"fifo-widget\",\"name\":\"F\",\"version\":\"1\",\"api\":\"1.0\",\"widgets\":[{\"type\":\"fifo-widget\",\"name\":\"F\",\"widget\":\"W.qml\"}]}' > \"$1/fifo-widget/module.json\" && "
+                + "mkfifo \"$1/fifo-main/Main.qml\" \"$1/fifo-widget/W.qml\" && printf '123:8 1\\n' > \"$1/starts\"", [_scratch], code => suite._made = code);
+        });
+        _then("the FIFO modules are made", () => _made !== null, () => {
+            assertEqual(_made, 0, "made the FIFO fixtures");
+            host.load([_scratch + "/fifo-main", _scratch + "/fifo-widget"], {});
+        });
+        _then("the FIFO modules settle", _settled, () => {
+            const fifoMain = host.statuses.find(status => status.id === "fifo-main");
+            assertEqual(fifoMain?.state, "failed", "a FIFO as main: the module fails (and nothing hung)");
+            assert(_has(fifoMain?.errors, "not a regular file"), "… said so: " + fifoMain?.errors.join("; "));
+            const fifoWidget = host.statuses.find(status => status.id === "fifo-widget");
+            assertEqual(fifoWidget?.state, "loaded", "a FIFO as a widget: the module loads");
+            assert(_has(fifoWidget?.errors, "widget fifo-widget: W.qml is not a regular file (dropped)"), "… without that widget: " + fifoWidget?.errors.join("; "));
+            assertEqual(host.widgetEntries.length, 0, "… which is in no list");
+
+            // The start guard, with a counter file of the test's and an identity it gives:
+            // process 123 relaunched once after a crash already (8), now again (9)
+            host.guardFile = _scratch + "/starts";
+            host.guardIdentity = "123:9";
+            host.guardClearMs = 300;
+            host.load(_dirs(["good"]), {});
+        });
+        _then("the guarded load settles", () => _settled() && host.guard !== null, () => {
+            assert(host.safeMode, "a second relaunch after a crash in a row: safe mode");
+            assertEqual(host.guard?.count, 2, "… the count");
+            assert(_has([host.safeModeReason], "relaunched the shell after a crash 2 times"), "… and why, for `modules list`: " + host.safeModeReason);
+            _expectState("good", "safe-mode");
+            assertEqual(host.describe().safeModeReason, host.safeModeReason, "describe() tells it");
+            // A reload of the same relaunched process: counted once, not again
+            host.load(_dirs(["good"]), {});
+        });
+        _then("the reload settles", () => _settled() && host.guard !== null, () => {
+            assertEqual(host.guard?.count, 2, "a reload of the same process: not counted again");
+            suite._exists = null;
+            _sh("sleep 0.6; cat \"$1/starts\"", [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("the counter is cleared after the window", () => _exists !== null, () => {
+            assertEqual(_exists, "123:9 0", "lived guardClearMs: the count back to 0");
+            suite._made = null;
+            _sh("printf 'garbage\\n' > \"$1/starts\"", [_scratch], code => suite._made = code);
+        });
+        _then("garbage in the counter", () => _made !== null, () => {
+            host.guardIdentity = "123:10";
+            host.load(_dirs(["good"]), {});
+        });
+        _then("garbage settles", () => _settled() && host.guard !== null, () => {
+            assert(!host.safeMode, "a counter that is garbage: this relaunch counts as the first");
+            _expectState("good", "loaded");
+            suite._exists = null;
+            _sh("cat \"$1/starts\"", [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("counted", () => _exists !== null, () => {
+            assertEqual(_exists, "123:10 1", "… written: 1");
+            // A fresh process (no crash marker: a launch, a --restart): 0, whatever was there
+            host.guardIdentity = "456:";
+            host.load(_dirs(["good"]), {});
+        });
+        _then("a fresh process settles", () => _settled() && host.guard !== null, () => {
+            assertEqual(host.guard?.count, 0, "a fresh process: 0");
+            assert(!host.safeMode, "… no safe mode");
+            host.guardFile = "";
+            host.unload();
+            _sh("rm -rf \"$1\"", [_scratch], () => {});
         });
         _clock.start();
     }
 
     property var _goodState: null
+    property var _made: null
+    property var _exists: null
+    // The test's own files: in the private runtime directory the runner gives it
+    readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-modules-test-" + Date.now()
+
+    // Runs a shell script with arguments; done(exit code, output)
+    function _sh(script, args, done) {
+        const process = _shell.createObject(suite, { command: ["sh", "-c", script, "sh"].concat(args), done: done });
+        process.running = true;
+    }
+
+    property Component _shell: Component {
+        Process {
+            id: _process
+            property var done: null
+            property string output: ""
+            stdout: SplitParser {
+                splitMarker: ""
+                onRead: data => _process.output += data
+            }
+            onExited: code => {
+                _process.done?.(code, _process.output);
+                _process.destroy();
+            }
+        }
+    }
 }

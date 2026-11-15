@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import qs.singletons
+import qs.components
 
 // Every setting in the schema's "general" and "appearance" groups, edited in the profile
 // picked in the settings window. The debug switches are always global.
@@ -67,6 +68,15 @@ ColumnLayout {
             key: modelData
             editIndex: root.editIndex
         }
+    }
+
+    // Modules' sections of this page (slot settings.general.bottom, ModuleRules.slotTable),
+    // editing the same profile
+    ModuleSlot {
+        Layout.fillWidth: true
+        Layout.topMargin: count > 0 ? 16 : 0
+        name: "settings.general.bottom"
+        context: ({ editIndex: root.editIndex })
     }
 
     Item {

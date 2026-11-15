@@ -75,7 +75,11 @@ Singleton {
         ]
     }))
 
-    readonly property var entries: _baseEntries.concat(_popupModeEntries)
+    // The core's settings; then the loaded modules' (Modules.settingEntries: keys mod.<id>.*,
+    // each naming its `module`), which go with their module when it is turned off — a
+    // profile's values for them are kept, unused, and apply again when it is back
+    readonly property var coreEntries: _baseEntries.concat(_popupModeEntries)
+    readonly property var entries: ModuleRules.mergeSettingEntries(coreEntries, Modules.settingEntries)
 
     readonly property var _baseEntries: [
         // ── General ──
@@ -398,6 +402,15 @@ Singleton {
     readonly property var defaults: {
         let values = {};
         for (const entry of entries)
+            values[entry.key] = entry.default;
+        return values;
+    }
+
+    // The core's defaults only: what a new config's Full spells out (a module's defaults are
+    // not frozen into it, so a module's update can change them)
+    readonly property var coreDefaults: {
+        let values = {};
+        for (const entry of coreEntries)
             values[entry.key] = entry.default;
         return values;
     }
