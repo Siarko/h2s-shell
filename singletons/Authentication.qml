@@ -36,6 +36,19 @@ Singleton {
     readonly property string state: _trying === "decide" ? "deciding"
         : PolkitRules.state(mode, mode === "on" && registered, otherAgents, _probed === "unknown")
 
+    // What polkit's PAM stack asks first (PolkitRules.pamStackOrder): the prompt words its
+    // hints by it, Settings says it. Only read — the file is world-readable; nothing is
+    // asked of PAM, polkit or the reader.
+    readonly property string pamStack: PolkitRules.pamStackOrder(_pamFile.loaded ? _pamFile.text() : "")
+    FileView {
+        id: _pamFile
+        path: "/etc/pam.d/polkit-1"
+        printErrors: false
+        // A system rebuild replaces it
+        watchChanges: true
+        onFileChanged: reload()
+    }
+
     // Kept from a successful first-start try until the setting says "on": destroyed and
     // made again at once, the new agent's registration came before polkit had let the old
     // one go, and was refused

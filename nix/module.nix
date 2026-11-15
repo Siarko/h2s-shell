@@ -29,6 +29,21 @@ in
       defaultText = lib.literalExpression "h2s-shell.packages.\${system}.default";
       description = "The h2s-shell package.";
     };
+    polkit.passwordFirst = lib.mkOption {
+      type = lib.types.bool;
+      default = config.services.fprintd.enable;
+      defaultText = lib.literalExpression "config.services.fprintd.enable";
+      description = ''
+        Whether polkit's PAM stack (`security.pam.services.polkit-1`, used by every polkit
+        agent, the shell's prompt among them) asks for the password before the fingerprint
+        reader. NixOS puts pam_fprintd first, so a prompt shows only "Place your finger…"
+        until the reader gives up (30 s, or three fingers that do not match), and only then
+        asks for the password. With this on, the password is asked at once; an empty one
+        (Enter on an empty field) fails pam_unix and goes on to the reader, and so does a
+        wrong one. polkit's helper runs this one stack, so an agent cannot change the order
+        itself. Only the order changes: the modules and their arguments stay NixOS's.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -52,6 +67,13 @@ in
     # Quickshell runs pam_authenticate and nothing else: only the `auth` lines matter (the
     # account, password and session lines NixOS writes into every service never run).
     security.pam.services = {
+      # polkit (programs.h2s-shell.polkit.passwordFirst): pam_fprintd moved to just after
+      # pam_unix — relative to pam_unix's own order, as NixOS's PAM module advises, so a
+      # renumbering upstream keeps it right. Nothing else in the stack moves.
+      polkit-1 = lib.mkIf (cfg.polkit.passwordFirst && config.security.polkit.enable) {
+        rules.auth.fprintd.order = config.security.pam.services.polkit-1.rules.auth.unix.order + 10;
+      };
+
       # The password: NixOS's usual stack — pam_unix, and whatever the machine keeps its
       # accounts in that checks the same password (systemd-homed, SSSD, LDAP, Kerberos,
       # kanidm: global switches, kept) — without the modules that would make the typed

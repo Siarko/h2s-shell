@@ -89,6 +89,18 @@ Flickable {
 
         SchemaSettingEditor { key: "system.polkitAgent"; editIndex: 0; Layout.fillWidth: true }
 
+        // What polkit's PAM stack (/etc/pam.d/polkit-1) asks first, where a reader is in it
+        Hint {
+            Layout.topMargin: 8
+            Layout.fillWidth: true
+            visible: text !== ""
+            text: Authentication.pamStack === "fingerprint-first"
+                ? "This computer asks the fingerprint reader first: the password is asked only after the reader gives up (30 s, or three fingers that do not match); the prompt keeps a password typed meanwhile. To be asked for the password at once: programs.h2s-shell.polkit.passwordFirst in the shell's NixOS module (on by default with a fingerprint reader), then a system rebuild."
+                : Authentication.pamStack === "password-first"
+                ? "This computer asks for the password first; an empty password goes on to the fingerprint reader."
+                : ""
+        }
+
         RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: 8

@@ -31,7 +31,7 @@ destroyed; `AuthFlow` carries the message, action, identities, prompt, `submit`/
     or the shell could not register → a notification offering to turn the shell's off.
 - **The prompt**: an overlay on the focused screen, exclusive keyboard focus, the
   background dimmed; what asks (message, action id), the account when several can answer,
-  the password field (hidden unless PAM says otherwise), PAM's messages (a fingerprint
+  the password field (always there; typed before PAM asks, held), PAM's messages (a fingerprint
   reader's "place your finger" needs no password), a wrong password shown and asked
   again, Cancel and Esc. The lock screen card's look. The password is never logged.
 - **System tab**: a third tab, "Settings of this computer, kept by the system — they apply
@@ -63,3 +63,40 @@ destroyed; `AuthFlow` carries the message, action, identities, prompt, `submit`/
   before it counts as another agent's (also covers a restart, the old shell not yet gone).
   The warnings are critical notifications, whose toasts now stay until dismissed.
 
+- 2026-11-15: "the prompt lets me in only with the finger" (the Framework, fprintd on).
+  Found in the sources, not on a real prompt:
+  - polkit's helper (`polkitagenthelper-pam.c`) calls `pam_start ("polkit-1", …)`: the
+    service name is fixed, and the agent only starts a session (`polkit_agent_session_new`
+    with an identity and the cookie) — no way to pick another stack or run a second
+    helper. Its conversation relays PAM_TEXT_INFO / PAM_ERROR_MSG as messages and reads
+    stdin only for PAM_PROMPT_ECHO_OFF/ON.
+  - NixOS's polkit-1: `auth sufficient pam_fprintd.so` (11400), then `pam_unix.so
+    likeauth try_first_pass` (11700), then pam_deny. pam_fprintd sends "Place your finger…"
+    (info) and waits — 30 s per round (`DEFAULT_TIMEOUT`), three non-matching fingers
+    (`DEFAULT_MAX_TRIES`) — ignoring the conversation's return value (`send_msg`) and
+    anything the agent writes; only SIGINT inside the helper ends it early. Untouched it
+    sends "Verification timed out" and returns PAM_AUTHINFO_UNAVAIL; `sufficient` goes on
+    to pam_unix, which asks "Password:". A wrong password fails the attempt, and
+    Quickshell's AuthFlow starts a new session — the reader first again.
+  - The prompt showed the field only once `isResponseRequired` (the PAM question) came: for
+    those 30 s it had PAM's message and Cancel, the focused field was hidden (so keys, Esc
+    included, went nowhere). After a wrong password, another 30 s with "not accepted" and
+    no field. So the password did work — after half a minute nobody waited for.
+  - Changed: the field is always there; a password Entered before the question is held in
+    it and sent the moment a hidden question comes (never into a shown one); a hint line
+    from the conversation as it arrived (PolkitRules.conversation*, tested on both
+    orders), the stack's order read from /etc/pam.d/polkit-1 (`Authentication.pamStack`);
+    Esc on a focus scope; state reset when the next queued request takes the window.
+  - System side, `programs.h2s-shell.polkit.passwordFirst` (NixOS module, default
+    `services.fprintd.enable`): pam_fprintd's order = pam_unix's + 10. pam_unix fails an
+    empty password without `nullok` (`verify_pwd_hash`), so Enter on an empty field goes
+    on to the reader, and so does a wrong password (the prompt says it was not accepted;
+    the password is asked again after the reader gives up). Its 2 s fail delay applies only
+    when the whole stack fails. A system-wide change (every agent uses polkit-1), but the
+    usual arrangement, and only the order moves.
+  - Not adopted: shortening pam_fprintd (`timeout=`/`max-tries=` — still sequential);
+    a parallel module like pam_fprintd_grosshack (not in nixpkgs).
+  - Seen in Quickshell 0.3.2 while reading: `PolkitAgentImpl::initiateAuthentication`
+    activates a request when the queue holds one — but the active request was popped from
+    it, so a second request arriving while one is open replaces the open flow at once
+    (the prompt now resets its state when `flow` changes).

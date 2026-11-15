@@ -341,12 +341,22 @@ when a known agent runs, on when the shell registers) and changed in Settings �
 Authentication, which also shows what answers now. Notifications say when no agent answers
 or another one cannot register beside the shell's. Plan: `docs/plans/polkit.md`.
 
+polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader first in
+it, so PAM asks for the password only after the reader gives up (30 s, or three fingers
+that do not match). The prompt's field is there from the start: a password typed and
+Entered meanwhile is held and sent the moment it is asked for, and a line under PAM's
+message says what the prompt waits for (`PolkitRules.conversationHint`). The NixOS
+module's `programs.h2s-shell.polkit.passwordFirst` (on by default with fprintd) moves
+pam_fprintd after pam_unix: the password is asked at once, and Enter on an empty field
+goes on to the reader. Settings → System → Authentication says which order this computer
+has (read from `/etc/pam.d/polkit-1`).
+
 ## Settings
 
 A separate floating window, reachable from the Settings widget, from
 `Shell.openSettings(pageId)`, or over IPC — which also works with no Settings widget on
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
-`openPage bar_appearance`), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
+`openPage bar_appearance`), `currentPage` (the open page's id), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
 a profile, and **Appearance**, whose pages edit a theme. The sidebar shows which profiles
 are active right now, and picks what the tab's pages edit — the profile (with the theme it
 uses, a click away) or the theme (with the profiles that use it, and Preview to show it

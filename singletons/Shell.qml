@@ -9,4 +9,8 @@ QtObject {
     signal openSettings(string pageId)
     // Shows the settings window, or hides it if it is open
     signal toggleSettings()
+    // The ids of the pages the settings window has now (SettingsWindow.pages, modules' pages
+    // included), published by the window: what openSettings can open. VpnManager asks it
+    // whether a VPN provider's own settings page is there (VpnProvider.settingsPage).
+    property var settingsPageIds: []
 }

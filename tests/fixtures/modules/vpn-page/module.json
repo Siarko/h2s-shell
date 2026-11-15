@@ -1,0 +1,11 @@
+{
+    "id": "vpn-page",
+    "name": "VPN settings page fixture",
+    "version": "1.0.0",
+    "api": "1.2",
+    "description": "A module whose VPN provider's page is a regular settings page under Network (settingsPage), with no network.vpn.page slot: the card's Settings… goes there (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "settingsPages": [
+        { "id": "vpn-page", "label": "Page VPN", "component": "VpnSettingsPage.qml", "tab": "system", "parent": "network" }
+    ]
+}

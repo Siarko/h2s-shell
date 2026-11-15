@@ -137,8 +137,9 @@ Singleton {
     //                      card is open; context { slot, vpnId, entryId, vpn, provider,
     //                      otherVpnsUp, open }
     //   network.vpn.page — a page of the provider's own, opened over the VPN page from the
-    //                      card, in the settings pages' frame (title, Back, scrolling);
-    //                      context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, close }
+    //                      card, in the settings pages' frame (title, Back, scrolling) — only
+    //                      when the provider has no settingsPage the settings window knows
+    //                      (settingsPageOf, pageOf); context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, close }
     //   (contextFor makes them)
     readonly property var slots: ({ row: "network.vpn.row", card: "network.vpn.card", page: "network.vpn.page" })
 
@@ -205,7 +206,7 @@ Singleton {
     }
 
     // Each provider as read now: { providerId, alive, typeName, glyph, busy, canChange,
-    // ready, lockdownNote, rowExtras, cardExtras, pageUrl, entries, problems, object }
+    // ready, lockdownNote, rowExtras, cardExtras, settingsPage, pageUrl, entries, problems, object }
     readonly property var _providerReads: _providers.map(entry => _readProvider(entry))
     // A provider's `ready`: its entries were read successfully at least once. The core no
     // longer judges anything by it (nothing is pruned); kept in the read for the views.
@@ -213,7 +214,7 @@ Singleton {
     function _readProvider(entry) {
         const gone = problem => ({
             providerId: entry.id, alive: false, typeName: "", glyph: "", busy: false, canChange: true, ready: false,
-            lockdownNote: "", rowExtras: null, cardExtras: null, pageUrl: "", entries: [], problems: [problem], object: null
+            lockdownNote: "", rowExtras: null, cardExtras: null, settingsPage: "", pageUrl: "", entries: [], problems: [problem], object: null
         });
         try {
             const provider = entry.object;
@@ -226,7 +227,8 @@ Singleton {
                 providerId: entry.id, alive: true, typeName: text(provider.typeName, 60) || "VPN", glyph: text(provider.glyph, 8),
                 busy: provider.busy === true, canChange: provider.canChange !== false, ready: provider.ready === true,
                 lockdownNote: text(provider.lockdownNote, 300), rowExtras: component(provider.rowExtras),
-                cardExtras: component(provider.cardExtras), pageUrl: text(provider.pageUrl, 1000),
+                cardExtras: component(provider.cardExtras), settingsPage: text(provider.settingsPage, 200),
+                pageUrl: text(provider.pageUrl, 1000),
                 entries: checked.entries, problems: checked.problems, object: provider
             };
         } catch (error) {
@@ -295,11 +297,37 @@ Singleton {
             ?? (slot === slots.row ? read.rowExtras : read.cardExtras);
     }
 
-    // The page's URL of a provider's VPN ("" none) — slot network.vpn.page: the module host's
-    // (Modules.slotUrl), else the provider's own pageUrl
+    // Where a provider VPN's card's "Settings…" leads. One place for the provider's page: its
+    // own entry in the settings window's list when it has one (settingsPageOf: the window goes
+    // there, the list selects it), else the page in the frame over the VPN page (pageOf),
+    // else nowhere (no button).
+
+    // The provider's settingsPage when the settings window has that page now (Shell
+    // .settingsPageIds), else "" — a wrong id or a dropped page falls back to the frame
+    function settingsPageOf(vpn): string {
+        const page = providerOf(vpn)?.settingsPage ?? "";
+        return page !== "" && (Shell.settingsPageIds ?? []).includes(page) ? page : "";
+    }
+
+    // The framed page's URL of a provider's VPN ("" none) — slot network.vpn.page: the module
+    // host's (Modules.slotUrl), else the provider's own pageUrl; "" while settingsPageOf
+    // names a page (never two ways to the same content)
     function pageOf(vpn): string {
         const read = providerOf(vpn);
-        return read === null ? "" : (Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "");
+        if (read === null || settingsPageOf(vpn) !== "")
+            return "";
+        return Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "";
+    }
+
+    // "Settings…" with a settings page to go to: opens the settings window there through the
+    // path Api.openSettings takes (Shell.openSettings) and answers true; false when there is
+    // none (the card opens pageOf's frame, if any)
+    function openSettingsPageOf(vpn): bool {
+        const page = settingsPageOf(vpn);
+        if (page === "")
+            return false;
+        Shell.openSettings(page);
+        return true;
     }
 
     // The context a slot's contribution gets (VpnManager.slots): { slot, vpnId, entryId,

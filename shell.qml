@@ -125,6 +125,7 @@ QtObject {
     // The settings window from outside, e.g. with no settings widget on the bar:
     //   qs ipc call settings open
     //   qs ipc call settings openPage profiles     (a page's id: SettingsWindow.pages)
+    //   qs ipc call settings currentPage           (the open page's id, the one the list selects)
     //   qs ipc call settings toggle
     //   qs ipc call settings close
     property var _settingsIpc: IpcHandler {
@@ -139,6 +140,10 @@ QtObject {
                 return "No page \"" + page + "\"; pages: " + settingsWindow.pages.map(entry => entry.id).join(", ");
             Shell.openSettings(page);
             return "";
+        }
+
+        function currentPage(): string {
+            return settingsWindow.selectedPage;
         }
 
         function toggle(): void {

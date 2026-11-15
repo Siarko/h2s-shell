@@ -216,6 +216,9 @@ Item {
                     readonly property var _attention: modelData.attention ?? null
                     // The page states the limit whenever blocking is on, connected or not
                     readonly property string _lockdownNote: VpnLockdown.noteFor(modelData, true)
+                    // Its own page: an entry of the settings window's list to go to, else one
+                    // framed over this page (VpnManager.settingsPageOf, pageOf)
+                    readonly property string _settingsPage: _provided ? VpnManager.settingsPageOf(modelData) : ""
                     readonly property string _pageUrl: _provided ? VpnManager.pageOf(modelData) : ""
                     readonly property bool _up: modelData.state === "activated"
                     readonly property string _server: VpnManager.details[modelData.uuid]?.server ?? ""
@@ -263,10 +266,14 @@ Item {
                         extra: ({ open: _vpn.open })
                     }
                     SmallButton {
-                        visible: _vpn._pageUrl !== ""
+                        objectName: "vpnProviderSettings"
+                        visible: _vpn._settingsPage !== "" || _vpn._pageUrl !== ""
                         label: "Settings…"
                         tooltip: "Its own settings: " + VpnManager.typeName(_vpn.modelData)
-                        onClicked: root._providerPage = _vpn.modelData.uuid
+                        onClicked: {
+                            if (!VpnManager.openSettingsPageOf(_vpn.modelData))
+                                root._providerPage = _vpn.modelData.uuid;
+                        }
                     }
 
                     // The networks it comes up with (set in their editors)
@@ -573,7 +580,9 @@ Item {
     }
 
     // ── A provider's own page, over this one (slot network.vpn.page) ── by the VPN's id
-    // ("" none), in the settings pages' frame (VpnProviderPageFrame: Back, title, scrolling)
+    // ("" none), in the settings pages' frame (VpnProviderPageFrame: Back, title, scrolling).
+    // Only for a provider whose page has no entry in the settings window's list: one that has
+    // goes there instead (VpnManager.settingsPageOf)
     property string _providerPage: ""
 
     VpnProviderPageFrame {

@@ -74,11 +74,19 @@ import qs.singletons.network
 //               network popup (an exit-node chooser)
 //   cardExtras  Component or null — slot "network.vpn.card": on the entry's card in
 //               Settings → System → Network → VPN, while the card is open
-//   pageUrl     string ("" none) — slot "network.vpn.page": a page of the provider's own,
-//               opened over the VPN page from the entry's card ("Settings…"), inside the
-//               core's frame: "‹ Back", a title (type · entry name) and scrolling are the
-//               core's — the page is a plain Item (a ColumnLayout) laid out at the page's
-//               width, scrolled by its implicitHeight; it must not scroll itself
+//   settingsPage string ("" none) — the id of the provider's own page among the settings
+//               window's pages (a module: the id its manifest's `settingsPages` declares,
+//               "<module id>" or "<module id>.<name>", as Api.openSettings takes it). The
+//               card's "Settings…" then goes to that page (Shell.openSettings: the page list
+//               selects it); no framed copy opens. While the window has no such page (a
+//               wrong id, the page dropped) the core falls back to pageUrl / the page slot.
+//   pageUrl     string ("" none) — slot "network.vpn.page": the fallback for a provider with
+//               a page but no entry in the settings window's list — opened over the VPN page
+//               from the entry's card ("Settings…"), inside the core's frame: "‹ Back", a
+//               title (type · entry name) and scrolling are the core's — the page is a plain
+//               Item (a ColumnLayout) laid out at the page's width, scrolled by its
+//               implicitHeight; it must not scroll itself. Unused while settingsPage is
+//               there. Neither: no "Settings…".
 //   A contribution's root item may declare `property var context`; the core sets it to
 //   { slot, vpnId, entryId, vpn, provider } — `provider` this object, to call its functions
 //   and read its state — (the card's adds `open`; the page's adds `close`, a function that
@@ -120,6 +128,7 @@ QtObject {
     property string lockdownNote: ""
     property Component rowExtras: null
     property Component cardExtras: null
+    property string settingsPage: ""
     property string pageUrl: ""
 
     signal failed(string entryId, string what, string reason)

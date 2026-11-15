@@ -283,7 +283,7 @@ contribution out as a Component (the same guard, forwarding a `context` set on i
 | `settings.general.bottom` | Settings → Behaviour → General, at the end | `editIndex` (for SettingEditor) | 1.0 |
 | `network.vpn.row` | under the row of each VPN of the module's provider in the network popup (`VpnManager.extrasFor`) | `vpnId`, `entryId`, `vpn`, `provider`, `otherVpnsUp` | 1.1 |
 | `network.vpn.card` | on that VPN's card in Settings → System → Network → VPN, while open | the row's + `open` | 1.1 |
-| `network.vpn.page` | a page over the VPN page, from the card's "Settings…", in the core's frame (Back, title, scrolling); given `module` when it declares it (`VpnManager.pageOf`) | the row's + `close` | 1.1 |
+| `network.vpn.page` | a page over the VPN page, from the card's "Settings…", in the core's frame (Back, title, scrolling); given `module` when it declares it (`VpnManager.pageOf`). Only for a page that is not also a settings page: a provider whose page is in `settingsPages` names it as `VpnProvider.settingsPage` instead, and "Settings…" goes there (tailscale.md §3) | the row's + `close` | 1.1 |
 
 The three VPN slots take one contribution per provider: the one of the module whose id is the
 provider's `providerId` (the convention: `VpnProvider { providerId: module.moduleId }`); a
@@ -324,7 +324,7 @@ module's) — with the convention that a module's provider's `providerId` is its
 The page frame (`VpnProviderPageFrame`) loads the page by URL with
 `Modules.initialProperties`, so a page that declares `module` gets its handle like any other
 file built from a manifest. VpnExtras needs no change: the Component forwards the `context`
-it sets. `tests/ModuleRegistriesTest.qml` checks it with the `vpn-slots` fixture.
+it sets. `tests/ModuleRegistriesTest.qml` checks it with the `vpn-slots` fixture, and the other way — a provider whose page is its module's settings page (`settingsPage`, no page slot) — with the `vpn-page` fixture.
 
 ## 4. Safety
 

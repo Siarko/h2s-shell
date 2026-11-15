@@ -79,6 +79,11 @@ FloatingWindow {
     on_MergedPagesChanged: {
         for (const problem of _mergedPages.problems)
             console.warn("[Modules] " + problem);
+    }
+    // On `pages`, not on _mergedPages: that handler may run before `pages` has followed, and
+    // then still finds the page that went (seen in tests/ModuleRegistriesTest: a module turned
+    // off while its page was open left selectedPage on the vanished id)
+    onPagesChanged: {
         // The open page went with its module: back to General
         if (_pageIndex(selectedPage) < 0)
             selectedPage = "general";
@@ -88,6 +93,17 @@ FloatingWindow {
             _lastAppearancePage = "themes";
         if (_pageIndex(_lastSystemPage) < 0)
             _lastSystemPage = "authentication";
+    }
+
+    // What Shell.openSettings can open, for those who must know before offering a way there
+    // (a VPN provider's card: VpnManager.settingsPageOf). One window in the shell; a test's
+    // window going away takes its ids with it.
+    readonly property var _pageIds: pages.map(page => page.id)
+    on_PageIdsChanged: Shell.settingsPageIds = _pageIds
+    Component.onCompleted: Shell.settingsPageIds = _pageIds
+    Component.onDestruction: {
+        if (JSON.stringify(Shell.settingsPageIds) === JSON.stringify(_pageIds))
+            Shell.settingsPageIds = [];
     }
 
     function _pageIndex(id) {

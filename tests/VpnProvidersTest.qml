@@ -416,6 +416,40 @@ TestCase {
         assert(VpnManager.contextFor(VpnManager.slots.row, { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
         fake.withExtras = false;
 
+        // The card's "Settings…": the provider's own settings page when the settings window has
+        // it (settingsPage → navigate), else the framed page (pageUrl / the page slot), else
+        // none. Synchronous, so the suite running beside it (ModuleRegistries' settings
+        // window publishes its ids) cannot see the ids this sets.
+        const savedPageIds = Shell.settingsPageIds;
+        Shell.settingsPageIds = ["general", "network_vpn", "vpt-page"];
+        const opened = [];
+        const onOpen = pageId => opened.push(pageId);
+        Shell.openSettings.connect(onOpen);
+        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")) === "",
+               "settings page: neither declared — no settings page, no framed page (no button)");
+        fake.withPage = true;
+        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
+               "settings page: a page but no settingsPage — the framed page");
+        assert(!VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 0, "… Settings… does not navigate (the card opens the frame)");
+        fake.settingsPage = "vpt-page";
+        assertEqual(VpnManager.settingsPageOf(_vpn("vpt:one")), "vpt-page", "settings page: declared and in the window's list — that page");
+        assertEqual(VpnManager.pageOf(_vpn("vpt:one")), "", "… and no framed copy of it");
+        assert(VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.join(",") === "vpt-page",
+               "… Settings… goes there through Shell.openSettings (Api.openSettings' path): " + opened.join(","));
+        fake.settingsPage = "vpt-nowhere";
+        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
+               "settings page: an id the window does not have — falls back to the framed page");
+        assert(!VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 1, "… and does not navigate");
+        fake.withPage = false;
+        assertEqual(VpnManager.pageOf(_vpn("vpt:one")), "", "… nor a page: nothing");
+        fake.settingsPage = "vpt-page";
+        Shell.settingsPageIds = ["general"];
+        assertEqual(VpnManager.settingsPageOf(_vpn("vpt:one")), "", "settings page: the page left the window's list (its module off) — not offered");
+        assertEqual(VpnManager.settingsPageOf({ uuid: "u", type: "wireguard" }), "", "settings page: none for NetworkManager's");
+        Shell.openSettings.disconnect(onOpen);
+        fake.settingsPage = "";
+        Shell.settingsPageIds = savedPageIds;
+
         // The kill switch does not take provider VPNs in
         assert(VpnLockdown.vpnInterfaces.indexOf("fake0") < 0 && JSON.stringify(VpnManager.nmDetails).indexOf("vpt:") < 0,
                "lockdown: the provider's interface and details never reach the blocking");
@@ -511,6 +545,20 @@ TestCase {
         return found;
     }
 
+    // The first item under `item` (itself included) with that objectName, or null
+    function _named(item, name) {
+        if (!item)
+            return null;
+        if (item.objectName === name)
+            return item;
+        for (const child of item.children ?? []) {
+            const found = _named(child, name);
+            if (found !== null)
+                return found;
+        }
+        return null;
+    }
+
     function _extrasOf(row) {
         let found = null;
         const walk = node => {
@@ -560,6 +608,24 @@ TestCase {
                    "views: the popup's rows, the attention line and its action");
             assert(texts.some(text => text.indexOf("Fake row extras for one") === 0), "views: the row's extras, given their context");
             assert(texts.includes("Via exit-1"), "views: the entry's status line on its row");
+            // Two lines with a status: the name, the status under it; one line, as tall as
+            // before (36, a NetworkManager VPN's row: the same delegate, no status), without
+            const rowWith = suite._named(suite._row("vpt:one"), "vpnRow");
+            const nameWith = suite._named(rowWith, "vpnName");
+            const statusWith = suite._named(rowWith, "vpnStatus");
+            assert(nameWith !== null && statusWith !== null && nameWith.text === "One" && statusWith.text === "Via exit-1" && statusWith.visible,
+                   "row: the name and the status, two Text items");
+            // In no window nothing polishes: lay the two lines out as a shown popup does
+            nameWith.parent.forceLayout();
+            suite._named(suite._row("vpt:two"), "vpnName").parent.forceLayout();
+            assert(statusWith.mapToItem(rowWith, 0, 0).y >= nameWith.mapToItem(rowWith, 0, nameWith.height).y && statusWith.x === nameWith.x,
+                   "row: the status under the name, aligned with it");
+            assert(statusWith.elide === Text.ElideRight && statusWith.maximumLineCount === 1, "row: a long status elides, never wraps");
+            const rowWithout = suite._named(suite._row("vpt:two"), "vpnRow");
+            assert(rowWithout !== null && !suite._named(rowWithout, "vpnStatus").visible, "row: no status — no second line");
+            assertEqual(rowWithout.height, 36, "row: no status — the one-line height it always had");
+            assert(rowWith.height > rowWithout.height && rowWith.height >= nameWith.height + statusWith.height,
+                   "row: with a status — taller, holding both lines (" + rowWith.height + ")");
             assert(suite._texts(suite._card).includes("A note") && suite._texts(suite._card).includes("Disconnect"),
                    "views: a provider's card — its notice, its button");
             suite._rowOne = suite._row("vpt:one");

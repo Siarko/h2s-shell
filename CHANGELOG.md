@@ -24,7 +24,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   a 700 directory the host makes first), flushed when destroyed, read by a process and capped
   (a file over 1 MiB is refused and left alone); `Api.theme`'s groups and `curve()` are deep
   frozen copies; `setFact` with the value a fact has is a no-op; only `property var module`
-  receives the handle (other spellings get a warning in the module's status).
+  receives the handle (other spellings get a warning in the module's status);
+  `VpnProvider.settingsPage` — the id of the provider's own page among the settings pages
+  (its module's `settingsPages` id): the VPN card's "Settings…" goes there, and the
+  `network.vpn.page` slot / `pageUrl` is only the fallback for a provider without one.
 - 1.1: the VPN provider seam's slots `network.vpn.row`, `network.vpn.card` and
   `network.vpn.page` in the slot table — a module's VPN provider (`VpnProvider` from
   `qs.components`, its `providerId` the module's id) fills them through its manifest's
@@ -336,6 +339,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Settings → Network → VPN: "Settings…" on a VPN whose module has its own settings page
+  (Tailscale) goes to that page — the list on the left selects it, under Network beside
+  VPN — instead of opening a copy of it over the VPN page with a Back button. The framed
+  page stays for a provider that has a page but no entry in the list.
+- Network popup: a VPN's status ("Tailnet only", "Via <exit node>") is a second, muted line
+  under its name instead of sitting beside it; rows without a status are unchanged.
 - Settings → Network → VPN: shorter hints and notes (the blocking of traffic outside a VPN,
   password-free blocking, importable files, a network's VPNs in its editor); the same facts,
   no repetitions — the password note is said once, under "Password-free blocking".
@@ -386,6 +395,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Authentication prompt (polkit): with a fingerprint reader first in polkit's PAM stack
+  (NixOS's default) the prompt showed only "Place your finger…" — no field, Esc dead — for
+  up to 30 s until the reader gave up. The field is there from the start: a password typed
+  and Entered early is held (never logged, cleared on cancel and at the end) and sent the
+  moment PAM asks for it, and a line says what the prompt waits for. The NixOS module's new
+  `programs.h2s-shell.polkit.passwordFirst` (on by default with fprintd) asks for the
+  password first; Enter on an empty field then goes on to the reader. Settings → System →
+  Authentication says which order this computer has.
+- Settings: a module turned off while its settings page was open left the window on that
+  vanished page id; it goes back to General, as intended.
 - Modules: the shell reads no module file on its GUI thread while starting (the manifest,
   qmldir and the files' texts come out of the module host's time-limited check), and nothing
   the lock screen needs waits for the modules — a module on a mount that hangs on read can no

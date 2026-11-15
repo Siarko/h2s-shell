@@ -86,7 +86,8 @@ an object of the same shape made otherwise.
 | `lockdownNote` | string | core reads | its own sentence for the kill switch note ("" the shell's) |
 | `rowExtras` | Component or null | core instantiates | slot `network.vpn.row` |
 | `cardExtras` | Component or null | core instantiates | slot `network.vpn.card` |
-| `pageUrl` | string | core loads | slot `network.vpn.page`, inside the core's frame (below) |
+| `settingsPage` | string ("" none) | core reads | the id of the provider's own page among the settings window's pages — for a module the id its manifest's `settingsPages` declares (`<module id>` or `<module id>.<name>`, what `Api.openSettings` takes). The card's "Settings…" goes there (`Shell.openSettings`: the page list selects it) and no framed copy opens. An id the window does not have (wrong, or the page dropped) falls back to `pageUrl` / the page slot (below) |
+| `pageUrl` | string | core loads | slot `network.vpn.page`, inside the core's frame (below) — only for a provider whose page has no entry in the settings window's list (no known `settingsPage`) |
 | `connect(entryId, request)` | function | core calls | bring the entry up; `request` `{ origin }` (below) |
 | `disconnect(entryId, request)` | function | core calls | take it down; `request` as for connect |
 | `attend(entryId)` | function | core calls | perform the entry's attention action (log in, approve, start the service, become operator…) — always the user's doing (a button) |
@@ -149,8 +150,9 @@ in "VPN with a network", is *not available* (kept, never removed by the shell).
   connects an entry with attention by itself (below). **Never for transient states**
   ("starting", "reconnecting", "waiting for the daemon to answer" — those are `state` and
   `status`). The core is robust against a brief one only right after asking (below).
-- **`status`** (optional, ≤ 80 chars, default ""): one short line shown beside the state —
-  in the popup row beside the name, on the card in its subtitle after the state: "Tailnet
+- **`status`** (optional, ≤ 80 chars, default ""): one short line shown with the state —
+  in the popup row under the name (a second line, muted, elided; a row without one keeps its
+  one-line height), on the card in its subtitle after the state: "Tailnet
   only", "Via <exit node>", "Starting…".
 - **`busy`** (optional bool, default false): an operation runs for this entry; its buttons
   are disabled while it or the provider's `busy` is true (`VpnManager.busyFor`).
@@ -178,7 +180,7 @@ the id is malformed), any other id is a NetworkManager UUID on the unchanged pat
   (unchanged values), `activeGlyph` (new: WireGuard's / the provider's own / padlock),
   `details` (merged; `nmDetails` NetworkManager's alone), `interfaceNames` (merged;
   `nmInterfaceNames`), `interfaceOf`, `typeName`, `glyphOf`, `busyFor`, `needFor`,
-  `providerOf`, `extrasFor`, `pageOf`, `contextFor`, `unavailableVpnIds`, `labelOf`.
+  `providerOf`, `extrasFor`, `settingsPageOf`, `pageOf`, `openSettingsPageOf`, `contextFor`, `unavailableVpnIds`, `labelOf`.
 - Popup (`panels/network/VpnSection.qml`): header glyph, a row per VPN with its glyph,
   name, status, privileged mark, Connect/Disconnect/attention button (disabled while
   `busyFor`); under a provider's row the attention sentence, the kill switch note (while
@@ -191,7 +193,13 @@ the id is malformed), any other id is a NetworkManager UUID on the unchanged pat
   `editable`, `deletable`, `busy`, `need`, `canUse`, `notice`, `noticeAction`): a provider's
   card has no editor, no delete, no autoconnect; it connects through the provider (origin
   "user"), shows the status in its subtitle, the attention and the kill switch note
-  (whenever blocking is on), the card extras, and "Settings…" when the provider has a page.
+  (whenever blocking is on), the card extras, and "Settings…" when the provider has a page:
+  to its own settings page when it names one the settings window has (`settingsPage`,
+  `VpnManager.settingsPageOf` → `openSettingsPageOf` → `Shell.openSettings`; the left list
+  selects it, under Network beside VPN for a module page with `"parent": "network"`), else
+  the framed page (`pageOf`), else no button. One place for the page: never both. "Has" is
+  `Shell.settingsPageIds`, the ids the settings window publishes (its `pages`, modules'
+  included), so a module turned off takes the way there with it.
 - Connection editor's "Connect a VPN with it": provider entries are selectable pills; the
   not available ones as removable pills (below).
 - Kill switch (`VpnLockdown`): NetworkManager's VPNs only (below).
@@ -206,7 +214,7 @@ the core sets it (`VpnManager.contextFor`) and sets it again only when its value
 |---|---|---|
 | `network.vpn.row` | under the VPN's row in the network popup (an exit-node chooser) | `{ slot, vpnId, entryId, vpn, provider }` |
 | `network.vpn.card` | on the VPN's card in Settings → System → Network → VPN, while open | `{ slot, vpnId, entryId, vpn, provider, open }` |
-| `network.vpn.page` | a page over the VPN page, opened from the card's "Settings…" | `{ slot, vpnId, entryId, vpn, provider, close }` (`close()` returns) |
+| `network.vpn.page` | a page over the VPN page, opened from the card's "Settings…" — the fallback for a provider without a known `settingsPage` | `{ slot, vpnId, entryId, vpn, provider, close }` (`close()` returns) |
 
 `vpn` is the merged entry above; `provider` the provider object itself, so a contribution
 calls the provider's own functions and reads its own state without a singleton of its own.

@@ -72,8 +72,11 @@ Column {
             spacing: 2
 
             Rectangle {
+                objectName: "vpnRow"
                 width: parent.width
-                height: 36
+                // As tall as before for a row of one line (NetworkManager's VPNs); a status
+                // line under the name makes it taller, as the hotspot rows' second line does
+                height: Math.max(36, _names.implicitHeight + 8)
                 radius: Theme.row.radius
                 color: _vpn.isActive ? Theme.accentTint : Theme.surface
 
@@ -88,24 +91,35 @@ Column {
                         color: _vpn.isActive ? Theme.accent : Theme.textMuted
                     }
 
-                    Text {
-                        text: _vpn.modelData.name
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: _vpn.isActive ? Theme.accent : Theme.textPrimary
+                    // The name, and under it a provider's one line ("Tailnet only", "Via
+                    // <exit node>", "Starting…") in the muted sub-line style of the hotspot
+                    // rows — beside the name it squeezed both into one elided line
+                    Column {
+                        id: _names
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
-                    }
+                        spacing: 0
 
-                    // A provider's one line beside the state ("Via <exit node>", "Starting…")
-                    Text {
-                        visible: text !== ""
-                        text: _vpn.modelData.status ?? ""
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textMuted
-                        elide: Text.ElideRight
-                        Layout.maximumWidth: 110
+                        Text {
+                            objectName: "vpnName"
+                            width: parent.width
+                            text: _vpn.modelData.name
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeBody
+                            color: _vpn.isActive ? Theme.accent : Theme.textPrimary
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            objectName: "vpnStatus"
+                            width: parent.width
+                            visible: text !== ""
+                            text: _vpn.modelData.status ?? ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeXSmall
+                            color: Theme.textMuted
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                        }
                     }
 
                     PrivilegedMark {
