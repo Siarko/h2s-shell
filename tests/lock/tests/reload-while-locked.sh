@@ -40,7 +40,5 @@ check "the same process (a reload, not a restart)" kill -0 "$SHELL_PID"
 lock_by_ipc
 check_within 5 "the reloaded shell locks" compositor_locked
 check_within 5 "… and the compositor confirms it" state_is secure true
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "… and unlocks again" compositor_unlocked
+unlock_for_test
+check "… and unlocks again" compositor_unlocked

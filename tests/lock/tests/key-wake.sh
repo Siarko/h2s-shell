@@ -17,9 +17,11 @@ check_within 3 "Enter wakes the prompt" state_is prompt_awake true
 check_within 2 "and is refused as an empty password" state_is refusal empty
 check "nothing was checked" test ! -e "$WORK/pam/check.log"
 
-# Back to sleep: the prompt's 10 s time-out is long, so a press of Escape would unlock;
-# wait it out instead
-check_within 15 "the prompt goes back to sleep" state_is prompt_awake false
+# Back to sleep: Escape at an awake prompt hides it (as its time-out would, 10 s later)
+press_key Escape
+check_within 3 "Escape puts the prompt back to sleep" state_is prompt_awake false
+check "… still locked" compositor_locked
+check "… the refusal is gone with it" state_is refusal ""
 
 first=${LOCKTEST_PASSWORD:0:1}
 rest=${LOCKTEST_PASSWORD:1}

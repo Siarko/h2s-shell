@@ -21,8 +21,8 @@ import qs.screensaver
 // (LockRules.describe). There is no unlock function, no dispatch function, and the state,
 // the event queue and the surface registry are not properties: they live in the closure
 // _build() makes, reachable only through the operations it returns. The lock ends only as
-// the rules say — an accepted authentication, logind's Unlock, the Escape key at an awake
-// prompt (the owner's decision, for now), or the compositor ending it.
+// the rules say — an accepted authentication, logind's Unlock (`loginctl unlock-session`,
+// from another console), or the compositor ending it. Escape never unlocks.
 //
 // What same-process QML can still do (plan, section 7, "What other QML can reach"): call
 // lock() and the surface functions with a LockSurface it got hold of; emit the signals of

@@ -16,13 +16,13 @@ sleep 1.5
 check "the prompt stays asleep through the fade and after" state_is prompt_awake false
 send_input "move 1 0"
 check_within 2 "a one-pixel move wakes it" state_is prompt_awake true
-press_key Escape
-check_within 5 "out (Escape at an awake prompt, the owner's testing door)" compositor_unlocked
+unlock_for_test
+check "out (the test password)" compositor_unlocked
 
 shell_ipc lockscreen lock > /dev/null
 wait_until 5 state_is surfaces 1 || abort "no lock surface"
 send_input "click left"
 check_within 2 "a press right as the lock appears wakes the prompt" state_is prompt_awake true
 check_within 5 "locked" compositor_locked
-press_key Escape
-check_within 5 "out again" compositor_unlocked
+unlock_for_test
+check "out again" compositor_unlocked

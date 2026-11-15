@@ -107,6 +107,8 @@ never went through a real `WlSessionLock`.
 Security:
 
 1. Escape unlocks without authentication (`LockPrompt.qml`, also in the packaged version).
+   (Kept on purpose as the owner's testing door through the real-machine check; removed
+   2026-11-15, section 5.)
 2. Any file written in the checkout while locked reloads the shell and unlocks the screen,
    or leaves it locked with no client (the shell runs from the live checkout). (Stage 2: no
    reload from file changes while locked; Stage 4: a reload while locked keeps the lock.)
@@ -264,7 +266,7 @@ on `account`, the fingerprint config independent of the global switch), the meth
 `XDG_SESSION_ID`. Report the Quickshell bug upstream.
 
 **Stage 6 — the real machine, once.** Prepared, not performed: the checklist is
-**`docs/plans/lockscreen-real-machine.md`** — escape routes first, then deployment
+**`docs/plans/lockscreen-real-machine.md`** — the ways out first, then deployment
 checks, then the tests cheapest first, each with what must happen, the log lines to match
 and what it proves; any failure: `scripts/lock-log.sh` and stop. Before it, from the
 review of Stage 4: the reload at unlock removed, the reload window narrowed, one
@@ -307,13 +309,16 @@ read from the log rather than guessed.
 - Lock before sleep stays on by default.
 - `loginctl unlock-session` (logind's Unlock signal) unlocks: the emergency way in from
   another console, and what the tests use.
-- **Escape keeps unlocking for now**, against section 1: the owner uses it while testing.
-  It is an explicit, named event in the rules (not a side door in a view), so the tests
-  can say exactly which events unlock: an accepted authentication, logind's Unlock, and
-  this one. Removing it later is deleting that one event. What it does, plainly: at an
-  awake prompt a press of Escape unlocks — from any screen, with a question pending, during
-  a check, while the machine is going to sleep; on a sleeping prompt it only wakes it, so
-  two separate presses unlock; a held Escape's repeats count for nothing.
+- **Escape no longer unlocks — removed 2026-11-15.** It was kept as the owner's testing
+  door (Escape at an awake prompt unlocked, against section 1) until the real-machine check
+  was done; the owner then asked for it to go. The ways out are now: an accepted
+  authentication (password, fingerprint, security key), logind's Unlock
+  (`loginctl unlock-session` from another console — the emergency way in, and what the
+  tests use), and the compositor ending the lock. What Escape does instead: on a sleeping
+  prompt it wakes it, as any key; at an awake prompt it hides the prompt, exactly as the
+  prompt's time-out does (the field empties, a question left unanswered is cancelled, a
+  check under way goes on). A held Escape's repeats count for nothing (else it would toggle
+  the prompt).
 - The shell may be locked and unlocked freely inside the isolated test compositor.
 
 ## 6. How the work is done
@@ -350,7 +355,7 @@ back but a TTY; a lenient one unlocks. So:
   (`compositorLocked` taken for it). Every unit test checks this on every step it takes.
 - A lock is never set again or given up while unconfirmed: no retry, no "unconfirmed" end.
   A late confirmation is only reported (`timings.confirm`, a warning once, `view.notice`).
-- An unlock decided while `locking` — an accepted authentication, logind's Unlock, Escape —
+- An unlock decided while `locking` — an accepted authentication or logind's Unlock —
   is **pending**: the phase becomes `unlocking`, every conversation and lock timer is wound
   down as for an unlock, and `phase.pending` records `{ reason, method }`. At
   `compositorLocked` for that session the unlock is carried out (`unlockCompositor`, then
@@ -422,8 +427,7 @@ back but a TTY; a lenient one unlocks. So:
   `settings.timings`, left out it is `LockRules.timings`).
 - Tables: `timings`, `limits` (`errorLimit` 5, `revivals` 3; not overridable),
   `passiveMethods` (`fingerprint`, `u2f`: name, label, hint, eager), `unlockSources`
-  (`["logind"]`), `escapeUnlocks` (true — see "Escape"), `namedKeys`, `sleepTimers`,
-  `timerNames`, `pamResults`.
+  (`["logind"]`), `namedKeys`, `sleepTimers`, `timerNames`, `pamResults`.
 
 The driver's small pure helpers are `singletons/LockIoRules.qml` (tested in
 `tests/LockIoRulesTest.qml`): `serialQueue(handle, onError)` (one event at a time),
@@ -458,7 +462,7 @@ Each region has a `status`.
 
 | region | status | other fields |
 |---|---|---|
-| `phase` | unlocked / locking / locked / unlocking | `session` (+1 at every lock), `confirmLate` (the confirm timer expired; locking/unlocking), `pending` (`{ reason, method }` while unlocking, else null), `lastEnd` when unlocked: authenticated / escape / logind / compositor / denied |
+| `phase` | unlocked / locking / locked / unlocking | `session` (+1 at every lock), `confirmLate` (the confirm timer expired; locking/unlocking), `pending` (`{ reason, method }` while unlocking, else null), `lastEnd` when unlocked: authenticated / logind / compositor / denied |
 | `sleep` | awake / suspending / resuming | `inhibitor`: held / released, `minSuspendPassed` (suspending: the minSuspend timer has run) |
 | `methods` | unknown / detecting / known | `generation`, `configs: { password, fingerprint, u2f }` (each `{ directory, config }` or null), `answered` (the script answered once in this lock), `lastResult` (answered / failed / ""), `askedAt` (wall clock of the last request), `waitForAnswer`, `passwordSource`: detected / fallback / none |
 | `password` | idle / pending / verifying / asking / failed / unavailable | `conversation: { id, session }`, `config`, `avoid` (a config that could not be used in this lock, or null), `question`, `answerVisible`, `error`, `pamError`, `refusal`, `settling` |
@@ -486,7 +490,7 @@ prompt's surfaces (still there; the prompt stays where it was to say "Unlocking�
 | `surfaceRemoved` | `surface` | that instance destroyed |
 | `activity` | `surface` | pointer motion |
 | `press` | `surface` | a pointer press (it moves the prompt to that surface) |
-| `key` | `surface, key` (one of `namedKeys`, or ""), `text`, `autoRepeat` | every key pressed on the surface; `autoRepeat` true for a held key's repeats |
+| `key` | `surface, key` (one of `namedKeys`, or ""), `text`, `autoRepeat` | every key pressed on the surface; `autoRepeat` true for a held key's repeats. Never ends a lock. Escape: on a sleeping prompt wakes it; at an awake prompt hides it (as the prompt time-out); never forwarded; repeated, ignored ("repeated Escape") |
 | `submit` | `surface, text` | Enter / the button in the field; taken only from `promptSurface` |
 | `methodsDetected` | `generation, lines` | the methods script's output |
 | `methodsFailed` | `generation, reason` | the script failed |
@@ -876,7 +880,7 @@ registry live in the closure `_build()` makes, not in properties; `_api` holds o
 operations above. The surface functions take the `LockSurface` object itself and act only for
 one registered by `addSurface` (which accepts only a `LockSurface` instance, once, while a lock
 is in force) — no guessable ids. Still reachable: a QML component that gets hold of a
-`LockSurface` (or creates one) can send its input — Escape at an awake prompt included;
+`LockSurface` (or creates one) can send its input (a password it knows; no key unlocks);
 `Lockscreen.children` lists the singleton's child objects (the logind monitor, the adapters,
 the timers), whose signals other QML can emit — the driver accepts from each only the event
 types it may raise (the logind monitor's include logind's Unlock); and, like any process of
@@ -886,20 +890,24 @@ against code running in the shell.
 
 ### Decisions, and why
 
-- **Escape** (the owner's decision, section 5) unlocks at an awake prompt. It is routed only
-  through the `key` event, in one marked block in `_key`, switched by `escapeUnlocks`; it is
-  no `unlockRequested` source. On a sleeping prompt it only wakes it and is not forwarded. A
-  held key's auto-repeats are ignored ("repeated Escape"), so holding Escape on a sleeping
-  prompt does not wake it and then unlock. Plainly: two separate presses unlock (the first
-  wakes, the second unlocks); it works from any surface (not only the one showing the
-  prompt), with a question pending, during a verification, and while suspending; while
-  locking it is a pending unlock like any other. "At an awake prompt" was kept as the only
-  condition rather than tightened, deliberately: this is a testing door slated for deletion,
-  and every extra rule around it is more to delete. Removing it is deleting that block and
-  the property. The events that end a lock are exactly: a `pamCompleted` success of the
-  current conversation, `unlockRequested("logind")`, a pressed Escape at an awake prompt (all
-  three pending while locking, carried out at `compositorLocked`), and — not unlocks by
-  anyone — `compositorFinished` of the current session. The sweep asserts it.
+- **No key unlocks; Escape hides the prompt** (section 5: Escape unlocked at an awake prompt
+  until 2026-11-15, the owner's testing door, then removed). The events that end a lock are
+  exactly: a `pamCompleted` success of the current conversation, `unlockRequested("logind")`
+  (both pending while locking, carried out at `compositorLocked`), and — not unlocks by
+  anyone — `compositorFinished` of the current session. The sweep's oracle fails on any
+  `key` event that ends a lock or decides an unlock, and counts the Escapes it sends at an
+  awake prompt (at least one per sixteen sequences); a behaviour test sends sixty Escapes,
+  pressed and repeated, from every surface, from each situation (asleep, awake, two
+  surfaces, a question pending, verifying, suspending, locking, locking while going to
+  sleep, restored over a reload): the phase never changes, nothing is sent. What Escape
+  does, in `_key` only: on a sleeping prompt it wakes it (any key does) and is not
+  forwarded; at an awake prompt, from any surface, it hides the prompt through the same
+  `_sleepPrompt` as the time-out — `fieldEpoch` +1 (what was typed goes), a question left
+  unanswered is cancelled (its conversation aborted), a verification under way goes on and
+  still unlocks if it succeeds. One press, one effect, rather than "first clear, then
+  hide": the rules do not know whether the field holds text (it lives in the view), and
+  hiding empties it anyway. Its auto-repeats are ignored ("repeated Escape") — otherwise a
+  held Escape would toggle the prompt at the repeat rate.
 - **Keys on another surface are forwarded to the owner**, not a reason to move the prompt: the
   half-typed text lives in the owner's field. Motion elsewhere only extends the owner's
   time. A **press** on a surface that does not own the prompt moves it there (the owner's
@@ -1318,7 +1326,6 @@ section 4; not part of this work).
 - `recorded_supervisor` could prove the pid is the lock holder via `/proc/locks`.
 - Write the marker's pending "unlocked" on destruction when the unlock was already flushed.
 - CapsLockLed: a read arriving while a stale probe runs briefly shows the old answer.
-- Remove Escape's unlock after the check (LockRules `escapeUnlocks` and the tests that expect it — the checklist's last section, `docs/plans/lockscreen-real-machine.md` section 3, says exactly what).
 - The screensaver drops when a profile changes its timeout while it shows.
 - The three upstream Quickshell issues and the `qs ipc` exit-status one (`docs/upstream/`) are drafted, not filed.
 - Whether to drop the `login` fallback on NixOS, once `tests/manual/pam-probe.sh` (checklist 2.17) settles it.

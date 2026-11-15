@@ -29,11 +29,9 @@ for cycle in 1 2 3 4 5; do
     check "cycle $cycle: the lock ended authenticated" state_is last_end authenticated
     check_within 3 "cycle $cycle: the per-lock adapters are gone" state_is lock_scope false
     check_within 3 "cycle $cycle: no fingerprint conversation left" no_finger_waiters
-    if compositor_locked; then
-        press_key Escape
-        wait_until 5 compositor_unlocked
-        break
-    fi
+    # Still locked: the failure is counted; the next cycle could prove nothing (the run
+    # stops the stack, which ends the lock)
+    compositor_locked && break
 done
 log "password checks: $(tr '\n' ' ' < "$WORK/pam/check.log" 2> /dev/null)"
 check "the three password unlocks each ran the test stack once, all right" \

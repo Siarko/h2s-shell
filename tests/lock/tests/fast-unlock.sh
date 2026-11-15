@@ -44,18 +44,16 @@ press_key Return
 check_within 10 "a fresh authentication unlocks it" compositor_unlocked
 check "no protocol error" no_protocol_error
 
-# ---- Escape twice, as fast as the test bed can send it after the lock request ----
+# ---- Escape twice, as fast as the test bed can send it after the lock request: no unlock ----
+# (Escape ended a lock until 2026-11-15; an unlock decided while locking is logind's, above)
 shell_ipc lockscreen lock > /dev/null
 send_input "key Escape" "key Escape"
+check_within 5 "Escape right after the lock request: locked" compositor_locked
+check_within 5 "… confirmed, nothing pending" state_is phase locked
 sleep 1
-for _ in 1 2 3; do
-    compositor_unlocked && break
-    press_key Escape
-    sleep 0.5
-done
-check_within 5 "Escape right after the lock request ends unlocked" compositor_unlocked
-check "ended by Escape" state_is last_end escape
-log "Escape: the unlock $(grep -aq "unlock (escape) decided before" "$WORK/shell.log" && echo "was pending (decided while locking)" || echo "came after the confirmation")"
+check "… and stays locked" state_is phase locked
+unlock_for_test
+check "logind's Unlock then ends it" compositor_unlocked
 check "the shell still runs" kill -0 "$SHELL_PID"
 check "no protocol error" no_protocol_error
 lock_by_ipc

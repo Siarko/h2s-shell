@@ -34,10 +34,8 @@ check_within 5 "locked" compositor_locked
 check "the marker is in the private runtime dir, the user's, not a link" \
     test -f "$marker" -a ! -L "$marker" -a "$(stat -c %u "$marker")" = "$(id -u)"
 check "it says locked, with this session's key" test "$(cat "$marker")" = "locked $(key_of "$this_boot")"
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "unlocked" compositor_unlocked
+unlock_for_test
+check "unlocked" compositor_unlocked
 check_within 3 "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
 
 # ---- From another boot ----

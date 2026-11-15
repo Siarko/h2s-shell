@@ -29,12 +29,6 @@ confirmed_after() {
     line=$(tail -n +"$(($1 + 1))" "$WORK/shell.log" | sed 's/\x1b\[[0-9;]*m//g' | grep -a -m 1 '"type":"compositorLocked"') || return 0
     date -d "${line:0:23}" +%s.%N 2> /dev/null
 }
-unlock_by_escape() {
-    press_key Escape
-    wait_until 3 state_is prompt_awake true
-    press_key Escape
-    wait_until 5 compositor_unlocked
-}
 # The end of a sleep, and a wait until the shell has handled it (taken or ignored, its
 # "resumed" event is logged) — instead of a fixed sleep before the next key
 wake_and_settle() {
@@ -50,17 +44,17 @@ lock_by_ipc
 check_within 5 "locked" compositor_locked
 echo "// written by tests/lock reload-window.sh while locked" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
 reloads_before=$(reloads)
-unlock_by_escape || fail "Escape did not unlock"
+unlock_for_test || fail "logind's Unlock did not unlock"
 launcher_ipc lockscreen lock > "$WORK/ipc-1.out" 2>&1
 check "a lock by the launcher's IPC right after the unlock is taken (status 0)" test $? = 0
 check_within 5 "… and locks" compositor_locked
 check "no reload came with the unlock" test "$(reloads)" = "$reloads_before"
-unlock_by_escape || fail "Escape did not unlock"
+unlock_for_test || fail "logind's Unlock did not unlock"
 wait_until 5 inhibitor_held
 logind_signal sleep
 check_within 5 "a PrepareForSleep right after an unlock locks" compositor_locked
 wake_and_settle
-unlock_by_escape || fail "Escape did not unlock"
+unlock_for_test || fail "logind's Unlock did not unlock"
 check "still no reload" test "$(reloads)" = "$reloads_before"
 
 # ---- (2) The launcher's IPC while the shell reloads ----
@@ -78,7 +72,7 @@ check "the launcher's lock during the reload ends with status 0" test "$status" 
 check_within 5 "… and the screen locks" compositor_locked
 check "the call did not end on \"Not ready\"" test "$(grep -c 'Not ready' "$WORK/ipc-2.out")" = 0
 wait_until 10 shell_status_is locked
-unlock_by_escape || fail "Escape did not unlock"
+unlock_for_test || fail "logind's Unlock did not unlock"
 
 # ---- (3) PrepareForSleep while the shell reloads ----
 for offset in 0 0.4; do
@@ -118,6 +112,6 @@ for offset in 0 0.4; do
     [ -n "$held_at_signal" ] || fail "[$offset] no inhibitor was held when the signal came"
     log "[$offset] how the shell heard of it: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/shell.log" | grep -a -E 'PreparingForSleep|"type":"prepareForSleep"' | tail -n 2 | sed 's/^.*\[Lockscreen\] //' | tr '\n' '|')"
     wake_and_settle
-    unlock_by_escape || fail "[$offset] Escape did not unlock"
+    unlock_for_test || fail "[$offset] logind's Unlock did not unlock"
 done
 check "no protocol error" no_protocol_errors

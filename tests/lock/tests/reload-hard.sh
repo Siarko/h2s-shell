@@ -33,8 +33,6 @@ press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 lock_by_ipc
 check_within 5 "a later lock works" compositor_locked
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "… and unlocks" compositor_unlocked
+unlock_for_test
+check "… and unlocks" compositor_unlocked
 log "Hyprland on the lock: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/hyprland.log" | grep -a -E 'SessionLock|sessionLock|lockscreen|Lock' | grep -v -i 'clock\|LED\|Mod index' | tr '\n' '|')"

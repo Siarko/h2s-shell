@@ -391,7 +391,7 @@ Four layers, so that what decides can be tested without what does (plan and cont
 compositor's `locked` a protocol error, and Quickshell sends one whenever
 `WlSessionLock.locked` is set false before `secure`. So the rules emit `unlockCompositor`
 only for a session the compositor confirmed: an unlock decided while locking (a password,
-logind's Unlock, Escape) is pending until `compositorLocked`, and a slow confirmation is
+logind's Unlock) is pending until `compositorLocked`, and a slow confirmation is
 only reported — the lock is never set again or given up (plan, section 7).
 
 **The Quickshell bug worked around**: Quickshell 0.3.2 never emits `lockStateChanged`

@@ -92,8 +92,10 @@ there is one supervisor per session (a second start waits briefly, then gives up
 lock screen misbehaves, `h2s-shell --lock-log` (or `scripts/lock-log.sh`, also from a text
 console while the screen is locked) prints what happened: the shell's lock lines
 (Quickshell's log, `qs log`), the supervisor's log (`$XDG_RUNTIME_DIR/h2s-shell-launcher.log`)
-and the journal's PAM, fprintd and logind lines — nothing typed is ever logged. Settings
-are kept in `~/.config/h2s_shell/`.
+and the journal's PAM, fprintd and logind lines — nothing typed is ever logged. A locked
+screen that will not take the password is unlocked from a text console with `loginctl
+unlock-session <id>` (the graphical session's id, from `loginctl list-sessions`); Escape
+does not unlock, it only hides the prompt. Settings are kept in `~/.config/h2s_shell/`.
 
 ### Tablet mode
 

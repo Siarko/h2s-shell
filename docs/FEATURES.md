@@ -251,10 +251,10 @@ Two independent stages, both driven by Wayland idle notifications:
   keeps its "lockscreen app died" screen, the shell says `compositor-locked` and waits for
   the setting (see `docs/plans/lockscreen.md`, section 7, "Recovery").
 - **Other ways out** — logind's Unlock for the shell's session (`loginctl
-  unlock-session`, from another console), and, deliberately for now, Escape at a showing
-  prompt (the owner's decision while testing; on a hidden prompt Escape only shows it, so
-  two presses unlock; a held Escape's repeats count for nothing).
-  There is no unlock over IPC.
+  unlock-session`, from another console), and the compositor ending the lock. There is no
+  unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a
+  showing one, emptying the field (as the prompt's time-out does); a held Escape's repeats
+  count for nothing. (Escape at a showing prompt unlocked until 2026-11-15.)
 - **Sleep** — the screen locks before the computer sleeps (`lockscreen.lockOnSleep`), the
   shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and

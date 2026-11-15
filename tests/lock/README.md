@@ -333,8 +333,11 @@ Lock is on (the text typed would not be the one asked for). Input goes through
 a FIFO to `input/ltinput.py`; a client that has died, or does not read within 5 s, aborts
 the test with its last words from `input.log`, and so does a character it cannot type
 (it refuses the whole string rather than type a different one). Its acknowledgement
-means the compositor has the input, not that the shell has handled it. Escape unlocks for now (the owner's decision); a test
-may use it to get out, and must not count it as authentication.
+means the compositor has the input, not that the shell has handled it. Escape never unlocks
+(it did until 2026-11-15): a test whose subject is not how the lock ends gets out with
+`unlock_for_test` — logind's Unlock through the stand-in when the stack has one (`--logind`,
+`--fprintd`), else the test password (one more "right" in `pam/check.log`) — or simply ends
+locked: stopping the stack ends the lock.
 
 A test that fails with today's code on purpose — a red test for a coming fix — goes in
 `EXPECTED_TO_FAIL` at the top of `run.sh`, with the reason, and the checks expected to

@@ -1077,6 +1077,24 @@ wake_prompt() {
     return 1
 }
 
+# unlock_for_test [seconds]: ends the lock by a legitimate route, for a test whose subject is
+# not how the lock ends (Escape never unlocks): logind's Unlock through the stand-in when the
+# stack has one (stack_start --logind or --fprintd), else the test password typed at the
+# prompt (which adds a "right" to pam/check.log, and needs a stack whose password works).
+# Waits up to <seconds> (10) for the compositor to unlock; non-zero if it did not. A test
+# that only needs to stop while locked needs none of this: stopping the stack ends it.
+unlock_for_test() {
+    if [ -f "$WORK/logind/signals" ]; then
+        logind_signal unlock
+    else
+        wait_until 5 _password_stack_is_safe || { log "unlock_for_test: the password config is not a test stack: not typing"; return 1; }
+        wake_prompt || { log "unlock_for_test: the prompt did not wake"; return 1; }
+        type_text "$LOCKTEST_PASSWORD"
+        press_key Return
+    fi
+    wait_until "${1:-10}" compositor_unlocked
+}
+
 # ---- Evidence -----------------------------------------------------------------------
 
 screenshot() { grim "$WORK/$1.png" 2> /dev/null && log "screenshot $1.png"; }

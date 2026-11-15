@@ -93,8 +93,6 @@ check "the old supervisor did not start a shell" test "$(shell_log_count "starte
 check "the lock names the new supervisor" test "$(cat "$RUN/h2s-shell-launcher.lock")" = "$SUPERVISOR_PID"
 lock_by_ipc
 check_within 5 "the new shell locks" compositor_locked
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "… and unlocks" compositor_unlocked
+unlock_for_test
+check "… and unlocks" compositor_unlocked
 log "the launcher log: $(tr '\n' '|' < "$RUN/h2s-shell-launcher.log")"

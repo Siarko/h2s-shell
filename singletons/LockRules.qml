@@ -129,11 +129,6 @@ Singleton {
     // console. An unlockRequested from any other source is refused.
     readonly property var unlockSources: ["logind"]
 
-    // ESCAPE UNLOCKS — kept for now, deliberately: the owner uses it while testing (plan,
-    // section 5). The one place it acts is the marked block in _key. Removing it is
-    // deleting that block and this property; the Escape key then only wakes the prompt.
-    readonly property bool escapeUnlocks: true
-
     // The key names a `key` event may carry (the driver maps Qt's keys to these; Return and
     // the keypad's Enter are both "Enter"). Anything else is a character and belongs in
     // `text`: an unknown `key` is taken as "" and never logged.
@@ -534,7 +529,7 @@ Singleton {
             + " ms: still waiting (the password can be checked meanwhile; an unlock waits for the confirmation)");
     }
 
-    // An unlock decided — an accepted authentication, logind's Unlock, Escape. Locked: done
+    // An unlock decided — an accepted authentication or logind's Unlock. Locked: done
     // now. Locking: the compositor has not confirmed the lock, and unlocking it now would
     // be a protocol error (the header) — so everything of the lock is wound down as for an
     // unlock, and the unlock itself waits, as `phase.pending`, for compositorLocked
@@ -689,25 +684,22 @@ Singleton {
         // A character belongs in `text`; a `key` outside the list is dropped, so that it can
         // neither carry typed text into a log nor act as a key the field does not know
         const key = namedKeys.includes(event.key) ? event.key : "";
-        // Holding Escape on a sleeping prompt must not wake it and then unlock it: its
-        // auto-repeats count for nothing (two separate presses still unlock, see below)
+        // A held Escape would wake a sleeping prompt and hide it again at its first repeat,
+        // and so on: its auto-repeats count for nothing
         if (key === "Escape" && event.autoRepeat === true)
             return "repeated Escape";
         _recoverSleep(tx);
         // Control characters (Enter's "\r", Backspace's "\b", Ctrl+letters) are not text
         const text = typeof event.text === "string" && !/[\u0000-\u001f\u007f]/.test(event.text) ? event.text : "";
-        const wasAwake = tx.state.prompt.owner !== null;
+        // Escape never unlocks (it did until 2026-11-15: plan, section 5). On a sleeping
+        // prompt it wakes it, as any key; at an awake prompt — from any surface — it hides
+        // the prompt exactly as its inactivity time-out does: the field empties, a question
+        // left unanswered is cancelled, a verification under way goes on. Never forwarded.
         if (key === "Escape") {
-            // ---- ESCAPE UNLOCKS (see `escapeUnlocks`): delete this block to remove it ----
-            // At an awake prompt, from any surface, whatever the password is doing, also
-            // while suspending; while locking it is a pending unlock like any other
-            if (escapeUnlocks && wasAwake) {
-                _endLock(tx, "escape", "");
-                return;
-            }
-            // ---- end of Escape ----
-            // On a sleeping prompt Escape only wakes it, and is not passed on
-            _wake(tx, event.surface);
+            if (tx.state.prompt.owner !== null)
+                _sleepPrompt(tx);
+            else
+                _wake(tx, event.surface);
             return;
         }
         _wake(tx, event.surface);
@@ -791,9 +783,10 @@ Singleton {
         _detect(tx, false);
     }
 
-    // The prompt's inactivity time-out (and the last surface gone): the prompt hides, its
-    // field empties, a QUESTION left unanswered (a one-time code) is cancelled — but a
-    // verification under way is not touched (defect 8: the old 10 s sleep aborted it)
+    // The prompt's inactivity time-out, Escape at an awake prompt (and the last surface
+    // gone): the prompt hides, its field empties, a QUESTION left unanswered (a one-time
+    // code) is cancelled — but a verification under way is not touched (defect 8: the old
+    // 10 s sleep aborted it)
     function _sleepPrompt(tx) {
         _stopTimer(tx, "prompt");
         _set(tx, "prompt", { owner: null, awakeUntil: null, fieldEpoch: tx.state.prompt.fieldEpoch + 1 });

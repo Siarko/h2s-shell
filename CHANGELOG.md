@@ -399,10 +399,11 @@ section to the new version and date.
   error that a strict compositor answers by killing the shell (the session then stays
   locked for good) and a lenient one by unlocking. The lock waits for the confirmation as
   long as it takes ("Waiting for the compositor…" after 5 s, e.g. a slow screen after a
-  suspend); the password can be checked meanwhile, and an unlock — by password, logind or
-  Escape — shows "Unlocking…" and happens when the compositor confirms.
-- Lock screen: holding Escape no longer unlocks (its repeats are ignored; Escape on a hidden
-  prompt only shows it).
+  suspend); the password can be checked meanwhile, and an unlock — by password or logind —
+  shows "Unlocking…" and happens when the compositor confirms.
+- Lock screen: Escape no longer dismisses the lock screen without a password, as it did in
+  every released version: it now shows a hidden prompt and hides a showing one (emptying
+  the field); `loginctl unlock-session` unlocks from another console.
 - Lock screen: a password config that cannot be used (PAM refuses to start it, or reports an
   error) no longer makes every password fail for the rest of the lock: the next attempt
   uses the fallback, which is now chosen like the methods script's password config

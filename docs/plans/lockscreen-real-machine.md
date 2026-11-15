@@ -20,12 +20,14 @@ hs() { H2S_SHELL_DIR=$HOME/src/h2s-shell h2s-shell "$@"; }
 The "log" column lists lines `hs --lock-log` must show for the step, in order (shortened:
 `…` stands for the rest of the line). Background: `docs/plans/lockscreen.md`, section 7.
 
-## 0. Escape routes — read before locking anything
+## 0. Ways out — read before locking anything
+
+Escape does not unlock (it did until 2026-11-15; former route 0.1): at a showing prompt it
+only hides the prompt again. A prompt that will not take the password is 0.2.
 
 | # | When | Do |
 |---|---|---|
-| 0.1 | A prompt that shows (or wakes) but will not take the password | Press **Escape** twice (the first wakes the prompt, the second unlocks). Deliberately still there for this check (plan section 5). |
-| 0.2 | Anything else while locked | **Ctrl+Alt+F2**, log in, then `loginctl list-sessions` (your graphical session: user h2s, seat0, TTY `tty1`), `loginctl unlock-session <its id>`, back with **Ctrl+Alt+F1**. logind's Unlock reaches the shell, which unlocks. |
+| 0.2 | Anything while locked: a prompt that will not take the password, or none at all | **Ctrl+Alt+F2**, log in, then `loginctl list-sessions` (your graphical session: user h2s, seat0, TTY `tty1`), `loginctl unlock-session <its id>`, back with **Ctrl+Alt+F1**. logind's Unlock reaches the shell, which unlocks. |
 | 0.3 | Hyprland's red "lockscreen app died" screen stays, or no prompt ever comes (no shell holds the lock) | From the text console (0.2): `hyprctl -i 0 eval 'hl.config({ misc = { allow_session_lock_restore = true } })'`, then `pgrep -af scripts/launch.sh`. **A launcher listed:** wait a minute (it retries; the shell takes the lock back). **None listed:** `XDG_SESSION_ID=<graphical id> WAYLAND_DISPLAY=wayland-1 HYPRLAND_INSTANCE_SIGNATURE=<sig> H2S_SHELL_DIR=$HOME/src/h2s-shell h2s-shell --restart` — the graphical id from `loginctl list-sessions` (the session on seat0 whose TTY is the graphical login's, `tty1`; not the console's own, or the new shell follows the console's logind session and 0.2's `unlock-session` no longer reaches it), the signature from `ls $XDG_RUNTIME_DIR/hypr/` (`hyprctl instances` also shows it with its `wayland-N`); the new shell finds the marker and shows the prompt. |
 | 0.4 | Last resort | `loginctl terminate-session <id>` from the console: ends the session (unsaved work is lost); the next login is not locked. |
 
@@ -45,7 +47,7 @@ The "log" column lists lines `hs --lock-log` must show for the step, in order (s
 | 2.1 | Super+L. Wait a few seconds, press a letter key, type the password, Enter. | Locks at once (no desktop frame); the key wakes the prompt; unlocks. | `event {"type":"lockRequested","source":"ipc"}` · `effect {"type":"lockCompositor","session":N}` · `lock marker: locked …` · `locking (ipc), session N` · `event {"type":"compositorLocked",…}` and `"type":"methodsDetected"` with `password\t/etc/pam.d\th2s-shell-password` and `fingerprint\t/etc/pam.d\th2s-shell-fingerprint` (these two in either order: independent) · `prompt awake on surface …, woken by key` · `effect {"type":"startPam","method":"password",…"config":"h2s-shell-password"}` · `password conversation … ended: success after … ms` · `unlocked (authenticated, password), session N` · `the lock screen is gone` · `lock marker: unlocked` | The real password through the real stack. |
 | 2.2 | Super+L again, same as 2.1. | Same. | Same, session N+1. | The original "works once" bug is gone. |
 | 2.3 | Select some text at the desktop. Super+L, wake, type a wrong password, Enter; then middle-click on the prompt and on the screen's top-left corner; type the right one, Enter. | "Authentication failed" (after pam_unix's ~2 s delay), the field empty; nothing pasted; the right one unlocks. | `… ended: failed after …` · `password not accepted (failed), PAM config /etc/pam.d/h2s-shell-password` · `prompt shows: Authentication failed` · `… ended: success …` · `unlocked (authenticated, password)` — journal: `pam_unix(h2s-shell-password:auth): authentication failure` | A wrong password costs nothing; the next works; no paste into the field. |
-| 2.4 | Super+L; then escape route 0.2 (`loginctl unlock-session <id>`). | Back at VT1, unlocked. | `event {"type":"unlockRequested","source":"logind"}` · `unlocked (logind), session …` | The emergency way in works — before anything riskier. |
+| 2.4 | Super+L; then way out 0.2 (`loginctl unlock-session <id>`). | Back at VT1, unlocked. | `event {"type":"unlockRequested","source":"logind"}` · `unlocked (logind), session …` | The emergency way in works — before anything riskier. |
 | 2.5 | In a terminal: `loginctl lock-session`. Unlock by password. Then press the power key briefly (HandlePowerKey=lock). Unlock by password. | Both lock. | `"type":"lockRequested","source":"logind"` (both times) | logind's Lock reaches the shell (power key included). |
 | 2.6 | Super+L, wait 5 s untouched, touch the reader with the enrolled finger (right index). | Unlocks. | `effect {"type":"startPam","method":"fingerprint",…"config":"h2s-shell-fingerprint"}` · `event {…"message":"Place your finger…","method":"fingerprint",…}` · `fingerprint conversation … ended: success after …` · `unlocked (authenticated, fingerprint)` | The real reader through the real stack. |
 | 2.7 | Super+L, leave it **6 minutes** untouched (watch the clock), then touch the reader. | Unlocks at the touch. | No `fingerprint: PAM error` and no `cannot be used` lines in those 6 minutes; then as 2.6. | The 4.5-minute regression (broken after five 30 s time-outs) is gone (`timeout=-1`). |
@@ -62,14 +64,6 @@ The "log" column lists lines `hs --lock-log` must show for the step, in order (s
 
 ## 3. What stays open on purpose
 
-- **Escape unlocks** (0.1). To remove it after this check: in `singletons/LockRules.qml`
-  delete the property `escapeUnlocks` (line 135) and the block marked `---- ESCAPE UNLOCKS
-  (see escapeUnlocks): delete this block to remove it ----` in `_key` (line ~701); in
-  `tests/LockRulesTest.qml` the assertion on `escapeUnlocks` (line ~297) and the oracle's
-  Escape case (line ~2085), and the Escape behaviours; `tests/lock/tests/escape.sh`; the
-  `press_key Escape` exits in 15 other harness tests (replace by the password or
-  `logind_signal unlock`); `screensaver/LockPrompt.qml` says nothing of it. Plan sections 5
-  and 7 ("Escape") and the README's line.
 - **Quickshell's own bugs** (`docs/upstream/quickshell-session-lock-unlock-notify.md`, a
   draft, not filed): the unlock notify (fixed upstream after 0.3.2), `kill(-1)` after a
   failed fork, `unlock_and_destroy` before `locked`, and `qs ipc` exiting 0 on a dropped

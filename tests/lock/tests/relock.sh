@@ -29,10 +29,7 @@ for cycle in 1 2; do
     check_within 3 "cycle $cycle: shell says unlocked afterwards" shell_status_is unlocked
     check "cycle $cycle: the shell's lock mirror is false" state_is locked false
 
-    if compositor_locked; then
-        # Out by the deliberate Escape, so the evidence above is all this cycle leaves
-        press_key Escape
-        wait_until 5 compositor_unlocked
-        break
-    fi
+    # Still locked: the failure is counted; the next cycle could prove nothing (the run
+    # stops the stack, which ends the lock)
+    compositor_locked && break
 done

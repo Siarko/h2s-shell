@@ -35,8 +35,8 @@ generation=$(state_field methods_generation)
 wake_prompt || fail "the prompt did not wake"
 sleep 1
 check "a clean 'not here' is not asked again at the prompt's wake" state_is methods_generation "$generation"
-press_key Escape
-check_within 10 "Escape unlocks (the owner's testing door)" compositor_unlocked
+unlock_for_test
+check "out by logind's Unlock (the stand-in)" compositor_unlocked
 
 # 3. fprintd hangs
 # (nothing is typed in this part, so the lock need not wait for a safe password config)

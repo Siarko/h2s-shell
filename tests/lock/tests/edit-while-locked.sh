@@ -42,7 +42,5 @@ check "the compositor stayed unlocked" compositor_unlocked
 
 lock_by_ipc
 check_within 5 "the reloaded shell locks" compositor_locked
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "… and unlocks" compositor_unlocked
+unlock_for_test
+check "… and unlocks" compositor_unlocked

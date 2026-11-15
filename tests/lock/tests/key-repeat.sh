@@ -1,9 +1,10 @@
 # A held key repeats, as it should, through the key catcher — and the repeats are still
-# reported as such (the rules ignore a held Escape's repeats):
+# reported as such (the rules ignore a held Escape's repeats, escape.sh):
 #   a held Backspace deletes more than one character (the field is emptied, then the
 #   password typed alone unlocks);
 #   a held character types more than once (the password ending in a held "2" is wrong);
-#   Escape held on a sleeping prompt wakes it and does not unlock.
+#   Escape held on a sleeping prompt wakes it, and its repeats do not hide it again (nor
+#   unlock: Escape never does).
 
 stack_start
 
@@ -17,7 +18,8 @@ check "the prompt sleeps" state_is prompt_awake false
 hold_key Escape 1.5
 check_within 2 "a held Escape wakes the prompt" state_is prompt_awake true
 sleep 0.5
-check "and does not unlock (its repeats are reported as repeats)" compositor_locked
+check "it stays awake: its repeats are reported as repeats, and ignored" state_is prompt_awake true
+check "still locked" compositor_locked
 
 # A held character repeats: the password with its last character held is not the password
 type_text "${LOCKTEST_PASSWORD%?}"

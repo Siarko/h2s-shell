@@ -1,6 +1,5 @@
 # The test bed checks itself: the stack comes up isolated, the real shell locks the
-# nested compositor, a key wakes the prompt, and Escape (kept as a deliberate unlock for
-# now, docs/plans/lockscreen.md §5) unlocks.
+# nested compositor, a key wakes the prompt, and the test password unlocks.
 
 stack_start
 
@@ -68,6 +67,7 @@ changed=$(prompt_region_changes locked-asleep locked-awake)
 log "pixels changed in the prompt's area: $changed"
 check "the prompt's area changed when the prompt woke" test "$changed" -gt 500
 
-press_key Escape
-check_within 5 "Escape unlocks the compositor" compositor_unlocked
+unlock_for_test
+check "the password unlocks the compositor" compositor_unlocked
+check "… authenticated" state_is last_end authenticated
 describe_lock

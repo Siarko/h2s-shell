@@ -7,10 +7,8 @@ stack_start
 
 lock_by_ipc
 check_within 5 "locked" compositor_locked
-press_key Escape
-check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
-press_key Escape
-check_within 5 "unlocked" compositor_unlocked
+unlock_for_test
+check "unlocked" compositor_unlocked
 check_within 3 "the marker says unlocked" state_is marker unlocked
 
 old_shell=$SHELL_PID

@@ -269,7 +269,6 @@ TestCase {
                    "1: " + label + " unlocks (" + reason + ")");
         };
         unlocks("logind's Unlock", locked(), { type: "unlockRequested", source: "logind" }, "logind");
-        unlocks("the Escape key at an awake prompt", locked().send(activity()), key("s1", "Escape"), "escape");
         unlocks("a fingerprint accepted", locked(), pamCompleted("fingerprint", "success"), "authenticated");
         unlocks("a security key accepted", locked(), pamCompleted("u2f", "success"), "authenticated");
         const ends = (label, from, reason) => {
@@ -294,35 +293,9 @@ TestCase {
         }
         assertEqual(JSON.stringify(LockRules.unlockSources), "[\"logind\"]",
                     "1: the only unlock by request is logind's; Escape is not a request source");
-        assertEqual(LockRules.escapeUnlocks, true,
-                    "1: Escape unlocks for now — the one marked case in _key (removing it is deleting that block)");
-
-        const sleepingEscape = locked().send(key("s1", "Escape"));
-        assert(sleepingEscape.state.phase.status === "locked" && sleepingEscape.state.prompt.owner === "s1"
-               && !has(sleepingEscape.effects, "forwardKey"),
-               "1: Escape on a sleeping prompt only wakes it, and is not passed on");
-        const ghostEscape = locked().send(activity()).send(key("s9", "Escape"));
-        assert(ghostEscape.state.phase.status === "locked" && ghostEscape.ignored === "unknown surface",
-               "1: Escape from a surface not known does nothing");
+        _escapeNeverUnlocks();
         const otherKeys = locked().send(activity()).sendAll([key("s1", "Enter"), key("s1", "", "x"), press(), activity()]);
         assertEqual(otherKeys.state.phase.status, "locked", "1: no other key, press or activity unlocks");
-
-        // Escape held down: the press wakes the prompt, its repeats count for nothing
-        const held = locked();
-        held.send(key("s1", "Escape"));
-        for (let i = 0; i < 20; i++)
-            held.send(key("s1", "Escape", "", true), 30);
-        assert(held.state.phase.status === "locked" && held.ignored === "repeated Escape" && held.state.prompt.owner === "s1",
-               "1: Escape held on a sleeping prompt wakes it and does not unlock (its auto-repeats are ignored)");
-        const repeatAwake = locked().send(activity());
-        const repeatBefore = repeatAwake.state;
-        repeatAwake.send(key("s1", "Escape", "", true));
-        assert(repeatAwake.state === repeatBefore && repeatAwake.ignored === "repeated Escape",
-               "1: … also at an awake prompt a repeated Escape changes nothing");
-        held.send(key("s1", "Escape"), 300);
-        assertEqual(held.state.phase.lastEnd, "escape", "1: two separate presses do unlock (the owner's decision)");
-        const otherSurface = locked().sendAll([added("s2", "HDMI-A-1"), activity("s1"), key("s2", "Escape")]);
-        assertEqual(otherSurface.state.phase.lastEnd, "escape", "1: Escape works from any surface while the prompt is awake");
         const repeatedOther = locked().send(activity()).sendAll([key("s1", "Backspace", "", true), key("s1", "", "a", true)]);
         assert(has(repeatedOther.effects, "forwardKey", { text: "a" }), "1: other keys' repeats are typed as usual");
 
@@ -343,7 +316,6 @@ TestCase {
 
         // Decided while locking: never unlockCompositor before the compositor's word
         for (const [label, events] of [["logind's Unlock", [{ type: "unlockRequested", source: "logind" }]],
-                                       ["Escape", [activity(), key("s1", "Escape")]],
                                        ["a password", [detected(passwordOnly), ...enter("pw"), passwordPrompt(), pamCompleted("password", "success")]]]) {
             const early = locking().sendAll(events);
             assert(early.state.phase.status === "unlocking" && !has(early.all, "unlockCompositor") && !has(early.all, "announceLocked", { locked: false }),
@@ -351,6 +323,96 @@ TestCase {
             early.send(confirmed());
             assert(early.state.phase.status === "unlocked" && has(early.effects, "unlockCompositor", { session: 1 }),
                    "1: … and carried out at the compositor's confirmation");
+        }
+    }
+
+    // Escape never unlocks (it did until 2026-11-15, the owner's testing door; plan,
+    // section 5). What it does: on a sleeping prompt it wakes it, as any key; at an awake
+    // prompt it hides it, as the prompt's time-out does (the field empties, a question left
+    // unanswered is cancelled, a verification goes on); never forwarded to the field; a
+    // held Escape's repeats count for nothing.
+    function _escapeNeverUnlocks() {
+        const sleeping = locked().send(key("s1", "Escape"));
+        assert(sleeping.state.phase.status === "locked" && sleeping.state.prompt.owner === "s1"
+               && !has(sleeping.effects, "forwardKey") && !has(sleeping.effects, "unlockCompositor"),
+               "1: Escape on a sleeping prompt wakes it, as any key, and is not passed on");
+        const ghost = locked().send(activity()).send(key("s9", "Escape"));
+        assert(ghost.state.phase.status === "locked" && ghost.ignored === "unknown surface",
+               "1: Escape from a surface not known does nothing");
+
+        const awake = locked().sendAll([activity(), key("s1", "", "x")]);
+        const epoch = awake.state.prompt.fieldEpoch;
+        awake.send(key("s1", "Escape"));
+        assert(awake.state.phase.status === "locked" && awake.state.prompt.owner === null && awake.state.prompt.awakeUntil === null
+               && awake.state.prompt.fieldEpoch === epoch + 1 && !("prompt" in awake.state.timers)
+               && !has(awake.effects, "forwardKey") && !has(awake.effects, "unlockCompositor"),
+               "1: Escape at an awake prompt hides it and empties the field (as the time-out does), still locked");
+        awake.send(key("s1", "", "p"));
+        assert(awake.state.prompt.owner === "s1" && has(awake.effects, "forwardKey", { text: "p" }),
+               "1: … and the next character wakes it again and is typed");
+        assertEqual(LockRules.view(locked().sendAll([activity(), key("s1", "Escape")]).state).promptSurface, null,
+                    "1: … the view shows no prompt after Escape");
+
+        const other = locked().sendAll([added("s2", "HDMI-A-1"), activity("s1"), key("s2", "Escape")]);
+        assert(other.state.phase.status === "locked" && other.state.prompt.owner === null,
+               "1: Escape on another surface hides the prompt too (from any surface)");
+
+        const question = locked(passwordOnly).sendAll([enter("pw"), passwordPrompt(), passwordPrompt("Code:")]);
+        assertEqual(question.state.password.status, "asking", "1: (a question pending)");
+        question.send(key("s1", "Escape"));
+        assert(has(question.effects, "abortPam", { method: "password" }) && question.state.password.status === "idle"
+               && question.state.password.question === "" && question.state.prompt.owner === null
+               && question.state.phase.status === "locked",
+               "1: Escape with a question pending cancels it and hides the prompt; still locked");
+
+        const verifying = locked(passwordOnly).sendAll([enter("pw"), passwordPrompt()]);
+        assertEqual(verifying.state.password.status, "verifying", "1: (a password being checked)");
+        verifying.send(key("s1", "Escape"));
+        assert(!has(verifying.effects, "abortPam") && verifying.state.password.status === "verifying"
+               && verifying.state.prompt.owner === null && verifying.state.phase.status === "locked",
+               "1: Escape while verifying hides the prompt but never aborts the check");
+        verifying.send(pamCompleted("password", "success"));
+        assert(verifying.state.phase.lastEnd === "authenticated", "1: … which still unlocks when it succeeds (authenticated)");
+
+        // Held down: the press wakes the prompt (or hides it), its repeats count for nothing
+        const held = locked();
+        held.send(key("s1", "Escape"));
+        for (let i = 0; i < 20; i++)
+            held.send(key("s1", "Escape", "", true), 30);
+        assert(held.state.phase.status === "locked" && held.ignored === "repeated Escape" && held.state.prompt.owner === "s1",
+               "1: Escape held on a sleeping prompt wakes it and it stays awake (its auto-repeats are ignored)");
+        const repeatAwake = locked().send(activity());
+        const repeatBefore = repeatAwake.state;
+        repeatAwake.send(key("s1", "Escape", "", true));
+        assert(repeatAwake.state === repeatBefore && repeatAwake.ignored === "repeated Escape",
+               "1: … also at an awake prompt a repeated Escape changes nothing");
+        held.send(key("s1", "Escape"), 300);
+        assert(held.state.phase.status === "locked" && held.state.prompt.owner === null,
+               "1: a second separate press hides the prompt again; it does not unlock");
+
+        // No number of Escapes ends a lock: pressed and repeated, from every surface, from
+        // every situation, many times over
+        const starts = [
+            ["asleep", () => locked()],
+            ["awake", () => locked().send(activity())],
+            ["two surfaces", () => locked().sendAll([added("s2", "HDMI-A-1"), activity("s2")])],
+            ["a question pending", () => locked(passwordOnly).sendAll([enter("pw"), passwordPrompt(), passwordPrompt("Code:")])],
+            ["verifying", () => locked(passwordOnly).sendAll([enter("pw"), passwordPrompt()])],
+            ["suspending", () => locked().sendAll([activity(), { type: "prepareForSleep" }])],
+            ["locking", () => locking().send(activity())],
+            ["locking, going to sleep", () => started().sendAll([{ type: "prepareForSleep" }, added("s1"), activity()])],
+            ["restored over a reload", () => restoredLocked().send(activity())]
+        ];
+        for (const [label, make] of starts) {
+            const lock = make();
+            const status = lock.state.phase.status;
+            const surfaces = lock.state.prompt.surfaces.map(surface => surface.id);
+            lock.all = [];
+            for (let i = 0; i < 60; i++)
+                lock.send(key(surfaces[i % surfaces.length], "Escape", "", i % 3 === 2), i % 5 === 0 ? 400 : 20);
+            assert(lock.state.phase.status === status && !has(lock.all, "unlockCompositor") && !has(lock.all, "announceLocked", { locked: false })
+                   && lock.state.phase.pending === null,
+                   "1: sixty Escapes (" + label + "): still " + status + ", no unlock sent, none pending");
         }
     }
 
@@ -450,7 +512,6 @@ TestCase {
     function _behaviour3LeavingCleansUp() {
         const routes = [
             ["logind", { type: "unlockRequested", source: "logind" }],
-            ["Escape", key("s1", "Escape")],
             ["the compositor", finished()],
             ["a fingerprint", pamCompleted("fingerprint", "success")],
             ["the password", pamCompleted("password", "success")]
@@ -501,8 +562,7 @@ TestCase {
         assert(refusedDown.state.phase.status === "unlocked" && refusedDown.state.sleep.inhibitor === "released"
                && has(refusedDown.effects, "releaseInhibitor") && !("inhibitor" in refusedDown.state.timers),
                "3: the compositor refusing the lock during a suspend: there is nothing to wait for, the inhibitor goes at once");
-        for (const [label, event] of [["logind's Unlock", { type: "unlockRequested", source: "logind" }],
-                                      ["Escape", [activity(), key("s1", "Escape")]]]) {
+        for (const [label, event] of [["logind's Unlock", { type: "unlockRequested", source: "logind" }]]) {
             const down = started().sendAll([{ type: "prepareForSleep" }, added("s1")]);
             down.send(event);
             assert(down.state.phase.status === "unlocking" && down.state.sleep.inhibitor === "held" && "inhibitor" in down.state.timers,
@@ -1204,7 +1264,7 @@ TestCase {
                && has(lock.effects, "unlockCompositor", { session: 1, reason: "authenticated", method: "password" }),
                "8f: the late confirmation carries out the pending unlock: unlockCompositor, then announceLocked(false)");
 
-        const refused = locking().sendAll([activity(), key("s1", "Escape"), finished()]);
+        const refused = locking().sendAll([activity(), { type: "unlockRequested", source: "logind" }, finished()]);
         assert(refused.state.phase.status === "unlocked" && refused.state.phase.lastEnd === "denied"
                && !has(refused.all, "unlockCompositor") && has(refused.effects, "announceLocked", { locked: false }),
                "8f: a pending unlock ended by compositorFinished: the lock ends, nothing to unlock");
@@ -1230,7 +1290,7 @@ TestCase {
         assert(sleepy.state.phase.status === "locked" && has(sleepy.effects, "releaseInhibitor") && !has(sleepy.all, "unlockCompositor"),
                "8f: … and the confirmation locks and lets the machine go");
 
-        const surfaces = locking().sendAll([activity(), key("s1", "Escape"), added("s2", "DP-1"), removed("s1")]);
+        const surfaces = locking().sendAll([activity(), { type: "unlockRequested", source: "logind" }, added("s2", "DP-1"), removed("s1")]);
         assert(surfaces.state.prompt.surfaces.length === 1 && surfaces.state.prompt.owner === "s2",
                "8f: surfaces are followed while an unlock is pending (the prompt handed on)");
 
@@ -2019,7 +2079,7 @@ TestCase {
                 return pick([activity(knownSurface()), press(knownSurface()), activity(knownSurface())]);
             if (roll < 0.58) {
                 const asleep = state.prompt.owner === null;
-                const name = pick(asleep ? ["", "Enter", "Backspace", "Escape", "A"] : ["", "", "Enter", "Backspace", "Tab", "A", chance(0.15) ? "Escape" : ""]);
+                const name = pick(asleep ? ["", "Enter", "Backspace", "Escape", "A"] : ["", "", "Enter", "Backspace", "Tab", "A", "Escape"]);
                 return key(knownSurface(), name, pick([pick(_keyCharacters), "", "\r"]), chance(0.25));
             }
             if (roll < 0.7) {
@@ -2082,8 +2142,7 @@ TestCase {
         if (event.type === "unlockRequested")
             return event.source === "logind" && end === "logind" ? "" : "unlockRequested from " + event.source + " unlocked";
         if (event.type === "key")
-            return event.key === "Escape" && event.autoRepeat !== true && before.prompt.owner !== null && LockRules.escapeUnlocks && end === "escape"
-                ? "" : "a key other than a pressed Escape at an awake prompt unlocked";
+            return "a key (" + JSON.stringify(event.key) + (event.autoRepeat === true ? ", repeated" : "") + ") ended the lock or decided an unlock: no key ever does, Escape included";
         if (event.type === "compositorFinished")
             return after.phase.status === "unlocked" && event.session === before.phase.session && end === (from === "locking" ? "denied" : "compositor")
                 ? "" : "a compositorFinished not of this session unlocked";
@@ -2262,8 +2321,6 @@ TestCase {
             return "";
         }
         const unlocks = [{ type: "unlockRequested", source: "logind" }, { type: "compositorFinished", session: session }];
-        if (state.prompt.owner !== null)
-            unlocks.push(key(state.prompt.surfaces[0].id, "Escape"));
         for (const conversation of LockRules.running(state).conversations)
             unlocks.push({ type: "pamCompleted", method: conversation.method, conversation: conversation.conversation, result: "success" });
         const conversations = LockRules.running(state).conversations;
@@ -2305,6 +2362,9 @@ TestCase {
         let unlocks = 0;
         let relocks = 0;
         let pendings = 0;
+        // Escapes pressed (not repeated) at an awake prompt of a lock: the ones that unlocked
+        // until 2026-11-15 — the unlock oracle must see plenty of them
+        let awakeEscapes = 0;
         let firstFailure = "";
         const statuses = {};
         const ignoredReasons = {};
@@ -2337,6 +2397,9 @@ TestCase {
                 const frozen = checkInput ? JSON.stringify(before) : "";
                 const result = LockRules.step(before, event, now);
                 steps++;
+                if (event?.type === "key" && event.key === "Escape" && event.autoRepeat !== true && before.prompt.owner !== null
+                    && before.phase.status !== "unlocked" && result.ignored === "")
+                    awakeEscapes++;
                 let problem = "";
                 if (checkInput && JSON.stringify(before) !== frozen)
                     problem = "the input state was mutated";
@@ -2431,6 +2494,7 @@ TestCase {
         assert(firstFailure !== "" || ignoredSteps / steps < 0.35, "sweep: most events are taken (" + Math.round(100 * ignoredSteps / steps) + " % ignored)");
         assert(firstFailure !== "" || relocks > sequences / 10, "sweep: sequences unlock (" + unlocks + ") and lock again (" + relocks + ")");
         assert(firstFailure !== "" || pendings > sequences / 20, "sweep: unlocks decided while locking are pending (" + pendings + ")");
+        assert(firstFailure !== "" || awakeEscapes >= sequences / 16, "sweep: Escape pressed at an awake prompt " + awakeEscapes + " times (at least " + sequences / 16 + "), none ended a lock");
         const reached = ["password pending", "password verifying", "password asking", "password failed", "password unavailable", "password settling",
                          "fingerprint running", "fingerprint backoff", "fingerprint paused", "fingerprint broken", "fingerprint unavailable",
                          "u2f running", "u2f backoff", "u2f broken", "several surfaces", "sleep suspending", "sleep resuming", "locking late"];
