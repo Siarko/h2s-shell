@@ -1,49 +1,44 @@
 import QtQuick
+import Quickshell
 import qs.components
 import QtQuick.Layouts
 import qs.singletons
 
+// The password prompt: a view of Lockscreen.view (LockRules.view). It shows what the rules
+// say — busy ("Verifying…", or "Unlocking…" while an unlock waits for the compositor), the
+// error, a notice, the placeholder or PAM's question, the passive methods' lines —
+// and keeps only the half-typed text. The field never has keyboard focus: keys reach it as
+// the rules' forwardKey effects through applyKey() (see LockSurface.qml), and it empties
+// only when `fieldEpoch` changes — when the rules took the input, moved the prompt or put
+// it to sleep — never on its own when something is submitted.
 Item {
     id: root
     implicitWidth: 320
     implicitHeight: _col.implicitHeight + 48
 
-    signal activity
+    // LockRules.view(state), from the surface
+    required property var view
+    // Whether this instance shows the prompt (view.promptSurface is its surface)
+    property bool awake: false
 
-    property bool _failed: false
-    property string _errorMessage: ""
+    // Enter, or the Unlock button: the field's text, for the rules' `submit`
+    signal submitted(string text)
 
-    function reset() {
-        _input.text = ""
-        _failed = false
-        _errorMessage = ""
+    readonly property int fieldEpoch: view.fieldEpoch
+    onFieldEpochChanged: _input.text = ""
+
+    // A forwardKey effect: a character inserted, Enter submitting, Backspace, Delete and
+    // the cursor keys editing (LockIoRules.editField)
+    function applyKey(key, text) {
+        const edited = LockIoRules.editField({ text: _input.text, cursor: _input.cursorPosition }, key, text);
+        if (edited.text !== _input.text)
+            _input.text = edited.text;
+        _input.cursorPosition = edited.cursor;
+        if (edited.submit)
+            root.submitted(_input.text);
     }
 
-    onVisibleChanged: if (visible) _input.forceActiveFocus()
-
-    // A character typed before the field could take it (the key that woke the prompt)
-    function type(text) {
-        if (text.length === 1 && text >= " " && text !== "\x7f")
-            _input.insert(_input.length, text)
-    }
-
-    function _send() {
-        if (LockAuth.verifying) return
-        _failed = false
-        LockAuth.submit(_input.text)
-        // An answer to a further question: the field empties for the next one
-        _input.text = ""
-    }
-
-    Connections {
-        target: LockAuth
-        function onRejected() {
-            root._errorMessage = LockAuth.error
-            root._failed = true
-            _input.text = ""
-            _input.forceActiveFocus()
-        }
-    }
+    readonly property bool _showError: view.error !== ""
 
     Rectangle {
         anchors.fill: parent
@@ -70,12 +65,25 @@ Item {
 
         Text {
             Layout.fillWidth: true
-            visible: _failed
-            text: _errorMessage
+            visible: root._showError
+            text: root.view.error
             color: Theme.error
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+
+        // Information that is no error: the compositor has not confirmed the lock yet
+        Text {
+            Layout.fillWidth: true
+            visible: root.view.notice !== ""
+            text: root.view.notice
+            color: Theme.textSecondary
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
         }
 
         Rectangle {
@@ -83,17 +91,19 @@ Item {
             implicitHeight: Theme.lock.controlHeight
             radius: Theme.lock.controlRadius
             color: Theme.glass
-            border.color: _failed
+            // Red while the error stands and nothing new is typed
+            border.color: root._showError && _input.text === ""
                 ? Theme.error
-                : (_input.activeFocus ? Theme.glassBorderFocus : Theme.glassBorder)
+                : (root.awake ? Theme.glassBorderFocus : Theme.glassBorder)
             border.width: Theme.border.width
 
             Text {
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
-                text: LockAuth.awaitingInput && LockAuth.question !== "" ? LockAuth.question : "Password"
+                text: root.view.placeholder
                 color: Theme.glassTextMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
+                elide: Text.ElideRight
                 visible: _input.text === ""
             }
 
@@ -102,17 +112,18 @@ Item {
                 selectionColor: Theme.selection
                 selectedTextColor: Theme.selectedText
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
-                echoMode: LockAuth.awaitingInput && LockAuth.answerVisible ? TextInput.Normal : TextInput.Password
+                echoMode: root.view.answerVisible ? TextInput.Normal : TextInput.Password
                 inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-                color: LockAuth.verifying ? Theme.glassTextMuted : Theme.textPrimary
+                color: root.view.busy ? Theme.glassTextMuted : Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 font.letterSpacing: 4
-                focus: true
-                readOnly: LockAuth.verifying
-                onTextChanged: { root.activity(); if (text !== "") root._failed = false }
-                onAccepted: root._send()
-                Keys.onEscapePressed: Lockscreen.unlock()
+                // Never focused: keys come only through applyKey (LockSurface.qml)
+                focus: false
+                activeFocusOnPress: false
+                activeFocusOnTab: false
+                selectByMouse: false
+                cursorVisible: root.awake
             }
         }
 
@@ -120,7 +131,7 @@ Item {
             Layout.fillWidth: true
             implicitHeight: Theme.lock.controlHeight
             radius: Theme.lock.controlRadius
-            color: (LockAuth.verifying || _unlockHover.lit)
+            color: (root.view.busy || _unlockHover.lit)
                 ? Theme.glassHover
                 : Theme.glassRaised
 
@@ -128,7 +139,7 @@ Item {
 
             Text {
                 anchors.centerIn: parent
-                text: LockAuth.verifying ? "Verifying…" : "Unlock"
+                text: root.view.buttonText
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -136,24 +147,28 @@ Item {
 
             PointerArea {
                 id: _unlockHover
-                enabled: !LockAuth.verifying
+                enabled: !root.view.busy
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root._send()
+                onClicked: root.submitted(_input.text)
             }
         }
 
-        // The ways in that need nothing typed, while they are waiting: what PAM last
-        // said about each ("Place your finger…", "Failed to match fingerprint"), or
-        // the method's own hint before it has said anything
+        // The ways in that need nothing typed: what each is doing, from the rules
+        // ("Touch the fingerprint reader", PAM's own "Failed to match fingerprint", "not
+        // available, trying again later"). A fresh array on every view: through a
+        // ScriptModel keyed by name, never the bare array (CLAUDE.md)
         Repeater {
-            model: [LockAuth.fingerprint, LockAuth.securityKey]
+            model: ScriptModel {
+                values: root.view.methods
+                objectProp: "name"
+            }
 
             Text {
                 required property var modelData
                 Layout.fillWidth: true
-                visible: modelData.available
-                text: modelData.message !== "" ? modelData.message : modelData.hint
-                color: modelData.messageIsError ? Theme.error : Theme.textSecondary
+                visible: modelData.visible
+                text: modelData.text
+                color: modelData.isError ? Theme.error : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 horizontalAlignment: Text.AlignHCenter

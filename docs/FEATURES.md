@@ -184,26 +184,57 @@ Two independent stages, both driven by Wayland idle notifications:
   run when it activates and deactivates (not yet wired up — see CLEANUP.md #12).
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached either after the screensaver or on its own idle timer, and shows a password
-  prompt and optionally the notification list. On multi-monitor only one screen shows
-  the prompt. It also locks on request: logind's Lock signal (`loginctl lock-session`, or
-  `HandlePowerKey=lock` in logind.conf), caught by a `gdbus monitor` on the session, and
-  `h2s-shell ipc call lockscreen lock`.
-- **Unlocking** (`singletons/LockAuth.qml`) — by password, fingerprint or security key
-  (FIDO2/U2F), each a PAM conversation of its own, all running side by side: a finger on
-  the reader or a touch of the key unlocks with nothing typed, and a typed password is
-  checked at once. The prompt shows what the reader or key last said, and when PAM asks
-  for more after the password (a one-time code) the next thing typed answers it.
-  `scripts/lock-auth-methods.sh` says which are there: the password always, the
-  fingerprint when fprintd has a finger enrolled, the key when the system has a PAM
-  config for it or the user has `~/.config/Yubico/u2f_keys`. Each uses
+  prompt and optionally the notification list. It also locks on request: logind's Lock
+  signal for the shell's session (`loginctl lock-session`, or `HandlePowerKey=lock` in
+  logind.conf) and `h2s-shell ipc call lockscreen lock`; a request while locked changes
+  nothing. Every lock starts afresh: nothing of one lock carries into the next.
+- **The prompt** — on one screen at a time; it wakes on a key, pointer motion or a click,
+  and sleeps after 10 s without activity (a question left unanswered is cancelled then, a
+  password check under way is not). A click on another screen brings it there; keys typed
+  on another screen go to it where it is. No key is lost to a focus change: the key that
+  wakes it is typed into it, and so are Enter and Backspace right after (dead keys, compose
+  sequences and input methods do not work in it yet). The field empties only when
+  what was sent is taken — a second Enter during a check is refused and keeps the text. It
+  shows "Verifying…" while a password is checked, PAM's reason when one is refused, and
+  what each passive method is doing. When the screen showing it goes away the prompt moves
+  to another; a screen added while locked gets its own lock surface.
+- **Unlocking** — by password, fingerprint or security key (FIDO2/U2F), each a PAM
+  conversation of its own, all running side by side: a finger on the reader or a touch of
+  the key unlocks with nothing typed, and a typed password is checked at once. The prompt
+  shows what the reader or key last said, and when PAM asks for more after the password (a
+  one-time code) the question replaces "Password" and the next thing typed answers it. An
+  empty password is never sent. A fingerprint or key config that asks for typed input is
+  not used. `scripts/lock-auth-methods.sh` says which are there: the password always, the
+  fingerprint when fprintd has a finger enrolled, the key when the system has a PAM config
+  for it or the user has `~/.config/Yubico/u2f_keys`. Each uses
   `/etc/pam.d/h2s-shell-<password|fingerprint|u2f>` if the system has one (the NixOS
   module writes them, and only those work there; without them the password goes through
-  `login`, which waits for the reader first), else the shell's own
-  `pam/<method>`.
+  `login`, which waits for the reader first), else the shell's own `pam/<method>`. When
+  the script fails, prints nothing or does not answer within 5 s, the password uses the
+  fallback, chosen the same way (`/etc/pam.d/h2s-shell-password`, else `login` on NixOS,
+  else the shipped `pam/password`); when the password's config cannot be used (PAM refuses
+  to start it or reports an error), the next attempt takes the other of the two. A check
+  that cannot start or never answers (90 s) shows an error, never a lasting "Verifying…".
+- **The compositor's confirmation** — the screen counts as locked once the compositor says
+  so; until then the password is already checked, and an unlock waits for that word
+  ("Unlocking…"), since unlocking a lock the compositor has not confirmed is a protocol
+  error. A confirmation late by more than 5 s is shown ("Waiting for the compositor…"). No
+  reload of the shell while locked (a file written in its folder waits for the unlock).
+- **Other ways out** — logind's Unlock for the shell's session (`loginctl
+  unlock-session`, from another console), and, deliberately for now, Escape at a showing
+  prompt (the owner's decision while testing; on a hidden prompt Escape only shows it, so
+  two presses unlock; a held Escape's repeats count for nothing).
+  There is no unlock over IPC.
 - **Sleep** — the screen locks before the computer sleeps (`lockscreen.lockOnSleep`), the
   shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
-  the lock, so the desktop is not what shows on waking. The fingerprint and key
-  conversations stop for the sleep and start again after it.
+  the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
+  key conversations stop for the sleep and start again after it, with the methods looked
+  for again; the inhibitor is taken again after every wake, and when it is lost.
+- **The log** — every authentication event leaves a `[Lockscreen]` line in the shell's
+  log (what was asked, started, answered, refused, why a lock ended), never what was
+  typed: what to read when unlocking fails on the real machine.
+- Design and tests: `docs/ARCHITECTURE.md` ("Lock screen"), `docs/plans/lockscreen.md`,
+  `tests/LockRulesTest.qml`, and the end-to-end test bed `tests/lock/`.
 
 ## Network settings
 

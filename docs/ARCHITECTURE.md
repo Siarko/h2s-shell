@@ -64,12 +64,13 @@ shell.qml                 process root — one Bar, one Hud, one ScreensaverSurf
 │       └── panels/       popup content (NetworkPanel, MusicPanel, Calendar, …)
 ├── Hud.qml               click-through overlay: toasts, volume OSD, queue badge
 │   └── hud/
-├── screensaver/          screensaver surface + the WlSessionLock surface and prompt
+├── screensaver/          screensaver surface + the lock surface and prompt (views of Lockscreen)
 ├── pam/                  the lock screen's own PAM configs, one per way of unlocking
 ├── components/           reusable building blocks (BarWidget, Logger, sliders, cards)
 └── singletons/           all shared state and all I/O
     ├── network/          nmcli/sysfs-backed network state
     ├── hardware/         sysfs-backed sensor sources
+    ├── lock/             the lock screen's adapters: PAM, methods script, logind, sleep inhibitor
     └── googlecalendar/   Google Calendar API client and OAuth
 ```
 
@@ -325,6 +326,73 @@ Calendar client. It predates and substitutes for native async/await in this QML 
 shell if given a promise that is not already settled. See CLEANUP.md #1 — this is the
 most serious known defect in the project.
 
+### Lock screen
+
+Four layers, so that what decides can be tested without what does (plan and contract:
+`docs/plans/lockscreen.md`, section 7):
+
+- **Rules** — `singletons/LockRules.qml`, pure: `initial(settings)` and
+  `step(state, event, now) → { state, effects }` on plain objects that are replaced, never
+  mutated; `view(state)` for the views, `describe(state)` for anything shown (no secret).
+  Every decision is here — when a conversation starts, what a PAM answer means, where the
+  prompt is, when the field empties, what sleep does. Unit-tested in
+  `tests/LockRulesTest.qml` (behaviours, a seeded sweep, a liveness oracle).
+- **Driver** — `singletons/Lockscreen.qml`, the one owner of the lock's state. It feeds
+  events to the rules one at a time (`LockIoRules.serialQueue`: an event raised while a
+  step's effects run is queued, never re-entered), stores the new state before running its
+  effects, and carries the effects out (`LockIoRules.runStep`: each part guarded, so a
+  view that fails to publish cannot keep the lock from being set): the `WlSessionLock`,
+  one single-shot `Timer` per timer name (tokens from the rules), `Profiles.screenLocked`
+  and `Quickshell.watchFiles` (off while locked: a reload while locked would unlock), the
+  adapters. It exposes only `view`, `locked`, `screensaverVisible`, `lock()`, the surface
+  functions the views call (they take the `LockSurface` object and act only for a
+  registered one), and the IPC (`lock`, `status`, `state` = `describe` plus a few driver
+  facts). There is no unlock and no dispatch function: the state, queue and surface
+  registry live in a closure (`_build()`), not in properties. Same-process QML is still no
+  security boundary (it can emit its child objects' signals, or run `loginctl
+  unlock-session`) — plan section 7, "What other QML in the shell can reach". It also owns
+  idle (the two `IdleMonitor`s, bound declaratively), the screensaver and its commands,
+  and the password fallback (`LockIoRules.passwordFallback`, from a probe of the machine).
+- **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
+  Per lock (`LockScope.qml`, created when a lock begins and destroyed when it has ended,
+  so destruction is the cleanup): `PamMethod.qml` (one `PamContext` per method,
+  conversations tagged with the rules' id, a refused `start()` reported, stale or second
+  answers dropped) and `MethodDetector.qml` (one run of `scripts/lock-auth-methods.sh`,
+  tagged with its generation; a newer run destroys, so kills, the older). For the shell's
+  lifetime: `LogindMonitor.qml` (one `gdbus monitor`, parsed by `LockRules.parseLogind`,
+  restarted with a growing pause, kept from outliving a crashed shell by a stdin watcher)
+  and `SleepInhibitor.qml` (`systemd-inhibit` held as a level, taken again when lost).
+  Their small pure helpers are in `singletons/LockIoRules.qml` (tested in
+  `tests/LockIoRulesTest.qml`).
+- **Views** — `screensaver/LockSurface.qml` (one per screen, an instance with its own id)
+  and `screensaver/LockPrompt.qml` render `Lockscreen.view` and report input. Keys arrive
+  in one place per surface — a key catcher that holds the focus; the field never takes it
+  — and reach the field as the rules' `forwardKey` effects (`LockIoRules.editField`). What
+  a key event carries is typed; dead keys, compose sequences and input methods are not yet.
+
+**Fail closed against the compositor**: ext-session-lock-v1 makes an unlock before the
+compositor's `locked` a protocol error, and Quickshell sends one whenever
+`WlSessionLock.locked` is set false before `secure`. So the rules emit `unlockCompositor`
+only for a session the compositor confirmed: an unlock decided while locking (a password,
+logind's Unlock, Escape) is pending until `compositorLocked`, and a slow confirmation is
+only reported — the lock is never set again or given up (plan, section 7).
+
+**The Quickshell bug worked around**: Quickshell 0.3.2 never emits `lockStateChanged`
+when a `WlSessionLock` unlocks (`src/wayland/session_lock.cpp`), so a binding to its
+`locked` stays true after the first unlock — the old lock screen worked once per shell.
+The driver never binds or watches `locked`: it sets it in the `lockCompositor` /
+`unlockCompositor` effects, reads it back only right after setting it true (to catch a
+refused lock), and takes the compositor's word from `secureStateChanged`, tagged with the
+session of the last `lockCompositor`.
+
+Where state lives: the lock's state only in the driver (in `_build()`'s closure, never
+exposed — it holds the typed password between submit and PAM's prompt); the half-typed text
+only in the prompt's field; the I/O handles in the adapters. The test bed's seams, inert
+unless set: `H2S_LOCK_AUTH_METHODS` (read by the methods script), `H2S_LOCK_TOOLS` (a
+directory whose `gdbus` and `systemd-inhibit` stand in for the real ones) and
+`H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
+`/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack).
+
 ### Logging
 
 `components/Logger.qml` gives each subsystem a prefixed, individually switchable logger:
@@ -404,7 +472,10 @@ during a run cannot reload it), in an invisible, isolated compositor (Hyprland n
 headless labwc, private runtime dir, no D-Bus, no seat, no new privileges) and drives its
 lock screen end to end: locked for real, keys typed and the pointer moved through the
 compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
-`scripts/lock-auth-methods.sh`; the copy's own `pam/` configs only deny). `tests/lock/run.sh`
+`scripts/lock-auth-methods.sh`; the copy's own `pam/` configs only deny, and the "system"
+PAM directory the password fallback is chosen from is the test's own,
+`H2S_LOCK_SYSTEM_PAM_DIR`), logind's signals and the sleep inhibitor through stand-ins
+(`H2S_LOCK_TOOLS`). `tests/lock/run.sh`
 runs it; nothing appears on screen and the real session cannot be reached. See its README.
 
 Everything else is verified by hand: run `quickshell` from the repo root and check that

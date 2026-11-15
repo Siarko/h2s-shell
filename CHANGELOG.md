@@ -12,24 +12,69 @@ section to the new version and date.
 
 ### Added
 - Lock screen: locks when systemd-logind asks for it — `loginctl lock-session`, or a power
-  key or lid switch set to `lock` in logind.conf — and on `ipc call lockscreen lock`.
+  key or lid switch set to `lock` in logind.conf — and on `ipc call lockscreen lock`; and
+  unlocks on logind's Unlock for the shell's own session (`loginctl unlock-session`, the
+  way back in from another console). Another session's Unlock is ignored.
 - Lock screen: unlocks with a fingerprint or a security key (FIDO2/U2F) as well as the
   password, each checked on its own, so a finger on the reader unlocks with nothing typed
-  and a typed password no longer waits for the reader to give up. It shows what the
-  reader or key is waiting for, and asks for anything more PAM wants after the password
-  (a one-time code).
+  and a typed password never waits for the reader to give up. It shows what the reader or
+  key is waiting for, and asks for anything more PAM wants after the password (a one-time
+  code). A fingerprint or key configuration that asks for typed input is not used (it
+  would count failed password attempts); this leaves pam_u2f's interactive mode out.
 - Lock screen: locks before the computer sleeps (Settings → Lockscreen, on by default),
-  holding the sleep back until the screen is covered.
+  holding the sleep back until the compositor confirms the screen is covered (at most 4 s).
+- Lock screen: every authentication event goes to the shell's log — locks and unlocks and
+  why, each PAM conversation started, answered, aborted or finished, the methods found,
+  failures to run a helper — never what was typed.
 
 ### Fixed
-- Lock screen: with a fingerprint reader set up, a typed password sat on "Verifying…"
-  for half a minute.
-- Lock screen: a key press wakes the password prompt, as moving the pointer does; and the
-  prompt no longer stays hidden for good when the screen it was on went away while it
-  was showing (a laptop's over a suspend).
+- Lock screen: it worked once per shell. After the first unlock the shell still believed
+  the screen locked (Quickshell 0.3.2 never reports a session lock's unlock): a typed
+  password was dropped without a word, the fingerprint reader was never asked again,
+  `ipc call lockscreen status` said `locked`, the screensaver and "lock after the
+  screensaver" never came back, and a prompt left showing at the unlock never woke on the
+  next lock. Every lock now starts afresh, and the shell no longer relies on that report.
+- Lock screen: "Verifying…" no longer sticks. A methods script that fails, prints nothing
+  or hangs (5 s) falls back to a password config of its own; a PAM config that cannot be
+  started says "Password check could not start"; a check that never answers is given up
+  after 90 s ("Password check timed out"). With a fingerprint reader set up, a typed
+  password no longer waits for it.
+- Lock screen: keys are no longer lost to focus changes. The key that wakes the prompt is
+  typed into it, and so are Enter and Backspace right after it, keys typed while the
+  prompt fades in, and keys typed on another screen (they go to the prompt where it is).
+  An Enter on an empty field sends nothing. (Dead keys, compose sequences and input
+  methods do not work in the field yet.)
+- Lock screen: a file written in the shell's folder while the screen is locked no longer
+  reloads the shell — a reload unlocked the screen with no password. Changes made while
+  locked take effect at the next change after unlocking.
+- Lock screen: never unlocks the compositor before it has confirmed the lock — a protocol
+  error that a strict compositor answers by killing the shell (the session then stays
+  locked for good) and a lenient one by unlocking. The lock waits for the confirmation as
+  long as it takes ("Waiting for the compositor…" after 5 s, e.g. a slow screen after a
+  suspend); the password can be checked meanwhile, and an unlock — by password, logind or
+  Escape — shows "Unlocking…" and happens when the compositor confirms.
+- Lock screen: holding Escape no longer unlocks (its repeats are ignored; Escape on a hidden
+  prompt only shows it).
+- Lock screen: a password config that cannot be used (PAM refuses to start it, or reports an
+  error) no longer makes every password fail for the rest of the lock: the next attempt
+  uses the fallback, which is now chosen like the methods script's password config
+  (`/etc/pam.d/h2s-shell-password` when readable, else `login` on NixOS, else the shipped
+  one) instead of the shipped config, which does not work on NixOS.
+- Lock screen: a security key config that never works stops being retried after a few
+  rounds per lock.
+- Lock screen: the field empties only when what was sent is taken; a second Enter while a
+  password is being checked is refused and keeps what was typed. The prompt hiding after
+  10 s idle no longer cancels a password check under way (a question left unanswered, such
+  as a one-time code, still is).
+- Lock screen: the prompt follows the screens: when the one showing it goes away (a
+  monitor unplugged, a laptop's screen over a suspend) it moves, awake, to another, and a
+  screen added while locked gets its own lock surface; a click brings the prompt there.
 - Lock screen: the fingerprint reader works again after the computer wakes. Its check was
   started as the machine went to sleep and was dead on waking; now nothing is started
   until it is back, and the reader is looked for again then.
+- Lock screen: logind's monitor no longer leaves `gdbus` processes behind when the shell
+  crashes, and no longer restarts every 10 s without a logind session; the sleep inhibitor
+  is taken again when it is lost.
 - Network settings: moving between the network pages no longer stops the new page's
   updates; the popup and the Wi-Fi page no longer stop each other's scanning; a saved Wi-Fi
   password with ':' or '\' shows as it is; a password being typed is never overwritten

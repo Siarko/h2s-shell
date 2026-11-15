@@ -5,6 +5,11 @@ import qs.singletons
 // (docs/plans/lockscreen.md, sections 4 and 7). Each numbered part below is one of them;
 // the seeded sweep at the end checks the invariants over thousands of generated sequences,
 // and a liveness oracle checks from sampled states that the owner can still get in.
+//
+// One invariant is checked on EVERY step any test takes (machine.send, the sweep, the
+// oracle): unlockCompositor is only ever emitted for a session the compositor confirmed
+// (a compositorLocked taken for it) — ext-session-lock-v1 makes anything else a protocol
+// error (the header of LockRules.qml).
 TestCase {
     suiteName: "LockRules"
 
@@ -18,7 +23,44 @@ TestCase {
     readonly property var passwordAndFingerprint: ["password\t/etc/pam.d\th2s-shell-password", "fingerprint\t/etc/pam.d\th2s-shell-fingerprint"]
     readonly property var passwordAndKey: ["password\t/etc/pam.d\th2s-shell-password", "u2f\t/etc/pam.d\th2s-shell-u2f"]
 
+    // Steps that broke the compositor rule, anywhere (reported once at the end of run())
+    property int _unconfirmedUnlocks: 0
+    property string _firstUnconfirmedUnlock: ""
+
     // ---- Helpers ----
+
+    // The compositor rule, for one step: `confirmed` is the set of sessions a taken
+    // compositorLocked confirmed so far, updated here. → "" or what is wrong
+    function _compositorRule(confirmed, event, result) {
+        if (event !== null && typeof event === "object" && event.type === "compositorLocked" && result.ignored === "")
+            confirmed.add(event.session);
+        for (const effect of result.effects) {
+            if (effect.type === "unlockCompositor" && !confirmed.has(effect.session))
+                return "unlockCompositor for session " + effect.session + ", which the compositor never confirmed";
+        }
+        return "";
+    }
+
+    function _noteCompositorRule(problem, where) {
+        if (problem === "")
+            return;
+        _unconfirmedUnlocks++;
+        if (_firstUnconfirmedUnlock === "")
+            _firstUnconfirmedUnlock = where + ": " + problem;
+    }
+
+    // The due times of the timers running, kept beside a state from the effects (the
+    // state itself keeps only tokens)
+    function _trackDues(dues, event, result, now) {
+        if (result.ignored === "" && event?.type === "timer")
+            delete dues[event.name];
+        for (const effect of result.effects) {
+            if (effect.type === "startTimer")
+                dues[effect.name] = now + effect.ms;
+            else if (effect.type === "stopTimer")
+                delete dues[effect.name];
+        }
+    }
 
     // A machine: the state, the clock, and the last step's result. `send` takes an event,
     // a function of the state returning one (for the ids only the state knows), or an
@@ -31,7 +73,9 @@ TestCase {
             effects: [],
             ignored: "",
             error: false,
-            all: []
+            all: [],
+            confirmed: new Set(),
+            dues: {}
         };
         self.send = (event, advance) => {
             if (Array.isArray(event))
@@ -39,6 +83,8 @@ TestCase {
             self.now += advance ?? 10;
             const resolved = typeof event === "function" ? event(self.state) : event;
             const result = rules.step(self.state, resolved, self.now);
+            _noteCompositorRule(_compositorRule(self.confirmed, resolved, result), "a behaviour test, on " + JSON.stringify(rules.describeEvent(resolved)));
+            _trackDues(self.dues, resolved, result, self.now);
             self.state = result.state;
             self.effects = result.effects;
             self.ignored = result.ignored;
@@ -74,8 +120,8 @@ TestCase {
         return { type: "press", surface: surface ?? "s1" };
     }
 
-    function key(surface, name, text) {
-        return { type: "key", surface: surface ?? "s1", key: name ?? "", text: text ?? "" };
+    function key(surface, name, text, autoRepeat) {
+        return { type: "key", surface: surface ?? "s1", key: name ?? "", text: text ?? "", autoRepeat: autoRepeat === true };
     }
 
     // From the surface that shows the prompt (the field is only there)
@@ -129,6 +175,16 @@ TestCase {
         return state => ({ type: "pamCompleted", method: method, conversation: conversationOf(state, method), result: result });
     }
 
+    function startFailed(method) {
+        return state => ({ type: "pamStartFailed", method: method, conversation: conversationOf(state, method) });
+    }
+
+    // The methods asked again within a lock, through a path that does it on its own: a
+    // password whose config cannot start (_passwordConfigFailed re-detects)
+    function redetected(lines) {
+        return [activity("s1"), submit("x"), startFailed("password"), detected(lines)];
+    }
+
     function timer(name) {
         return state => ({ type: "timer", name: name, token: state.timers[name] ? state.timers[name].token : -1 });
     }
@@ -152,6 +208,15 @@ TestCase {
         return running.conversations.length === 0 && running.lockTimers.length === 0 && state.secret === null;
     }
 
+    // An unlock decided and waiting for the compositor: nothing of the lock running but the
+    // wait for the compositor's word itself
+    function windingDone(state) {
+        const running = LockRules.running(state);
+        return state.phase.status === "unlocking" && running.conversations.length === 0
+            && running.lockTimers.every(name => name === "confirm") && state.secret === null
+            && state.password.status === "idle";
+    }
+
     function run() {
         _behaviour1OnlyTheseUnlock();
         _behaviour2StaleIgnored();
@@ -163,16 +228,20 @@ TestCase {
         _behaviour6Surfaces();
         _behaviour7Sleep();
         _behaviour8RepeatedAndDeniedLocks();
-        _behaviour8Unconfirmed();
+        _behaviour8FailClosed();
         _behaviour9Retry();
         _behaviour10Settings();
         _behaviour11Hangs();
+        _behaviour11InternalErrors();
         _behaviour12Redetection();
+        _behaviour13PasswordFallback();
         _parsers();
         _secrets();
         _totality();
         _livenessCases();
         _sweep(1600, 24, 20261114);
+        assert(_unconfirmedUnlocks === 0, "compositor rule: on every step of every test, unlockCompositor only for a session the compositor confirmed"
+               + (_firstUnconfirmedUnlock ? " — " + _unconfirmedUnlocks + " broke it, first: " + _firstUnconfirmedUnlock : ""));
     }
 
     // ---- 1. Only these unlock ----
@@ -186,14 +255,16 @@ TestCase {
         };
         unlocks("logind's Unlock", locked(), { type: "unlockRequested", source: "logind" }, "logind");
         unlocks("the Escape key at an awake prompt", locked().send(activity()), key("s1", "Escape"), "escape");
-        unlocks("the compositor ending the lock", locked(), finished(), "compositor");
-        unlocks("the compositor refusing the lock", locking(), finished(), "denied");
         unlocks("a fingerprint accepted", locked(), pamCompleted("fingerprint", "success"), "authenticated");
         unlocks("a security key accepted", locked(), pamCompleted("u2f", "success"), "authenticated");
-        const unconfirmed = locking();
-        for (let attempt = 0; attempt < LockRules.limits.confirmAttempts - 1; attempt++)
-            unconfirmed.send(timer("confirm"), 5000);
-        unlocks("the compositor never confirming (given up, from locking only)", unconfirmed, timer("confirm"), "unconfirmed");
+        const ends = (label, from, reason) => {
+            const lock = from.send(finished());
+            assert(lock.state.phase.status === "unlocked" && lock.state.phase.lastEnd === reason
+                   && !has(lock.effects, "unlockCompositor") && has(lock.effects, "announceLocked", { locked: false }),
+                   "1: " + label + " ends the lock (" + reason + ") with nothing to unlock (Quickshell destroys the lock object itself)");
+        };
+        ends("the compositor ending the lock", locked(), "compositor");
+        ends("the compositor refusing the lock", locking(), "denied");
 
         const password = locked().sendAll([enter("hunter2"), passwordPrompt(), pamCompleted("password", "success")]);
         assert(has(password.effects, "unlockCompositor", { reason: "authenticated", method: "password" }),
@@ -221,6 +292,25 @@ TestCase {
         const otherKeys = locked().send(activity()).sendAll([key("s1", "Enter"), key("s1", "", "x"), press(), activity()]);
         assertEqual(otherKeys.state.phase.status, "locked", "1: no other key, press or activity unlocks");
 
+        // Escape held down: the press wakes the prompt, its repeats count for nothing
+        const held = locked();
+        held.send(key("s1", "Escape"));
+        for (let i = 0; i < 20; i++)
+            held.send(key("s1", "Escape", "", true), 30);
+        assert(held.state.phase.status === "locked" && held.ignored === "repeated Escape" && held.state.prompt.owner === "s1",
+               "1: Escape held on a sleeping prompt wakes it and does not unlock (its auto-repeats are ignored)");
+        const repeatAwake = locked().send(activity());
+        const repeatBefore = repeatAwake.state;
+        repeatAwake.send(key("s1", "Escape", "", true));
+        assert(repeatAwake.state === repeatBefore && repeatAwake.ignored === "repeated Escape",
+               "1: … also at an awake prompt a repeated Escape changes nothing");
+        held.send(key("s1", "Escape"), 300);
+        assertEqual(held.state.phase.lastEnd, "escape", "1: two separate presses do unlock (the owner's decision)");
+        const otherSurface = locked().sendAll([added("s2", "HDMI-A-1"), activity("s1"), key("s2", "Escape")]);
+        assertEqual(otherSurface.state.phase.lastEnd, "escape", "1: Escape works from any surface while the prompt is awake");
+        const repeatedOther = locked().send(activity()).sendAll([key("s1", "Backspace", "", true), key("s1", "", "a", true)]);
+        assert(has(repeatedOther.effects, "forwardKey", { text: "a" }), "1: other keys' repeats are typed as usual");
+
         const failed = locked().sendAll([pamCompleted("fingerprint", "failed"), pamCompleted("u2f", "maxTries")]);
         assert(failed.state.phase.status === "locked" && !has(failed.all, "unlockCompositor"),
                "1: failed and MaxTries results do not unlock");
@@ -234,7 +324,19 @@ TestCase {
                && plain.effects[1].type === "announceLocked" && plain.effects[1].locked === true,
                "1: lockRequested: lockCompositor (session 1), then announceLocked(true), first: " + JSON.stringify(types(plain.effects)));
         assert(has(plain.effects, "detectMethods") && has(plain.effects, "startTimer", { name: "confirm", ms: 5000 }),
-               "1: … and asks for the methods, and waits for the compositor's word a bounded time");
+               "1: … and asks for the methods, and notes when the compositor's word is late");
+
+        // Decided while locking: never unlockCompositor before the compositor's word
+        for (const [label, events] of [["logind's Unlock", [{ type: "unlockRequested", source: "logind" }]],
+                                       ["Escape", [activity(), key("s1", "Escape")]],
+                                       ["a password", [detected(passwordOnly), ...enter("pw"), passwordPrompt(), pamCompleted("password", "success")]]]) {
+            const early = locking().sendAll(events);
+            assert(early.state.phase.status === "unlocking" && !has(early.all, "unlockCompositor") && !has(early.all, "announceLocked", { locked: false }),
+                   "1: " + label + " while locking: the unlock is pending, nothing sent to the compositor");
+            early.send(confirmed());
+            assert(early.state.phase.status === "unlocked" && has(early.effects, "unlockCompositor", { session: 1 }),
+                   "1: … and carried out at the compositor's confirmation");
+        }
     }
 
     // ---- 2. Stale events are ignored ----
@@ -308,6 +410,13 @@ TestCase {
         assertEqual(next.ignored, "stale session", "2: a compositor event without a session counts for none");
         next.send({ type: "compositorLocked", session: 2 });
         assertEqual(next.state.phase.status, "locked", "2: the current session's word counts");
+
+        // A pending unlock is carried out only for its own session's confirmation
+        const pending = locked().sendAll([{ type: "unlockRequested", source: "logind" }, { type: "lockRequested", source: "idle" },
+                                          added("s2"), { type: "unlockRequested", source: "logind" }]);
+        pending.send({ type: "compositorLocked", session: 1 });
+        assert(pending.state.phase.status === "unlocking" && pending.ignored === "stale session" && !has(pending.effects, "unlockCompositor"),
+               "2: a pending unlock is not carried out by a confirmation of an earlier session");
     }
 
     // ---- 3. Leaving the lock leaves nothing behind ----
@@ -349,11 +458,15 @@ TestCase {
                    && lock.state.prompt.owner === null && lock.state.methods.status === "unknown",
                    "3: leaving by " + label + " leaves nothing running, no secret, fresh regions");
             const order = types(lock.effects);
+            const byCompositor = label === "the compositor";
             const unlockAt = order.indexOf("unlockCompositor");
-            assert(order.lastIndexOf("abortPam") < unlockAt && order.lastIndexOf("stopTimer") < unlockAt
-                   && order.indexOf("announceLocked") > unlockAt,
-                   "3: by " + label + ": aborts and stops first, then unlockCompositor, then announceLocked");
-            assertEqual(of(lock.effects, "unlockCompositor")[0].session, 1, "3: by " + label + ": unlockCompositor names the session");
+            const endAt = byCompositor ? order.indexOf("announceLocked") : unlockAt;
+            assert((unlockAt >= 0) === !byCompositor && endAt >= 0
+                   && order.lastIndexOf("abortPam") < endAt && order.lastIndexOf("stopTimer") < endAt
+                   && order.indexOf("announceLocked") >= endAt,
+                   "3: by " + label + ": aborts and stops first, then " + (byCompositor ? "" : "unlockCompositor, then ") + "announceLocked");
+            if (!byCompositor)
+                assertEqual(of(lock.effects, "unlockCompositor")[0].session, 1, "3: by " + label + ": unlockCompositor names the session");
         }
 
         // logind's Unlock while the password is merely pending (typed before the methods were known)
@@ -365,18 +478,24 @@ TestCase {
         assert(nothingRunning(suspended.state) && "missedResume" in suspended.state.timers,
                "3: an unlock while suspending keeps the sleep timers, nothing of the lock");
 
-        // The lock ending while the inhibitor waits for it (going down, not yet confirmed):
-        // there is nothing to wait for, the machine may go
+        // The lock ending while the inhibitor waits for it (going down, not yet confirmed)
+        const refusedDown = started().sendAll([{ type: "prepareForSleep" }, added("s1")]);
+        assert(refusedDown.state.sleep.inhibitor === "held" && refusedDown.state.phase.status === "locking",
+               "3: (going down, the inhibitor held for the lock)");
+        refusedDown.send(finished());
+        assert(refusedDown.state.phase.status === "unlocked" && refusedDown.state.sleep.inhibitor === "released"
+               && has(refusedDown.effects, "releaseInhibitor") && !("inhibitor" in refusedDown.state.timers),
+               "3: the compositor refusing the lock during a suspend: there is nothing to wait for, the inhibitor goes at once");
         for (const [label, event] of [["logind's Unlock", { type: "unlockRequested", source: "logind" }],
-                                      ["the compositor's refusal", finished()],
                                       ["Escape", [activity(), key("s1", "Escape")]]]) {
             const down = started().sendAll([{ type: "prepareForSleep" }, added("s1")]);
-            assert(down.state.sleep.inhibitor === "held" && down.state.phase.status === "locking",
-                   "3: (going down, the inhibitor held for the lock) — " + label);
             down.send(event);
+            assert(down.state.phase.status === "unlocking" && down.state.sleep.inhibitor === "held" && "inhibitor" in down.state.timers,
+                   "3: an unlock by " + label + " decided going down, before the confirmation: pending, the inhibitor still waits for the compositor");
+            down.send(confirmed());
             assert(down.state.phase.status === "unlocked" && down.state.sleep.inhibitor === "released"
-                   && has(down.all.slice(-12), "releaseInhibitor") && !("inhibitor" in down.state.timers),
-                   "3: the lock ended during a suspend by " + label + ": the inhibitor is released at once");
+                   && has(down.effects, "releaseInhibitor") && has(down.effects, "unlockCompositor"),
+                   "3: … released at the confirmation, which carries out the unlock");
         }
     }
 
@@ -445,7 +564,7 @@ TestCase {
                 return rename(sessions, item);
             if (["conversation", "token", "generation", "id"].includes(key))
                 return rename(ids, item);
-            if (["due", "since", "deadline", "awakeUntil", "startedAt"].includes(key))
+            if (["askedAt", "startedAt"].includes(key))
                 return item - base;
             return item;
         }));
@@ -463,6 +582,7 @@ TestCase {
         assert(lock.state.prompt.fieldEpoch === epoch + 1 && lock.state.password.refusal === "",
                "4: … and the input counts as taken (the field empties)");
         assertEqual(LockRules.view(lock.state).buttonText, "Verifying…", "4: … the view says it is being verified");
+        assert(has(lock.effects, "startTimer", { name: "verify", ms: 90000 }), "4: … the verify timer runs (armed by reconcile)");
         lock.send(detected(allLines));
         const start = of(lock.effects, "startPam", { method: "password" })[0];
         assert(start !== undefined && start.configDirectory === "/etc/pam.d" && start.config === "h2s-shell-password",
@@ -471,11 +591,17 @@ TestCase {
         assert(has(lock.effects, "respondPam", { method: "password", text: "early bird" }) && lock.state.secret === null,
                "4: the held text answers the first prompt, and is dropped from the state");
 
+        // While locking, conversations run: a late confirmation does not strand the owner
         const whileLocking = locking().sendAll([enter("fast"), detected(passwordOnly)]);
-        assert(whileLocking.state.password.status === "pending" && !has(whileLocking.all, "startPam"),
-               "4: before the compositor confirms the lock nothing starts");
-        whileLocking.send(confirmed());
-        assert(has(whileLocking.effects, "startPam", { method: "password" }), "4: … it starts once the lock is confirmed");
+        assert(whileLocking.state.phase.status === "locking" && has(whileLocking.all, "startPam", { method: "password" }),
+               "4: the password is checked while the compositor has not confirmed the lock yet");
+        const passiveWhileLocking = locking().send(detected(allLines));
+        assert(has(passiveWhileLocking.effects, "startPam", { method: "fingerprint" }) && has(passiveWhileLocking.effects, "startPam", { method: "u2f" }),
+               "4: … and the passive methods run");
+        whileLocking.sendAll([passwordPrompt(), pamCompleted("password", "success")]);
+        assert(whileLocking.state.phase.status === "unlocking" && LockRules.view(whileLocking.state).unlocking
+               && LockRules.view(whileLocking.state).buttonText === "Unlocking…",
+               "4: … accepted before the confirmation: \"Unlocking…\", waiting for the compositor");
 
         const failed = locking().sendAll([confirmed(), enter("pw")]);
         failed.send(state => ({ type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" }));
@@ -499,13 +625,13 @@ TestCase {
                "4: no config at all: a visible error, never a permanent \"verifying\"");
 
         // Known methods without a password config: asked again before saying so
-        const askAgain = locked([], { lockOnSleep: true, passwordFallback: null }).sendAll([activity(), detected([]), submit("pw")]);
+        const askAgain = locked([], { lockOnSleep: true, passwordFallback: null }).sendAll([activity(), submit("pw")]);
         assert(askAgain.state.password.status === "pending" && has(askAgain.effects, "detectMethods"),
                "4: a password submitted with no password config known asks the methods script again");
         askAgain.send(detected(passwordOnly));
         assert(has(askAgain.effects, "startPam", { method: "password", config: "h2s-shell-password" }),
                "4: … and a config that turned up serves");
-        const stillNone = locked([], { lockOnSleep: true, passwordFallback: null }).sendAll([activity(), detected([]), submit("pw"), detected([])]);
+        const stillNone = locked([], { lockOnSleep: true, passwordFallback: null }).sendAll([activity(), submit("pw"), detected([])]);
         assert(stillNone.state.password.status === "unavailable" && stillNone.state.secret === null,
                "4: … else the error shows");
 
@@ -516,7 +642,7 @@ TestCase {
         const refused = locked().sendAll(enter("pw"));
         refused.send(submit("again"));
         assertEqual(refused.state.password.refusal, "busy", "4: (a submit while verifying: busy)");
-        refused.send(state => ({ type: "pamStartFailed", method: "password", conversation: conversationOf(state, "password") }));
+        refused.send(startFailed("password"));
         assert(refused.state.password.status === "unavailable" && refused.state.password.conversation === null
                && LockRules.view(refused.state).error === "Password check could not start" && !LockRules.view(refused.state).busy
                && refused.state.secret === null && LockRules.view(refused.state).refusal === "",
@@ -524,8 +650,7 @@ TestCase {
         refused.send(submit("pw again"));
         assert(has(refused.effects, "startPam", { method: "password" }), "4: … and the next submit tries again");
 
-        const fpRefused = locked().send(state => ({ type: "pamStartFailed", method: "fingerprint",
-                                                    conversation: conversationOf(state, "fingerprint") }));
+        const fpRefused = locked().send(startFailed("fingerprint"));
         assert(fpRefused.state.passive.fingerprint.status === "broken" && fpRefused.state.passive.fingerprint.conversation === null,
                "4: a passive method's refused start leaves it broken, not running");
 
@@ -605,7 +730,7 @@ TestCase {
                "5: the " + LockRules.limits.errorLimit + "th Error in a row: broken for the lock");
         keyLock.sendAll([timer("prompt"), activity()], 10000);
         assert(has(keyLock.effects, "startPam", { method: "u2f" }),
-               "5: an eager method broken by Errors gets one more try each time somebody comes back (the key plugged in now)");
+               "5: an eager method broken by Errors gets one more try when somebody comes back (the key plugged in now)");
         keyLock.send(pamCompleted("u2f", "error"));
         assertEqual(keyLock.state.passive.u2f.status, "broken", "5: … broken again at once by the next Error");
 
@@ -806,6 +931,12 @@ TestCase {
         handover.sendAll([added("s4", "DP-1"), activity("s4")]);
         assertEqual(handover.state.prompt.owner, "s4", "6s: a surface that comes back gets a working prompt");
 
+        // Two successors on the owner's screen (an output re-added twice in a row): the
+        // newest is the live one, an older one is being destroyed
+        const heirs = locked().sendAll([activity("s1"), added("s2", "HDMI-A-1"), added("s3", "DP-1"), added("s4", "DP-1")]);
+        heirs.send(removed("s1"));
+        assertEqual(heirs.state.prompt.owner, "s4", "6s: with two successors on its screen the prompt goes to the newest, not the oldest");
+
         const keep = locked().sendAll([added("s2", "HDMI-A-1"), added("s3", "eDP-1"), activity("s2")]);
         const keepEpoch = keep.state.prompt.fieldEpoch;
         keep.send(removed("s3"));
@@ -825,6 +956,8 @@ TestCase {
         assertEqual(dup.ignored, "surface already known", "6s: a surface reported twice counts once");
         const noId = locked().send({ type: "surfaceAdded", screen: "DP-1" });
         assertEqual(noId.ignored, "no surface", "6s: a surface without an id is refused");
+        const noScreen = locked().send(added("s5", ""));
+        assertEqual(noScreen.ignored, "no screen", "6s: a surface without a screen name is refused (the driver gives one a name)");
 
         const questionMoves = locked(passwordOnly).sendAll([added("s2", "HDMI-A-1"), enter("pw"), passwordPrompt(), passwordPrompt("Code:"),
                                                             removed("s1")]);
@@ -850,8 +983,9 @@ TestCase {
                "7: … released once the lock is confirmed");
         assert(!has(unlocked.all, "startPam"), "7: passive methods are not started while suspending, also when the lock came with it");
 
-        const graceRunning = started().sendAll([{ type: "prepareForSleep" }, { type: "resumed" }, { type: "unlockRequested", source: "logind" }]);
-        assert("resumeGrace" in graceRunning.state.timers, "7: (resumeGrace running, unlocked)");
+        const graceRunning = started().sendAll([{ type: "prepareForSleep" }, added("s1"), confirmed(), { type: "resumed" },
+                                                { type: "unlockRequested", source: "logind" }]);
+        assert("resumeGrace" in graceRunning.state.timers && graceRunning.state.phase.status === "unlocked", "7: (resumeGrace running, unlocked)");
         graceRunning.send({ type: "prepareForSleep" }, 1000);
         assert(graceRunning.effects[0].type === "lockCompositor" && graceRunning.effects[1].type === "announceLocked"
                && has(graceRunning.effects, "stopTimer", { name: "resumeGrace" }),
@@ -893,10 +1027,21 @@ TestCase {
         assert(missed.state.sleep.status === "resuming" && has(missed.effects, "detectMethods"),
                "7: no resume signal: after its deadline the lock goes on as awake");
         const byActivity = locked().send({ type: "prepareForSleep" });
-        byActivity.send(activity(), 30000);
+        byActivity.send(timer("minSuspend"), 5000);
+        byActivity.send(activity(), 25000);
         assert(byActivity.state.sleep.status === "resuming" && byActivity.state.prompt.owner === "s1"
                && has(byActivity.effects, "detectMethods"),
-               "7: … or at the first activity well after going down, which also wakes the prompt");
+               "7: … or at the first activity after minSuspend of running time since going down, which also wakes the prompt");
+        // The wall clock jumping forward while going down (an NTP step): the hand that closes
+        // the lid is still not a wake, and nothing takes the inhibitor while going down
+        const jump = locked().send({ type: "prepareForSleep" });
+        jump.send(activity(), 3600000);
+        assert(jump.state.sleep.status === "suspending" && !has(jump.effects, "holdInhibitor") && !has(jump.effects, "detectMethods"),
+               "7: the wall clock jumping an hour forward right after PrepareForSleep: activity is still no wake, no inhibitor taken");
+        const clockBack = locked().send({ type: "prepareForSleep" });
+        clockBack.send(timer("minSuspend"), 5000);
+        clockBack.send(activity(), -3600000);
+        assertEqual(clockBack.state.sleep.status, "resuming", "7: … and set back an hour, activity after minSuspend still recovers");
 
         // A second PrepareForSleep while still suspending: the wake was missed, this is a new sleep
         const twice = started().sendAll([{ type: "prepareForSleep" }, added("s1"), confirmed()]);
@@ -970,54 +1115,88 @@ TestCase {
         // refusal as compositorFinished for that session
         const denied = locking().send(finished());
         assert(denied.state.phase.status === "unlocked" && denied.state.phase.lastEnd === "denied"
-               && has(denied.effects, "unlockCompositor", { reason: "denied", session: 1 }) && has(denied.effects, "announceLocked", { locked: false })
+               && !has(denied.effects, "unlockCompositor") && has(denied.effects, "announceLocked", { locked: false })
                && has(denied.effects, "log", { level: "warning" }) && nothingRunning(denied.state),
-               "8: the compositor refusing the lock: back to unlocked, cleanly, and reported");
+               "8: the compositor refusing the lock: back to unlocked, cleanly, nothing to unlock, and reported");
         denied.send({ type: "lockRequested" });
         assert(denied.state.phase.status === "locking" && denied.state.phase.session === 2, "8: … and the next lock request locks");
         const late = locked().send({ type: "unlockRequested", source: "logind" }).send(finished());
         assertEqual(late.ignored, "not locked", "8: the compositor's end after an unlock is ignored");
     }
 
-    // A lock the compositor never confirms (Quickshell refuses some without any signal)
-    function _behaviour8Unconfirmed() {
-        const lock = locking().sendAll(enter("pw"));
-        assert(lock.state.password.status === "pending" && "confirm" in lock.state.timers, "8u: (locking, a password held)");
+    // A lock the compositor confirms late, or never: FAIL CLOSED (the header of
+    // LockRules.qml). Nothing sets the compositor's lock false before its `locked`.
+    function _behaviour8FailClosed() {
+        const lock = locking().sendAll([enter("pw"), detected(passwordOnly)]);
+        assert(lock.state.password.status === "verifying" && "confirm" in lock.state.timers, "8f: (locking, a password being checked)");
         lock.send(timer("confirm"), 5000);
-        const order = types(lock.effects);
-        assert(order.indexOf("unlockCompositor") >= 0 && order.indexOf("unlockCompositor") < order.indexOf("lockCompositor")
-               && has(lock.effects, "unlockCompositor", { session: 1, reason: "retry" }) && has(lock.effects, "lockCompositor", { session: 2 }),
-               "8u: no confirmation in time: the lock is set again (unlock, then lock under a new session)");
-        assert(lock.state.phase.status === "locking" && lock.state.phase.session === 2 && lock.state.phase.attempt === 2
-               && lock.state.password.status === "pending" && !has(lock.effects, "announceLocked"),
-               "8u: … still locking, the password still held, nothing announced again");
-        lock.send({ type: "compositorLocked", session: 1 });
-        assertEqual(lock.ignored, "stale session", "8u: a late confirmation of the abandoned session does not count");
-        const retried = locking().sendAll([timer("confirm"), confirmed(), detected(passwordOnly)], 5000);
-        assert(retried.state.phase.status === "locked" && !("confirm" in retried.state.timers),
-               "8u: the retried session's confirmation locks");
+        assert(!has(lock.effects, "unlockCompositor") && !has(lock.effects, "lockCompositor") && lock.state.phase.status === "locking"
+               && lock.state.phase.session === 1 && lock.state.phase.confirmLate && !("confirm" in lock.state.timers)
+               && has(lock.effects, "log", { level: "warning" }) && lock.state.password.status === "verifying",
+               "8f: no confirmation in time: a warning, nothing set again or given up, the check goes on");
+        assertEqual(LockRules.view(lock.state).notice, "Waiting for the compositor to confirm the lock", "8f: … the view says it waits");
+        lock.sendAll([passwordPrompt(), pamCompleted("password", "success")]);
+        assert(windingDone(lock.state) && !has(lock.effects, "unlockCompositor") && !has(lock.effects, "announceLocked")
+               && lock.state.phase.pending.reason === "authenticated" && lock.state.phase.pending.method === "password",
+               "8f: the password accepted while unconfirmed: everything wound down, the unlock pending, nothing sent");
+        const view = LockRules.view(lock.state);
+        assert(view.locked && view.unlocking && view.busy && view.buttonText === "Unlocking…" && view.promptSurface === "s1",
+               "8f: … the prompt stays and says \"Unlocking…\"");
+        const pendingState = lock.state;
+        for (const event of [activity(), key("s1", "Escape"), key("s1", "", "a"), { type: "submit", surface: "s1", text: "again" },
+                             press(), { type: "unlockRequested", source: "logind" }]) {
+            lock.send(event);
+            assert(lock.state === pendingState && lock.ignored === "unlock pending",
+                   "8f: while an unlock is pending, " + event.type + " is ignored cleanly");
+        }
+        lock.send(timer("confirm"));
+        assertEqual(lock.ignored, "timer not running", "8f: (the confirm timer ran once)");
+        lock.send({ type: "compositorLocked", session: 1 }, 20000);
+        assert(lock.state.phase.status === "unlocked" && lock.state.phase.lastEnd === "authenticated"
+               && JSON.stringify(types(lock.effects)) === JSON.stringify(["unlockCompositor", "announceLocked"])
+               && has(lock.effects, "unlockCompositor", { session: 1, reason: "authenticated", method: "password" }),
+               "8f: the late confirmation carries out the pending unlock: unlockCompositor, then announceLocked(false)");
 
-        lock.send(timer("confirm"), 5000);
-        assert(lock.state.phase.attempt === 3 && lock.state.phase.session === 3, "8u: (a second retry)");
-        lock.send(timer("confirm"), 5000);
-        assert(lock.state.phase.status === "unlocked" && lock.state.phase.lastEnd === "unconfirmed"
-               && has(lock.effects, "unlockCompositor", { session: 3, reason: "unconfirmed" })
-               && has(lock.effects, "announceLocked", { locked: false }) && has(lock.effects, "log", { level: "warning" })
-               && nothingRunning(lock.state),
-               "8u: after " + LockRules.limits.confirmAttempts + " attempts the lock is given up, said so, no secret left");
-        lock.send({ type: "lockRequested", source: "idle" });
-        assert(lock.ignored === "" && lock.state.phase.status === "locking" && lock.state.phase.session === 4,
-               "8u: … and a later lock request locks again");
+        const refused = locking().sendAll([activity(), key("s1", "Escape"), finished()]);
+        assert(refused.state.phase.status === "unlocked" && refused.state.phase.lastEnd === "denied"
+               && !has(refused.all, "unlockCompositor") && has(refused.effects, "announceLocked", { locked: false }),
+               "8f: a pending unlock ended by compositorFinished: the lock ends, nothing to unlock");
 
-        // Going down with a lock that is never confirmed: the machine sleeps after the
-        // fallback, and the lock is given up — the next sleep locks again
-        const down = started().sendAll([{ type: "prepareForSleep" }, added("s1")]);
-        down.send(timer("inhibitor"), 4000);
-        down.sendAll([timer("confirm"), timer("confirm"), timer("confirm")], 5000);
-        assertEqual(down.state.phase.lastEnd, "unconfirmed", "8u: (going down, never confirmed: given up)");
-        down.sendAll([{ type: "resumed" }, { type: "prepareForSleep" }], 30000);
-        assert(down.state.phase.status === "locking" && has(down.effects, "lockCompositor"),
-               "8u: … and the next sleep locks again");
+        const relock = locking().sendAll([added("s2", "HDMI-A-1"), { type: "unlockRequested", source: "logind" }]);
+        assertEqual(relock.state.phase.status, "unlocking", "8f: (logind's Unlock while locking: pending)");
+        relock.send({ type: "lockRequested", source: "idle" });
+        assert(relock.state.phase.status === "locking" && relock.state.phase.pending === null && relock.state.phase.session === 1
+               && !has(relock.effects, "lockCompositor") && !has(relock.effects, "announceLocked")
+               && relock.state.prompt.surfaces.length === 2 && relock.state.methods.status === "detecting"
+               && relock.state.password.status === "idle",
+               "8f: a lock request cancels the pending unlock: still locking the same session, surfaces kept, methods asked afresh");
+        relock.send(confirmed());
+        assert(relock.state.phase.status === "locked" && !has(relock.all, "unlockCompositor"),
+               "8f: … and the confirmation then only locks: a fresh authentication is needed");
+
+        const sleepy = started().sendAll([{ type: "lockRequested", source: "ipc" }, added("s1"), { type: "unlockRequested", source: "logind" },
+                                          { type: "prepareForSleep" }]);
+        assert(sleepy.state.phase.status === "locking" && sleepy.state.sleep.status === "suspending"
+               && sleepy.state.sleep.inhibitor === "held" && "inhibitor" in sleepy.state.timers,
+               "8f: going to sleep cancels a pending unlock: locked, the inhibitor held for the confirmation");
+        sleepy.send(confirmed());
+        assert(sleepy.state.phase.status === "locked" && has(sleepy.effects, "releaseInhibitor") && !has(sleepy.all, "unlockCompositor"),
+               "8f: … and the confirmation locks and lets the machine go");
+
+        const surfaces = locking().sendAll([activity(), key("s1", "Escape"), added("s2", "DP-1"), removed("s1")]);
+        assert(surfaces.state.prompt.surfaces.length === 1 && surfaces.state.prompt.owner === "s2",
+               "8f: surfaces are followed while an unlock is pending (the prompt handed on)");
+
+        // The compositor never answers at all
+        const never = locking().send(detected(passwordOnly));
+        never.send(timer("confirm"), 5000);
+        for (let i = 0; i < 30; i++)
+            never.sendAll([activity(), submit("wrong-" + i), passwordPrompt(), pamCompleted("password", "failed")], 11000);
+        assert(never.state.phase.status === "locking" && !has(never.all, "unlockCompositor"),
+               "8f: a compositor that never answers: still locking after many minutes, never unlocked, never set again");
+        never.sendAll([activity(), submit("right"), passwordPrompt(), pamCompleted("password", "success")]);
+        assert(never.state.phase.status === "unlocking" && !has(never.all, "unlockCompositor"),
+               "8f: … the owner can still authenticate, and the unlock waits (the known limit, plan section 7)");
     }
 
     // ---- 9. Retries ----
@@ -1064,12 +1243,49 @@ TestCase {
         const notEager = locked().send(pamCompleted("fingerprint", "failed"));
         notEager.send(activity());
         assert(!has(notEager.effects, "startPam"), "9: … the fingerprint keeps its delay");
-        const none = locked(passwordOnly).send(activity());
-        assert(has(none.effects, "detectMethods"), "9: a lock without a passive method asks again when somebody comes back");
+        const maxTriesKey = locked().send(pamCompleted("u2f", "maxTries"));
+        maxTriesKey.send(activity());
+        assert(!has(maxTriesKey.effects, "startPam") && maxTriesKey.state.passive.u2f.status === "backoff",
+               "9: … but a key waiting out MaxTries (somebody failing) keeps its wait");
+
+        // Revival of an eager method broken by Errors: bounded
+        const reviving = locked(passwordAndKey);
+        for (let i = 0; i < LockRules.limits.errorLimit; i++)
+            reviving.sendAll([pamCompleted("u2f", "error"), timer("retry:u2f")], 30000);
+        assertEqual(reviving.state.passive.u2f.status, "broken", "9: (the key broken by Errors)");
+        let starts = 0;
+        for (let i = 0; i < 10; i++) {
+            reviving.sendAll([timer("prompt"), activity()], 11000);
+            starts += of(reviving.effects, "startPam", { method: "u2f" }).length;
+            if (reviving.state.passive.u2f.status === "running")
+                reviving.send(pamCompleted("u2f", "error"), 100);
+        }
+        assert(starts === LockRules.limits.revivals && reviving.state.passive.u2f.status === "broken",
+               "9: ten returns to the prompt revive the broken key " + starts + " times: at most " + LockRules.limits.revivals + " per lock");
+        assert(of(reviving.all, "startPam", { method: "u2f" }).length <= 1 + LockRules.limits.errorLimit + LockRules.limits.revivals,
+               "9: … so its PAM rounds per lock are bounded (errorLimit + revivals, and the first)");
+        reviving.sendAll([{ type: "prepareForSleep" }, { type: "resumed" }]);
+        assert(reviving.state.passive.u2f.revivals === 0 && reviving.state.passive.u2f.errors === 0,
+               "9: … and a wake from sleep gives it its chances back");
+
+        // Re-detection when somebody comes back: only after a FAILED detection, rate-limited
+        const clean = locked(passwordOnly).send(activity());
+        assert(!has(clean.effects, "detectMethods"), "9: a clean answer without passive methods is not asked again at every wake of the prompt");
         const eagerWithoutReader = locked(passwordAndKey).send(pamCompleted("u2f", "failed"));
         eagerWithoutReader.send(activity());
-        assert(has(eagerWithoutReader.effects, "detectMethods") && has(eagerWithoutReader.effects, "startPam", { method: "u2f" }),
-               "9: … and an eager retry is not held up by that re-detection (no fingerprint reader: the key still tried at once)");
+        assert(!has(eagerWithoutReader.effects, "detectMethods") && has(eagerWithoutReader.effects, "startPam", { method: "u2f" }),
+               "9: … no reader offered: the key still tried at once, the script not run");
+        const failing = locking().sendAll([confirmed(), state => ({ type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" })]);
+        failing.send(activity(), 30000);
+        assert(has(failing.effects, "detectMethods"), "9: after a failed detection, somebody coming back asks again");
+        failing.send(state => ({ type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" }), 100);
+        failing.send(timer("prompt"), 9900);
+        failing.send(activity(), 100);
+        assert(!has(failing.effects, "detectMethods") && failing.state.prompt.owner === "s1",
+               "9: … but not again within " + LockRules.timings.redetect / 1000 + " s");
+        failing.send(timer("prompt"), 10000);
+        failing.send(activity(), 10000);
+        assert(has(failing.effects, "detectMethods"), "9: … and again after it");
     }
 
     // ---- 10. Settings ----
@@ -1133,46 +1349,88 @@ TestCase {
         answered.send(pamCompleted("password", "failed"));
         assert(!("verify" in answered.state.timers), "11: … and the end of the conversation stops it");
 
-        // A password pending because nothing starts (the lock not confirmed)
+        // A password pending because nothing starts (the methods never known)
         const neverStarts = locking().sendAll(enter("pw"));
         neverStarts.send(timer("verify"), 90000);
         assert(neverStarts.state.password.status === "failed" && neverStarts.state.secret === null
                && neverStarts.state.password.error === "Password check timed out",
                "11: a password stuck pending gets the same bound");
+    }
 
-        // An internal error on a PAM completion still ends that conversation
-        const base = locked().sendAll(enter("pw"));
-        const throwing = new Proxy({}, { get: () => { throw new Error("planted"); }, has: () => { throw new Error("planted"); },
+    // An internal error (a rule that throws) on a PAM completion still ends that
+    // conversation — FAIL CLOSED, the result not believed, nothing typed in the log
+    function _behaviour11InternalErrors() {
+        const typed = "s3cr3t-in-flight";
+        const throwingEvent = (method, result, state) => {
+            const event = { type: "pamCompleted", method: method, conversation: conversationOf(state, method) };
+            let reads = 0;
+            // The handler reads `result`; the internal-error path must not need it
+            Object.defineProperty(event, "result", { enumerable: true, get: () => {
+                reads++;
+                throw new Error("planted fault while holding " + state.secret);
+            } });
+            return event;
+        };
+
+        // A fault that throws only in the handler: the full path runs (reconcile included)
+        const base = locked(passwordOnly).sendAll(enter(typed));
+        assert(base.state.secret === typed && base.state.password.status === "verifying", "11i: (a password being checked, its secret held)");
+        const pw = LockRules.step(base.state, throwingEvent("password", "success", base.state), base.now + 10);
+        assert(pw.error === true && pw.ignored === "" && pw.state.phase.status === "locked"
+               && pw.state.password.status === "failed" && pw.state.password.error === "Password check failed, try again"
+               && pw.state.secret === null && !("verify" in pw.state.timers) && !has(pw.effects, "unlockCompositor"),
+               "11i: an internal error on a password success fails closed: still locked, \"try again\", no secret, verify timer stopped");
+        const allText = JSON.stringify(pw.effects) + pw.ignored;
+        assert(!allText.includes(typed) && has(pw.effects, "log", { level: "error" }),
+               "11i: … its log says so, without the secret (even when the error's text holds it)");
+
+        const fpBase = locked();
+        const fp = LockRules.step(fpBase.state, throwingEvent("fingerprint", "success", fpBase.state), fpBase.now + 10);
+        assert(fp.error === true && fp.state.phase.status === "locked" && fp.state.passive.fingerprint.status === "backoff"
+               && "retry:fingerprint" in fp.state.timers && fp.state.passive.fingerprint.errors === 1 && !has(fp.effects, "unlockCompositor"),
+               "11i: an internal error on a fingerprint success fails closed — and backs off as after an Error, not broken for the lock");
+
+        const whileLocking = locking().sendAll([detected(passwordOnly), ...enter(typed)]);
+        const lockingResult = LockRules.step(whileLocking.state, throwingEvent("password", "success", whileLocking.state), whileLocking.now + 10);
+        assert(lockingResult.state.phase.status === "locking" && lockingResult.state.password.status === "failed",
+               "11i: … also while locking (no pending unlock from a result not believed)");
+
+        // A state that makes every helper throw: the minimum, still ending the conversation
+        const throwing = new Proxy({}, { get: () => { throw new Error("planted " + typed); }, has: () => { throw new Error("planted"); },
                                          ownKeys: () => { throw new Error("planted"); },
                                          getOwnPropertyDescriptor: () => { throw new Error("planted"); } });
         const poisoned = Object.assign({}, base.state, { timers: throwing });
-        const fp = LockRules.step(poisoned, { type: "pamCompleted", method: "fingerprint", conversation: conversationOf(base.state, "fingerprint"),
-                                              result: "failed" }, base.now + 10);
-        assert(fp.error === true && fp.ignored === "" && fp.state.passive.fingerprint.conversation === null
-               && fp.state.passive.fingerprint.status === "broken" && has(fp.effects, "log", { level: "error" }),
-               "11: an internal error on a passive method's completion still ends that conversation (broken, said so)");
-        const pw = LockRules.step(poisoned, { type: "pamCompleted", method: "password", conversation: conversationOf(base.state, "password"),
-                                              result: "failed" }, base.now + 10);
-        assert(pw.error === true && pw.state.password.conversation === null && pw.state.password.status === "failed"
-               && pw.state.secret === null && !LockRules.view(pw.state).busy,
-               "11: … and the password's: not verifying any more, no secret, usable");
-        const startFailed = LockRules.step(poisoned, { type: "pamStartFailed", method: "u2f", conversation: conversationOf(base.state, "u2f") }, base.now + 10);
-        assert(startFailed.error === true && startFailed.state.passive.u2f.conversation === null, "11: … and a refused start's");
-        const stale = LockRules.step(poisoned, { type: "pamCompleted", method: "u2f", conversation: -7, result: "failed" }, base.now + 10);
-        assert(stale.ignored !== "" && stale.state === poisoned, "11: (a stale completion is still just ignored)");
+        const poisonedFp = Object.assign({}, fpBase.state, { timers: throwing });
+        const minimalFp = LockRules.step(poisonedFp, { type: "pamCompleted", method: "fingerprint", conversation: conversationOf(fpBase.state, "fingerprint"),
+                                                       result: "failed" }, fpBase.now + 10);
+        assert(minimalFp.error === true && minimalFp.ignored === "" && minimalFp.state.passive.fingerprint.conversation === null
+               && minimalFp.state.passive.fingerprint.status === "broken" && has(minimalFp.effects, "log", { level: "error" }),
+               "11i: when even ending it throws, the passive method's conversation still ends (broken, said so)");
+        const minimalPw = LockRules.step(poisoned, { type: "pamCompleted", method: "password", conversation: conversationOf(base.state, "password"),
+                                                     result: "success" }, base.now + 10);
+        assert(minimalPw.error === true && minimalPw.state.password.conversation === null && minimalPw.state.password.status === "failed"
+               && minimalPw.state.secret === null && !LockRules.view(minimalPw.state).busy && minimalPw.state.phase.status === "locked",
+               "11i: … and the password's, a success included: not verifying, no secret, usable, still locked");
+        assert(!(JSON.stringify(minimalPw.effects) + minimalPw.ignored).includes(typed), "11i: … no secret in that log either");
+        const startFailedResult = LockRules.step(poisonedFp, { type: "pamStartFailed", method: "u2f", conversation: conversationOf(fpBase.state, "u2f") }, fpBase.now + 10);
+        assert(startFailedResult.error === true && startFailedResult.state.passive.u2f.conversation === null, "11i: … and a refused start's");
+        const stale = LockRules.step(poisonedFp, { type: "pamCompleted", method: "u2f", conversation: -7, result: "failed" }, fpBase.now + 10);
+        assert(stale.ignored !== "" && stale.state === poisonedFp, "11i: (a stale completion is still just ignored)");
         const other = LockRules.step(poisoned, activity(), base.now + 10);
-        assert(other.error === true && other.state === poisoned && other.effects.length === 0,
-               "11: an internal error on any other event leaves the state as it was");
+        assert(other.error === true && other.state === poisoned && other.effects.length === 0 && !other.ignored.includes(typed),
+               "11i: an internal error on any other event leaves the state as it was, and its reason holds no secret");
     }
 
     // ---- 12. Re-detection ----
 
     function _behaviour12Redetection() {
         // A re-detection that no longer names a method running: stopped, unavailable
-        const fewer = locked(passwordAndFingerprint);
+        const fewer = locked(passwordAndFingerprint).sendAll([{ type: "prepareForSleep" }, { type: "resumed" },
+                                                              detected(passwordAndFingerprint), timer("settle:fingerprint")]);
         const running = conversationOf(fewer.state, "fingerprint");
-        fewer.send(activity());
-        assert(has(fewer.effects, "detectMethods"), "12: (u2f missing: somebody coming back asks again)");
+        assert(running !== -1, "12: (the fingerprint running after a wake)");
+        fewer.send(timer("resumeGrace"), 4000);
+        assert(has(fewer.effects, "detectMethods"), "12: (u2f missing: asked again after the wake's grace)");
         fewer.send(detected(passwordOnly));
         assert(has(fewer.effects, "abortPam", { method: "fingerprint", conversation: running })
                && fewer.state.passive.fingerprint.status === "unavailable" && fewer.state.passive.fingerprint.conversation === null,
@@ -1183,15 +1441,16 @@ TestCase {
         assert(!LockRules.view(fewer.state).methods[0].visible, "12: … and nothing shows it running");
 
         const backoff = locked(passwordAndFingerprint).send(pamCompleted("fingerprint", "failed"));
-        backoff.sendAll([activity(), detected(passwordOnly)]);
+        backoff.sendAll(redetected(passwordOnly));
         assert(backoff.state.passive.fingerprint.status === "unavailable" && !("retry:fingerprint" in backoff.state.timers),
                "12: … one backing off: its retry stopped");
         const stillBroken = locked(passwordAndFingerprint).send(pamMessage("fingerprint", { responseRequired: true }));
-        stillBroken.sendAll([activity(), detected(passwordOnly), detected(passwordAndFingerprint)]);
+        stillBroken.sendAll(redetected(passwordOnly));
+        stillBroken.sendAll(redetected(passwordAndFingerprint));
         assertEqual(stillBroken.state.passive.fingerprint.status, "broken", "12: a broken method stays broken through re-detections");
 
         // Detection failing keeps this lock's last answer
-        const keeps = locked(passwordAndFingerprint).send(activity());
+        const keeps = locked(passwordAndFingerprint).sendAll([activity(), submit("x"), startFailed("password")]);
         keeps.send(state => ({ type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" }));
         const warning = of(keeps.effects, "log", { level: "warning" })[0];
         assert(keeps.state.methods.status === "known" && keeps.state.methods.configs.fingerprint !== null
@@ -1200,11 +1459,50 @@ TestCase {
                "12: a failed re-detection keeps this lock's last answer");
         assert(warning.message.includes("last answer") && warning.message.includes("from that answer"),
                "12: … and says so: " + warning.message);
-        const lastNoPassword = locked(["fingerprint\t/etc/pam.d\tfp"]).send(activity());
+        const lastNoPassword = locked(["fingerprint\t/etc/pam.d\tfp"]).sendAll([activity(), submit("x"), startFailed("password")]);
         lastNoPassword.send(timer("detect"), 5000);
         const fallbackWarning = of(lastNoPassword.effects, "log", { level: "warning" })[0];
         assert(fallbackWarning.message.includes("the fallback") && lastNoPassword.state.methods.configs.password.directory === "/shell/pam",
                "12: … the password from the fallback where that answer named none, said so: " + fallbackWarning.message);
+    }
+
+    // ---- 13. A detected password config that cannot be used ----
+
+    function _behaviour13PasswordFallback() {
+        const configOf = effects => {
+            const start = of(effects, "startPam", { method: "password" })[0];
+            return start ? start.configDirectory + "/" + start.config : "none";
+        };
+        const refused = locked(passwordOnly).sendAll(enter("pw"));
+        assertEqual(configOf(refused.effects), "/etc/pam.d/h2s-shell-password", "13: (the detected config first)");
+        refused.send(startFailed("password"));
+        assert(has(refused.effects, "detectMethods") && refused.state.password.avoid !== null,
+               "13: its start() refused: the methods are asked again, the config noted as not usable");
+        refused.sendAll([detected(passwordOnly), activity(), submit("pw2")]);
+        assertEqual(configOf(refused.effects), "/shell/pam/password", "13: … and the next attempt takes the fallback (even when detection names the same config again)");
+        refused.sendAll([passwordPrompt(), pamCompleted("password", "success")]);
+        assertEqual(refused.state.phase.lastEnd, "authenticated", "13: … which can unlock");
+
+        const tried = [];
+        const four = locked(passwordOnly).sendAll(enter("pw"));
+        for (let i = 0; i < 4; i++) {
+            tried.push(configOf(four.effects));
+            four.sendAll([startFailed("password"), activity(), submit("pw" + i)], 100);
+            if (four.state.methods.status === "detecting")
+                four.send(detected(passwordOnly));
+            if (four.state.password.status === "pending")
+                four.send(submit("pw" + i));
+        }
+        assert(new Set(tried).size === 2, "13: start() refused again and again: the attempts alternate between the two configs, never the dead one alone: "
+               + JSON.stringify(tried));
+
+        const errored = locked(passwordOnly).sendAll([enter("pw"), passwordPrompt(), pamCompleted("password", "error"), activity(), submit("again")]);
+        assertEqual(configOf(errored.effects), "/shell/pam/password", "13: after PAM's Error on the detected config, the next attempt takes the fallback");
+        const wrong = locked(passwordOnly).sendAll([enter("pw"), passwordPrompt(), pamCompleted("password", "failed"), activity(), submit("again")]);
+        assertEqual(configOf(wrong.effects), "/etc/pam.d/h2s-shell-password", "13: a wrong password is no reason to change config");
+        const noOther = locked(passwordOnly, { lockOnSleep: true, passwordFallback: { directory: "/etc/pam.d", config: "h2s-shell-password" } })
+            .sendAll([enter("pw"), startFailed("password"), activity(), submit("again")]);
+        assertEqual(configOf(noOther.effects), "/etc/pam.d/h2s-shell-password", "13: a fallback that is the same config: tried again (there is no other)");
     }
 
     // ---- Parsers ----
@@ -1278,6 +1576,10 @@ TestCase {
         assert(!shown.includes("tr0ub4dor") && LockRules.describe(lock.state).hasSecret === true,
                "secrets: describe() leaves the secret out, saying only that there is one");
         assert(JSON.stringify(JSON.parse(shown)) === shown, "secrets: describe() is JSON-serialisable");
+        const described = LockRules.describe(locked().send(activity()).state);
+        assert(!("awakeUntil" in described.prompt) && !("serial" in described) && Array.isArray(described.timers)
+               && described.timers.every(name => typeof name === "string"),
+               "secrets: describe() has nothing that times keystrokes: no prompt deadline, no id counter, timers by name only");
         lock.sendAll([detected(passwordOnly), passwordPrompt()]);
         const respond = of(lock.effects, "respondPam")[0];
         assert(respond.text === "tr0ub4dor&3" && LockRules.describeEffect(respond).text === "<redacted>",
@@ -1298,13 +1600,15 @@ TestCase {
         const paths = [
             locked(passwordOnly).sendAll([enter(typed), passwordPrompt(), pamCompleted("password", "failed")]),
             locked(passwordOnly).sendAll([enter(typed), timer("verify")], 90000),
-            locking().sendAll([enter(typed), timer("confirm"), timer("confirm"), timer("confirm")], 5000),
+            locking().sendAll([enter(typed), timer("confirm"), detected(passwordOnly), passwordPrompt(), pamCompleted("password", "success"),
+                               confirmed()], 5000),
             locked([], { passwordFallback: null }).sendAll([enter(typed), detected([])]),
             locked(passwordOnly).sendAll([enter(typed), passwordPrompt("Code:"), submit(typed), pamCompleted("password", "error")]),
+            locked(passwordOnly).sendAll([enter(typed), startFailed("password"), activity(), submit(typed)]),
             locked(passwordOnly).sendAll([activity(), key("s1", typed, typed), submit(typed), { type: "unlockRequested", source: "logind" }])
         ];
         assert(paths.every(path => of(path.all, "log").every(effect => !JSON.stringify(effect).includes(typed))),
-               "secrets: no log effect contains typed text (failed, timed out, unconfirmed, unavailable, answered, unlocked)");
+               "secrets: no log effect contains typed text (failed, timed out, late confirmation, unavailable, answered, refused start, unlocked)");
         assert(paths.every(path => path.all.filter(effect => effect.type !== "respondPam" && effect.type !== "forwardKey")
                                        .every(effect => !JSON.stringify(effect).includes(typed))),
                "secrets: … nor any effect but respondPam (and forwardKey for a key's own text)");
@@ -1344,31 +1648,49 @@ TestCase {
 
     // From any state, the owner comes back and types the right password: the lock must
     // open within `livenessSteps` steps and `livenessTime` ms of simulated time. The world
-    // is kind but not helpful: the compositor confirms, the methods script answers, PAM
-    // answers conversations started from here on (a hidden prompt, then success for the
-    // right password). Conversations from before never answer (hung), passive methods
-    // never succeed, and pending timers fire when their time comes. The bound: a missed
-    // resume (60 s) + a hung verification (90 s) + the detection, settle and prompt time-outs
-    // on the way, with room to spare.
+    // is kind but not helpful: the methods script answers, PAM answers conversations
+    // started from here on (a hidden prompt, then success for the right password).
+    // Conversations from before never answer (hung), passive methods never succeed, and
+    // pending timers fire when their time comes. The bound: a missed resume (60 s) + a hung
+    // verification (90 s) + the detection, settle and prompt time-outs on the way, with
+    // room to spare.
+    //
+    // `world`: { confirm (default true): the compositor confirms a lock; false — it never
+    // answers, and the owner must then reach an authenticated unlock PENDING (a late
+    // confirmation cannot strand them), refuse: PAM refuses to start any password config
+    // but the fallback (a detected config that cannot work) }
     readonly property int livenessSteps: 120
     readonly property int livenessTime: 200000
 
-    function _liveness(state, now) {
+    function _liveness(state, now, dues, world) {
+        const confirmWorld = world?.confirm !== false;
+        const refuseWorld = world?.refuse === true;
         const rightPassword = "the-right-password";
         let current = state;
         let clock = now;
         const start = now;
         const ours = {};
         const trail = [];
+        const due = Object.assign({}, dues ?? {});
+        const confirmedSessions = new Set();
+        if (state.phase.status === "locked")
+            confirmedSessions.add(state.phase.session);
         let pokedSleep = false;
         const apply = (event, at) => {
             const result = LockRules.step(current, event, at);
             trail.push(JSON.stringify(LockRules.describeEvent(event)) + (result.ignored ? " → ignored: " + result.ignored : ""));
             if (result.error === true)
                 return "internal error: " + result.ignored;
+            const rule = _compositorRule(confirmedSessions, event, result);
+            if (rule !== "")
+                return rule;
+            _trackDues(due, event, result, at);
             for (const effect of result.effects) {
-                if (effect.type === "startPam" && effect.method === "password")
-                    ours[effect.conversation] = { prompted: false, answer: null };
+                if (effect.type === "startPam" && effect.method === "password") {
+                    const isFallback = effect.configDirectory === current.settings.passwordFallback?.directory
+                        && effect.config === current.settings.passwordFallback?.config;
+                    ours[effect.conversation] = { prompted: false, answer: null, refused: refuseWorld && !isFallback };
+                }
                 if (effect.type === "respondPam" && ours[effect.conversation])
                     ours[effect.conversation].answer = effect.text;
             }
@@ -1381,6 +1703,8 @@ TestCase {
                 return current.phase.lastEnd === "authenticated" && current.password.status === "idle"
                     ? "" : "ended as " + current.phase.lastEnd;
             }
+            if (!confirmWorld && current.phase.status === "unlocking")
+                return current.phase.pending.reason === "authenticated" ? "" : "pending as " + current.phase.pending.reason;
             if (clock - start > livenessTime)
                 break;
             const surfaces = current.prompt.surfaces;
@@ -1391,11 +1715,14 @@ TestCase {
             let at = clock + 10;
             if (surfaces.length === 0)
                 event = added("oracle-surface", "DP-9");
-            else if (current.phase.status === "locking")
+            else if (confirmWorld && (current.phase.status === "locking" || current.phase.status === "unlocking"))
                 event = { type: "compositorLocked", session: current.phase.session };
             else if (current.methods.status === "detecting")
                 event = { type: "methodsDetected", generation: current.methods.generation, lines: allLines };
-            else if (password.status === "verifying" && conversation && !conversation.prompted) {
+            else if (password.status === "verifying" && conversation && conversation.refused && !conversation.prompted) {
+                conversation.prompted = true;
+                event = { type: "pamStartFailed", method: "password", conversation: password.conversation.id };
+            } else if (password.status === "verifying" && conversation && !conversation.prompted) {
                 conversation.prompted = true;
                 event = { type: "pamMessage", method: "password", conversation: password.conversation.id, message: "Password: ",
                           messageIsError: false, responseRequired: true, responseVisible: false };
@@ -1416,9 +1743,10 @@ TestCase {
                 const names = Object.keys(current.timers);
                 if (names.length === 0)
                     return "stuck with no timer running (password " + password.status + ")\n      " + trail.join("\n      ");
-                names.sort((a, b) => current.timers[a].due - current.timers[b].due);
+                const dueOf = name => due[name] ?? clock;
+                names.sort((a, b) => dueOf(a) - dueOf(b));
                 const name = names[0];
-                at = Math.max(clock, current.timers[name].due);
+                at = Math.max(clock, dueOf(name));
                 event = { type: "timer", name: name, token: current.timers[name].token };
             }
             const problem = apply(event, at);
@@ -1437,11 +1765,23 @@ TestCase {
             ["no password config", locked([], { passwordFallback: null })],
             ["locking with a password held", locking().sendAll(enter("early"))],
             ["a surface swap", locked().sendAll([added("s2"), removed("s1")])],
-            ["no surface", locked().send(removed("s1"))]
+            ["no surface", locked().send(removed("s1"))],
+            ["a lock request cancelling a pending unlock", locking().sendAll([{ type: "unlockRequested", source: "logind" }, { type: "lockRequested" }])]
         ];
         for (const [label, from] of cases) {
-            const problem = _liveness(from.state, from.now);
+            const problem = _liveness(from.state, from.now, from.dues);
             assert(problem === "", "liveness: from " + label + ", the right password unlocks within the bound" + (problem ? ": " + problem : ""));
+        }
+        for (const [label, from] of [["locking", locking()], ["locking, late", locking().send(timer("confirm"), 5000)],
+                                     ["locking with a password held", locking().sendAll(enter("early"))]]) {
+            const problem = _liveness(from.state, from.now, from.dues, { confirm: false });
+            assert(problem === "", "liveness: a compositor that never confirms, from " + label + ": the owner still authenticates (the unlock pending)"
+                   + (problem ? ": " + problem : ""));
+        }
+        for (const [label, from] of [["a lock whose detected password config cannot start", locked(passwordOnly)],
+                                     ["… with a password already refused", locked(passwordOnly).sendAll([enter("pw"), startFailed("password")])]]) {
+            const problem = _liveness(from.state, from.now, from.dues, { refuse: true });
+            assert(problem === "", "liveness: from " + label + ": the fallback is reached and unlocks" + (problem ? ": " + problem : ""));
         }
     }
 
@@ -1483,9 +1823,10 @@ TestCase {
         };
         const conversations = LockRules.running(state).conversations;
         const phase = state.phase.status;
+        const unconfirmed = phase === "locking" || phase === "unlocking";
         if (chance(0.8)) {
-            const roll = random();
             if (phase === "unlocked") {
+                const roll = random();
                 if (roll < 0.35) return { type: "lockRequested", source: pick(["ipc", "logind", "sleep", "idle"]) };
                 if (roll < 0.5) return { type: chance(0.5) ? "prepareForSleep" : "resumed" };
                 if (roll < 0.6) return { type: "settings", values: pick([{ lockOnSleep: true }, { lockOnSleep: false }, { passwordFallback: null }, { passwordFallback: fallback }]) };
@@ -1497,8 +1838,20 @@ TestCase {
                 context.surfaceCount++;
                 return added("s" + context.surfaceCount, pick(["DP-1", "HDMI-A-1"]));
             }
-            if (phase === "locking" && roll < 0.25)
-                return chance(0.97) ? { type: "compositorLocked", session: state.phase.session } : { type: "compositorFinished", session: state.phase.session };
+            // The compositor's word, as its own chance (it used to shadow the timers and the
+            // detection while locking: nothing time-driven in "locking" was swept)
+            if (unconfirmed && chance(0.12))
+                return chance(0.9) ? { type: "compositorLocked", session: state.phase.session } : { type: "compositorFinished", session: state.phase.session };
+            // A password already answered (no secret held) is asked a further question now and
+            // then (a one-time code), so that "asking" is reached and sampled often enough
+            if (state.password.status === "verifying" && chance(0.3))
+                return state.secret !== null
+                    ? { type: "pamMessage", method: "password", conversation: state.password.conversation.id,
+                        message: "Password: ", messageIsError: false, responseRequired: true, responseVisible: false }
+                    : { type: "pamMessage", method: "password", conversation: state.password.conversation.id,
+                        message: pick(["Verification code: ", "STRESS Password: ", "Code:"]), messageIsError: false,
+                        responseRequired: true, responseVisible: chance(0.3) };
+            const roll = random();
             const names = Object.keys(state.timers);
             if (roll < 0.15 && names.length > 0) {
                 const name = pick(names);
@@ -1507,14 +1860,17 @@ TestCase {
             if (roll < 0.22 && state.methods.status === "detecting")
                 return chance(0.85) ? { type: "methodsDetected", generation: state.methods.generation, lines: pick(_lineSets) }
                                     : { type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" };
-            if (roll < 0.4 && conversations.length > 0 && phase === "locked") {
+            if (roll < 0.42 && conversations.length > 0) {
                 const conversation = pick(conversations);
                 const id = conversation.conversation;
                 const kind = random();
+                // A password already answered (no secret held) is asked a question often, so
+                // that "asking" is reached
+                const answered = conversation.method === "password" && state.secret === null;
                 if (kind < 0.45)
                     return { type: "pamMessage", method: conversation.method, conversation: id,
                              message: pick(["Password: ", "Code:", "", "Place your finger", "Account locked"]),
-                             messageIsError: chance(0.3), responseRequired: chance(conversation.method === "password" ? 0.6 : 0.1),
+                             messageIsError: chance(0.3), responseRequired: chance(conversation.method === "password" ? (answered ? 0.85 : 0.6) : 0.1),
                              responseVisible: chance(0.2) };
                 if (kind < 0.95)
                     return { type: "pamCompleted", method: conversation.method, conversation: id,
@@ -1526,7 +1882,7 @@ TestCase {
             if (roll < 0.58) {
                 const asleep = state.prompt.owner === null;
                 const name = pick(asleep ? ["", "Enter", "Backspace", "Escape", "A"] : ["", "", "Enter", "Backspace", "Tab", "A", chance(0.15) ? "Escape" : ""]);
-                return key(knownSurface(), name, pick([pick(_keyCharacters), "", "\r"]));
+                return key(knownSurface(), name, pick([pick(_keyCharacters), "", "\r"]), chance(0.25));
             }
             if (roll < 0.7) {
                 const owner = state.prompt.owner;
@@ -1555,7 +1911,7 @@ TestCase {
         case 1: return { type: pick(["compositorLocked", "compositorFinished"]), session: pick([state.phase.session - 1, state.phase.session + 1, undefined, String(state.phase.session)]) };
         case 2: return { type: "pamCompleted", method: method, conversation: conversation, result: pick(["success", "failed", "error"]) };
         case 3: return { type: "pamMessage", method: method, conversation: conversation, message: "Password:", responseRequired: true };
-        case 4: return { type: "timer", name: pick(["prompt", "detect", "retry:u2f", "settle:password", "confirm", "verify"]), token: pick([0, -1, state.serial]) };
+        case 4: return { type: "timer", name: pick(["prompt", "detect", "retry:u2f", "settle:password", "confirm", "verify", "minSuspend"]), token: pick([0, -1, state.serial]) };
         case 5: return { type: "methodsDetected", generation: pick([0, 1, state.serial + 5]), lines: pick(_lineSets) };
         case 6: return { type: "pamStartFailed", method: method, conversation: conversation };
         case 7: return { type: "submit", surface: pick(["gone", null, 7]), text: typedText() };
@@ -1564,23 +1920,37 @@ TestCase {
         }
     }
 
-    // Did the event that ended the lock have the right to? → "" or what is wrong
+    // An event that ended the lock or decided an unlock (→ unlocked, or locking → unlocking):
+    // did it have the right to? → "" or what is wrong
     function _unlockViolation(before, event, after) {
-        const end = after.phase.lastEnd;
+        const from = before.phase.status;
+        if (from === "unlocking") {
+            if (event.type === "compositorLocked")
+                return event.session === before.phase.session && after.phase.lastEnd === before.phase.pending.reason
+                    ? "" : "a pending unlock carried out by another session's confirmation, or as something else";
+            if (event.type === "compositorFinished")
+                return event.session === before.phase.session && after.phase.lastEnd === "denied" ? "" : "a pending unlock ended wrongly";
+            return event.type + " ended a pending unlock";
+        }
+        const end = after.phase.status === "unlocking" ? after.phase.pending.reason : after.phase.lastEnd;
+        if (after.phase.status === "unlocking" && from !== "locking")
+            return "an unlock pending from " + from;
         if (event.type === "pamCompleted") {
             const conversation = event.method === "password" ? before.password.conversation
                                : before.passive[event.method] ? before.passive[event.method].conversation : null;
             return event.result === "success" && conversation !== null && conversation.id === event.conversation
-                   && before.phase.status === "locked" && end === "authenticated" ? "" : "a PAM completion unlocked without being the current success";
+                   && end === "authenticated" ? "" : "a PAM completion unlocked without being the current success";
         }
         if (event.type === "unlockRequested")
             return event.source === "logind" && end === "logind" ? "" : "unlockRequested from " + event.source + " unlocked";
         if (event.type === "key")
-            return event.key === "Escape" && before.prompt.owner !== null && LockRules.escapeUnlocks && end === "escape" ? "" : "a key other than Escape at an awake prompt unlocked";
+            return event.key === "Escape" && event.autoRepeat !== true && before.prompt.owner !== null && LockRules.escapeUnlocks && end === "escape"
+                ? "" : "a key other than a pressed Escape at an awake prompt unlocked";
         if (event.type === "compositorFinished")
-            return event.session === before.phase.session && end === (before.phase.status === "locking" ? "denied" : "compositor") ? "" : "a compositorFinished not of this session unlocked";
+            return after.phase.status === "unlocked" && event.session === before.phase.session && end === (from === "locking" ? "denied" : "compositor")
+                ? "" : "a compositorFinished not of this session unlocked";
         if (event.type === "timer" && event.name === "confirm")
-            return before.phase.status === "locking" && before.phase.attempt >= LockRules.limits.confirmAttempts && end === "unconfirmed" ? "" : "the confirm timer ended the lock early";
+            return "the confirm timer ended the lock";
         return event.type + " unlocked";
     }
 
@@ -1596,16 +1966,25 @@ TestCase {
             return "pending without the secret";
         if ((password.status === "verifying" || password.status === "asking") !== (password.conversation !== null))
             return "password conversation and status disagree";
-        const locked = state.phase.status !== "unlocked";
-        if (locked && (password.status === "pending" || password.status === "verifying") !== ("verify" in state.timers))
+        const phase = state.phase;
+        const locked = phase.status !== "unlocked";
+        const authenticating = phase.status === "locking" || phase.status === "locked";
+        const unconfirmed = phase.status === "locking" || phase.status === "unlocking";
+        if (authenticating && (password.status === "pending" || password.status === "verifying") !== ("verify" in state.timers))
             return "the verify timer does not run exactly while the password waits for PAM";
-        if ((state.phase.status === "locking") !== ("confirm" in state.timers))
-            return "the confirm timer does not run exactly while locking";
+        if ((unconfirmed && !phase.confirmLate) !== ("confirm" in state.timers))
+            return "the confirm timer does not run exactly while the compositor's word is awaited and not yet late";
+        if ((phase.status === "unlocking") !== (phase.pending !== null))
+            return "a pending unlock outside unlocking, or unlocking without one";
+        if (phase.status === "unlocking" && !windingDone(state))
+            return "something of the lock still running while an unlock is pending";
         if (!locked && !nothingRunning(state))
             return "something of the lock left while unlocked";
         if (state.methods.status === "detecting" && !("detect" in state.timers))
             return "detecting without a detect timer";
         const suspending = state.sleep.status === "suspending";
+        if (suspending !== ("minSuspend" in state.timers || state.sleep.minSuspendPassed))
+            return "minSuspend neither running nor passed while suspending (or so while not)";
         for (const method of LockRules.passiveMethods) {
             const passive = state.passive[method.name];
             if ((passive.status === "running") !== (passive.conversation !== null))
@@ -1616,13 +1995,19 @@ TestCase {
                 return method.name + " started while suspending";
             if ((passive.status === "backoff") !== (("retry:" + method.name) in state.timers))
                 return method.name + ": backoff and its retry timer disagree";
+            if (passive.revivals > LockRules.limits.revivals)
+                return method.name + " revived more often than the limit";
         }
         for (const method of ["password"].concat(LockRules.passiveMethods.map(m => m.name))) {
             if (has(effects, "abortPam", { method: method }) && has(effects, "startPam", { method: method }))
                 return method + " aborted and started in one step";
         }
+        if (has(effects, "startPam") && !authenticating)
+            return "a conversation started outside locking/locked";
         if (!suspending && (state.sleep.inhibitor === "held") !== state.settings.lockOnSleep)
             return "inhibitor not held exactly when wanted";
+        if (suspending && has(effects, "holdInhibitor"))
+            return "the inhibitor taken while going down";
         const lastTimerEffect = {};
         for (const effect of effects) {
             if (effect.type === "startTimer" || effect.type === "stopTimer")
@@ -1649,17 +2034,22 @@ TestCase {
                 return "a forwardKey not to the owner, or with a key or text the field cannot take: " + JSON.stringify(effect);
         }
         const locks = of(effects, "lockCompositor");
-        if (locks.length > 0 && locks[locks.length - 1].session !== state.phase.session)
-            return "lockCompositor's session is not the state's";
+        if (locks.length > 1 || (locks.length > 0 && (locks[0].session !== state.phase.session || before.phase.status !== "unlocked")))
+            return "lockCompositor other than once, for the new session, from unlocked";
         if (before.phase.status === "unlocked" && locked
                 && !(effects[0].type === "lockCompositor" && effects[1].type === "announceLocked" && effects[1].locked === true))
             return "entering the lock did not begin with lockCompositor, announceLocked(true)";
+        if (has(effects, "unlockCompositor") && !(before.phase.status === "locked" || before.phase.status === "unlocking"))
+            return "unlockCompositor from " + before.phase.status;
         if (!locked && before.phase.status !== "unlocked") {
             const order = effects.map(effect => effect.type);
-            const unlockAt = effects.findIndex(effect => effect.type === "unlockCompositor" && effect.reason !== "retry");
-            if (unlockAt < 0 || order.lastIndexOf("abortPam") > unlockAt || order.lastIndexOf("startTimer") > unlockAt
-                    || effects.findIndex(effect => effect.type === "announceLocked" && effect.locked === false) < unlockAt)
-                return "leaving the lock: not aborts first, then unlockCompositor, then announceLocked(false)";
+            const unlockAt = order.indexOf("unlockCompositor");
+            const announceAt = effects.findIndex(effect => effect.type === "announceLocked" && effect.locked === false);
+            const endAt = unlockAt >= 0 ? unlockAt : announceAt;
+            if (announceAt < 0 || announceAt < endAt || order.lastIndexOf("abortPam") > endAt || order.lastIndexOf("startTimer") > endAt)
+                return "leaving the lock: not aborts first, then unlockCompositor (if any), then announceLocked(false)";
+        } else if (has(effects, "announceLocked", { locked: false })) {
+            return "announceLocked(false) while still locked";
         }
         LockRules.view(state);
         return "";
@@ -1707,27 +2097,52 @@ TestCase {
         return context.typed.some(text => described.includes(text)) ? "typed text in describe()" : "";
     }
 
-    // Each of the unlocks, applied to this state, unlocks it and leaves nothing behind
+    // Each of the unlocks, applied to this state, ends it as it must and leaves nothing
+    // behind. Locked: unlocked, unlockCompositor. Locking: an unlock pending, nothing sent,
+    // carried out at the confirmation. compositorFinished: ended, nothing to unlock.
     function _mirrorViolation(state) {
-        const unlocks = [{ type: "unlockRequested", source: "logind" }, { type: "compositorFinished", session: state.phase.session }];
+        const status = state.phase.status;
+        const session = state.phase.session;
+        if (status === "unlocking") {
+            const done = LockRules.step(state, { type: "compositorLocked", session: session }, 1e12);
+            if (done.state.phase.status !== "unlocked" || !has(done.effects, "unlockCompositor", { session: session, reason: state.phase.pending.reason }))
+                return "a pending unlock was not carried out at the confirmation";
+            const ended = LockRules.step(state, { type: "compositorFinished", session: session }, 1e12);
+            if (ended.state.phase.status !== "unlocked" || has(ended.effects, "unlockCompositor"))
+                return "a pending unlock ended by compositorFinished sent an unlock";
+            const again = LockRules.step(state, { type: "lockRequested", source: "idle" }, 1e12);
+            if (again.state.phase.status !== "locking" || again.state.phase.pending !== null || has(again.effects, "lockCompositor"))
+                return "a lock request did not cancel a pending unlock (staying locked, the same session)";
+            return "";
+        }
+        const unlocks = [{ type: "unlockRequested", source: "logind" }, { type: "compositorFinished", session: session }];
         if (state.prompt.owner !== null)
             unlocks.push(key(state.prompt.surfaces[0].id, "Escape"));
-        if (state.phase.status === "locked") {
-            for (const conversation of LockRules.running(state).conversations)
-                unlocks.push({ type: "pamCompleted", method: conversation.method, conversation: conversation.conversation, result: "success" });
-        }
+        for (const conversation of LockRules.running(state).conversations)
+            unlocks.push({ type: "pamCompleted", method: conversation.method, conversation: conversation.conversation, result: "success" });
         const conversations = LockRules.running(state).conversations;
         for (const event of unlocks) {
             const result = LockRules.step(state, event, 1e12);
-            if (result.ignored !== "" || result.state.phase.status !== "unlocked" || !has(result.effects, "unlockCompositor", { session: state.phase.session }))
-                return JSON.stringify(event) + " did not unlock (" + result.ignored + ")";
-            if (!nothingRunning(result.state))
-                return JSON.stringify(event) + " left something running";
+            const byCompositor = event.type === "compositorFinished";
+            if (result.ignored !== "")
+                return JSON.stringify(event) + " was ignored (" + result.ignored + ")";
+            if (byCompositor || status === "locked") {
+                if (result.state.phase.status !== "unlocked" || has(result.effects, "unlockCompositor", { session: session }) === byCompositor)
+                    return JSON.stringify(event) + " did not end the lock as it must";
+                if (!nothingRunning(result.state))
+                    return JSON.stringify(event) + " left something running";
+                if (result.state.sleep.status === "suspending" && result.state.sleep.inhibitor === "held")
+                    return JSON.stringify(event) + " kept the inhibitor held after the lock ended during a suspend";
+            } else {
+                if (!windingDone(result.state) || has(result.effects, "unlockCompositor"))
+                    return JSON.stringify(event) + " while locking: not a cleanly pending unlock";
+                const carried = LockRules.step(result.state, { type: "compositorLocked", session: session }, 1e12 + 1);
+                if (carried.state.phase.status !== "unlocked" || !has(carried.effects, "unlockCompositor", { session: session }) || !nothingRunning(carried.state))
+                    return JSON.stringify(event) + " while locking: not carried out cleanly at the confirmation";
+            }
             if (!conversations.every(c => has(result.effects, "abortPam", { method: c.method, conversation: c.conversation })
                                      || (event.type === "pamCompleted" && event.method === c.method)))
                 return JSON.stringify(event) + " did not abort every conversation";
-            if (result.state.sleep.status === "suspending" && result.state.sleep.inhibitor === "held")
-                return JSON.stringify(event) + " kept the inhibitor held after the lock ended during a suspend";
         }
         return "";
     }
@@ -1741,14 +2156,18 @@ TestCase {
         let steps = 0;
         let ignoredSteps = 0;
         let mirrored = 0;
-        let livenessChecked = 0;
         let unlocks = 0;
         let relocks = 0;
+        let pendings = 0;
         let firstFailure = "";
         const statuses = {};
         const ignoredReasons = {};
-        const phases = { unlocked: 0, locking: 0, locked: 0 };
+        const phases = { unlocked: 0, locking: 0, locked: 0, unlocking: 0 };
+        const livenessBy = {};
+        let livenessChecked = 0;
+        const timeDriven = {};
         const starts = ["unlocked", "locking", "locked"];
+        const count = (table, name) => table[name] = (table[name] ?? 0) + 1;
         for (let sequence = 0; sequence < sequences && firstFailure === ""; sequence++) {
             const settings = settingsSets[sequence % settingsSets.length];
             const startAs = starts[sequence % 3];
@@ -1757,6 +2176,8 @@ TestCase {
             const context = { typed: [], surfaceCount: 1 };
             const trail = [];
             const livenessAt = Math.floor(random() * length);
+            let sampled = false;
+            let askingSamples = 0;
             let wasUnlockedAfterLock = false;
             for (let i = 0; i < length; i++) {
                 const event = _randomEvent(lock.state, random, context);
@@ -1777,19 +2198,26 @@ TestCase {
                     problem = "internal error: " + result.ignored;
                 else if (result.ignored !== "" && (result.state !== before || result.effects.length > 0))
                     problem = "an ignored event changed something";
-                else if (before.phase.status !== "unlocked" && result.state.phase.status === "unlocked")
+                else if (before.phase.status !== "unlocked" && before.phase.status !== result.state.phase.status
+                         && (result.state.phase.status === "unlocked" || result.state.phase.status === "unlocking"))
                     problem = _unlockViolation(before, event, result.state);
+                if (problem === "")
+                    problem = _compositorRule(lock.confirmed, event, result);
+                _trackDues(lock.dues, event, result, now);
                 if (problem === "")
                     problem = _violation(before, result.state, result.effects) || _effectLeak(result, context);
                 if (result.ignored !== "") {
                     ignoredSteps++;
-                    const reason = result.ignored.replace(/: .*/, "");
-                    ignoredReasons[reason] = (ignoredReasons[reason] ?? 0) + 1;
+                    count(ignoredReasons, result.ignored.replace(/: .*/, ""));
+                } else if (event?.type === "timer" || event?.type === "methodsDetected" || event?.type === "methodsFailed") {
+                    count(timeDriven, before.phase.status + " " + (event.type === "timer" ? event.name.split(":")[0] : "detection"));
                 }
                 if (before.phase.status !== "unlocked" && result.state.phase.status === "unlocked") {
                     unlocks++;
                     wasUnlockedAfterLock = true;
                 }
+                if (before.phase.status === "locking" && result.state.phase.status === "unlocking")
+                    pendings++;
                 if (before.phase.status === "unlocked" && result.state.phase.status !== "unlocked" && wasUnlockedAfterLock)
                     relocks++;
                 lock.state = result.state;
@@ -1799,22 +2227,44 @@ TestCase {
                         || (i % 8 === 7 ? _describeLeak(lock.state, context) : "");
                     mirrored++;
                 }
-                if (problem === "" && i >= livenessAt && lock.state.phase.status !== "unlocked" && livenessChecked < sequence + 1) {
-                    const stuck = _liveness(lock.state, lock.now);
+                // Liveness: one sample at a random step, and one each time (up to three) the password
+                // asks a question (rare otherwise). Every other sample in a world where the
+                // compositor never confirms, every third in one where the detected password
+                // config cannot start
+                const state = lock.state;
+                const status = state.phase.status;
+                // (Not from "unlocking": that lock ends whatever the owner types — the mirror
+                // check covers it)
+                const wantRandom = !sampled && i >= livenessAt && status !== "unlocked" && status !== "unlocking";
+                const wantAsking = askingSamples < 3 && state.password.status === "asking" && before.password.status !== "asking";
+                if (problem === "" && (wantRandom || wantAsking)) {
+                    if (wantRandom)
+                        sampled = true;
+                    if (wantAsking)
+                        askingSamples++;
+                    const world = {};
+                    if (livenessChecked % 2 === 1 && status !== "unlocking" && status !== "locked")
+                        world.confirm = false;
+                    if (livenessChecked % 3 === 2 && state.settings.passwordFallback !== null)
+                        world.refuse = true;
+                    const stuck = _liveness(state, lock.now, lock.dues, world);
                     if (stuck !== "")
-                        problem = "liveness: " + stuck;
+                        problem = "liveness (" + JSON.stringify(world) + "): " + stuck;
                     livenessChecked++;
+                    count(livenessBy, status + (world.confirm === false ? " never-confirmed" : "") + (world.refuse ? " refusing" : ""));
+                    count(livenessBy, "password " + state.password.status);
                 }
-                phases[lock.state.phase.status]++;
-                const count = name => statuses[name] = (statuses[name] ?? 0) + 1;
-                count("password " + lock.state.password.status);
+                count(phases, status);
+                count(statuses, "password " + state.password.status);
                 for (const method of LockRules.passiveMethods)
-                    count(method.name + " " + lock.state.passive[method.name].status);
-                count("sleep " + lock.state.sleep.status);
-                if (lock.state.password.settling)
-                    count("password settling");
-                if (lock.state.prompt.surfaces.length > 1)
-                    count("several surfaces");
+                    count(statuses, method.name + " " + state.passive[method.name].status);
+                count(statuses, "sleep " + state.sleep.status);
+                if (state.password.settling)
+                    count(statuses, "password settling");
+                if (state.prompt.surfaces.length > 1)
+                    count(statuses, "several surfaces");
+                if (status === "locking" && state.phase.confirmLate)
+                    count(statuses, "locking late");
                 if (problem !== "") {
                     firstFailure = "sequence " + sequence + " (from " + startAs + "), step " + i + ": " + problem + "\n    events: "
                         + trail.map(item => JSON.stringify(LockRules.describeEvent(item))).join("\n            ");
@@ -1825,22 +2275,29 @@ TestCase {
         if (firstFailure !== "")
             fail("sweep: " + firstFailure);
         assert(firstFailure === "", "sweep: " + sequences + " seeded sequences (" + steps + " steps) from unlocked, locking and locked: "
-               + "only the unlock events unlock, the invariants hold, no typed text leaks");
-        assert(firstFailure !== "" || mirrored >= sequences * 4, "sweep: from " + mirrored + " reached states, each unlock event unlocks and leaves nothing running");
-        assert(firstFailure !== "" || livenessChecked >= sequences * 0.8,
+               + "only the unlock events unlock, never before the compositor's confirmation, the invariants hold, no typed text leaks");
+        assert(firstFailure !== "" || mirrored >= sequences * 4, "sweep: from " + mirrored + " reached states, each unlock event ends the lock as it must and leaves nothing running");
+        assert(firstFailure !== "" || livenessChecked >= sequences * 0.9,
                "sweep: liveness from " + livenessChecked + " reached states: the right password unlocks within "
-               + livenessSteps + " steps and " + livenessTime / 1000 + " s");
+               + livenessSteps + " steps and " + livenessTime / 1000 + " s (or, the compositor never confirming, the unlock is pending)");
         assert(firstFailure !== "" || ignoredSteps / steps < 0.35, "sweep: most events are taken (" + Math.round(100 * ignoredSteps / steps) + " % ignored)");
         assert(firstFailure !== "" || relocks > sequences / 10, "sweep: sequences unlock (" + unlocks + ") and lock again (" + relocks + ")");
+        assert(firstFailure !== "" || pendings > sequences / 20, "sweep: unlocks decided while locking are pending (" + pendings + ")");
         const reached = ["password pending", "password verifying", "password asking", "password failed", "password unavailable", "password settling",
                          "fingerprint running", "fingerprint backoff", "fingerprint paused", "fingerprint broken", "fingerprint unavailable",
-                         "u2f running", "u2f backoff", "u2f broken", "several surfaces", "sleep suspending", "sleep resuming"];
+                         "u2f running", "u2f backoff", "u2f broken", "several surfaces", "sleep suspending", "sleep resuming", "locking late"];
         assert(reached.every(status => statuses[status]), "sweep: the sequences reach every interesting status: missing "
                + reached.filter(status => !statuses[status]).join(", "));
+        const timeDrivenInLocking = ["locking confirm", "locking detect", "locking detection", "locking prompt", "locking verify"];
+        assert(timeDrivenInLocking.every(name => timeDriven[name]), "sweep: timers and detection answers are delivered while locking too: missing "
+               + timeDrivenInLocking.filter(name => !timeDriven[name]).join(", "));
+        assert((livenessBy["password asking"] ?? 0) >= 100, "sweep: liveness sampled from \"asking\" " + (livenessBy["password asking"] ?? 0) + " times (at least 100)");
         console.log("  INFO: sweep: " + steps + " steps, " + Math.round(1000 * ignoredSteps / steps) / 10 + " % ignored; steps per phase "
-                    + JSON.stringify(phases) + "; unlocks " + unlocks + ", relocks " + relocks + "; mirrored " + mirrored
+                    + JSON.stringify(phases) + "; unlocks " + unlocks + ", pending " + pendings + ", relocks " + relocks + "; mirrored " + mirrored
                     + "; liveness samples " + livenessChecked);
         console.log("  INFO: sweep statuses: " + JSON.stringify(statuses));
+        console.log("  INFO: sweep liveness samples by phase/world and password: " + JSON.stringify(livenessBy));
+        console.log("  INFO: sweep time-driven events taken, by phase: " + JSON.stringify(timeDriven));
         console.log("  INFO: sweep ignored: " + JSON.stringify(ignoredReasons));
     }
 }

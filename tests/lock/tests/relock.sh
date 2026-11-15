@@ -2,10 +2,11 @@
 # password, lock again, unlock with the password again. The second unlock must work as
 # the first did.
 #
-# Expected to fail with Quickshell 0.3.2 and today's code (marked in run.sh): Quickshell
-# never notifies WlSessionLock's unlock, so Lockscreen.locked stays true, onLockedChanged
-# never runs, LockAuth is never ended and never begun again, and the second password is
-# dropped before PAM sees it. The checks after the first unlock say which part broke.
+# It failed before stage 2: Quickshell 0.3.2 never notifies WlSessionLock's unlock, and the
+# old shell hung everything on that notify, so it never re-armed after the first unlock and
+# dropped the second password before PAM saw it. The driver no longer reads that property
+# through a binding (singletons/Lockscreen.qml). The checks after the first unlock say
+# which part would break.
 
 stack_start
 
@@ -15,7 +16,7 @@ for cycle in 1 2; do
     check_within 5 "cycle $cycle: lock by IPC locks the compositor" compositor_locked || break
     check_within 5 "cycle $cycle: the compositor confirmed the lock" state_is secure true
     check "cycle $cycle: shell says locked" shell_status_is locked
-    check_within 5 "cycle $cycle: authentication is armed" state_is auth.active true
+    check_within 5 "cycle $cycle: authentication is armed" state_is armed true
 
     wake_prompt || fail "cycle $cycle: the prompt did not wake"
     type_text "$LOCKTEST_PASSWORD"

@@ -30,7 +30,7 @@ in
     networking.networkmanager.enable = lib.mkDefault true;
 
     # The lock screen's PAM conversations, one per way of unlocking so that they run
-    # side by side (singletons/LockAuth.qml). The shell ships configs of its own in pam/,
+    # side by side (singletons/lock/PamMethod.qml). The shell ships configs of its own in pam/,
     # but those name modules without a path, which finds only the ones PAM itself
     # brings: pam_fprintd and pam_u2f live in other packages here. So the fingerprint
     # and security key ones exist only where the system has those set up.

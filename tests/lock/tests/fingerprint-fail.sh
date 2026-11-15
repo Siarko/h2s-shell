@@ -6,7 +6,7 @@ stack_start --methods "password fingerprint"
 lock_by_ipc
 check_within 5 "lock by IPC locks the compositor" compositor_locked
 check_within 5 "the compositor confirmed the lock" state_is secure true
-check_within 5 "a fingerprint conversation is waiting" state_is auth.fingerprint.waiting true
+check_within 5 "a fingerprint conversation is waiting" state_is fingerprint_waiting true
 wait_until 5 _one_finger_waiter || abort "no single fingerprint conversation waiting (found: $(finger_waiters | tr '\n' ' '))"
 first_conversation=$(finger_waiters)
 

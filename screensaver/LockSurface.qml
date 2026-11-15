@@ -2,51 +2,70 @@ import QtQuick
 import Quickshell.Wayland
 import qs.singletons
 
+// One lock surface instance: a view of Lockscreen.view, and the place this screen's input
+// is reported from. It decides nothing — whether the prompt shows here, when the field
+// empties, what a key does: the rules say (singletons/LockRules.qml).
+//
+// Keys arrive in exactly one place: the key catcher below, which holds the window's focus
+// for the instance's whole life (the field never takes focus). Every key goes to the rules
+// as a `key` event, and comes back as a forwardKey effect to the surface showing the prompt
+// — this one or another — which edits its field (LockIoRules.editField). So no key is lost
+// to a focus change: not the one that wakes the prompt, not Enter or Backspace right after
+// it, not one typed while the prompt fades in, not one typed on another screen. (What a key
+// event does not carry is not typed: dead keys, compose sequences and input methods do not
+// work in the field yet.)
+//
+// Input is reported with this object itself (Lockscreen acts only for the LockSurface it
+// registered), never by an id another component could guess.
 WlSessionLockSurface {
     id: root
 
     color: "transparent"
 
-    property bool _awake: false
+    // The driver's id for this instance; null until registered (once the screen is known —
+    // Quickshell sets it right after creating the instance)
+    property var _surfaceId: null
+    property bool _gone: false
 
-    property bool _ready: false
-    Timer { interval: 300; running: true; onTriggered: root._ready = true }
+    readonly property var _view: Lockscreen.view
+    readonly property bool _awake: _surfaceId !== null && _view.promptSurface === _surfaceId
 
-    function _wake() {
-        if (!_ready) return
-        if (Lockscreen.promptActive && !_awake) return
-        // Coming back to the machine: a security key plugged in just now is looked for at once
-        if (!_awake)
-            LockAuth.nudge()
-        _awake = true
-        Lockscreen.promptActive = true
-        _sleepTimer.restart()
+    function _register() {
+        if (_surfaceId !== null || _gone || !screen)
+            return;
+        _surfaceId = Lockscreen.addSurface(root, screen.name);
     }
 
-    function _sleep() {
-        _awake = false
-        Lockscreen.promptActive = false
-        // A question left unanswered (a one-time code) is not kept waiting
-        LockAuth.cancelPassword()
-        _prompt.reset()
-        _keys.forceActiveFocus()
+    onScreenChanged: _register()
+    Component.onCompleted: {
+        _register();
+        _keys.forceActiveFocus();
     }
-
-    // A surface goes away with its screen — and a laptop's screen goes away and comes
-    // back over a suspend. One that held the prompt has to give it up then: the surface
-    // made for the screen that comes back would otherwise never wake, the prompt being
-    // "active" on one that no longer exists.
     Component.onDestruction: {
-        if (_awake) {
-            Lockscreen.promptActive = false
-            LockAuth.cancelPassword()
-        }
+        _gone = true;
+        if (_surfaceId !== null)
+            Lockscreen.removeSurface(root);
     }
 
-    Timer {
-        id: _sleepTimer
-        interval: 10000
-        onTriggered: root._sleep()
+    // The rules' forwardKey effect, addressed to this instance
+    function applyKey(key, text) {
+        _prompt.applyKey(key, text);
+    }
+
+    // Pointer events in the first moments are the surface appearing under a resting
+    // pointer, not somebody moving it: they would wake the prompt on every lock. Keys are
+    // never filtered.
+    property bool _pointerReady: false
+    Timer { interval: 300; running: true; onTriggered: root._pointerReady = true }
+
+    function _pointerActivity() {
+        if (_pointerReady && _surfaceId !== null)
+            Lockscreen.surfaceActivity(root);
+    }
+
+    function _pointerPress() {
+        if (_pointerReady && _surfaceId !== null)
+            Lockscreen.surfacePress(root);
     }
 
     // The lock fades in over the screen rather than cutting to it
@@ -63,26 +82,25 @@ WlSessionLockSurface {
         z: 100
         hoverEnabled: true
         propagateComposedEvents: true
-        cursorShape: Lockscreen.promptActive ? Qt.ArrowCursor : Qt.BlankCursor
-        onEntered:                  root._wake()
-        onPositionChanged: mouse => { root._wake(); mouse.accepted = false }
-        onPressed:         mouse => { root._wake(); mouse.accepted = false }
-        onReleased:        mouse => { mouse.accepted = false }
-        onClicked:         mouse => { mouse.accepted = false }
+        cursorShape: root._view.promptSurface !== null ? Qt.ArrowCursor : Qt.BlankCursor
+        onPositionChanged: mouse => { root._pointerActivity(); mouse.accepted = false }
+        // A press anywhere brings the prompt to this surface (the rules decide); it goes
+        // on to what is under it, the Unlock button
+        onPressed: mouse => { root._pointerPress(); mouse.accepted = false }
+        onReleased: mouse => { mouse.accepted = false }
+        onClicked: mouse => { mouse.accepted = false }
     }
 
-    // A key wakes the prompt as the pointer does — the only way in when there is no
-    // pointer to move (a touchpad that did not come back from hibernation). It holds the
-    // keyboard while the prompt is hidden, the prompt's field being unable to; the key
-    // that woke it is not lost, it starts the password.
+    // The key catcher: the one place keys arrive (see the header). Return and the keypad's
+    // Enter both come as "Enter"; a character travels in `text`; a held key's repeats say
+    // so (the rules ignore a repeated Escape).
     Item {
         id: _keys
         focus: true
-        Component.onCompleted: forceActiveFocus()
         Keys.onPressed: event => {
-            root._wake()
-            if (root._awake)
-                _prompt.type(event.text)
+            event.accepted = true;
+            if (root._surfaceId !== null)
+                Lockscreen.surfaceKey(root, LockIoRules.keyName(event.key), event.text, event.isAutoRepeat);
         }
     }
 
@@ -91,12 +109,17 @@ WlSessionLockSurface {
     LockPrompt {
         id: _prompt
         anchors.centerIn: parent
+        view: root._view
+        awake: root._awake
         visible: opacity > 0
         opacity: root._awake ? 1 : 0
         scale: root._awake ? 1 : 0.96
         Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
         Behavior on scale { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
-        onActivity: root._wake()
+        onSubmitted: text => {
+            if (root._surfaceId !== null)
+                Lockscreen.surfaceSubmit(root, text);
+        }
     }
 
     ListView {

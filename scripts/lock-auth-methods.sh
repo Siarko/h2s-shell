@@ -22,7 +22,9 @@ if [ -n "${H2S_LOCK_AUTH_METHODS:-}" ]; then
 fi
 
 shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
-system_dir=/etc/pam.d
+# H2S_LOCK_SYSTEM_PAM_DIR: the test bed's seam for where system-wide configs are looked
+# for (the shell's password fallback honours it too, singletons/Lockscreen.qml)
+system_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
 
 method() {
     if [ -r "$system_dir/h2s-shell-$1" ]; then

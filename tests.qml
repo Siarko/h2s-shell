@@ -37,6 +37,7 @@ QtObject {
     property var _polkitRules: PolkitRulesTest {}
     property var _energyRules: EnergyRulesTest {}
     property var _lockRules: LockRulesTest {}
+    property var _lockIoRules: LockIoRulesTest {}
     property var _pointerInput: PointerInputTest {}
 
     // The suites that run on the event loop (TestCase.asynchronous)

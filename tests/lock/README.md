@@ -15,8 +15,8 @@ LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about a minute (six tests, each starting its own
-stack in 2–3 s).
+130 when interrupted. A full run takes about three and a half minutes (twenty-four tests,
+each starting its own stack in 2–3 s).
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running test and its stack, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
@@ -58,8 +58,9 @@ here may reach it.
 - **D-Bus addresses that point at nothing.** The shell watches logind for Lock and
   PrepareForSleep (`gdbus monitor --system`) and takes a sleep inhibitor
   (`systemd-inhibit`). With the real bus, the test shell would lock when the real session
-  locks and hold up the real machine's sleep. With a bogus address both fail at start;
-  `harness.sh` checks that no such helper is running and that no process of the run
+  locks and hold up the real machine's sleep. With a bogus address both fail at start (and are
+  tried again after a growing pause); `harness.sh` checks that no such helper stays running
+  (the same process still there a second later) and that no process of the run
   holds an inhibitor on the real logind, and `run.sh` checks that again after every test
   (before the sweep). The real list is only read, and an inhibitor is told to be the
   run's by its PID carrying the run's marker — not by its name, which the real shell's
@@ -84,10 +85,12 @@ here may reach it.
   folder, and a reload while locked unlocks; so `run.sh` copies the checkout once per run
   into the artifacts dir (`shell/`: everything but `tests/lock`, `.git` and `result*`)
   and the shell runs from there. Edits to the checkout during a run cannot disturb it;
-  `run.sh` notes them, as the results are for the copy taken at the start. In the copy,
-  `pam/` is replaced by configs that only deny: the shell falls back to `pam/password`
-  (`pam_unix`, the real account) when the methods script fails or names no password, and
-  a typed test string must never reach the real password check. Logs and screenshots go
+  `run.sh` notes them, as the results are for the copy taken at the start. (The shell itself
+  no longer reloads while locked — file watching is off then — and `reload-while-locked.sh`
+  checks that; the copy guards the rest of a run.) In the copy, `pam/` is replaced by
+  configs that only deny: the shipped `pam/password` (`pam_unix`, the real account) is one
+  of the configs the shell's password fallback can be, and a typed test string must never
+  reach the real password check. Logs and screenshots go
   to the temp dir; Python is told not to write bytecode. A change to the real
   config.json is noted.
 - **The launcher probe is isolated too.** `run.sh` asks the launcher which `qs` it runs
@@ -109,21 +112,48 @@ here may reach it.
 - **`HYPRLAND_NO_SD_*`**: the nested Hyprland does not push its environment into the
   user's systemd or notify it.
 
-## The seam: test PAM stacks in the real shell
+## The seams: test PAM stacks and logind stand-ins in the real shell
 
 `scripts/lock-auth-methods.sh` says which ways of unlocking exist and with which PAM
 config. When `H2S_LOCK_AUTH_METHODS` names an executable, it answers instead, in the same
 format. `stack_start --methods "password fingerprint"` writes such a script listing the
-test stacks. The list must include `password` (`stack_start` refuses it otherwise), and
-`lock_by_ipc` waits until the shell reports the test stack as its password config, and
-aborts the test if it does not; `type_text` checks it again before every string. So a
-typed string can only ever reach the test stack.
+test stacks (`password=password-question` names another stack for a method);
+`stack_start --methods-script <file>` takes a test's own (a failing one, one naming a
+stack that is not there). Unless a test's own script is given, the list must include
+`password` (`stack_start` refuses it otherwise).
+
+**The password fallback** (used when the methods script fails or names no password, and for
+the next attempt after a password config that cannot be used) is chosen by the shell from
+the machine: `<system dir>/h2s-shell-password` when readable, else `login` on NixOS, else
+the shipped `pam/password`. On this machine the real `/etc/pam.d` may well hold a readable
+`h2s-shell-password`, and it is NixOS: either would send typed test strings to the real
+account. So the shell is started with `H2S_LOCK_SYSTEM_PAM_DIR=$WORK/system-pam` (the seam;
+the methods script honours it too), a directory of the test's own holding a stand-in
+`h2s-shell-password` that denies everything — or, with `stack_start
+--system-password-stack`, the test password stack (`fallback.sh`). `login` is never there,
+so a NixOS fallback without the file is a config PAM cannot start.
+
+`lock_by_ipc` waits until the shell reports a test stack as its password config, and has
+looked for its fallback, and aborts the test if not; `type_text` checks again before every
+string that BOTH the config in use and the fallback are safe (`_password_stack_is_safe`): a
+test stack; the test's stand-in system-wide config (the test stack, or checked line by line
+to deny everything); a config under the test's directory that does not exist (PAM cannot
+start it); or the run's copy of the shipped config, checked to deny everything
+(`lock_by_ipc --any-safe-config` accepts all of those for the config in use). Were the seam
+lost, the fallback would be a real `/etc/pam.d` config, and nothing would be typed. So a
+typed string can only ever reach a test stack or nothing.
 
 - **password** (`pam/password`, `pam/check-password.sh`): accepts exactly
   `LOCKTEST_PASSWORD` (in `lib.sh`), through `pam_exec` with `expose_authtok`. Each run
   of the script appends `right` or `wrong` (never what was typed) to `pam/check.log`, so
   a test can tell a rejected password from a script that never ran
-  (`wrong-password.sh` does).
+  (`wrong-password.sh` does). While the file `pam/slow` exists, each check first notes
+  `waiting` and waits for `pam/release` (consumed; 30 s at most) — a verification a test
+  can act during (`busy-submit.sh`).
+- **password-question** (`pam/password-question`, `pam/check-answer.sh`): the password as
+  above, then a second question (libpam's own `pam_stress` asks "STRESS Password:" with
+  the answer hidden and stores the answer as the auth token), checked against
+  `LOCKTEST_ANSWER` (`answer-right` / `answer-wrong` in `pam/check.log`).
 - **fingerprint** (`pam/fingerprint`, `pam/wait-finger.sh`): a stand-in for the reader. A
   conversation announces itself as `finger/waiting.<pid>` and waits for
   `finger/result.<pid>`; `finger ok` / `finger fail` in a test answers the one waiting
@@ -145,20 +175,41 @@ the shape `[success=1 default=ignore] pam_exec` / `requisite pam_deny` /
 `required pam_permit`: `pam_exec` failing on its own is a system error, which the shell
 reports as "not available" rather than a wrong password.
 
+**logind** cannot reach the shell here: the system bus is cut off. `H2S_LOCK_TOOLS`, when
+set, names a directory whose `gdbus` and `systemd-inhibit` the shell runs instead of the
+ones on PATH (`singletons/Lockscreen.qml`; PATH itself cannot serve, the launcher puts
+the real gdbus first). Unset — always, outside the test bed — nothing changes.
+`stack_start --logind` writes the stand-ins and starts the shell with them and
+`XDG_SESSION_ID=lt1`: the `gdbus` stand-in answers the session lookup and, as
+`gdbus monitor`, prints every line `logind_signal lock|unlock|unlock-other|sleep|wake`
+appends to `logind/signals` (`logind_signals lock unlock …` appends several in one write,
+so that the shell handles them in one pass — an Unlock before the compositor can have
+confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
+`release <pid>` in `logind/log` (`inhibitor_held`, `inhibitor_record`). No bus is reached
+by either.
+
 ## Reading the shell's state
 
 - `shell_ipc lockscreen status` — the shell's word (`locked` / `unlocked`);
-- `state_field <path>` on `ipc call lockscreen state`, a read-only JSON added for this:
-  the shell's lock mirror, the WlSessionLock's own property, `secure`, the prompt, and
-  LockAuth's state (armed, verifying, error, which PAM configs) — nothing typed;
+- `state_field <fact>` / `state_is <fact> <value>` on `ipc call lockscreen state`, a
+  read-only JSON: the rules' `LockRules.describe(state)` (no secret, nothing typed, nothing
+  that times keystrokes: no prompt deadline, timers by name only) plus the driver's own
+  facts under `driver` (the compositor's `secure`, the surfaces, the logind session, the
+  inhibitor, file watching, whether the password fallback is known). Tests ask for facts by
+  name — `secure`, `locked`, `armed`, `prompt_awake`, `password_config`,
+  `password_fallback`, `unlocking`, `watch_files`, `error`, `fingerprint_waiting`, … — and the
+  one table in `lib.sh` (`state_field`) knows where each lives in the JSON; a name not in
+  it is read as a dotted path (`phase.lastEnd`);
 - `compositor_locked` — `hyprctl -j locked` in the nested instance, the ground truth;
 - `screenshot <name>` and `screenshot_ppm <name>` (grim), `reddish_pixels <name>` (red in
   the prompt's area: it depends on the built-in theme's error colour being a clear red)
   and `prompt_region_changes <a> <b>` (pixels that differ in the prompt's area between
   two PPM screenshots);
-- the logs in the artifacts dir: `shell.log`, `hyprland.log`, `labwc.log`, `input.log`,
-  `finger/log` (each fingerprint conversation: start, answer, orphaned, timeout),
-  `pam/check.log` (each password check's verdict).
+- the logs in the artifacts dir: `shell.log` (the shell's `[Lockscreen]` lines: every
+  event, effect and decision about authentication, nothing typed), `hyprland.log`,
+  `labwc.log`, `input.log`, `finger/log` (each fingerprint conversation: start, answer,
+  orphaned, timeout), `pam/check.log` (each password check's verdict), `logind/log` (the
+  stand-ins').
 
 ## Adding a test
 
@@ -177,7 +228,9 @@ check_within 10 "the password unlocks" compositor_unlocked
 
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
 print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
-the test fails if any check failed. Input: `type_text`, `press_key
+the test fails if any check failed. `check_within` re-runs its command, but its arguments
+were expanded once: to wait on something that changes, pass a function (`no_finger_waiters`,
+`lines_more_than <count> <regex> <file>`), never `test "$(…)"`. Input: `type_text`, `press_key
 Return|BackSpace|Escape|Tab|space`, `move_pointer x y`, `wake_prompt`. Input goes through
 a FIFO to `input/ltinput.py`; a client that has died, or does not read within 5 s, aborts
 the test with its last words from `input.log`, and so does a character it cannot type
@@ -216,7 +269,8 @@ is not pinned here: the shell runs with the one its launcher provides.
 ## What it cannot simulate
 
 Real fprintd and security keys; `pam_unix` with the real password; suspend and resume and
-logind's signals (there is no logind); real DRM hotplug and DPMS (outputs can be added
-and removed with `hyprctl output create headless` / `remove`); real input devices, and
+the real logind (its signals are delivered by a stand-in, see the seams); real DRM hotplug
+and DPMS (outputs can be added and removed with `hyprctl output create headless` /
+`remove`); real input devices, and
 anything below the Wayland seat (a touchpad dead after hibernation); more than what
 Hyprland's virtual devices do (no touch, no tablet).

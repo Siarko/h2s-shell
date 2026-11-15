@@ -25,16 +25,10 @@ PROBE_TIMEOUT=5
 # its end (no setup failure, no time-out) and the checks that failed are some of these,
 # at least one. Any other failure is a FAIL. Passing makes it XPASS, which fails the run,
 # so the mark is removed by whoever fixes it rather than left behind.
+# (none at present: `relock`, the regression behind the rework, passes since stage 2)
 declare -A EXPECTED_TO_FAIL=(
-    [relock]="Quickshell 0.3.2 never notifies WlSessionLock's unlock, so the shell does not re-arm after the first unlock (docs/plans/lockscreen.md §1); stage 2 turns this green"
 )
 declare -A EXPECTED_FAILING_CHECKS=(
-    [relock]="cycle 1: shell says unlocked afterwards
-cycle 1: the shell's lock mirror is false
-cycle 2: authentication is armed
-cycle 2: the password unlocks the compositor
-cycle 2: shell says unlocked afterwards
-cycle 2: the shell's lock mirror is false"
 )
 
 # ---- Cleanup, whatever ends the run --------------------------------------------------
