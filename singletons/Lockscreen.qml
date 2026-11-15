@@ -36,6 +36,14 @@ import qs.screensaver
 // after the first unlock — and the old code, hung on that binding, worked once per shell.
 // Here `locked` is never bound or watched: it is set by the effects, read back only right
 // after being set to true, and the compositor's word comes from secureStateChanged.
+//
+// Recovery (plan, section 7, "Reload" and "Restart"): a reload of the shell while locked
+// carries the compositor's lock over (`_carried`, set into the new WlSessionLock before
+// Quickshell realizes it, and the rules' `restored`); a shell that stopped while locked —
+// crashed, killed, stopped, restarted — finds the lock marker it wrote at the lock
+// ($XDG_RUNTIME_DIR/h2s-shell-lock) and locks again at once. The launcher
+// (scripts/launch.sh) restarts a shell that died. FAIL CLOSED: a shell that cannot take
+// the lock back says so and keeps trying; it never comes up unlocked over a locked session.
 Singleton {
     id: root
 
@@ -43,12 +51,16 @@ Singleton {
 
     // What the lock surfaces render (LockRules.view): replaced, never mutated
     readonly property var view: _view
-    readonly property bool locked: _view.locked
+    // Also while the compositor holds a lock this shell could not take back (see "Recovery"
+    // below): the screen is locked whatever the rules' state says, so nothing may act as if
+    // it were not (the idle lock, the screensaver)
+    readonly property bool locked: _view.locked || _restorePending
     readonly property bool screensaverVisible: _screensaverMonitor.isIdle || locked
-    // Whether Caps Lock is on, as far as the keys typed at the lock surfaces tell
-    // (LockIoRules.capsLockAfterKey): true, false, or null while unknown. Shown on the
-    // prompt; no part of the lock's state — the rules never see it
-    readonly property var capsLock: _capsLock
+    // Whether Caps Lock is on, from the keyboards' LEDs (singletons/lock/CapsLockLed.qml):
+    // true, false, or null while unknown (no LED, or none readable: no indicator). Read
+    // when the prompt wakes and at each key on an awake prompt. Shown on the prompt; no
+    // part of the lock's state — the rules never see it
+    readonly property var capsLock: _capsLed.on
 
     // Locking needs no proof, so anything may ask (the IPC, idle, a future button)
     function lock(source) {
@@ -86,11 +98,6 @@ Singleton {
         _api?.input(surface, { type: "submit", text: text });
     }
 
-    // What a key on the surface told about Caps Lock: true, false or null (unknown)
-    function surfaceCapsLock(surface, on) {
-        _api?.capsLock(surface, on);
-    }
-
     // ---- Settings (docs/plans/global-profiles.md) ----
 
     readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
@@ -105,7 +112,10 @@ Singleton {
     // ---- The driver ----
 
     property var _view: LockRules.view(LockRules.initial({}))
-    property var _capsLock: null
+    // The compositor holds a lock this shell had (the marker says so) and has refused to let
+    // it take that lock back — Hyprland without misc:allow_session_lock_restore. Retried
+    // with a growing pause; see the "Recovery" note above
+    property bool _restorePending: false
     // The operations of the driver, closures over its private state; null until built
     property var _api: null
 
@@ -119,6 +129,24 @@ Singleton {
     readonly property string _toolDirectory: Quickshell.env("H2S_LOCK_TOOLS") ?? ""
     readonly property string _systemPamDirectory: Quickshell.env("H2S_LOCK_SYSTEM_PAM_DIR") || "/etc/pam.d"
 
+    // H2S_LOCK_TEST_TIMINGS: a JSON object of LockRules.timings overrides, so that a test of
+    // what happens after minutes (rounds that time out) runs in seconds. initial() keeps
+    // only known names with finite values ≥ 0; anything unparsable is no override. Like the
+    // seams above, it grants nothing: the timings decide when, never whether, a lock ends.
+    function _testTimings() {
+        const text = Quickshell.env("H2S_LOCK_TEST_TIMINGS") ?? "";
+        if (text === "")
+            return {};
+        try {
+            const parsed = JSON.parse(text);
+            _log("warning", "test timings in force (H2S_LOCK_TEST_TIMINGS): " + JSON.stringify(parsed));
+            return parsed !== null && typeof parsed === "object" ? parsed : {};
+        } catch (error) {
+            _log("error", "H2S_LOCK_TEST_TIMINGS is not JSON: ignored");
+            return {};
+        }
+    }
+
     // The events each source may raise: a child object's signal emitted by other QML can
     // raise no other kind
     readonly property var _adapterEvents: ["pamMessage", "pamCompleted", "pamStartFailed", "methodsDetected", "methodsFailed"]
@@ -127,11 +155,26 @@ Singleton {
     // The events whose handling goes to the log, taken or not: everything about
     // authentication, the lock's life and sleep. Pointer motion, keys and timers would drown
     // them; what those cause shows in the rules' own log effects.
-    readonly property var _loggedEvents: ["started", "lockRequested", "unlockRequested", "compositorLocked",
+    readonly property var _loggedEvents: ["started", "restored", "lockRequested", "unlockRequested", "compositorLocked",
         "compositorFinished", "surfaceAdded", "surfaceRemoved", "submit", "methodsDetected", "methodsFailed",
         "pamMessage", "pamCompleted", "pamStartFailed", "prepareForSleep", "resumed", "settings"]
-    readonly property var _loggedEffects: ["lockCompositor", "unlockCompositor", "announceLocked", "detectMethods",
-        "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
+    readonly property var _loggedEffects: ["lockCompositor", "adoptCompositorLock", "unlockCompositor", "announceLocked",
+        "detectMethods", "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
+
+    // The lock marker: "locked <key>" from the moment this shell asks for a compositor lock
+    // until that lock is over, "unlocked" otherwise. A shell that starts and finds "locked"
+    // with this compositor's key was locked when its predecessor stopped (a crash, a kill, a
+    // restart): it locks again at once. In $XDG_RUNTIME_DIR, the user's own 0700 directory
+    // on a tmpfs (gone at reboot and at the end of the user's last session); without it,
+    // there is no marker and a restarted shell cannot know (logged once).
+    readonly property string _runtimeDirectory: Quickshell.env("XDG_RUNTIME_DIR") ?? ""
+    readonly property string _markerPath: _runtimeDirectory !== "" ? _runtimeDirectory + "/h2s-shell-lock" : ""
+    // Taking the lock back after the compositor refused it: 5 s, doubling up to a minute
+    // (under Hyprland each attempt is first a question to it — cheap, and asking for the lock
+    // only once it would be given)
+    readonly property var _restoreTable: ({ minimum: 5000, maximum: 60000, healthyRun: Infinity })
+    // Hyprland's instance, when the shell runs under it: asked before a lock is taken back
+    readonly property string _hyprlandSignature: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? ""
 
     // Builds the driver: its state lives in this function's scope, never in a property.
     // Returns the operations the singleton's functions and the IPC call.
@@ -140,7 +183,8 @@ Singleton {
         // and old states are never kept
         let state = LockRules.initial({
             lockOnSleep: root.lockOnSleep,
-            passwordFallback: LockIoRules.passwordFallback({ shellDirectory: Quickshell.shellDir, systemDirectory: root._systemPamDirectory })
+            passwordFallback: LockIoRules.passwordFallback({ shellDirectory: Quickshell.shellDir, systemDirectory: root._systemPamDirectory }),
+            timings: root._testTimings()
         });
         let viewJson = "";
         // Surface objects ↔ ids; the timers by name; the per-lock adapters; the session of
@@ -153,6 +197,17 @@ Singleton {
         let sessionInForce = 0;
         let watchFilesBefore = true;
         let fallbackKnown = false;
+        // Recovery (see the header). `lockKey`: this compositor session's key for the
+        // marker, "?" until the start probe has answered (a marker with "?" counts as this
+        // session's: fail closed). `restoring`: the lock in force or being asked for is one
+        // the marker asked to take back — until the compositor confirms it. `lockedAt`: when
+        // the lock began (seconds), for the edits made while locked
+        let lockKey = "?";
+        let markerState = "";
+        let restoring = false;
+        let restoreDelay = 0;
+        let restoreRefusalLogged = false;
+        let lockedAt = 0;
 
         const log = root._log;
         const describeEvent = event => JSON.stringify(LockRules.describeEvent(event));
@@ -207,6 +262,8 @@ Singleton {
                         ending.retire();
                         ending.destroy();
                     }
+                    if (state.phase.status === "unlocked" && (markerState === "locked" || _carried.held))
+                        lockOver();
                 },
                 onError: (where, error, effect) => log("error", (effect ? "effect " + describeEffect(effect) : where) + " failed: " + error)
             });
@@ -219,8 +276,12 @@ Singleton {
             const json = JSON.stringify(view);
             if (json === viewJson)
                 return;
+            const woke = view.promptSurface !== null && root._view.promptSurface === null;
             viewJson = json;
             root._view = view;
+            // Caps Lock is read from its LED when somebody comes back to the prompt
+            if (woke)
+                _capsLed.read();
         }
 
         function execute(effect) {
@@ -229,6 +290,9 @@ Singleton {
             switch (effect.type) {
             case "lockCompositor":
                 sessionInForce = effect.session;
+                // The marker first: a shell that dies from here on comes back locked
+                writeMarker("locked");
+                _carried.secure = false;
                 _sessionLock.locked = true;
                 // Reliable in this direction (only the unlock notify is broken): false right
                 // after setting it means Quickshell refused the lock without a signal — no
@@ -239,8 +303,31 @@ Singleton {
                 if (!_sessionLock.locked) {
                     log("warning", "the session lock was refused at once (session " + effect.session + ")");
                     _sessionLock.locked = false;
+                    _carried.held = false;
+                    // Taking back a lock this process had is refused only by a process that
+                    // believes it still holds one (Quickshell's process-wide lock manager,
+                    // left with a stale lock when a locked WlSessionLock was destroyed: a
+                    // hard reload). It can never lock again: a fresh process can — the
+                    // launcher starts one, and the marker locks it
+                    if (restoring) {
+                        exitForRestart("this process cannot take the session lock back (Quickshell still counts a destroyed lock as active)");
+                        break;
+                    }
                     dispatch({ type: "compositorFinished", session: effect.session });
+                } else {
+                    _carried.held = true;
                 }
+                break;
+            case "adoptCompositorLock":
+                // `restored`: the new WlSessionLock takes the old one's lock over when
+                // Quickshell realizes it (later in this reload); its target must be true by
+                // then, or it would unlock (plan, section 1). Nothing is sent to the
+                // compositor here
+                sessionInForce = effect.session;
+                _sessionLock.locked = true;
+                _carried.held = true;
+                writeMarker("locked");
+                Qt.callLater(checkCarriedLock);
                 break;
             case "unlockCompositor":
                 // The rules emit this only for a session the compositor confirmed. Checked
@@ -254,15 +341,21 @@ Singleton {
                 break;
             case "announceLocked":
                 Profiles.screenLocked = effect.locked;
-                // Quickshell reloads the shell when a file of it changes, and a reload while
-                // locked unlocks (plan, section 1): no reload while locked. Edits made
-                // meanwhile are picked up by the next file change after the unlock.
+                // No reload while locked, from file changes: a reload carries the lock over
+                // now (`restored`), but that is the recovery path, not one to take at every
+                // file written while the owner is away. Edits made meanwhile are looked
+                // for at the unlock, and reloaded then (editsWhileLocked)
                 if (effect.locked) {
+                    // Nothing of an earlier lock's Caps Lock is shown: read at the wake
+                    _capsLed.forget();
                     watchFilesBefore = Quickshell.watchFiles;
                     Quickshell.watchFiles = false;
+                    lockedAt = Math.floor(Date.now() / 1000);
                     probeFallback();
                 } else {
                     Quickshell.watchFiles = watchFilesBefore;
+                    if (watchFilesBefore)
+                        editsWhileLocked();
                 }
                 break;
             case "detectMethods":
@@ -354,20 +447,188 @@ Singleton {
                 dispatch({ type: "settings", values: { passwordFallback: fallback } });
         });
 
+        // ---- Recovery ----
+
+        function writeMarker(word) {
+            if (root._markerPath === "")
+                return;
+            markerState = word;
+            _marker.setText(word === "locked" ? "locked " + lockKey + "\n" : "unlocked\n");
+        }
+
+        // The lock this shell had (or asked for) is over. A lock the marker asked to take
+        // back and the compositor refused is not over for the compositor: it keeps its lock
+        // (Hyprland without misc:allow_session_lock_restore shows "lockscreen app died"), so
+        // the marker stays and the lock is asked for again, with a growing pause — a way back
+        // in once the setting is switched on (plan, section 7, "Recovery")
+        function lockOver() {
+            _carried.held = false;
+            _carried.secure = false;
+            if (restoring && state.phase.lastEnd === "denied") {
+                restoreRefused("the compositor refused the lock");
+                return;
+            }
+            restoring = false;
+            root._restorePending = false;
+            restoreDelay = 0;
+            writeMarker("unlocked");
+        }
+
+        // The compositor will not (or did not) give the lock back: said once, shown in the
+        // status ("compositor-locked"), asked again later
+        function restoreRefused(why) {
+            restoreDelay = LockIoRules.restartDelay(restoreDelay, 0, root._restoreTable);
+            root._restorePending = true;
+            if (!restoreRefusalLogged) {
+                restoreRefusalLogged = true;
+                log("error", "the compositor refused to let this shell take back the lock it had (" + why + "): the session "
+                    + "stays locked, with no prompt of this shell's (Hyprland: misc:allow_session_lock_restore is off). Asking "
+                    + "again every few seconds to a minute; to get the prompt back, switch it on — from a TTY: hyprctl -i 0 eval "
+                    + "'hl.config({ misc = { allow_session_lock_restore = true } })' — see docs/plans/lockscreen.md, section 7, "
+                    + "\"Recovery\"");
+            }
+            log("warning", "taking the lock back again in " + Math.round(restoreDelay / 1000) + " s");
+            _restoreRetry.interval = restoreDelay;
+            _restoreRetry.start();
+        }
+
+        // A lock the marker asked for: once the compositor confirms it, it is an ordinary
+        // lock (and a later refusal is an ordinary one too)
+        function lockConfirmed() {
+            _carried.secure = true;
+            if (restoring)
+                log("info", "the lock is back: the compositor confirmed it");
+            restoring = false;
+            root._restorePending = false;
+            restoreDelay = 0;
+            _restoreRetry.stop();
+        }
+
+        function restoreFromMarker(why) {
+            if (state.phase.status !== "unlocked")
+                return;
+            restoring = true;
+            log("warning", why + ": locking again");
+            tryRestore();
+        }
+
+        // Asks for the lock back — under Hyprland only after asking it whether it would
+        // give it: Hyprland 0.57 refuses a new lock while a dead client's lock stands and
+        // restoring is off, and then kills the client that asked (it destroys the refused
+        // lock at once; Quickshell's get_lock_surface on it is a protocol error). Without
+        // Hyprland (or without an answer), the lock is simply asked for: refused, it is asked
+        // again later; a shell killed for asking is started again by the launcher, at most a
+        // few times
+        function tryRestore() {
+            if (!restoring || state.phase.status !== "unlocked")
+                return;
+            if (root._hyprlandSignature !== "") {
+                if (!_restoreProbe.running)
+                    _restoreProbe.running = true;
+                return;
+            }
+            dispatch({ type: "lockRequested", source: "restore" });
+        }
+
+        _restoreProbe.answered.connect(output => {
+            if (!restoring || state.phase.status !== "unlocked")
+                return;
+            if (LockIoRules.lockSurelyRefused(LockIoRules.hyprlandLockFacts(output))) {
+                restoreRefused("Hyprland is locked and does not allow restoring the lock; not asking, which would get "
+                    + "this shell killed");
+                return;
+            }
+            dispatch({ type: "lockRequested", source: "restore" });
+        });
+
+        // Reload, after Quickshell realized the new WlSessionLock: the lock must now be
+        // held by this process. If it is not (the old WlSessionLock was not handed over —
+        // a reload that changed this file's objects), the old one's lock dies with the old
+        // generation and Quickshell still counts it as active: this process can never lock
+        // again, and a fresh one is needed
+        function checkCarriedLock() {
+            if (state.phase.status === "unlocked" || _sessionLock.locked)
+                return;
+            exitForRestart("the lock was not carried over the reload");
+        }
+
+        // The process cannot lock (again): it quits with a failure, the launcher starts a
+        // fresh one, and the marker (still "locked") locks that one at once. Without the
+        // launcher's supervision nothing restarts it — no worse than staying, unable to lock
+        function exitForRestart(why) {
+            log("error", why + ": quitting so that a fresh shell takes the lock (the launcher restarts it; the marker locks it)");
+            writeMarker("locked");
+            Qt.exit(1);
+        }
+
+        // The start probe: this compositor session's key, whether the runtime dir is
+        // private, and the marker as the last shell left it
+        _markerProbe.answered.connect(lines => {
+            const facts = LockIoRules.markerFacts(lines);
+            if (!facts.private) {
+                log("warning", "XDG_RUNTIME_DIR (" + root._runtimeDirectory + ") is not a private directory of this user: "
+                    + "no lock marker, a restarted shell cannot know it was locked");
+                return;
+            }
+            if (facts.key !== "")
+                lockKey = facts.key;
+            // A lock in force got "?" in its marker: now the key is known
+            if (markerState === "locked")
+                writeMarker("locked");
+            const decision = LockIoRules.markerDecision(facts.marker, lockKey);
+            if (decision === "lock")
+                restoreFromMarker("the shell was locked when it stopped (the lock marker says so)");
+            else if (decision === "stale") {
+                log("info", "a lock marker from another compositor session (" + facts.marker + "): not this session's, ignored");
+                if (state.phase.status === "unlocked" && markerState === "")
+                    writeMarker("unlocked");
+            }
+        });
+
+        // Files of the shell changed while it was locked (Quickshell's file watching was off,
+        // and a new watcher does not see what changed before it): one reload now, after the
+        // unlock — which is complete by then; nothing of the lock is carried
+        function editsWhileLocked() {
+            if (!_editsProbe.running) {
+                _editsProbe.since = lockedAt;
+                _editsProbe.running = true;
+            }
+        }
+
+        _editsProbe.answered.connect(changed => {
+            if (changed === "" || state.phase.status !== "unlocked" || !Quickshell.watchFiles)
+                return;
+            log("info", "files of the shell changed while it was locked (" + changed + "): reloading now");
+            Qt.callLater(() => Quickshell.reload(false));
+        });
+
+        _restoreRetry.triggered.connect(tryRestore);
+
         // The compositor confirmed the lock (secure) or ended / refused it. Tagged with the
         // session of the last lockCompositor executed, as it is at the moment of the
         // signal: inside an unlock effect that is the old session, which the rules then
         // ignore once a new lock has begun
-        _sessionLock.secureStateChanged.connect(() => dispatch({
-            type: _sessionLock.secure ? "compositorLocked" : "compositorFinished",
-            session: sessionInForce
-        }));
+        _sessionLock.secureStateChanged.connect(() => {
+            if (_sessionLock.secure)
+                lockConfirmed();
+            dispatch({
+                type: _sessionLock.secure ? "compositorLocked" : "compositorFinished",
+                session: sessionInForce
+            });
+        });
         _logind.event.connect(dispatchFrom(root._logindEvents));
 
         const registered = surface => surfaceIds.has(surface) ? surfaceIds.get(surface) : null;
 
         const api = {
-            lock: source => dispatch({ type: "lockRequested", source: typeof source === "string" && source !== "" ? source : "request" }),
+            // While the compositor holds a lock it will not give back, asking for a new one
+            // is asking for that one back (and nothing else would be given)
+            lock: source => {
+                if (root._restorePending)
+                    tryRestore();
+                else
+                    dispatch({ type: "lockRequested", source: typeof source === "string" && source !== "" ? source : "request" });
+            },
             // Only a LockSurface, once, while a lock is in force (Quickshell creates them in
             // the lockCompositor effect, after the step's state is committed). A screen
             // without a name gets one of its own: the rules refuse an empty one
@@ -391,14 +652,21 @@ Singleton {
             },
             input: (surface, event) => {
                 const id = registered(surface);
-                if (id !== null)
-                    dispatch(Object.assign({}, event, { surface: id }));
-            },
-            capsLock: (surface, on) => {
-                if (registered(surface) !== null)
-                    root._capsLock = on === true || on === false ? on : null;
+                if (id === null)
+                    return;
+                dispatch(Object.assign({}, event, { surface: id }));
+                // Every key at an awake prompt reads Caps Lock again (the Caps Lock key
+                // itself among them): sysfs tells nobody when the LED changes
+                if (event.type === "key" && root._view.promptSurface !== null)
+                    _capsLed.read();
             },
             lockOnSleepChanged: () => dispatch({ type: "settings", values: { lockOnSleep: root.lockOnSleep } }),
+            // A reload while locked (`_carried` said so): the rules go on with the lock this
+            // process holds — called before Quickshell realizes the new WlSessionLock
+            restoreAfterReload: secure => {
+                log("warning", "the shell was reloaded while locked: the lock is carried over");
+                dispatch({ type: "restored", secure: secure === true });
+            },
             // What the IPC `state` answers: the rules' describe() (no secret, nothing that
             // times keystrokes), plus a few facts only the driver knows
             describe: () => {
@@ -413,7 +681,16 @@ Singleton {
                     lockScope: scope !== null,
                     watchFiles: Quickshell.watchFiles,
                     passwordFallbackKnown: fallbackKnown,
-                    capsLock: root._capsLock
+                    capsLock: _capsLed.on,
+                    // Recovery: the marker as last written ("locked" / "unlocked" / "" for
+                    // none yet), whether its key is known, a lock being taken back, the
+                    // compositor refusing that, what a reload would carry over
+                    marker: markerState,
+                    markerKeyKnown: lockKey !== "?",
+                    restoring: restoring,
+                    restorePending: root._restorePending,
+                    carriedHeld: _carried.held,
+                    carriedSecure: _carried.secure
                 };
                 return JSON.stringify(described);
             }
@@ -422,7 +699,30 @@ Singleton {
         publish();
         dispatch({ type: "started" });
         probeFallback();
+        if (root._markerPath !== "")
+            _markerProbe.running = true;
+        else
+            log("warning", "XDG_RUNTIME_DIR is not set: no lock marker, a restarted shell cannot know it was locked");
         return api;
+    }
+
+    // ---- What a reload carries over ----
+    // Quickshell hands a reloaded singleton's children their old instances by position,
+    // and copies a PersistentProperties' values from the old one before `reloaded`. This one
+    // comes BEFORE the WlSessionLock below, so its `reloaded` runs before Quickshell realizes
+    // the new WlSessionLock: setting that one's `locked` there makes it take the old lock
+    // over instead of unlocking (WlSessionLock::onReload → realizeLockTarget: with the target
+    // false it calls unlock(), which sends unlock_and_destroy — the reload that unlocked).
+    // `held`: this process has a compositor lock (asked for or confirmed); `secure`: the
+    // compositor confirmed it. Keep this object before the WlSessionLock.
+    PersistentProperties {
+        id: _carried
+        property bool held: false
+        property bool secure: false
+        onReloaded: {
+            if (held)
+                root._api?.restoreAfterReload(secure);
+        }
     }
 
     Component {
@@ -458,6 +758,103 @@ Singleton {
 
         // `locked` is not bound: see the header. The surfaces are views of `view`
         LockSurface {}
+    }
+
+    // ---- Recovery: the lock marker, and what the start needs to read it ----
+
+    // Written synchronously (blockWrites), atomically: "locked <key>" is on disk before the
+    // compositor is asked for a lock
+    FileView {
+        id: _marker
+        path: root._markerPath
+        blockWrites: true
+        atomicWrites: true
+        printErrors: false
+        onSaveFailed: error => root._log("warning", "could not write the lock marker " + root._markerPath + ": "
+            + FileViewError.toString(error))
+    }
+
+    // One line each: `private yes|no` (XDG_RUNTIME_DIR is a directory of this user's that
+    // nobody else can write to — 0700 by the XDG spec: no other user can plant, remove or
+    // read the marker), `key <boot id>:<display>:<socket device:inode:ctime>` — this compositor
+    // session, which a new compositor (a new socket) or a reboot changes — and `marker
+    // <its first line>` when there is one
+    Process {
+        id: _markerProbe
+        signal answered(var lines)
+        property var _lines: []
+        command: ["sh", "-c",
+            "dir=$1; marker=$2\n"
+            + "mode=$(stat -c %A \"$dir\" 2> /dev/null)\n"
+            + "case $mode in d????w* | d???????w*) mode= ;; esac\n"
+            + "if [ -n \"$mode\" ] && [ -d \"$dir\" ] && [ -O \"$dir\" ] && [ ! -L \"$dir\" ]; then echo 'private yes'; else echo 'private no'; fi\n"
+            + "display=${WAYLAND_DISPLAY:-wayland-0}\n"
+            + "case $display in /*) socket=$display ;; *) socket=$dir/$display ;; esac\n"
+            + "boot=$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)\n"
+            + "where=$(stat -L -c '%d:%i:%Z' \"$socket\" 2> /dev/null)\n"
+            + "[ -n \"$where\" ] && echo \"key $boot:$display:$where\"\n"
+            + "[ -f \"$marker\" ] && [ ! -L \"$marker\" ] && [ -O \"$marker\" ] && IFS= read -r line < \"$marker\" && echo \"marker $line\"\n"
+            + "exit 0",
+            "sh", root._runtimeDirectory, root._markerPath]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => _markerProbe._lines = _markerProbe._lines.concat([line])
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            const lines = _lines;
+            _lines = [];
+            answered(lines);
+        }
+    }
+
+    // The shell's QML or JS files changed since `since` (seconds): the first one found, or ""
+    Process {
+        id: _editsProbe
+        signal answered(string changed)
+        property int since: 0
+        property string _found: ""
+        command: ["find", Quickshell.shellDir, "-path", "*/.git", "-prune", "-o", "(", "-name", "*.qml", "-o", "-name", "*.js", ")",
+            "-newermt", "@" + since, "-print", "-quit"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => {
+                if (_editsProbe._found === "" && line.trim() !== "")
+                    _editsProbe._found = line.trim();
+            }
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            const found = _found;
+            _found = "";
+            answered(found);
+        }
+    }
+
+    Timer {
+        id: _restoreRetry
+        repeat: false
+    }
+
+    // Hyprland's word before a lock is taken back (LockIoRules.hyprlandLockFacts): whether
+    // restoring a dead client's lock is allowed, and whether the session is locked
+    Process {
+        id: _restoreProbe
+        signal answered(string output)
+        property string _output: ""
+        command: ["sh", "-c", "hyprctl -j getoption misc:allow_session_lock_restore; echo; hyprctl -j locked"]
+        stdout: StdioCollector {
+            onStreamFinished: _restoreProbe._output = text
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            const output = _output;
+            _output = "";
+            answered(output);
+        }
     }
 
     // ---- What the password fallback depends on ----
@@ -564,8 +961,11 @@ Singleton {
             return status();
         }
 
+        // "locked", "unlocked", or "compositor-locked": the compositor holds a lock this
+        // shell had and refuses to give it back (see "Recovery" in the header) — the screen
+        // is locked, but not by a prompt of this shell's
         function status(): string {
-            return root.locked ? "locked" : "unlocked";
+            return root._view.locked ? "locked" : root._restorePending ? "compositor-locked" : "unlocked";
         }
 
         // What the lock test bed reads to know where the lock stands: the rules' describe()
@@ -575,6 +975,70 @@ Singleton {
         // the helpers running, file watching, whether the password fallback is known
         function state(): string {
             return root._api?.describe() ?? "{}";
+        }
+    }
+
+    // The lock test bed's seam for a reload while locked (tests/lock/tests/reload-*.sh):
+    // nothing in the shell calls Quickshell.reload(), and file changes do not reload while
+    // locked, so the test asks for one here. Inert unless H2S_LOCK_TEST_RELOAD=1. A reload
+    // grants nothing (it carries the lock over, or ends in a restart that locks again).
+    IpcHandler {
+        target: "locktest"
+        enabled: Quickshell.env("H2S_LOCK_TEST_RELOAD") === "1"
+
+        function reload(hard: bool): string {
+            Qt.callLater(() => Quickshell.reload(hard));
+            return hard ? "hard reload" : "reload";
+        }
+    }
+
+    // Caps Lock, from the keyboards' LEDs: the prompt's "Caps Lock is on". Last among the
+    // children, so that the ones before keep their positions (a reload matches by position)
+    CapsLockLed {
+        id: _capsLed
+    }
+
+    // ---- PAM helpers left by this very process before a crash ----
+    // Quickshell's crash handler restarts a crashed shell in the same process (execve, same
+    // pid): the PAM helpers it had forked are still its children, and nobody ends them — the
+    // launcher sees no exit, so its clean-up does not run. A fingerprint helper blocked in
+    // pam_fprintd with `timeout=-1` (no time limit: pam/fingerprint) would keep the reader
+    // claimed for good, and the new shell's fingerprint would fail at its claim. So once per
+    // process (`done` is carried over soft reloads, which leave the helpers to their own
+    // PamContexts), children of this process running Quickshell's binary that started
+    // before this check are killed — not Quickshell's crash reporter (marked by its
+    // environment). A process started fresh has none.
+    PersistentProperties {
+        id: _helperSweepOnce
+        property bool done: false
+        onLoaded: {
+            if (done)
+                return;
+            done = true;
+            _helperSweep.running = true;
+        }
+    }
+
+    Process {
+        id: _helperSweep
+        command: ["sh", "-c",
+            "shell=$PPID\n"
+            + "read -r own < /proc/$$/stat; own=${own##*) }; set -- $own; own_start=${20}\n"
+            + "binary=$(readlink /proc/$shell/exe)\n"
+            + "for stat in /proc/[0-9]*/stat; do\n"
+            + "    pid=${stat#/proc/}; pid=${pid%/stat}\n"
+            + "    [ \"$pid\" = $$ ] && continue\n"
+            + "    read -r line < \"$stat\" 2> /dev/null || continue\n"
+            + "    line=${line##*) }; set -f; set -- $line; set +f\n"
+            + "    [ \"$2\" = \"$shell\" ] && [ \"${20}\" -lt \"$own_start\" ] || continue\n"
+            + "    [ \"$(readlink /proc/$pid/exe 2> /dev/null)\" = \"$binary\" ] || continue\n"
+            + "    tr '\\0' '\\n' < /proc/$pid/environ 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_DUMP_FD=' && continue\n"
+            + "    kill -KILL \"$pid\" 2> /dev/null && echo \"$pid\"\n"
+            + "done\n"
+            + "exit 0"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => root._log("warning", "killed a PAM helper this process left before it was restarted in place: " + line)
         }
     }
 }

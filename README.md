@@ -82,7 +82,13 @@ end)
 ```
 
 `launch.sh` (which `h2s-shell` runs) starts the shell with the icon theme chosen in its
-settings. Settings are kept in `~/.config/h2s_shell/`.
+settings, and stays as its supervisor: a shell that dies (a crash, a kill) is started
+again, and one that died while the screen was locked locks again at once. For that the
+lock screen needs one line in `hyprland.lua`'s `misc` settings,
+`allow_session_lock_restore = true` (without it Hyprland refuses to let a restarted lock
+screen take the lock back; see `docs/plans/lockscreen.md`, section 7, "Recovery").
+`h2s-shell --restart` stops the shell and starts it again, detached. Settings are kept in
+`~/.config/h2s_shell/`.
 
 ### Tablet mode
 
@@ -115,15 +121,39 @@ shipped in `pam/`.
   `h2s-shell-fingerprint` exists when `services.fprintd.enable` is set, `h2s-shell-u2f` when
   `security.pam.u2f.enable` is (with your `security.pam.u2f.settings`, always `cue`, never
   `interactive`). Enroll a finger with `fprintd-enroll`; register a key with `pamu2fcfg`
-  (into `~/.config/Yubico/u2f_keys`, or the `authfile` your settings name).
+  (into `~/.config/Yubico/u2f_keys`, or the `authfile` your settings name — the forms
+  below).
 - **Arch and others**: nothing to set up for the password — the shipped `pam/password`
   checks the local password (`pam_unix`, accounts in `/etc/shadow`). For the fingerprint,
   install `fprintd` and enroll a finger (`fprintd-enroll`); for a security key, install
-  `pam-u2f` and register it: `mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`.
-  Each is offered only once that is done. Accounts that are not in `/etc/shadow`
-  (systemd-homed, LDAP/SSSD) need a `/etc/pam.d/h2s-shell-password` of the
-  administrator's, e.g. `auth include system-auth` — but only if `system-auth` does not
-  itself wait for a fingerprint or a key, or the password would wait for them too.
+  `pam-u2f` and register it (below). Each is offered only once that is done.
+  Accounts that are not in `/etc/shadow` (systemd-homed, LDAP/SSSD) need a
+  `/etc/pam.d/h2s-shell-password` of the administrator's. Do not simply write `auth
+  include system-auth`: Arch's `system-auth` (and many others') has **`pam_faillock`** —
+  wrong passwords typed at the lock then count toward the account's lockout, and a
+  locked-out account cannot unlock the screen by password at all until the lockout
+  expires — and it often has `pam_fprintd` or `pam_u2f` added, and then the password
+  check waits for a finger or a key first. Write the modules your accounts need instead,
+  `auth` lines only, e.g. for homed users
+
+  ```
+  auth  [success=done default=ignore]  pam_systemd_home.so
+  auth  required                       pam_unix.so
+  ```
+
+  (for SSSD `pam_sss.so` in place of `pam_systemd_home.so`, with `use_first_pass` on it
+  or not as your SSSD setup wants), and include nothing that holds `pam_faillock`,
+  `pam_fprintd` or `pam_u2f`.
+
+Registering a security key (`pamu2fcfg`, from pam-u2f): the FIRST key with
+`mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`; every further key
+with `pamu2fcfg -n >> ~/.config/Yubico/u2f_keys` (`-n` leaves out the user name, so the key
+is added to your line). `>` replaces the file: run on a file that has keys, it throws away
+every key registered before.
+
+An account with an **empty password** cannot unlock by password: the lock never sends an
+empty password, and no config allows one (no `nullok`). Give the account a password, or
+unlock with a fingerprint or a key.
 
 A config of your own in `/etc/pam.d/h2s-shell-<method>`: only `auth` lines matter (the shell
 runs no account, session or password phase). The fingerprint and key configs must never

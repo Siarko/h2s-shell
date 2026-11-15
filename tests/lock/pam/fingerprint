@@ -1,6 +1,10 @@
 # The test bed's stand-in for a fingerprint reader: a conversation that asks nothing and
-# blocks until the test answers it (see wait-finger.sh). Same shape as "password".
-auth     [success=1 default=ignore] @PAM_MODULES@/pam_exec.so quiet @WORK@/pam/wait-finger.sh
+# blocks until the test answers it (see wait-finger.sh). Same shape as "password", with one
+# line more: a round that TIMED OUT (finger_timeout) ends in PAM's Error, as pam_fprintd's
+# own time-out does (PAM_AUTHINFO_UNAVAIL) — finger-error.sh fails then, and `die` returns
+# its PAM_SYSTEM_ERR, which Quickshell reports as Error; any other failure is a plain one.
+auth     [success=2 default=ignore] @PAM_MODULES@/pam_exec.so quiet @WORK@/pam/wait-finger.sh
+auth     [success=ignore default=die] @PAM_MODULES@/pam_exec.so quiet @WORK@/pam/finger-error.sh
 auth     requisite @PAM_MODULES@/pam_deny.so
 auth     required  @PAM_MODULES@/pam_permit.so
 account  required  @PAM_MODULES@/pam_permit.so

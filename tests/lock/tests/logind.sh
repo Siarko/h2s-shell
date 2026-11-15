@@ -90,6 +90,9 @@ inhibitor_gone() { ! inhibitor_alive; }
     || abort "pid $SHELL_PID is not the shell under test: not killing it"
 check_within 3 "before the crash the logind monitor runs" monitor_alive
 check_within 3 "before the crash the inhibitor is held" inhibitor_alive
+# The launcher would start a new shell, whose own monitor and inhibitor these checks would
+# then see: it lets this one go first (restarts are tests/lock/tests/restart-*.sh's)
+supervisor_release
 kill -KILL "$SHELL_PID"
 check_within 3 "after a crash the logind monitor ends by itself" monitor_gone
 check_within 3 "after a crash the inhibitor is let go" inhibitor_gone

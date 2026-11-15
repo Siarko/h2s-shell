@@ -86,6 +86,32 @@ sleeper=$(sed -n 's/^    hang) exec \([^ ]*\) 120 ;;$/\1/p' "$tools/gdbus-fprint
 no_sleeper() { [ -n "$sleeper" ] && ! pgrep -fx "$sleeper 120" > /dev/null; }
 check "hang: the stuck call does not linger" no_sleeper
 
+# gdbus's stderr is not its reply: a GLib warning on a call that succeeded changes nothing
+fprintd_mode warning
+run_script
+check "warning on gdbus's stderr, good reply: fingerprint offered" has_line "$fingerprint_line"
+check "warning on gdbus's stderr, good reply: exit 0" status_is 0
+
+# gdbus's own time-out (its --timeout ran out) is a time-out, said so
+fprintd_mode gdbus-timeout
+run_script
+check "gdbus-timeout: fingerprint not offered" lacks_method fingerprint
+check "gdbus-timeout: exit non-zero" status_nonzero
+check "gdbus-timeout: says it timed out" says "GetDevices: timeout"
+
+# A reader that vanishes between GetDevices and ListEnrolledFingers: a failure
+fprintd_mode vanished
+run_script
+check "vanished: fingerprint not offered" lacks_method fingerprint
+check "vanished: exit non-zero (asked again later)" status_nonzero
+check "vanished: says why" says "ListEnrolledFingers (/net/reactivated/Fprint/Device/0): error org.freedesktop.DBus.Error.UnknownObject"
+
+# An error of several lines is one line of reason (the shell logs each stderr line)
+fprintd_mode multiline
+run_script
+check "multiline: exit non-zero" status_nonzero
+check "multiline: the reason is one line" test "$(grep -c . "$WORK/script.err")" = 1
+
 empty_tools=$WORK/no-tools
 mkdir -p "$empty_tools"
 fprintd_mode enrolled
@@ -166,6 +192,32 @@ echo "auth required /nowhere/pam_unix.so" > "$sys/h2s-shell-u2f"
 printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$keys"
 run_script
 check "u2f: a config without pam_u2f: not offered" lacks_method u2f
+
+# The config's words are not patterns: `authfile=…/k*` names a file called "k*", not
+# whatever the shell would match against the current directory
+mkdir -p "$WORK/glob-cwd/authfile=$WORK/u2f"
+: > "$WORK/glob-cwd/authfile=$WORK/u2f/k-matched"
+printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$WORK/u2f/k*"
+echo "auth required /nowhere/pam_u2f.so authfile=$WORK/u2f/k* cue" > "$sys/h2s-shell-u2f"
+OUTPUT=$(cd "$WORK/glob-cwd" && env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
+check "u2f: authfile= with a * is taken literally, not expanded against the current directory" has_line "$u2f_line"
+rm -f "$WORK/u2f/k*"
+
+# The user name is matched literally: a name with a dot is no pattern
+mkdir -p "$WORK/fake-id"
+printf '#!%s\necho "a.b"\n' "$(command -v bash)" > "$WORK/fake-id/id"
+chmod +x "$WORK/fake-id/id"
+echo "auth required /nowhere/pam_u2f.so cue" > "$sys/h2s-shell-u2f"
+printf 'axb:khandle,pubkey,es256,+presence\n' > "$keys"
+OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
+check "u2f: user a.b, keys only for axb: not offered (the name is no pattern)" lacks_method u2f
+printf 'a.b:khandle,pubkey,es256,+presence\n' > "$keys"
+OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
+check "u2f: user a.b with a key: offered" has_line "$u2f_line"
+printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$keys"
 
 if [ -e /etc/NIXOS ]; then
     rm -f "$sys/h2s-shell-u2f"

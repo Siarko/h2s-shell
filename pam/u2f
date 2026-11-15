@@ -2,8 +2,9 @@
 # /etc/pam.d/h2s-shell-u2f (and not on NixOS, where a module named without a path is
 # looked for only in libpam's own directory: the NixOS module writes the system-wide one).
 # Offered when the user has a key in ~/.config/Yubico/u2f_keys ($XDG_CONFIG_HOME/Yubico/
-# u2f_keys), where pam_u2f looks without `authfile=` (register one with
-# `pamu2fcfg > ~/.config/Yubico/u2f_keys`).
+# u2f_keys), where pam_u2f looks without `authfile=`. Register the first key with
+# `pamu2fcfg > ~/.config/Yubico/u2f_keys`, each further one with
+# `pamu2fcfg -n >> ~/.config/Yubico/u2f_keys` (`>` on a file with keys throws them away).
 #
 # A passive check: it must never ask for typed input. The shell treats a passive check
 # that asks as broken. So `cue` (pam_u2f says "touch the key", which needs no answer), and

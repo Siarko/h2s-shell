@@ -17,7 +17,8 @@ tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL,
 On the desktop the shell is started by `scripts/launch.sh` (Hyprland's autostart calls
 it): Quickshell takes the icon theme only at launch, from `QS_ICON_THEME`, and the script
 sets it from the `appearance.iconTheme` setting — the system's theme or the first one
-installed when that is empty. `launch.sh --restart` restarts the shell the same way, which
+installed when that is empty — and stays as the shell's supervisor, starting it again
+when it dies (see "Lock screen", "Recovery"). `launch.sh --restart` restarts the shell the same way, which
 is what the setting's "Restart to apply" runs — a shell that does not answer is
 terminated by its process id; `--list` and `--resolve` print the installed themes and
 the one that would be used, `--preview <theme>` the files of a few sample icons, which
@@ -377,9 +378,13 @@ Four layers, so that what decides can be tested without what does (plan and cont
   Qt composes — dead keys, Compose sequences, an input method's commit — arrives too: sent
   on as a `key` with that text and emptied from the catcher at once. Pointer motion counts
   only where the pointer really moved (`LockIoRules.pointerMoved`), so a surface appearing
-  under a resting pointer does not wake the prompt. Caps Lock is inferred from the keys
-  (`LockIoRules.capsLockAfterKey`; Qt does not report it), kept by the driver as `capsLock`,
-  and said on the prompt. Notifications are listed by `screensaver/NotificationList.qml`
+  under a resting pointer does not wake the prompt. The catcher lies outside the surface and
+  the surface's `MouseArea` keeps every button but the left from what is under it: a
+  middle click on a text input pastes the primary selection. Caps Lock (Qt does not report
+  it) is read from the keyboards' LEDs by `singletons/lock/CapsLockLed.qml`
+  (`/sys/class/leds/*::capslock/brightness`, when the prompt wakes and at each key; no LED,
+  no indicator), exposed by the driver as `capsLock` and said on the prompt.
+  Notifications are listed by `screensaver/NotificationList.qml`
   (plain text, nothing to act on; the lock screen's detail is "app only" by default).
 
 **Fail closed against the compositor**: ext-session-lock-v1 makes an unlock before the
@@ -399,14 +404,54 @@ The driver never binds or watches `locked`: it sets it in the `lockCompositor` /
 refused lock), and takes the compositor's word from `secureStateChanged`, tagged with the
 session of the last `lockCompositor`.
 
+**Recovery** (plan section 7, "Reload" and "Restart"; never comes up unlocked over a locked
+session):
+
+- *A reload while locked* keeps the lock. Quickshell hands a reloaded singleton's children
+  their old instances by position; a `PersistentProperties` (`_carried`: "this process holds
+  a compositor lock", "the compositor confirmed it") placed before the `WlSessionLock` gets
+  its `reloaded` first, and sets the new `WlSessionLock`'s `locked` before Quickshell
+  realizes it — so it takes the old lock over instead of unlocking. The rules go on from
+  their `restored` event (a fresh lock on the carried compositor lock: no new lock request,
+  fresh adapters, methods asked again, nothing typed before survives). File changes still do
+  not reload while locked (`watchFiles` off); edits made meanwhile are reloaded once right
+  after the unlock. A reload that cannot carry the lock (a hard reload, `reload(true)`)
+  leaves Quickshell's process-wide lock manager with a stale lock: the process quits
+  (status 1) and the launcher starts a fresh one, which the marker locks.
+- *A shell that stops while locked* — crash, SIGKILL, `qs kill`, `--restart` — comes back
+  locked. The driver writes a lock marker (`$XDG_RUNTIME_DIR/h2s-shell-lock`: "locked
+  <key>" from the lock request to the end of the lock, the key naming this compositor
+  session: boot id, display, socket identity); a starting shell that finds "locked" for its
+  session locks at once (a marker of another boot or compositor is stale and ignored).
+  `scripts/launch.sh` supervises the shell: it runs it as a child (in a process group of its
+  own) and starts it again when it dies, not when it was stopped on purpose (clean exit or
+  SIGTERM/INT/HUP while unlocked; SIGUSR1 to the launcher lets the shell go, which
+  `--restart` does), with a growing pause and at most 5 restarts in 2 minutes; it kills what
+  the dead shell left of Quickshell's own binary in that group (PAM helpers, which would
+  keep a fingerprint reader claimed). Quickshell's own crash handler restarts a crashed shell
+  in the same process (unless it crashed within 10 s of starting): no second shell, and the
+  launcher sees nothing — so the restarted shell itself kills, once, the PAM helpers its
+  process had forked before the crash (`_helperSweep`).
+- *The compositor will not give the lock back* (Hyprland without
+  `misc:allow_session_lock_restore`): Hyprland refuses a new lock while a dead client's lock
+  stands, and kills the client that asks. So under Hyprland the shell first asks `hyprctl`
+  (the option, `locked`) and does not ask for a lock it would be refused: it reports
+  `compositor-locked`, counts as locked for the rest of the shell, and looks again with a
+  growing pause (5 s to 1 min) — the setting switched on at runtime brings the prompt back.
+
 Where state lives: the lock's state only in the driver (in `_build()`'s closure, never
 exposed — it holds the typed password between submit and PAM's prompt); the half-typed text
-only in the prompt's field; the I/O handles in the adapters. The test bed's seams, inert
+only in the prompt's field; the I/O handles in the adapters; across a reload, two booleans
+in `_carried`; across a restart, the marker. The test bed's seams, inert
 unless set: `H2S_LOCK_AUTH_METHODS` (read by the methods script), `H2S_LOCK_TOOLS` (a
 directory whose `gdbus` and `systemd-inhibit` stand in for the real ones — the shell's
-and the methods script's) and
+and the methods script's),
 `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
-`/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack).
+`/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack),
+`H2S_LOCK_TEST_RELOAD=1` (an IPC target `locktest` whose `reload(hard)` asks for
+`Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
+Caps Lock LEDs are read, `/sys/class/leds` otherwise) and `H2S_LOCK_TEST_TIMINGS` (JSON
+overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds).
 
 ### Logging
 
@@ -469,7 +514,9 @@ the suites `tests.qml` lists. `tests/run-unit.sh` runs them in a private headles
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
 privileges), so the suites' windows never show on the real screen; it finds labwc and
 Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any `FAIL`, a
-`TypeError`/`ReferenceError`, or a suite that never reported. Most run their assertions in `Component.onCompleted`, on pure
+`TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
+summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`
+checks that verdict against stand-in Quickshells. Most run their assertions in `Component.onCompleted`, on pure
 functions (the `*Rules` and geometry singletons, parsers). A suite that throws counts as
 failed, not as missing.
 
@@ -500,6 +547,10 @@ PAM directory the password fallback is chosen from is the test's own,
 stand-ins (`H2S_LOCK_TOOLS`; the real methods script runs against the fprintd one in
 `methods-script.sh` and `methods-fprintd.sh`). `tests/lock/run.sh`
 runs it; nothing appears on screen and the real session cannot be reached. See its README.
+
+`tests/manual/` holds checks no suite runs because they touch the real system — the one
+there runs a single PAM conversation with the real password against the shipped
+`pam/password` (its README).
 
 Everything else is verified by hand: run `quickshell` from the repo root and check that
 the bar renders, the clock ticks, cells respond, and popups toggle. Apart from the lock

@@ -2,8 +2,8 @@ import QtQuick
 import qs.singletons
 
 // The lock screen's I/O-side helpers (singletons/LockIoRules.qml): the driver's queue, key
-// names, the field's editing by forwarded keys, the methods script's report, and the
-// helper processes' restart pause.
+// names, the field's editing by forwarded keys, the methods script's report, the helper
+// processes' restart pause, and the recovery's lock marker and Hyprland probe.
 TestCase {
     suiteName: "LockIoRules"
 
@@ -148,6 +148,42 @@ TestCase {
                 field = rules.editField(field, key, typed);
             assertEqual(JSON.stringify(field), JSON.stringify({ text: "pw", cursor: 2, submit: true }), "a typo corrected, then Enter");
         }
+        // A character beyond the BMP (an emoji) is two UTF-16 units: never split (PAM would
+        // get half a pair, an invalid UTF-8 sequence)
+        const emoji = "😀";
+        const wellFormed = text => !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
+        assertEqual(edit("a" + emoji, 3, "Backspace", ""), JSON.stringify({ text: "a", cursor: 1, submit: false }),
+                    "Backspace after an emoji deletes all of it");
+        assertEqual(edit(emoji + "a", 0, "Delete", ""), JSON.stringify({ text: "a", cursor: 0, submit: false }),
+                    "Delete before an emoji deletes all of it");
+        assertEqual(edit("a" + emoji + "b", 3, "Left", ""), JSON.stringify({ text: "a" + emoji + "b", cursor: 1, submit: false }),
+                    "Left steps over an emoji");
+        assertEqual(edit("a" + emoji + "b", 1, "Right", ""), JSON.stringify({ text: "a" + emoji + "b", cursor: 3, submit: false }),
+                    "Right steps over an emoji");
+        assertEqual(JSON.stringify(rules.editField(rules.editField({ text: emoji, cursor: 2 }, "Left", ""), "", "x")),
+                    JSON.stringify({ text: "x" + emoji, cursor: 1, submit: false }), "Left then x: the x goes before the emoji, not inside it");
+        assertEqual(edit(emoji, 1, "", "x"), JSON.stringify({ text: "x" + emoji, cursor: 1, submit: false }),
+                    "a cursor handed in inside a pair is taken to its start");
+        assertEqual(edit(emoji, 1, "Backspace", ""), JSON.stringify({ text: emoji, cursor: 0, submit: false }),
+                    "… so Backspace there deletes nothing of it");
+        assertEqual(edit("a" + emoji + emoji, 5, "Backspace", ""), JSON.stringify({ text: "a" + emoji, cursor: 3, submit: false }),
+                    "two emoji: one Backspace, one emoji");
+        assertEqual(edit("\uD83D", 1, "Backspace", ""), JSON.stringify({ text: "", cursor: 0, submit: false }),
+                    "a lone half (never typed, but) is one unit");
+        {
+            // Every key from every position of a mixed text keeps the text well formed
+            const text = "a" + emoji + "é" + emoji;
+            let allWellFormed = true;
+            for (let cursor = 0; cursor <= text.length; cursor++) {
+                for (const [key, typed] of [["Backspace", ""], ["Delete", ""], ["Left", ""], ["Right", ""], ["", "x"]]) {
+                    let field = rules.editField({ text: text, cursor: cursor }, key, typed);
+                    field = rules.editField(field, "", "y");
+                    if (!wellFormed(field.text))
+                        allWellFormed = false;
+                }
+            }
+            assert(allWellFormed, "every edit from every cursor position leaves well-formed text (no half pairs)");
+        }
 
         // --- the methods script's report ---
         const detected = run => JSON.stringify(rules.detectionEvent(7, run));
@@ -166,21 +202,20 @@ TestCase {
         assertEqual(rules.detectionEvent(3, { started: true, exitCode: 0, crashed: false, lines: ["a", 5, null] }).lines.length, 1,
                     "only strings are passed on");
 
-        // --- Caps Lock, from what the keys typed ---
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "A", false, false), true, "a capital without Shift: on");
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "a", false, false), false, "a small letter without Shift: off");
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "a", true, false), true, "a small letter with Shift: on (they cancel out)");
-        assertEqual(rules.capsLockAfterKey(true, Qt.Key_A, "A", true, false), false, "a capital with Shift: off");
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_Eacute, "É", false, false), true, "a letter beyond ASCII counts too");
-        assertEqual(rules.capsLockAfterKey(true, Qt.Key_1, "1", false, false), true, "a digit says nothing: as it was");
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_1, "!", true, false), null, "nor a symbol: still unknown");
-        assertEqual(rules.capsLockAfterKey(false, Qt.Key_Return, "\r", false, false), false, "nor a named key");
-        assertEqual(rules.capsLockAfterKey(false, 0, "ab", false, false), false, "nor several characters at once (a commit)");
-        assertEqual(rules.capsLockAfterKey(false, Qt.Key_CapsLock, "", false, false), true, "Caps Lock pressed flips it");
-        assertEqual(rules.capsLockAfterKey(true, Qt.Key_CapsLock, "", false, false), false, "both ways");
-        assertEqual(rules.capsLockAfterKey(true, Qt.Key_CapsLock, "", false, true), true, "not on an auto-repeat");
-        assertEqual(rules.capsLockAfterKey(null, Qt.Key_CapsLock, "", false, false), null, "unknown stays unknown");
-        assertEqual(rules.capsLockAfterKey(undefined, Qt.Key_1, "1", false, false), null, "junk before is unknown");
+        // --- Caps Lock, from the keyboards' LEDs (singletons/lock/CapsLockLed.qml) ---
+        assertEqual(rules.capsLockFromLeds(["led 1"]), true, "one LED, on: Caps Lock on");
+        assertEqual(rules.capsLockFromLeds(["led 0"]), false, "one LED, off: off");
+        assertEqual(rules.capsLockFromLeds(["led 0", "led 1"]), true, "two keyboards, one LED on: on");
+        assertEqual(rules.capsLockFromLeds(["led 0", "led 0"]), false, "two, both off: off");
+        assertEqual(rules.capsLockFromLeds(["led 255"]), true, "any brightness above 0 is on");
+        assertEqual(rules.capsLockFromLeds([]), null, "no LED at all: unknown (no indicator)");
+        assertEqual(rules.capsLockFromLeds(["led ?"]), null, "an LED that cannot be read: unknown");
+        assertEqual(rules.capsLockFromLeds(["led 0", "led ?"]), null, "one off, one unreadable: unknown, not off");
+        assertEqual(rules.capsLockFromLeds(["led ?", "led 1"]), true, "one unreadable, one on: on");
+        assertEqual(rules.capsLockFromLeds(["led ", "led -1", "led x"]), null, "junk values: unknown");
+        assertEqual(rules.capsLockFromLeds(["junk", "", "1"]), null, "lines that are no LED's: none seen");
+        assertEqual(rules.capsLockFromLeds({ length: 1, 0: "led 1" }), true, "a QML list (array-like) is read");
+        assertEqual(rules.capsLockFromLeds(null), null, "nothing: unknown");
 
         // --- pointer motion on a lock surface ---
         assert(!rules.pointerMoved(null, 10, 10), "the first position (the pointer entering) is no move");
@@ -198,5 +233,47 @@ TestCase {
         assertEqual(rules.restartDelay(undefined, undefined, table), 1000, "nothing known: the minimum");
         assertEqual(rules.restartDelay(500, 0, { minimum: 30000, maximum: 600000, healthyRun: Infinity }), 30000,
                     "a previous pause below the minimum is raised to it");
+
+        // --- the lock marker (Lockscreen, "Recovery") ---
+        const facts = rules.markerFacts(["private yes", "key b00t:wayland-1:66:1234:99", "marker locked b00t:wayland-1:66:1234:99"]);
+        assert(facts.private && facts.key === "b00t:wayland-1:66:1234:99" && facts.marker === "locked b00t:wayland-1:66:1234:99",
+               "the probe's lines: private, the session's key, the marker's line");
+        assert(!rules.markerFacts(["private no"]).private, "a runtime dir that is not private is said so");
+        assert(!rules.markerFacts([]).private && rules.markerFacts([]).key === "" && rules.markerFacts([]).marker === "",
+               "no lines: not private, no key, no marker");
+        assert(!rules.markerFacts(null).private && !rules.markerFacts("private yes").private, "junk is no answer");
+        assertEqual(rules.markerFacts({ length: 1, 0: "private yes" }).private, true, "a QML list (array-like) is read");
+        assertEqual(rules.markerFacts(["key a", "key b"]).key, "a", "the first key line counts");
+
+        const key = "b00t:wayland-1:66:1234:99";
+        assertEqual(rules.markerDecision("locked " + key, key), "lock", "locked, this session's key: lock again");
+        assertEqual(rules.markerDecision("locked other:wayland-1:66:1:1", key), "stale", "locked for another compositor session: stale");
+        assertEqual(rules.markerDecision("locked " + key.replace("b00t", "boot2"), key), "stale", "… or another boot: stale");
+        assertEqual(rules.markerDecision("locked ?", key), "lock", "locked, the key not known when written: lock (fail closed)");
+        assertEqual(rules.markerDecision("locked", key), "lock", "locked with no key at all: lock (fail closed)");
+        assertEqual(rules.markerDecision("locked " + key, "?"), "lock", "this session's key unknown: lock (fail closed)");
+        assertEqual(rules.markerDecision("locked " + key, ""), "lock", "… also when empty");
+        assertEqual(rules.markerDecision("unlocked", key), "none", "unlocked: nothing to do");
+        assertEqual(rules.markerDecision("", key), "none", "no marker: nothing");
+        assertEqual(rules.markerDecision(undefined, key), "none", "nothing at all: nothing");
+        assertEqual(rules.markerDecision("lockedx " + key, key), "none", "a word that is not exactly locked: nothing");
+        assertEqual(rules.markerDecision("  locked   " + key + "  ", key), "lock", "spaces around do not matter");
+
+        // --- Hyprland's word before a lock is taken back ---
+        const said = (option, locked) => '{"option":"misc:allow_session_lock_restore","bool":' + option + ',"set":true}\n{"locked": ' + locked + "}";
+        let hypr = rules.hyprlandLockFacts(said("false", "true"));
+        assert(hypr.restoreAllowed === false && hypr.locked === true && rules.lockSurelyRefused(hypr),
+               "locked, restoring not allowed: a lock is refused for sure (do not ask: Hyprland kills the client that asks)");
+        hypr = rules.hyprlandLockFacts(said("true", "true"));
+        assert(hypr.restoreAllowed === true && !rules.lockSurelyRefused(hypr), "restoring allowed: ask");
+        hypr = rules.hyprlandLockFacts(said("false", "false"));
+        assert(hypr.locked === false && !rules.lockSurelyRefused(hypr), "not locked: ask (the marker says the owner left it locked)");
+        hypr = rules.hyprlandLockFacts('{"option":"misc:allow_session_lock_restore","int":0,"set":true}{"locked":true}');
+        assert(hypr.restoreAllowed === false && rules.lockSurelyRefused(hypr), "an int option reads as well");
+        for (const output of ["", "hyprctl: command not found", "{\"locked\": true}", said("false", "maybe"), null, undefined,
+                              '{"option":"misc:other","bool":false}{"locked":true}'])
+            assert(!rules.lockSurelyRefused(rules.hyprlandLockFacts(output)),
+                   "an answer that does not say both facts is no refusal (ask; the launcher bounds the cost): " + JSON.stringify(output));
+        assert(!rules.lockSurelyRefused(null) && !rules.lockSurelyRefused({}), "no facts: no refusal");
     }
 }

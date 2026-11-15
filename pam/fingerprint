@@ -9,5 +9,11 @@
 # pam_fprintd alone, `required`: its result (success, failure, MaxTries, a reader not
 # there) is the result.
 #
+# `timeout=-1`: no time limit on waiting for a finger (pam_fprintd: a negative timeout is
+# none). Its default, 30 s, ends an untouched round with an error, every 30 s for as long as
+# the screen is locked; the shell ends the conversation itself — at the unlock, when the
+# lock ends, before the machine sleeps. `max-tries` is pam_fprintd's own (3 fingers that do
+# not match, then MaxTries; the shell waits a moment and starts again).
+#
 # Quickshell runs pam_authenticate and nothing else: only `auth` lines mean anything.
-auth     required pam_fprintd.so
+auth     required pam_fprintd.so timeout=-1

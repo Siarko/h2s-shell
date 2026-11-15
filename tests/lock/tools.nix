@@ -4,7 +4,7 @@
 #   nix build --no-link --print-out-paths --impure -f tests/lock/tools.nix
 #
 # prints one store path holding bin/ (labwc, Hyprland, hyprctl, grim, setpriv, python3
-# with pywayland, xkbcli, dbus-daemon, gdbus), share/ltproto (Python bindings of the input
+# with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr), share/ltproto (Python bindings of the input
 # and window protocols), share/us.xkb (the keymap the virtual keyboard sends by default) and
 # share/keymaps/<name>.xkb (the others a test may ask for). run.sh does this itself.
 #
@@ -80,6 +80,13 @@ pkgs.linkFarm "h2s-locktest-tools" [
   # --session-bus): the shell's notification server registers there, gdbus sends to it
   { name = "bin/dbus-daemon"; path = "${pkgs.dbus}/bin/dbus-daemon"; }
   { name = "bin/gdbus"; path = "${pkgs.glib.bin}/bin/gdbus"; }
+  # The primary selection a middle click would paste (tests/paste.sh): set and read inside
+  # the nested compositor only, through its data-control protocol
+  { name = "bin/wl-copy"; path = "${pkgs.wl-clipboard}/bin/wl-copy"; }
+  { name = "bin/wl-paste"; path = "${pkgs.wl-clipboard}/bin/wl-paste"; }
+  # Pins the headless labwc output's size (its default is 1280x720), which the nested
+  # Hyprland's window, and so its output, follows
+  { name = "bin/wlr-randr"; path = "${pkgs.wlr-randr}/bin/wlr-randr"; }
   { name = "share/ltproto"; path = "${protocols}/ltproto"; }
   { name = "share/us.xkb"; path = keymap; }
   { name = "share/keymaps"; path = keymaps; }

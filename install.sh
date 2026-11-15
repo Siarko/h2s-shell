@@ -73,16 +73,25 @@ cat << EOF
 
      hl.exec_cmd("$target/scripts/launch.sh")
 
-   Or start it now, from a terminal in Hyprland:
+   Or start it now, from a terminal in Hyprland, detached and supervised as the
+   autostart runs it (a shell that dies is started again, and locks again if the screen
+   was locked):
 
-     $target/scripts/launch.sh -d
+     $target/scripts/launch.sh --restart
+
+   (Not \`launch.sh -d\`: that runs the shell on its own, and nothing would start it
+   again after a crash while the screen is locked.)
 
 3. Optional, for the lock screen (the password works as it is):
 
      fingerprint:   sudo pacman -S fprintd && fprintd-enroll
-     security key:  sudo pacman -S pam-u2f && mkdir -p ~/.config/Yubico \\
-                      && pamu2fcfg > ~/.config/Yubico/u2f_keys
+     security key:  sudo pacman -S pam-u2f && mkdir -p ~/.config/Yubico
+                    the first key:   pamu2fcfg > ~/.config/Yubico/u2f_keys
+                    another key:     pamu2fcfg -n >> ~/.config/Yubico/u2f_keys
+                    (">" replaces the file: on a file with keys it throws them away)
 
    Accounts not kept in /etc/shadow (systemd-homed, LDAP) need a
-   /etc/pam.d/h2s-shell-password: see "Lock screen" in the README.
+   /etc/pam.d/h2s-shell-password — not simply "auth include system-auth", which
+   usually brings pam_faillock (wrong passwords at the lock count toward a lockout)
+   and often pam_fprintd: see "Lock screen" in the README.
 EOF

@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# Starts the shell with the icon theme from its settings.
+# Starts the shell with the icon theme from its settings, and keeps it running.
 #
 # Quickshell sets the icon theme once, at launch, from QS_ICON_THEME — nothing changes it
 # while the shell runs. So the shell is started through here (Hyprland's autostart calls
 # this script), and the settings' "Restart to apply" runs `launch.sh --restart`.
 #
-#   launch.sh            start the shell (extra arguments go to qs)
-#   launch.sh --restart  stop the running shell and start it again, detached
+# The shell is supervised: this script stays, as its parent, and starts it again when it
+# dies (a crash, a kill, the OOM killer) — above all a shell that dies while the screen is
+# locked: the compositor keeps the session locked, and only a new shell can show a prompt
+# again (it finds the lock marker and locks at once; docs/plans/lockscreen.md, section 7,
+# "Restart"). See supervise() for what counts as stopping on purpose.
+#
+#   launch.sh            start the shell, supervised (extra arguments go to qs; with -d,
+#                        Quickshell's own daemon mode, the shell is not supervised: its
+#                        starter exits at once. --restart is the detached, supervised start)
+#   launch.sh --restart  stop the running shell and start it again, detached (supervised)
 #   launch.sh ipc ARGS   `qs ipc ARGS` to this shell, e.g. `ipc call tablet set true`
 #   launch.sh --list     the installed icon themes, one per line
 #   launch.sh --resolve  the icon theme the shell would start with
@@ -152,14 +160,40 @@ shell_pids() {
     done
 }
 
+# The supervisor of a shell process (supervise() below), if it has one: the parent named in
+# its environment, and only if that really is its parent and runs this script
+supervisor_of() {
+    local pid=$1 supervisor parent
+    supervisor=$({ tr '\0' '\n' < "/proc/$pid/environ"; } 2> /dev/null | sed -n 's/^H2S_SHELL_SUPERVISOR=//p')
+    [[ "$supervisor" =~ ^[0-9]+$ ]] || return 1
+    parent=$(process_parent "$pid") || return 1
+    [ "$parent" = "$supervisor" ] || return 1
+    tr '\0' ' ' < "/proc/$supervisor/cmdline" 2> /dev/null | grep -q 'scripts/launch\.sh' || return 1
+    echo "$supervisor"
+}
+
+# A process's parent, from /proc (the command name may hold spaces and parentheses: the
+# fields are read after the last ")")
+process_parent() {
+    local stat
+    stat=$(cat "/proc/$1/stat" 2> /dev/null) || return 1
+    stat=${stat##*) }
+    set -- $stat
+    echo "$2"
+}
+
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
 # the request over its socket) is terminated, then killed. The settings window is closed
 # first: Quickshell tearing it down with a text field focused crashed it on the way out
-# (QInputMethod::commit on the dying window), and the crash report popped up.
+# (QInputMethod::commit on the dying window), and the crash report popped up. A supervised
+# shell's supervisor is told first to let it go (SIGUSR1), or it would start it again.
 stop_shell() {
-    local pids
+    local pids supervisor
     pids=$(shell_pids)
     [ -n "$pids" ] || return
+    for pid in $pids; do
+        supervisor=$(supervisor_of "$pid") && kill -USR1 "$supervisor" 2> /dev/null
+    done
     for pid in $pids; do
         qs ipc --pid "$pid" call settings close > /dev/null 2>&1
     done
@@ -180,7 +214,7 @@ stop_shell() {
     done
 }
 
-start() {
+prepare_environment() {
     # Marks the shell as started here: without it, the shell shows a banner saying the
     # icon theme cannot apply and how to start it instead
     export H2S_SHELL_LAUNCHER=1
@@ -189,7 +223,107 @@ start() {
     if [ -n "$theme" ]; then
         export QS_ICON_THEME="$theme"
     fi
-    exec qs -p "$shell_dir" "$@"
+}
+
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+
+say() { echo "h2s-shell launcher: $*" >&2; }
+
+# The lock marker the shell writes (singletons/Lockscreen.qml): "locked <key>" while it holds
+# or asks for a lock of the session
+died_locked() {
+    local word=""
+    [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -f "$XDG_RUNTIME_DIR/h2s-shell-lock" ] \
+        && read -r word _ < "$XDG_RUNTIME_DIR/h2s-shell-lock" 2> /dev/null
+    [ "$word" = locked ]
+}
+
+# The compositor is still there to start a shell in: its socket exists (a compositor that
+# exits removes it — the end of the session, when nothing is to be started again)
+compositor_alive() {
+    local display=${WAYLAND_DISPLAY:-wayland-0}
+    case "$display" in /*) ;; *) display=$runtime_dir/$display ;; esac
+    [ -S "$display" ]
+}
+
+# What a dead shell left behind in its process group, of its own program: PAM helpers.
+# Quickshell's PAM conversations run in a fork of the shell, killed only when the shell
+# destroys them; after a crash a helper blocked in pam_fprintd keeps the fingerprint reader
+# claimed (the next shell's fingerprint fails until it times out). The shell ran in a
+# process group of its own (set -m, below), whose id is its pid and cannot be reused while
+# anything is left in it; of what is left only processes running Quickshell's binary are
+# killed — never a program the shell started (a terminal, a browser), nor Quickshell's
+# crash reporter (marked by its environment).
+clean_up_after() {
+    local group=$1 stat pid binary
+    for stat in /proc/[0-9]*/stat; do
+        pid=${stat#/proc/}
+        pid=${pid%/stat}
+        stat=$(cat "$stat" 2> /dev/null) || continue
+        stat=${stat##*) }
+        set -- $stat
+        [ "$3" = "$group" ] || continue
+        binary=$(readlink "/proc/$pid/exe" 2> /dev/null) || continue
+        case "${binary##*/}" in *quickshell*) ;; *) continue ;; esac
+        tr '\0' '\n' < "/proc/$pid/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH' && continue
+        say "killing what the shell left behind: $pid ($binary)"
+        kill -KILL "$pid" 2> /dev/null
+    done
+}
+
+# Runs the shell as a child and starts it again when it dies — not when it was stopped on
+# purpose. On purpose: it quit cleanly (`qs kill`, exit status 0) or by SIGTERM / SIGINT /
+# SIGHUP — unless the screen was locked (the marker says so), since then only a new shell
+# can give the owner a prompt; or this script was told to stop (SIGUSR1: let the shell go,
+# as stop_shell does; SIGTERM/SIGINT/SIGHUP: stop it too); or the compositor is gone (the
+# session ended). Anything else — a crash Quickshell's own handler gave up on (it restarts
+# a crashed shell in the same process unless it crashed within 10 s of starting, then it
+# exits with 255), SIGKILL, the OOM killer — starts it again after a pause: 1 s, doubling
+# while it keeps dying within 30 s of starting, and never more than 5 times in 2 minutes
+# (a shell that cannot start is not started forever).
+supervise() {
+    prepare_environment
+    export H2S_SHELL_SUPERVISOR=$$
+    local child="" stopping="" status started delay=1
+    local recent=()
+    trap 'stopping=1' USR1
+    trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2> /dev/null' TERM INT HUP
+    # Each child in a process group of its own: what it leaves behind can be found
+    set -m
+    while :; do
+        started=$SECONDS
+        qs -p "$shell_dir" "$@" &
+        child=$!
+        # `wait` returns early when a trapped signal arrives: wait again while it runs
+        while :; do
+            wait "$child"
+            status=$?
+            [ -z "$(jobs -pr)" ] && break
+        done
+        clean_up_after "$child"
+        child=""
+        [ -n "$stopping" ] && break
+        if ! died_locked; then
+            case "$status" in
+                0) break ;;
+                129 | 130 | 143) say "the shell was stopped (status $status)"; break ;;
+            esac
+        fi
+        local now=$SECONDS kept=() time
+        for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
+        recent=("${kept[@]}" "$now")
+        if [ "${#recent[@]}" -gt 5 ]; then
+            say "the shell died $((${#recent[@]} - 1)) times in 2 minutes: not starting it again"
+            exit 1
+        fi
+        if [ $((now - started)) -ge 30 ]; then delay=1; fi
+        say "the shell exited (status $status)$(died_locked && echo ' while the screen was locked'): starting it again in $delay s"
+        sleep "$delay" &
+        wait $! 2> /dev/null
+        [ $((now - started)) -lt 30 ] && delay=$((delay * 2))
+        [ -n "$stopping" ] && break
+        compositor_alive || { say "the compositor is gone: not starting the shell again"; break; }
+    done
 }
 
 case "$1" in
@@ -201,7 +335,24 @@ case "$1" in
     --restart)
         stop_shell
         shift
-        start -d "$@"
+        # A new supervisor, out of this process's session (the settings' "Restart to apply"
+        # runs this from inside the shell being stopped); what it says goes to a log in the
+        # runtime dir, the shell's own log is Quickshell's
+        self=$(readlink -f "$0")
+        if command -v setsid > /dev/null; then
+            setsid "$self" "$@" < /dev/null >> "$runtime_dir/h2s-shell-launcher.log" 2>&1 &
+        else
+            ( trap '' HUP; exec "$self" "$@" ) < /dev/null >> "$runtime_dir/h2s-shell-launcher.log" 2>&1 &
+        fi
         ;;
-    *) start "$@" ;;
+    *)
+        # Quickshell's daemon mode: its starter exits as soon as the shell is up, so there is
+        # nothing to supervise (and a supervisor would take that exit for the shell's)
+        for argument in "$@"; do
+            case "$argument" in
+                -d | --daemonize) prepare_environment; exec qs -p "$shell_dir" "$@" ;;
+            esac
+        done
+        supervise "$@"
+        ;;
 esac

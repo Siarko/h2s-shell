@@ -83,10 +83,14 @@ in
       # attempt each time). One module, `required`: its own result is the result.
       # mkOverride 900: above NixOS's generated text (a default), below a plain definition
       # of the machine's own, which replaces it.
+      # `timeout=-1`: pam_fprintd waits for a finger with no time limit (its default, 30 s,
+      # ends an untouched round in an error); the lock ends the conversation itself — at
+      # the unlock, at the end of the lock, before sleep. `max-tries` stays pam_fprintd's
+      # (3 non-matching fingers, then MaxTries: the shell waits a moment and starts again).
       h2s-shell-fingerprint = lib.mkIf config.services.fprintd.enable {
         text = lib.mkOverride 900 ''
           # The lock screen's fingerprint check (h2s-shell's NixOS module)
-          auth required ${config.services.fprintd.package}/lib/security/pam_fprintd.so
+          auth required ${config.services.fprintd.package}/lib/security/pam_fprintd.so timeout=-1
         '';
       };
       # pam_u2f with the machine's settings (where the keys are: authfile, appid, origin…),

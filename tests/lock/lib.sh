@@ -25,6 +25,10 @@ LOCKTEST_PASSWORD="lt-test-pass-42"
 LOCKTEST_ANSWER="lt-answer-7"
 # A cap on every process the test bed starts, should every other way of stopping it fail
 LOCKTEST_PROCESS_TIMEOUT=${LOCKTEST_PROCESS_TIMEOUT:-300}
+# The nested output's size: labwc's headless output is pinned to it, Hyprland's output is
+# checked to be it (stack_start), and the tests' pointer coordinates are written for it
+LOCKTEST_OUTPUT_SIZE=1920x1080
+OUTPUT_WIDTH=1920 OUTPUT_HEIGHT=1080
 
 WORK=$LOCKTEST_ARTIFACTS
 TOOLS=$LOCKTEST_TOOLS
@@ -52,7 +56,7 @@ RUN=${LOCKTEST_RUNTIME:-}
 [ -n "$RUN" ] && [ -d "$RUN" ] && [ -O "$RUN" ] && [ -z "$(ls -A "$RUN")" ] \
     || abort "no fresh private runtime dir from run.sh (LOCKTEST_RUNTIME=$RUN)"
 chmod 700 "$RUN"
-mkdir -p "$WORK"/{home,xdg/config,xdg/cache,xdg/data,xdg/state,labwc,hypr,pam,finger}
+mkdir -p "$WORK"/{home,xdg/config,xdg/cache,xdg/data,xdg/state,labwc,hypr,pam,finger,leds}
 export XDG_RUNTIME_DIR=$RUN
 export HOME=$WORK/home
 export XDG_CONFIG_HOME=$WORK/xdg/config XDG_CACHE_HOME=$WORK/xdg/cache
@@ -173,11 +177,27 @@ check_within() {
 #                                    notification server registers and notify() can send
 # --window                           a stand-in desktop window (input/ltwindow.py: solid
 #                                    magenta) before the shell starts
+# --no-lock-restore                  the nested Hyprland runs with misc:allow_session_lock_restore
+#                                    off (Hyprland's default, and the owner's config today): a
+#                                    lock client that died cannot be replaced
+# --hyprland-debug                   the nested Hyprland writes its debug log (hyprland.log):
+#                                    what it did with the lock and its surfaces
+# --no-hyprland-ipc                  the shell runs without HYPRLAND_INSTANCE_SIGNATURE: as under
+#                                    a compositor it cannot ask about its lock (the generic path)
+# --reload-seam                      the shell's `locktest reload` IPC is enabled
+#                                    (H2S_LOCK_TEST_RELOAD=1): a test asks for Quickshell.reload()
+# --timings <json>                   LockRules.timings overrides for the shell
+#                                    (H2S_LOCK_TEST_TIMINGS): what takes minutes, in seconds
+#
+# Always: the shell reads Caps Lock from $WORK/leds (H2S_LOCK_LEDS_DIR; caps_led writes it),
+# never from the machine's /sys/class/leds — the real keyboard's state is not the test's.
 stack_start() {
     local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
-    local window=0 fprintd=""
+    local window=0 fprintd="" lock_restore=true reload_seam="" hyprland_logs=true hyprland_stdout=false
+    local shell_env=() timings=""
     while [ $# -gt 0 ]; do
         case "$1" in
+            --timings) timings=$2; shift 2 ;;
             --methods) methods=$2; shift 2 ;;
             --methods-script) methods_script=$2; shift 2 ;;
             --logind) logind=1; shift ;;
@@ -187,6 +207,10 @@ stack_start() {
             --settings) settings=$2; shift 2 ;;
             --session-bus) session_bus=1; shift ;;
             --window) window=1; shift ;;
+            --no-lock-restore) lock_restore=false; shift ;;
+            --reload-seam) reload_seam=1; shift ;;
+            --no-hyprland-ipc) shell_env=(-u HYPRLAND_INSTANCE_SIGNATURE); shift ;;
+            --hyprland-debug) hyprland_logs=false; hyprland_stdout=true; shift ;;
             *) abort "stack_start: unknown option $1" ;;
         esac
     done
@@ -200,12 +224,16 @@ stack_start() {
     WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
         spawn "$WORK/labwc.log" labwc -C "$WORK/labwc"
     wait_until 10 test -S "$RUN/wayland-0" || abort "labwc did not start (see labwc.log)"
+    # Its headless output comes up at 1280x720, and the nested Hyprland's window — so its
+    # output — follows it: pinned to the size the tests' coordinates are written for
+    WAYLAND_DISPLAY=wayland-0 wlr-randr --output HEADLESS-1 --custom-mode "$LOCKTEST_OUTPUT_SIZE" \
+        >> "$WORK/labwc.log" 2>&1 || abort "could not set labwc's output to $LOCKTEST_OUTPUT_SIZE (see labwc.log)"
 
     # The config must be Lua: Hyprland 0.57 reads hyprland.lua
-    cat > "$WORK/hypr/hyprland.lua" << 'EOF'
-hl.monitor({ output = "", mode = "1920x1080@60", position = "auto", scale = "1" })
+    cat > "$WORK/hypr/hyprland.lua" << EOF
+hl.monitor({ output = "", mode = "$LOCKTEST_OUTPUT_SIZE@60", position = "auto", scale = "1" })
 hl.config({
-    misc = { allow_session_lock_restore = true, disable_hyprland_logo = true,
+    misc = { allow_session_lock_restore = $lock_restore, disable_hyprland_logo = true,
              force_default_wallpaper = 0, disable_autoreload = true,
              -- No banners across the top of the screen (screenshots look at it): the warning
              -- that it was not started by start-hyprland, a scale it adjusted
@@ -213,6 +241,7 @@ hl.config({
     xwayland = { enabled = false },
     animations = { enabled = false },
     ecosystem = { no_update_news = true, no_donation_nag = true },
+    debug = { disable_logs = $hyprland_logs, enable_stdout_logs = $hyprland_stdout },
 })
 EOF
     WAYLAND_DISPLAY=wayland-0 AQ_DRM_DEVICES=/nonexistent-drm \
@@ -223,6 +252,21 @@ EOF
     HYPRLAND_INSTANCE_SIGNATURE=$(ls "$RUN/hypr" | head -n 1)
     export HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY=wayland-1
     wait_until 10 hyprctl monitors || abort "hyprctl cannot reach the nested Hyprland"
+    # The first output (Hyprland's window in labwc) comes up at Aquamarine's 1280x720 —
+    # the config's rule does not make its custom mode at start (observed); the same rule
+    # given at runtime does
+    hyprctl eval "hl.monitor({ output = \"WAYLAND-1\", mode = \"$LOCKTEST_OUTPUT_SIZE@60\", position = \"auto\", scale = \"1\" })" \
+        > /dev/null 2>&1
+    # The size of the output, as the compositor has it: the one fact the pointer's
+    # coordinates are measured in (move_pointer). Read once, before a test adds outputs
+    local size=""
+    for _ in $(seq 1 30); do
+        size=$(hyprctl -j monitors | python3 -I -c 'import json, sys; m = json.load(sys.stdin)[0]; print("%dx%d" % (m["width"], m["height"]))' 2> /dev/null)
+        [ "$size" = "$LOCKTEST_OUTPUT_SIZE" ] && break
+        sleep 0.1
+    done
+    [ "$size" = "$LOCKTEST_OUTPUT_SIZE" ] || abort "the nested output is ${size:-unknown}, not $LOCKTEST_OUTPUT_SIZE"
+    OUTPUT_WIDTH=${size%x*} OUTPUT_HEIGHT=${size#*x}
 
     # Input before the shell: a lock client binds its keyboard when it starts, and a seat
     # that gains its first keyboard later loses the first key
@@ -267,14 +311,11 @@ EOF
     # tests of dead keys and Compose sequences must not depend on the caller's. No input
     # method module is asked for: Qt picks its own, as in a session without one (both set in
     # the isolation block at the top).
-    QT_LOGGING_RULES=${LOCKTEST_QT_LOGGING:-} DBUS_SESSION_BUS_ADDRESS=$session_bus_address \
-    H2S_LOCK_TOOLS=$tools XDG_SESSION_ID=$session_id H2S_LOCK_SYSTEM_PAM_DIR=$WORK/system-pam \
-    H2S_SHELL_DIR=$LOCKTEST_SHELL H2S_LOCK_AUTH_METHODS=$WORK/pam/methods.sh QT_QPA_PLATFORM=wayland \
-        spawn "$WORK/shell.log" "$LOCKTEST_LAUNCHER"
-    local timeout_pid=$SPAWNED_PID
-    wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
-    SHELL_PID=$(pgrep -P "$timeout_pid" | head -n 1)
-    wait_until 30 shell_ipc lockscreen status || abort "the shell's IPC does not answer (see shell.log)"
+    LAUNCHER_ENV=("${shell_env[@]}" QT_LOGGING_RULES="${LOCKTEST_QT_LOGGING:-}" DBUS_SESSION_BUS_ADDRESS="$session_bus_address"
+        H2S_LOCK_TOOLS="$tools" XDG_SESSION_ID="$session_id" H2S_LOCK_SYSTEM_PAM_DIR="$WORK/system-pam"
+        H2S_LOCK_TEST_RELOAD="$reload_seam" H2S_SHELL_DIR="$LOCKTEST_SHELL" H2S_LOCK_AUTH_METHODS="$WORK/pam/methods.sh"
+        H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland)
+    start_launcher
     log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }
 
@@ -302,7 +343,7 @@ _write_pam_stacks() {
     esac
     bash_path=$(command -v bash)
     coreutils=$(dirname "$(dirname "$(readlink -f "$(command -v rm)")")")
-    for file in password password-question fingerprint check-password.sh check-answer.sh wait-finger.sh; do
+    for file in password password-question fingerprint check-password.sh check-answer.sh wait-finger.sh finger-error.sh; do
         sed -e "s|@PAM_MODULES@|$LOCKTEST_PAM_MODULES|g" -e "s|@WORK@|$WORK|g" \
             -e "s|@BASH@|$bash_path|g" -e "s|@COREUTILS@|$coreutils/bin|g" \
             -e "s|@FINGER_DIR@|$WORK/finger|g" -e "s|@PASSWORD@|$LOCKTEST_PASSWORD|g" \
@@ -486,6 +527,11 @@ EOF
 #   nobus              no system bus to connect to
 #   malformed-devices  GetDevices answers something that is not a list of readers
 #   malformed-fingers  ListEnrolledFingers answers something that is not a list of fingers
+#   warning            as enrolled, with a GLib warning on gdbus's stderr at every call
+#   gdbus-timeout      gdbus's own time-out: "Error: Timeout was reached", status 1
+#   vanished           the reader listed by GetDevices is gone at ListEnrolledFingers
+#                      (UnknownObject)
+#   multiline          ListEnrolledFingers fails with an error message of two lines
 _write_fprintd_standin() {
     local dir=$1 bash_path coreutils
     bash_path=$(command -v bash)
@@ -509,8 +555,13 @@ while [ \$# -gt 0 ]; do
 done
 echo "call \$method user=\$argument path=\$path mode=\$mode" >> "$WORK/fprintd/log"
 error() { echo "Error: GDBus.Error:\$1: \$2" >&2; exit 1; }
+if [ "\$mode" = warning ]; then
+    echo "(gdbus:\$\$): GLib-WARNING **: 12:00:00.000: a warning gdbus printed on a call that succeeded" >&2
+    mode=enrolled
+fi
 case "\$mode" in
     hang) exec $coreutils/sleep 120 ;;
+    gdbus-timeout) echo "Error: Timeout was reached" >&2; exit 1 ;;
     absent) error org.freedesktop.DBus.Error.ServiceUnknown "The name is not activatable" ;;
     nobus) echo "Error connecting: Could not connect: No such file or directory" >&2; exit 1 ;;
 esac
@@ -527,6 +578,8 @@ case "\$method" in
         case "\$mode:\$path" in
             enrolled:* | second:*/1) echo "(['right-index-finger'],)" ;;
             denied:*) error net.reactivated.Fprint.Error.PermissionDenied "Not Authorized: net.reactivated.fprint.device.verify" ;;
+            vanished:*) error org.freedesktop.DBus.Error.UnknownObject "No such interface “net.reactivated.Fprint.Device” on object at path \$path" ;;
+            multiline:*) printf 'Error: GDBus.Error:net.reactivated.Fprint.Error.Internal: the first line\nand a second line\n' >&2; exit 1 ;;
             malformed-fingers:*) echo "(Right Index Finger,)" ;;
             *) error net.reactivated.Fprint.Error.NoEnrolledPrints "Failed to discover prints" ;;
         esac
@@ -598,6 +651,133 @@ _quickshell_binary() {
     readlink -f "$binary"
 }
 
+# ---- The shell's process, under its supervisor ----------------------------------------
+# The launcher (scripts/launch.sh) supervises the shell: it runs it as a child and starts it
+# again when it dies. SUPERVISOR_PID is the launcher, SHELL_PID the shell process now.
+
+# start_launcher: the launcher (and so the shell), as stack_start starts it — also again
+# after a test let the first one go (supervisor_release) and the shell end. The launcher
+# stays, as the shell's supervisor (scripts/launch.sh), and the shell runs as its child.
+start_launcher() {
+    spawn "$WORK/shell.log" env "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER"
+    local timeout_pid=$SPAWNED_PID
+    wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
+    SUPERVISOR_PID=$(pgrep -P "$timeout_pid" | head -n 1)
+    wait_until 10 _find_shell_pid || abort "the launcher did not start the shell"
+    SHELL_PID=$(_find_shell_pid)
+    _track_shell_group
+    wait_until 30 shell_ipc lockscreen status || abort "the shell's IPC does not answer (see shell.log)"
+}
+
+# The shell process under the supervisor: a child running Quickshell's binary, of this run
+_find_shell_pid() {
+    local pid
+    # A launcher that execs the shell instead of supervising it (before Stage 4): the
+    # launcher's process is the shell
+    if [ "$(readlink -f "/proc/${SUPERVISOR_PID:-0}/exe" 2> /dev/null)" = "$(_quickshell_binary)" ]; then
+        echo "$SUPERVISOR_PID"
+        return 0
+    fi
+    for pid in $(pgrep -P "${SUPERVISOR_PID:-0}" 2> /dev/null); do
+        [ "$(readlink -f "/proc/$pid/exe" 2> /dev/null)" = "$(_quickshell_binary)" ] || continue
+        [ "$(process_env "$pid" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] || continue
+        echo "$pid"
+        return 0
+    done
+    return 1
+}
+# The supervised shell runs in a process group of its own (its pid): stopped with the stack,
+# like the groups spawn() made — what the shell started (a hung methods script) goes too
+_track_shell_group() {
+    [ "$(awk '{ print $5 }' "/proc/$SHELL_PID/stat" 2> /dev/null)" = "$SHELL_PID" ] \
+        && [ "$(process_env "$SHELL_PID" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+        && PROCESS_GROUPS+=("$SHELL_PID")
+    return 0
+}
+_shell_pid_other_than() { local pid; pid=$(_find_shell_pid) && [ "$pid" != "$1" ]; }
+
+# wait_for_new_shell <old pid> <seconds>: the supervisor has started another shell process
+# and its IPC answers; SHELL_PID is then that one
+wait_for_new_shell() {
+    wait_until "$2" _shell_pid_other_than "$1" || return 1
+    SHELL_PID=$(_find_shell_pid)
+    _track_shell_group
+    wait_until 20 shell_ipc lockscreen status || return 1
+    log "the supervisor started a new shell: pid $SHELL_PID"
+}
+
+# The checks a test makes before it signals a process: of this run, and what it says it is
+# (a wrong pid could be a process of the real session). assert_shell_process <pid>: the
+# shell under test; assert_supervisor_process <pid>: its launcher.
+assert_shell_process() {
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+        && [ "$(readlink -f "/proc/$1/exe" 2> /dev/null)" = "$(_quickshell_binary)" ] \
+        && [ "$(process_env "$1" XDG_RUNTIME_DIR)" = "$RUN" ] \
+        || abort "pid $1 is not the shell under test: not signalling it"
+}
+assert_supervisor_process() {
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+        && tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" \
+        || abort "pid $1 is not the launcher under test: not signalling it"
+}
+
+# The supervisor lets the shell go: it no longer starts it again (what the launcher's own
+# --restart does first). For tests about a shell that dies and stays dead.
+supervisor_release() {
+    assert_supervisor_process "$SUPERVISOR_PID"
+    kill -USR1 "$SUPERVISOR_PID"
+    log "the supervisor lets the shell go (SIGUSR1)"
+}
+
+# signal_shell <signal>: to the shell under test, after making sure it is that
+signal_shell() {
+    assert_shell_process "$SHELL_PID"
+    kill -s "$1" "$SHELL_PID"
+    log "sent SIG$1 to the shell (pid $SHELL_PID)"
+}
+
+# Watches the compositor's lock across a gap: one line per poll ("true"/"false"/"error")
+# in $WORK/<name>.polls, every 50 ms, until stop_lock_watch. A poll that cannot reach the
+# compositor says "error" (counted apart: it says nothing about the lock).
+start_lock_watch() {
+    LOCK_WATCH_FILE=$WORK/$1.polls
+    : > "$LOCK_WATCH_FILE"
+    (
+        while :; do
+            hyprctl -j locked 2> /dev/null | python3 -I -c '
+import json, sys
+try:
+    print(str(json.load(sys.stdin)["locked"]).lower())
+except Exception:
+    print("error")' >> "$LOCK_WATCH_FILE"
+            sleep 0.05
+        done
+    ) &
+    LOCK_WATCH_PID=$!
+}
+stop_lock_watch() {
+    [ -n "${LOCK_WATCH_PID:-}" ] && kill "$LOCK_WATCH_PID" 2> /dev/null
+    wait "$LOCK_WATCH_PID" 2> /dev/null
+    LOCK_WATCH_PID=""
+    log "lock watch: $(grep -c true "$LOCK_WATCH_FILE") polls locked, $(grep -c false "$LOCK_WATCH_FILE") unlocked, $(grep -c error "$LOCK_WATCH_FILE") unanswered"
+}
+lock_watch_never_unlocked() { [ "$(grep -c false "$LOCK_WATCH_FILE")" = 0 ] && [ "$(grep -c true "$LOCK_WATCH_FILE")" -gt 0 ]; }
+
+# The lock marker as it is on disk ($XDG_RUNTIME_DIR/h2s-shell-lock): its first word
+# (locked / unlocked), "" when there is none
+marker_file_word() { local word=""; [ -f "$RUN/h2s-shell-lock" ] && read -r word _ < "$RUN/h2s-shell-lock"; echo "$word"; }
+marker_file_is() { [ "$(marker_file_word)" = "$1" ]; }
+
+# Lines of the shell's log (all its processes write to shell.log) matching a pattern
+shell_log_count() { grep -ac -- "$1" "$WORK/shell.log"; }
+
+# A protocol error or a killed client, in the nested Hyprland's or the shell's log
+protocol_errors() {
+    grep -aiE 'protocol error|error 4 |invalid_destroy|invalid_unlock|duplicate_output|already_constructed|killing client|wl_display@1: error' \
+        "$WORK/hyprland.log" "$WORK/shell.log" 2> /dev/null
+}
+no_protocol_errors() { [ -z "$(protocol_errors)" ]; }
+
 # ---- Talking to the shell -----------------------------------------------------------
 
 # shell_ipc <target> <function> [args...]. Addressed by process id inside the private
@@ -637,6 +817,11 @@ shell_ipc() {
 #   timers               the names of the rules' timers running, comma-separated
 #   caps_lock            what the shell knows of Caps Lock: true / false / "" (unknown)
 #   screensaver          the shell's screensaverVisible (idle, or locked)
+#   marker               the lock marker as the shell last wrote it: locked / unlocked / "" (none yet)
+#   marker_key_known     the marker carries this compositor session's key (the start probe answered)
+#   restoring            a lock the marker asked to take back, not yet confirmed
+#   restore_pending      the compositor refused to give that lock back (status "compositor-locked")
+#   carried_held         a reload now would carry a compositor lock over
 state_field() {
     shell_ipc lockscreen state | python3 -I -c '
 import json, sys
@@ -686,6 +871,11 @@ facts = {
     "timers": lambda s: ",".join(s["timers"]),
     "caps_lock": lambda s: s["driver"]["capsLock"],
     "screensaver": lambda s: s["driver"]["screensaverVisible"],
+    "marker": lambda s: s["driver"]["marker"],
+    "marker_key_known": lambda s: s["driver"]["markerKeyKnown"],
+    "restoring": lambda s: s["driver"]["restoring"],
+    "restore_pending": lambda s: s["driver"]["restorePending"],
+    "carried_held": lambda s: s["driver"]["carriedHeld"],
 }
 name = sys.argv[1]
 if name in facts:
@@ -836,15 +1026,22 @@ keys_text() {
 press_key() { send_input "key $1"; }
 # hold_key <keysym> <seconds>: held down, so that it auto-repeats
 hold_key() { send_input "hold $1 $2"; }
-move_pointer() { send_input "abs ${1:-960} ${2:-540} 1920 1080" "move 5 5"; }
+# move_pointer [x y]: to that pixel of the output (its centre by default), then a small move
+# (a surface counts only real motion: LockIoRules.pointerMoved). The coordinates are in
+# OUTPUT_WIDTH × OUTPUT_HEIGHT, read from the compositor at stack_start
+move_pointer() {
+    send_input "abs ${1:-$((OUTPUT_WIDTH / 2))} ${2:-$((OUTPUT_HEIGHT / 2))} $OUTPUT_WIDTH $OUTPUT_HEIGHT" "move 5 5"
+}
 
 # Wakes the prompt by moving the pointer and waits for it to show: a test about
 # authentication should not depend on how a waking key is handled (stage 3 tests that).
-# The motion is repeated: a lock surface ignores everything in its first 300 ms.
+# Repeated, to a slightly different place each time: the first position a surface sees is
+# no motion (the pointer entering, or the surface appearing under it), and a motion sent
+# before the surface exists reaches nothing.
 wake_prompt() {
     local attempt
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
-        move_pointer $((880 + attempt * 4)) 500
+        move_pointer $((OUTPUT_WIDTH / 2 - 80 + attempt * 4)) $((OUTPUT_HEIGHT / 2 - 40))
         wait_until 0.5 state_is prompt_awake true && return 0
     done
     return 1
@@ -965,3 +1162,23 @@ no_finger_waiters() { [ -z "$(finger_waiters)" ]; }
 # waiting on a log to grow (check_within re-runs a command, but the arguments it was given
 # were expanded once)
 lines_more_than() { [ "$(grep -c -- "$2" "$3" 2> /dev/null)" -gt "$1" ]; }
+
+# finger_timeout <seconds>: from the next round on, a round nobody answers ends after that
+# long in PAM's Error, as pam_fprintd's own time-out does (wait-finger.sh, finger-error.sh);
+# `finger_timeout 0` puts the default back (a plain failure after 120 s)
+finger_timeout() {
+    if [ "$1" = 0 ]; then rm -f "$WORK/finger/timeout"; else echo "$1" > "$WORK/finger/timeout"; fi
+    if [ "$1" = 0 ]; then log "fingerprint stand-in: rounds wait 120 s, then fail (the default)"; else log "fingerprint stand-in: rounds time out after $1 s with an Error"; fi
+}
+
+# ---- The Caps Lock LED (stack_start points the shell's H2S_LOCK_LEDS_DIR at $WORK/leds) ----
+# The nested compositor has no keyboard, so no LED: the test writes the one the shell reads.
+# caps_led <1|0|none>: the LED on, off, or not there at all
+caps_led() {
+    case "$1" in
+        none) rm -rf "$WORK/leds/test::capslock" ;;
+        0 | 1) mkdir -p "$WORK/leds/test::capslock"; echo "$1" > "$WORK/leds/test::capslock/brightness" ;;
+        *) abort "caps_led: 1, 0 or none" ;;
+    esac
+    log "Caps Lock LED: $1"
+}

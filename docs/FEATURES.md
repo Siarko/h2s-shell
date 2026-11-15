@@ -181,7 +181,9 @@ Two independent stages, both driven by Wayland idle notifications:
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. Commands can be configured to
-  run when it activates and deactivates (not yet wired up — see CLEANUP.md #12).
+  run when it activates and deactivates (not yet wired up — see CLEANUP.md #12). A
+  profile switch that changes the screensaver's timeout while it shows takes it down (and
+  starts the idle count again): a known limit.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached either after the screensaver or on its own idle timer, and shows a password
   prompt and optionally the notification list — the app's name only by default, or the
@@ -197,7 +199,9 @@ Two independent stages, both driven by Wayland idle notifications:
   wakes it is typed into it, and so are Enter and Backspace right after. Dead keys, Compose
   sequences, AltGr, the keypad and text an input method commits type into it (the input
   method is told it is a password field: nothing predicted or learned). It says "Caps Lock
-  is on" once a letter typed shows it. The field empties only when
+  is on" when the keyboard's Caps Lock LED is lit (`/sys/class/leds/*::capslock`, read
+  when the prompt wakes and at each key); with no such LED it says nothing. A middle click
+  pastes nothing into it. The field empties only when
   what was sent is taken — a second Enter during a check is refused and keeps the text. It
   shows "Verifying…" while a password is checked, PAM's reason when one is refused, and
   what each passive method is doing. When the screen showing it goes away the prompt moves
@@ -207,13 +211,17 @@ Two independent stages, both driven by Wayland idle notifications:
   the key unlocks with nothing typed, and a typed password is checked at once. The prompt
   shows what the reader or key last said, and when PAM asks for more after the password (a
   one-time code) the question replaces "Password" and the next thing typed answers it. An
-  empty password is never sent. A fingerprint or key config that asks for typed input is
-  not used. `scripts/lock-auth-methods.sh` says which are there: the password always, the
+  empty password is never sent — so an account with an empty password cannot unlock by
+  password (no config allows one either: no `nullok`). A fingerprint or key config that
+  asks for typed input is not used. The reader waits for a finger for as long as the
+  screen is locked (`pam_fprintd timeout=-1` in the configs; a round that times out anyway
+  is started again, not counted as a fault). `scripts/lock-auth-methods.sh` says which are there: the password always, the
   fingerprint when fprintd (asked over D-Bus, within 4 s) has a finger enrolled for the
   user, the key when the user has one registered where the key's PAM config looks
   (pam_u2f's `authfile`, else `~/.config/Yubico/u2f_keys`). An answer of "not there" is
   not asked again at every wake of the prompt; a question that could not be answered
-  (fprintd stuck or failing) is, at most every 30 s. Each uses
+  (fprintd stuck or failing) is asked again at the first wake of the prompt at least 30 s
+  after the last question. Each uses
   `/etc/pam.d/h2s-shell-<password|fingerprint|u2f>` if the system has one (the NixOS
   module writes them; there the fingerprint and key work only with those, and without
   the password one the password goes through `login`, which waits for the reader first),
@@ -226,8 +234,19 @@ Two independent stages, both driven by Wayland idle notifications:
 - **The compositor's confirmation** — the screen counts as locked once the compositor says
   so; until then the password is already checked, and an unlock waits for that word
   ("Unlocking…"), since unlocking a lock the compositor has not confirmed is a protocol
-  error. A confirmation late by more than 5 s is shown ("Waiting for the compositor…"). No
-  reload of the shell while locked (a file written in its folder waits for the unlock).
+  error. A confirmation late by more than 5 s is shown ("Waiting for the compositor…").
+- **Failure and recovery** — the screen stays locked whatever happens to the shell. A file
+  written in its folder while locked does not reload it; the shell reloads once right after
+  the unlock instead. A reload asked for while locked keeps the lock (a new authentication
+  is needed). A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
+  `h2s-shell --restart` — is started again by the launcher (`h2s-shell`, which stays as its
+  supervisor; at most 5 restarts in 2 minutes) or by Quickshell's own crash handler, and
+  locks again at once: it finds the lock marker it left in `$XDG_RUNTIME_DIR`. A shell
+  stopped on purpose while unlocked is not started again. What it left behind (a
+  fingerprint conversation holding the reader) is killed. Under Hyprland this needs
+  `misc:allow_session_lock_restore = true` in the Hyprland config; without it Hyprland
+  keeps its "lockscreen app died" screen, the shell says `compositor-locked` and waits for
+  the setting (see `docs/plans/lockscreen.md`, section 7, "Recovery").
 - **Other ways out** — logind's Unlock for the shell's session (`loginctl
   unlock-session`, from another console), and, deliberately for now, Escape at a showing
   prompt (the owner's decision while testing; on a hidden prompt Escape only shows it, so

@@ -12,8 +12,10 @@
 # are found as the lock test bed finds them (tests/lock/resolve.sh: labwc from
 # tests/lock/tools.nix, Quickshell from the h2s-shell launcher, or LOCKTEST_QS).
 #
-# Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out or a
-# TypeError / ReferenceError was printed, 2 when the runner could not be set up.
+# Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, a
+# TypeError / ReferenceError was printed, Quickshell exited non-zero (a crash after a
+# partial summary included) or fewer suites reported than tests.qml registers, 2 when the
+# runner could not be set up.
 set -uo pipefail
 
 LOCKTEST_DIR=$(cd "$(dirname "$(readlink -f "$0")")/lock" && pwd)
@@ -76,5 +78,12 @@ echo "$summary" | sed 's/^/  /'
 [ "$fails" -gt 0 ] && { echo "  $fails check(s) FAILED"; failed=1; }
 [ "$errors" -gt 0 ] && { echo "  $errors TypeError/ReferenceError line(s)"; grep -E 'TypeError|ReferenceError' "$work/unit.log" | head -n 10 | sed 's/^/    /'; failed=1; }
 [ "$status" = 124 ] && { echo "  quickshell timed out"; failed=1; }
+# Any other non-zero status is a failure too: a crash (139: SIGSEGV) after a partial
+# summary with no FAIL line in it must not pass
+[ "$status" != 0 ] && [ "$status" != 124 ] && { echo "  quickshell exited with status $status"; failed=1; }
+# Every suite tests.qml registers (`property var _name: SomethingTest {}`) must report
+expected=$(grep -c -E '^[[:space:]]*property var _[A-Za-z0-9]+: [A-Za-z0-9]+Test \{\}' "$REPO/tests.qml")
+reported=$(printf '%s\n' "$summary" | grep -c -- '^--- ')
+[ "$reported" -lt "$expected" ] && { echo "  only $reported of the $expected suites in tests.qml reported"; failed=1; }
 [ -n "$summary" ] || { echo "  no suite reported: quickshell did not run them"; failed=1; }
 exit $failed

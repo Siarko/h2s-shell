@@ -128,23 +128,26 @@ Singleton {
         return _keyNames[qtKey] ?? "";
     }
 
-    // What a key pressed at a lock surface tells about Caps Lock, which Qt does not report:
-    // a letter's case against Shift — upper case without Shift, or lower case with it, is
-    // Caps Lock on (xkb's alphabetic keys: Shift and Lock cancel out) — and a press of the
-    // Caps Lock key itself flips what was known. Anything else (digits, named keys, an
-    // auto-repeat of Caps Lock) leaves `previous` as it is. `previous`: true, false or null
-    // (unknown) → the same.
-    function capsLockAfterKey(previous, qtKey, text, shift, autoRepeat) {
-        const known = previous === true || previous === false ? previous : null;
-        if (qtKey === Qt.Key_CapsLock)
-            return autoRepeat === true || known === null ? known : !known;
-        if (typeof text !== "string" || text.length !== 1)
-            return known;
-        const upper = text.toUpperCase();
-        const lower = text.toLowerCase();
-        if (upper === lower)
-            return known;
-        return (text === upper) !== (shift === true);
+    // Caps Lock from the keyboards' LEDs (singletons/lock/CapsLockLed.qml): one line per
+    // `*::capslock` LED, "led <brightness>" or "led ?" (unreadable) → true when any LED is
+    // on (a brightness above 0), false when there is at least one and every one reads 0,
+    // null (unknown: no indicator) when there is none, or one could not be read and none is
+    // on. Array-likes are accepted (a QML signal's list).
+    function capsLockFromLeds(lines) {
+        const list = lines !== null && typeof lines === "object" && typeof lines.length === "number" ? Array.from(lines) : [];
+        let seen = 0;
+        let unreadable = false;
+        for (const line of list) {
+            const match = /^led (\S*)\s*$/.exec(String(line));
+            if (match === null)
+                continue;
+            seen++;
+            if (!/^[0-9]+$/.test(match[1]))
+                unreadable = true;
+            else if (Number(match[1]) > 0)
+                return true;
+        }
+        return seen === 0 || unreadable ? null : false;
     }
 
     // Whether a pointer position reported on a lock surface is a real move: not the first
@@ -160,32 +163,39 @@ Singleton {
     // What a forwardKey effect does to the field (plan, section 7): `text` (printable,
     // never a control character — the rules filter those) is inserted at the cursor; Enter
     // submits; Backspace / Delete delete before / after the cursor; Left / Right / Home /
-    // End move it; any other key changes nothing.
+    // End move it; any other key changes nothing. Positions step by code point, never into
+    // a surrogate pair (an emoji, any character beyond the BMP): half a pair is no valid
+    // text, and PAM would get an invalid UTF-8 sequence. A cursor handed in inside a pair
+    // is taken to the pair's start.
     // `field`: { text, cursor } → { text, cursor, submit }
     function editField(field, key, text) {
         const current = typeof field?.text === "string" ? field.text : "";
-        const cursor = Math.max(0, Math.min(current.length,
+        let cursor = Math.max(0, Math.min(current.length,
             typeof field?.cursor === "number" && isFinite(field.cursor) ? Math.round(field.cursor) : current.length));
+        if (_splitsPair(current, cursor))
+            cursor--;
         const result = { text: current, cursor: cursor, submit: false };
+        const before = _pairBefore(current, cursor) ? 2 : 1;
+        const after = _pairAt(current, cursor) ? 2 : 1;
         switch (key) {
         case "Enter":
             result.submit = true;
             return result;
         case "Backspace":
             if (cursor > 0) {
-                result.text = current.slice(0, cursor - 1) + current.slice(cursor);
-                result.cursor = cursor - 1;
+                result.text = current.slice(0, cursor - before) + current.slice(cursor);
+                result.cursor = cursor - before;
             }
             return result;
         case "Delete":
             if (cursor < current.length)
-                result.text = current.slice(0, cursor) + current.slice(cursor + 1);
+                result.text = current.slice(0, cursor) + current.slice(cursor + after);
             return result;
         case "Left":
-            result.cursor = Math.max(0, cursor - 1);
+            result.cursor = Math.max(0, cursor - before);
             return result;
         case "Right":
-            result.cursor = Math.min(current.length, cursor + 1);
+            result.cursor = Math.min(current.length, cursor + after);
             return result;
         case "Home":
             result.cursor = 0;
@@ -202,6 +212,27 @@ Singleton {
             result.cursor = cursor + text.length;
         }
         return result;
+    }
+
+    function _isHighSurrogate(code) {
+        return code >= 0xD800 && code <= 0xDBFF;
+    }
+
+    function _isLowSurrogate(code) {
+        return code >= 0xDC00 && code <= 0xDFFF;
+    }
+
+    // A whole surrogate pair right before / right at `index`; `index` between the two halves
+    function _pairBefore(text, index) {
+        return index >= 2 && _isLowSurrogate(text.charCodeAt(index - 1)) && _isHighSurrogate(text.charCodeAt(index - 2));
+    }
+
+    function _pairAt(text, index) {
+        return index + 1 < text.length && _isHighSurrogate(text.charCodeAt(index)) && _isLowSurrogate(text.charCodeAt(index + 1));
+    }
+
+    function _splitsPair(text, index) {
+        return index > 0 && index < text.length && _isHighSurrogate(text.charCodeAt(index - 1)) && _isLowSurrogate(text.charCodeAt(index));
     }
 
     // ---- The methods script ----
@@ -235,5 +266,61 @@ Singleton {
             return minimum;
         const previous = typeof previousDelay === "number" && previousDelay > 0 ? previousDelay : 0;
         return previous === 0 ? minimum : Math.min(Math.max(previous * 2, minimum), table.maximum);
+    }
+
+    // ---- The lock marker (Lockscreen, "Recovery") ----
+
+    // The start probe's lines → { private (XDG_RUNTIME_DIR is this user's 0700 directory),
+    // key (this compositor session's, "" when it could not be worked out), marker (the
+    // marker's first line, "" for none) }. Array-likes are accepted (a QML signal's list).
+    function markerFacts(lines) {
+        const facts = { private: false, key: "", marker: "" };
+        const list = lines !== null && typeof lines === "object" && typeof lines.length === "number" ? Array.from(lines) : [];
+        for (const line of list) {
+            if (typeof line !== "string")
+                continue;
+            if (line === "private yes")
+                facts.private = true;
+            else if (line.startsWith("key ") && facts.key === "")
+                facts.key = line.slice(4).trim();
+            else if (line.startsWith("marker ") && facts.marker === "")
+                facts.marker = line.slice(7).trim();
+        }
+        return facts;
+    }
+
+    // What a starting shell does about the marker it found, `key` being this compositor
+    // session's ("?" while unknown): "lock" — it says locked, for this session (or one of
+    // the two keys is unknown: fail closed, a lock too many rather than one too few);
+    // "stale" — locked, but for another compositor session (the compositor died or was
+    // stopped since: a new session is a new login, nothing to take back); "none" —
+    // unlocked, nothing, or anything else.
+    // What Hyprland says before a lock is taken back: the output of `hyprctl -j getoption
+    // misc:allow_session_lock_restore` and `hyprctl -j locked`, one after the other →
+    // { restoreAllowed, locked } (true / false, null when not said). A lock is refused for
+    // sure exactly when the session is locked and restoring is not allowed — and Hyprland
+    // 0.57 then also kills the client that asked (it destroys the refused lock at once, and
+    // Quickshell's next request on it is a protocol error: plan, section 7, "Restart").
+    function hyprlandLockFacts(output) {
+        const text = String(output ?? "");
+        const option = /"option"\s*:\s*"misc:allow_session_lock_restore"[^}]*?"(?:bool|int)"\s*:\s*(true|false|0|1)\b/.exec(text);
+        const locked = /"locked"\s*:\s*(true|false)\b/.exec(text);
+        return {
+            restoreAllowed: option === null ? null : option[1] === "true" || option[1] === "1",
+            locked: locked === null ? null : locked[1] === "true"
+        };
+    }
+
+    function lockSurelyRefused(facts) {
+        return facts?.restoreAllowed === false && facts?.locked === true;
+    }
+
+    function markerDecision(marker, key) {
+        const fields = String(marker ?? "").trim().split(/\s+/);
+        if (fields[0] !== "locked")
+            return "none";
+        const written = fields.length > 1 ? fields.slice(1).join(" ") : "?";
+        const current = typeof key === "string" && key !== "" ? key : "?";
+        return written === "?" || current === "?" || written === current ? "lock" : "stale";
     }
 }

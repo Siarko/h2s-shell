@@ -33,7 +33,17 @@ parent_is_alive() {
     read -r _ _ _ current_parent _ < /proc/$$/stat
     [ "$current_parent" = "$parent" ]
 }
-for ((round = 0; round < 1200; round++)); do
+# Nobody answering: by default the round fails after 120 s. With finger/timeout (seconds,
+# finger_timeout in lib.sh) it ends after that long as pam_fprintd's own time-out does — in
+# PAM's Error: timedout.<helper> tells the stack's next line (finger-error.sh) to fail
+rounds=1200 timeout_is_error=0
+if [ -e "$directory/timeout" ]; then
+    read -r seconds < "$directory/timeout"
+    if [[ "$seconds" =~ ^[0-9]+$ ]] && [ "$seconds" -gt 0 ]; then
+        rounds=$((seconds * 10)) timeout_is_error=1
+    fi
+fi
+for ((round = 0; round < rounds; round++)); do
     if ! parent_is_alive; then
         echo "orphaned $$ (parent $parent gone)" >> "$log"
         exit 1
@@ -47,5 +57,10 @@ for ((round = 0; round < 1200; round++)); do
     fi
     @COREUTILS@/sleep 0.1
 done
-echo "timeout $$" >> "$log"
+if [ "$timeout_is_error" = 1 ]; then
+    : > "$directory/timedout.$parent"
+    echo "timeout $$ (an Error, as pam_fprintd's)" >> "$log"
+else
+    echo "timeout $$" >> "$log"
+fi
 exit 1

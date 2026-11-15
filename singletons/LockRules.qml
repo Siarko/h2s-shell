@@ -11,6 +11,9 @@ import QtQuick
 //   initial(settings)        → state
 //   step(state, event, now)  → { state, effects, ignored }
 //
+// A state always begins unlocked; a lock carried over a reload of the shell enters by the
+// `restored` event, from a fresh state only (_restored).
+//
 // States are plain objects, replaced and never mutated: a caller may keep an old one and
 // compare. `now` is the wall clock (Date.now()) at the moment the event is handled; no
 // rule reads a clock, a process or another singleton.
@@ -91,14 +94,17 @@ Singleton {
         retryMax: 10000,
         quickRound: 20000,
         // A passive method's round that ended in PAM's Error (Quickshell maps every code
-        // but success / auth error / max tries to it, a device not plugged in included):
-        // tried again after this
+        // but success / auth error / max tries to it, a device not plugged in included)
+        // before `quickRound`: tried again after this. An Error after a full-length round
+        // is the module's time-out with nobody trying: `retryMin`, not counted
         errorRetry: 30000
     })
 
     // Counts, not durations: not overridable
     readonly property var limits: ({
-        // Consecutive Error rounds after which a passive method is broken for the lock (and
+        // Consecutive QUICK Error rounds (shorter than `timings.quickRound`; a longer one is
+        // a time-out, not counted, and resets the count) after which a passive method is
+        // broken for the lock (and
         // until the next wake from sleep, which clears it). A config that cannot work at all
         // (a module not installed) errs every time: with `revivals` this bounds its PAM
         // children and warnings to errorLimit + revivals rounds per lock and wake — while
@@ -328,7 +334,9 @@ Singleton {
     // wait up to the maximum; a round that ran its full time was nobody trying, and resets
     // it. MaxTries is the module giving up after its own attempts — somebody is trying and
     // failing — so it waits the longest at once. Success does not retry, and neither does
-    // Error here: its wait is `errorRetry`, counted against `limits.errorLimit`.
+    // Error here: a quick one waits `errorRetry`, counted against `limits.errorLimit`; one
+    // after a full-length round (the module's time-out) waits `retryMin`, not counted
+    // (_pamCompleted).
     // `timingOverrides`: the timings to use (a state's `settings.timings`); the defaults
     // when left out.
     function retryDelay(previousDelay, roundMilliseconds, result, timingOverrides) {
@@ -351,6 +359,7 @@ Singleton {
 
     readonly property var _handlers: ({
         started: (tx, event) => root._started(tx, event),
+        restored: (tx, event) => root._restored(tx, event),
         lockRequested: (tx, event) => root._lockRequested(tx, event),
         unlockRequested: (tx, event) => root._unlockRequested(tx, event),
         compositorLocked: (tx, event) => root._compositorLocked(tx, event),
@@ -377,6 +386,38 @@ Singleton {
     // Once, after initial(). It does nothing itself: being a taken event, it runs
     // _reconcile, which takes the sleep inhibitor if the settings want it
     function _started(tx, event) {
+    }
+
+    // The compositor's lock is already held by this process: Quickshell reloaded the shell
+    // while it was locked, and the new WlSessionLock took the old one's lock over (the driver
+    // set it before Quickshell realized it, plan section 7, "Reload"). So the lock goes on
+    // without asking the compositor for one: `adoptCompositorLock` (the session the
+    // compositor's later word belongs to), then announceLocked(true), first — no
+    // lockCompositor. Everything else of the lock starts afresh, as at any lock: the methods
+    // asked, no conversation, no secret, no pending unlock, the prompt asleep; what was
+    // typed or under way before the reload is gone, and getting in needs a new
+    // authentication.
+    //
+    // Only from a FRESH state (unlocked, no lock yet in this state's life): it is a way to
+    // begin, never a way to change a lock — it can only enter one, never end or replace one.
+    // `secure`: the compositor had confirmed that lock (exactly true); anything else is taken
+    // as not confirmed (locking, the confirm timer runs), so an unconfirmed lock can never be
+    // unlocked on this event's word (THE COMPOSITOR RULE).
+    function _restored(tx, event) {
+        if (tx.state.phase.status !== "unlocked" || tx.state.phase.session !== 0)
+            return tx.state.phase.status !== "unlocked" ? "already locked" : "not a fresh state";
+        const secure = event.secure === true;
+        const session = tx.state.phase.session + 1;
+        _setTop(tx, Object.assign(_freshLockRegions(), {
+            phase: { status: secure ? "locked" : "locking", session: session, lastEnd: "", confirmLate: false, pending: null }
+        }));
+        _emit(tx, "adoptCompositorLock", { session: session });
+        _emit(tx, "announceLocked", { locked: true });
+        _log(tx, "info", "the compositor's lock carried over (" + (secure ? "confirmed" : "not confirmed yet")
+            + "): locked as session " + session + ", a new authentication needed");
+        if (!secure)
+            _startTimer(tx, "confirm", tx.state.settings.timings.confirm);
+        _detect(tx, true);
     }
 
     // Locking or locked: a lock whose owner may authenticate (conversations run, input is
@@ -994,7 +1035,15 @@ Singleton {
         }
         const passive = tx.state.passive[method];
         if (result === "error") {
-            _passiveErred(tx, method);
+            // An Error after a full-length round is the module's own time-out with nobody
+            // trying (pam_fprintd: PAM_AUTHINFO_UNAVAIL after its `timeout`, 30 s by
+            // default), not a fault: counted, it broke the fingerprint after ~4.5 minutes
+            // of an untouched lock. A wall clock set back makes the round look quick
+            // (counted: fail towards "broken", which a wake clears)
+            if (tx.now - passive.startedAt >= tx.state.settings.timings.quickRound)
+                _passiveTimedOut(tx, method);
+            else
+                _passiveErred(tx, method);
             return;
         }
         const delay = retryDelay(passive.delay, tx.now - passive.startedAt, result, tx.state.settings.timings);
@@ -1016,6 +1065,17 @@ Singleton {
         const wait = tx.state.settings.timings.errorRetry;
         _log(tx, "warning", method + ": PAM error (" + errors + " of " + limits.errorLimit + "), trying again later");
         _setPassive(tx, method, { status: "backoff", conversation: null, errors: errors, delay: wait, lastResult: "error" });
+        _startTimer(tx, "retry:" + method, wait);
+    }
+
+    // A full-length round that ended in Error: nobody tried, the reader is fine. Not
+    // counted, and it resets the count (as any result but a quick Error does); the next
+    // round starts after `retryMin` — the shortest wait, as after a full-length failed
+    // round. A completion is no abort, so no settle; the round ends by its retry timer,
+    // never in this step.
+    function _passiveTimedOut(tx, method) {
+        const wait = tx.state.settings.timings.retryMin;
+        _setPassive(tx, method, { status: "backoff", conversation: null, errors: 0, delay: wait, lastResult: "timeout" });
         _startTimer(tx, "retry:" + method, wait);
     }
 
@@ -1563,6 +1623,9 @@ Singleton {
                 return shown(method.label + ": too many attempts, wait a moment", true);
             if (passive.lastResult === "error")
                 return shown(method.label + " not available, trying again later", false);
+            // The module's own time-out: restarted in a moment, the line stays as it was
+            if (passive.lastResult === "timeout")
+                return shown(method.hint, false);
             return shown((passive.messageIsError && passive.message ? passive.message : method.label + " not ready")
                 + ", trying again shortly", false);
         case "broken":

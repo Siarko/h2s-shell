@@ -16,7 +16,7 @@ if [ -z "$LOCKTEST_TOOLS" ]; then
     setup_error "nix could not build tests/lock/tools.nix (output above)"
 fi
 rm -f "$nix_log"
-for tool in bin/labwc bin/Hyprland bin/hyprctl bin/grim bin/python3 bin/setpriv bin/xkbcli bin/dbus-daemon bin/gdbus \
+for tool in bin/labwc bin/Hyprland bin/hyprctl bin/grim bin/python3 bin/setpriv bin/xkbcli bin/dbus-daemon bin/gdbus bin/wl-copy bin/wl-paste bin/wlr-randr \
     share/ltproto share/us.xkb share/keymaps; do
     [ -e "$LOCKTEST_TOOLS/$tool" ] || setup_error "the tool set lacks $tool ($LOCKTEST_TOOLS)"
 done

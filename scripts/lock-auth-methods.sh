@@ -53,7 +53,8 @@ failed=0
 
 # Says why a question could not be answered, and makes the exit status non-zero
 cannot_tell() {
-    echo "lock-auth-methods: $*" >&2
+    local reason="$*"
+    echo "lock-auth-methods: ${reason//$'\n'/ }" >&2
     failed=1
 }
 
@@ -91,10 +92,13 @@ fi
 # (and ~/.ssh in place of ~/.config). Printed as "<path> TAB <sshformat 0/1>"; nothing
 # when the config has no pam_u2f line. `include`d or `substack`ed configs are not followed.
 u2f_authfile() {
-    local file=$1 line word authfile="" expand=0 sshformat=0 home
+    local file=$1 line word words authfile="" expand=0 sshformat=0 home
     line=$(grep -E '^[[:space:]]*-?auth[[:space:]].*pam_u2f\.so' "$file" 2> /dev/null | head -n 1)
     [ -n "$line" ] || return 0
-    for word in $line; do
+    # Split into words without pathname expansion: `[origin=…]`, `authfile=/x/*` are
+    # the module's words, not patterns to match against files here
+    read -ra words <<< "$line"
+    for word in "${words[@]}"; do
         case "$word" in
             authfile=*) authfile=${word#authfile=} ;;
             expand) expand=1 ;;
@@ -124,13 +128,18 @@ u2f_authfile() {
 # key file is the key itself. The PAM conversation runs as the user, so a file the user
 # cannot read (a root-only mapping file) cannot serve: not offered.
 u2f_registered() {
-    local authfile=$1 sshformat=$2
+    local authfile=$1 sshformat=$2 line
     [ -r "$authfile" ] || return 1
     if [ "$sshformat" = 1 ]; then
         [ -s "$authfile" ]
-    else
-        grep -q "^$user:." "$authfile"
+        return
     fi
+    # The user name matched literally (not as a pattern: a name may hold a dot), at the
+    # start of a line, followed by ":" and at least one character
+    while IFS= read -r line || [ -n "$line" ]; do
+        [[ "$line" == "$user:"?* ]] && return 0
+    done < "$authfile"
+    return 1
 }
 
 u2f_config=$(config u2f)
@@ -147,36 +156,53 @@ fi
 # and Device.ListEnrolledFingers. The user name is passed as "" — fprintd then takes the
 # caller; naming a user, even oneself, is not needed, and naming another would ask polkit
 # for net.reactivated.fprint.device.setusername, which brings up an authentication dialog.
+#
+# Not free of polkit even so: fprintd checks EVERY ListEnrolledFingers against the polkit
+# action net.reactivated.fprint.device.verify (fprintd 1.94, src/device.c: the call needs
+# the verify permission, checked with user interaction allowed). Its default is
+# allow_active=yes — the active session's user gets it without a dialog — and no for an
+# inactive session (a PermissionDenied: a failure here, asked again later). A site policy
+# that requires authentication for it would put a dialog on the screen at every detection;
+# the same rule already applies to pam_fprintd's Claim of the reader at every fingerprint
+# conversation, so such a machine has no usable fingerprint lock either way.
+#
 # The whole question has a deadline (4 s); each call gets what is left of it.
 deadline=$(( ${EPOCHREALTIME//[.,]/} / 1000 + 4000 ))
 
 # fprint <object path> <method> [argument] → the reply on stdout; the D-Bus error name
-# on stdout as "error <name>" with status 1; status 2 for a time-out or a failure to ask
+# on stdout as "error <name>" with status 1; status 2 for a time-out or a failure to ask.
+# What it prints is one line. gdbus's stderr is kept apart from its reply (a file of its
+# own, removed at once): a GLib warning on a call that succeeded must not make the reply
+# unreadable, and an error of several lines is one line of reason.
 fprint() {
-    local left output status
+    local left output errors status error_file
     left=$(( deadline - ${EPOCHREALTIME//[.,]/} / 1000 ))
     if [ "$left" -le 0 ]; then
         echo "timeout"
         return 2
     fi
+    error_file=$(mktemp "${TMPDIR:-/tmp}/lock-auth-methods.XXXXXX") || { echo "failed: cannot create a temp file"; return 2; }
     output=$(timeout -k 1 "$((left / 1000)).$(printf '%03d' $((left % 1000)))" \
         "$gdbus" call --system --timeout $(((left + 999) / 1000)) --dest net.reactivated.Fprint \
-        --object-path "$1" --method "net.reactivated.Fprint.$2" "${@:3}" 2>&1 < /dev/null)
+        --object-path "$1" --method "net.reactivated.Fprint.$2" "${@:3}" 2> "$error_file" < /dev/null)
     status=$?
+    errors=$(tr '\n' ' ' < "$error_file" 2> /dev/null)
+    rm -f "$error_file"
     if [ "$status" = 0 ]; then
-        printf '%s\n' "$output"
+        printf '%s\n' "$output" | head -n 1
         return 0
     fi
-    if [ "$status" = 124 ] || [ "$status" = 137 ]; then
+    # timeout's own, or gdbus's (its --timeout ran out: "Error: Timeout was reached")
+    if [ "$status" = 124 ] || [ "$status" = 137 ] || [[ "$errors" == *"Timeout was reached"* ]]; then
         echo "timeout"
         return 2
     fi
     # gdbus: "Error: GDBus.Error:<error name>: <message>"
-    if [[ "$output" =~ GDBus\.Error:([A-Za-z0-9_.]+): ]]; then
+    if [[ "$errors" =~ GDBus\.Error:([A-Za-z0-9_.]+): ]]; then
         echo "error ${BASH_REMATCH[1]}"
         return 1
     fi
-    printf 'failed: %s\n' "$(printf '%s' "$output" | head -n 1 | cut -c 1-200)"
+    printf 'failed: %s\n' "$(printf '%s' "${errors:-status $status}" | cut -c 1-200)"
     return 2
 }
 

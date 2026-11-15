@@ -15,7 +15,7 @@ LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about seven minutes (thirty-eight tests, each
+130 when interrupted. A full run takes about thirteen minutes (fifty-one tests, each
 starting its own stack in 2–3 s; the idle tests wait out real idle timeouts).
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running test and its stack, sweeps, removes the
@@ -30,14 +30,21 @@ GPU device, no real input device.
 ```
 labwc        headless (wlroots' headless backend): only gives the nested compositor a
 │            GPU allocator — Hyprland 0.57 cannot run on the headless backend alone,
-│            and sway does not work as the parent
-└─ Hyprland  nested in labwc (Aquamarine's Wayland backend), Lua config written per run
+│            and sway does not work as the parent; its output pinned to 1920x1080
+│            (wlr-randr; the headless default is 1280x720)
+└─ Hyprland  nested in labwc (Aquamarine's Wayland backend), Lua config written per run;
+   │         its output, the window in labwc, set to 1920x1080 at runtime (the config's
+   │         rule does not take at start) and checked: OUTPUT_WIDTH × OUTPUT_HEIGHT, the
+   │         one size the tests' pointer coordinates are measured in (move_pointer)
    ├─ input/ltinput.py   one virtual keyboard + one virtual pointer, alive for the whole
    │                     test, fed commands through a FIFO; the keymap is the test's
    ├─ input/ltwindow.py  (stack_start --window) a solid magenta window: the desktop the
    │                     lock must hide
    ├─ dbus-daemon        (stack_start --session-bus) a private session bus, no activation
-   └─ the shell          `H2S_SHELL_DIR=<the run's copy> h2s-shell`, a plain start
+   └─ the launcher       `H2S_SHELL_DIR=<the run's copy> h2s-shell`, a plain start: the
+      │                  copy's scripts/launch.sh, which stays as the shell's supervisor
+      └─ the shell       its child, in a process group of its own; started again by the
+                         launcher when it dies (SUPERVISOR_PID / SHELL_PID in lib.sh)
 ```
 
 All of it runs with no new privileges (`setpriv --no-new-privs`, inherited by every
@@ -85,12 +92,13 @@ here may reach it.
 - **Private `HOME` and XDG directories** under the artifacts dir: the shell does not read
   or write the user's `~/.config/h2s_shell/config.json`, cache or state.
 - **The shell runs from a copy.** Quickshell reloads a shell on any file written in its
-  folder, and a reload while locked unlocks; so `run.sh` copies the checkout once per run
+  folder (and a reload while locked used to unlock); so `run.sh` copies the checkout once per run
   into the artifacts dir (`shell/`: everything but `tests/lock`, `.git` and `result*`)
   and the shell runs from there. Edits to the checkout during a run cannot disturb it;
   `run.sh` notes them, as the results are for the copy taken at the start. (The shell itself
   no longer reloads while locked — file watching is off then — and `reload-while-locked.sh`
-  checks that; the copy guards the rest of a run.) In the copy, `pam/` is replaced by
+  checks that; a reload asked for while locked keeps the lock, `reload-explicit.sh`; the
+  copy guards the rest of a run.) In the copy, `pam/` is replaced by
   configs that only deny: the shipped `pam/password` (`pam_unix`, the real account) is one
   of the configs the shell's password fallback can be, and a typed test string must never
   reach the real password check. Logs and screenshots go
@@ -137,7 +145,10 @@ stack that is not there). Unless a test's own script is given, the list must inc
 `h2s-shell-fingerprint`) and asks fprintd through the `gdbus` stand-in (`H2S_LOCK_TOOLS`;
 `--fprintd` implies `--logind`), which hands fprintd's calls to `standins/gdbus-fprintd`: it
 answers as fprintd would in the mode in `fprintd/mode` — `enrolled`, `none`, `second`,
-`nodevice`, `absent`, `hang`, `denied`, `nobus`, `malformed-devices`, `malformed-fingers`;
+`nodevice`, `absent`, `hang`, `denied`, `nobus`, `malformed-devices`, `malformed-fingers`,
+`warning` (a GLib warning on stderr, good replies), `gdbus-timeout` (gdbus's own "Timeout
+was reached"), `vanished` (the reader gone between the two calls), `multiline` (an error of
+two lines);
 `fprintd_mode <mode>` changes it during a test — and notes each call in `fprintd/log`.
 `methods-script.sh` runs the script alone against the same stand-in (no stack).
 
@@ -186,7 +197,11 @@ typed string can only ever reach a test stack or nothing.
   checks this by killing a conversation's PAM helper — only after making sure that the
   process is a child of the shell under test, runs Quickshell's binary and carries the
   run's marker. More than one waiting conversation fails the test: the shell should never
-  run two.
+  run two. Nobody answering, a round fails after 120 s; with `finger_timeout <seconds>` it
+  ends after that long in PAM's Error instead, as pam_fprintd's own time-out does
+  (PAM_AUTHINFO_UNAVAIL): the round leaves `timedout.<helper pid>`, and the stack's second
+  line (`pam/finger-error.sh`, `[success=ignore default=die]`) then fails, so the stack
+  returns its PAM_SYSTEM_ERR, which Quickshell reports as Error (`fingerprint-timeout.sh`).
 
 PAM modules are taken from the libpam Quickshell links (a module must match the library
 that loads it), by absolute path. Scripts run by `pam_exec` get no PATH. The stacks have
@@ -206,6 +221,15 @@ so that the shell handles them in one pass — an Unlock before the compositor c
 confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
 `release <pid>` in `logind/log` (`inhibitor_held`, `inhibitor_record`). No bus is reached
 by either (nor by the fprintd stand-in, above).
+
+**Caps Lock** is read from the keyboards' LEDs (`/sys/class/leds/*::capslock`); the nested
+compositor has no keyboard, and the machine's real LED is not the test's. So every shell
+runs with `H2S_LOCK_LEDS_DIR=$WORK/leds`, empty (Caps Lock unknown, no indicator) until a
+test writes one: `caps_led 1|0|none` (`caps-keypad.sh`).
+
+**Timings**: `stack_start --timings '<json>'` hands the shell `LockRules.timings` overrides
+(`H2S_LOCK_TEST_TIMINGS`), so that what takes minutes — five rounds that time out — runs in
+seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own.
 
 ## Reading the shell's state
 
@@ -246,19 +270,36 @@ press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 ```
 
-`stack_start` takes, beside the methods: `--keymap us|us-intl|us-compose` (the layout the
+`stack_start` takes, beside the methods: `--no-lock-restore` (the nested Hyprland with
+`misc:allow_session_lock_restore` off, its default), `--no-hyprland-ipc` (the shell without
+`HYPRLAND_INSTANCE_SIGNATURE`: it cannot ask Hyprland about its lock), `--reload-seam` (the
+shell's `locktest reload <hard>` IPC: `shell_ipc locktest reload false` asks for
+`Quickshell.reload()`), `--hyprland-debug` (Hyprland's debug log in `hyprland.log`: what it
+did with the lock and its surfaces), `--keymap us|us-intl|us-compose` (the layout the
 virtual keyboard sends: plain US, US international with dead keys and AltGr, US with a
 Compose key on the right Alt — tools.nix compiles them; the keyboard works out which key and
 modifiers type each character from the keymap itself, with `xkbcli how-to-type`, and a
 character no key gives directly is fatal), `--settings '<json>'` (the shell's settings, as
 the shell stores them: `write_settings` writes a config.json whose one profile sets these
 keys — short idle timeouts, a notification detail), `--session-bus` (with `notify <app>
-<summary> <body>` and `notification_server_up`), `--window` (the magenta stand-in). A test
+<summary> <body>` and `notification_server_up`), `--window` (the magenta stand-in), `--timings '<json>'` (the shell's timing overrides, above). A test
 may set `LOCKTEST_PASSWORD` before `stack_start` (a password with é in it; no `| & \ $ \` "
 '`). `password_details` lists, per check, the length in bytes and the SHA-256 of what the
 password stack received (`pam/check-detail.log`, never the text), and `password_detail_of
 <text>` gives the line a text would give; `screenshot_output_ppm <output> <name>` takes one
 output.
+
+Restarts (Stage 4): the launcher supervises the shell, so `SHELL_PID` changes when it is
+started again — `wait_for_new_shell <old pid> <seconds>` waits for the new one and sets it.
+`signal_shell <SIG>` signals the shell and `supervisor_release` tells the launcher to let it
+go (SIGUSR1: it is not started again), each only after checking the pid is the run's shell
+or launcher (`assert_shell_process`, `assert_supervisor_process`: the run's marker, the
+binary or the copy's launch.sh, the private runtime dir) — a wrong pid could be a process
+of the real session. `start_launcher` starts a launcher (and shell) again, as `stack_start`
+did. `start_lock_watch <name>` / `stop_lock_watch` poll `hyprctl -j locked` every 50 ms
+across a gap, `lock_watch_never_unlocked` says no poll saw it unlocked. `marker_file_is
+<locked|unlocked>` reads the lock marker on disk; `protocol_errors` / `no_protocol_errors`
+look for a protocol error or a killed client in both logs.
 
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
 print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
@@ -268,7 +309,9 @@ were expanded once: to wait on something that changes, pass a function (`no_fing
 <keysym>` (any keysym of the stack's keymap: `Return`, `BackSpace`, `Escape`, `Tab`,
 `dead_acute`, `Multi_key`, `KP_1`, `KP_Enter`, `Caps_Lock`, `Num_Lock`, …), `keys_text`
 (the keys for a text with Caps Lock off, whatever the locks are), `hold_key <keysym>
-<seconds>` (auto-repeat), `move_pointer x y`, `wake_prompt`. `type_text` refuses while Caps
+<seconds>` (auto-repeat), `move_pointer x y` (pixels of the 1920x1080 output),
+`send_input "abs x y w h" "click left|middle|right"`, `wake_prompt`; `caps_led`,
+`finger_timeout` (above). `type_text` refuses while Caps
 Lock is on (the text typed would not be the one asked for). Input goes through
 a FIFO to `input/ltinput.py`; a client that has died, or does not read within 5 s, aborts
 the test with its last words from `input.log`, and so does a character it cannot type
@@ -297,8 +340,9 @@ not keep it.
 
 `tools.nix` builds, from one pinned nixpkgs, labwc, Hyprland and hyprctl, grim, setpriv,
 a Python with pywayland, the Python bindings of the virtual keyboard/pointer and xdg-shell
-protocols, xkbcli, dbus-daemon, gdbus, and the keymaps (`share/keymaps/`: us, us-intl,
-us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh` and for
+protocols, xkbcli, dbus-daemon, gdbus, wl-copy/wl-paste (the primary selection a middle
+click would paste, set inside the nested compositor while locked: `paste.sh`), wlr-randr
+(labwc's output size), and the keymaps (`share/keymaps/`: us, us-intl, us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh` and for
 `tests/run-unit.sh`. The pin is the nixos-unstable revision the owner's system takes Hyprland
 from, so the test bed runs the same Hyprland as the real session (the repo's flake pins
 nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves —
@@ -308,7 +352,13 @@ is not pinned here: the shell runs with the one its launcher provides.
 
 ## What it cannot simulate
 
-Real fprintd and security keys; `pam_unix` with the real password; suspend and resume and
+That a dead shell's PAM helper keeps a real fingerprint reader claimed, and that fprintd
+releases the claim once the helper is killed: the stand-in reproduces the lingering helper
+(`restart-kill-locked`), not fprintd. The real Hyprland config (the owner's); a real
+logout (the launcher stops when the compositor's socket is gone — reasoning, not run).
+Real fprintd (its claim held for a whole lock with `timeout=-1`) and security keys; a real
+keyboard's Caps Lock LED following Caps Lock under Hyprland (the shell reads a file the test
+writes); `pam_unix` with the real password (`tests/manual/`); suspend and resume and
 the real logind (its signals are delivered by a stand-in, see the seams); real DRM hotplug
 and DPMS (outputs can be added and removed with `hyprctl output create headless` /
 `remove`); real input devices, and

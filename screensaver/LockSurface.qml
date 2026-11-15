@@ -79,16 +79,9 @@ WlSessionLockSurface {
             Lockscreen.surfacePress(root);
     }
 
-    function _key(key, text, autoRepeat, modifiers, qtKey) {
-        if (_surfaceId === null)
-            return;
-        // What Caps Lock is, from what the key typed (Qt reports no Caps Lock state):
-        // shown on the prompt, the usual reason for "my password is wrong"
-        const capsLock = LockIoRules.capsLockAfterKey(Lockscreen.capsLock, qtKey, text,
-            (modifiers & Qt.ShiftModifier) !== 0, autoRepeat);
-        if (capsLock !== Lockscreen.capsLock)
-            Lockscreen.surfaceCapsLock(root, capsLock);
-        Lockscreen.surfaceKey(root, key, text, autoRepeat);
+    function _key(key, text, autoRepeat) {
+        if (_surfaceId !== null)
+            Lockscreen.surfaceKey(root, key, text, autoRepeat);
     }
 
     // The lock fades in over the screen rather than cutting to it
@@ -100,19 +93,27 @@ WlSessionLockSurface {
         Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
     }
 
+    // Above everything, every button. Only the left button goes on to what is under it
+    // (the Unlock button, the field's cursor); every other button stops here: a middle
+    // click on a text input pastes the primary selection — whatever was last selected on
+    // the desktop would land in the password — and a right click is nobody's business here.
     MouseArea {
         anchors.fill: parent
         z: 100
         hoverEnabled: true
         propagateComposedEvents: true
+        acceptedButtons: Qt.AllButtons
         // Hidden while the prompt sleeps (on every screen), shown while it is awake
         cursorShape: root._view.promptSurface !== null ? Qt.ArrowCursor : Qt.BlankCursor
         onPositionChanged: mouse => { root._pointerAt(mouse.x, mouse.y); mouse.accepted = false }
-        // A press anywhere brings the prompt to this surface (the rules decide); it goes
-        // on to what is under it, the Unlock button
-        onPressed: mouse => { root._pointerPress(mouse.x, mouse.y); mouse.accepted = false }
-        onReleased: mouse => { mouse.accepted = false }
-        onClicked: mouse => { mouse.accepted = false }
+        // A press of any button brings the prompt to this surface (the rules decide); a
+        // left press goes on to what is under it, any other is taken here
+        onPressed: mouse => {
+            root._pointerPress(mouse.x, mouse.y);
+            mouse.accepted = mouse.button !== Qt.LeftButton;
+        }
+        onReleased: mouse => { mouse.accepted = mouse.button !== Qt.LeftButton }
+        onClicked: mouse => { mouse.accepted = mouse.button !== Qt.LeftButton }
     }
 
     // The key catcher: the one place keys arrive (see the header). A key is sent as it
@@ -121,11 +122,18 @@ WlSessionLockSurface {
     // catcher itself never edits. Text composed by Qt (dead keys, Compose, an input method)
     // comes as a commit instead of a key: sent on with that text, and emptied at once.
     // Invisible, and marked as a password to the input method: nothing predicted, learned
-    // or shown; a preedit (an input method's text before its commit) never shows.
+    // or shown; a preedit (an input method's text before its commit) never shows. Placed
+    // outside the surface, where no pointer can reach it (a middle click on it would paste
+    // the primary selection into the password); no selection by mouse, none kept; a plain
+    // TextInput has no context menu and takes no drops. The field (LockPrompt) is covered by
+    // the MouseArea above, which keeps every button but the left from it.
     TextInput {
         id: _keys
+        x: -100
+        y: -100
         width: 1
         height: 1
+        persistentSelection: false
         opacity: 0
         focus: true
         echoMode: TextInput.Password
@@ -138,7 +146,7 @@ WlSessionLockSurface {
 
         Keys.onPressed: event => {
             event.accepted = true;
-            root._key(LockIoRules.keyName(event.key), event.text, event.isAutoRepeat, event.modifiers, event.key);
+            root._key(LockIoRules.keyName(event.key), event.text, event.isAutoRepeat);
         }
 
         onTextChanged: {
@@ -146,7 +154,7 @@ WlSessionLockSurface {
                 return;
             const committed = text;
             text = "";
-            root._key("", committed, false, 0, 0);
+            root._key("", committed, false);
         }
     }
 

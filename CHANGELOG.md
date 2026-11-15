@@ -20,171 +20,30 @@ section to the new version and date.
   and a typed password never waits for the reader to give up. It shows what the reader or
   key is waiting for, and asks for anything more PAM wants after the password (a one-time
   code). A fingerprint or key configuration that asks for typed input is not used (it
-  would count failed password attempts); this leaves pam_u2f's interactive mode out.
+  would count failed password attempts); this leaves pam_u2f's interactive mode out. The
+  reader waits for a finger for as long as the screen is locked (`pam_fprintd timeout=-1`
+  in the shipped and the NixOS module's configs), and a round that times out anyway is
+  started again rather than counted against the reader. An account with an empty password
+  cannot unlock by password.
 - Lock screen: locks before the computer sleeps (Settings → Lockscreen, on by default),
   holding the sleep back until the compositor confirms the screen is covered (at most 4 s).
 - Lock screen: every authentication event goes to the shell's log — locks and unlocks and
   why, each PAM conversation started, answered, aborted or finished, the methods found,
   failures to run a helper — never what was typed.
-
-- Lock screen: says "Caps Lock is on" under the password field — told from the letters
-  typed (the shell has no other way to know it), so it shows from the first letter typed
-  with Caps Lock on, and goes when one is typed with it off.
-
-### Fixed
-- Lock screen: dead keys and Compose sequences type into the password field (and so does
-  what an input method commits). A password with "é" typed as ´ then e was checked as
-  "e" — the dead key was dropped — so it was refused, and the plain letter accepted in its
-  place. AltGr characters, Caps Lock, the keypad and held keys work as before.
-- Screensaver and idle lock: they could fail to come at all. Quickshell's idle monitor,
-  given the configured timeout once the settings were read (or any later change), could
-  stop reporting idle for good — seen every time in the test bed. Each is now made anew
-  whenever its settings change.
-- Lock screen: a notification's title or text that looks like markup is shown as written,
-  never as rich text (a link drawn, an image fetched while the screen is locked).
-- Lock screen: the prompt no longer wakes by itself when the lock appears under a resting
-  pointer on a slow first frame; a click in the first moments of a lock counts; the prompt
-  fits a small or highly scaled screen, a long password scrolls inside its field instead of
-  running over its edge, and a question too long for the field is shown in full above it.
-- Lock screen: it worked once per shell. After the first unlock the shell still believed
-  the screen locked (Quickshell 0.3.2 never reports a session lock's unlock): a typed
-  password was dropped without a word, the fingerprint reader was never asked again,
-  `ipc call lockscreen status` said `locked`, the screensaver and "lock after the
-  screensaver" never came back, and a prompt left showing at the unlock never woke on the
-  next lock. Every lock now starts afresh, and the shell no longer relies on that report.
-- Lock screen: "Verifying…" no longer sticks. A methods script that fails, prints nothing
-  or hangs (5 s) falls back to a password config of its own; a PAM config that cannot be
-  started says "Password check could not start"; a check that never answers is given up
-  after 90 s ("Password check timed out"). With a fingerprint reader set up, a typed
-  password no longer waits for it.
-- Lock screen: keys are no longer lost to focus changes. The key that wakes the prompt is
-  typed into it, and so are Enter and Backspace right after it, keys typed while the
-  prompt fades in, and keys typed on another screen (they go to the prompt where it is).
-  An Enter on an empty field sends nothing. (Dead keys, compose sequences and input
-  methods do not work in the field yet.)
-- Lock screen: a file written in the shell's folder while the screen is locked no longer
-  reloads the shell — a reload unlocked the screen with no password. Changes made while
-  locked take effect at the next change after unlocking.
-- Lock screen: never unlocks the compositor before it has confirmed the lock — a protocol
-  error that a strict compositor answers by killing the shell (the session then stays
-  locked for good) and a lenient one by unlocking. The lock waits for the confirmation as
-  long as it takes ("Waiting for the compositor…" after 5 s, e.g. a slow screen after a
-  suspend); the password can be checked meanwhile, and an unlock — by password, logind or
-  Escape — shows "Unlocking…" and happens when the compositor confirms.
-- Lock screen: holding Escape no longer unlocks (its repeats are ignored; Escape on a hidden
-  prompt only shows it).
-- Lock screen: a password config that cannot be used (PAM refuses to start it, or reports an
-  error) no longer makes every password fail for the rest of the lock: the next attempt
-  uses the fallback, which is now chosen like the methods script's password config
-  (`/etc/pam.d/h2s-shell-password` when readable, else `login` on NixOS, else the shipped
-  one) instead of always the shipped config.
-- Lock screen: which ways of unlocking the machine has is asked of fprintd over D-Bus, with
-  a time limit (4 s), instead of read from `fprintd-list`'s text. A machine without a
-  reader or an enrolled finger is no longer asked again at every wake of the prompt;
-  fprintd stuck (as it can be around a suspend) no longer leaves a process behind, and is
-  asked again later. A security key is offered only when the user has one registered where
-  the key's PAM config looks (its `authfile=`, or `~/.config/Yubico/u2f_keys`).
-- Lock screen: the shipped password config no longer unlocks an account that has no
-  password with whatever is typed (`nullok` removed), and the configs no longer carry
-  `account` lines that never ran. On NixOS the module's password config leaves out second
-  factors that would make the typed password wait or ask again (smartcard, face, one-time
-  codes…; each can be switched back on), and its fingerprint and security key configs hold
-  only their own module, so a global PAM switch can no longer put a password prompt in
-  them; the key's honours `security.pam.u2f.settings` but never `interactive`.
-- Lock screen: a security key config that never works stops being retried after a few
-  rounds per lock.
-- Lock screen: the field empties only when what was sent is taken; a second Enter while a
-  password is being checked is refused and keeps what was typed. The prompt hiding after
-  10 s idle no longer cancels a password check under way (a question left unanswered, such
-  as a one-time code, still is).
-- Lock screen: the prompt follows the screens: when the one showing it goes away (a
-  monitor unplugged, a laptop's screen over a suspend) it moves, awake, to another, and a
-  screen added while locked gets its own lock surface; a click brings the prompt there.
-- Lock screen: the fingerprint reader works again after the computer wakes. Its check was
-  started as the machine went to sleep and was dead on waking; now nothing is started
-  until it is back, and the reader is looked for again then.
-- Lock screen: logind's monitor no longer leaves `gdbus` processes behind when the shell
-  crashes, and no longer restarts every 10 s without a logind session; the sleep inhibitor
-  is taken again when it is lost.
-- Network settings: moving between the network pages no longer stops the new page's
-  updates; the popup and the Wi-Fi page no longer stop each other's scanning; a saved Wi-Fi
-  password with ':' or '\' shows as it is; a password being typed is never overwritten
-  when the shown one hides, and the eye works again after a change; connecting no longer
-  holds up every other button for as long as it waits.
-- Network popup: "Connect to hidden network" shows "Connecting…" for a name typed with a
-  space at its end too.
-- Network popup: VPNs are known by their profile's UUID, so two with the same name no
-  longer get mixed up, and several can be up at once — each row connects or disconnects
-  its own VPN (before, Disconnect took down whichever was found first) and says
-  "Connecting…" while it does; a failed connection is reported.
-- Network popup: a failed Wi-Fi connection says why (wrong password, out of range, not
-  allowed, or nmcli's own words) at once — nmcli's errors were never read, so "Wrong
-  password" never showed and a failure waited out a 30 s timeout. Saved networks are known
-  by their SSID, and "Forget" removes their profiles by UUID: a profile named otherwise
-  than its network was neither shown as saved nor forgotten.
-- The count of waiting toasts showed on every screen; it shows on the toasts' screen.
-- Music: skipping a paused track (the buttons or a swipe) no longer starts it playing in
-  players that do so against MPRIS, such as Spotify — the shell pauses it again.
-- `launch.sh --restart` (`h2s-shell --restart`) closes every running copy of the shell, not
-  only its own folder's: restarting the package's copy with a checkout running
-  (`H2S_SHELL_DIR`) left two shells.
-- On-screen keyboard: it shows when you tap a text field in a popup opened by touch and
-  hides when you tap anywhere else, as in a browser; tapping it keeps the popup and the
-  field. The same for the reply field on a notification. A popup opened by touch closes on
-  a tap outside it, and that tap no longer goes on to the window beneath. Fields say what
-  they are — digits for dates and times, password for passwords — so the keyboard can pick
-  its layout; a tap anywhere on a field's box focuses it. In the settings window the
-  keyboard hides after a field too, with Qt 6.12.
-- Calendar: the + and refresh icons take a tap from around them, not only on the glyph.
-- A hover popup no longer closes when the pointer goes back from it onto its bar widget.
-- Touch: a tap on a bar widget opens its popup even when the widget opens it on hover —
-  such a popup opened by a finger used to stay open for good. A popup opened by a tap
-  closes on a tap outside it and the bar, and takes the keyboard (a text field in it gets
-  typing, the on-screen keyboard too) without the pointer over it. Popups opened by the
-  mouse behave as before; one opening on hover does so 60 ms later.
-- Settings: the list of pages scrolls when the window is too short for it (a small
-  laptop screen); the pages at the bottom could not be reached.
-- Bluetooth stays off after a restart when you left it off. BlueZ powers the adapter on
-  whenever it starts; the shell now puts back the state it was last in.
-- Google Calendar: losing the network (e.g. right after waking the laptop) no longer signs
-  you out; only a sign-in Google itself has expired or revoked asks for a new login.
-- Music: the popup no longer opens short and grows to its height after.
-- A popup closed before it had appeared (another screen's opening at that moment) no
-  longer stays open for good, its widget lit and deaf to clicks.
-- Bar popups: each opens on its own bar's screen. They went to the screen with the focus,
-  which at the top happened to be the bar's.
-- After a review of the day's changes:
-  - Music: the ring round the cover no longer stays hidden for good when the cover fails
-    to load or its colours cannot be read; no small copy of the last cover shows where
-    the next has none; the cover's colours are read only when they are used.
-  - Music: dictation pauses every player that plays, hidden ones too, and resumes them.
-  - Music: the player list shows while any player is hidden, even with no other.
-  - Music: the ring round the cover is no longer cut at the top, and a glow no longer
-    spills outside the popup in any layout; the edge layouts follow the popup's real
-    edges at the bar's end.
-  - Music: cava keeps running through pauses instead of restarting each time.
-  - Music: a player's icon given as a file path shows.
-  - Notifications widget: a reload of the shell no longer makes every notification
-    unread (the bell rang until the panel was opened).
-  - Notifications widget: a notification its sender replaces (same id: a download's
-    progress, what is playing) counts as new and rings — once, if the panel was opened
-    since; further updates before the panel is opened again do not ring.
-  - Hiding a player never writes into a profile that is not in effect.
-- Popups under the middle of the bar (the calendar's top half) took no clicks: the hidden
-  launch warning banner still caught them, over every popup there.
-- Music panel: the seek bar shows. It had been there all along, 0 px tall.
-- Music panel: playerctld no longer shows as a second copy of the last player used.
-- Music panel: showing a paused player while another plays, the visualiser falls flat
-  instead of moving to the other's sound — smoothly, at the visualiser's frame rate, in
-  half a second (it fell in 10 steps a second, for up to two seconds).
-- Notifications: replying from the notification works. Apps that can take a reply (chat
-  apps, say) now get a reply field on the card — in the panel and on the toast — with
-  their own hint text; Enter or Send sends it, Escape clears it. A toast takes the
-  keyboard only while its reply field is under the pointer or being written, and does
-  not count down meanwhile. The field never showed before, and the shell did not tell
-  apps it could take replies.
-
-### Added
+- Lock screen: the screen stays locked when the shell does not. The launcher (`h2s-shell`)
+  now stays as the shell's supervisor and starts it again when it dies (a crash, a kill,
+  the OOM killer; at most 5 times in 2 minutes; not after a deliberate stop while unlocked),
+  and a shell that stopped while locked — also by `qs kill` or `h2s-shell --restart` —
+  locks again at once when it comes back. Under Hyprland this needs
+  `misc:allow_session_lock_restore = true`; without it Hyprland's "lockscreen app died"
+  screen stays, and the shell waits for the setting instead of getting itself killed
+  (`ipc call lockscreen status` says `compositor-locked`).
+- Lock screen: says "Caps Lock is on" under the password field, from the keyboard's Caps
+  Lock LED (`/sys/class/leds/*::capslock`, read when the prompt wakes and at each key; any
+  keyboard's LED on counts). Without such an LED it says nothing rather than guess.
+- Lock screen: a crash that Quickshell restarts in place no longer leaves the old
+  fingerprint conversation holding the reader: the restarted shell ends what its process
+  left.
 - Settings → System → Network → Overview: whether the computer is online; Wi-Fi, mobile
   broadband, airplane mode (every radio, Bluetooth too, put back as it was) and networking
   switches; each network device with its hardware, MAC, speed, signal, addresses, gateway,
@@ -425,13 +284,18 @@ section to the new version and date.
   most), instead of one accent dot for the day.
 
 ### Changed
+- Lock screen setup: `install.sh` now suggests starting the shell with `launch.sh
+  --restart` (detached and supervised, as the autostart runs it) instead of `launch.sh -d`,
+  which ran it unsupervised — nothing started it again after a crash while locked. It and
+  the README show how to register a further security key without overwriting the first
+  (`pamu2fcfg -n >> …`), and warn against `auth include system-auth` for the password
+  config (faillock: wrong passwords at the lock count toward an account lockout).
 - Lock screen: notifications show the app only by default ("Notifications on the lock
   screen show", Settings → Lockscreen): a message's text, a one-time code in it, is not for
   whoever stands at the locked screen. A config still holding the old default ("In full",
   which every config seeded before had) moves to the new one once; another choice stays.
   The two notification settings are no longer greyed out when the idle lock is off: they
   apply to every lock.
-### Changed
 - Popups slide out from under the bar as a whole, and back under it, instead of being
   uncovered by a growing cut; the curves joining them to the bar stay until only the
   popup's rounded end is left.
@@ -455,6 +319,171 @@ section to the new version and date.
   action used to be an empty button.
 
 ### Fixed
+- Lock screen: the fingerprint no longer stops working after a few minutes on a lock
+  nobody touches. Each round the reader's PAM module timed out on its own (30 s) counted
+  as a fault, and the fifth broke the fingerprint until the next sleep.
+- Lock screen: a middle click can no longer paste the primary selection (whatever was last
+  selected on the desktop) into the password.
+- Lock screen: Backspace, Delete and the arrow keys no longer split a character beyond the
+  basic plane (an emoji) in the password field, which sent PAM an invalid byte sequence.
+- Lock screen: the check for a fingerprint reader no longer fails on a warning printed by
+  gdbus, takes a user name and a key file name literally, and logs one line per reason.
+- Lock screen: a reload of the shell while locked no longer unlocks the screen — the new
+  generation takes the lock over (and a new authentication is needed); a hard reload
+  restarts the shell, which locks again. Files edited while locked are reloaded once right
+  after the unlock (they used to wait for the next file change). After a crash, the old
+  shell's fingerprint conversation no longer keeps the reader from the new one.
+- Lock screen: dead keys and Compose sequences type into the password field (and so does
+  what an input method commits). A password with "é" typed as ´ then e was checked as
+  "e" — the dead key was dropped — so it was refused, and the plain letter accepted in its
+  place. AltGr characters, Caps Lock, the keypad and held keys work as before.
+- Screensaver and idle lock: they could fail to come at all. Quickshell's idle monitor,
+  given the configured timeout once the settings were read (or any later change), could
+  stop reporting idle for good — seen every time in the test bed. Each is now made anew
+  whenever its settings change.
+- Lock screen: a notification's title or text that looks like markup is shown as written,
+  never as rich text (a link drawn, an image fetched while the screen is locked).
+- Lock screen: the prompt no longer wakes by itself when the lock appears under a resting
+  pointer on a slow first frame; a click in the first moments of a lock counts; the prompt
+  fits a small or highly scaled screen, a long password scrolls inside its field instead of
+  running over its edge, and a question too long for the field is shown in full above it.
+- Lock screen: it worked once per shell. After the first unlock the shell still believed
+  the screen locked (Quickshell 0.3.2 never reports a session lock's unlock): a typed
+  password was dropped without a word, the fingerprint reader was never asked again,
+  `ipc call lockscreen status` said `locked`, the screensaver and "lock after the
+  screensaver" never came back, and a prompt left showing at the unlock never woke on the
+  next lock. Every lock now starts afresh, and the shell no longer relies on that report.
+- Lock screen: "Verifying…" no longer sticks. A methods script that fails, prints nothing
+  or hangs (5 s) falls back to a password config of its own; a PAM config that cannot be
+  started says "Password check could not start"; a check that never answers is given up
+  after 90 s ("Password check timed out"). With a fingerprint reader set up, a typed
+  password no longer waits for it.
+- Lock screen: keys are no longer lost to focus changes. The key that wakes the prompt is
+  typed into it, and so are Enter and Backspace right after it, keys typed while the
+  prompt fades in, and keys typed on another screen (they go to the prompt where it is).
+  An Enter on an empty field sends nothing. (Dead keys, compose sequences and input
+  methods do not work in the field yet.)
+- Lock screen: a file written in the shell's folder while the screen is locked no longer
+  reloads the shell — a reload unlocked the screen with no password. Changes made while
+  locked take effect at the next change after unlocking.
+- Lock screen: never unlocks the compositor before it has confirmed the lock — a protocol
+  error that a strict compositor answers by killing the shell (the session then stays
+  locked for good) and a lenient one by unlocking. The lock waits for the confirmation as
+  long as it takes ("Waiting for the compositor…" after 5 s, e.g. a slow screen after a
+  suspend); the password can be checked meanwhile, and an unlock — by password, logind or
+  Escape — shows "Unlocking…" and happens when the compositor confirms.
+- Lock screen: holding Escape no longer unlocks (its repeats are ignored; Escape on a hidden
+  prompt only shows it).
+- Lock screen: a password config that cannot be used (PAM refuses to start it, or reports an
+  error) no longer makes every password fail for the rest of the lock: the next attempt
+  uses the fallback, which is now chosen like the methods script's password config
+  (`/etc/pam.d/h2s-shell-password` when readable, else `login` on NixOS, else the shipped
+  one) instead of always the shipped config.
+- Lock screen: which ways of unlocking the machine has is asked of fprintd over D-Bus, with
+  a time limit (4 s), instead of read from `fprintd-list`'s text. A machine without a
+  reader or an enrolled finger is no longer asked again at every wake of the prompt;
+  fprintd stuck (as it can be around a suspend) no longer leaves a process behind, and is
+  asked again later. A security key is offered only when the user has one registered where
+  the key's PAM config looks (its `authfile=`, or `~/.config/Yubico/u2f_keys`).
+- Lock screen: the shipped password config no longer unlocks an account that has no
+  password with whatever is typed (`nullok` removed), and the configs no longer carry
+  `account` lines that never ran. On NixOS the module's password config leaves out second
+  factors that would make the typed password wait or ask again (smartcard, face, one-time
+  codes…; each can be switched back on), and its fingerprint and security key configs hold
+  only their own module, so a global PAM switch can no longer put a password prompt in
+  them; the key's honours `security.pam.u2f.settings` but never `interactive`.
+- Lock screen: a security key config that never works stops being retried after a few
+  rounds per lock.
+- Lock screen: the field empties only when what was sent is taken; a second Enter while a
+  password is being checked is refused and keeps what was typed. The prompt hiding after
+  10 s idle no longer cancels a password check under way (a question left unanswered, such
+  as a one-time code, still is).
+- Lock screen: the prompt follows the screens: when the one showing it goes away (a
+  monitor unplugged, a laptop's screen over a suspend) it moves, awake, to another, and a
+  screen added while locked gets its own lock surface; a click brings the prompt there.
+- Lock screen: the fingerprint reader works again after the computer wakes. Its check was
+  started as the machine went to sleep and was dead on waking; now nothing is started
+  until it is back, and the reader is looked for again then.
+- Lock screen: logind's monitor no longer leaves `gdbus` processes behind when the shell
+  crashes, and no longer restarts every 10 s without a logind session; the sleep inhibitor
+  is taken again when it is lost.
+- Network settings: moving between the network pages no longer stops the new page's
+  updates; the popup and the Wi-Fi page no longer stop each other's scanning; a saved Wi-Fi
+  password with ':' or '\' shows as it is; a password being typed is never overwritten
+  when the shown one hides, and the eye works again after a change; connecting no longer
+  holds up every other button for as long as it waits.
+- Network popup: "Connect to hidden network" shows "Connecting…" for a name typed with a
+  space at its end too.
+- Network popup: VPNs are known by their profile's UUID, so two with the same name no
+  longer get mixed up, and several can be up at once — each row connects or disconnects
+  its own VPN (before, Disconnect took down whichever was found first) and says
+  "Connecting…" while it does; a failed connection is reported.
+- Network popup: a failed Wi-Fi connection says why (wrong password, out of range, not
+  allowed, or nmcli's own words) at once — nmcli's errors were never read, so "Wrong
+  password" never showed and a failure waited out a 30 s timeout. Saved networks are known
+  by their SSID, and "Forget" removes their profiles by UUID: a profile named otherwise
+  than its network was neither shown as saved nor forgotten.
+- The count of waiting toasts showed on every screen; it shows on the toasts' screen.
+- Music: skipping a paused track (the buttons or a swipe) no longer starts it playing in
+  players that do so against MPRIS, such as Spotify — the shell pauses it again.
+- `launch.sh --restart` (`h2s-shell --restart`) closes every running copy of the shell, not
+  only its own folder's: restarting the package's copy with a checkout running
+  (`H2S_SHELL_DIR`) left two shells.
+- On-screen keyboard: it shows when you tap a text field in a popup opened by touch and
+  hides when you tap anywhere else, as in a browser; tapping it keeps the popup and the
+  field. The same for the reply field on a notification. A popup opened by touch closes on
+  a tap outside it, and that tap no longer goes on to the window beneath. Fields say what
+  they are — digits for dates and times, password for passwords — so the keyboard can pick
+  its layout; a tap anywhere on a field's box focuses it. In the settings window the
+  keyboard hides after a field too, with Qt 6.12.
+- Calendar: the + and refresh icons take a tap from around them, not only on the glyph.
+- A hover popup no longer closes when the pointer goes back from it onto its bar widget.
+- Touch: a tap on a bar widget opens its popup even when the widget opens it on hover —
+  such a popup opened by a finger used to stay open for good. A popup opened by a tap
+  closes on a tap outside it and the bar, and takes the keyboard (a text field in it gets
+  typing, the on-screen keyboard too) without the pointer over it. Popups opened by the
+  mouse behave as before; one opening on hover does so 60 ms later.
+- Settings: the list of pages scrolls when the window is too short for it (a small
+  laptop screen); the pages at the bottom could not be reached.
+- Bluetooth stays off after a restart when you left it off. BlueZ powers the adapter on
+  whenever it starts; the shell now puts back the state it was last in.
+- Google Calendar: losing the network (e.g. right after waking the laptop) no longer signs
+  you out; only a sign-in Google itself has expired or revoked asks for a new login.
+- Music: the popup no longer opens short and grows to its height after.
+- A popup closed before it had appeared (another screen's opening at that moment) no
+  longer stays open for good, its widget lit and deaf to clicks.
+- Bar popups: each opens on its own bar's screen. They went to the screen with the focus,
+  which at the top happened to be the bar's.
+- After a review of the day's changes:
+  - Music: the ring round the cover no longer stays hidden for good when the cover fails
+    to load or its colours cannot be read; no small copy of the last cover shows where
+    the next has none; the cover's colours are read only when they are used.
+  - Music: dictation pauses every player that plays, hidden ones too, and resumes them.
+  - Music: the player list shows while any player is hidden, even with no other.
+  - Music: the ring round the cover is no longer cut at the top, and a glow no longer
+    spills outside the popup in any layout; the edge layouts follow the popup's real
+    edges at the bar's end.
+  - Music: cava keeps running through pauses instead of restarting each time.
+  - Music: a player's icon given as a file path shows.
+  - Notifications widget: a reload of the shell no longer makes every notification
+    unread (the bell rang until the panel was opened).
+  - Notifications widget: a notification its sender replaces (same id: a download's
+    progress, what is playing) counts as new and rings — once, if the panel was opened
+    since; further updates before the panel is opened again do not ring.
+  - Hiding a player never writes into a profile that is not in effect.
+- Popups under the middle of the bar (the calendar's top half) took no clicks: the hidden
+  launch warning banner still caught them, over every popup there.
+- Music panel: the seek bar shows. It had been there all along, 0 px tall.
+- Music panel: playerctld no longer shows as a second copy of the last player used.
+- Music panel: showing a paused player while another plays, the visualiser falls flat
+  instead of moving to the other's sound — smoothly, at the visualiser's frame rate, in
+  half a second (it fell in 10 steps a second, for up to two seconds).
+- Notifications: replying from the notification works. Apps that can take a reply (chat
+  apps, say) now get a reply field on the card — in the panel and on the toast — with
+  their own hint text; Enter or Send sends it, Escape clears it. A toast takes the
+  keyboard only while its reply field is under the pointer or being written, and does
+  not count down meanwhile. The field never showed before, and the shell did not tell
+  apps it could take replies.
 - Tooltips no longer fail to open when what they say changes at the moment they are
   asked to show.
 - Screensaver: notification previews show the text, no longer the body's HTML drawn
