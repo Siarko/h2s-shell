@@ -399,12 +399,13 @@ virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keybo
 which QtTest, sending events to the Qt window directly, cannot reach. It finds what to tap
 through the `shelltest` IPC (`Bar.qml`). See its README.
 
-`tests/lock/` runs the real shell from the checkout in an invisible, isolated compositor
-(Hyprland nested in a headless labwc, private runtime dir, no D-Bus, no seat) and drives
-its lock screen end to end: locked for real, keys typed and the pointer moved through the
+`tests/lock/` runs the real shell, from a copy of the checkout made once per run (so edits
+during a run cannot reload it), in an invisible, isolated compositor (Hyprland nested in a
+headless labwc, private runtime dir, no D-Bus, no seat, no new privileges) and drives its
+lock screen end to end: locked for real, keys typed and the pointer moved through the
 compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
-`scripts/lock-auth-methods.sh`). `tests/lock/run.sh` runs it; nothing appears on screen
-and the real session cannot be reached. See its README.
+`scripts/lock-auth-methods.sh`; the copy's own `pam/` configs only deny). `tests/lock/run.sh`
+runs it; nothing appears on screen and the real session cannot be reached. See its README.
 
 Everything else is verified by hand: run `quickshell` from the repo root and check that
 the bar renders, the clock ticks, cells respond, and popups toggle. Apart from the lock

@@ -3,8 +3,8 @@
 #
 #   nix build --no-link --print-out-paths --impure -f tests/lock/tools.nix
 #
-# prints one store path holding bin/ (labwc, Hyprland, hyprctl, grim, python3 with
-# pywayland), share/ltproto (Python bindings of the input protocols) and share/us.xkb (the
+# prints one store path holding bin/ (labwc, Hyprland, hyprctl, grim, setpriv, python3
+# with pywayland), share/ltproto (Python bindings of the input protocols) and share/us.xkb (the
 # keymap the virtual keyboard sends). run.sh does this itself.
 #
 # Why this nixpkgs and not the repo's flake.lock: the flake pins nixos-26.05 for the
@@ -12,7 +12,8 @@
 # (the owner's system takes Hyprland from there). The lock screen is a conversation with
 # the compositor, so the test bed uses the compositor the shell actually meets: this is
 # the nixos-unstable revision the owner's system is built from, and its Hyprland is the
-# very store path the real session runs. Move the pin when the system's Hyprland moves.
+# very store path the real session runs. Move the pin when the system's Hyprland moves
+# (run.sh prints a NOTE when the two versions differ).
 #
 # Quickshell is deliberately not here: the shell under test is started through the
 # installed `h2s-shell` launcher, with the Quickshell that launcher puts on PATH, as in
@@ -21,12 +22,11 @@
 { system ? builtins.currentSystem }:
 
 let
-  nixpkgs = builtins.fetchTree {
-    type = "github";
-    owner = "NixOS";
-    repo = "nixpkgs";
-    rev = "1d060086d60cb76a40cf37109f979d88a5bd6396";
-    narHash = "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8=";
+  # fetchTarball with a hash rather than fetchTree: the same store path, without needing
+  # the fetch-tree (or flakes) experimental feature
+  nixpkgs = builtins.fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/1d060086d60cb76a40cf37109f979d88a5bd6396.tar.gz";
+    sha256 = "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8=";
   };
   pkgs = import nixpkgs { inherit system; config = { }; overlays = [ ]; };
 
@@ -57,6 +57,8 @@ pkgs.linkFarm "h2s-locktest-tools" [
   { name = "bin/hyprctl"; path = "${pkgs.hyprland}/bin/hyprctl"; }
   { name = "bin/grim"; path = "${pkgs.grim}/bin/grim"; }
   { name = "bin/python3"; path = "${python}/bin/python3"; }
+  # Every process of a test runs with no new privileges (setpriv --no-new-privs)
+  { name = "bin/setpriv"; path = "${pkgs.util-linux}/bin/setpriv"; }
   { name = "share/ltproto"; path = "${protocols}/ltproto"; }
   { name = "share/us.xkb"; path = keymap; }
 ]

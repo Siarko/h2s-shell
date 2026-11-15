@@ -3,13 +3,17 @@
 #
 # run.sh hands over, in the environment:
 #   LOCKTEST_DIR           this directory
-#   LOCKTEST_REPO          the shell checkout under test
+#   LOCKTEST_SHELL         the copy of the checkout the shell under test runs from
 #   LOCKTEST_TOOLS         the store path tools.nix built (bin/, share/)
 #   LOCKTEST_PAM_MODULES   the PAM module directory matching Quickshell's libpam
 #   LOCKTEST_LAUNCHER      the h2s-shell launcher
 #   LOCKTEST_QS            the qs the launcher runs the shell with
 #   LOCKTEST_ARTIFACTS     this test's directory for logs and screenshots
 #   LOCKTEST_RUN_ID        a marker every process of the run carries, for the final sweep
+#   LOCKTEST_RUNTIME       this test's private, short runtime dir (run.sh removes it)
+#
+# run.sh starts this bash with no new privileges (setpriv --no-new-privs): everything
+# below inherits that, so no setuid program (pkexec, unix_chkpwd) gains anything.
 
 set -uo pipefail
 
@@ -39,7 +43,9 @@ abort() { printf '    FAIL (setup) %s\n' "$*"; FAILURES=$((FAILURES + 1)); exit 
 # backend that does not exist, so the nested compositor cannot open a seat, a DRM device
 # or real input devices. HOME and the XDG directories are private, so the user's
 # config.json is neither read nor written.
-RUN=$(mktemp -d /tmp/lt.XXXXXX) || abort "cannot create a runtime dir"
+RUN=${LOCKTEST_RUNTIME:-}
+[ -n "$RUN" ] && [ -d "$RUN" ] && [ -O "$RUN" ] && [ -z "$(ls -A "$RUN")" ] \
+    || abort "no fresh private runtime dir from run.sh (LOCKTEST_RUNTIME=$RUN)"
 chmod 700 "$RUN"
 mkdir -p "$WORK"/{home,xdg/config,xdg/cache,xdg/data,xdg/state,labwc,hypr,pam,finger}
 export XDG_RUNTIME_DIR=$RUN
@@ -54,7 +60,8 @@ export LOCKTEST_RUN_ID
 export PATH=$TOOLS/bin:$PATH
 unset WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE HYPRLAND_CMD NOTIFY_SOCKET \
     SWAYSOCK XDG_SESSION_ID XDG_SESSION_TYPE XDG_CURRENT_DESKTOP LABWC_PID QS_CONFIG_PATH \
-    QS_CONFIG_NAME DESKTOP_STARTUP_ID XDG_ACTIVATION_TOKEN
+    QS_CONFIG_NAME DESKTOP_STARTUP_ID XDG_ACTIVATION_TOKEN WAYLAND_SOCKET PIPEWIRE_REMOTE \
+    PIPEWIRE_RUNTIME_DIR PULSE_SERVER
 
 stack_stop() {
     local group
@@ -67,7 +74,8 @@ stack_stop() {
     done
     for group in "${PROCESS_GROUPS[@]}"; do kill -KILL -- "-$group" 2> /dev/null; done
     PROCESS_GROUPS=()
-    rm -rf "$RUN"
+    # The dir itself is run.sh's to remove (also when this bash is killed)
+    rm -rf "${RUN:?}"/* 2> /dev/null
 }
 trap stack_stop EXIT
 trap 'exit 1' INT TERM
@@ -162,13 +170,15 @@ EOF
     mkfifo "$INPUT_FIFO"
     spawn "$WORK/input.log" python3 -I "$LOCKTEST_DIR/input/ltinput.py" \
         "$TOOLS/share" "$TOOLS/share/us.xkb" "$INPUT_FIFO"
+    INPUT_PID=$SPAWNED_PID
     wait_until 10 grep -q ready "$WORK/input.log" || abort "the input client did not start (see input.log)"
 
     _write_pam_stacks "$methods"
 
     # The shell, as it is started for real: the launcher with H2S_SHELL_DIR pointing at
-    # the checkout, a plain start (never --restart, which stops every h2s-shell it finds)
-    H2S_SHELL_DIR=$LOCKTEST_REPO H2S_LOCK_AUTH_METHODS=$WORK/pam/methods.sh QT_QPA_PLATFORM=wayland \
+    # the run's copy of the checkout (run.sh), a plain start (never --restart, which stops
+    # every h2s-shell it finds)
+    H2S_SHELL_DIR=$LOCKTEST_SHELL H2S_LOCK_AUTH_METHODS=$WORK/pam/methods.sh QT_QPA_PLATFORM=wayland \
         spawn "$WORK/shell.log" "$LOCKTEST_LAUNCHER"
     local timeout_pid=$SPAWNED_PID
     wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
@@ -181,12 +191,24 @@ EOF
 _write_pam_stacks() {
     local methods=$1 file
     local bash_path coreutils
+    # Without a password method the shell falls back to a config of its own for the
+    # password: typed test strings must only ever reach the test stack
+    case " $methods " in
+        *" password "*) ;;
+        *) abort "the methods ($methods) must include password" ;;
+    esac
+    # The paths go into sed replacements and PAM lines: plain characters only
+    local path
+    for path in "$LOCKTEST_PAM_MODULES" "$WORK"; do
+        [[ "$path" =~ ^/[A-Za-z0-9._/+-]*$ ]] || abort "a path with characters a PAM stack cannot hold: $path"
+    done
     bash_path=$(command -v bash)
     coreutils=$(dirname "$(dirname "$(readlink -f "$(command -v rm)")")")
     for file in password fingerprint check-password.sh wait-finger.sh; do
         sed -e "s|@PAM_MODULES@|$LOCKTEST_PAM_MODULES|g" -e "s|@WORK@|$WORK|g" \
             -e "s|@BASH@|$bash_path|g" -e "s|@COREUTILS@|$coreutils/bin|g" \
             -e "s|@FINGER_DIR@|$WORK/finger|g" -e "s|@PASSWORD@|$LOCKTEST_PASSWORD|g" \
+            -e "s|@QS_BINARY@|$(_quickshell_binary)|g" \
             "$LOCKTEST_DIR/pam/$file" > "$WORK/pam/$file"
     done
     chmod +x "$WORK/pam/"*.sh
@@ -201,6 +223,14 @@ _write_pam_stacks() {
         echo "EOF"
     } > "$WORK/pam/methods.sh"
     chmod +x "$WORK/pam/methods.sh"
+}
+
+# The binary Quickshell's processes run (its PAM helper among them): the wrapper's target
+_quickshell_binary() {
+    local binary
+    binary=$(dirname "$LOCKTEST_QS")/.quickshell-wrapped
+    [ -e "$binary" ] || binary=$LOCKTEST_QS
+    readlink -f "$binary"
 }
 
 # ---- Talking to the shell -----------------------------------------------------------
@@ -232,10 +262,19 @@ compositor_locked_is() {
 compositor_locked() { compositor_locked_is true; }
 compositor_unlocked() { compositor_locked_is false; }
 
-# logind's inhibitors named h2s-shell on the REAL system bus, listed read-only: the shell
-# under test must never add one
-real_inhibitors() {
-    env -u DBUS_SYSTEM_BUS_ADDRESS systemd-inhibit --list --no-pager 2> /dev/null | grep -c 'h2s-shell'
+# The inhibitors on the REAL system bus (listed read-only) held by a process of this run,
+# by PID: the shell under test must never add one. By PID, not by name: the real shell's
+# inhibitor is called h2s-shell too.
+run_inhibitors() {
+    local pid
+    for pid in $(env -u DBUS_SYSTEM_BUS_ADDRESS systemd-inhibit --list --no-pager --no-legend 2> /dev/null \
+        | awk '{ for (i = 1; i + 2 <= NF; i++) if ($i ~ /^[0-9]+$/ && $(i + 2) ~ /^[0-9]+$/) { print $(i + 2); break } }'); do
+        [ "$(process_env "$pid" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] && echo "$pid"
+    done
+}
+# That the real list can be read at all (else the check above proves nothing)
+real_inhibitor_list_readable() {
+    env -u DBUS_SYSTEM_BUS_ADDRESS systemd-inhibit --list --no-pager --no-legend > /dev/null 2>&1
 }
 
 # The value of one variable in a process's environment
@@ -257,21 +296,44 @@ describe_lock() {
     log "compositor locked=$(hyprctl -j locked | tr -d ' \n') shell status=$(shell_ipc lockscreen status) state=$(shell_ipc lockscreen state)"
 }
 
-lock_by_ipc() { shell_ipc lockscreen lock > /dev/null; }
+# Locks, and makes sure the shell will check a typed password against the test stack and
+# nothing else: a shell whose methods script failed falls back to a config of its own
+lock_by_ipc() {
+    shell_ipc lockscreen lock > /dev/null
+    wait_until 5 _password_stack_is_ours \
+        || abort "the shell's password config is '$(state_field auth.passwordConfig 2> /dev/null)', not the test stack $WORK/pam/password: nothing will be typed"
+}
+_password_stack_is_ours() { state_is auth.passwordConfig "$WORK/pam/password"; }
 
 # ---- Input --------------------------------------------------------------------------
 
-# send <command...>: hands lines to the input client, returns once it has acted on all
+# send_input <command...>: hands lines to the input client, returns once the compositor
+# has seen all of them. A dead client is reported as such, with its last words, and the
+# write cannot block for long: opening a FIFO nobody reads would wait forever.
 send_input() {
     local before
+    _input_alive || abort "the input client is not running: $(_input_last_words)"
     before=$(_acknowledged)
-    printf '%s\n' "$@" > "$INPUT_FIFO"
-    wait_until 15 _acknowledged_at_least $((before + $#)) || abort "the input client stopped answering"
+    timeout 5 bash -c 'printf "%s\n" "${@:2}" > "$1"' _ "$INPUT_FIFO" "$@" \
+        || abort "the input client did not take the input within 5 s ($(_input_alive && echo "alive" || echo "dead: $(_input_last_words)"))"
+    local deadline=$((SECONDS + 15))
+    until _acknowledged_at_least $((before + $#)); do
+        _input_alive || abort "the input client died: $(_input_last_words)"
+        [ "$SECONDS" -lt "$deadline" ] || abort "the input client stopped answering (see input.log)"
+        sleep 0.05
+    done
 }
 _acknowledged() { cat "$INPUT_FIFO.ack" 2> /dev/null | wc -l; }
 _acknowledged_at_least() { [ "$(_acknowledged)" -ge "$1" ]; }
+# The client runs under timeout (INPUT_PID): alive while that timeout has a child
+_input_alive() { [ -n "${INPUT_PID:-}" ] && pgrep -P "$INPUT_PID" > /dev/null; }
+_input_last_words() { tail -n 2 "$WORK/input.log" 2> /dev/null | tr '\n' ' '; }
 
-type_text() { send_input "type $1"; }
+# Typing goes only to a shell whose password check is the test stack (see lock_by_ipc)
+type_text() {
+    _password_stack_is_ours || abort "not typing: the shell's password config is not the test stack"
+    send_input "type $1"
+}
 press_key() { send_input "key $1"; }
 move_pointer() { send_input "abs ${1:-960} ${2:-540} 1920 1080" "move 5 5"; }
 
@@ -290,31 +352,19 @@ wake_prompt() {
 # ---- Evidence -----------------------------------------------------------------------
 
 screenshot() { grim "$WORK/$1.png" 2> /dev/null && log "screenshot $1.png"; }
+# The same as a PPM (<name>.ppm), which plain Python reads
+screenshot_ppm() { grim -t ppm "$WORK/$1.ppm" 2> /dev/null && log "screenshot $1.ppm"; }
 
 # reddish_pixels <name>: takes a screenshot (kept as <name>.ppm, a format plain Python
 # reads) and counts the clearly red pixels in the middle of the screen, where the prompt
 # is. Red is how the prompt shows an error; the corner, where Hyprland puts its own red
 # warning, is left out.
+#
+# The heuristic depends on the built-in theme's error colour being a clear red.
 reddish_pixels() {
     grim -t ppm "$WORK/$1.ppm" 2> /dev/null || { echo -1; return; }
-    python3 -I -c '
-import sys
-data = open(sys.argv[1], "rb").read()
-fields, position = [], 0
-while len(fields) < 4:
-    while data[position:position + 1].isspace():
-        position += 1
-    if data[position:position + 1] == b"#":
-        position = data.index(b"\n", position)
-        continue
-    end = position
-    while not data[end:end + 1].isspace():
-        end += 1
-    fields.append(data[position:end])
-    position = end
-position += 1
-width, height = int(fields[1]), int(fields[2])
-pixels = data[position:]
+    python3 -I -c "$_PPM_READER"'
+width, height, pixels = read_ppm(sys.argv[1])
 count = 0
 for y in range(height * 3 // 10, height * 7 // 10):
     row = y * width * 3
@@ -324,6 +374,51 @@ for y in range(height * 3 // 10, height * 7 // 10):
             count += 1
 print(count)' "$WORK/$1.ppm"
 }
+
+# prompt_region_changes <name-a> <name-b>: of two screenshots taken with
+# `grim -t ppm` (<name>.ppm), the number of pixels in the prompt's area (the middle of the
+# screen, as for reddish_pixels) that differ clearly; -1 when one cannot be read
+prompt_region_changes() {
+    python3 -I -c "$_PPM_READER"'
+try:
+    width, height, first = read_ppm(sys.argv[1])
+    other_width, other_height, second = read_ppm(sys.argv[2])
+except Exception:
+    print(-1)
+    sys.exit()
+if (width, height) != (other_width, other_height):
+    print(-1)
+    sys.exit()
+count = 0
+for y in range(height * 3 // 10, height * 7 // 10):
+    row = y * width * 3
+    for x in range(width * 3 // 10, width * 7 // 10):
+        offset = row + x * 3
+        if max(abs(first[offset + channel] - second[offset + channel]) for channel in range(3)) > 40:
+            count += 1
+print(count)' "$WORK/$1.ppm" "$WORK/$2.ppm"
+}
+
+# A binary PPM (P6) reader for the snippets above
+_PPM_READER='
+import sys
+def read_ppm(path):
+    data = open(path, "rb").read()
+    fields, position = [], 0
+    while len(fields) < 4:
+        while data[position:position + 1].isspace():
+            position += 1
+        if data[position:position + 1] == b"#":
+            position = data.index(b"\n", position)
+            continue
+        end = position
+        while not data[end:end + 1].isspace():
+            end += 1
+        fields.append(data[position:end])
+        position = end
+    position += 1
+    return int(fields[1]), int(fields[2]), data[position:]
+'
 
 # ---- The fingerprint stand-in -------------------------------------------------------
 

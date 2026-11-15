@@ -24,3 +24,7 @@ check "the prompt shows the error in red" test "$red_after" -gt $((red_before + 
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the right password typed next unlocks" compositor_unlocked
+# The verdicts came from the test stack's script, not from somewhere else
+log "password checks: $(tr '\n' ' ' < "$WORK/pam/check.log" 2> /dev/null)"
+check "the test stack's check ran, saw the wrong password and then the right one" \
+    test "$(tr '\n' ' ' < "$WORK/pam/check.log" 2> /dev/null)" = "wrong right "

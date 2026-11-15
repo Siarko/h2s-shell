@@ -13,7 +13,9 @@ Usage: ltinput.py <protocol-dir> <keymap-file> <fifo>
 <protocol-dir> holds the generated `ltproto` bindings (tools.nix builds them). Commands,
 one per line, are written to <fifo>:
 
-  type <text>          type ASCII text (US layout)
+  type <text>          type ASCII text (US layout); a character the table below lacks
+                       ends the client with an error before anything is typed, so a
+                       typed password is always exactly the one asked for
   key <Name>           Return | BackSpace | Escape | Tab | space
   move <dx> <dy>       relative motion
   abs <x> <y> <w> <h>  absolute motion in a w*h extent
@@ -21,9 +23,11 @@ one per line, are written to <fifo>:
   sleep <seconds>
   quit
 
-Each command, once the compositor has seen it (a roundtrip), is acknowledged by a line
-"done <n> <command>" appended to <fifo>.ack: the caller waits for it, so a test never
-races its own input.
+Each command, once the compositor has received it (a roundtrip), is acknowledged by a
+line "done <n> <command>" appended to <fifo>.ack: the caller waits for it, so a test
+never races its own input into the compositor. The acknowledgement says nothing about
+the shell: whether the shell has received and handled the input is for the test to
+observe (through the shell's state).
 """
 import os
 import sys
@@ -118,10 +122,12 @@ def main():
                     continue
                 command, _, argument = line.partition(" ")
                 if command == "type":
+                    unmapped = sorted({character for character in argument if character not in KEYS})
+                    if unmapped:
+                        print("fatal: cannot type", unmapped, "(not in ltinput.py's key table)",
+                              file=sys.stderr, flush=True)
+                        os._exit(3)  # sys.exit crashes in pywayland's teardown
                     for character in argument:
-                        if character not in KEYS:
-                            print("unmapped character", repr(character), file=sys.stderr)
-                            continue
                         press(*KEYS[character])
                 elif command == "key":
                     press(NAMED_KEYS[argument])
