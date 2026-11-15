@@ -36,7 +36,10 @@ PopupWidget {
             // keeps the plain full glyph and lets the colour say the rest,
             // the same way the ethernet icon works.
             text: {
-                if (!NetworkManager.wifiConnected)
+                // Serving a hotspot: no signal to show, the access point instead
+                if (WifiManager.mode === "hotspot")
+                    return "󰀃"
+                if (WifiManager.mode !== "connected")
                     return "󰤨"
                 if (WifiManager.wifiSignal >= 75)
                     return "󰤨"
@@ -48,13 +51,13 @@ PopupWidget {
             }
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
-            color: NetworkManager.wifiConnected ? Theme.accent : Theme.textPrimary
+            color: WifiManager.mode === "connected" || WifiManager.mode === "hotspot" ? Theme.accent : Theme.textPrimary
         }
 
         // VPN — shown only while a tunnel is actually up
         Text {
-            visible: VpnManager.activeVpn !== ""
-            text: VpnManager.activeVpnType === "wireguard" ? "󰒃" : "󰌾"
+            visible: VpnManager.activeVpns.length > 0
+            text: VpnManager.activeType === "wireguard" ? "󰒃" : "󰌾"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.accent

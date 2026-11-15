@@ -32,6 +32,9 @@ Singleton {
     // is exactly what activeDeviceType cannot express.
     readonly property bool ethernetConnected: ethernetState.startsWith("connected")
     readonly property bool wifiConnected: wifiState.startsWith("connected")
+    // Some link other than Wi-Fi is up — a cable or a modem — so a hotspot on the Wi-Fi
+    // still has internet to share
+    property bool otherLinkConnected: false
 
     // -------------------------------------------------------------------------
     // Device status — device/type/state/connection
@@ -65,6 +68,7 @@ Singleton {
         var ethernetProfile = ""
         var wifiDeviceName = ""
         var wifiDeviceState = ""
+        var otherLink = false
         for (var i = 0; i < lines.length; i++) {
             var parts = Nmcli.splitTerse(lines[i].trim())
             if (parts.length < 3) continue
@@ -77,6 +81,8 @@ Singleton {
             // what keeps them from being mistaken for the real port.
             if (state === "unmanaged") continue
             var connectedNow = state.startsWith("connected")
+            if (connectedNow && (type === "ethernet" || type === "gsm" || type === "cdma"))
+                otherLink = true
             if (type === "wifi") {
                 hasWifiAdapter = true
                 // Prefer a radio that is actually up over whichever is listed first
@@ -101,6 +107,7 @@ Singleton {
             }
         }
         root.wifiAvailable = hasWifiAdapter
+        root.otherLinkConnected = otherLink
         root.ethernetDevice = ethernetDeviceName
         root.ethernetState = ethernetDeviceState
         root.ethernetConnection = ethernetProfile

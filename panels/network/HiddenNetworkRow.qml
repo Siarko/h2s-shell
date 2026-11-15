@@ -12,6 +12,8 @@ Rectangle {
     property bool expanded: false
     property string ssidText: ""
     property string passwordText: ""
+    // Empty is an open network; otherwise one WPA can take (NetworkRules)
+    readonly property bool _passwordWrong: passwordText !== "" && !NetworkRules.isWifiPassword(passwordText, "wpa-psk")
 
     // The header, and with it the fields when open: as tall as they are (with a little
     // room below)
@@ -89,15 +91,34 @@ Rectangle {
                 outlined: true
                 placeholder: "Password (optional)"
                 password: true
+                problem: root._passwordWrong
                 onTextEdited: root.passwordText = text
+                onAccepted: _connect.clicked()
             }
 
             SmallButton {
-                label: "Connect"
+                id: _connect
+                label: WifiManager.connecting && WifiManager.connectingTo === root.ssidText.trim() ? "Connecting…" : "Connect"
                 kind: "save"
-                available: root.ssidText !== ""
-                onClicked: WifiManager.connectToHiddenWifi(root.ssidText, root.passwordText)
+                available: root.ssidText.trim() !== "" && !root._passwordWrong && !WifiManager.connecting
+                onClicked: if (available) WifiManager.connectToHiddenWifi(root.ssidText.trim(), root.passwordText)
             }
+        }
+
+        // A password that cannot be one, or why connecting failed
+        Text {
+            width: parent.width
+            visible: text !== ""
+            wrapMode: Text.WordWrap
+            text: root._passwordWrong ? "8 to 63 characters."
+                : WifiManager.connectFailed && WifiManager.failedSsid === root.ssidText.trim()
+                    ? (WifiManager.failedKind === "password" ? "Wrong password"
+                        : WifiManager.failedKind === "notFound" ? "No network of that name in range"
+                        : WifiManager.failedMessage)
+                : ""
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.warning
         }
     }
 }

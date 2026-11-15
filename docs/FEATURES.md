@@ -55,8 +55,8 @@ unavailable. So ethernet and wifi both up shows two green icons.
   up but has no carrier, i.e. the cable is out.
 - **WiFi** — hidden entirely while the radio is off. The glyph carries signal strength
   once connected.
-- **VPN** — shown only while a tunnel is actually up; shield for WireGuard, padlock
-  otherwise.
+- **VPN** — shown only while a tunnel is actually up; shield when every VPN up is
+  WireGuard, padlock otherwise.
 
 Container and VM interfaces (veth pairs, taps) report as type `ethernet` to
 NetworkManager but are unmanaged, and are ignored when picking which port to report on.
@@ -88,7 +88,8 @@ Opened from their bar widget, rendered in the single popup below the bar.
   selection, and a per-application volume row for every Pipewire stream. Per-app volumes
   are remembered across restarts and reapplied when the app reappears.
 - **Bluetooth** — adapter toggle, paired and discovered devices, connect/disconnect.
-- **Network** — VPN connections, ethernet with a connect toggle, wifi with a radio
+- **Network** — VPN connections (by UUID, several up at once, each its own Connect /
+  Disconnect with "Connecting…"), ethernet with a connect toggle, wifi with a radio
   toggle, the scanned network list with signal strength and security, hidden-network
   entry, saved-profile management, plus live throughput (click it for a
   download/upload history graph), IP and DNS per link.
@@ -185,6 +186,70 @@ Two independent stages, both driven by Wayland idle notifications:
   reached either after the screensaver or on its own idle timer, and shows a password
   prompt and optionally the notification list. On multi-monitor only one screen shows
   the prompt.
+
+## Network settings
+
+Settings → System → Network unfolds into its pages (docs/plans/network.md). **Overview**
+(`singletons/network/NetworkOverview.qml`): online or not (NetworkManager's connectivity),
+the Wi-Fi, mobile broadband, airplane-mode and networking switches, each device with its
+hardware, MAC, speed, Wi-Fi signal and channel, addresses, gateway, DNS, search domains and
+MTU (bridges, containers' and tunnels folded under "Other devices"), and the hostname, a
+global DNS and the connectivity check — through `nmcli` and NetworkManager's D-Bus
+properties (`busctl`); a change refused for want of rights goes to the polkit prompt.
+**Wi-Fi** (shown when the computer has Wi-Fi): the radio, the network in use, the saved
+networks with connect, autoconnect, priority, the password (shown for 30 s, or changed)
+and forget, a hidden network, and "Find networks": the networks in range sliding in from
+the right — the popup's own list (`panels/network/WifiNetworkList.qml`), so connecting works
+the same in both; the Overview's Wi-Fi card and summary line lead there. **Hotspots**:
+this computer's own networks (Wi-Fi profiles in access-point mode, IPv4 "Be the router"),
+each a card like a saved network's — turn on (asking first when it would leave the network
+the Wi-Fi is on with no cable or modem to share), turn off (by the profile, so the saved
+network comes back), start automatically, the password shown, the devices on it (IP and
+MAC from `ip neigh`, every 5 s), edit, forget; "New hotspot" opens the editor on a fresh
+one: the computer's name, 2.4 GHz, WPA2, a random 12-letter password.
+While one is on, the network popup shows it in the Wi-Fi network's place (devices, speed,
+address, "Turn off hotspot") instead of the list, and the bar shows an access point. The
+popup lists the saved hotspots under the hidden network (`panels/network/HotspotRow.qml`),
+each with "Turn on".
+**Ethernet** (with a wired device): each device's card or "Cable unplugged", and the wired
+profiles with use or disconnect, autoconnect, priority and forget.
+**The connection editor** (a profile → Edit connection…,
+`panels/settings/NetworkConnectionEditor.qml`): general, IPv4, IPv6, DNS, routing (only
+its own network, route metric, require the family), "Be the router" (this computer's
+address, the range handed out, the lease time), and the Wi-Fi's or the cable's own
+settings; every option explained (on hover, and the picked one's under it); wrong fields marked (`NetworkRules.editorErrors`), only the
+changes sent, in one `nmcli connection modify` (`editorChanges`); on the connection in use,
+"Save and reconnect" and a 20 s "Keep these settings?" that puts the old ones back.
+Saved profiles are known by UUID (`NetworkProfiles`); commands that change something report
+nmcli's errors (`CommandAction`, `Nmcli.errorKind`).
+**VPN** (`panels/settings/NetworkVpnSettings.qml`): each VPN profile as a card — its kind
+(WireGuard, or its plugin's), whether it is up, its server; connect, disconnect, start
+automatically (WireGuard), edit, delete; while up its interface, address, DNS, the data it
+moved and its speed. "Import…" makes a profile from a VPN's file (a WireGuard .conf —
+imported off, from a copy named for a valid interface —, an OpenVPN .ovpn, another
+plugin's); "New WireGuard" opens the editor on a fresh profile. WireGuard's part of the
+editor: interface, private key (Generate with `wg`, the public key shown to copy; pasted
+when wireguard-tools is missing, which a note says), listen port, MTU, the peers (public
+key, endpoint, allowed IPs with "All traffic", preshared key, keepalive). A Wi-Fi or wired
+profile's editor picks VPNs to "Connect a VPN with it" (`system.vpnWithNetworks`,
+VpnManager, `NetworkRules.vpnWithNetworkPlan`): wanted while a linked network is up, taken
+down when none is if the shell brought them up (remembered in Config), held down when
+taken down by hand — the shell's doing, from its start (shell.qml), as
+NetworkManager's connection.secondaries takes no WireGuard; the VPN's card lists them.
+Only through the VPN (`singletons/network/VpnLockdown.qml`): always, or on the networks set
+for it in their editors — the table `inet h2s_vpn_lockdown`, built by
+`scripts/h2s-vpn-lockdown` (root's, through pkexec; it takes checked settings, never rules),
+letting out only loopback, the VPNs' interfaces and servers, virtual interfaces, DNS, DHCP
+and IPv6 ND, and the local network when allowed; passed-on traffic only through a VPN.
+"Password-free blocking" installs that script to /usr/local/libexec/h2s-vpn-lockdown with
+a polkit rule for this user (Install… / Remove…, its state on the page, the script and the
+rule shown in full; on NixOS a module to import); then no password is asked, and its
+`status` is checked at the start, after network events and every 5 minutes to mend a
+firewall reload. Without it each switch asks, and
+what was switched on in which boot is kept in Config.
+"Files you can import" lists each kind (`NetworkRules.vpnImportKinds`) with its
+files and whether it can be imported now — a missing plugin named with what it is for,
+other installed plugins after. Modem follows.
 
 ## Authentication prompts (polkit)
 

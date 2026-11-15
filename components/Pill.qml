@@ -10,6 +10,8 @@ Rectangle {
     property bool picked: false
     property int fontSize: Theme.fontSizeSmall
     property int minimumHeight: Theme.pill.minHeight
+    // What the choice means, shown on hover ("" none)
+    property string tooltip: ""
     signal clicked
 
     implicitWidth: _label.implicitWidth + 2 * Theme.pill.horizontalPadding
@@ -35,5 +37,11 @@ Rectangle {
         id: _area
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
+    }
+
+    HoverTip {
+        target: root
+        shown: root.tooltip !== "" && _area.containsMouse
+        text: root.tooltip
     }
 }

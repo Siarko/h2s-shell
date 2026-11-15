@@ -5,6 +5,11 @@ import qs.singletons
 // The settings window's page list for the tab that is open, with a mark on the selected
 // page and ✎ on pages where the theme edited has unsaved changes (a page's `draftGroups`).
 // Pages are the window's (SettingsWindow.pages); clicking one asks with `pageClicked`.
+//
+// A page with `group: true` is a heading for the pages naming it as their `parent`: they
+// show under it, indented, while one of them is open, and fold away when another page
+// opens — no toggle of their own; ▾/▸ only shows which. The window opens a group's first
+// page when the group is clicked. A page's `shown` function hides it while it returns false.
 Item {
     id: root
 
@@ -26,6 +31,13 @@ Item {
         return pages[_pageIndex(id)]?.tab;
     }
 
+    function _parentOf(id) {
+        return pages[_pageIndex(id)]?.parent ?? "";
+    }
+
+    // The group whose pages show: the open page's parent
+    readonly property string _openGroup: _parentOf(selectedPage)
+
     // The mark slides from the page before only when the page changes within a tab: it
     // sits at the page plus an offset that animates to nothing. Anything else that moves
     // the list (the picker above it growing, a change of tab) moves the mark with it at
@@ -46,7 +58,8 @@ Item {
         const fromRow = _rowOf(from);
         const toRow = _rowOf(to);
         _markSlide.stop();
-        if (!fromRow || !toRow || _tabOf(from) !== _tabOf(to)) {
+        // Into or out of a group the list itself changes height: the mark goes at once
+        if (!fromRow || !toRow || _tabOf(from) !== _tabOf(to) || _parentOf(from) !== _parentOf(to)) {
             _markOffset = 0;
             return;
         }
@@ -95,8 +108,13 @@ Item {
                 required property int index
                 readonly property bool selected: modelData.id === root.selectedPage
                 readonly property Item row: _row
-                // Only the pages of the tab that is open
-                visible: modelData.tab === root.tab
+                readonly property bool _child: !!modelData.parent
+                // A group with one of its pages open: lit faintly, the page itself marked
+                readonly property bool _groupOpen: !!modelData.group && root._openGroup === modelData.id
+                // Only the pages of the tab that is open; a group's pages only while it is open
+                // A page with `shown` only while it says so (a device the computer has)
+                visible: modelData.tab === root.tab && (!_child || root._openGroup === modelData.parent)
+                    && (modelData.shown ? modelData.shown() : true)
                 width: _column.width
                 height: _row.y + _row.height
 
@@ -113,15 +131,25 @@ Item {
                     id: _row
                     y: _delegate.modelData.separatorBefore ? 13 : 0
                     width: parent.width
-                    height: 34
+                    height: _delegate._child ? 30 : 34
                     radius: Theme.settings.sidebarItemRadius
                     // The selected one is marked by the sliding mark above
-                    color: _rowArea.lit && !_delegate.selected
+                    color: (_rowArea.lit && !_delegate.selected) || _delegate._groupOpen
                         ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     // ✎: the theme edited has unsaved changes on this page. On its own at the
                     // right, so cutting a long name never hides it.
+                    // A group: open or folded
+                    Text {
+                        visible: !!_delegate.modelData.group
+                        anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 10 }
+                        text: _delegate._groupOpen ? "▾" : "▸"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textMuted
+                    }
+
                     Text {
                         id: _changedMark
                         visible: (Theme.drafts, (_delegate.modelData.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
@@ -136,7 +164,7 @@ Item {
                         anchors {
                             verticalCenter: parent.verticalCenter
                             left: parent.left
-                            leftMargin: 10
+                            leftMargin: _delegate._child ? 24 : 10
                             right: _changedMark.visible ? _changedMark.left : parent.right
                             rightMargin: 6
                         }
@@ -144,8 +172,8 @@ Item {
                         elide: Text.ElideRight
                         text: _delegate.modelData.label
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBodyLarge
-                        color: _delegate.selected ? Theme.textPrimary : Theme.textSecondary
+                        font.pixelSize: _delegate._child ? Theme.fontSizeBody : Theme.fontSizeBodyLarge
+                        color: _delegate.selected || _delegate._groupOpen ? Theme.textPrimary : Theme.textSecondary
                         Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                     }
 

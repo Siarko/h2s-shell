@@ -21,6 +21,10 @@ Item {
 
     property real rxSpeed: 0
     property real txSpeed: 0
+    // The interface's byte counters as last read (-1 not yet): what it received and sent
+    // since it came up
+    property real rxTotal: -1
+    property real txTotal: -1
 
     // History.append samples in bytes/s, one per tick while the link is up, for the graph
     property var rxHistory: []
@@ -41,6 +45,8 @@ Item {
         _txPrevious = -1
         rxSpeed = 0
         txSpeed = 0
+        rxTotal = -1
+        txTotal = -1
     }
 
     KernelFile {
@@ -74,6 +80,8 @@ Item {
     // Divides by the time actually elapsed, not by intervalMs: a profile can change the
     // rate between two reads. `now` is a parameter for the tests.
     function _update(rxBytes, txBytes, now = Date.now()) {
+        rxTotal = rxBytes
+        txTotal = txBytes
         if (_rxPrevious < 0 || now <= _previousTime) {
             _rxPrevious = rxBytes
             _txPrevious = txBytes

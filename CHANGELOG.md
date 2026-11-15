@@ -11,6 +11,22 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Fixed
+- Network settings: moving between the network pages no longer stops the new page's
+  updates; the popup and the Wi-Fi page no longer stop each other's scanning; a saved Wi-Fi
+  password with ':' or '\' shows as it is; a password being typed is never overwritten
+  when the shown one hides, and the eye works again after a change; connecting no longer
+  holds up every other button for as long as it waits.
+- Network popup: "Connect to hidden network" shows "Connecting…" for a name typed with a
+  space at its end too.
+- Network popup: VPNs are known by their profile's UUID, so two with the same name no
+  longer get mixed up, and several can be up at once — each row connects or disconnects
+  its own VPN (before, Disconnect took down whichever was found first) and says
+  "Connecting…" while it does; a failed connection is reported.
+- Network popup: a failed Wi-Fi connection says why (wrong password, out of range, not
+  allowed, or nmcli's own words) at once — nmcli's errors were never read, so "Wrong
+  password" never showed and a failure waited out a 30 s timeout. Saved networks are known
+  by their SSID, and "Forget" removes their profiles by UUID: a profile named otherwise
+  than its network was neither shown as saved nor forgotten.
 - The count of waiting toasts showed on every screen; it shows on the toasts' screen.
 - Music: skipping a paused track (the buttons or a swipe) no longer starts it playing in
   players that do so against MPRIS, such as Spotify — the shell pauses it again.
@@ -74,6 +90,82 @@ section to the new version and date.
   apps it could take replies.
 
 ### Added
+- Settings → System → Network → Overview: whether the computer is online; Wi-Fi, mobile
+  broadband, airplane mode (every radio, Bluetooth too, put back as it was) and networking
+  switches; each network device with its hardware, MAC, speed, signal, addresses, gateway,
+  DNS and MTU; the hostname, a global DNS over every connection's, and the connectivity
+  check. Pages of the settings' sidebar can unfold into sub-pages (Network → Overview).
+- Settings → System → Network → Wi-Fi: the radio and the network in use; the saved networks
+  (in use, in range, out of range; security, hidden, last used), each with connect or
+  disconnect, connect automatically, priority (which wins when several are in range), the
+  password — shown for a while from NetworkManager, or changed — and forget; joining a
+  network that hides its name; "Find networks" slides in the networks in range from the
+  right, to connect to a new one as in the network popup (the same list). The Overview's
+  Wi-Fi card and summary line lead to it.
+- Settings → System → Network → Ethernet (with a wired device): each device's card, or that
+  its cable is out, and the wired profiles — in use or when last, use or disconnect,
+  connect automatically, priority, forget. The Overview's Ethernet card and line lead to it.
+- Only through the VPN (a kill switch): "Block traffic outside a VPN, always" on the VPN
+  page, or "Block traffic outside a VPN here" in a Wi-Fi or wired profile's editor — an
+  nftables table loaded through pkexec that lets out only the VPNs, their servers, joining
+  a network (DHCP, IPv6 neighbour discovery), virtual interfaces (containers) and, when
+  allowed, the local network; a hotspot's devices and containers get out only through a
+  VPN; DNS still looked up, so a VPN set by its server's name connects. Switched again
+  only when the rules change; the page says whether it is blocking, and "Apply again"
+  finds the servers anew. "Password-free blocking": the script that builds the rules
+  (scripts/h2s-vpn-lockdown, readable on the page; it checks and rebuilds every argument,
+  so nothing else can be had from it) installed with a polkit rule for this
+  user alone — one password, "Install…" and "Remove…" on the page with its state
+  (installed, outdated, still asking); on NixOS a module to import instead. Installed, no
+  password is asked again, and the shell checks (at the start, after network changes, every
+  5 minutes) that the blocking is still
+  loaded.
+- A VPN with a network: "Connect a VPN with it" in a Wi-Fi or wired profile's editor picks
+  VPNs the shell keeps up while that network is connected — linked to several, while any
+  of them is — and takes down when none is, if it brought them up (remembered across
+  restarts; one taken down by hand stays down until the networks change). WireGuard too —
+  which NetworkManager's own connection.secondaries refuses —, and a VPN that fails leaves
+  the network up. The VPN's card lists the networks it comes up with.
+- Settings → System → Network → VPN: "New WireGuard" and WireGuard's own editor — the
+  interface, the private key (Generate with wireguard-tools' wg, or pasted; the public
+  key shown to copy for the server; a note when wireguard-tools is missing), listen port,
+  MTU, and the peers: public key, endpoint, allowed IPs with "All traffic", preshared key,
+  keepalive; IPv4 and IPv6 manual or off.
+- Settings → System → Network → VPN: the VPN profiles as cards — kind, state, server;
+  connect, disconnect, edit, delete; while up the interface, address, data moved and speed
+  — and "Import…" for a WireGuard .conf (imported off, so a whole-traffic tunnel does not
+  take the internet over by itself; any file name), an OpenVPN .ovpn or another plugin's
+  file; "Files you can import" lists each kind with its files and whether it can be
+  imported now (a missing plugin named with what it is for). The Overview's VPN line and
+  cards lead there.
+- Settings → System → Network → Wi-Fi: hotspots — this computer's own Wi-Fi networks, in a
+  section of their own: turn on (asking first when that would drop the network in use with
+  no cable or modem to share), turn off, start automatically, the password, the devices on
+  it, edit, forget; "New hotspot" makes one (the computer's name, 2.4 GHz, WPA2, a random
+  password), in the connection editor fitted to it (security and password, the addresses
+  handed out).
+- While a hotspot is on, the network popup shows it in the Wi-Fi network's place — its
+  devices, speed and address, "Turn off hotspot" — and says joining a network needs it off,
+  instead of the stale list of networks; the bar shows an access point instead of the
+  signal, and the Overview and the Wi-Fi page say "Hotspot on".
+- The network popup lists the saved hotspots under "Connect to hidden network" (a section
+  that opens, shown when there are some), each with "Turn on" — asking first, as on the
+  settings page, when it would leave the network in use with nothing to share.
+- Settings → System → Network: a saved Wi-Fi or wired profile's connection editor (Edit
+  connection…). First the profile's name and the medium's own settings — the Wi-Fi's SSID
+  (the profile's name follows it while the two match), band, MAC address and hidden; the
+  cable's MAC address and MTU — then, below a line, connect automatically, priority,
+  metered, only for me; IPv4 and IPv6 (automatic, manual addresses and gateway, link-local,
+  off; for IPv4 "Be the router", handing addresses out from this computer, with its own
+  address, the range and the lease time), DNS servers, search domains, ignoring DHCP's DNS,
+  use only for its own network, route metric, require the family, IPv6 privacy. Every
+  option says what it means (on hover, and the picked one's under it), and the list fields
+  how to write several. Wrong fields are marked; Save, at the top and the bottom, sends only
+  what changed, at once.
+  "Save and reconnect" on the connection in use asks "Keep these settings?" for 20 s and
+  otherwise puts the old ones back — what really changed, a manual profile's addresses
+  too; the countdown carries on when the editor is left, and shows on the Wi-Fi and
+  Ethernet pages as well.
 - Critical notifications' toasts stay until dismissed or answered, as the notification
   spec asks — no countdown, no timer bar — and the toasts after them count down meanwhile.
   Their cards, toast or in the panel, are outlined in the error colour.

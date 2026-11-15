@@ -5,12 +5,13 @@ import qs.components
 import qs.singletons
 import qs.singletons.network
 
-// The network panel's VPN section: a header with the active VPN, a row per VPN
-// connection to connect or disconnect it, and a divider below. Hidden with no VPNs.
+// The network panel's VPN section: a header with the VPNs up, a row per VPN to connect or
+// disconnect it — several may be up at once — and a divider below. Hidden with no VPNs.
+// VPNs by UUID (VpnManager).
 Column {
     id: root
 
-    visible: VpnManager.vpnConnections.length > 0
+    visible: VpnManager.vpns.length > 0
     spacing: 4
 
     RowLayout {
@@ -18,10 +19,10 @@ Column {
         spacing: 8
 
         Text {
-            text: (VpnManager.activeVpn === "" || VpnManager.activeVpnType === "wireguard") ? "󰒃" : "󰌾"
+            text: VpnManager.activeType === "vpn" ? "󰌾" : "󰒃"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeTitle
-            color: VpnManager.activeVpn !== "" ? Theme.accent : Theme.textDisabled
+            color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
         }
 
         Text {
@@ -33,10 +34,10 @@ Column {
         }
 
         Text {
-            text: VpnManager.activeVpn !== "" ? VpnManager.activeVpn : "Off"
+            text: VpnManager.activeVpns.length > 0 ? VpnManager.activeVpns.map(vpn => vpn.name).join(", ") : "Off"
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: VpnManager.activeVpn !== "" ? Theme.accent : Theme.textDisabled
+            color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
             elide: Text.ElideRight
             Layout.maximumWidth: 120
         }
@@ -44,19 +45,20 @@ Column {
 
     Repeater {
         // ScriptModel, never the bare array — see "The Repeater crash" in
-        // docs/ARCHITECTURE.md. VpnManager rebuilds vpnConnections as brand-new JS
-        // objects on every poll, so objectProp keys the diff by "name" instead of object
-        // identity — otherwise every poll would look like a full remove+insert.
+        // docs/ARCHITECTURE.md. The profiles are brand-new JS objects on every read, so
+        // objectProp keys the diff by UUID instead of object identity — otherwise every
+        // read would look like a full remove+insert (names may repeat: not by name).
         model: ScriptModel {
-            objectProp: "name"
-            values: VpnManager.vpnConnections
+            objectProp: "uuid"
+            values: VpnManager.vpns
         }
 
         delegate: Rectangle {
             required property var modelData
             required property int index
 
-            property bool isActive: VpnManager.activeVpn === modelData.name
+            readonly property bool isActive: modelData.state === "activated"
+            readonly property bool isChanging: modelData.state === "activating" || modelData.state === "deactivating"
 
             width: root.width
             height: 36
@@ -84,13 +86,18 @@ Column {
                 }
 
                 SmallButton {
-                    label: isActive ? "Disconnect" : "Connect"
+                    label: modelData.state === "activating" ? "Connecting…"
+                        : modelData.state === "deactivating" ? "Disconnecting…"
+                        : isActive ? "Disconnect" : "Connect"
                     kind: isActive ? "delete" : "save"
+                    // Not while any connecting runs: a second click before the list says
+                    // "activating" would bring the tunnel down and up again
+                    available: !isChanging && !NetworkProfiles.connecting
                     onClicked: {
                         if (isActive)
-                            VpnManager.disconnectVpn()
+                            VpnManager.disconnect(modelData.uuid)
                         else
-                            VpnManager.connectVpn(modelData.name)
+                            VpnManager.connect(modelData.uuid)
                     }
                 }
             }

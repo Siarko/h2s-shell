@@ -49,7 +49,9 @@ Singleton {
             "osdVolumeBorder": "#777777",
             "osdMessageBorder": "#777777",
             // Music: empty follows the accent (ThemeRules.colorFollows) until a theme sets it
-            "visualizer": ""                 // the music visualiser
+            "visualizer": "",                // the music visualiser
+            // Empty follows the warning colour until a theme sets it
+            "privileged": ""                 // the mark on what asks for an administrator's password
         },
         "fonts": {
             "family": "JetBrainsMono Nerd Font",

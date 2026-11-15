@@ -58,7 +58,17 @@ FloatingWindow {
         { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] },
         // System: this computer's settings, kept by the system or at least never per profile
         // (docs/plans/polkit.md, TODO 11.36)
-        { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp }
+        { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp },
+        // A group: its pages show under it while one is open (SettingsPageList); clicking
+        // it opens the first (docs/plans/network.md)
+        { id: "network", label: "Network", tab: "system", group: true },
+        { id: "network_overview", label: "Overview", tab: "system", parent: "network", component: networkOverviewComp },
+        // `shown`: only while it has something to show — a kind of device the computer has
+        { id: "network_wifi", label: "Wi-Fi", tab: "system", parent: "network", component: networkWifiComp,
+          shown: () => NetworkManager.wifiAvailable },
+        { id: "network_ethernet", label: "Ethernet", tab: "system", parent: "network", component: networkEthernetComp,
+          shown: () => NetworkManager.ethernetDevice !== "" },
+        { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp }
     ]
 
     function _pageIndex(id) {
@@ -85,6 +95,14 @@ FloatingWindow {
     property string _lastSystemPage: "authentication"
     // From the page itself: _onAppearance may not have caught up yet when this runs
     onSelectedPageChanged: {
+        // A group is a heading: its first page opens instead
+        if (_pageOf(selectedPage).group) {
+            const first = pages.find(page => page.parent === selectedPage);
+            if (first) {
+                selectedPage = first.id;
+                return;
+            }
+        }
         const tab = _pageOf(selectedPage).tab;
         if (tab === "appearance")
             _lastAppearancePage = selectedPage;
@@ -482,6 +500,10 @@ FloatingWindow {
     Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
     Component { id: wallpaperComp;     WallpaperSettings     { editIndex: root.editIndex } }
     Component { id: authenticationComp; AuthenticationSettings {} }
+    Component { id: networkOverviewComp; NetworkOverviewSettings {} }
+    Component { id: networkWifiComp; NetworkWifiSettings {} }
+    Component { id: networkEthernetComp; NetworkEthernetSettings {} }
+    Component { id: networkVpnComp; NetworkVpnSettings {} }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }

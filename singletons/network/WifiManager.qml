@@ -30,12 +30,30 @@ Singleton {
     property bool scanning: false
     property bool scanInProgress: false
 
-    readonly property bool wifiConnected: wifiNetworks.some(n => n.inUse)
+    // The card serves a hotspot (NetworkProfiles.activeHotspot): it joins no network, and
+    // its list of networks is the one from before — a rescan does nothing in that mode
+    readonly property var hotspot: NetworkProfiles.activeHotspot
+    // Joined to a network — not serving a hotspot, whose own SSID the list marks in use
+    readonly property bool wifiConnected: hotspot === null && wifiNetworks.some(network => network.inUse)
+    // The Wi-Fi in one word, for what shows it (the popup, the bar): "off", "hotspot"
+    // (serving one), "connected" (joined to a network) or "disconnected". The device's own
+    // state (NetworkManager.wifiConnected) is "connected" in both of the middle two.
+    readonly property string mode: !wifiEnabled ? "off" : hotspot !== null ? "hotspot" : wifiConnected ? "connected" : "disconnected"
+
+    // Turning a hotspot on takes the Wi-Fi off the network it is on; without a cable or a
+    // modem up, the devices that join get no internet — so turning one on asks this first
+    // ("" when nothing would be lost)
+    readonly property string hotspotQuestion: wifiConnected && !NetworkManager.otherLinkConnected
+        ? "Leaves " + (wifiNetworks.find(network => network.inUse)?.ssid ?? "the network") + ": no internet to share. Turn on?" : ""
     property bool connecting: false
     property string connectingTo: ""
     property bool disconnecting: false
     property bool connectFailed: false
     property string failedSsid: ""
+    // Why it failed: Nmcli.errorKind ("password", "auth", "notFound", "missing", "other")
+    // and nmcli's own words
+    property string failedKind: ""
+    property string failedMessage: ""
 
     Timer {
         id: connectTimeoutTimer
@@ -145,6 +163,8 @@ Singleton {
         }
         wifiScanProcess._pendingRescan = false
         wifiScanProcess._lines = []
+        if (root.hotspot !== null)
+            forceRescan = false
         wifiScanProcess.command = [
             "nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,IN-USE,FREQ",
             "device", "wifi", "list",
@@ -159,8 +179,8 @@ Singleton {
         if (result.signalInUse >= 0)
             root.wifiSignal = result.signalInUse
         root.wifiNetworks = networks
-        var anyInUse = networks.some(n => n.inUse)
-        if (root.connectingTo !== "" && networks.some(n => n.inUse && n.ssid === root.connectingTo)) {
+        var anyInUse = networks.some(network => network.inUse)
+        if (root.connectingTo !== "" && networks.some(network => network.inUse && network.ssid === root.connectingTo)) {
             root.connecting = false
             root.connectingTo = ""
             connectTimeoutTimer.stop()
@@ -171,22 +191,13 @@ Singleton {
     }
 
     // -------------------------------------------------------------------------
-    // Saved connection profiles
+    // Saved connection profiles: by SSID, from NetworkProfiles (a profile's name may
+    // differ from its network's, so names are never matched)
     // -------------------------------------------------------------------------
-    property var savedSsids: []
-
-    CommandQuery {
-        id: savedQuery
-        command: ["nmcli", "-t", "-f", "name,type", "connection", "show"]
-        onDone: lines => root._processSaved(lines)
-    }
+    readonly property var savedSsids: NetworkProfiles.savedSsids
 
     function _pollSaved() {
-        savedQuery.request()
-    }
-
-    function _processSaved(lines) {
-        root.savedSsids = Nmcli.savedWifi(lines)
+        NetworkProfiles.refresh()
     }
 
     // -------------------------------------------------------------------------
@@ -194,13 +205,21 @@ Singleton {
     // -------------------------------------------------------------------------
     function toggleWifi() {
         if (actionProcess.running) return
+        actionProcess.what = root.wifiEnabled ? "Turning Wi-Fi off" : "Turning Wi-Fi on"
         actionProcess.command = ["nmcli", "radio", "wifi", root.wifiEnabled ? "off" : "on"]
         actionProcess.running = true
     }
 
+    // Every profile saved for the network, by UUID
     function forgetNetwork(ssid) {
         if (actionProcess.running) return
-        actionProcess.command = ["nmcli", "connection", "delete", ssid]
+        const profiles = NetworkProfiles.profilesForSsid(ssid)
+        if (profiles.length === 0) return
+        const command = ["nmcli", "connection", "delete"]
+        for (const profile of profiles)
+            command.push("uuid", profile.uuid)
+        actionProcess.what = "Forgetting " + ssid
+        actionProcess.command = command
         actionProcess.running = true
     }
 
@@ -208,6 +227,7 @@ Singleton {
         var device = NetworkManager.wifiDevice
         if (actionProcess.running || device === "") return
         root.disconnecting = true
+        actionProcess.what = "Disconnecting Wi-Fi"
         actionProcess.command = ["nmcli", "device", "disconnect", device]
         actionProcess.running = true
     }
@@ -227,6 +247,8 @@ Singleton {
         root.connectingTo = ssid
         root.connectFailed = false
         root.failedSsid = ""
+        root.failedKind = ""
+        root.failedMessage = ""
         connectTimeoutTimer.restart()
         const command = ["nmcli", "device", "wifi", "connect", ssid]
         if (hidden)
@@ -237,6 +259,22 @@ Singleton {
         actionProcess.running = true
     }
 
+    // Scanning while something shows the networks in range: the popup, the Wi-Fi settings
+    // page. Counted, so one closing does not stop the other's list.
+    property int _scanHolders: 0
+
+    function holdScan() {
+        _scanHolders++
+        startScan()
+    }
+
+    function releaseScan() {
+        _scanHolders = Math.max(0, _scanHolders - 1)
+        if (_scanHolders === 0)
+            stopScan()
+    }
+
+    // The popup's Scan / Stop button: resumes or pauses the scan while held
     function startScan() {
         scanning = true
         _doScan(true)
@@ -269,36 +307,46 @@ Singleton {
         }
     }
 
+    // nmcli writes its errors to stderr ("Error: … Secrets were required…") and exits with
+    // a code other than 0: both are read. Reading stdout for "error" never matched, so a
+    // wrong password waited out the 30 s timeout.
     Process {
         id: actionProcess
-        property string _output: ""
+        property string _errors: ""
         property bool _cancelling: false
+        // What the action was, for a message when one other than connecting fails
+        property string what: ""
 
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                if (line.trim() !== "")
-                    actionProcess._output += line + "\n"
-            }
+        stderr: SplitParser {
+            splitMarker: ""
+            onRead: data => actionProcess._errors += data
         }
 
-        onRunningChanged: {
-            if (!running) {
-                if (!_cancelling) {
-                    if (root.connecting && actionProcess._output.toLowerCase().includes("error")) {
-                        root.connectFailed = true
-                        root.failedSsid = root.connectingTo
-                        root.connecting = false
-                        root.connectingTo = ""
-                        connectTimeoutTimer.stop()
-                    }
-                    root._pollRadio()
-                    root._doScan(false)
-                    postActionTimer.restart()
+        onExited: exitCode => {
+            if (!_cancelling) {
+                const failed = exitCode !== 0
+                if (root.connecting && failed) {
+                    root.connectFailed = true
+                    root.failedSsid = root.connectingTo
+                    root.failedKind = Nmcli.errorKind(actionProcess._errors)
+                    root.failedMessage = Nmcli.errorMessage(actionProcess._errors)
+                    root.connecting = false
+                    root.connectingTo = ""
+                    connectTimeoutTimer.stop()
+                } else if (failed) {
+                    const action = actionProcess.what !== "" ? actionProcess.what : "A Wi-Fi action"
+                    if (Nmcli.errorKind(actionProcess._errors) === "auth")
+                        Authentication.reportDenied(action)
+                    else
+                        Notifier.send(action + " failed", { body: Nmcli.errorMessage(actionProcess._errors) })
                 }
-                _cancelling = false
-                actionProcess._output = ""
+                root._pollRadio()
+                root._doScan(false)
+                postActionTimer.restart()
             }
+            _cancelling = false
+            actionProcess._errors = ""
+            actionProcess.what = ""
         }
     }
 

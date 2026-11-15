@@ -20,6 +20,7 @@ Singleton {
     property alias gcal: _gcal
     property alias audio: _audio
     property alias bluetooth: _bluetooth
+    property alias network: _network
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
     // library a bar entry points into. "" until migrated from the old widgetProfiles.
     property alias widgetPresets: _adapter.widgetPresets
@@ -96,6 +97,17 @@ Singleton {
             property JsonObject bluetooth: JsonObject {
                 id: _bluetooth
                 property string powered: ""
+            }
+
+            // Which VPNs the shell brought up with a network, and which were taken down by
+            // hand (VpnManager), so a restart keeps them — remembered, not a preference
+            property JsonObject network: JsonObject {
+                id: _network
+                property string vpnMemory: "{}"
+                // The blocking rules last loaded and the boot they were loaded in
+                // (VpnLockdown: root's to read back, so remembered), and the VPN servers'
+                // addresses last found
+                property string lockdown: "{}"
             }
 
             // The Google account, its tokens and the calendars picked — data, not settings

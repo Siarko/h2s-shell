@@ -25,4 +25,25 @@ QtObject {
             unit++;
         return (value / Math.pow(1024, unit)).toFixed(decimals[unit]) + " " + _units[unit] + suffix;
     }
+
+    // How long ago a moment was, as a person says it: "just now", "5 min ago", "3 h ago",
+    // "yesterday", "4 days ago", "2 months ago"; "never" for 0 (callers say "Never used"
+    // rather than "Last used never"). Both in seconds since 1970.
+    function ago(seconds, nowSeconds) {
+        if (!(seconds > 0))
+            return "never";
+        const elapsed = Math.max(0, (nowSeconds ?? Date.now() / 1000) - seconds);
+        if (elapsed < 60)
+            return "just now";
+        if (elapsed < 3600)
+            return Math.floor(elapsed / 60) + " min ago";
+        if (elapsed < 86400)
+            return Math.floor(elapsed / 3600) + " h ago";
+        const days = Math.floor(elapsed / 86400);
+        if (days === 1)
+            return "yesterday";
+        if (days < 60)
+            return days + " days ago";
+        return Math.floor(days / 30) + " months ago";
+    }
 }

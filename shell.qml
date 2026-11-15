@@ -3,6 +3,7 @@ import Quickshell
 import QtQuick
 import Quickshell.Io
 import qs.singletons
+import qs.singletons.network
 import qs.screensaver
 import qs.panels
 import qs.wallpaper
@@ -39,6 +40,15 @@ QtObject {
                 WallpaperSurface { modelData: _wallpaperLoader.modelData }
             }
         }
+    }
+
+    // VPNs brought up with their networks, and the blocking outside them, from the start,
+    // whatever the bar shows (VpnManager, VpnLockdown)
+    property var _vpns: VpnManager
+    property var _vpnLockdown: VpnLockdown
+    Component.onCompleted: {
+        VpnManager.start();
+        VpnLockdown.start();
     }
 
     // The polkit agent decides at start whether it answers (Authentication); its prompt

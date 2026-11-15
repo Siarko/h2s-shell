@@ -154,10 +154,15 @@ Rectangle {
                     Layout.fillWidth: true
                 }
 
-                // Error label for wrong password
+                // Why connecting failed, from nmcli's error (WifiManager.failedKind)
                 Text {
                     visible: WifiManager.connectFailed && WifiManager.failedSsid === root.modelData.ssid
-                    text: "Wrong password"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: WifiManager.failedKind === "password" ? "Wrong password"
+                        : WifiManager.failedKind === "notFound" ? "The network is out of range"
+                        : WifiManager.failedKind === "auth" ? "Not allowed to connect"
+                        : WifiManager.failedMessage !== "" ? WifiManager.failedMessage : "Could not connect"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.warning

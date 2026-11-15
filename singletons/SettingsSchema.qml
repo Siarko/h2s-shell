@@ -14,7 +14,8 @@ import QtQuick
 //   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
 //              "bool", "string", "stringList"; or a structured value with its own editor
 //              on its page ("barSection", "hardwarePopup", "color", "wallpaperSubset",
-//              "wallpaperSlots", "wallpaperWeekdays"), overridden as a whole
+//              "wallpaperSlots", "wallpaperWeekdays", "vpnWithNetworks", "vpnLockdownNetworks"),
+//              overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   presets  — for interval: the values offered, in ms, instead of the polling ones;
@@ -263,6 +264,22 @@ Singleton {
               { value: "off", label: "Off" }
           ],
           hint: "Asks for an administrator's password when a program needs one (polkit). Only one agent can answer: turn this off if you run your own (hyprpolkitagent, polkit-gnome)." },
+
+        // VPNs the shell brings up with a network: { networkUuid: [vpnUuid…] } (VpnManager;
+        // NetworkManager's own connection.secondaries takes no WireGuard). Edited in a
+        // profile's connection editor.
+        { key: "system.vpnWithNetworks", label: "VPNs with networks", group: "network",
+          type: "vpnWithNetworks", default: ({}), global: true },
+        // Only through the VPN (VpnLockdown): always, or on the networks listed (their
+        // UUIDs; set in their editors); the local network let through when allowed
+        { key: "system.vpnLockdownAlways", label: "Block traffic outside a VPN, always", group: "network",
+          type: "bool", default: false, global: true },
+        { key: "system.vpnLockdownNetworks", label: "Block traffic outside a VPN on these networks", group: "network",
+          type: "vpnLockdownNetworks", default: [], global: true },
+        { key: "system.vpnLockdownLan", label: "Allow the local network", group: "network",
+          type: "bool", default: false, global: true },
+        { key: "system.vpnLockdownServers", label: "Other VPN servers", group: "network",
+          type: "stringList", default: [], global: true },
 
         // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; docs/plans/wallpapers.md)
         { key: "wallpaper.enabled", label: "Draw the wallpaper", group: "wallpaper",

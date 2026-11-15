@@ -7,6 +7,14 @@ TestCase {
     function run() {
         // --- sizes: what the RAM, disk and VRAM subtitles showed before ---
         assertEqual(Format.bytes(31.2 * 1073741824), "31.2 GB", "gigabytes to one decimal");
+        const now = 1731400000;
+        assertEqual(Format.ago(0, now), "never", "ago: never");
+        assertEqual(Format.ago(now - 30, now), "just now", "ago: seconds");
+        assertEqual(Format.ago(now - 300, now), "5 min ago", "ago: minutes");
+        assertEqual(Format.ago(now - 3 * 3600, now), "3 h ago", "ago: hours");
+        assertEqual(Format.ago(now - 30 * 3600, now), "yesterday", "ago: a day");
+        assertEqual(Format.ago(now - 4 * 86400, now), "4 days ago", "ago: days");
+        assertEqual(Format.ago(now - 90 * 86400, now), "3 months ago", "ago: months");
         assertEqual(Format.bytes(1073741824), "1.0 GB", "exactly a gigabyte");
         assertEqual(Format.bytes(742 * 1048576 + 300000), "742 MB", "whole megabytes");
         assertEqual(Format.bytes(1048576), "1 MB", "exactly a megabyte");

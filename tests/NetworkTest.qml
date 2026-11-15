@@ -92,27 +92,15 @@ TestCase {
             assertEqual(merged[1].band, "2.4G", "wifi list: single network: its band");
         }
 
-        // --- WifiManager._processSaved ---
+        // --- saved networks: by SSID, from the profiles (NetworkProfiles) ---
         {
-            WifiManager._processSaved([
-                "Home\\:5G:802-11-wireless",
-                "Wired connection 1:802-3-ethernet"
+            const profiles = Nmcli.profiles([
+                "u1:Home 1:802-11-wireless::yes:0:0:no",
+                "u2:Wired connection 1:802-3-ethernet:enp13s0:yes:0:0:yes"
             ]);
-            assertEqual(JSON.stringify(WifiManager.savedSsids), JSON.stringify(["Home:5G"]),
-                "saved networks: wifi only, escaped colon kept");
-        }
-
-        // --- VpnManager._processVpn ---
-        {
-            VpnManager._processVpn([
-                "work\\:vpn:wireguard:activated",
-                "home:vpn:",
-                "Wired connection 1:802-3-ethernet:activated"
-            ]);
-            assertEqual(VpnManager.vpnConnections.length, 2, "vpn: only VPN types are listed");
-            assertEqual(VpnManager.vpnConnections[0].name, "work:vpn", "vpn: escaped colon in a name");
-            assertEqual(VpnManager.activeVpn, "work:vpn", "vpn: active connection");
-            assertEqual(VpnManager.activeVpnType, "wireguard", "vpn: active type");
+            const ssids = Nmcli.wifiDetails(["connection.uuid:u1", "802-11-wireless.ssid:Home:5G"]);
+            assert(profiles[0].kind === "wifi" && ssids[profiles[0].uuid].ssid === "Home:5G",
+                   "saved networks: a profile named otherwise than its SSID still matches it");
         }
 
         // --- IpManager._parse ---
@@ -145,6 +133,427 @@ TestCase {
             assertEqual(_link.txHistory[0].v, 1000, "link speed: and the tx speed separately");
             _link._update(10100, 100, 24000);
             assertEqual(_link.rxSpeed, 1000, "link speed: divides by the time elapsed, not the configured interval");
+        }
+
+        // --- Nmcli: records, profiles, devices, errors ---
+        {
+            const blocks = Nmcli.records([
+                "connection.uuid:5b60", "connection.id:H2S 10 Pro", "802-11-wireless.ssid:H2S 10 Pro",
+                "connection.uuid:fe20", "connection.id:Home: upstairs", "802-11-wireless.ssid:H2S_HEX"
+            ], "connection.uuid");
+            assertEqual(blocks.length, 2, "records: a block starts again where its first key comes back");
+            assertEqual(blocks[1]["connection.id"], "Home: upstairs", "records: only the first colon separates");
+
+            const details = Nmcli.wifiDetails([
+                "connection.uuid:5b60", "802-11-wireless.ssid:H2S 10 Pro", "802-11-wireless-security.key-mgmt:sae", "802-11-wireless.hidden:no",
+                "connection.uuid:fe20", "802-11-wireless.ssid:H2S_HEX", "802-11-wireless-security.key-mgmt:", "802-11-wireless.hidden:yes"
+            ]);
+            assertEqual(details["fe20"].ssid, "H2S_HEX", "wifiDetails: by UUID");
+            assert(details["5b60"].security === "sae" && !details["5b60"].hidden && details["fe20"].hidden, "wifiDetails: security, hidden");
+            assertEqual(Nmcli.securityName(details["5b60"].security), "WPA3", "securityName: SAE is WPA3");
+            assertEqual(Nmcli.securityName(details["fe20"].security), "Open", "securityName: none set is open");
+
+            const profiles = Nmcli.profiles([
+                "5b60:H2S 10 Pro:802-11-wireless::yes:0:1731400000:no",
+                "a1b2:Wired connection 1:802-3-ethernet:enp13s0:yes:-1:1731400100:yes",
+                "c3d4:ua:wireguard::no:0:0:no",
+                "broken"
+            ]);
+            assertEqual(profiles.length, 3, "profiles: a malformed line is skipped");
+            assertEqual(profiles[0].kind, "wifi", "profiles: Wi-Fi's kind");
+            assert(profiles[1].active && profiles[1].device === "enp13s0" && profiles[1].priority === -1,
+                   "profiles: active, device, a negative priority");
+            assert(profiles[2].kind === "vpn" && !profiles[2].autoconnect, "profiles: WireGuard is a VPN");
+            const states = Nmcli.profiles(["v1:work\\:vpn:wireguard:wg0:no:0:0:yes::activating", "v2:home:vpn::no:0:0:no::"]);
+            assert(states[0].name === "work:vpn" && states[0].state === "activating" && states[0].active && states[1].state === "" && !states[1].active,
+                   "profiles: a VPN connecting, an escaped colon in its name; one not up");
+            assertEqual(profiles[1].state, "activated", "profiles: an older nmcli line without STATE: active is activated");
+            const ported = Nmcli.profiles(["p1:bridge-slave-eno1:802-3-ethernet:eno1:yes:0:0:yes:bridge"]);
+            assertEqual(ported[0].port, "bridge", "profiles: a bridge's port is told apart");
+            assertEqual(profiles[0].port, "", "profiles: an older nmcli line without the column: not a port");
+
+            const devices = Nmcli.devices([
+                "GENERAL.DEVICE:enp13s0", "GENERAL.TYPE:ethernet", "GENERAL.VENDOR:Realtek Semiconductor Co., Ltd.",
+                "GENERAL.PRODUCT:RTL8126 5GbE Controller", "GENERAL.DRIVER:r8169", "GENERAL.HWADDR:34:5A:60:B5:AA:BE",
+                "GENERAL.MTU:1500", "GENERAL.STATE:100 (connected)", "GENERAL.CONNECTION:Wired connection 1",
+                "CAPABILITIES.SPEED:2500 Mb/s", "IP4.ADDRESS[1]:192.168.1.137/24", "IP4.GATEWAY:192.168.1.1",
+                "IP4.DNS[1]:192.168.1.1", "IP4.DOMAIN[1]:lan", "IP6.ADDRESS[1]:fe80::6f33:7072:7167:c19c/64", "IP6.GATEWAY:",
+                "GENERAL.DEVICE:wlp14s0", "GENERAL.TYPE:wifi", "GENERAL.STATE:30 (disconnected)", "GENERAL.CONNECTION:"
+            ]);
+            assertEqual(devices.length, 2, "devices: two");
+            const glued = Nmcli.devices(["GENERAL.DEVICE:a", "GENERAL.STATE:100 (connected (externally))",
+                                         "\nGENERAL.DEVICE:b", "GENERAL.STATE:10 (unmanaged)"]);
+            assert(glued.length === 2 && glued[0].stateText === "connected (externally)" && glued[1].state === 10,
+                   "devices: the blank line glued to the next block's first line still starts a block");
+            const wired = devices[0];
+            assert(wired.state === 100 && wired.stateText === "connected" && wired.speed === 2500,
+                   "devices: state number and words, speed in Mb/s");
+            assertEqual(wired.mac, "34:5A:60:B5:AA:BE", "devices: a MAC keeps its colons");
+            assertEqual(Nmcli.devices(["GENERAL.DEVICE:e", "WIRED-PROPERTIES.CARRIER:off"])[0].carrier, "off", "devices: the cable out");
+            assertEqual(wired.carrier, "", "devices: the cable not known");
+            assertEqual(wired.ipv6[0], "fe80::6f33:7072:7167:c19c/64", "devices: an IPv6 address keeps its colons");
+            assert(wired.ipv4.length === 1 && wired.dns[0] === "192.168.1.1" && wired.domains[0] === "lan", "devices: addresses, DNS, domains");
+            assert(devices[1].kind === "wifi" && devices[1].ipv4.length === 0, "devices: a disconnected Wi-Fi, no addresses");
+
+            assertEqual(Nmcli.errorKind("Error: Connection activation failed: Secrets were required, but not provided."), "password",
+                        "errorKind: a wrong or missing password");
+            assertEqual(Nmcli.errorKind("Error: Failed to modify connection: Insufficient privileges"), "auth", "errorKind: not allowed");
+            assertEqual(Nmcli.errorKind("Error: unknown connection 'x'."), "missing", "errorKind: no such connection");
+            assertEqual(Nmcli.errorKind("Error: No network with SSID 'x' found."), "notFound", "errorKind: not in range");
+            assertEqual(Nmcli.errorMessage("Error: unknown connection 'x'.\nmore"), "unknown connection 'x'",
+                        "errorMessage: plain words, the first line");
+        }
+
+        // --- NetworkRules ---
+        {
+            const rules = NetworkRules;
+            assert(rules.isHostname("h2s-arch") && rules.isHostname("box.lan"), "hostname: plain and dotted");
+            assert(!rules.isHostname("-box") && !rules.isHostname("box_1") && !rules.isHostname("") && !rules.isHostname("a..b"),
+                   "hostname: a leading hyphen, an underscore, empty, an empty label");
+            assert(!rules.isHostname("a".repeat(64)), "hostname: a label over 63");
+            assert(rules.isIpv4("192.168.1.1") && !rules.isIpv4("256.1.1.1") && !rules.isIpv4("1.2.3"), "IPv4");
+            assert(rules.isIpv6("2606:4700:4700::1111") && rules.isIpv6("::1") && rules.isIpv6("fe80::6f33:7072:7167:c19c"),
+                   "IPv6: shortened forms");
+            assert(rules.isIpv6("::ffff:192.168.1.1"), "IPv6 ending in IPv4");
+            assert(!rules.isIpv6("1::2::3") && !rules.isIpv6("12345::1") && !rules.isIpv6("1:2:3:4:5:6:7"), "IPv6: two ::, a long group, too few");
+            const parsed = rules.parseServers("1.1.1.1, 8.8.8.8 ;1.1.1.1  nope 2606:4700:4700::1111");
+            assertEqual(JSON.stringify(parsed.list), "[\"1.1.1.1\",\"8.8.8.8\",\"2606:4700:4700::1111\"]", "servers: split, no repeats");
+            assertEqual(JSON.stringify(parsed.bad), "[\"nope\"]", "servers: what is not an address");
+            const dns = rules.globalDnsFrom({ searches: { type: "as", data: ["lan"] },
+                domains: { type: "a{sv}", data: { "*": { type: "a{sv}", data: { servers: { type: "as", data: ["1.1.1.1"] } } } } } });
+            assert(dns.servers[0] === "1.1.1.1" && dns.searches[0] === "lan", "global DNS: read from busctl's JSON");
+            assertEqual(rules.globalDnsFrom({}).servers.length, 0, "global DNS: none set");
+            assertEqual(rules.globalDnsArguments([]).join(" "), "a{sv} 0", "global DNS: cleared");
+            assertEqual(rules.globalDnsArguments(["1.1.1.1", "9.9.9.9"]).join(" "),
+                        "a{sv} 1 domains a{sv} 1 * a{sv} 1 servers as 2 1.1.1.1 9.9.9.9", "global DNS: busctl's nested form");
+            assertEqual(rules.speedText(2500), "2.5 Gb/s", "speed: gigabits");
+            assertEqual(rules.speedText(866), "866 Mb/s", "speed: megabits");
+            assertEqual(rules.speedText(0), "", "speed: unknown");
+            assert(rules.isWifiPassword("12345678", "wpa-psk") && !rules.isWifiPassword("1234567", "wpa-psk"), "Wi-Fi password: at least 8");
+            assert(!rules.isWifiPassword("x".repeat(64), "sae") && rules.isWifiPassword("a".repeat(64), "sae"),
+                   "Wi-Fi password: 64 characters only as the hexadecimal key");
+                        // --- the connection editor ---
+            const wiredBlock = { "connection.id": "Office", "connection.autoconnect": "yes", "connection.autoconnect-priority": "-999",
+                "connection.metered": "unknown", "connection.permissions": "", "ipv4.method": "manual",
+                "ipv4.addresses": "192.168.10.5/24,10.0.0.2/8", "ipv4.gateway": "192.168.10.1", "ipv4.dns": "1.1.1.1,9.9.9.9",
+                "ipv4.dns-search": "lan", "ipv4.ignore-auto-dns": "no", "ipv6.method": "auto", "ipv6.addresses": "",
+                "ipv6.gateway": "", "ipv6.dns": "", "ipv6.ignore-auto-dns": "no", "ipv6.ip6-privacy": "-1",
+                "802-3-ethernet.cloned-mac-address": "", "802-3-ethernet.mtu": "auto" };
+            const wired = rules.settingsFrom(wiredBlock);
+            assert(wired.name === "Office" && wired.priority === -999 && wired.metered === "auto" && !wired.onlyMe, "editor: general read");
+            assertEqual(JSON.stringify(wired.ipv4.addresses), "[\"192.168.10.5/24\",\"10.0.0.2/8\"]", "editor: addresses as a list");
+            assert(wired.ethernet !== null && wired.ethernet.mtu === 0 && wired.wifi === null, "editor: ethernet extras, no Wi-Fi");
+            assertEqual(JSON.stringify(rules.editorErrors(wired)), "{}", "editor: valid settings, no errors");
+            const unchanged = rules.editorChanges(wired, JSON.parse(JSON.stringify(wired)), "h2s");
+            assertEqual(unchanged.length, 0, "editor: nothing changed, nothing sent");
+
+            const edited = JSON.parse(JSON.stringify(wired));
+            edited.ipv4.method = "auto";
+            edited.onlyMe = true;
+            edited.metered = "yes";
+            const changes = rules.editorChanges(wired, edited, "h2s");
+            const find = property => (changes.find(change => change[0] === property) ?? [null, null])[1];
+            assert(find("ipv4.method") === "auto" && find("ipv4.addresses") === "" && find("ipv4.gateway") === "",
+                   "editor: leaving manual clears addresses and gateway");
+            assert(find("connection.permissions") === "user:h2s" && find("connection.metered") === "yes", "editor: only me, metered");
+            assertEqual(find("ipv4.dns"), null, "editor: an unchanged field is not sent");
+
+            const broken = JSON.parse(JSON.stringify(wired));
+            broken.ipv4.gateway = "10.1.1.1";
+            broken.ipv4.addresses = ["192.168.10.5/24"];
+            broken.ipv4.dns = ["1.1.1.1", "nope"];
+            broken.ethernet.mtu = 20;
+            broken.name = " ";
+            const errors = rules.editorErrors(broken);
+            assert(errors["ipv4.gateway"] && errors["ipv4.dns"] && errors["802-3-ethernet.mtu"] && errors["connection.id"],
+                   "editor: a gateway outside the network, a bad DNS, a tiny MTU, no name");
+            const empty = JSON.parse(JSON.stringify(wired));
+            empty.ipv4.addresses = [];
+            assert(!!rules.editorErrors(empty)["ipv4.addresses"], "editor: manual with no address");
+            assert(rules.inSubnet4("192.168.10.200", ["192.168.10.5/24"]) && !rules.inSubnet4("192.168.11.1", ["192.168.10.5/24"]),
+                   "subnet: in and out of a /24");
+            assert(rules.isCidr6("2001:db8::5/64") && !rules.isCidr6("2001:db8::5/129"), "IPv6 with a prefix");
+            assert(rules.isMacSetting("random") && rules.isMacSetting("12:34:56:78:9a:BC") && !rules.isMacSetting("12:34"), "MAC settings");
+            assert(wired.ipv4.routeMetric === -1 && wired.ipv4.mayFail && !wired.ipv4.neverDefault && wired.ipv4.rangeStart === "",
+                   "editor: routing defaults when nmcli leaves them out");
+            const routed = rules.settingsFrom(Object.assign({}, wiredBlock, { "ipv4.never-default": "yes", "ipv4.route-metric": "50",
+                "ipv4.may-fail": "no", "ipv6.route-metric": "-1" }));
+            assert(routed.ipv4.neverDefault && routed.ipv4.routeMetric === 50 && !routed.ipv4.mayFail && routed.ipv6.routeMetric === -1,
+                   "editor: never-default, route metric, may-fail read");
+            const router = rules.settingsFrom(Object.assign({}, wiredBlock, { "ipv4.method": "shared", "ipv4.addresses": "10.42.0.1/24",
+                "ipv4.gateway": "", "ipv4.shared-dhcp-range": "10.42.0.100,10.42.0.200", "ipv4.shared-dhcp-lease-time": "600" }));
+            assert(router.ipv4.rangeStart === "10.42.0.100" && router.ipv4.rangeEnd === "10.42.0.200" && router.ipv4.leaseTime === 600,
+                   "editor: the router's range and lease time read");
+            assertEqual(JSON.stringify(rules.editorErrors(router)), "{}", "editor: a valid router");
+            const badRouter = JSON.parse(JSON.stringify(router));
+            badRouter.ipv4.rangeEnd = "10.43.0.5";
+            badRouter.ipv4.leaseTime = 30;
+            const routerErrors = rules.editorErrors(badRouter);
+            assert(routerErrors["ipv4.shared-dhcp-range"] && routerErrors["ipv4.shared-dhcp-lease-time"],
+                   "editor: a range outside the network, a too short lease");
+            const halfRange = JSON.parse(JSON.stringify(router));
+            halfRange.ipv4.rangeEnd = "";
+            halfRange.ipv4.addresses = ["10.42.0.1"];
+            const halfErrors = rules.editorErrors(halfRange);
+            assert(halfErrors["ipv4.shared-dhcp-range"] && halfErrors["ipv4.addresses"], "editor: half a range, an address without its prefix");
+            const toRouter = JSON.parse(JSON.stringify(wired));
+            toRouter.ipv4.method = "shared";
+            toRouter.ipv4.addresses = ["10.42.0.1/24"];
+            toRouter.ipv4.rangeStart = "10.42.0.10";
+            toRouter.ipv4.rangeEnd = "10.42.0.20";
+            const routerChanges = rules.editorChanges(wired, toRouter, "h2s");
+            const findRouter = property => (routerChanges.find(change => change[0] === property) ?? [null, null])[1];
+            assert(findRouter("ipv4.addresses") === "10.42.0.1/24" && findRouter("ipv4.gateway") === ""
+                   && findRouter("ipv4.shared-dhcp-range") === "10.42.0.10,10.42.0.20", "editor: becoming the router keeps its address, sends the range");
+            const fromRouter = JSON.parse(JSON.stringify(router));
+            fromRouter.ipv4.method = "auto";
+            const leaving = rules.editorChanges(router, fromRouter, "h2s");
+            assert(leaving.some(change => change[0] === "ipv4.shared-dhcp-range" && change[1] === "")
+                   && leaving.some(change => change[0] === "ipv4.shared-dhcp-lease-time" && change[1] === "0"), "editor: leaving the router clears its range");
+            const badMetric = JSON.parse(JSON.stringify(wired));
+            badMetric.ipv6.routeMetric = -5;
+            assert(!!rules.editorErrors(badMetric)["ipv6.route-metric"], "editor: a negative route metric");
+            // --- hotspots ---
+            const password = rules.hotspotPassword(() => 0.5);
+            assert(password.length === 12 && !/[01lIO]/.test(password), "hotspot: a 12-letter password, nothing to misread");
+            const hotspot = rules.hotspotTemplate("framework", "secretpass");
+            assert(rules.isHotspot(hotspot) && hotspot.wifi.ssid === "framework" && hotspot.wifi.band === "bg"
+                   && hotspot.wifi.security === "wpa-psk" && !hotspot.autoconnect && hotspot.ipv4.method === "shared",
+                   "hotspot: template — the computer's name, 2.4 GHz, WPA2, by hand, the router");
+            assertEqual(JSON.stringify(rules.editorErrors(hotspot)), "{}", "hotspot: the template is valid");
+            const create = rules.createCommand(hotspot, "h2s");
+            const addArgs = create.command.slice(3);
+            const argument = property => { const at = addArgs.indexOf(property); return at < 0 ? null : addArgs[at + 1]; };
+            assert(addArgs[0] === "type" && addArgs[1] === "wifi" && argument("802-11-wireless.mode") === "ap"
+                   && argument("802-11-wireless.ssid") === "framework" && argument("ipv4.method") === "shared"
+                   && argument("802-11-wireless-security.key-mgmt") === "wpa-psk" && argument("802-11-wireless-security.psk") === "secretpass"
+                   && argument("802-11-wireless-security.proto") === "rsn" && argument("connection.autoconnect") === "no"
+                   && argument("connection.id") === "framework hotspot", "hotspot: the add command");
+            const shortPassword = JSON.parse(JSON.stringify(hotspot));
+            shortPassword.wifi.password = "short";
+            assert(!!rules.editorErrors(shortPassword)["802-11-wireless-security.psk"], "hotspot: a too short password");
+            const opened = JSON.parse(JSON.stringify(hotspot));
+            opened.wifi.security = "";
+            const openChanges = rules.editorChanges(hotspot, opened, "h2s");
+            assert(openChanges.some(change => change[0] === "remove" && change[1] === "802-11-wireless-security")
+                   && !openChanges.some(change => change[0] === "802-11-wireless-security.psk"), "hotspot: open takes the security away");
+            const newPassword = JSON.parse(JSON.stringify(hotspot));
+            newPassword.wifi.password = "anotherpass";
+            const passwordChanges = rules.editorChanges(hotspot, newPassword, "h2s");
+            assert(passwordChanges.length === 1 && passwordChanges[0][1] === "anotherpass", "hotspot: only the new password sent");
+            const network = rules.settingsFrom({ "connection.id": "Home", "802-11-wireless.ssid": "Home", "802-11-wireless-security.key-mgmt": "wpa-psk" });
+            assert(!rules.isHotspot(network) && rules.editorChanges(network, Object.assign(JSON.parse(JSON.stringify(network)), {}), "h2s").length === 0
+                   && Object.keys(rules.editorErrors(network)).length === 0, "hotspot: a joined network's password is not the editor's");
+            const neighbours = JSON.stringify([
+                { dst: "10.42.0.23", dev: "wlan0", lladdr: "aa:bb:cc:00:11:22", state: ["REACHABLE"] },
+                { dst: "fe80::1", dev: "wlan0", lladdr: "aa:bb:cc:00:11:22", state: ["STALE"] },
+                { dst: "10.42.0.40", dev: "wlan0", state: ["FAILED"] },
+                { dst: "10.42.0.41", dev: "wlan0", lladdr: "dd:ee:ff:00:11:22", state: ["STALE"] }]);
+            const first = rules.hotspotClients(neighbours, {}, 1000, 300000);
+            assert(first.clients.length === 1 && first.clients[0].address === "10.42.0.23",
+                   "hotspot: devices heard from, IPv4 first; a STALE one never heard from left out");
+            const idle = rules.hotspotClients(JSON.stringify([{ dst: "10.42.0.23", lladdr: "aa:bb:cc:00:11:22", state: ["STALE"] }]),
+                first.seen, 200000, 300000);
+            assertEqual(idle.clients.length, 1, "hotspot: an idle device still counts for a while");
+            const gone = rules.hotspotClients(JSON.stringify([{ dst: "10.42.0.23", lladdr: "aa:bb:cc:00:11:22", state: ["STALE"] }]),
+                first.seen, 400000, 300000);
+            assertEqual(gone.clients.length, 0, "hotspot: a device long silent has left");
+            assertEqual(rules.hotspotClients("not json", {}, 0, 1).clients.length, 0, "hotspot: unreadable neighbours, none");
+            const extra = rules.settingsFrom(Object.assign({}, wiredBlock, { "ipv4.method": "auto", "ipv4.addresses": "10.0.0.5/24", "ipv4.gateway": "" }));
+            const renamed = JSON.parse(JSON.stringify(extra));
+            renamed.name = "Renamed";
+            const renameChanges = rules.editorChanges(extra, renamed, "h2s");
+            assert(renameChanges.length === 1 && renameChanges[0][0] === "connection.id", "editor: DHCP's extra addresses left alone");
+            const backToManual = rules.editorChanges(Object.assign(JSON.parse(JSON.stringify(wired)), { ipv4: Object.assign({}, wired.ipv4,
+                { method: "auto", addresses: [], gateway: "" }) }), wired, "h2s");
+            const findBack = property => (backToManual.find(change => change[0] === property) ?? [null, null])[1];
+            assert(findBack("ipv4.method") === "manual" && findBack("ipv4.addresses") === "192.168.10.5/24,10.0.0.2/8"
+                   && findBack("ipv4.gateway") === "192.168.10.1", "editor: the way back to manual brings its addresses and gateway");
+            const crossDns = JSON.parse(JSON.stringify(wired));
+            crossDns.ipv4.dns = ["2606:4700:4700::1111"];
+            crossDns.ipv6.dns = ["1.1.1.1"];
+            const crossErrors = rules.editorErrors(crossDns);
+            assert(crossErrors["ipv4.dns"] && crossErrors["ipv6.dns"], "editor: DNS servers of the other family refused");
+            const unread = JSON.parse(JSON.stringify(hotspot));
+            unread.wifi.password = null;
+            const unreadBand = JSON.parse(JSON.stringify(unread));
+            unreadBand.wifi.band = "a";
+            assert(Object.keys(rules.editorErrors(unread)).length === 0
+                   && !rules.editorChanges(unread, unreadBand, "h2s").some(change => change[0] === "802-11-wireless-security.psk"),
+                   "hotspot: a password that could not be read is kept, not required");
+            // --- VPNs ---
+            const plugins = rules.vpnPlugins("[VPN Connection]\nname=openvpn\nservice=org.freedesktop.NetworkManager.openvpn\n"
+                + "program=/usr/lib/nm-openvpn-service\n\n[libnm]\nplugin=libnm-vpn-plugin-openvpn.so\n[GNOME]\nname=ignored\n"
+                + "[VPN Connection]\nname=vpnc\nservice=org.freedesktop.NetworkManager.vpnc\n"
+                + "[VPN Connection]\nname=openvpn\nservice=org.freedesktop.NetworkManager.openvpn\n");
+            assert(plugins.length === 2 && plugins[0].name === "openvpn" && plugins[1].name === "vpnc",
+                   "vpn: plugins from their .name files, other sections ignored, each once");
+            assertEqual(rules.vpnTypeName("org.freedesktop.NetworkManager.openvpn"), "OpenVPN", "vpn: a plugin's name from its service");
+            const vpnDetails = rules.vpnDetails([
+                { "connection.uuid": "w1", "wireguard.peers": "KEY= allowed-ips=0.0.0.0/0;::/0 endpoint=vpn.example.com:3389" },
+                { "connection.uuid": "o1", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn",
+                  "vpn.data": "ca = /home/a/ca.crt, connection-type = tls, remote = ovpn.example.org:1194, dev = tun" }]);
+            assert(vpnDetails["w1"].server === "vpn.example.com:3389" && vpnDetails["w1"].service === ""
+                   && vpnDetails["o1"].server === "ovpn.example.org:1194", "vpn: the server from WireGuard's peer and OpenVPN's remote");
+            const upDetails = rules.vpnDetails([
+                { "connection.uuid": "w2", "wireguard.peers": "K1= allowed-ips=10.0.0.0/8 endpoint=a.example:51820, K2= endpoint=b.example:51820" },
+                { "connection.uuid": "o2", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn", "GENERAL.IP-IFACE": "tun0",
+                  "IP4.ADDRESS": ["10.8.0.6/24"], "IP6.ADDRESS": ["fd00::6/64"], "IP4.DNS": ["10.8.0.1"] }]);
+            assert(upDetails["w2"].server === "a.example:51820" && upDetails["w2"].iface === "" && upDetails["w2"].addresses.length === 0,
+                   "vpn: several peers — the first's endpoint, without the comma; not up, no interface");
+            assert(upDetails["o2"].iface === "tun0" && upDetails["o2"].addresses.join(" ") === "10.8.0.6/24 fd00::6/64"
+                   && upDetails["o2"].dns[0] === "10.8.0.1", "vpn: while up, the tunnel's own interface, addresses and DNS");
+            assert(rules.importTypeOf("/x/home.conf", plugins) === "wireguard" && rules.importTypeOf("/x/a.OVPN", plugins) === "openvpn"
+                   && rules.importTypeOf("/x/cisco.pcf", plugins) === "vpnc" && rules.importTypeOf("/x/a.pcf", []) === ""
+                   && rules.importTypeOf("/x/a.ovpn", []) === "", "vpn: import kind by the file's ending, only with its plugin");
+            assert(rules.importTypeOf("/x/a.bin", [{ name: "fortisslvpn", service: "s" }]) === "fortisslvpn",
+                   "vpn: else the only plugin with no known file");
+            assert(rules.canImport("wireguard", []) && !rules.canImport("openvpn", []) && rules.canImport("openvpn", plugins),
+                   "vpn: WireGuard always, a plugin's kind with its plugin");
+            const importNames = rules.wireguardImportNames("/home/a/My VPN (Poland) server.conf");
+            assert(importNames.name === "My VPN (Poland) server" && importNames.iface === "MyVPNPolandserv"
+                   && rules.wireguardImportNames("/x/ąę.conf").iface === "wg0", "vpn: a WireGuard file's profile name and a valid interface");
+            // --- WireGuard ---
+            const keyA = "EXLhetDmYSWNkAY1H8iTfrg3FAq08r4wq9Fsz9cB1hE=";
+            const keyB = "rxygZozWStLioOLAG7N+42a9wrGderYLA9o0KEwkc1Q=";
+            assert(rules.isWireguardKey(keyA) && !rules.isWireguardKey("short=") && !rules.isWireguardKey(keyA.slice(0, 42) + "B="),
+                   "wireguard: a key is 32 bytes of base64");
+            assert(rules.isEndpoint("vpn.example.com:51820") && rules.isEndpoint("[::1]:51831") && !rules.isEndpoint("host")
+                   && !rules.isEndpoint("host:70000") && !rules.isEndpoint("[nope]:1"), "wireguard: endpoints");
+            const peers = rules.wireguardPeers(keyA + " allowed-ips=10.97.97.0/24;10.96.0.0/16 endpoint=127.0.0.1:51830 preshared-key=" + keyB
+                + " preshared-key-flags=0 persistent-keepalive=25, " + keyB + " endpoint=[::1]:51831");
+            assert(peers.length === 2 && peers[0].allowedIps.length === 2 && peers[0].presharedKey === keyB && peers[0].keepalive === 25
+                   && peers[1].endpoint === "[::1]:51831" && peers[1].allowedIps.length === 0, "wireguard: peers read, with their preshared key");
+            assertEqual(rules.wireguardPeers(rules.wireguardPeersText(peers)).length, 2, "wireguard: peers written read back the same");
+            assert(rules.wireguardPeersText(peers).indexOf("preshared-key-flags=0") > 0, "wireguard: a preshared key stored with the profile");
+            const wgSettings = rules.settingsFrom({ "connection.id": "Work", "connection.interface-name": "wg0", "wireguard.listen-port": "0",
+                "wireguard.mtu": "1420", "ipv4.method": "manual", "ipv4.addresses": "10.0.0.2/24", "ipv6.method": "disabled" });
+            assert(wgSettings.wireguard !== null && wgSettings.wireguard.mtu === 1420 && wgSettings.wireguard.iface === "wg0"
+                   && wgSettings.wifi === null, "wireguard: its own settings read");
+            wgSettings.wireguard.privateKey = keyA;
+            wgSettings.wireguard.peers = peers;
+            assertEqual(JSON.stringify(rules.editorErrors(wgSettings)), "{}", "wireguard: valid settings");
+            const wgBroken = JSON.parse(JSON.stringify(wgSettings));
+            wgBroken.wireguard.privateKey = "";
+            wgBroken.wireguard.iface = "a-much-too-long-name";
+            wgBroken.wireguard.peers[0].publicKey = "x";
+            wgBroken.wireguard.peers[1].endpoint = "nope";
+            const wgErrors = rules.editorErrors(wgBroken);
+            assert(wgErrors["wireguard.private-key"] && wgErrors["connection.interface-name"] && wgErrors["wireguard.peers.0.publicKey"]
+                   && wgErrors["wireguard.peers.1.endpoint"], "wireguard: no key, a long interface, a bad peer key and endpoint");
+            const wgEdited = JSON.parse(JSON.stringify(wgSettings));
+            wgEdited.wireguard.peers[0].keepalive = 0;
+            const wgChanges = rules.editorChanges(wgSettings, wgEdited, "h2s");
+            assert(wgChanges.length === 1 && wgChanges[0][0] === "wireguard.peers" && wgChanges[0][1].indexOf("persistent-keepalive") < 0,
+                   "wireguard: a peer changed — all peers written");
+            const wgUnread = JSON.parse(JSON.stringify(wgSettings));
+            wgUnread.wireguard.privateKey = null;
+            wgUnread.wireguard.peers = null;
+            const wgUnreadRenamed = JSON.parse(JSON.stringify(wgUnread));
+            wgUnreadRenamed.name = "Other";
+            assert(Object.keys(rules.editorErrors(wgUnread)).length === 0 && rules.editorChanges(wgUnread, wgUnreadRenamed, "h2s").length === 1,
+                   "wireguard: secrets not read are kept, not required");
+            const template = rules.wireguardTemplate(["wg0"]);
+            assert(template.wireguard.iface === "wg1" && template.ipv4.method === "manual" && !template.autoconnect
+                   && template.wireguard.peers[0].allowedIps.join(" ") === "0.0.0.0/0 ::/0", "wireguard: a new one — the next interface, all traffic");
+            template.ipv4.addresses = ["10.0.0.2/24"];
+            template.wireguard.privateKey = keyA;
+            template.wireguard.peers[0].publicKey = keyB;
+            template.wireguard.peers[0].endpoint = "vpn.example.com:51820";
+            const wgCreate = rules.createCommand(template, "h2s");
+            const createArgs = wgCreate.command.slice(3);
+            const wgArgument = property => { const at = createArgs.indexOf(property); return at < 0 ? null : createArgs[at + 1]; };
+            assert(createArgs[0] === "type" && createArgs[1] === "wireguard" && wgArgument("connection.interface-name") === "wg1"
+                   && wgArgument("ipv4.method") === "manual" && wgArgument("wireguard.private-key") === keyA
+                   && wgArgument("wireguard.peers").indexOf(keyB) === 0 && wgArgument("connection.autoconnect") === "no",
+                   "wireguard: the add command, its key and peers with it");
+            const exact = rules.modifyCommand("u1", [["connection.id", "A"], ["802-11-wireless-security.psk", " spaced pass "]]);
+            assertEqual(exact.command.join("|"), "nmcli|connection|modify|uuid|u1|connection.id|A|802-11-wireless-security.psk| spaced pass ",
+                   "writing: one modify, a password with its spaces as typed");
+            // --- a VPN with a network ---
+            const profile = (uuid, kind, state) => ({ uuid: uuid, kind: kind, state: state });
+            const map = { wired: ["vpn"], wifi: ["vpn"], gone: ["vpn"] };
+            const plan = (profiles, memory, now) => rules.vpnWithNetworkPlan(profiles, map, memory, now ?? 1000);
+            const start = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], {});
+            assert(start.connect.join() === "vpn" && start.memory.broughtUp.vpn && start.memory.pending.vpn === 1000,
+                   "vpn with a network: a network up brings its VPN up, pending until seen up");
+            const early = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], start.memory, 2000);
+            assert(early.connect.length === 0 && early.memory.broughtUp.vpn && !early.memory.heldDown.vpn,
+                   "vpn with a network: still down right after asking — not taken for by hand, not asked again");
+            const seen = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", "activated"), profile("vpn", "vpn", "activated")], early.memory, 3000);
+            assert(!("vpn" in seen.memory.pending) && seen.memory.broughtUp.vpn, "vpn with a network: seen up");
+            const cableOut = plan([profile("wired", "ethernet", ""), profile("wifi", "wifi", "activated"), profile("vpn", "vpn", "activated")], seen.memory, 4000);
+            assert(cableOut.disconnect.length === 0 && cableOut.connect.length === 0,
+                   "vpn with a network: one of two linked networks gone — the VPN stays for the other");
+            const settling = plan([profile("wired", "ethernet", ""), profile("wifi", "wifi", "deactivating"), profile("vpn", "vpn", "activated")], seen.memory, 5000);
+            assertEqual(settling.disconnect.length, 0, "vpn with a network: a network still going down — NetworkManager's turn first");
+            const allGone = plan([profile("wired", "ethernet", ""), profile("wifi", "wifi", ""), profile("vpn", "vpn", "activated")], seen.memory, 6000);
+            assert(allGone.disconnect.join() === "vpn" && !allGone.memory.broughtUp.vpn, "vpn with a network: no linked network up — taken down");
+            const byHand = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], seen.memory, 7000);
+            assert(byHand.connect.length === 0 && byHand.memory.heldDown.vpn === "wired" && !byHand.memory.broughtUp.vpn,
+                   "vpn with a network: taken down by hand while wanted — held down");
+            const stillHeld = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], byHand.memory, 8000);
+            assertEqual(stillHeld.connect.length, 0, "vpn with a network: held down while the same networks are up");
+            const reconnected = plan([profile("wired", "ethernet", ""), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], stillHeld.memory, 9000);
+            const again = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], reconnected.memory, 10000);
+            assertEqual(again.connect.join(), "vpn", "vpn with a network: the network back again — brought up again");
+            const failed = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], start.memory, 100000);
+            assert(failed.connect.length === 0 && failed.memory.heldDown.vpn === "wired", "vpn with a network: still down after 90 s — failed, not retried");
+            const ownVpn = plan([profile("wired", "ethernet", ""), profile("wifi", "wifi", ""), profile("vpn", "vpn", "activated")], {}, 1000);
+            assertEqual(ownVpn.disconnect.length, 0, "vpn with a network: a VPN brought up by hand stays when the networks go");
+            const notRead = plan([], seen.memory, 1000);
+            assert(notRead.connect.length === 0 && notRead.disconnect.length === 0 && notRead.memory.broughtUp.vpn,
+                   "vpn with a network: profiles not read yet — nothing done, nothing forgotten");
+            const pruned = rules.prunedVpnMapping({ wired: ["vpn", "deleted"], gone: ["vpn"] }, [profile("wired", "ethernet", ""), profile("vpn", "vpn", "")]);
+            assertEqual(JSON.stringify(pruned), JSON.stringify({ wired: ["vpn"] }), "vpn with a network: profiles that are gone leave the mapping");
+            assertEqual(JSON.stringify(rules.prunedVpnMapping(map, [])), JSON.stringify(map), "vpn with a network: nothing pruned before the profiles are read");
+            // --- only through the VPN ---
+            const lockProfiles = [{ uuid: "cafe", state: "activated" }, { uuid: "home", state: "" }];
+            assert(rules.lockdownWanted(lockProfiles, true, []) && rules.lockdownWanted(lockProfiles, false, ["cafe"])
+                   && !rules.lockdownWanted(lockProfiles, false, ["home"]) && !rules.lockdownWanted([], false, ["cafe"]),
+                   "lockdown: always, or while a network it is set for is up");
+            assert(rules.serverHost("vpn.example.com:51820") === "vpn.example.com" && rules.serverHost("[2001:db8::1]:51820") === "2001:db8::1"
+                   && rules.serverHost("2001:db8::1") === "2001:db8::1" && rules.serverHost("1.2.3.4") === "1.2.3.4", "lockdown: a server's host");
+            const lockArgs = rules.lockdownArguments({ vpnInterfaces: ["wg0", "ua", "evil\"; flush", "ua", "a.b"], servers: ["2001:DB8::1", "193.0.0.1", "junk", "::ffff:1.2.3.4"], allowLan: false });
+            assertEqual(lockArgs.join(" "), "on 0 ua,wg0 193.0.0.1,2001:db8::1", "lockdown: the script's arguments, checked and sorted");
+            assertEqual(rules.lockdownArguments({}).join(" "), "on 0 - -", "lockdown: none — a dash");
+            assertEqual(rules.lockdownStatusOf(lockArgs), "on 0 ua,wg0 193.0.0.1,2001:db8::1", "lockdown: the status it reports");
+            const rule = rules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);
+            assert(rule.indexOf('subject.user == "h2s" && subject.local && subject.active') > 0
+                   && rule.indexOf('action.lookup("program") == "/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"') > 0
+                   && rules.lockdownPolkitRule("h2s\"; evil", ["x"]).indexOf('subject.user == "h2sevil"') > 0, "lockdown: the polkit rule, for this user and this program only");
+            const twoQuotes = "''";
+            const module = rules.lockdownNixosModule("echo ${1:-} " + twoQuotes + "x\n", "h2s");
+            assert(module.indexOf("echo " + twoQuotes + "${1:-} " + twoQuotes + "'x") > 0 && module.indexOf("writeShellScriptBin") > 0
+                   && module.indexOf("pkgs.nftables") > 0 && module.indexOf('"${lockdown}/bin/h2s-vpn-lockdown"') > 0,
+                   "lockdown: NixOS's module, the script escaped inside it");
+            assert(rules.serverHost("ovpn.example.org:1194:udp") === "ovpn.example.org" && rules.serverHost("1.2.3.4:443:tcp-client") === "1.2.3.4",
+                   "lockdown: OpenVPN's host:port:proto");
+            const remotes = rules.vpnDetails([{ "connection.uuid": "o3", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn",
+                "vpn.data": "ca = /a/ca.crt, remote = a.example:1194:udp, b.example:443:tcp, dev = tun" },
+                { "connection.uuid": "w3", "wireguard.peers": "K1= endpoint=a.example:51820, K2= endpoint=[2001:db8::1]:51820" }]);
+            assert(remotes["o3"].servers.join(" ") === "a.example:1194:udp b.example:443:tcp" && remotes["o3"].server === "a.example:1194:udp"
+                   && remotes["w3"].servers.length === 2, "lockdown: every remote, every peer's endpoint");
+            assertEqual(JSON.stringify(rules.addressesByHost(["a.example 1.2.3.4", "a.example 1.2.3.4", "a.example 2001:db8::5", "b.example junk"])),
+                   JSON.stringify({ "a.example": ["1.2.3.4", "2001:db8::5"] }), "lockdown: addresses by host");
+            assert(rules.serverHost("https://vpn.corp.example/staff") === "vpn.corp.example" && rules.serverHost("vpn.example.com::udp") === "vpn.example.com"
+                   && rules.serverHost("https://user@[2001:db8::1]:443/x") === "2001:db8::1", "lockdown: a server's host from a URL, from host::udp");
+            assert(rules.isLockdownAddress("1.2.3.4") && !rules.isLockdownAddress("01.2.3.4") && !rules.isLockdownAddress("::ffff:1.2.3.4")
+                   && rules.isLockdownAddress("2001:db8::1"), "lockdown: addresses as the script takes them");
+            const many = [];
+            for (let i = 0; i < 300; i++)
+                many.push("10." + Math.floor(i / 250) + "." + (i % 250) + ".1");
+            assertEqual(rules.lockdownArguments({ servers: many })[3].split(",").length, 256, "lockdown: no more addresses than the script takes");
+            const wifiSettings = rules.settingsFrom({ "connection.id": "Home", "802-11-wireless.ssid": "Home", "802-11-wireless.band": "a",
+                "802-11-wireless.cloned-mac-address": "stable", "802-11-wireless.hidden": "no", "ipv6.ip6-privacy": "2 (enabled, prefer temporary IP)" });
+            assert(wifiSettings.wifi.band === "a" && wifiSettings.wifi.mac === "stable" && wifiSettings.ethernet === null
+                   && wifiSettings.ipv6.privacy === "2", "editor: Wi-Fi extras, privacy from nmcli's words");
+
+                        assert(rules.isConnectivityUri("http://ping.archlinux.org/nm-check.txt") && rules.isConnectivityUri("https://example.com:8443/x"),
+                   "connectivity URI: http and https, a port, a path");
+            assert(!rules.isConnectivityUri("ftp://x/y") && !rules.isConnectivityUri("http://x/a b")
+                   && !rules.isConnectivityUri("http://x/a\nuri=evil") && !rules.isConnectivityUri("http://x/\"q"),
+                   "connectivity URI: another scheme, a space, a newline, a quote");
         }
     }
 }

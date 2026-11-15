@@ -51,8 +51,8 @@ Then, in the user's order:
       today the network popup connects to Wi-Fi and VPNs and nothing more. Through
       `nmcli`: saved Wi-Fi networks (forget, autoconnect, priority, password), hidden
       networks; VPNs (list, import `.ovpn` and WireGuard `.conf`, edit the basics, delete);
-      a connection's IPv4/IPv6 (DHCP or manual: addresses, gateway), DNS; Ethernet; later a
-      hotspot. A plan in `docs/plans/` first.
+      a connection's IPv4/IPv6 (DHCP or manual: addresses, gateway), DNS; Ethernet;
+      hotspots (done). Later: a QR code to join (`qrencode`). A plan in `docs/plans/` first.
 
 - [ ] **11.23 Installing: Arch and NixOS** (requested 2026-11-08, before touch input —
       the Framework 12 runs NixOS). `install.sh` for Arch (pacman, then a checkout in

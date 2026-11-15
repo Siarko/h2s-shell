@@ -77,14 +77,162 @@ Singleton {
         return { networks: networks, signalInUse: signalInUse };
     }
 
-    // `nmcli -t -f name,type connection show`: the names of the saved Wi-Fi profiles
-    function savedWifi(lines) {
-        const names = [];
-        for (const line of lines) {
-            const parts = splitTerse(line);
-            if (parts.length >= 2 && parts[1].trim() === "802-11-wireless")
-                names.push(parts[0]);
+    // `nmcli -t -f <fields> connection show <id>…` or `device show`: "KEY:value" lines, one
+    // block per connection or device. Only the first colon separates (an IPv6 address has
+    // more); numbered keys ("IP4.ADDRESS[1]", "IP4.ADDRESS[2]") gather into a list under
+    // "IP4.ADDRESS". The commands that read the output drop blank lines, so a block starts
+    // again where `startKey` comes back. → [{ KEY: value or [values] }]
+    function records(lines, startKey) {
+        const blocks = [];
+        let current = null;
+        for (const rawLine of lines ?? []) {
+            // Trimmed: the blank line between blocks comes glued to the next line's start
+            // ("\nGENERAL.DEVICE:…"), which hid the key that starts a block
+            const line = String(rawLine).trim();
+            const colon = line.indexOf(":");
+            if (colon <= 0)
+                continue;
+            const fullKey = line.slice(0, colon);
+            const value = line.slice(colon + 1).trim();
+            const numbered = /^(.*)\[\d+\]$/.exec(fullKey);
+            const key = numbered ? numbered[1] : fullKey;
+            if (current === null || key === startKey && key in current) {
+                current = {};
+                blocks.push(current);
+            }
+            if (numbered) {
+                if (!Array.isArray(current[key]))
+                    current[key] = [];
+                if (value !== "")
+                    current[key].push(value);
+            } else {
+                current[key] = value;
+            }
         }
-        return names;
+        return blocks;
+    }
+
+    // The kind of a connection type: "wifi", "ethernet", "vpn" (WireGuard, plugin VPNs),
+    // "modem" (gsm, cdma), "bridge", "loopback", or the type itself
+    function kindOf(type) {
+        const kinds = {
+            "802-11-wireless": "wifi", "wifi": "wifi",
+            "802-3-ethernet": "ethernet", "ethernet": "ethernet",
+            "wireguard": "vpn", "vpn": "vpn", "openconnect": "vpn",
+            "gsm": "modem", "cdma": "modem",
+            "bridge": "bridge", "loopback": "loopback"
+        };
+        return kinds[type] ?? type;
+    }
+
+    // `nmcli -t -f UUID,NAME,TYPE,DEVICE,AUTOCONNECT,AUTOCONNECT-PRIORITY,TIMESTAMP,ACTIVE,SLAVE,
+    // STATE connection show`: the saved profiles, by UUID — names are the user's and may
+    // repeat, or differ from a network's SSID. `port` is the kind of bridge or bond the
+    // profile is a port of ("bridge", "bond"…), "" for an ordinary one. `state` is
+    // "activating", "activated", "deactivating" or "" (not active) — `active` is true for
+    // the first three.
+    function profiles(lines) {
+        const list = [];
+        for (const line of lines ?? []) {
+            const parts = splitTerse(String(line));
+            if (parts.length < 8 || parts[0] === "")
+                continue;
+            list.push({
+                uuid: parts[0], name: parts[1], type: parts[2], kind: kindOf(parts[2]),
+                device: parts[3], autoconnect: parts[4] === "yes",
+                priority: parseInt(parts[5]) || 0, lastUsed: parseInt(parts[6]) || 0,
+                active: parts[7] === "yes", port: parts[8] ?? "",
+                state: parts[9] ?? (parts[7] === "yes" ? "activated" : "")
+            });
+        }
+        return list;
+    }
+
+    // `nmcli -t -f connection.uuid,802-11-wireless.ssid,802-11-wireless-security.key-mgmt,
+    // 802-11-wireless.hidden connection show uuid A uuid B…`: { uuid: { ssid, security,
+    // hidden } } — `security` NetworkManager's key management ("wpa-psk", "sae",
+    // "wpa-eap", "owe"…; "" for an open network)
+    function wifiDetails(lines) {
+        const details = {};
+        for (const block of records(lines, "connection.uuid")) {
+            if (block["connection.uuid"])
+                details[block["connection.uuid"]] = {
+                    ssid: block["802-11-wireless.ssid"] ?? "",
+                    security: block["802-11-wireless-security.key-mgmt"] ?? "",
+                    hidden: block["802-11-wireless.hidden"] === "yes",
+                    mode: block["802-11-wireless.mode"] || "infrastructure",
+                    band: block["802-11-wireless.band"] ?? ""
+                };
+        }
+        return details;
+    }
+
+    // A profile's 802-11-wireless.band as a person names it ("" any)
+    function bandName(band) {
+        return band === "a" ? "5 GHz" : band === "bg" ? "2.4 GHz" : "";
+    }
+
+    // Key management as a person names it
+    function securityName(keyManagement) {
+        const names = {
+            "": "Open", "none": "WEP", "ieee8021x": "WEP (802.1X)", "owe": "Open, encrypted (OWE)",
+            "wpa-psk": "WPA2", "sae": "WPA3", "wpa-eap": "Enterprise", "wpa-eap-suite-b-192": "Enterprise (WPA3)"
+        };
+        return names[keyManagement] ?? keyManagement;
+    }
+
+    // `nmcli -t -f all device show`: each device with what the Overview shows. `state` is
+    // NetworkManager's number (100 connected, 30 disconnected, 20 unavailable, 10
+    // unmanaged), `stateText` its words; `speed` in Mb/s, 0 unknown.
+    function devices(lines) {
+        const list = [];
+        for (const block of records(lines, "GENERAL.DEVICE")) {
+            const stateMatch = /^(\d+)\s*\((.*)\)$/.exec(block["GENERAL.STATE"] ?? "");
+            const list4 = key => Array.isArray(block[key]) ? block[key] : (block[key] ? [block[key]] : []);
+            list.push({
+                device: block["GENERAL.DEVICE"] ?? "",
+                type: block["GENERAL.TYPE"] ?? "",
+                kind: kindOf(block["GENERAL.TYPE"] ?? ""),
+                mac: block["GENERAL.HWADDR"] ?? "",
+                mtu: parseInt(block["GENERAL.MTU"]) || 0,
+                state: stateMatch ? parseInt(stateMatch[1]) : 0,
+                stateText: stateMatch ? stateMatch[2] : (block["GENERAL.STATE"] ?? ""),
+                connection: block["GENERAL.CONNECTION"] ?? "",
+                vendor: block["GENERAL.VENDOR"] ?? "",
+                product: block["GENERAL.PRODUCT"] ?? "",
+                driver: block["GENERAL.DRIVER"] ?? "",
+                speed: parseInt(block["CAPABILITIES.SPEED"]) || 0,
+                // A wired device's cable: "on", "off", "" when not wired or not known
+                carrier: block["WIRED-PROPERTIES.CARRIER"] ?? "",
+                ipv4: list4("IP4.ADDRESS"),
+                gateway4: block["IP4.GATEWAY"] ?? "",
+                dns: list4("IP4.DNS").concat(list4("IP6.DNS")),
+                domains: list4("IP4.DOMAIN"),
+                ipv6: list4("IP6.ADDRESS"),
+                gateway6: block["IP6.GATEWAY"] ?? ""
+            });
+        }
+        return list;
+    }
+
+    // What went wrong, from nmcli's stderr: "password" (secrets missing or refused),
+    // "auth" (not allowed), "missing" (no such connection or device), "notFound" (no
+    // network of that name in range), "other"
+    function errorKind(text) {
+        const message = String(text ?? "");
+        if (/secrets were required|802-11-wireless-security\.psk|psk: property is invalid|wrong password/i.test(message))
+            return "password";
+        if (/not authorized|insufficient privileges|permission denied|not allowed/i.test(message))
+            return "auth";
+        if (/no network with ssid/i.test(message))
+            return "notFound";
+        if (/unknown connection|no such connection|unknown device|not found/i.test(message))
+            return "missing";
+        return "other";
+    }
+
+    // nmcli's message without its "Error: " and trailing full stop, for a person to read
+    function errorMessage(text) {
+        return String(text ?? "").split("\n")[0].replace(/^Error:\s*/i, "").replace(/\.\s*$/, "").trim();
     }
 }

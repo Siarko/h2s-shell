@@ -1,0 +1,216 @@
+import QtQuick
+import QtQuick.Layouts
+import qs.components
+import qs.singletons
+import qs.singletons.network
+
+// A saved connection profile on its kind's page (System → Network → Wi-Fi, Ethernet): its
+// name and a line about it, connect or disconnect at once, and, opened, connect
+// automatically, priority, edit connection and forget — plus what the page adds (`data`:
+// the Wi-Fi password). Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
+// page offers ("" when there is none: out of range, no cable); disconnecting takes the
+// device down, not only the profile (NetworkProfiles.disconnectDevice).
+Rectangle {
+    id: root
+
+    // { uuid, name, active, autoconnect, priority, device } (NetworkProfiles.profiles)
+    property var profile: ({ uuid: "", name: "", active: false, autoconnect: false, priority: 0, device: "" })
+    property string title: profile.name
+    property string subtitle: ""
+    property bool open: false
+    property string useDevice: ""
+    // Whether it can be connected now: a device to use it on, by default; a VPN needs none
+    property bool usable: useDevice !== ""
+    property string forgetLabel: "Forget"
+    // The same as it is being done, for a failure's message ("Forgetting Home failed")
+    property string forgetAction: "Forgetting"
+    property string useLabel: "Connect"
+    property string stopLabel: "Disconnect"
+    // A question before connecting ("" none): the second click connects (DeleteButton)
+    property string useQuestion: ""
+    // Stopping takes the profile down rather than the device (a hotspot: the saved network
+    // comes back on the Wi-Fi after it)
+    property bool stopsProfile: false
+    property bool showAutoconnect: true
+    property string autoconnectLabel: "Connect automatically"
+    property string autoconnectHint: ""
+    property bool showPriority: true
+    property string priorityHint: "Higher wins when several could connect"
+    property string editTooltip: "Addresses, DNS, and the rest"
+    // The page's own settings, under the shared ones
+    default property alias content: _extra.data
+    signal toggleRequested()
+    signal forgotten()
+    // Its addresses, DNS and the rest: the page opens NetworkConnectionEditor
+    signal editRequested()
+
+    implicitHeight: _column.implicitHeight + 16
+    radius: Theme.settings.cardRadius
+    color: open ? Theme.surface : (_headerArea.lit ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
+    border.width: Theme.border.width
+    border.color: profile.active ? Theme.accent : Theme.outline
+    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+    ColumnLayout {
+        id: _column
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+        spacing: 6
+
+        // The profile — click for its settings. The click area goes under the row, so the
+        // button takes its own clicks.
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: _header.implicitHeight
+
+            PointerArea {
+                id: _headerArea
+                centred: false
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleRequested()
+            }
+
+            RowLayout {
+                id: _header
+                width: parent.width
+                spacing: 10
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Text {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: root.title
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        font.bold: root.profile.active
+                        color: Theme.textPrimary
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: root.subtitle
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: root.profile.active ? Theme.success : Theme.textMuted
+                    }
+                }
+                // As in the network popup: connect in the confirm colour, disconnect in the
+                // delete colour
+                SmallButton {
+                    visible: root.profile.active || (root.usable && root.useQuestion === "")
+                    label: root.profile.active ? root.stopLabel : root.useLabel
+                    kind: root.profile.active ? "delete" : "save"
+                    available: !NetworkProfiles.connecting
+                    onClicked: {
+                        if (!root.profile.active)
+                            NetworkProfiles.activate(root.profile.uuid, root.useDevice);
+                        else if (root.stopsProfile)
+                            NetworkProfiles.deactivate(root.profile.uuid, root.stopLabel + " " + root.title);
+                        else
+                            NetworkProfiles.disconnectDevice(root.profile.device, "Disconnecting " + root.title);
+                    }
+                }
+                DeleteButton {
+                    visible: !root.profile.active && root.usable && root.useQuestion !== ""
+                    label: root.useLabel
+                    fontSize: Theme.fontSizeBody
+                    confirmLabel: root.useQuestion
+                    cancelTip: "Cancel"
+                    available: !NetworkProfiles.connecting
+                    onConfirmed: NetworkProfiles.activate(root.profile.uuid, root.useDevice)
+                }
+                Text {
+                    text: root.open ? "▾" : "▸"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textMuted
+                }
+            }
+        }
+
+        // ── Its settings ──
+        ColumnLayout {
+            visible: root.open
+            Layout.fillWidth: true
+            spacing: 6
+
+            SwitchRow {
+                visible: root.showAutoconnect
+                label: root.autoconnectLabel
+                hint: root.autoconnectHint
+                checked: root.profile.autoconnect
+                onToggled: NetworkProfiles.setAutoconnect(root.profile.uuid, !checked)
+            }
+
+            // Which profile wins when several could connect
+            RowLayout {
+                visible: root.showPriority
+                Layout.fillWidth: true
+                spacing: 8
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Priority"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textPrimary
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.priorityHint
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                    }
+                }
+                SmallButton {
+                    label: "−"
+                    available: !NetworkProfiles.busy && root.profile.priority > -999
+                    onClicked: NetworkProfiles.setPriority(root.profile.uuid, root.profile.priority - 1)
+                }
+                Text {
+                    Layout.preferredWidth: 32
+                    horizontalAlignment: Text.AlignHCenter
+                    text: String(root.profile.priority)
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textPrimary
+                }
+                SmallButton {
+                    label: "+"
+                    available: !NetworkProfiles.busy && root.profile.priority < 999
+                    onClicked: NetworkProfiles.setPriority(root.profile.uuid, root.profile.priority + 1)
+                }
+            }
+
+            ColumnLayout {
+                id: _extra
+                Layout.fillWidth: true
+                spacing: 6
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                SmallButton {
+                    label: "Edit connection…"
+                    tooltip: root.editTooltip
+                    onClicked: root.editRequested()
+                }
+                Item { Layout.fillWidth: true }
+                DeleteButton {
+                    label: root.forgetLabel
+                    confirmLabel: root.forgetLabel + "?"
+                    cancelTip: "Keep it"
+                    onConfirmed: {
+                        root.forgotten();
+                        NetworkProfiles.forget([root.profile.uuid], root.forgetAction + " " + root.title);
+                    }
+                }
+            }
+        }
+    }
+}

@@ -625,6 +625,8 @@ Singleton {
     readonly property color errorMuted: Qt.alpha(error, 0.6)        // a destructive button at rest
     property color warning: _colors.warning
     ThemeColorBehavior on warning {}
+    property color privileged: _colors.privileged
+    ThemeColorBehavior on privileged {}
     property color success: _colors.success
     ThemeColorBehavior on success {}
 

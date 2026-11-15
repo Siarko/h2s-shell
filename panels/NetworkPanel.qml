@@ -7,7 +7,11 @@ import qs.singletons.network
 import qs.panels.network
 
 // Network management popup: VPN (VpnSection), Ethernet and Wi-Fi with their details
-// (LinkInfo), the network list (WifiNetworkRow) and a hidden network (HiddenNetworkRow)
+// (LinkInfo), the network list (WifiNetworkRow), a hidden network (HiddenNetworkRow) and
+// the saved hotspots to turn on (HotspotRow).
+// While the Wi-Fi serves a hotspot it joins no network: the hotspot shows in the network's
+// place — its devices, a button to turn it off — and the list gives way to a line saying
+// so (the list is the one from before the hotspot, and joining would end it unasked).
 Item {
     id: root
 
@@ -15,28 +19,17 @@ Item {
     // network list is cut to fit it. Unlimited until the popup sets it.
     property real availableHeight: Infinity
 
-    // The network row that is open, by SSID; the passwords typed, by SSID; whether the
-    // open row shows its password (see WifiNetworkRow)
-    property string _expandedSsid: ""
-    property var _passwords: ({})
-    property bool _showPassword: false
-
-    function _toggleNetwork(ssid) {
-        _expandedSsid = _expandedSsid === ssid ? "" : ssid;
-        _showPassword = false;
-    }
-
-    function _setPassword(ssid, text) {
-        const passwords = Object.assign({}, _passwords);
-        passwords[ssid] = text;
-        _passwords = passwords;
-    }
-
     implicitWidth: Theme.popupWidth("network", 280)
     implicitHeight: col.implicitHeight
 
-    Component.onCompleted: WifiManager.startScan()
-    Component.onDestruction: WifiManager.stopScan()
+    Component.onCompleted: {
+        WifiManager.holdScan();
+        NetworkOverview.holdHotspotClients();
+    }
+    Component.onDestruction: {
+        WifiManager.releaseScan();
+        NetworkOverview.releaseHotspotClients();
+    }
 
     Column {
         id: col
@@ -108,7 +101,8 @@ Item {
             Text {
                 text: {
                     if (!WifiManager.wifiEnabled) return "󰤭"
-                    if (!NetworkManager.wifiConnected) return "󰤮"
+                    if (WifiManager.mode === "hotspot") return "󰀃"
+                    if (WifiManager.mode !== "connected") return "󰤮"
                     if (WifiManager.wifiSignal >= 75) return "󰤨"
                     if (WifiManager.wifiSignal >= 50) return "󰤤"
                     if (WifiManager.wifiSignal >= 25) return "󰤢"
@@ -116,7 +110,7 @@ Item {
                 }
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeTitle
-                color: NetworkManager.wifiConnected ? Theme.textPrimary : Theme.textDisabled
+                color: WifiManager.mode === "connected" || WifiManager.mode === "hotspot" ? Theme.textPrimary : Theme.textDisabled
             }
 
             Text {
@@ -139,13 +133,13 @@ Item {
 
         // ---- WiFi connection info row ----
         RowLayout {
-            visible: WifiManager.wifiEnabled && (WifiManager.wifiConnected || WifiManager.connecting)
+            visible: WifiManager.mode === "connected" || (WifiManager.mode === "disconnected" && WifiManager.connecting)
             width: parent.width
             spacing: 6
 
             Text {
                 text: WifiManager.wifiConnected
-                    ? (WifiManager.wifiNetworks.find(n => n.inUse)?.ssid ?? "")
+                    ? (WifiManager.wifiNetworks.find(network => network.inUse)?.ssid ?? "")
                     : ("Connecting to \"" + WifiManager.connectingTo + "\"…")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
@@ -170,12 +164,45 @@ Item {
             }
         }
 
+        // ---- The hotspot in the network's place ----
+        RowLayout {
+            visible: WifiManager.mode === "hotspot"
+            width: parent.width
+            spacing: 6
+
+            Text {
+                text: "Hotspot \"" + (WifiManager.hotspot?.ssid ?? "") + "\""
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBodyLarge
+                color: Theme.textPrimary
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+            }
+
+            Text {
+                readonly property int _count: NetworkOverview.hotspotClients.length
+                text: _count + (_count === 1 ? " device" : " devices")
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.textSecondary
+            }
+        }
+
         LinkInfo {
-            visible: WifiManager.wifiConnected
+            visible: WifiManager.mode === "connected" || WifiManager.mode === "hotspot"
             width: parent.width
             speeds: WifiManager
             address: IpManager.wifiAddress
             dns: IpManager.wifiDns
+        }
+
+        SmallButton {
+            visible: WifiManager.mode === "hotspot"
+            width: parent.width
+            label: "Turn off hotspot"
+            kind: "delete"
+            available: !NetworkProfiles.connecting
+            onClicked: NetworkProfiles.deactivate(WifiManager.hotspot.uuid, "Turning off " + WifiManager.hotspot.ssid)
         }
 
         // ---- WiFi disconnect button ----
@@ -197,10 +224,20 @@ Item {
             opacity: 0.3
         }
 
+        Text {
+            visible: WifiManager.mode === "hotspot"
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "The Wi-Fi serves the hotspot: turn it off to join a network."
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeBody
+            color: Theme.textMuted
+        }
+
         // ---- Available networks section ----
         Column {
             id: _wifiSection
-            visible: WifiManager.wifiEnabled
+            visible: WifiManager.mode === "connected" || WifiManager.mode === "disconnected"
             width: parent.width
             spacing: 4
 
@@ -238,63 +275,23 @@ Item {
                 }
             }
 
-            // Network list
-            ListView {
+            // Network list (shared with Settings → System → Network → Wi-Fi), cut to what the
+            // panel has left: everything above it, and below it the hidden-network row
+            WifiNetworkList {
                 id: networkList
                 width: parent.width
-                // What the panel has left for it: everything above it, and below it the
-                // hidden-network row (the empty-state text shows only with no list)
-                height: {
-                    const below = _wifiSection.spacing + _hiddenRow.height;
-                    const room = root.availableHeight - _wifiSection.y - networkList.y - below;
-                    return Math.min(contentHeight, Math.max(80, room));
-                }
-                clip: true
-                // Keyed by "ssid", as WifiManager rebuilds wifiNetworks fresh on every
-                // scan (see VpnSection for why)
-                model: ScriptModel {
-                    objectProp: "ssid"
-                    values: WifiManager.wifiNetworks
-                }
-                spacing: 4
-                boundsBehavior: Flickable.StopAtBounds
-                // A network found by a scan fades in, and the list makes room for it;
-                // rows re-sorted by signal slide to their new place
-                add: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
-                }
-                displaced: Transition {
-                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing: Theme.curve("move") }
-                    NumberAnimation { property: "opacity"; to: 1; duration: Theme.duration("enter") }
-                }
-                move: Transition {
-                    NumberAnimation { property: "y"; duration: Theme.duration("move"); easing: Theme.curve("move") }
-                }
-
-                delegate: WifiNetworkRow {
-                    width: networkList.width
-                    expanded: root._expandedSsid === ssid
-                    passwordText: root._passwords[ssid] ?? ""
-                    showPassword: expanded && root._showPassword
-                    onToggleRequested: root._toggleNetwork(ssid)
-                    onPasswordEdited: text => root._setPassword(ssid, text)
-                    onRevealToggled: root._showPassword = !root._showPassword
-                }
-            }
-
-            // Empty state
-            Text {
-                visible: WifiManager.wifiNetworks.length === 0
-                text: "No networks found"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.textMuted
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
+                maximumHeight: root.availableHeight - _wifiSection.y - networkList.y
+                    - (_wifiSection.spacing + _hiddenRow.height) - (_hotspotRow.visible ? _wifiSection.spacing + _hotspotRow.height : 0)
             }
 
             HiddenNetworkRow {
                 id: _hiddenRow
+                width: parent.width
+            }
+
+            // The saved hotspots, to turn one on (shown when there are some)
+            HotspotRow {
+                id: _hotspotRow
                 width: parent.width
             }
         }

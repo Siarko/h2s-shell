@@ -89,7 +89,7 @@ Singleton {
     // modified. Returns { group: { token: value } } for every group.
     // Colours that take another's value until a theme sets them — built in as "" — so a
     // theme that changes the accent changes them too
-    readonly property var colorFollows: ({ visualizer: "accent" })
+    readonly property var colorFollows: ({ visualizer: "accent", privileged: "warning" })
 
     function resolve(builtin, chain, palettes) {
         const result = {};
@@ -142,6 +142,7 @@ Singleton {
         { group: "Text", token: "textDisabled", label: "Disabled", hint: "Disabled, other-month days, faint icons; dividers and faint fills derive from it" },
         { group: "Status", token: "error", label: "Error", hint: "Errors, destructive actions" },
         { group: "Status", token: "warning", label: "Warning", hint: "Warnings, volume above 100%" },
+        { group: "Status", token: "privileged", label: "Needs an administrator", hint: "The mark on settings that ask for an administrator's password; follows Warning until set" },
         { group: "Status", token: "success", label: "Success", hint: "Connected, done" },
         { group: "Workspaces", token: "workspaceActive", label: "Active", hint: "A workspace that is active but not focused (focused uses the dark accent)" },
         { group: "Workspaces", token: "workspaceSpecial", label: "Special", hint: "A shown special (scratchpad) workspace" },

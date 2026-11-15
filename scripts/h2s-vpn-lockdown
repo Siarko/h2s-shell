@@ -1,0 +1,255 @@
+#!/bin/sh
+# h2s-vpn-lockdown — the "Only through the VPN" blocking of h2s-shell
+# (Settings > System > Network > VPN). Run as root, through pkexec.
+#
+# One job: switch one nftables table, inet h2s_vpn_lockdown, on or off, and say whether it
+# is on. A polkit rule may let a user run it without a password, so whoever runs it must not
+# be able to make it do anything else. Hence:
+#   - nothing from outside reaches the rules as it came: every argument is checked first —
+#     a list of allowed characters, then its shape — and rebuilt from its parts (an IPv4
+#     address from its four numbers); one wrong argument and nothing at all is done
+#   - the rules come from the fixed text below, the rebuilt values put into it
+#   - the environment is set here: no globbing (set -f), C locale, a fixed PATH and IFS
+#   - every $(…) is checked by hand (|| exit 2): bash outside POSIX mode — NixOS runs it
+#     so — does not stop at a failure inside one
+#
+#   h2s-vpn-lockdown on <lan> <interfaces> <addresses>
+#       lan         1 lets the local network through, 0 does not
+#       interfaces  the VPNs' own interfaces, comma-separated, or "-" for none: letters,
+#                   digits, "-" and "_", 15 at most each; tun*, tap*, ppp*, vpn* and wg*
+#                   always pass
+#       addresses   the VPN servers' addresses (IPv4, IPv6), comma-separated, or "-"
+#   h2s-vpn-lockdown off
+#   h2s-vpn-lockdown status    "on <lan> <interfaces> <addresses>" as switched on, or "off"
+#   h2s-vpn-lockdown version
+#
+# What gets out while it is on: loopback; the VPNs' interfaces; virtual interfaces
+# (containers, bridges — local, not the internet); the VPN servers; DNS (so a VPN set by
+# its server's name finds it); DHCP and IPv6 neighbour discovery (so a network can be
+# joined); replies to what came in (not what this computer opened); the local network when
+# allowed. Passed on (a
+# hotspot's devices, containers): only into or out of a VPN, between virtual interfaces, or
+# within the local network.
+
+set -eu
+set -f
+LC_ALL=C
+export LC_ALL
+PATH=/usr/sbin:/usr/bin:/sbin:/bin:/run/current-system/sw/bin
+export PATH
+# Space, tab, newline — written so, as trailing blanks get lost on the way
+IFS=$(printf ' \t\nx')
+IFS=${IFS%x}
+umask 022
+
+VERSION=3
+TABLE=h2s_vpn_lockdown
+STATE=/run/h2s-vpn-lockdown.state
+MOST_INTERFACES=32
+MOST_ADDRESSES=256
+
+fail() {
+    echo "h2s-vpn-lockdown: $*" >&2
+    exit 2
+}
+
+nft_command() {
+    for place in /usr/sbin/nft /usr/bin/nft /sbin/nft /bin/nft /run/current-system/sw/bin/nft; do
+        if [ -x "$place" ]; then
+            echo "$place"
+            return 0
+        fi
+    done
+    fail "nft not found: nftables is not installed"
+}
+
+# ── Checking ── each prints the value rebuilt, or fails
+
+interface_name() {
+    case $1 in
+        '' | *[!A-Za-z0-9_-]*) fail "not an interface name: only letters, digits, - and _" ;;
+    esac
+    [ "${#1}" -le 15 ] || fail "an interface name has 15 characters at most"
+    printf '%s' "$1"
+}
+
+ipv4_address() {
+    case $1 in
+        '' | *[!0-9.]*) fail "not an IPv4 address" ;;
+    esac
+    old_ifs=$IFS
+    IFS=.
+    # shellcheck disable=SC2086 # split on the dots on purpose; globbing is off
+    set -- $1
+    IFS=$old_ifs
+    [ "$#" -eq 4 ] || fail "not an IPv4 address: four numbers"
+    for octet in "$@"; do
+        case $octet in
+            '' | ????* | 0?*) fail "not an IPv4 address: numbers 0 to 255, no leading zero" ;;
+        esac
+        [ "$octet" -le 255 ] || fail "not an IPv4 address: numbers 0 to 255"
+    done
+    printf '%s.%s.%s.%s' "$1" "$2" "$3" "$4"
+}
+
+ipv6_address() {
+    case $1 in
+        '' | *[!0-9A-Fa-f:]*) fail "not an IPv6 address: hex digits and colons" ;;
+        *:*:*) ;;
+        *) fail "not an IPv6 address" ;;
+    esac
+    [ "${#1}" -le 39 ] || fail "not an IPv6 address: too long"
+    case $1 in
+        *::*::* | *:::*) fail "not an IPv6 address" ;;
+    esac
+    whole=$1
+    old_ifs=$IFS
+    IFS=:
+    # shellcheck disable=SC2086
+    set -- $1
+    IFS=$old_ifs
+    [ "$#" -le 8 ] || fail "not an IPv6 address: eight groups at most"
+    for group in "$@"; do
+        case $group in
+            ?????*) fail "not an IPv6 address: four digits a group at most" ;;
+        esac
+    done
+    printf '%s' "$whole" | tr 'A-F' 'a-f'
+}
+
+# A list: "-" or items joined by commas, none empty; each rebuilt by the checker named
+checked_list() {
+    list=$1 checker=$2 most=$3
+    if [ "$list" = "-" ]; then
+        printf '%s' "-"
+        return 0
+    fi
+    case $list in
+        '' | ,* | *, | *,,*) fail "an empty item in a list" ;;
+    esac
+    old_ifs=$IFS
+    IFS=,
+    # shellcheck disable=SC2086
+    set -- $list
+    IFS=$old_ifs
+    [ "$#" -le "$most" ] || fail "too many items in a list"
+    rebuilt=""
+    for item in "$@"; do
+        value=$("$checker" "$item") || exit 2
+        rebuilt="${rebuilt:+$rebuilt,}$value"
+    done
+    printf '%s' "$rebuilt"
+}
+
+address() {
+    case $1 in
+        *:*) ipv6_address "$1" ;;
+        *) ipv4_address "$1" ;;
+    esac
+}
+
+# ── The rules ── from the values checked above only
+
+ruleset() {
+    lan=$1 interfaces=$2 addresses=$3
+    lan4="{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }"
+    lan6="{ fe80::/10, fc00::/7 }"
+    vpn_names="tun* tap* ppp* vpn* wg*"
+    if [ "$interfaces" != "-" ]; then
+        vpn_names="$(printf '%s' "$interfaces" | tr ',' ' ') $vpn_names"
+    fi
+    virtual_names="docker* br-* veth* virbr* podman* vnet* lxc* incus* tailscale*"
+    servers4="" servers6=""
+    if [ "$addresses" != "-" ]; then
+        old_ifs=$IFS
+        IFS=,
+        for item in $addresses; do
+            case $item in
+                *:*) servers6="${servers6:+$servers6, }$item" ;;
+                *) servers4="${servers4:+$servers4, }$item" ;;
+            esac
+        done
+        IFS=$old_ifs
+    fi
+
+    echo "table inet $TABLE {}"
+    echo "delete table inet $TABLE"
+    echo "table inet $TABLE {"
+    echo "    chain output {"
+    echo "        type filter hook output priority filter; policy drop;"
+    echo "        oifname \"lo\" accept"
+    # Replies to what came in (a hotspot's DNS, an SSH session) — only replies: a flow this
+    # computer opened before the blocking, or one a VPN that went down left behind, does not
+    # get out by it
+    echo "        ct state established,related ct direction reply accept"
+    for name in $vpn_names $virtual_names; do
+        echo "        oifname \"$name\" accept"
+    done
+    if [ -n "$servers4" ]; then echo "        ip daddr { $servers4 } accept"; fi
+    if [ -n "$servers6" ]; then echo "        ip6 daddr { $servers6 } accept"; fi
+    echo "        meta l4proto { udp, tcp } th dport 53 accept"
+    echo "        udp sport 68 udp dport 67 accept"
+    echo "        udp sport 67 udp dport 68 accept"
+    echo "        udp sport 546 udp dport 547 accept"
+    echo "        icmpv6 type { nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld2-listener-report } accept"
+    echo "        ip6 daddr ff02::/16 accept"
+    if [ "$lan" = 1 ]; then
+        echo "        ip daddr $lan4 accept"
+        echo "        ip6 daddr $lan6 accept"
+    fi
+    echo "    }"
+    echo "    chain forward {"
+    echo "        type filter hook forward priority filter; policy drop;"
+    for name in $vpn_names; do
+        echo "        oifname \"$name\" accept"
+        echo "        iifname \"$name\" accept"
+    done
+    for name in $virtual_names; do
+        echo "        iifname \"$name\" oifname \"$name\" accept"
+    done
+    if [ "$lan" = 1 ]; then
+        echo "        ip saddr $lan4 ip daddr $lan4 accept"
+        echo "        ip6 saddr $lan6 ip6 daddr $lan6 accept"
+    fi
+    echo "    }"
+    echo "}"
+}
+
+# ── The job ──
+
+case ${1:-} in
+    on)
+        [ "$#" -eq 4 ] || fail "on takes <lan> <interfaces> <addresses>"
+        case $2 in
+            0 | 1) lan=$2 ;;
+            *) fail "lan is 0 or 1" ;;
+        esac
+        interfaces=$(checked_list "$3" interface_name "$MOST_INTERFACES") || exit 2
+        addresses=$(checked_list "$4" address "$MOST_ADDRESSES") || exit 2
+        nft=$(nft_command) || exit 2
+        ruleset "$lan" "$interfaces" "$addresses" | "$nft" -f -
+        printf 'on %s %s %s\n' "$lan" "$interfaces" "$addresses" > "$STATE.new"
+        mv -f "$STATE.new" "$STATE"
+        ;;
+    off)
+        [ "$#" -eq 1 ] || fail "off takes nothing"
+        nft=$(nft_command) || exit 2
+        "$nft" delete table inet "$TABLE" 2> /dev/null || true
+        rm -f "$STATE"
+        ;;
+    status)
+        [ "$#" -eq 1 ] || fail "status takes nothing"
+        nft=$(nft_command) || exit 2
+        if "$nft" list table inet "$TABLE" > /dev/null 2>&1 && [ -f "$STATE" ]; then
+            head -n1 "$STATE"
+        else
+            echo "off"
+        fi
+        ;;
+    version)
+        echo "$VERSION"
+        ;;
+    *)
+        fail "on <lan> <interfaces> <addresses> | off | status | version"
+        ;;
+esac
