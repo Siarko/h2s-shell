@@ -342,7 +342,7 @@ Singleton {
         if (wanted) {
             if (!nftFound) {
                 state = "failed";
-                failure = "nftables is not installed: the script uses its nft to set the blocking rules.";
+                failure = "nftables is not installed: the blocking needs it.";
                 return;
             }
             if (!force && _status === expectedStatus)

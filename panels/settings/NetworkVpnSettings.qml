@@ -51,12 +51,11 @@ Item {
             note: kind.builtIn ? "Ready: NetworkManager's own."
                 : ready ? "Ready: its plugin is installed."
                 : !VpnManager.pluginsRead ? "Looking for its plugin…"
-                : "Not now: NetworkManager's " + kind.label + " plugin is not installed — it reads these files and connects "
-                  + kind.label + " VPNs."
+                : "Not now: needs NetworkManager's " + kind.label + " plugin."
         };
     }).concat(VpnManager.plugins.filter(plugin => !NetworkRules.vpnImportKinds.some(kind => kind.name === plugin.name)).map(plugin => ({
         name: plugin.name, label: NetworkRules.vpnTypeName(plugin.name), ready: true, files: "",
-        note: "Its plugin is installed: a file of its own can be imported if the plugin reads one (choose it under \"As\")."
+        note: "Its plugin is installed. If it reads a file, pick it under \"As\" when importing."
     })))
 
     function _pathOf(url) {
@@ -106,12 +105,12 @@ Item {
                 }
                 SmallButton {
                     label: "New WireGuard"
-                    tooltip: "A WireGuard VPN set up by hand: keys, address, the server as a peer"
+                    tooltip: "Set up by hand: keys, address, server"
                     onClicked: root._newWireguard = true
                 }
                 SmallButton {
                     label: "Import…"
-                    tooltip: "A file from the VPN's provider: WireGuard .conf, OpenVPN .ovpn, or another plugin's"
+                    tooltip: "A WireGuard .conf, an OpenVPN .ovpn, or another plugin's file"
                     onClicked: _fileDialog.open()
                 }
             }
@@ -392,28 +391,26 @@ Item {
                 }
                 Hint {
                     text: _extraServers.problem ? "Addresses only — IPv4 without leading zeros, or IPv6 — separated by commas or spaces."
-                        : "Let through to set up their tunnels; NetworkManager's VPNs are found by themselves."
+                        : "Let through to set up their tunnels. NetworkManager's VPNs need no entry here."
                 }
             }
             Hint {
                 Layout.topMargin: 8
                 readonly property var _names: VpnLockdown.networks.filter(uuid => NetworkProfiles.profiles.some(profile => profile.uuid === uuid))
                     .map(uuid => NetworkProfiles.nameOf(uuid))
-                text: (_names.length > 0 ? "Also on: " + _names.join(", ") + " — " : "Or only on some networks, in a Wi-Fi or wired profile's editor — ")
+                text: (_names.length > 0 ? "Also on " + _names.join(", ") + ": " : "Or only on some networks (set in a Wi-Fi or wired profile's editor): ")
                     + "there it starts a few seconds after the network is up and the password is given; only \"always\" leaves no gap. "
-                    + "Names (DNS) are still looked up outside the VPN, so a VPN set by its server's name can connect. "
-                    + (VpnLockdown.tooManyServers ? "More VPN server addresses than " + NetworkRules.lockdownMostAddresses + ": the rest are left out. " : "")
-                    + "A network with a sign-in page (a hotel's) cannot be signed into while blocking"
-                    + (VpnLockdown.passwordFree ? "." : "; each change asks for the administrator's password — unless the script below is installed.")
+                    + "Name lookups (DNS) still go outside the VPN. "
+                    + (VpnLockdown.tooManyServers ? "Over " + NetworkRules.lockdownMostAddresses + " VPN server addresses: the rest are left out. " : "")
+                    + "A network's sign-in page (a hotel's) cannot be used while blocking."
             }
 
             // ── Password-free blocking: the script, installed in the open ──
             SectionTitle { text: "Password-free blocking" }
             Hint {
-                text: "Switching the blocking is root's, so it asks for the administrator's password — each time, and again after every reboot. "
-                    + "Installed, the script h2s-vpn-lockdown (part of the shell: it only switches this blocking, and builds the rules itself from checked "
-                    + "settings) may run without one, through a polkit rule for " + VpnLockdown.user + " alone. Then the shell also checks that "
-                    + "the blocking is still loaded — at the start, after network changes, and every 5 minutes; a firewall reload can drop it — and loads it again."
+                text: "The blocking changes the firewall as root: each switch asks for the administrator's password, again after every reboot. "
+                    + "Installed, the script h2s-vpn-lockdown, which only switches this blocking, runs without it through a polkit rule for "
+                    + VpnLockdown.user + " alone; the shell then also reloads the blocking if it is dropped (checked on network changes and every 5 minutes)."
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -433,9 +430,9 @@ Item {
                     wrapMode: Text.WordWrap
                     text: !VpnLockdown.checked ? "Looking…"
                         : VpnLockdown.helperState === "ready" ? "Installed (version " + VpnLockdown.installedVersion + ", " + VpnLockdown.installedAt
-                            + ") with its polkit rule: the blocking switches without a password."
-                        : VpnLockdown.helperState === "outdated" ? "Installed, but older than the shell's (version " + VpnLockdown.installedVersion
-                            + ", the shell's " + VpnLockdown.scriptVersion + "): update it. Until then the password is asked for."
+                            + ") with its polkit rule: no password needed."
+                        : VpnLockdown.helperState === "outdated" ? "Older than the shell's (version " + VpnLockdown.installedVersion
+                            + ", the shell's " + VpnLockdown.scriptVersion + "): install it again. Until then the password is asked for."
                         : VpnLockdown.helperState === "asks" ? "Installed, but a password was still asked for: its polkit rule does not apply."
                         : VpnLockdown.installedVersion > 0 ? "The script is there (" + VpnLockdown.installedAt + "), but not its polkit rule for "
                             + VpnLockdown.user + ": the password is asked for."
@@ -491,8 +488,8 @@ Item {
                 Layout.topMargin: 4
                 spacing: 4
                 Hint {
-                    text: "NixOS keeps /etc itself: save this module as /etc/nixos/h2s-vpn-lockdown.nix, add it to imports, and rebuild. "
-                        + "It holds the script, nftables and the polkit rule. To remove it, take it out of imports and rebuild."
+                    text: "Save this module as /etc/nixos/h2s-vpn-lockdown.nix, add it to imports and rebuild; it holds the script, nftables and the polkit rule. "
+                        + "To remove it, take it out of imports and rebuild."
                 }
                 RowLayout {
                     Layout.fillWidth: true

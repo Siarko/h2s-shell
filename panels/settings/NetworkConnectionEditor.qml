@@ -679,7 +679,7 @@ Item {
                 // wireguard-tools missing: named with what it is for, no install line
                 Hint {
                     visible: VpnManager.wgChecked && !VpnManager.wgAvailable
-                    text: "wireguard-tools is not installed: the shell uses its wg to make a key pair and to show the public key. A key from the VPN's provider can still be pasted."
+                    text: "wireguard-tools is not installed: no key pair can be made or public key shown. A key from the VPN's provider can still be pasted."
                 }
 
                 RowLayout {
@@ -849,7 +849,7 @@ Item {
                         Pill {
                             required property var modelData
                             label: VpnManager.labelOf(modelData.id)
-                            tooltip: "Not available now (its provider not loaded, not signed in, or not reporting it): kept until you take it out"
+                            tooltip: "Not available now (its provider not loaded, signed out or not listing it): kept until you take it out"
                             fontSize: Theme.fontSizeBody
                             minimumHeight: 26
                             picked: root._vpnsEdited.includes(modelData.id)
@@ -869,8 +869,7 @@ Item {
                 }
                 Hint {
                     text: VpnManager.vpns.length === 0 ? "No VPN set up yet: System → Network → VPN."
-                        : "When this network connects, the shell brings the VPNs picked up, and takes them down when it disconnects. "
-                          + "Only while the shell runs; a VPN that fails leaves the network up."
+                        : "The VPNs picked connect and disconnect with this network, while the shell runs. A VPN that fails leaves the network up."
                 }
             }
 

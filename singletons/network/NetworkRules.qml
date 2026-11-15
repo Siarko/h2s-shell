@@ -1104,8 +1104,8 @@ Singleton {
         if (whateverState !== true && vpn.state !== "activating" && vpn.state !== "activated")
             return "";
         const own = _string(note, 300).trim();
-        return own !== "" ? own : (vpn.typeName || "This VPN") + " is not let through by the blocking of traffic outside a VPN: "
-            + "it cannot reach its servers or its peers, so it may not connect or carry traffic.";
+        return own !== "" ? own : (vpn.typeName || "This VPN") + " is not let through while traffic outside a VPN is blocked: "
+            + "it may not connect or carry traffic.";
     }
 
     // Whether two slot contexts (VpnExtras, the provider's page) say the same, so a

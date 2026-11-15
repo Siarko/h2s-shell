@@ -336,6 +336,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Settings → Network → VPN: shorter hints and notes (the blocking of traffic outside a VPN,
+  password-free blocking, importable files, a network's VPNs in its editor); the same facts,
+  no repetitions — the password note is said once, under "Password-free blocking".
 - `h2s-shell` (the launcher): one supervisor per session — a second start waits a little for
   the first to end and then gives up, and `--restart` tells the supervisor even when it is
   between two restarts (two shells came of it). It now needs `flock` (util-linux), and
