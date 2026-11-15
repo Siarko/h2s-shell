@@ -10,6 +10,9 @@
 #   LOCKTEST_QS            the qs the launcher runs the shell with
 #   LOCKTEST_ARTIFACTS     this test's directory for logs and screenshots
 #   LOCKTEST_RUN_ID        a marker every process of the run carries, for the final sweep
+#   LOCKTEST_TEST_ID       a marker every process of THIS test carries (tests run side by
+#                          side): what a test looks for among processes, and what run.sh
+#                          sweeps after it — never a sibling test's
 #   LOCKTEST_RUNTIME       this test's private, short runtime dir (run.sh removes it)
 #
 # run.sh starts this bash with no new privileges (setpriv --no-new-privs): everything
@@ -55,6 +58,7 @@ abort() { printf '    FAIL (setup) %s\n' "$*"; FAILURES=$((FAILURES + 1)); exit 
 RUN=${LOCKTEST_RUNTIME:-}
 [ -n "$RUN" ] && [ -d "$RUN" ] && [ -O "$RUN" ] && [ -z "$(ls -A "$RUN")" ] \
     || abort "no fresh private runtime dir from run.sh (LOCKTEST_RUNTIME=$RUN)"
+[ -n "${LOCKTEST_RUN_ID:-}" ] && [ -n "${LOCKTEST_TEST_ID:-}" ] || abort "no run and test markers from run.sh"
 chmod 700 "$RUN"
 mkdir -p "$WORK"/{home,xdg/config,xdg/cache,xdg/data,xdg/state,labwc,hypr,pam,finger,leds}
 export XDG_RUNTIME_DIR=$RUN
@@ -65,7 +69,7 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=$RUN/no-session-bus
 export DBUS_SYSTEM_BUS_ADDRESS=unix:path=$RUN/no-system-bus
 export LIBSEAT_BACKEND=disabled-for-test
 export PYTHONDONTWRITEBYTECODE=1
-export LOCKTEST_RUN_ID
+export LOCKTEST_RUN_ID LOCKTEST_TEST_ID
 export PATH=$TOOLS/bin:$PATH
 unset WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE HYPRLAND_CMD NOTIFY_SOCKET \
     SWAYSOCK XDG_SESSION_ID XDG_SESSION_TYPE XDG_CURRENT_DESKTOP LABWC_PID QS_CONFIG_PATH \
@@ -702,7 +706,7 @@ _find_shell_pid() {
     fi
     for pid in $(pgrep -P "${SUPERVISOR_PID:-0}" 2> /dev/null); do
         [ "$(readlink -f "/proc/$pid/exe" 2> /dev/null)" = "$(_quickshell_binary)" ] || continue
-        [ "$(process_env "$pid" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] || continue
+        [ "$(process_env "$pid" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] || continue
         echo "$pid"
         return 0
     done
@@ -712,7 +716,7 @@ _find_shell_pid() {
 # like the groups spawn() made — what the shell started (a hung methods script) goes too
 _track_shell_group() {
     [ "$(awk '{ print $5 }' "/proc/$SHELL_PID/stat" 2> /dev/null)" = "$SHELL_PID" ] \
-        && [ "$(process_env "$SHELL_PID" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+        && [ "$(process_env "$SHELL_PID" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] \
         && PROCESS_GROUPS+=("$SHELL_PID")
     return 0
 }
@@ -732,13 +736,13 @@ wait_for_new_shell() {
 # (a wrong pid could be a process of the real session). assert_shell_process <pid>: the
 # shell under test; assert_supervisor_process <pid>: its launcher.
 assert_shell_process() {
-    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] \
         && [ "$(readlink -f "/proc/$1/exe" 2> /dev/null)" = "$(_quickshell_binary)" ] \
         && [ "$(process_env "$1" XDG_RUNTIME_DIR)" = "$RUN" ] \
         || abort "pid $1 is not the shell under test: not signalling it"
 }
 assert_supervisor_process() {
-    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] \
+    [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] \
         && tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" \
         || abort "pid $1 is not the launcher under test: not signalling it"
 }
@@ -928,14 +932,14 @@ compositor_locked_is() {
 compositor_locked() { compositor_locked_is true; }
 compositor_unlocked() { compositor_locked_is false; }
 
-# The inhibitors on the REAL system bus (listed read-only) held by a process of this run,
-# by PID: the shell under test must never add one. By PID, not by name: the real shell's
-# inhibitor is called h2s-shell too.
+# The inhibitors on the REAL system bus (listed read-only) held by a process of this test
+# (its marker; run.sh checks the run as a whole too), by PID: the shell under test must never
+# add one. By PID, not by name: the real shell's inhibitor is called h2s-shell too.
 run_inhibitors() {
     local pid
     for pid in $(env -u DBUS_SYSTEM_BUS_ADDRESS systemd-inhibit --list --no-pager --no-legend 2> /dev/null \
         | awk '{ for (i = 1; i + 2 <= NF; i++) if ($i ~ /^[0-9]+$/ && $(i + 2) ~ /^[0-9]+$/) { print $(i + 2); break } }'); do
-        [ "$(process_env "$pid" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] && echo "$pid"
+        [ "$(process_env "$pid" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] && echo "$pid"
     done
 }
 # That the real list can be read at all (else the check above proves nothing)
@@ -946,15 +950,27 @@ real_inhibitor_list_readable() {
 # The value of one variable in a process's environment
 process_env() { { tr '\0' '\n' < "/proc/$1/environ"; } 2> /dev/null | sed -n "s/^$2=//p"; }
 
-# Every live process of this run, by the marker in its environment
+# Every live process of this test, by its marker in the environment (not a sibling test's:
+# tests run side by side, from copies of the same tree)
 run_processes() {
     local environ pid
     for environ in /proc/[0-9]*/environ; do
         [ -O "$environ" ] || continue
         pid=${environ#/proc/}
         pid=${pid%/environ}
-        [ "$(process_env "$pid" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] && echo "$pid"
+        [ "$(process_env "$pid" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] && echo "$pid"
     done
+}
+# test_pgrep <pgrep options> <pattern>: pgrep, among this test's processes only — a sibling
+# test runs the same programs from the same store paths
+test_pgrep() {
+    local pid found=1
+    for pid in $(pgrep "$@"); do
+        [ "$(process_env "$pid" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] || continue
+        echo "$pid"
+        found=0
+    done
+    return $found
 }
 
 # A one-line summary of where the lock stands, for the log

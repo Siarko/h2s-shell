@@ -53,7 +53,7 @@ check "the shell logged why, in the script's words" \
 check "the password uses the fallback (the test's stand-in system-wide config)" \
     state_is password_config "$WORK/system-pam/h2s-shell-password"
 check "fingerprint not offered meanwhile" state_is fingerprint_available false
-no_stuck_call() { ! pgrep -f "$(sed -n 's/^    hang) exec \(.*\) ;;$/\1/p' "$WORK/standins/gdbus-fprintd")" > /dev/null; }
+no_stuck_call() { ! test_pgrep -f "$(sed -n 's/^    hang) exec \(.*\) ;;$/\1/p' "$WORK/standins/gdbus-fprintd")" > /dev/null; }
 check "the stuck fprintd call did not linger" no_stuck_call
 
 fprintd_mode enrolled

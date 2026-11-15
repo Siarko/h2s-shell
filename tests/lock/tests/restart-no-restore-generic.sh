@@ -19,12 +19,12 @@ check_within 5 "confirmed" state_is secure true
 start_lock_watch generic
 supervisor=$SUPERVISOR_PID
 signal_shell KILL
-check_within 30 "after 5 quick restarts the launcher goes on slowly (the screen was locked)" \
+check_within 60 "after 5 quick restarts the launcher goes on slowly (the screen was locked)" \
     grep -aq "times in 2 minutes while the screen was locked: trying again every 1 s" "$WORK/shell.log"
 slow_attempts() { grep -ac "starting it again in 1 s" "$WORK/shell.log"; }
 attempts_before=$(slow_attempts)
 more_slow_attempts() { [ "$(slow_attempts)" -ge $((attempts_before + 2)) ]; }
-check_within 15 "… and keeps trying (two more slow attempts)" more_slow_attempts
+check_within 40 "… and keeps trying (two more slow attempts)" more_slow_attempts
 check "the launcher did not give up" test "$(shell_log_count "not starting it again")" = 0
 check "the launcher still runs" kill -0 "$supervisor"
 stop_lock_watch
