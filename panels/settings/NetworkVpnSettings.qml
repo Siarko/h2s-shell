@@ -84,7 +84,7 @@ Item {
         id: _page
         anchors.fill: parent
         // A provider's page that fails to load leaves this page shown
-        visible: root._editing === "" && !root._newWireguard && _providerPageLoader.status !== Loader.Ready
+        visible: root._editing === "" && !root._newWireguard && !_providerPageFrame.shown
         contentWidth: width
         contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
         flickableDirection: Flickable.VerticalFlick
@@ -215,7 +215,8 @@ Item {
                     // through it, no NetworkManager editor, no delete — its extras and page
                     readonly property bool _provided: modelData.type === "provider"
                     readonly property var _attention: modelData.attention ?? null
-                    readonly property string _lockdownNote: VpnLockdown.noteFor(modelData)
+                    // The page states the limit whenever blocking is on, connected or not
+                    readonly property string _lockdownNote: VpnLockdown.noteFor(modelData, true)
                     readonly property string _pageUrl: _provided ? VpnManager.pageOf(modelData) : ""
                     readonly property bool _up: modelData.state === "activated"
                     readonly property string _server: VpnManager.details[modelData.uuid]?.server ?? ""
@@ -226,7 +227,8 @@ Item {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
                     profile: modelData
-                    subtitle: [VpnManager.typeName(modelData), root._stateText(modelData), _server]
+                    // A provider's status line ("Via <exit node>") beside the state
+                    subtitle: [VpnManager.typeName(modelData), root._stateText(modelData), modelData.status ?? "", _server]
                         .filter(part => part !== "").join(" · ")
                     open: root._open === modelData.uuid
                     usable: true
@@ -574,27 +576,14 @@ Item {
     }
 
     // ── A provider's own page, over this one (slot network.vpn.page) ── by the VPN's id
-    // ("" none); its root item gets `context` { slot, vpnId, entryId, vpn, close } when it
-    // declares the property. Today the provider's pageUrl; later a page of the module host's.
+    // ("" none), in the settings pages' frame (VpnProviderPageFrame: Back, title, scrolling)
     property string _providerPage: ""
-    readonly property var _providerPageVpn: VpnManager.vpns.find(vpn => vpn.uuid === _providerPage) ?? null
-    Loader {
-        id: _providerPageLoader
+
+    VpnProviderPageFrame {
+        id: _providerPageFrame
         anchors.fill: parent
-        active: root._providerPage !== "" && root._providerPageVpn !== null && VpnManager.pageOf(root._providerPageVpn) !== ""
-        source: active ? VpnManager.pageOf(root._providerPageVpn) : ""
-        readonly property var context: ({ slot: VpnManager.slots.page, vpnId: root._providerPage,
-            entryId: root._providerPageVpn?.entryId ?? "", vpn: root._providerPageVpn, close: () => root._providerPage = "" })
-        onLoaded: _pass()
-        onContextChanged: _pass()
-        function _pass() {
-            try {
-                if (item !== null && "context" in item)
-                    item.context = context;
-            } catch (error) {
-                // No such property: it takes no context
-            }
-        }
+        vpnId: root._providerPage
+        onClosed: root._providerPage = ""
     }
 
     // ── The connection editor, over the page, for the profile asked for ──

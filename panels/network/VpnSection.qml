@@ -9,8 +9,9 @@ import qs.singletons.network
 // disconnect it — several may be up at once — and a divider below. Hidden with no VPNs.
 // VPNs by id (VpnManager): NetworkManager's by UUID, a provider's (components/VpnProvider
 // .qml) by "<provider>:<entry>" — a provider's row adds what needs the user (its attention,
-// with the action's button), the kill switch's note, and the provider's extras (slot
-// network.vpn.row). A NetworkManager VPN's row is only the row.
+// with the action's button), its status line, the kill switch's note (while it is up or
+// coming up), and the provider's extras (slot network.vpn.row). A NetworkManager VPN's row
+// is only the row.
 Column {
     id: root
 
@@ -94,6 +95,17 @@ Column {
                         color: _vpn.isActive ? Theme.accent : Theme.textPrimary
                         Layout.fillWidth: true
                         elide: Text.ElideRight
+                    }
+
+                    // A provider's one line beside the state ("Via <exit node>", "Starting…")
+                    Text {
+                        visible: text !== ""
+                        text: _vpn.modelData.status ?? ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: 110
                     }
 
                     PrivilegedMark {

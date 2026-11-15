@@ -121,11 +121,10 @@ Item {
             }
             root._original = settings;
             root._edited = JSON.parse(JSON.stringify(settings));
-            // Only VPNs there still are: one deleted would stay picked, unseen and unremovable.
-            // A provider's whose provider is away (a module disabled) stays: shown as not
-            // available, so it can be taken out (VpnManager.dormantVpnIds)
-            root._vpnsOriginal = VpnManager.vpnsWith(root.uuid).filter(vpn => VpnManager.vpns.some(entry => entry.uuid === vpn)
-                || VpnManager.dormantVpnIds.includes(vpn));
+            // NetworkManager's VPNs there still are (one deleted would stay picked, unseen and
+            // unremovable) and EVERY provider VPN stored, available or not — a not available
+            // one shows as a removable pill (NetworkRules.editorVpnIds, unavailableVpnIds)
+            root._vpnsOriginal = NetworkRules.editorVpnIds(VpnManager.vpnsWith(root.uuid), VpnManager.vpns);
             root._vpnsEdited = root._vpnsOriginal.slice();
             root._lockOriginal = VpnLockdown.isSetFor(root.uuid);
             root._lockEdited = root._lockOriginal;
@@ -163,7 +162,8 @@ Item {
     property var _vpnsToWrite: null
 
     function _save(reconnect) {
-        _vpnsToWrite = _vpnsChanged ? _vpnsEdited.slice() : null;
+        // Never a list missing a provider VPN the user did not take out (NetworkRules.vpnsToWrite)
+        _vpnsToWrite = _vpnsChanged ? NetworkRules.vpnsToWrite(VpnManager.vpnsWith(uuid), _vpnsOriginal, _vpnsEdited) : null;
         _lockToWrite = _lockOriginal !== _lockEdited ? _lockEdited : null;
         if (_creating)
             _createToken = NetworkProfiles.create(_edited, "Making " + _edited.name);
@@ -822,7 +822,7 @@ Item {
                 spacing: 4
                 Label { text: "Connect a VPN with it" }
                 Flow {
-                    visible: VpnManager.vpns.length > 0 || _dormant.count > 0
+                    visible: VpnManager.vpns.length > 0 || _unavailable.count > 0
                     Layout.fillWidth: true
                     spacing: 4
                     Repeater {
@@ -839,15 +839,17 @@ Item {
                                 : root._vpnsEdited.concat([modelData.uuid])
                         }
                     }
-                    // A provider's VPN picked for this network whose provider is not there
-                    // now: kept, and taken out here (a click, then Save)
+                    // A provider's VPN picked for this network that is not available now
+                    // (its provider away, not ready, logged out, the entry missing from a
+                    // read: NetworkRules.unavailableVpnIds): kept, and taken out here (a
+                    // click, then Save)
                     Repeater {
-                        id: _dormant
-                        model: ScriptModel { values: root._vpnsOriginal.filter(vpn => VpnManager.dormantVpnIds.includes(vpn)).map(vpn => ({ id: vpn })); objectProp: "id" }
+                        id: _unavailable
+                        model: ScriptModel { values: NetworkRules.unavailableVpnIds(root._vpnsOriginal, VpnManager.vpns).map(vpn => ({ id: vpn })); objectProp: "id" }
                         Pill {
                             required property var modelData
                             label: VpnManager.labelOf(modelData.id)
-                            tooltip: "Its provider is not loaded now (a module disabled or missing): kept until you take it out"
+                            tooltip: "Not available now (its provider not loaded, not signed in, or not reporting it): kept until you take it out"
                             fontSize: Theme.fontSizeBody
                             minimumHeight: 26
                             picked: root._vpnsEdited.includes(modelData.id)

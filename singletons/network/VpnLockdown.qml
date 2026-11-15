@@ -43,11 +43,13 @@ Singleton {
 
     // What to say on a provider VPN's row and card while blocking: the blocking does not let
     // it through (NetworkRules.lockdownProviderNote; the provider's own lockdownNote if it
-    // has one). "" for NetworkManager's VPNs, and when there is nothing to say.
-    function noteFor(vpn): string {
+    // has one). "" for NetworkManager's VPNs, and when there is nothing to say. The popup's
+    // row: while the VPN is up or coming up; the VPN page's card (`whateverState` true):
+    // whenever blocking is on, connected or not — the page states the limit (tailscale.md §8).
+    function noteFor(vpn, whateverState): string {
         if (vpn?.type !== "provider")
             return "";
-        return NetworkRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "");
+        return NetworkRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "", whateverState === true);
     }
 
     // ── The script ──

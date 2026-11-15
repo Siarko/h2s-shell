@@ -25,8 +25,13 @@ VpnProvider {
     property var attentionOnConnect: null
     // attend() clears the attention (the user did what was asked)
     property bool attendClears: true
-    // What the core called: [[action, entryId], …]
+    // What the core called: [[action, entryId, origin], …] (origin "" for attend, which has
+    // no request)
     property var calls: []
+    // Connecting needs a password (pkexec): asked by the user, the fake "prompts" (logged in
+    // `prompts`) and connects; asked by a network, it must not — it sets attention instead
+    property bool needsPrompt: false
+    property var prompts: []
 
     // The extras for the slots, when wanted: plain text items that show their context
     property bool withExtras: false
@@ -46,6 +51,10 @@ VpnProvider {
             color: "gray"
         }
     }
+
+    // A page of its own (slot network.vpn.page), when wanted
+    property bool withPage: false
+    pageUrl: withPage ? Qt.resolvedUrl("FakeVpnProviderPage.qml") : ""
 
     function _index(id) {
         return entries.findIndex(entry => entry.id === id);
@@ -102,8 +111,24 @@ VpnProvider {
         onTriggered: root._finish()
     }
 
-    function connect(entryId) {
-        calls = calls.concat([["connect", entryId]]);
+    function setStatus(id, text) {
+        _change(id, { status: text });
+    }
+
+    function setBusy(id, on) {
+        _change(id, { busy: on });
+    }
+
+    function connect(entryId, request) {
+        const origin = request?.origin ?? "?";
+        calls = calls.concat([["connect", entryId, origin]]);
+        if (needsPrompt) {
+            if (origin !== "user") {
+                _change(entryId, { state: "", attention: { reason: "Connecting needs your password", action: "Connect" } });
+                return;
+            }
+            prompts = prompts.concat([entryId]);
+        }
         if (failNext !== "") {
             const reason = failNext;
             failNext = "";
@@ -127,8 +152,8 @@ VpnProvider {
         setState(entryId, "activated");
     }
 
-    function disconnect(entryId) {
-        calls = calls.concat([["disconnect", entryId]]);
+    function disconnect(entryId, request) {
+        calls = calls.concat([["disconnect", entryId, request?.origin ?? "?"]]);
         if (slowMs > 0) {
             busy = true;
             _pending = [entryId, ""];
@@ -140,7 +165,7 @@ VpnProvider {
     }
 
     function attend(entryId) {
-        calls = calls.concat([["attend", entryId]]);
+        calls = calls.concat([["attend", entryId, ""]]);
         if (attendClears)
             clearAttention(entryId);
     }
@@ -183,6 +208,18 @@ VpnProvider {
         }
         function extras(on: bool): void {
             root.withExtras = on;
+        }
+        function page(on: bool): void {
+            root.withPage = on;
+        }
+        function status(id: string, text: string): void {
+            root.setStatus(id, text);
+        }
+        function busy(id: string, on: bool): void {
+            root.setBusy(id, on);
+        }
+        function needsPrompt(on: bool): void {
+            root.needsPrompt = on;
         }
         // Garbage, to see that the views drop it: one entry of every wrong shape
         function garbage(): void {

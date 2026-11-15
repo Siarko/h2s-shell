@@ -714,9 +714,15 @@ Singleton {
     // taken down). A VPN that needs the user (`attention` set: log in, approve…) is never
     // asked to connect; one that went there after being asked (or after being brought up) is
     // held down like a failure, so it is not retried in a loop — tried again only when the
-    // networks change. One that needed the user before it was ever asked is asked once the
-    // attention is gone. A VPN of a provider that is not there (a module disabled,
-    // not loaded yet) is left alone, its memory kept.
+    // networks change. Attention within vpnAttentionGraceMs of being asked is waited out
+    // (still pending): a provider passing through it on its way up (activating → attention
+    // → activated) is not held down; one still needing the user after that is. (Attention
+    // reached from up — brought up, then down with attention — is held down at once; a
+    // provider must not use attention for transient states.) One that needed the user
+    // before it was ever asked is asked once the attention is gone. A VPN of a provider that
+    // is not there (a module disabled, not loaded yet) is left alone, its memory kept while
+    // the mapping still names it (pending and held-down memory of an id neither known nor in
+    // the mapping is dropped).
     // → { connect [], disconnect [], memory }
     function vpnWithNetworkPlan(profiles, mapping, memory, now, providerVpns) {
         const states = {};
@@ -739,6 +745,13 @@ Singleton {
                 vpns.push(vpn);
         const connect = [];
         const disconnect = [];
+        // Memory of what is neither known nor wanted any more: nothing would ever settle it
+        // (and the 30 s re-check would run for it for ever)
+        for (const vpn of Object.keys(pending).concat(Object.keys(heldDown)))
+            if (!(vpn in states) && !vpns.includes(vpn)) {
+                delete pending[vpn];
+                delete heldDown[vpn];
+            }
         for (const vpn of vpns) {
             if (!(vpn in states))
                 continue;
@@ -756,6 +769,9 @@ Singleton {
                 if (state !== "")
                     continue;
                 if (attention[vpn]) {
+                    // Asked moments ago: perhaps passing through on its way up — waited out
+                    if (vpn in pending && now - pending[vpn] < vpnAttentionGraceMs)
+                        continue;
                     // Asked to connect and now waiting for the user: a failure, held down
                     if (vpn in pending || broughtUp[vpn]) {
                         delete pending[vpn];
@@ -798,31 +814,23 @@ Singleton {
         return { connect: connect, disconnect: disconnect, memory: { broughtUp: broughtUp, pending: pending, heldDown: heldDown } };
     }
 
+    // How long attention right after being asked is taken as passing (vpnWithNetworkPlan)
+    readonly property int vpnAttentionGraceMs: 20000
+
     // The mapping without profiles that are gone; `profiles` empty (not read yet): as it is.
-    // A provider's VPN ("<provider>:<id>") is judged by its provider — `providers`
-    // ({ providerId: { ready, entries: [id…] } }, the ones registered now):
-    //   registered and ready (its entries read), the entry there — kept;
-    //   registered and ready, the entry gone — removed for good (the provider says it no
-    //     longer exists: an account removed);
-    //   registered but not ready — kept (nothing known yet);
-    //   not registered — kept, dormant (dormantVpnIds): a module disabled, not loaded yet or
-    //     uninstalled must not make the shell delete the user's setting. The user removes a
-    //     dormant one in the network's editor, where it shows as "not available".
+    // A provider's VPN ("<provider>:<id>") is NEVER removed here, whatever its provider says
+    // and whether it is there at all: a provider logged out, stopped, unreadable for one
+    // read, ready too early or renaming an entry must not make the shell delete the user's
+    // setting. One its provider does not report now is "not available" (unavailableVpnIds):
+    // kept, shown as such in the network's editor, removed only by the user there.
     // An id that can be neither a UUID nor a provider's (vpnIdParts) is removed.
-    function prunedVpnMapping(mapping, profiles, providers) {
+    function prunedVpnMapping(mapping, profiles) {
         if ((profiles ?? []).length === 0)
             return mapping ?? {};
         const uuids = profiles.map(profile => profile.uuid);
         const keeps = vpn => {
             const parts = vpnIdParts(vpn);
-            if (parts === null)
-                return false;
-            if (parts.provider === "")
-                return uuids.includes(vpn);
-            const provider = Object.prototype.hasOwnProperty.call(providers ?? {}, parts.provider) ? providers[parts.provider] : null;
-            if (provider === null || provider?.ready !== true)
-                return true;
-            return (provider.entries ?? []).includes(parts.entry);
+            return parts !== null && (parts.provider !== "" || uuids.includes(vpn));
         };
         const pruned = {};
         for (const network in mapping ?? {}) {
@@ -835,18 +843,56 @@ Singleton {
         return pruned;
     }
 
-    // The provider VPNs in the mapping whose provider is not registered: kept, shown as not
-    // available ([id…], each once, in the mapping's order)
-    function dormantVpnIds(mapping, providers) {
+    function _vpnIdsOf(vpns) {
+        return (vpns ?? []).map(vpn => typeof vpn === "string" ? vpn : vpn?.uuid);
+    }
+
+    // The one definition of "not available": the provider VPNs among `ids` (a list, or a
+    // mapping { network: [id…] }) that are not among `vpns` now (VpnManager.vpns, or their
+    // ids) — whatever the reason: provider not registered, not ready, logged out, the entry
+    // missing from one read. [id…], each once, in their order.
+    function unavailableVpnIds(ids, vpns) {
+        const all = Array.isArray(ids) ? ids
+            : Object.keys(ids ?? {}).reduce((list, network) => list.concat(ids[network] ?? []), []);
+        const present = _vpnIdsOf(vpns);
         const found = [];
-        for (const network in mapping ?? {})
-            for (const vpn of mapping[network] ?? []) {
-                const parts = vpnIdParts(vpn);
-                if (parts !== null && parts.provider !== "" && !Object.prototype.hasOwnProperty.call(providers ?? {}, parts.provider)
-                        && !found.includes(vpn))
-                    found.push(vpn);
-            }
+        for (const vpn of all) {
+            const parts = vpnIdParts(vpn);
+            if (parts !== null && parts.provider !== "" && !present.includes(vpn) && !found.includes(vpn))
+                found.push(vpn);
+        }
         return found;
+    }
+
+    // The network editor's starting list for "VPN with a network", from the stored one:
+    // NetworkManager's VPNs still there (one deleted would stay picked, unseen and
+    // unremovable) and EVERY provider VPN, available or not (the editor shows the not
+    // available ones as removable pills)
+    function editorVpnIds(stored, vpns) {
+        const present = _vpnIdsOf(vpns);
+        const kept = [];
+        for (const vpn of stored ?? []) {
+            const parts = vpnIdParts(vpn);
+            if (parts !== null && (parts.provider !== "" || present.includes(vpn)) && !kept.includes(vpn))
+                kept.push(vpn);
+        }
+        return kept;
+    }
+
+    // What the network editor writes for "VPN with a network": the user's picks (`edited`),
+    // plus every provider VPN of the value stored now (`stored`) that the user did not take
+    // out — taken out: in the list the editor started from (`original`), not in `edited`. A
+    // provider id the editor did not show is never lost.
+    function vpnsToWrite(stored, original, edited) {
+        const picks = edited ?? [];
+        const result = picks.filter((vpn, index) => picks.indexOf(vpn) === index);
+        const removed = (original ?? []).filter(vpn => !picks.includes(vpn));
+        for (const vpn of stored ?? []) {
+            const parts = vpnIdParts(vpn);
+            if (parts !== null && parts.provider !== "" && !removed.includes(vpn) && !result.includes(vpn))
+                result.push(vpn);
+        }
+        return result;
     }
 
     // ── VPN providers ── a VPN supplied by an object rather than NetworkManager (the
@@ -912,12 +958,13 @@ Singleton {
     }
 
     // What a provider reports as its entries, checked: { entries, problems } — `entries`
-    // [{ id, name, state, attention, detail, active }] in the provider's order, `problems`
+    // [{ id, name, state, attention, detail, active, status, busy }] in the provider's order, `problems`
     // sentences for the log. An entry whose id, name or state is wrong (not an object; id
     // not isVpnEntryId, or repeated; name not a string; state not one of vpnStates) is
     // dropped. A wrong optional field is set to its default and reported: attention (null,
     // or { reason: a non-empty string, action: a string, "" none }), detail
-    // (vpnProviderDetail), active (a bool; else whether state is not "").
+    // (vpnProviderDetail), active (a bool; else whether state is not ""), status (text, at most 80;
+    // else ""), busy (a bool; else false).
     function vpnProviderEntries(providerId, raw) {
         const entries = [];
         const problems = [];
@@ -981,9 +1028,16 @@ Singleton {
                 problems.push(where + " (" + id + "): active is not true or false");
             if (typeof active !== "boolean")
                 active = state !== "";
+            const status = read("status");
+            if (status !== undefined && status !== null && typeof status !== "string")
+                problems.push(where + " (" + id + "): status is not text");
+            const entryBusy = read("busy");
+            if (entryBusy !== undefined && entryBusy !== null && typeof entryBusy !== "boolean")
+                problems.push(where + " (" + id + "): busy is not true or false");
             entries.push({
                 id: id, name: entryName.trim().slice(0, 200) || id, state: state, attention: attention,
-                detail: vpnProviderDetail(rawDetail), active: active
+                detail: vpnProviderDetail(rawDetail), active: active,
+                status: typeof status === "string" ? status.trim().slice(0, 80) : "", busy: entryBusy === true
             });
         });
         if (list.length > 64)
@@ -994,13 +1048,13 @@ Singleton {
     // One provider's entries as VPNs in the shape of NetworkManager's ({ uuid, name, type,
     // kind, state, active, … }), so the views and vpnWithNetworkPlan take both: `uuid` is the
     // id "<provider>:<entry>", `type` "provider", plus provider, entryId, typeName, glyph,
-    // attention. `read` { providerId, typeName, glyph, entries (vpnProviderEntries') }
+    // attention, status, busy. `read` { providerId, typeName, glyph, entries (vpnProviderEntries') }
     function vpnProviderVpns(read) {
         return (read?.entries ?? []).map(entry => ({
             uuid: vpnId(read.providerId, entry.id), name: entry.name, type: "provider", kind: "vpn",
             state: entry.state, active: entry.active, device: "", autoconnect: false, priority: 0, lastUsed: 0,
             provider: read.providerId, entryId: entry.id, typeName: read.typeName || "VPN", glyph: read.glyph || "",
-            attention: entry.attention
+            attention: entry.attention, status: entry.status ?? "", busy: entry.busy === true
         }));
     }
 
@@ -1042,15 +1096,51 @@ Singleton {
     // The kill switch does not cover provider VPNs (the owner's decision, tailscale.md §8):
     // the sentence saying so while blocking is on and the VPN is up or coming up ("" when
     // there is nothing to say). `note` the provider's own wording (its lockdownNote), else
-    // the shell's.
-    function lockdownProviderNote(blocking, vpn, note) {
+    // the shell's. `whateverState` true: whenever blocking is on, up or not — the VPN page's
+    // card states the limit always; the popup's row only while it matters.
+    function lockdownProviderNote(blocking, vpn, note, whateverState) {
         if (!blocking || typeof vpn?.provider !== "string" || vpn.provider === "")
             return "";
-        if (vpn.state !== "activating" && vpn.state !== "activated")
+        if (whateverState !== true && vpn.state !== "activating" && vpn.state !== "activated")
             return "";
         const own = _string(note, 300).trim();
         return own !== "" ? own : (vpn.typeName || "This VPN") + " is not let through by the blocking of traffic outside a VPN: "
             + "it cannot reach its servers or its peers, so it may not connect or carry traffic.";
+    }
+
+    // Whether two slot contexts (VpnExtras, the provider's page) say the same, so a
+    // provider re-read that changed nothing for this entry does not poke its contribution:
+    // the same keys; objects that are not plain data (the provider) the same object;
+    // functions (close) alike as functions; the rest the same as JSON
+    function sameVpnContext(a, b) {
+        if (a === b)
+            return true;
+        if (a === null || b === null || typeof a !== "object" || typeof b !== "object")
+            return false;
+        const keys = Object.keys(a);
+        if (keys.length !== Object.keys(b).length)
+            return false;
+        for (const key of keys) {
+            if (!Object.prototype.hasOwnProperty.call(b, key))
+                return false;
+            const left = a[key], right = b[key];
+            if (left === right)
+                continue;
+            if (typeof left === "function" || typeof right === "function") {
+                if (typeof left !== typeof right)
+                    return false;
+                continue;
+            }
+            if (key === "provider")
+                return false;
+            try {
+                if (JSON.stringify(left) !== JSON.stringify(right))
+                    return false;
+            } catch (error) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // ── Only through the VPN (a kill switch) ── docs/plans/network.md, VPN stage 7

@@ -130,11 +130,13 @@ Singleton {
     // Today a provider hands its Components over itself (rowExtras, cardExtras, pageUrl);
     // VpnManager.extrasFor is the one place to switch to the host's slot registry.
     //   network.vpn.row  — under the VPN's row in the network popup; context { slot, vpnId,
-    //                      entryId, vpn }
+    //                      entryId, vpn, provider }
     //   network.vpn.card — on the VPN's card in Settings → System → Network → VPN, while the
-    //                      card is open; context { slot, vpnId, entryId, vpn, open }
+    //                      card is open; context { slot, vpnId, entryId, vpn, provider, open }
     //   network.vpn.page — a page of the provider's own, opened over the VPN page from the
-    //                      card; context { slot, vpnId, entryId, vpn, close }
+    //                      card, in the settings pages' frame (title, Back, scrolling);
+    //                      context { slot, vpnId, entryId, vpn, provider, close }
+    //   (contextFor makes them)
     readonly property var slots: ({ row: "network.vpn.row", card: "network.vpn.card", page: "network.vpn.page" })
 
     // Takes `provider` (a VpnProvider, or an object of its shape); false when refused: no
@@ -202,6 +204,8 @@ Singleton {
     // Each provider as read now: { providerId, alive, typeName, glyph, busy, canChange,
     // ready, lockdownNote, rowExtras, cardExtras, pageUrl, entries, problems, object }
     readonly property var _providerReads: _providers.map(entry => _readProvider(entry))
+    // A provider's `ready`: its entries were read successfully at least once. The core no
+    // longer judges anything by it (nothing is pruned); kept in the read for the views.
 
     function _readProvider(entry) {
         const gone = problem => ({
@@ -231,16 +235,6 @@ Singleton {
     // registered
     readonly property var providerVpns: _providerReads.reduce((all, read) => all.concat(NetworkRules.vpnProviderVpns(read)), [])
 
-    // { providerId: { ready, entries: [id…] } } of the providers there: what the pruning of
-    // "VPN with a network" judges provider VPNs by
-    readonly property var providerIndex: {
-        const index = {};
-        for (const read of _providerReads)
-            if (read.alive)
-                index[read.providerId] = { ready: read.ready, entries: read.entries.map(entry => entry.id) };
-        return index;
-    }
-
     // { providerId: [problem…] }: what was dropped from each, logged when it changes
     readonly property var providerProblems: {
         const problems = {};
@@ -266,10 +260,14 @@ Singleton {
 
     // An operation runs for this VPN: its buttons wait — NetworkManager's while any
     // connecting runs (a second click before the list says "activating" would bring the
-    // tunnel down and up again), a provider's while it says it is busy
+    // tunnel down and up again), a provider's while it says it is busy or the entry does
     function busyFor(vpn): bool {
-        if (vpn?.type === "provider")
-            return providerOf(vpn)?.busy ?? true;
+        if (vpn?.type === "provider") {
+            const read = providerOf(vpn);
+            if (read === null)
+                return true;
+            return read.busy || (read.entries.find(entry => entry.id === vpn.entryId)?.busy ?? false);
+        }
         return NetworkProfiles.connecting;
     }
 
@@ -296,12 +294,22 @@ Singleton {
         return providerOf(vpn)?.pageUrl ?? "";
     }
 
-    // The provider VPNs in "VPN with a network" whose provider is not there: kept, shown as
-    // not available in the network's editor, where they can be taken out
-    readonly property var dormantVpnIds: NetworkRules.dormantVpnIds(withNetworks, providerIndex)
+    // The context a slot's contribution gets (VpnManager.slots): { slot, vpnId, entryId,
+    // vpn, provider } and `extra` ({ open } on the card, { close } on the page). `provider`
+    // is the provider object itself, so a contribution can call its functions and read its
+    // state.
+    function contextFor(slot: string, vpn, extra) {
+        return Object.assign({ slot: slot, vpnId: vpn?.uuid ?? "", entryId: vpn?.entryId ?? "", vpn: vpn,
+            provider: providerOf(vpn)?.object ?? null }, extra ?? {});
+    }
 
-    // A VPN by its id as a person reads it: its name, or for a dormant one its provider and
-    // entry, said not to be available
+    // The provider VPNs in "VPN with a network" that are not among `vpns` now — not
+    // available, whatever the reason (NetworkRules.unavailableVpnIds, the one definition):
+    // kept, shown as such in the network's editor, where the user can take them out
+    readonly property var unavailableVpnIds: NetworkRules.unavailableVpnIds(withNetworks, vpns)
+
+    // A VPN by its id as a person reads it: its name, or for one not available its provider
+    // and entry, said not to be available
     function labelOf(id: string): string {
         const vpn = vpns.find(entry => entry.uuid === id);
         if (vpn)
@@ -322,9 +330,18 @@ Singleton {
         _notify(NetworkRules.vpnFailureNotice(String(what ?? ""), String(reason ?? "")));
     }
 
+    // Who asked for a connect or disconnect, as handed to the provider: { origin } — "user"
+    // (a button: the provider may prompt, open a browser) or "network" ("VPN with a
+    // network": it must never prompt nor open a browser — attention instead). Anything else
+    // is the user's. A fresh object each call.
+    function _request(request) {
+        return { origin: request?.origin === "network" ? "network" : "user" };
+    }
+
     // Calls `action` ("connect", "disconnect", "attend") of a provider VPN, inside a guard:
-    // only for an entry the provider reports; a throw is logged and said as a failure
-    function _callProvider(id, action, what) {
+    // only for an entry the provider reports; a throw is logged and said as a failure.
+    // `request` (connect, disconnect) goes along as the second argument.
+    function _callProvider(id, action, what, request) {
         const parts = NetworkRules.vpnIdParts(id);
         const read = providerOf(id);
         if (parts === null || read === null) {
@@ -339,7 +356,10 @@ Singleton {
         try {
             if (typeof read.object[action] !== "function")
                 return false;
-            read.object[action](parts.entry);
+            if (request === undefined)
+                read.object[action](parts.entry);
+            else
+                read.object[action](parts.entry, request);
             return true;
         } catch (error) {
             console.warn("VpnManager: VPN provider \"" + read.providerId + "\": " + action + " threw:", error);
@@ -348,7 +368,8 @@ Singleton {
         }
     }
 
-    // The provider's action for a VPN that needs the user (its attention's action)
+    // The provider's action for a VPN that needs the user (its attention's action): always
+    // the user's doing (a button), so it takes no request
     function attend(id: string): void {
         _callProvider(id, "attend", "Attending to");
     }
@@ -386,10 +407,21 @@ Singleton {
         }
     }
 
-    // Each pending connection checked again after its 90 s, without waiting for an event
+    // Each pending connection checked again after its 90 s, without waiting for an event —
+    // only those of VPNs there are (one of a provider that is away waits for it to return)
+    readonly property bool _pendingKnown: {
+        let pending = {};
+        try {
+            pending = JSON.parse(Config.network.vpnMemory || "{}").pending ?? {};
+        } catch (error) {
+            pending = {};
+        }
+        return Object.keys(pending).some(id => NetworkProfiles.profiles.some(profile => profile.uuid === id)
+            || providerVpns.some(vpn => vpn.uuid === id));
+    }
     Timer {
         interval: 30000
-        running: Object.keys(JSON.parse(Config.network.vpnMemory || "{}").pending ?? {}).length > 0
+        running: root._pendingKnown
         repeat: true
         onTriggered: root._followNetworks()
     }
@@ -399,8 +431,8 @@ Singleton {
             return;
         const profiles = NetworkProfiles.profiles;
         // Profiles that are gone leave the setting (none read yet: nothing is pruned); a
-        // provider's VPN is kept while its provider is away (NetworkRules.prunedVpnMapping)
-        const pruned = NetworkRules.prunedVpnMapping(withNetworks, profiles, providerIndex);
+        // provider's VPN is never pruned (NetworkRules.prunedVpnMapping)
+        const pruned = NetworkRules.prunedVpnMapping(withNetworks, profiles);
         if (JSON.stringify(pruned) !== _withNetworksText) {
             Profiles.setGlobal("system.vpnWithNetworks", pruned);
             return;
@@ -415,10 +447,16 @@ Singleton {
         const text = JSON.stringify(plan.memory);
         if (text !== Config.network.vpnMemory)
             Config.network.vpnMemory = text;
-        for (const uuid of plan.connect)
-            connect(uuid);
-        for (const uuid of plan.disconnect)
-            disconnect(uuid);
+        _applyPlan(plan);
+    }
+
+    // The plan's connects and disconnects, as the network's doing (origin "network": a
+    // provider must not prompt or open a browser for them)
+    function _applyPlan(plan) {
+        for (const uuid of plan.connect ?? [])
+            connect(uuid, { origin: "network" });
+        for (const uuid of plan.disconnect ?? [])
+            disconnect(uuid, { origin: "network" });
     }
 
     Connections {
@@ -547,18 +585,19 @@ Singleton {
 
     // By id: a provider's ("<provider>:<entry>") through its provider; anything else is
     // NetworkManager's UUID, as before providers. An id with a colon that is no provider
-    // VPN here does nothing.
-    function connect(uuid: string): void {
+    // VPN here does nothing. `request` { origin: "user" | "network" } says who asked
+    // (default the user — a button); a provider gets it as connect's second argument.
+    function connect(uuid: string, request): void {
         if (uuid.indexOf(":") >= 0) {
-            _callProvider(uuid, "connect", "Connecting");
+            _callProvider(uuid, "connect", "Connecting", _request(request));
             return;
         }
         NetworkProfiles.activate(uuid, "");
     }
 
-    function disconnect(uuid: string): void {
+    function disconnect(uuid: string, request): void {
         if (uuid.indexOf(":") >= 0) {
-            _callProvider(uuid, "disconnect", "Disconnecting");
+            _callProvider(uuid, "disconnect", "Disconnecting", _request(request));
             return;
         }
         NetworkProfiles.deactivate(uuid, "Disconnecting " + NetworkProfiles.nameOf(uuid));
