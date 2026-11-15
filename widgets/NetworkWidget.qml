@@ -54,10 +54,11 @@ PopupWidget {
             color: WifiManager.mode === "connected" || WifiManager.mode === "hotspot" ? Theme.accent : Theme.textPrimary
         }
 
-        // VPN — shown only while a tunnel is actually up
+        // VPN — shown only while a tunnel is actually up (a provider's too: its own glyph
+        // when only its VPNs are up)
         Text {
             visible: VpnManager.activeVpns.length > 0
-            text: VpnManager.activeType === "wireguard" ? "󰒃" : "󰌾"
+            text: VpnManager.activeGlyph
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.accent
