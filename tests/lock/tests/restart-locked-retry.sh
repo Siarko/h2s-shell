@@ -25,12 +25,12 @@ supervisor=$SUPERVISOR_PID
 break_shell
 old_shell=$SHELL_PID
 signal_shell KILL
-check_within 20 "after the quick restarts failed, the launcher goes on slowly" \
+check_within 60 "after the quick restarts failed, the launcher goes on slowly" \
     grep -aq "while the screen was locked: trying again every 2 s" "$WORK/shell.log"
 slow_attempts() { grep -ac "while the screen was locked: starting it again in 2 s" "$WORK/shell.log"; }
 attempts_before=$(slow_attempts)
 more_slow_attempts() { [ "$(slow_attempts)" -ge $((attempts_before + 2)) ]; }
-check_within 15 "… each attempt logged, two more of them" more_slow_attempts
+check_within 40 "… each attempt logged, two more of them" more_slow_attempts
 check "the launcher is still there" kill -0 "$supervisor"
 check "it did not give up" test "$(shell_log_count "not starting it again")" = 0
 check "the compositor is still locked" compositor_locked

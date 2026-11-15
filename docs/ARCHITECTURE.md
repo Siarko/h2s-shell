@@ -554,8 +554,8 @@ virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keybo
 which QtTest, sending events to the Qt window directly, cannot reach. It finds what to tap
 through the `shelltest` IPC (`Bar.qml`). See its README.
 
-`tests/lock/` runs the real shell, from a copy of the checkout made once per run (so edits
-during a run cannot reload it), in an invisible, isolated compositor (Hyprland nested in a
+`tests/lock/` runs the real shell, from a copy of the checkout made at the start of a run
+(so edits during a run cannot reload it; each test gets its own copy of that), in an invisible, isolated compositor (Hyprland nested in a
 headless labwc, private runtime dir, no D-Bus, no seat, no new privileges) and drives its
 lock screen end to end: locked for real, keys typed and the pointer moved through the
 compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
@@ -564,7 +564,8 @@ PAM directory the password fallback is chosen from is the test's own,
 `H2S_LOCK_SYSTEM_PAM_DIR`), logind's signals, the sleep inhibitor and fprintd through
 stand-ins (`H2S_LOCK_TOOLS`; the real methods script runs against the fprintd one in
 `methods-script.sh` and `methods-fprintd.sh`). `tests/lock/run.sh`
-runs it; nothing appears on screen and the real session cannot be reached. See its README.
+runs it, several tests at a time, each in a stack of its own (`-j N`; `-j 1` one after
+another); nothing appears on screen and the real session cannot be reached. See its README.
 
 `tests/manual/` holds checks no suite runs because they touch the real system — the one
 there runs a single PAM conversation with the real password against the shipped

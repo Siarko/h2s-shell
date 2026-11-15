@@ -1311,7 +1311,6 @@ section 4; not part of this work).
 
 ## Backlog (after the real-machine check)
 
-- **First, before further lock work:** run the harness tests in parallel — each test already has its own isolated stack; a `-j N` in `tests/lock/run.sh` would cut the ~15 min run to a few minutes.
 - `scripts/launch.sh`: during the restart pause check the compositor every second, or have a new launcher wait for the lock longer than the longest pause (a fast re-login after a shell death at logout can leave the new session without a shell).
 - `scripts/launch.sh`: when `wait` returns 127, keep polling if the child is still alive and ours.
 - Wrap the `qs ipc` calls in `timeout 5`.

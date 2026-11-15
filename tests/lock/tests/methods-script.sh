@@ -83,7 +83,7 @@ check "hang: exit non-zero" status_nonzero
 check "hang: done within the shell's 5 s detection time" within 5000
 check "hang: says it timed out" says "timeout"
 sleeper=$(sed -n 's/^    hang) exec \([^ ]*\) 120 ;;$/\1/p' "$tools/gdbus-fprintd")
-no_sleeper() { [ -n "$sleeper" ] && ! pgrep -fx "$sleeper 120" > /dev/null; }
+no_sleeper() { [ -n "$sleeper" ] && ! test_pgrep -fx "$sleeper 120" > /dev/null; }
 check "hang: the stuck call does not linger" no_sleeper
 
 # gdbus's stderr is not its reply: a GLib warning on a call that succeeded changes nothing

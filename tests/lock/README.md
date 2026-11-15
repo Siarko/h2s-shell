@@ -10,18 +10,33 @@ stack and prints a PASS or FAIL line per check.
 tests/lock/run.sh                     # every test in tests/lock/tests/
 tests/lock/run.sh relock harness      # some of them, by file name without .sh
 LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all pass
+tests/lock/run.sh -j 3                # at most 3 tests at a time (LOCKTEST_JOBS=3 too)
+tests/lock/run.sh -j 1                # one after another, output as it comes
 ```
 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about fifteen minutes (fifty-seven tests, each
-starting its own stack in 2–3 s; the idle tests wait out real idle timeouts, the crash
-tests Quickshell's 10 s before it restarts a crash in place; the launcher's restart pauses
-are shortened where a test only needs their schedule, `--launcher-timings`).
+130 when interrupted. A full run takes about five minutes with the default four tests at
+a time, about fifteen one after another (fifty-seven tests, each starting its own stack in
+2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
+it restarts a crash in place; the launcher's restart pauses are shortened where a test only
+needs their schedule, `--launcher-timings`).
 
-Ctrl-C (or SIGTERM/SIGHUP) stops the running test and its stack, sweeps, removes the
+Ctrl-C (or SIGTERM/SIGHUP) stops the running tests and their stacks, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
+
+**Several at a time.** `-j N` (or `LOCKTEST_JOBS`) runs at most N tests at once; the default
+is one fewer than the cores, at most 4 (with 5 stacks on 6 cores the launcher's restart
+tests no longer keep to their schedule). Each test has its own stack, runtime dir,
+artifacts dir, copy of the shell and marker (`LOCKTEST_TEST_ID`, beside the run's
+`LOCKTEST_RUN_ID`): what a test looks for among processes (`run_processes`, `test_pgrep`,
+the checks before a signal) is its own, and the sweep after a test kills only what carries
+its marker, never a sibling's. Each test's output is printed as one block when it ends,
+with a line as each starts; the summary is in the usual order. The longest tests start
+first (`LONG_TESTS` in `run.sh`), and the tests in `SERIAL` — those whose subject is a
+timing a loaded machine cannot keep, each with its reason — run alone after the others.
+`-j 1` is the old way: one after another, the output as it comes.
 
 It needs `nix` (for the tools), the `h2s-shell` launcher on PATH (the NixOS module puts
 it there; `LOCKTEST_LAUNCHER` names another). Nothing privileged: no root, no seat, no
@@ -95,13 +110,15 @@ here may reach it.
   or write the user's `~/.config/h2s_shell/config.json`, cache or state.
 - **The shell runs from a copy.** Quickshell reloads a shell on any file written in its
   folder (and a reload while locked used to unlock); so `run.sh` copies the checkout once per run
-  into the artifacts dir (`shell/`: everything but `tests/lock`, `.git` and `result*`)
-  and the shell runs from there. Edits to the checkout during a run cannot disturb it;
+  into the artifacts dir (`shell/`: everything but `tests/lock`, `.git` and `result*`),
+  and that again for each test (`shells/<test>`, a few MB, some 20 ms), which the test's shell
+  runs from: tests that run side by side never see each other's edits. Edits to the checkout during a run cannot disturb it;
   `run.sh` notes them, as the results are for the copy taken at the start. (The shell itself
   no longer reloads while locked — file watching is off then — and `reload-while-locked.sh`
   and `edit-while-locked.sh` check that; a reload asked for while locked keeps the lock,
   `reload-explicit.sh`; the copy guards the rest of a run. Tests that edit the copy on
-  purpose — `edit-while-locked`, `reload-window`, `restart-locked-retry` — write only there.) In the copy, `pam/` is replaced by
+  purpose — `edit-while-locked`, `reload-while-locked`, `reload-window`,
+  `restart-locked-retry` — write only their own.) In the copy, `pam/` is replaced by
   configs that only deny: the shipped `pam/password` (`pam_unix`, the real account) is one
   of the configs the shell's password fallback can be, and a typed test string must never
   reach the real password check. Logs and screenshots go
@@ -115,8 +132,10 @@ here may reach it.
   must be one executable path, or setup fails.
 - **Every process in its own process group under `timeout`**, stopped with its group at
   the end of each test (an EXIT trap); each test under a time limit too; and after each
-  test `run.sh` kills anything still carrying the run's marker variable
-  (`LOCKTEST_RUN_ID`) in its environment — which catches what left its group, such as a
+  test `run.sh` kills anything still carrying that test's marker variable
+  (`LOCKTEST_TEST_ID`) in its environment, and at the end of the run and when interrupted
+  anything carrying the run's (`LOCKTEST_RUN_ID`, which every test's processes carry too) —
+  which catches what left its group, such as a
   shell helper re-parented to a subreaper. Not the scripts `pam_exec` runs: they get
   PAM's environment only, without the marker. Those are stopped with the shell's process
   group and, when their PAM helper dies, by their own orphan check (`wait-finger.sh`).
@@ -347,8 +366,9 @@ mark is removed.
 ## Artifacts
 
 A temp dir (`$TMPDIR` or `/tmp`, `h2s-locktest.XXXXXX`): the copy of the checkout
-(`shell/`) and one subdirectory per test: logs, screenshots, the generated PAM stacks,
-the private HOME. `$TMPDIR` must be a plain path (letters, digits, `._/+-`): its path
+(`shell/`), each test's copy of that (`shells/<test>`, removed when the test ends unless
+`LOCKTEST_KEEP=1`) and one subdirectory per test: logs, screenshots, the generated PAM
+stacks, the private HOME. `$TMPDIR` must be a plain path (letters, digits, `._/+-`): its path
 goes into PAM stacks. Printed and kept when a
 test failed or with `LOCKTEST_KEEP=1`, removed otherwise. An expected failure alone does
 not keep it.

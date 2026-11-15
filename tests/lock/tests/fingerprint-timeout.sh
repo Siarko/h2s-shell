@@ -18,8 +18,8 @@ check_within 5 "a fingerprint conversation runs" _one_finger_waiter
 
 timed_out() { lines_more_than "$1" 'an Error, as pam_fprintd' "$WORK/finger/log"; }
 check_within 45 "six rounds in a row time out with an Error (more than errorLimit)" timed_out 5
-check "each ended in PAM's Error (the stack's error line ran)" lines_more_than 5 '^error ' "$WORK/finger/log"
-check "the shell got them as Errors" lines_more_than 5 '"method":"fingerprint","result":"error","type":"pamCompleted"' "$WORK/shell.log"
+check_within 5 "each ended in PAM's Error (the stack's error line ran)" lines_more_than 5 '^error ' "$WORK/finger/log"
+check_within 5 "the shell got them as Errors" lines_more_than 5 '"method":"fingerprint","result":"error","type":"pamCompleted"' "$WORK/shell.log"
 log "fingerprint: $(state_field fingerprint_status), $(grep -c 'an Error, as pam_fprintd' "$WORK/finger/log") rounds timed out"
 check "the fingerprint is not broken by time-outs" test "$(state_field fingerprint_status)" != broken
 check "it was never broken" test "$(grep -ac 'fingerprint cannot be used' "$WORK/shell.log")" = 0
