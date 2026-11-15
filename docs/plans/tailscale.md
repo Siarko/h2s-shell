@@ -211,9 +211,12 @@ the core sets it (`VpnManager.contextFor`) and sets it again only when its value
 `vpn` is the merged entry above; `provider` the provider object itself, so a contribution
 calls the provider's own functions and reads its own state without a singleton of its own.
 Each is built in a Loader (`components/VpnExtras.qml`; the page's in
-`VpnProviderPageFrame`): one that fails to build shows nothing. Today the components come
-from the provider (`rowExtras`, `cardExtras`, `pageUrl`); switching to the module host's
-slot registry is the one function `VpnManager.extrasFor` (and `pageOf` for the page).
+`VpnProviderPageFrame`): one that fails to build shows nothing. Since module API 1.1 they are
+slots of the module host: `VpnManager.extrasFor` / `pageOf` ask `Modules.slotComponent` /
+`slotUrl` for the module whose id is the provider's `providerId` (a module's provider uses its
+module id), then fall back to the provider's own `rowExtras`, `cardExtras`, `pageUrl` (the
+stand-in provider); the frame hands a module's page its `module` handle. Contexts carry
+`otherVpnsUp` too (the names of the other VPNs up).
 
 **The page's frame** (`panels/settings/VpnProviderPageFrame.qml`) is the core's, framed as
 the connection editor is: "‹ Back" (= `close()`), a title — the provider's `typeName` · the
@@ -385,6 +388,19 @@ Advertising routes or an exit node under blocking needs the forward chain too �
   1. the entry among the VPNs, states and attention, connect/disconnect, log in/out,
      exit nodes (choose, none, suggested, Mullvad grouped, allow LAN), accept routes,
      accept DNS, shields up, the devices list with copy;
+     **Built 2026-11-15** (module 0.2.0 in h2s-shell-tailscale, on module API 1.1 here): the
+     live client (one curl on the LocalAPI bus as a trigger for coalesced re-reads of
+     `status --json` + `debug prefs`, backoff, 60 s poll, a re-read after sleep), the provider,
+     the three slots (exit-node chooser under the row, the card's extras, the page — also
+     a settings page under Network), pkexec on denial for the user's clicks only, become
+     operator with the NixOS line, facts `tailscale.connected` / `tailscale.exitNode`; suites
+     against stand-ins and a lock-bed test (the test bed takes tests from another directory:
+     `LOCKTEST_EXTRA_TESTS`). Still missing from step 1: nothing of the list, but verified only
+     against stand-ins — the owner's check on the real daemon (T4) is open; a `tailscale login`
+     run through pkexec runs as root and cannot be ended by the shell (cancel and the 10-minute
+     limit stop waiting for it only); the key-expiry warning is shown, re-auth before expiry is
+     step 2; the devices' traffic is polled every 3 s while the page is open (there is no
+     "page visible" signal in the API).
   2. accounts and tailnets (switch, add, remove), hostname, key expiry and re-auth,
      health, update notice, diagnostics (netcheck, DERP, ping a device);
   3. sharing this computer: advertise an exit node and routes, the SSH server, the web

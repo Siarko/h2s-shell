@@ -1,0 +1,13 @@
+{
+    "id": "vpn-slots",
+    "name": "VPN slots fixture",
+    "version": "1.0.0",
+    "api": "1.1",
+    "description": "A module with a VPN provider of its own (providerId = its id) contributing the three VPN slots through its manifest (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "slots": [
+        { "slot": "network.vpn.row", "component": "VpnRow.qml" },
+        { "slot": "network.vpn.card", "component": "VpnCard.qml" },
+        { "slot": "network.vpn.page", "component": "VpnPage.qml" }
+    ]
+}

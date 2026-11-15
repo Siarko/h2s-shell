@@ -72,9 +72,21 @@ Flickable {
         Loader {
             id: _loader
             Layout.fillWidth: true
-            active: root.vpn !== null && VpnManager.pageOf(root.vpn) !== ""
-            source: active ? VpnManager.pageOf(root.vpn) : ""
+            readonly property string _url: root.vpn !== null ? VpnManager.pageOf(root.vpn) : ""
+            active: _url !== ""
             readonly property var context: VpnManager.contextFor(VpnManager.slots.page, root.vpn, { close: () => root.close() })
+            // A module's page (slot network.vpn.page) is given its module's handle as `module`
+            // when it declares the property, as the core gives it to everything it builds from
+            // a manifest (Modules.initialProperties: {} for a file of no module, the stand-in's)
+            on_UrlChanged: _setSource()
+            Component.onCompleted: _setSource()
+            function _setSource() {
+                if (_url === "") {
+                    source = "";
+                    return;
+                }
+                setSource(_url, Modules.initialProperties(_url, {}));
+            }
             property var _passed: null
             onLoaded: {
                 _passed = null;

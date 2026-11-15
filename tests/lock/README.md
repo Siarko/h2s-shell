@@ -12,6 +12,7 @@ tests/lock/run.sh relock harness      # some of them, by file name without .sh
 LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all pass
 tests/lock/run.sh -j 3                # at most 3 tests at a time (LOCKTEST_JOBS=3 too)
 tests/lock/run.sh -j 1                # one after another, output as it comes
+LOCKTEST_EXTRA_TESTS=<dir> tests/lock/run.sh <name>   # a test from another directory (a module's repository)
 ```
 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or

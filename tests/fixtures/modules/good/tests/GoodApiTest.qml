@@ -75,7 +75,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.0", "Api.version");
+        assertEqual(Api.version, "1.1", "Api.version");
         assert(Api.slots.some(slot => slot.name === "network.popup.sections"), "the slot table names the slots offered");
 
         // --- the theme, read-only ---

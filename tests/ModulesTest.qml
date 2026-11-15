@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.singletons
+import qs.api
 
 // The module host (singletons/ModuleHost.qml) pointed at the fixture modules
 // (tests/fixtures/modules) through its seam, load(directories): each fixture's status, the
@@ -126,7 +127,7 @@ TestCase {
                    "broken-main: an exception in Component.onCompleted is the engine's to print; the host cannot see it, the object exists");
 
             const wrongApi = _expectState("wrong-api", "incompatible");
-            assert(_has(wrongApi?.errors, "2.0") && _has(wrongApi?.errors, "1.0"), "wrong-api: says which API it wants and which the shell has");
+            assert(_has(wrongApi?.errors, "2.0") && _has(wrongApi?.errors, Api.version), "wrong-api: says which API it wants and which the shell has");
 
             const collision = _expectState("key-collision", "loaded");
             assert(_has(collision?.errors, "lockscreen.enabled"), "key-collision: the core's key dropped, with an error");
@@ -180,7 +181,7 @@ TestCase {
                    "a widget loaded from widgetEntries shares the singleton good's main uses");
 
             const description = JSON.parse(JSON.stringify(host.describe()));
-            assertEqual(description.api + " " + description.safeMode + " " + description.modules.length, "1.0 false " + names.length,
+            assertEqual(description.api + " " + description.safeMode + " " + description.modules.length, Api.version + " false " + names.length,
                         "describe(): the IPC's JSON, plain data");
 
             // Turning good off: its main destroyed, its contributions gone, in the config

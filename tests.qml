@@ -44,7 +44,7 @@ QtObject {
     property var _moduleRules: ModuleRulesTest {}
     property var _quickshellPin: QuickshellPinTest {}
     property var _modules: ModulesTest {}
-    property var _moduleRegistries: ModuleRegistriesTest { after: _modules }
+    property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
     readonly property var _asyncSuites: [_pointerInput, _lockView, _modules, _moduleRegistries, _vpnProviders]

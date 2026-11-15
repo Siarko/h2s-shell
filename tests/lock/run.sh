@@ -9,6 +9,10 @@
 #                                   runs them one after another, their output as it comes
 #   LOCKTEST_KEEP=1 tests/lock/run.sh
 #                                   keep logs and screenshots even when all pass
+#   LOCKTEST_EXTRA_TESTS=<dir> tests/lock/run.sh <name>…
+#                                   tests from another directory too (a module's repository:
+#                                   <dir>/<name>.sh, written as these are); a name is looked
+#                                   for here first. Without names: these and that dir's
 #
 # Exit status: 0 when every test passed (or failed exactly as expected, see below), 1
 # when one failed (a test that could not start its stack counts as failed), 2 when the
@@ -193,11 +197,21 @@ if [ $# -gt 0 ]; then
     done
 else
     tests=()
-    for file in "$LOCKTEST_DIR"/tests/*.sh; do tests+=("$(basename "$file" .sh)"); done
+    for file in "$LOCKTEST_DIR"/tests/*.sh ${LOCKTEST_EXTRA_TESTS:+"$LOCKTEST_EXTRA_TESTS"/*.sh}; do
+        [ -f "$file" ] && tests+=("$(basename "$file" .sh)")
+    done
 fi
+# The file of each test: here, else in LOCKTEST_EXTRA_TESTS
+declare -A TEST_FILE=()
 for name in "${tests[@]}"; do
-    [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] && [ -f "$LOCKTEST_DIR/tests/$name.sh" ] \
-        || setup_error "no test $name (tests/lock/tests/$name.sh)"
+    [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || setup_error "no test $name (tests/lock/tests/$name.sh)"
+    if [ -f "$LOCKTEST_DIR/tests/$name.sh" ]; then
+        TEST_FILE[$name]=$LOCKTEST_DIR/tests/$name.sh
+    elif [ -n "${LOCKTEST_EXTRA_TESTS:-}" ] && [ -f "$LOCKTEST_EXTRA_TESTS/$name.sh" ]; then
+        TEST_FILE[$name]=$(cd "$LOCKTEST_EXTRA_TESTS" && pwd -P)/$name.sh
+    else
+        setup_error "no test $name (tests/lock/tests/$name.sh${LOCKTEST_EXTRA_TESTS:+, $LOCKTEST_EXTRA_TESTS/$name.sh})"
+    fi
 done
 
 ARTIFACTS=$(mktemp -d "$temp_base/h2s-locktest.XXXXXX") || setup_error "cannot create the artifacts dir"
@@ -316,8 +330,8 @@ start_test() {
         LOCKTEST_TEST_ID="$(test_id "$name")" LOCKTEST_RUNTIME="$runtime" \
         "$SETPRIV" --no-new-privs timeout -k 10 "$PER_TEST_TIMEOUT" bash -c '
             source "$LOCKTEST_DIR/lib.sh"
-            source "$LOCKTEST_DIR/tests/$1.sh"
-            [ "$FAILURES" -eq 0 ]' _ "$name" > "$ARTIFACTS/$name/test.log" 2>&1 < /dev/null &
+            source "$2"
+            [ "$FAILURES" -eq 0 ]' _ "$name" "${TEST_FILE[$name]}" > "$ARTIFACTS/$name/test.log" 2>&1 < /dev/null &
     pid=$!
     RUNNING[$pid]=$name
     if serial_output; then

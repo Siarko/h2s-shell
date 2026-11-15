@@ -5,10 +5,10 @@ import QtQuick
 import qs.singletons
 import qs.singletons.io as Io
 
-// The module API (docs/plans/modules.md, "Module API 1.0"): with qs.components, everything a
+// The module API (docs/plans/modules.md, "Module API 1.0", and 1.1): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.0" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.1" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same and this
 //                          minor is at least the one asked for. Adding anything bumps the minor;
 //                          changing or removing anything bumps the major.
@@ -29,7 +29,9 @@ import qs.singletons.io as Io
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
-// The VPN provider base type comes from qs.components (VpnProvider) once that branch lands.
+// From qs.components (API 1.1): VpnProvider, the base type of a VPN provider — a module's uses
+// its module id as `providerId`, and its three VPN slots (network.vpn.row, .card, .page) are
+// manifest `slots` contributions like any other (Api.slots; docs/plans/tailscale.md §3).
 Singleton {
     id: root
 

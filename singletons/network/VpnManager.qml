@@ -126,16 +126,19 @@ Singleton {
     // [{ id, object, handler }] in the order registered
     property var _providers: []
 
-    // The slots a provider fills, by name (the module host's slot names, modules.md §7).
-    // Today a provider hands its Components over itself (rowExtras, cardExtras, pageUrl);
-    // VpnManager.extrasFor is the one place to switch to the host's slot registry.
+    // The slots a provider fills, by name (the module host's slot names, modules.md §3a; in
+    // ModuleRules.slotTable since module API 1.1). A module's provider (providerId = its
+    // module id) fills them through its manifest's `slots`; a provider that is no module's
+    // (the stand-in) hands its Components over itself (rowExtras, cardExtras, pageUrl) —
+    // extrasFor and pageOf ask the module host first, then the provider.
     //   network.vpn.row  — under the VPN's row in the network popup; context { slot, vpnId,
-    //                      entryId, vpn, provider }
+    //                      entryId, vpn, provider, otherVpnsUp }
     //   network.vpn.card — on the VPN's card in Settings → System → Network → VPN, while the
-    //                      card is open; context { slot, vpnId, entryId, vpn, provider, open }
+    //                      card is open; context { slot, vpnId, entryId, vpn, provider,
+    //                      otherVpnsUp, open }
     //   network.vpn.page — a page of the provider's own, opened over the VPN page from the
     //                      card, in the settings pages' frame (title, Back, scrolling);
-    //                      context { slot, vpnId, entryId, vpn, provider, close }
+    //                      context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, close }
     //   (contextFor makes them)
     readonly property var slots: ({ row: "network.vpn.row", card: "network.vpn.card", page: "network.vpn.page" })
 
@@ -279,28 +282,35 @@ Singleton {
         return "";
     }
 
-    // The provider's components for a slot (VpnManager.slots), null when there are none.
-    // The one line to change when the module host's slot registry takes over (modules.md §7):
-    // look the slot up there instead of in the provider's own properties.
+    // The provider's component for a slot (VpnManager.slots), null when there is none: the
+    // module host's — the contribution to that slot of the module whose id is the provider's
+    // (Modules.slotComponent: built in the module's guard, given its handle, following its
+    // module on and off) — else the provider's own rowExtras / cardExtras (a provider that is
+    // no module's: the stand-in)
     function extrasFor(slot: string, vpn) {
         const read = providerOf(vpn);
-        if (read === null)
+        if (read === null || (slot !== slots.row && slot !== slots.card))
             return null;
-        return slot === slots.row ? read.rowExtras : slot === slots.card ? read.cardExtras : null;
+        return Modules.slotComponent(slot, read.providerId)
+            ?? (slot === slots.row ? read.rowExtras : read.cardExtras);
     }
 
-    // The page's URL of a provider's VPN ("" none) — slot network.vpn.page
+    // The page's URL of a provider's VPN ("" none) — slot network.vpn.page: the module host's
+    // (Modules.slotUrl), else the provider's own pageUrl
     function pageOf(vpn): string {
-        return providerOf(vpn)?.pageUrl ?? "";
+        const read = providerOf(vpn);
+        return read === null ? "" : (Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "");
     }
 
     // The context a slot's contribution gets (VpnManager.slots): { slot, vpnId, entryId,
-    // vpn, provider } and `extra` ({ open } on the card, { close } on the page). `provider`
-    // is the provider object itself, so a contribution can call its functions and read its
-    // state.
+    // vpn, provider, otherVpnsUp } and `extra` ({ open } on the card, { close } on the page).
+    // `provider` is the provider object itself, so a contribution can call its functions and
+    // read its state; `otherVpnsUp` the names of the other VPNs up now (two VPNs may compete
+    // for routes and DNS).
     function contextFor(slot: string, vpn, extra) {
         return Object.assign({ slot: slot, vpnId: vpn?.uuid ?? "", entryId: vpn?.entryId ?? "", vpn: vpn,
-            provider: providerOf(vpn)?.object ?? null }, extra ?? {});
+            provider: providerOf(vpn)?.object ?? null,
+            otherVpnsUp: activeVpns.filter(other => other.uuid !== (vpn?.uuid ?? "")).map(other => other.name) }, extra ?? {});
     }
 
     // The provider VPNs in "VPN with a network" that are not among `vpns` now — not

@@ -79,9 +79,9 @@ Singleton {
     // imports qs.singletons, and the two importing each other would be a cycle. Adding to
     // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
     // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
-    readonly property string apiVersion: "1.0"
+    readonly property string apiVersion: "1.1"
 
-    // ---- The slots the core offers (API 1.0) ----
+    // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
     //
     // A slot is a place in a panel the core owns where modules may put content
     // (components/ModuleSlot.qml). Each contribution is built in a guard of its own, with
@@ -100,7 +100,21 @@ Singleton {
           context: "{ slot, count: the number of notifications in the list }" },
         { name: "settings.general.bottom", since: "1.0",
           where: "Settings → Behaviour → General, at the end of the page",
-          context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" }
+          context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" },
+        // The VPN provider seam's three (docs/plans/tailscale.md §3; VpnManager.extrasFor and
+        // pageOf ask here first): one contribution per provider, the one of the module whose
+        // id is the provider's providerId — a module's provider uses its module id
+        // (`VpnProvider { providerId: module.moduleId }`). A provider that is no module's keeps
+        // its own rowExtras, cardExtras and pageUrl.
+        { name: "network.vpn.row", since: "1.1",
+          where: "the network popup's VPN section (panels/network/VpnSection.qml), under the row of each VPN of the module's provider",
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp: [names of the other VPNs up] }" },
+        { name: "network.vpn.card", since: "1.1",
+          where: "Settings → System → Network → VPN, on the card of each VPN of the module's provider, while the card is open",
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, open: bool }" },
+        { name: "network.vpn.page", since: "1.1",
+          where: "a page over Settings → System → Network → VPN, opened from the card's \"Settings…\", in the core's frame (Back, title, scrolling)",
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, close: function }" }
     ]
     readonly property var slotNames: slotTable.map(entry => entry.name)
 

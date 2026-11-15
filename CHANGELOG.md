@@ -13,6 +13,11 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, docs/plans/modules.md "Module API 1.0").
+- 1.1: the VPN provider seam's slots `network.vpn.row`, `network.vpn.card` and
+  `network.vpn.page` in the slot table — a module's VPN provider (`VpnProvider` from
+  `qs.components`, its `providerId` the module's id) fills them through its manifest's
+  `slots`; their context adds `otherVpnsUp` (the other VPNs up); a provider page gets its
+  module's handle as `module`.
 - 1.0: `Api` (version, theme tokens, slot table, `module(id)`, `moduleAt(url)`, notify,
   openUrl, copy, openSettings); a module's handle (its status, `active`, manifest, files, own
   settings read and written, facts, a JSON store, notifications, its settings pages, runtime

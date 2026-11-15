@@ -171,11 +171,11 @@ carries on; anything a module's singletons do later (the contract below); a modu
 blocks the event loop or crashes the process (safe mode, §4 item 5). A module's singletons
 outlive its main: turning it off destroys the main, not them.
 
-## 3a. Module API 1.0 (built in M2)
+## 3a. Module API 1.1 (1.0 built in M2; 1.1 adds the VPN slots)
 
 The module author's whole world: `import qs.api` and `import qs.components` (the VPN
-provider base type, `components/VpnProvider.qml`, comes with the VPN branch). Everything
-below is API 1.0; adding anything is a minor bump, changing or removing anything a major
+provider base type, `components/VpnProvider.qml`, since 1.1). Everything
+below is API 1.0 unless marked 1.1; adding anything is a minor bump, changing or removing anything a major
 one (`ModuleRules.apiVersion`, the CHANGELOG's "Module API" heading). The doc comments in
 `api/*.qml`, `components/ModuleSlot.qml` and `ModuleRules.slotTable` are the specification.
 
@@ -191,7 +191,7 @@ the handle of the module whose directory holds the file. A module's own assets:
 
 | `Api.` | Signature | What it does |
 |---|---|---|
-| `version` | string | "1.0" |
+| `version` | string | "1.1" |
 | `theme` | ThemeTokens | the theme's tokens, read-only, following the theme in use: colours (`accent`, `textPrimary`, … the core's semantic ones), `fontFamily`, `fontSize*`, `fontScale`, frozen groups (`capsule`, `popup`, `row`, `listItem`, `button`, `iconButton`, `pill`, `field`, `checkbox`, `tooltip`, `border`, `settings`), `reduceMotion`, `animationSpeed`, `scaled(w)`, `popupWidth(name, base)`, `duration(role)`, `curve(name)` |
 | `slots` | [{ name, where, context, since }] | the slot table (frozen) |
 | `module(id)` | → handle or null | a module's handle |
@@ -249,7 +249,13 @@ contribution out as a Component (the same guard, forwarding a `context` set on i
 | `network.popup.sections` | the network popup, under the VPN, Ethernet and Wi-Fi sections, above the network list (whose height counts it) | `wifiEnabled`, `wifiConnected`, `ethernetConnected` | 1.0 |
 | `notifications.popup.top` | the notifications popup, above the list | `count` | 1.0 |
 | `settings.general.bottom` | Settings → Behaviour → General, at the end | `editIndex` (for SettingEditor) | 1.0 |
-| `network.vpn.row`, `network.vpn.card`, `network.vpn.page` | the VPN branch's three (tailscale.md §3), offered once it is merged: rows added here then | `vpnId`, `entryId`, `vpn`, `provider` (+ `open` / `close`) | 1.x (merge) |
+| `network.vpn.row` | under the row of each VPN of the module's provider in the network popup (`VpnManager.extrasFor`) | `vpnId`, `entryId`, `vpn`, `provider`, `otherVpnsUp` | 1.1 |
+| `network.vpn.card` | on that VPN's card in Settings → System → Network → VPN, while open | the row's + `open` | 1.1 |
+| `network.vpn.page` | a page over the VPN page, from the card's "Settings…", in the core's frame (Back, title, scrolling); given `module` when it declares it (`VpnManager.pageOf`) | the row's + `close` | 1.1 |
+
+The three VPN slots take one contribution per provider: the one of the module whose id is the
+provider's `providerId` (the convention: `VpnProvider { providerId: module.moduleId }`); a
+provider that is no module's keeps its own `rowExtras`, `cardExtras`, `pageUrl`.
 
 **Never on the lock screen**: no slot, no module object, nothing of `Modules` in
 `screensaver/`, `singletons/lock/`, `Lockscreen` or `pam/` — ever (§4 item 1;
@@ -277,28 +283,16 @@ registry (created from `Qt.callLater` like every panel); the panel warm-up in `s
 compiles modules' panels too; the bar section editor offers modules' types and names a type
 that is gone "(not installed)". With no module, each is the core's list itself.
 
-**After the VPN merge** (`VpnManager`, the VPN branch's one place): the three VPN slots
-become ordinary slots by changing `extrasFor` and `pageOf` to ask the registry, falling back
-to the provider's own properties (its test provider, a provider that is not a module's):
-
-```qml
-function extrasFor(slot: string, vpn) {
-    const read = providerOf(vpn);
-    if (read === null)
-        return null;
-    return Modules.slotComponent(slot, read.providerId)
-        ?? (slot === slots.row ? read.rowExtras : slot === slots.card ? read.cardExtras : null);
-}
-function pageOf(vpn): string {
-    const read = providerOf(vpn);
-    return read === null ? "" : (Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "");
-}
-```
-
-with the convention that a module's provider's `providerId` is its module's id
-(`VpnProvider { providerId: module.moduleId }`; VpnManager already imports `qs.singletons`, where `Modules` is), and three rows added to `ModuleRules.slotTable`.
-The page then gets its handle through `Api.moduleAt(Qt.resolvedUrl("."))` (the frame loads it
-by URL). VpnExtras needs no change: the Component forwards the `context` it sets.
+**The VPN slots (built, API 1.1)** (`VpnManager`, the VPN branch's one place): the three VPN
+slots are ordinary slots — `extrasFor` asks `Modules.slotComponent(slot, providerId)` and
+`pageOf` asks `Modules.slotUrl(slots.page, providerId)` first, falling back to the provider's
+own `rowExtras` / `cardExtras` / `pageUrl` (the stand-in provider, any provider that is not a
+module's) — with the convention that a module's provider's `providerId` is its module's id
+(`VpnProvider { providerId: module.moduleId }`), and three rows in `ModuleRules.slotTable`.
+The page frame (`VpnProviderPageFrame`) loads the page by URL with
+`Modules.initialProperties`, so a page that declares `module` gets its handle like any other
+file built from a manifest. VpnExtras needs no change: the Component forwards the `context`
+it sets. `tests/ModuleRegistriesTest.qml` checks it with the `vpn-slots` fixture.
 
 ## 4. Safety
 

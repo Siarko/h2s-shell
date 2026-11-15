@@ -20,7 +20,7 @@ TestCase {
         const rules = ModuleRules;
 
         // --- the API version ---
-        assertEqual(Api.version, "1.0", "the module API is 1.0 (api/Api.qml)");
+        assertEqual(Api.version, "1.1", "the module API is 1.1 (api/Api.qml)");
         assert(rules.parseApi(Api.version) !== null, "the shell's API version is major.minor");
         assert(rules.apiCompatibility("1.0", "1.0").compatible, "same version: compatible");
         assert(rules.apiCompatibility("1.0", "1.3").compatible, "an older minor on a newer shell: compatible");

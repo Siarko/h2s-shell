@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.api
 import qs.components
 import qs.singletons
+import qs.singletons.network
 
 // The core's registries with modules in them (docs/plans/modules.md, M2), on the shell's own
 // host (Modules.host) — so after ModulesTest, whose host loads the same fixtures (`after`):
@@ -20,6 +21,9 @@ TestCase {
 
     // A suite that must be done first (it loads the same fixtures in a host of its own)
     property var after: null
+    // The VPN provider suite: its counts of VpnManager's providers must not see this one's
+    property var vpnSuite: null
+    property var _frame: null
 
     readonly property string fixtures: Quickshell.shellDir + "/tests/fixtures/modules"
     property var _steps: []
@@ -236,6 +240,60 @@ TestCase {
             const missing = names.filter((name, index) => names.indexOf(name) === index && ModuleRules.idPattern.test(name)
                                           && !ModuleRules.reservedIds.includes(name));
             assertEqual(missing.join(", "), "", "every IPC target, widget type, popup key and settings page id of the core is a reserved id");
+        });
+
+        // The VPN slots (API 1.1): a module's provider (providerId = its id) fills them through
+        // its manifest; a provider that is no module's keeps its own. After the VPN provider
+        // suite, which counts VpnManager's providers.
+        _then("the VPN provider suite is done", () => vpnSuite === null || vpnSuite.done, () => {
+            assert(Api.slots.some(slot => slot.name === "network.vpn.row" && slot.since === "1.1")
+                   && Api.slots.some(slot => slot.name === "network.vpn.card") && Api.slots.some(slot => slot.name === "network.vpn.page"),
+                   "the slot table offers network.vpn.row, .card and .page (since 1.1)");
+            Modules.host.load([fixtures + "/vpn-slots"], {});
+        });
+        _then("vpn-slots settles, its provider registered", () => _settled() && VpnManager.providerOf("vpn-slots:one") !== null, () => {
+            const status = Modules.status("vpn-slots");
+            assertEqual(status?.state, "loaded", "vpn-slots: loaded (api 1.1)");
+            assertEqual(JSON.stringify(status?.warnings ?? null), "[]", "… no warning: its main extends VpnProvider from qs.components, its slots are offered");
+            const vpn = VpnManager.vpns.find(each => each.uuid === "vpn-slots:one") ?? null;
+            assert(vpn !== null, "its provider's entry is among the VPNs");
+            const row = VpnManager.extrasFor(VpnManager.slots.row, vpn);
+            assert(row !== null && row === Modules.slotComponent("network.vpn.row", "vpn-slots"), "extrasFor(row): the module's contribution (Modules.slotComponent)");
+            assert(VpnManager.extrasFor(VpnManager.slots.card, vpn) === Modules.slotComponent("network.vpn.card", "vpn-slots"), "extrasFor(card): the module's");
+            assertEqual(VpnManager.extrasFor(VpnManager.slots.page, vpn), null, "extrasFor(page): none (the page is loaded by URL)");
+            assertEqual(VpnManager.pageOf(vpn), "file://" + fixtures + "/vpn-slots/VpnPage.qml", "pageOf: the module's page (Modules.slotUrl)");
+            const context = VpnManager.contextFor(VpnManager.slots.row, vpn);
+            assert(context.provider === VpnManager.providerOf(vpn).object && Array.isArray(context.otherVpnsUp), "contextFor: the provider, otherVpnsUp");
+            const built = row.createObject(suite, { context: context });
+            assert(built?.ready && built.item.text === "Row of vpn-slots:one by vpn-slots", "… built in the module's guard, with its handle and the context: " + built?.item?.text);
+            built?.destroy();
+            // A provider that is no module's: its own extras
+            const fakeComponent = Qt.createComponent(Qt.resolvedUrl("FakeVpnProvider.qml"), Component.PreferSynchronous);
+            const fake = fakeComponent.createObject(suite, { providerId: "vpt-own", withExtras: true, withPage: true });
+            fake.add("x", "Own extras");
+            const own = VpnManager.vpns.find(each => each.uuid === "vpt-own:x") ?? null;
+            assert(own !== null && VpnManager.extrasFor(VpnManager.slots.row, own) === fake.rowExtras
+                   && VpnManager.extrasFor(VpnManager.slots.card, own) === fake.cardExtras, "a provider that is no module's: its own rowExtras and cardExtras");
+            assert(VpnManager.pageOf(own).endsWith("/tests/FakeVpnProviderPage.qml"), "… and its own pageUrl");
+            fake.destroy();
+            // The page in the core's frame, given its module's handle
+            const frameComponent = Qt.createComponent(Qt.resolvedUrl("../panels/settings/VpnProviderPageFrame.qml"), Component.PreferSynchronous);
+            _frame = frameComponent.createObject(suite, { vpnId: "vpn-slots:one", width: 400, height: 300 });
+            assert(_frame !== null, "the page frame can be made (" + frameComponent.errorString() + ")");
+        });
+        _then("the frame shows the module's page", () => _frame?.page !== null && _frame?.page !== undefined, () => {
+            assertEqual(_frame.page.objectName, "vpnSlotsPage", "the frame loaded the module's page");
+            assertEqual(_frame.page.module, Modules.handle("vpn-slots"), "… and handed it its module's handle (it declares `module`)");
+            assertEqual(_frame.page.context?.vpnId, "vpn-slots:one", "… and its context");
+            assert(Modules.setEnabled("vpn-slots", false), "setEnabled(vpn-slots, false)");
+        });
+        _then("vpn-slots is off", () => Modules.status("vpn-slots")?.state === "disabled", () => {
+            assertEqual(VpnManager.providerOf("vpn-slots:one"), null, "its provider left with its main");
+            assertEqual(Modules.slotComponent("network.vpn.row", "vpn-slots"), null, "… its slot contributions with the module");
+            Modules.setEnabled("vpn-slots", true);
+            _frame?.destroy();
+            _frame = null;
+            Modules.host.unload();
         });
         _clock.start();
     }

@@ -33,7 +33,7 @@ sys.exit(0 if data["modules"] and not data["checkingPrograms"] and all(m["state"
 }
 listed_modules() { process_env "$SHELL_PID" H2S_SHELL_MODULES | tr ':' '\n' | grep -c .; }
 
-check "the launcher handed the shell one canonical directory per fixture (13)" test "$(listed_modules)" = 13
+check "the launcher handed the shell one canonical directory per fixture (14)" test "$(listed_modules)" = 14
 check "… in the fixtures' directory" test "$(process_env "$SHELL_PID" H2S_SHELL_MODULES | cut -d: -f1)" = "$fixtures/bad-manifest"
 check "no safe mode" test -z "$(process_env "$SHELL_PID" H2S_SHELL_SAFE_MODE)"
 check_within 10 "the modules have settled (the program check answered)" modules_settled
@@ -41,6 +41,7 @@ log "modules list: $(shell_ipc modules list | head -c 3000)"
 
 check "good: loaded" module_state_is good loaded
 check "good: no errors" test "$(module_field good errors)" = "[]"
+check "vpn-slots: loaded (a VPN provider and the three VPN slots, API 1.1)" module_state_is vpn-slots loaded
 check "broken: failed (its syntax error contained)" module_state_is broken failed
 check "broken: the error names its file" grep -q "Main.qml" <<< "$(module_field broken errors)"
 check "broken-main: loaded (its exception is the engine's to print)" module_state_is broken-main loaded
