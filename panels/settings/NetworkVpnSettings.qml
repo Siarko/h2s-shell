@@ -10,7 +10,9 @@ import qs.singletons.network
 // whether it is up, its server; connect, disconnect, edit, delete; and, while up, its
 // interface, address, speed and the data it moved. "New WireGuard" opens the editor on a
 // fresh profile; "Import…" makes a profile from a VPN's file (a WireGuard .conf, an OpenVPN .ovpn, another plugin's), and the plugins missing are
-// named with what they are for (docs/plans/network.md, VPN). By UUID (VpnManager).
+// named with what they are for (docs/plans/network.md, VPN). By UUID (VpnManager). A VPN
+// provider's entries (the Tailscale module's) get the same card, connected through the
+// provider, with its extras and a link to its own page instead of the editor and delete.
 Item {
     id: root
 
@@ -81,7 +83,8 @@ Item {
     Flickable {
         id: _page
         anchors.fill: parent
-        visible: root._editing === "" && !root._newWireguard
+        // A provider's page that fails to load leaves this page shown
+        visible: root._editing === "" && !root._newWireguard && _providerPageLoader.status !== Loader.Ready
         contentWidth: width
         contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
         flickableDirection: Flickable.VerticalFlick
@@ -208,6 +211,12 @@ Item {
                     id: _vpn
                     required property var modelData
                     readonly property bool _wireguard: modelData.type === "wireguard"
+                    // A VPN provider's (VpnManager; components/VpnProvider.qml): connected
+                    // through it, no NetworkManager editor, no delete — its extras and page
+                    readonly property bool _provided: modelData.type === "provider"
+                    readonly property var _attention: modelData.attention ?? null
+                    readonly property string _lockdownNote: VpnLockdown.noteFor(modelData)
+                    readonly property string _pageUrl: _provided ? VpnManager.pageOf(modelData) : ""
                     readonly property bool _up: modelData.state === "activated"
                     readonly property string _server: VpnManager.details[modelData.uuid]?.server ?? ""
                     // The tunnel's own interface and addresses (a plugin VPN's profile names
@@ -231,9 +240,33 @@ Item {
                     forgetLabel: "Delete"
                     forgetAction: "Deleting"
                     editTooltip: "Its name, addresses, DNS and the rest"
+                    external: _provided
+                    busy: VpnManager.busyFor(modelData)
+                    need: VpnManager.needFor(modelData)
+                    // Needing the user and off: its action in place of Connect
+                    canUse: _attention === null || _attention.action === ""
+                    notice: [_attention?.reason ?? "", _lockdownNote].filter(line => line !== "").join("\n")
+                    noticeAction: _attention?.action ?? ""
                     onToggleRequested: root._open = open ? "" : modelData.uuid
                     onForgotten: root._open = ""
                     onEditRequested: root._editing = modelData.uuid
+                    onUseRequested: VpnManager.connect(modelData.uuid)
+                    onStopRequested: VpnManager.disconnect(modelData.uuid)
+                    onNoticeActionRequested: VpnManager.attend(modelData.uuid)
+
+                    // A provider's own: its extras (slot network.vpn.card), and its page
+                    VpnExtras {
+                        Layout.fillWidth: true
+                        slot: VpnManager.slots.card
+                        vpn: _vpn.modelData
+                        extra: ({ open: _vpn.open })
+                    }
+                    SmallButton {
+                        visible: _vpn._pageUrl !== ""
+                        label: "Settings…"
+                        tooltip: "Its own settings: " + VpnManager.typeName(_vpn.modelData)
+                        onClicked: root._providerPage = _vpn.modelData.uuid
+                    }
 
                     // The networks it comes up with (set in their editors)
                     DetailRow {
@@ -536,6 +569,30 @@ Item {
                         Hint { text: modelData.note }
                     }
                 }
+            }
+        }
+    }
+
+    // ── A provider's own page, over this one (slot network.vpn.page) ── by the VPN's id
+    // ("" none); its root item gets `context` { slot, vpnId, entryId, vpn, close } when it
+    // declares the property. Today the provider's pageUrl; later a page of the module host's.
+    property string _providerPage: ""
+    readonly property var _providerPageVpn: VpnManager.vpns.find(vpn => vpn.uuid === _providerPage) ?? null
+    Loader {
+        id: _providerPageLoader
+        anchors.fill: parent
+        active: root._providerPage !== "" && root._providerPageVpn !== null && VpnManager.pageOf(root._providerPageVpn) !== ""
+        source: active ? VpnManager.pageOf(root._providerPageVpn) : ""
+        readonly property var context: ({ slot: VpnManager.slots.page, vpnId: root._providerPage,
+            entryId: root._providerPageVpn?.entryId ?? "", vpn: root._providerPageVpn, close: () => root._providerPage = "" })
+        onLoaded: _pass()
+        onContextChanged: _pass()
+        function _pass() {
+            try {
+                if (item !== null && "context" in item)
+                    item.context = context;
+            } catch (error) {
+                // No such property: it takes no context
             }
         }
     }

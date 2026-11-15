@@ -121,8 +121,11 @@ Item {
             }
             root._original = settings;
             root._edited = JSON.parse(JSON.stringify(settings));
-            // Only VPNs there still are: one deleted would stay picked, unseen and unremovable
-            root._vpnsOriginal = VpnManager.vpnsWith(root.uuid).filter(vpn => VpnManager.vpns.some(entry => entry.uuid === vpn));
+            // Only VPNs there still are: one deleted would stay picked, unseen and unremovable.
+            // A provider's whose provider is away (a module disabled) stays: shown as not
+            // available, so it can be taken out (VpnManager.dormantVpnIds)
+            root._vpnsOriginal = VpnManager.vpnsWith(root.uuid).filter(vpn => VpnManager.vpns.some(entry => entry.uuid === vpn)
+                || VpnManager.dormantVpnIds.includes(vpn));
             root._vpnsEdited = root._vpnsOriginal.slice();
             root._lockOriginal = VpnLockdown.isSetFor(root.uuid);
             root._lockEdited = root._lockOriginal;
@@ -819,7 +822,7 @@ Item {
                 spacing: 4
                 Label { text: "Connect a VPN with it" }
                 Flow {
-                    visible: VpnManager.vpns.length > 0
+                    visible: VpnManager.vpns.length > 0 || _dormant.count > 0
                     Layout.fillWidth: true
                     spacing: 4
                     Repeater {
@@ -834,6 +837,23 @@ Item {
                             onClicked: root._vpnsEdited = picked
                                 ? root._vpnsEdited.filter(vpn => vpn !== modelData.uuid)
                                 : root._vpnsEdited.concat([modelData.uuid])
+                        }
+                    }
+                    // A provider's VPN picked for this network whose provider is not there
+                    // now: kept, and taken out here (a click, then Save)
+                    Repeater {
+                        id: _dormant
+                        model: ScriptModel { values: root._vpnsOriginal.filter(vpn => VpnManager.dormantVpnIds.includes(vpn)).map(vpn => ({ id: vpn })); objectProp: "id" }
+                        Pill {
+                            required property var modelData
+                            label: VpnManager.labelOf(modelData.id)
+                            tooltip: "Its provider is not loaded now (a module disabled or missing): kept until you take it out"
+                            fontSize: Theme.fontSizeBody
+                            minimumHeight: 26
+                            picked: root._vpnsEdited.includes(modelData.id)
+                            onClicked: root._vpnsEdited = picked
+                                ? root._vpnsEdited.filter(vpn => vpn !== modelData.id)
+                                : root._vpnsEdited.concat([modelData.id])
                         }
                     }
                 }

@@ -133,6 +133,26 @@ binding. Start it from `Component.onCompleted` or a `Timer` instead.
 `Socket` from `Quickshell.Io`, holding a long-lived Unix-socket connection with a 2 s
 reconnect loop.
 
+### VPN providers
+
+A VPN is either a NetworkManager profile (by UUID) or an entry of a **VPN provider**
+(by `"<providerId>:<entryId>"` — the colon never occurs in a UUID): an object extending
+`components/VpnProvider.qml` that registers itself with `singletons/network/VpnManager.qml`
+when made and leaves when destroyed. It reports `entries` (`{ id, name, state, attention,
+detail, active }`, in NetworkManager's state words, `detail` in the shape of
+`VpnManager.details`), `busy`, `canChange`, and performs `connect`/`disconnect`/`attend`;
+failures come back through its `failed` signal as the same notification NetworkManager's
+get. Everything it reports is checked by `NetworkRules.vpnProviderEntries` (wrong entries
+dropped and logged, never shown). `VpnManager.vpns`, `details`, `interfaceOf` and the rest
+are the merged model the popup, the bar, the overview, the VPN page and the connection
+editor read; with no provider registered they are NetworkManager's lists themselves. The
+kill switch (`VpnLockdown`) reads `nmDetails`/`nmInterfaceNames` only — it does not support
+provider VPNs, and says so on their rows while blocking. Providers fill the slots named in
+`VpnManager.slots` (`network.vpn.row`, `.card`, `.page`) through `VpnManager.extrasFor`.
+The contract in full: [plans/tailscale.md](plans/tailscale.md) §3; the stand-in provider
+for tests is `tests/FakeVpnProvider.qml` (by hand: `H2S_FAKE_VPN_PROVIDER=1`, IPC target
+`fakevpn`).
+
 ### Config and profiles
 
 Settings live in **shell profiles**; the design is in
@@ -547,7 +567,10 @@ a finger do. It needs a Wayland session — `run-unit.sh` gives it its own. A st
 be sent that way. `LockViewTest.qml` is another: the lock prompt and a notification card fed
 views the way `Lockscreen` feeds them (answer hidden or shown, a long question in full, an
 error, the compositor's late notice, "Unlocking…", the passive methods' lines, Caps Lock,
-each notification detail as plain text).
+each notification detail as plain text). `VpnProvidersTest.qml` is a third: the VPN
+provider seam's rules, then `VpnManager` driven with the stand-in provider — a provider
+destroyed while registered, a slow operation on its timer, the popup's VPN section and a
+card built with a provider's VPNs.
 
 `tests/device/` drives the running shell on a touch device through the whole stack — a
 virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —

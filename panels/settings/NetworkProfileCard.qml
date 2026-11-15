@@ -9,7 +9,8 @@ import qs.singletons.network
 // automatically, priority, edit connection and forget — plus what the page adds (`data`:
 // the Wi-Fi password). Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
 // page offers ("" when there is none: out of range, no cable); disconnecting takes the
-// device down, not only the profile (NetworkProfiles.disconnectDevice).
+// device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
+// entry (VpnManager) uses it too, as `external`: the page connects it, no editor, no delete.
 Rectangle {
     id: root
 
@@ -37,12 +38,31 @@ Rectangle {
     property bool showPriority: true
     property string priorityHint: "Higher wins when several could connect"
     property string editTooltip: "Addresses, DNS, and the rest"
+    // Not a NetworkManager profile (a VPN provider's, VpnManager): connecting and
+    // disconnecting are the page's — useRequested / stopRequested — and there is no editor
+    // and no delete unless the page says so
+    property bool external: false
+    property bool editable: !external
+    property bool deletable: !external
+    // An operation runs: the button waits
+    property bool busy: NetworkProfiles.connecting
+    // polkit's answer for connecting it, for PrivilegedMark ("" nothing marked)
+    property string need: ""
+    // Offer to connect at all (false: something else must be done first — `noticeAction`)
+    property bool canUse: true
+    // A lasting line under the header, in the warning colour ("" none), with a button
+    // (`noticeAction`, "" none) that emits noticeActionRequested
+    property string notice: ""
+    property string noticeAction: ""
     // The page's own settings, under the shared ones
     default property alias content: _extra.data
     signal toggleRequested()
     signal forgotten()
     // Its addresses, DNS and the rest: the page opens NetworkConnectionEditor
     signal editRequested()
+    signal useRequested()
+    signal stopRequested()
+    signal noticeActionRequested()
 
     implicitHeight: _column.implicitHeight + 16
     radius: Theme.settings.cardRadius
@@ -96,15 +116,22 @@ Rectangle {
                         color: root.profile.active ? Theme.success : Theme.textMuted
                     }
                 }
+                PrivilegedMark {
+                    need: root.need
+                }
                 // As in the network popup: connect in the confirm colour, disconnect in the
                 // delete colour
                 SmallButton {
-                    visible: root.profile.active || (root.usable && root.useQuestion === "")
+                    visible: root.profile.active || (root.usable && root.canUse && root.useQuestion === "")
                     label: root.profile.active ? root.stopLabel : root.useLabel
                     kind: root.profile.active ? "delete" : "save"
-                    available: !NetworkProfiles.connecting
+                    available: !root.busy
                     onClicked: {
-                        if (!root.profile.active)
+                        if (root.external && root.profile.active)
+                            root.stopRequested();
+                        else if (root.external)
+                            root.useRequested();
+                        else if (!root.profile.active)
                             NetworkProfiles.activate(root.profile.uuid, root.useDevice);
                         else if (root.stopsProfile)
                             NetworkProfiles.deactivate(root.profile.uuid, root.stopLabel + " " + root.title);
@@ -113,13 +140,18 @@ Rectangle {
                     }
                 }
                 DeleteButton {
-                    visible: !root.profile.active && root.usable && root.useQuestion !== ""
+                    visible: !root.profile.active && root.usable && root.canUse && root.useQuestion !== ""
                     label: root.useLabel
                     fontSize: Theme.fontSizeBody
                     confirmLabel: root.useQuestion
                     cancelTip: "Cancel"
-                    available: !NetworkProfiles.connecting
-                    onConfirmed: NetworkProfiles.activate(root.profile.uuid, root.useDevice)
+                    available: !root.busy
+                    onConfirmed: {
+                        if (root.external)
+                            root.useRequested();
+                        else
+                            NetworkProfiles.activate(root.profile.uuid, root.useDevice);
+                    }
                 }
                 Text {
                     text: root.open ? "▾" : "▸"
@@ -127,6 +159,27 @@ Rectangle {
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textMuted
                 }
+            }
+        }
+
+        // A lasting line: what needs the user, with its action
+        RowLayout {
+            visible: root.notice !== ""
+            Layout.fillWidth: true
+            spacing: 8
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: root.notice
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
+            SmallButton {
+                visible: root.noticeAction !== ""
+                label: root.noticeAction
+                available: !root.busy
+                onClicked: root.noticeActionRequested()
             }
         }
 
@@ -194,14 +247,17 @@ Rectangle {
             }
 
             RowLayout {
+                visible: root.editable || root.deletable
                 Layout.fillWidth: true
                 SmallButton {
+                    visible: root.editable
                     label: "Edit connection…"
                     tooltip: root.editTooltip
                     onClicked: root.editRequested()
                 }
                 Item { Layout.fillWidth: true }
                 DeleteButton {
+                    visible: root.deletable
                     label: root.forgetLabel
                     confirmLabel: root.forgetLabel + "?"
                     cancelTip: "Keep it"

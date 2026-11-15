@@ -707,11 +707,25 @@ Singleton {
     //              still down 90 s later, it failed — held down, not retried in a loop
     //   heldDown — went down while wanted, not by the shell: left down until the networks
     //              wanting it change (`key`, the ones up then)
-    // `now` the time in ms. → { connect [], disconnect [], memory }
-    function vpnWithNetworkPlan(profiles, mapping, memory, now) {
+    // `now` the time in ms.
+    // `providerVpns` (optional): the VPNs of providers (VpnManager, "<provider>:<id>"), in
+    // the same shape ({ uuid, state, attention }) — considered only once the profiles are
+    // read (with none, nothing is known of the networks: a VPN would look unwanted and be
+    // taken down). A VPN that needs the user (`attention` set: log in, approve…) is never
+    // asked to connect; one that went there after being asked (or after being brought up) is
+    // held down like a failure, so it is not retried in a loop — tried again only when the
+    // networks change. One that needed the user before it was ever asked is asked once the
+    // attention is gone. A VPN of a provider that is not there (a module disabled,
+    // not loaded yet) is left alone, its memory kept.
+    // → { connect [], disconnect [], memory }
+    function vpnWithNetworkPlan(profiles, mapping, memory, now, providerVpns) {
         const states = {};
-        for (const profile of profiles ?? [])
+        const attention = {};
+        const known = (profiles ?? []).length > 0 ? (profiles ?? []).concat(providerVpns ?? []) : [];
+        for (const profile of known) {
             states[profile.uuid] = profile.state ?? "";
+            attention[profile.uuid] = !!profile.attention;
+        }
         const broughtUp = Object.assign({}, memory?.broughtUp ?? {});
         const pending = Object.assign({}, memory?.pending ?? {});
         const heldDown = Object.assign({}, memory?.heldDown ?? {});
@@ -741,6 +755,15 @@ Singleton {
             if (upNetworks.length > 0) {
                 if (state !== "")
                     continue;
+                if (attention[vpn]) {
+                    // Asked to connect and now waiting for the user: a failure, held down
+                    if (vpn in pending || broughtUp[vpn]) {
+                        delete pending[vpn];
+                        delete broughtUp[vpn];
+                        heldDown[vpn] = key;
+                    }
+                    continue;
+                }
                 if (vpn in pending) {
                     if (now - pending[vpn] > 90000) {
                         delete pending[vpn];
@@ -775,20 +798,259 @@ Singleton {
         return { connect: connect, disconnect: disconnect, memory: { broughtUp: broughtUp, pending: pending, heldDown: heldDown } };
     }
 
-    // The mapping without profiles that are gone; `profiles` empty (not read yet): as it is
-    function prunedVpnMapping(mapping, profiles) {
+    // The mapping without profiles that are gone; `profiles` empty (not read yet): as it is.
+    // A provider's VPN ("<provider>:<id>") is judged by its provider — `providers`
+    // ({ providerId: { ready, entries: [id…] } }, the ones registered now):
+    //   registered and ready (its entries read), the entry there — kept;
+    //   registered and ready, the entry gone — removed for good (the provider says it no
+    //     longer exists: an account removed);
+    //   registered but not ready — kept (nothing known yet);
+    //   not registered — kept, dormant (dormantVpnIds): a module disabled, not loaded yet or
+    //     uninstalled must not make the shell delete the user's setting. The user removes a
+    //     dormant one in the network's editor, where it shows as "not available".
+    // An id that can be neither a UUID nor a provider's (vpnIdParts) is removed.
+    function prunedVpnMapping(mapping, profiles, providers) {
         if ((profiles ?? []).length === 0)
             return mapping ?? {};
         const uuids = profiles.map(profile => profile.uuid);
+        const keeps = vpn => {
+            const parts = vpnIdParts(vpn);
+            if (parts === null)
+                return false;
+            if (parts.provider === "")
+                return uuids.includes(vpn);
+            const provider = Object.prototype.hasOwnProperty.call(providers ?? {}, parts.provider) ? providers[parts.provider] : null;
+            if (provider === null || provider?.ready !== true)
+                return true;
+            return (provider.entries ?? []).includes(parts.entry);
+        };
         const pruned = {};
         for (const network in mapping ?? {}) {
             if (!uuids.includes(network))
                 continue;
-            const vpns = (mapping[network] ?? []).filter(vpn => uuids.includes(vpn));
+            const vpns = (mapping[network] ?? []).filter(keeps);
             if (vpns.length > 0)
                 pruned[network] = vpns;
         }
         return pruned;
+    }
+
+    // The provider VPNs in the mapping whose provider is not registered: kept, shown as not
+    // available ([id…], each once, in the mapping's order)
+    function dormantVpnIds(mapping, providers) {
+        const found = [];
+        for (const network in mapping ?? {})
+            for (const vpn of mapping[network] ?? []) {
+                const parts = vpnIdParts(vpn);
+                if (parts !== null && parts.provider !== "" && !Object.prototype.hasOwnProperty.call(providers ?? {}, parts.provider)
+                        && !found.includes(vpn))
+                    found.push(vpn);
+            }
+        return found;
+    }
+
+    // ── VPN providers ── a VPN supplied by an object rather than NetworkManager (the
+    // contract: components/VpnProvider.qml; docs/plans/tailscale.md §3). Its entries are
+    // addressed as "<providerId>:<entryId>" — NetworkManager's UUIDs are hexadecimal digits
+    // and dashes, so the colon keeps the two apart for good.
+
+    // A provider's id: a lower-case letter, then up to 31 of lower-case letters, digits,
+    // "-" and "_" — no colon, nothing an object's prototype knows
+    function isVpnProviderId(text) {
+        return typeof text === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(text) && !_prototypeKeys.includes(text);
+    }
+
+    // An entry's id within its provider: 1 to 64 of letters, digits, ".", "_", "~", "-"
+    function isVpnEntryId(text) {
+        return typeof text === "string" && /^[A-Za-z0-9._~-]{1,64}$/.test(text) && !_prototypeKeys.includes(text);
+    }
+
+    readonly property var _prototypeKeys: ["__proto__", "constructor", "prototype", "hasOwnProperty", "toString", "valueOf",
+        "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__", "isPrototypeOf", "propertyIsEnumerable",
+        "toLocaleString"]
+
+    function vpnId(providerId, entryId) {
+        return providerId + ":" + entryId;
+    }
+
+    // A VPN's id taken apart: { provider: "", entry: uuid } for NetworkManager's (no colon),
+    // { provider, entry } for a provider's; null when it can be neither
+    function vpnIdParts(id) {
+        if (typeof id !== "string" || id === "")
+            return null;
+        const colon = id.indexOf(":");
+        if (colon < 0)
+            return _prototypeKeys.includes(id) ? null : { provider: "", entry: id };
+        const provider = id.slice(0, colon), entry = id.slice(colon + 1);
+        return isVpnProviderId(provider) && isVpnEntryId(entry) ? { provider: provider, entry: entry } : null;
+    }
+
+    readonly property var vpnStates: ["", "activating", "activated", "deactivating"]
+
+    function _string(value, most) {
+        return typeof value === "string" ? value.slice(0, most ?? 500) : "";
+    }
+
+    function _strings(value) {
+        return Array.isArray(value) ? value.filter(item => typeof item === "string").slice(0, 64).map(item => item.slice(0, 200)) : [];
+    }
+
+    // A provider's `detail` in the shape vpnDetails gives NetworkManager's VPNs, so the views
+    // read both alike: { service "", server, servers [], iface, interfaceName, addresses [],
+    // dns [] } — anything else dropped, missing fields empty
+    function vpnProviderDetail(detail) {
+        const source = detail !== null && typeof detail === "object" && !Array.isArray(detail) ? detail : {};
+        const read = key => Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
+        const server = _string(read("server"), 200);
+        const servers = _strings(read("servers"));
+        return {
+            service: "", server: server, servers: servers.length > 0 ? servers : (server !== "" ? [server] : []),
+            iface: /^[A-Za-z0-9_.-]{1,15}$/.test(_string(read("iface"))) ? read("iface") : "",
+            interfaceName: /^[A-Za-z0-9_.-]{1,15}$/.test(_string(read("interfaceName"))) ? read("interfaceName") : "",
+            addresses: _strings(read("addresses")), dns: _strings(read("dns"))
+        };
+    }
+
+    // What a provider reports as its entries, checked: { entries, problems } — `entries`
+    // [{ id, name, state, attention, detail, active }] in the provider's order, `problems`
+    // sentences for the log. An entry whose id, name or state is wrong (not an object; id
+    // not isVpnEntryId, or repeated; name not a string; state not one of vpnStates) is
+    // dropped. A wrong optional field is set to its default and reported: attention (null,
+    // or { reason: a non-empty string, action: a string, "" none }), detail
+    // (vpnProviderDetail), active (a bool; else whether state is not "").
+    function vpnProviderEntries(providerId, raw) {
+        const entries = [];
+        const problems = [];
+        const name = String(providerId);
+        let list = raw;
+        if (!Array.isArray(list)) {
+            if (list !== undefined && list !== null)
+                problems.push(name + ": entries is not a list");
+            list = [];
+        }
+        const seen = {};
+        list.slice(0, 64).forEach((entry, index) => {
+            const where = name + ": entry " + index;
+            if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+                problems.push(where + " is not an object");
+                return;
+            }
+            const read = key => {
+                try {
+                    return Object.prototype.hasOwnProperty.call(entry, key) ? entry[key] : undefined;
+                } catch (error) {
+                    return undefined;
+                }
+            };
+            const id = read("id");
+            if (!isVpnEntryId(id)) {
+                problems.push(where + ": id " + JSON.stringify(String(id)).slice(0, 80) + " is not 1–64 letters, digits, . _ ~ -");
+                return;
+            }
+            if (seen[id] === true) {
+                problems.push(where + ": id " + id + " repeated");
+                return;
+            }
+            const entryName = read("name");
+            if (typeof entryName !== "string") {
+                problems.push(where + " (" + id + "): name is not text");
+                return;
+            }
+            const state = read("state") ?? "";
+            if (!vpnStates.includes(state)) {
+                problems.push(where + " (" + id + "): state " + JSON.stringify(String(state)).slice(0, 40) + " is not one of activating, activated, deactivating, \"\"");
+                return;
+            }
+            seen[id] = true;
+            let attention = read("attention") ?? null;
+            if (attention !== null) {
+                const reason = typeof attention === "object" ? attention.reason : undefined;
+                const action = typeof attention === "object" ? (attention.action ?? "") : undefined;
+                if (typeof reason !== "string" || reason.trim() === "" || typeof action !== "string") {
+                    problems.push(where + " (" + id + "): attention is not { reason, action }");
+                    attention = null;
+                } else {
+                    attention = { reason: reason.slice(0, 300), action: action.slice(0, 40) };
+                }
+            }
+            const rawDetail = read("detail");
+            if (rawDetail !== undefined && rawDetail !== null && (typeof rawDetail !== "object" || Array.isArray(rawDetail)))
+                problems.push(where + " (" + id + "): detail is not an object");
+            let active = read("active");
+            if (active !== undefined && typeof active !== "boolean")
+                problems.push(where + " (" + id + "): active is not true or false");
+            if (typeof active !== "boolean")
+                active = state !== "";
+            entries.push({
+                id: id, name: entryName.trim().slice(0, 200) || id, state: state, attention: attention,
+                detail: vpnProviderDetail(rawDetail), active: active
+            });
+        });
+        if (list.length > 64)
+            problems.push(name + ": more than 64 entries, the rest left out");
+        return { entries: entries, problems: problems };
+    }
+
+    // One provider's entries as VPNs in the shape of NetworkManager's ({ uuid, name, type,
+    // kind, state, active, … }), so the views and vpnWithNetworkPlan take both: `uuid` is the
+    // id "<provider>:<entry>", `type` "provider", plus provider, entryId, typeName, glyph,
+    // attention. `read` { providerId, typeName, glyph, entries (vpnProviderEntries') }
+    function vpnProviderVpns(read) {
+        return (read?.entries ?? []).map(entry => ({
+            uuid: vpnId(read.providerId, entry.id), name: entry.name, type: "provider", kind: "vpn",
+            state: entry.state, active: entry.active, device: "", autoconnect: false, priority: 0, lastUsed: 0,
+            provider: read.providerId, entryId: entry.id, typeName: read.typeName || "VPN", glyph: read.glyph || "",
+            attention: entry.attention
+        }));
+    }
+
+    // NetworkManager's VPNs and the providers' in one list: those up first, then the most
+    // recently used; ties keep their order — NetworkManager's first, then each provider's
+    // in the order the providers were registered, entries in the provider's order
+    function mergedVpns(nmVpns, providerVpns) {
+        return (nmVpns ?? []).concat(providerVpns ?? [])
+            .map((vpn, index) => ({ vpn: vpn, index: index }))
+            .sort((a, b) => (b.vpn.active - a.vpn.active) || ((b.vpn.lastUsed ?? 0) - (a.vpn.lastUsed ?? 0)) || (a.index - b.index))
+            .map(item => item.vpn);
+    }
+
+    // The glyph for the VPNs up (the bar, the popup's header): WireGuard's when every one is
+    // WireGuard (and with none), one provider's own when every one is that provider's and it
+    // has one, else the padlock
+    function activeVpnGlyph(activeVpns) {
+        const list = activeVpns ?? [];
+        if (list.every(vpn => vpn.type === "wireguard"))
+            return "󰒃";
+        const glyph = list[0]?.glyph ?? "";
+        if (glyph !== "" && list.every(vpn => vpn.provider !== undefined && vpn.provider === list[0].provider))
+            return glyph;
+        return "󰌾";
+    }
+
+    // A VPN's own glyph: WireGuard's, a provider's own, else the padlock
+    function vpnGlyph(vpn) {
+        return vpn?.type === "wireguard" ? "󰒃" : (vpn?.glyph || "󰌾");
+    }
+
+    // A provider's failure as a notification, as NetworkManager's are (NetworkProfiles):
+    // { title "<what> failed", body: the reason }
+    function vpnFailureNotice(what, reason) {
+        const doing = _string(what, 200).trim() || "A VPN action";
+        return { title: doing + " failed", body: _string(reason, 500).trim() || "It did not say why." };
+    }
+
+    // The kill switch does not cover provider VPNs (the owner's decision, tailscale.md §8):
+    // the sentence saying so while blocking is on and the VPN is up or coming up ("" when
+    // there is nothing to say). `note` the provider's own wording (its lockdownNote), else
+    // the shell's.
+    function lockdownProviderNote(blocking, vpn, note) {
+        if (!blocking || typeof vpn?.provider !== "string" || vpn.provider === "")
+            return "";
+        if (vpn.state !== "activating" && vpn.state !== "activated")
+            return "";
+        const own = _string(note, 300).trim();
+        return own !== "" ? own : (vpn.typeName || "This VPN") + " is not let through by the blocking of traffic outside a VPN: "
+            + "it cannot reach its servers or its peers, so it may not connect or carry traffic.";
     }
 
     // ── Only through the VPN (a kill switch) ── docs/plans/network.md, VPN stage 7

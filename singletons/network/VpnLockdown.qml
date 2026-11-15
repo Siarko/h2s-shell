@@ -38,6 +38,18 @@ Singleton {
 
     readonly property bool wanted: NetworkRules.lockdownWanted(NetworkProfiles.profiles, always, networks)
 
+    // Blocking is on, or about to be: what the provider VPNs' note goes by
+    readonly property bool blocking: wanted || state === "on"
+
+    // What to say on a provider VPN's row and card while blocking: the blocking does not let
+    // it through (NetworkRules.lockdownProviderNote; the provider's own lockdownNote if it
+    // has one). "" for NetworkManager's VPNs, and when there is nothing to say.
+    function noteFor(vpn): string {
+        if (vpn?.type !== "provider")
+            return "";
+        return NetworkRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "");
+    }
+
     // ── The script ──
     // The shell's own copy (shown on the page; run with a password when not installed)
     readonly property string scriptPath: Quickshell.shellDir + "/scripts/h2s-vpn-lockdown"
@@ -83,10 +95,13 @@ Singleton {
     property string failure: ""
 
     // The interfaces let through as VPNs, besides tun*, wg* and the like: the WireGuard
-    // profiles' own — as set, not as up, so a VPN connecting changes nothing
-    readonly property var vpnInterfaces: VpnManager.interfaceNames.slice().sort()
-    // The VPN servers' names and addresses as set (every peer's, every remote)
-    readonly property var _hostList: Array.from(new Set(Object.values(VpnManager.details)
+    // profiles' own — as set, not as up, so a VPN connecting changes nothing. NetworkManager's
+    // VPNs only: the blocking does not support provider VPNs (Tailscale; the owner's decision,
+    // docs/plans/tailscale.md §8) — what a provider reports never reaches the script.
+    readonly property var vpnInterfaces: VpnManager.nmInterfaceNames.slice().sort()
+    // The VPN servers' names and addresses as set (every peer's, every remote) — of
+    // NetworkManager's VPNs only, as above
+    readonly property var _hostList: Array.from(new Set(Object.values(VpnManager.nmDetails)
         .reduce((all, detail) => all.concat(detail.servers ?? []), []).map(server => NetworkRules.serverHost(server))
         .filter(host => host !== ""))).sort()
     readonly property string _hosts: _hostList.join(" ")

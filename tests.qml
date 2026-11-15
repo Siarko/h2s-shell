@@ -13,6 +13,7 @@ QtObject {
     property var _promises: PromisesTest {}
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}
+    property var _vpnProviders: VpnProvidersTest {}
     property var _calendarDates: CalendarDatesTest {}
     property var _widgetRegistry: WidgetRegistryTest {}
     property var _hardware: HardwareTest {}
@@ -42,7 +43,7 @@ QtObject {
     property var _lockView: LockViewTest {}
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _lockView]
+    readonly property var _asyncSuites: [_pointerInput, _lockView, _vpnProviders]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed
