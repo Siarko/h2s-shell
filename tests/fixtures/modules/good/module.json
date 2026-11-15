@@ -1,0 +1,24 @@
+{
+    "id": "good",
+    "name": "Good fixture",
+    "version": "1.2.3",
+    "api": "1.0",
+    "description": "A module that does everything right (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "widgets": [
+        { "type": "good", "name": "Good", "widget": "GoodWidget.qml" }
+    ],
+    "settingsPages": [
+        { "id": "good", "label": "Good", "component": "GoodSettings.qml", "tab": "system" }
+    ],
+    "settings": [
+        { "key": "mod.good.greeting", "label": "Greeting", "type": "string", "default": "hello" }
+    ],
+    "facts": [
+        { "fact": "good.ready", "label": "Good fixture ready", "type": "bool" }
+    ],
+    "slots": [
+        { "slot": "network.vpn.row", "component": "GoodSlot.qml" }
+    ],
+    "tests": ["tests/GoodStateTest.qml"]
+}

@@ -40,9 +40,12 @@ QtObject {
     property var _lockIoRules: LockIoRulesTest {}
     property var _pointerInput: PointerInputTest {}
     property var _lockView: LockViewTest {}
+    property var _moduleRules: ModuleRulesTest {}
+    property var _quickshellPin: QuickshellPinTest {}
+    property var _modules: ModulesTest {}
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _lockView]
+    readonly property var _asyncSuites: [_pointerInput, _lockView, _modules]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed

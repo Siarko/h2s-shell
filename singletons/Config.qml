@@ -33,6 +33,10 @@ Singleton {
     // Settings already copied from their old place in this file into the profiles, once
     // each (docs/plans/global-profiles.md)
     property alias migratedKeys: _adapter.migratedKeys
+    // The ids of the modules turned off in Settings → Modules (ModuleHost): a module is on
+    // unless listed here. Global, not per profile: which code runs in the shell is not a
+    // preference a profile switches.
+    property alias disabledModules: _adapter.disabledModules
     // The file itself, for the backup taken before a migration
     readonly property string path: _file.path
 
@@ -83,6 +87,7 @@ Singleton {
             property string profiles: ""
             property string globals: "{}"
             property list<string> migratedKeys: []
+            property list<string> disabledModules: []
             // The shell version that last wrote this file — for reference, and for
             // migrations that need to know what wrote it
             property string writtenBy: ""

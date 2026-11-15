@@ -11,6 +11,11 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Modules (first stage, no module UI yet): the launcher finds modules in
+  `~/.local/share/h2s-shell/modules`, each `$XDG_DATA_DIRS/h2s-shell/modules` and
+  `H2S_SHELL_MODULES`; `ipc call modules list` reports each one's state, errors and warnings.
+- Safe mode: after the shell died within 30 s of starting twice in a row, the launcher
+  starts it without modules (and says so in its log); a start that lasts ends it.
 - Lock screen: locks when systemd-logind asks for it — `loginctl lock-session`, or a power
   key or lid switch set to `lock` in logind.conf — and on `ipc call lockscreen lock`; and
   unlocks on logind's Unlock for the shell's own session (`loginctl unlock-session`, the

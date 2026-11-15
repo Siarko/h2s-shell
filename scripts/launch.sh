@@ -255,6 +255,70 @@ stop_shell() {
     done
 }
 
+# The modules the shell loads (docs/plans/modules.md): H2S_SHELL_MODULES, colon-separated,
+# each the canonical path of a directory holding a module.json (symlinks resolved: one
+# directory reached by two spellings would load its singletons twice), each once, in search
+# order — the shell takes the first module of an id and reports the others:
+#   1. what H2S_SHELL_MODULES held when this launcher started (a developer's checkouts), each
+#      a module directory or a directory of modules
+#   2. $XDG_DATA_HOME/h2s-shell/modules/*   (~/.local/share)
+#   3. each $XDG_DATA_DIRS/h2s-shell/modules/*
+# Worked out before every start of the shell, so a module installed since is picked up by the
+# next one. The shell's environment carries the result, and a --restart run from inside it is
+# handed that as entries of 1: the ones 2 or 3 find again keep their place there, not first.
+# H2S_SHELL_SAFE_MODE is the supervisor's, set per start (supervise): never inherited.
+modules_given=${H2S_SHELL_MODULES-}
+module_roots() {
+    echo "${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/modules"
+    local IFS=:
+    for dir in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+        [ -n "$dir" ] && echo "$dir/h2s-shell/modules"
+    done
+}
+# A module directory's canonical path; fails for anything else (and a path with a ":", which
+# the list cannot hold)
+module_path() {
+    local path
+    [ -f "$1/module.json" ] || return 1
+    path=$(cd -- "$1" 2> /dev/null && pwd -P) || return 1
+    case "$path" in *:*) return 1 ;; esac
+    echo "$path"
+}
+discover_modules() {
+    local given=() explicit=() searched=() result=() entry dir path root seen=":" discovered=":"
+    unset H2S_SHELL_SAFE_MODE
+    while read -r root; do
+        for dir in "$root"/*/; do
+            path=$(module_path "$dir") && searched+=("$path") && discovered="$discovered$path:"
+        done
+    done < <(module_roots)
+    IFS=: read -r -a given <<< "$modules_given"
+    for entry in "${given[@]}"; do
+        [ -n "$entry" ] || continue
+        if path=$(module_path "$entry"); then
+            explicit+=("$path")
+        elif [ -d "$entry" ]; then
+            for dir in "$entry"/*/; do
+                path=$(module_path "$dir") && explicit+=("$path")
+            done
+        fi
+    done
+    for path in "${explicit[@]}"; do
+        case "$discovered" in *":$path:"*) continue ;; esac
+        case "$seen" in *":$path:"*) continue ;; esac
+        seen="$seen$path:"
+        result+=("$path")
+    done
+    for path in "${searched[@]}"; do
+        case "$seen" in *":$path:"*) continue ;; esac
+        seen="$seen$path:"
+        result+=("$path")
+    done
+    H2S_SHELL_MODULES=$(IFS=:; echo "${result[*]}")
+    export H2S_SHELL_MODULES
+    [ ${#result[@]} -eq 0 ] || say "modules: ${#result[@]} ($H2S_SHELL_MODULES)"
+}
+
 prepare_environment() {
     # Marks the shell as started here: without it, the shell shows a banner saying the
     # icon theme cannot apply and how to start it instead
@@ -434,6 +498,8 @@ supervise() {
     export H2S_SHELL_SUPERVISOR=$$
     local child="" stopping="" status=0 started delay_ms=$pause_first_ms slow="" lock_fd=""
     local recent=() wait_ends=0
+    # Deaths within 30 s of starting, in a row: from two on, the next start is in safe mode
+    local quick_deaths=0
     [ "${BASH_VERSINFO[0]}" -gt 5 ] || { [ "${BASH_VERSINFO[0]}" -eq 5 ] && [ "${BASH_VERSINFO[1]}" -ge 1 ]; } && wait_ends=1
     [ -f "$launcher_log" ] && [ "$(stat -c %s "$launcher_log" 2> /dev/null || echo 0)" -gt 524288 ] \
         && mv -f "$launcher_log" "$launcher_log.old" 2> /dev/null
@@ -448,6 +514,15 @@ supervise() {
     # Each child in a process group of its own: what it leaves behind can be found
     set -m
     while :; do
+        discover_modules
+        # Crash-loop safe mode (docs/plans/modules.md): a shell that died quickly twice in a
+        # row is started without modules — a module that crashes it at start would otherwise
+        # keep the session without a bar, or locked without a prompt. A start that lives past
+        # the quick-death window ends it (quick_deaths is counted below).
+        if [ "$quick_deaths" -ge 2 ]; then
+            export H2S_SHELL_SAFE_MODE=1
+            say "the shell died within 30 s of starting $quick_deaths times in a row: starting it in safe mode (no modules)"
+        fi
         started=$SECONDS
         # Not the lock's descriptor (a shell outliving this launcher would keep the next one
         # out), nor a terminal's input (a background job reading it is stopped)
@@ -471,6 +546,7 @@ supervise() {
             slow=""
             recent=()
         fi
+        if [ $((now - started)) -lt 30 ]; then quick_deaths=$((quick_deaths + 1)); else quick_deaths=0; fi
         for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
         recent=("${kept[@]}" "$now")
         # The slow retries were for a locked screen; that over (a shell came up and was
@@ -554,7 +630,7 @@ case "$1" in
         # nothing to supervise (and a supervisor would take that exit for the shell's)
         for argument in "$@"; do
             case "$argument" in
-                -d | --daemonize) prepare_environment; exec qs -p "$shell_dir" "$@" ;;
+                -d | --daemonize) prepare_environment; discover_modules; exec qs -p "$shell_dir" "$@" ;;
             esac
         done
         supervise "$@"

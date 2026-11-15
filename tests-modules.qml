@@ -1,0 +1,108 @@
+//@ pragma UseQApplication
+import QtQuick
+import Quickshell
+import qs.singletons
+import qs.tests
+
+// Run with: tests/run-modules.sh <module dir>… (headless, as tests/run-unit.sh runs
+// tests.qml). Loads the modules named in H2S_TEST_MODULES (canonical, colon-separated) with
+// a ModuleHost — exactly as the shell does — then creates each loaded module's suites (its
+// manifest's "tests") by URL. A module that did not load, one that lists no suites and a
+// suite that does not compile are FAILs. Imports qs.tests so that Quickshell makes the
+// TestCase type available to the modules' suites (they are loaded by URL).
+QtObject {
+    id: root
+
+    // First: the suites use the real Config singleton, whose file is the user's
+    readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+
+    property var host: ModuleHost {}
+    property var _suites: []
+    property string _phase: "loading"
+    property int _waited: 0
+
+    function _settled() {
+        return host.statuses.length > 0 && !host.statuses.some(status => status.state === "pending");
+    }
+
+    function _fail(message) {
+        console.error("  FAIL: " + message);
+    }
+
+    function _runSuites() {
+        console.log("\n=== modules ===");
+        const runnable = [];
+        for (const status of host.statuses) {
+            const label = (status.id || "?") + " (" + status.directory + ")";
+            if (status.state !== "loaded") {
+                _fail("module " + label + " did not load: " + status.state
+                      + (status.errors.length > 0 ? " — " + status.errors.join("; ") : ""));
+                continue;
+            }
+            console.log("  module " + label + " " + status.version + ": loaded"
+                        + (status.warnings.length > 0 ? " (warnings: " + status.warnings.join("; ") + ")" : ""));
+            const tests = host.manifestOf(status.directory)?.tests ?? [];
+            if (tests.length === 0)
+                _fail("module " + label + " lists no test suites (\"tests\" in its module.json)");
+            for (const test of tests)
+                runnable.push({ module: status.id, url: ModuleRules.fileUrl(status.directory, test), file: test });
+        }
+        console.log("MODULE-SUITES-EXPECTED: " + runnable.length);
+        const suites = [];
+        for (const entry of runnable) {
+            const component = Qt.createComponent(entry.url, Component.PreferSynchronous);
+            if (component.status !== Component.Ready) {
+                _fail(entry.module + ": " + entry.file + " does not compile: " + component.errorString().trim());
+                continue;
+            }
+            let suite = null;
+            try {
+                suite = component.createObject(root);
+            } catch (error) {
+                _fail(entry.module + ": " + entry.file + " threw while being created: " + error);
+            }
+            if (!suite) {
+                _fail(entry.module + ": " + entry.file + " could not be created");
+                continue;
+            }
+            suites.push(suite);
+        }
+        _suites = suites;
+    }
+
+    property var _clock: Timer {
+        interval: 50
+        running: true
+        repeat: true
+        onTriggered: {
+            root._waited += interval;
+            if (root._phase === "loading") {
+                // The required programs are checked by a process: wait for it (15 s at most)
+                if (!root._settled() && root._waited < 15000)
+                    return;
+                root._runSuites();
+                root._phase = "running";
+                root._waited = 0;
+                return;
+            }
+            const pending = root._suites.filter(suite => suite.asynchronous && !suite.done);
+            if (pending.length > 0 && root._waited < 20000)
+                return;
+            pending.forEach(suite => {
+                suite.fail("timed out");
+                suite.finish();
+            });
+            root.host.unload();
+            Qt.quit();
+        }
+    }
+
+    Component.onCompleted: {
+        const value = Quickshell.env("H2S_TEST_MODULES");
+        host.load(typeof value === "string" ? value : "", {});
+        if (host.directories.length === 0) {
+            _fail("no module directory given (H2S_TEST_MODULES; run tests/run-modules.sh <dir>…)");
+            _phase = "running";
+        }
+    }
+}

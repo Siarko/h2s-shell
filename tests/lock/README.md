@@ -18,7 +18,7 @@ Exit status 0 when every test passed or failed exactly as expected, 1 when one f
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
 130 when interrupted. A full run takes about five minutes with the default four tests at
-a time, about fifteen one after another (fifty-seven tests, each starting its own stack in
+a time, about fifteen one after another (fifty-nine tests, each starting its own stack in
 2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
 it restarts a crash in place; the launcher's restart pauses are shortened where a test only
 needs their schedule, `--launcher-timings`).
@@ -337,7 +337,11 @@ call again while the shell reloads). `stack_start --launcher-timings "first=0.2 
 lockwait=5"` shortens the launcher's pauses (`H2S_LAUNCHER_TEST_TIMINGS`: the first pause,
 the slow retry while locked, how long a second launcher waits for the lock; seconds), and
 `--shell-path <dir>` puts a directory of stand-in programs first on the shell's PATH (a
-`hyprctl` that hangs: `restart-hyprctl-hang`). The launcher's own log is
+`hyprctl` that hangs: `restart-hyprctl-hang`). `--modules <list>` sets the launcher's `H2S_SHELL_MODULES`
+(module directories or directories of modules: `tests/fixtures/modules` holds the fixture
+modules, `modules`), `--data-dirs <list>` its `XDG_DATA_DIRS` (where it also looks for modules,
+`modules-launcher`; unset, the caller's — so a module installed system-wide would be found by
+every test shell). The launcher's own log is
 `$RUN/h2s-shell-launcher.log`; its lines also go to `shell.log`, as do the shell's, stamped
 (`--log-times`). `scripts/lock-log.sh` is run against the test shell in `lock-log`.
 

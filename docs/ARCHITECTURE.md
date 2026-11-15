@@ -40,7 +40,10 @@ Qt 6 is required: QtQuick, QtQuick.Layouts, QtCore, plus the Quickshell modules
 
 Quickshell exposes every uppercase QML file in a directory as a type under
 `import qs.<dirname>` (`qs.widgets`, `qs.panels`, `qs.singletons.network`, …). There is
-no `qmldir` anywhere in the repo and none should be added — registration is automatic.
+no `qmldir` in the shell's own directories and none should be added — registration is
+automatic. (Modules are the exception: a module directory, loaded by URL from outside
+what Quickshell scans, needs its own — see [Modules](#modules); the fixture modules under
+`tests/fixtures/` have one.)
 
 Two consequences worth knowing:
 
@@ -464,6 +467,38 @@ Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (
 overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds) and the
 launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
 
+### Modules
+
+Integrations as separate packages; the design and its state are in
+[plans/modules.md](plans/modules.md). What exists (stages M0–M1): the rules, the host and
+discovery — no registry reads the modules' contributions yet, and there is no `qs.api`
+facade beyond its version.
+
+- A **module** is a directory with a `module.json` (the schema: `singletons/ModuleRules.qml`'s
+  header and the plan's §3), a `qmldir` for its singletons, and QML loaded by `file://` URL —
+  never imported statically (a broken one would fail the whole config).
+- **Discovery**: `scripts/launch.sh` (`discover_modules`, before every start of the shell)
+  builds `H2S_SHELL_MODULES` — canonical module directories from the variable's own
+  entries, `~/.local/share/h2s-shell/modules/*`, each `$XDG_DATA_DIRS/h2s-shell/modules/*`.
+  After two deaths within 30 s of starting in a row, the supervisor starts the shell with
+  `H2S_SHELL_SAFE_MODE=1`: no module is loaded.
+- **The host**: `singletons/ModuleHost.qml`, one instance in the `Modules` singleton, which
+  `shell.qml` touches before the bars. It reads the manifests at once, checks them with
+  `ModuleRules` (API version from `api/Api.qml`, namespaces `mod.<id>.*` / `<id>.*`, the
+  import allowlist as warnings, the first module of an id wins), checks required programs,
+  creates each enabled module's `main` inside a guard, and exposes each module's status and
+  the merged contributions (`widgetEntries`, `settingsPages`, `settingEntries`, `factTypes`,
+  `slotContributions(name)`). Modules are turned off through `Config.disabledModules`.
+  `qs ipc call modules list` prints the statuses as JSON.
+- **Tests**: `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
+  the fixtures in `tests/fixtures/modules`), `tests/QuickshellPinTest.qml` (the Quickshell
+  behaviour it all rests on — if it fails after a Quickshell upgrade, modules are broken by
+  the upgrade), and the lock-bed tests `modules` and `modules-launcher`. A module's own
+  suites run with `tests/run-modules.sh <module dir>…` — the module may live in another
+  repository; it is loaded the way the host loads it, with this tree as the config root, so
+  its suites extend `TestCase` (`import qs.tests`) and reach the module's singletons
+  (`import ".."` from its `tests/`).
+
 ### Logging
 
 The lock screen logs on its own terms (plan section 7, "Log every step"): every step of a
@@ -528,7 +563,8 @@ if-chain.
 ## Testing
 
 `tests/` holds a minimal harness (`TestCase.qml` with `assert`/`assertEqual`/`fail`) and
-the suites `tests.qml` lists. `tests/run-unit.sh` runs them in a private headless labwc
+the suites `tests.qml` lists. `tests/run-unit.sh` (and `tests/run-modules.sh`, for modules'
+own suites — see [Modules](#modules); both share `tests/headless.sh`) runs them in a private headless labwc
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
 privileges), so the suites' windows never show on the real screen; it finds labwc and
 Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any `FAIL`, a

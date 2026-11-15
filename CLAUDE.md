@@ -84,7 +84,9 @@ ticks, cells respond to clicks, and popups toggle.
   target. Rows of a list that touch take `centred: false`. See "Conventions" in
   `docs/ARCHITECTURE.md`.
 - **`ShapePath` has no `visible` property.**
-- **Do not add a `qmldir`.** Quickshell registers types per directory automatically.
+- **Do not add a `qmldir`.** Quickshell registers types per directory automatically. (A
+  module directory, loaded by URL from outside the scanned tree, is the exception: see
+  "Modules" in `docs/ARCHITECTURE.md`.)
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for config
   migrations or behaviour changes, minor for features, patch for fixes). With every
   user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves

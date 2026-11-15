@@ -51,7 +51,7 @@ declare -A SERIAL=(
 LONG_TESTS=(
     restart-locked-retry restart-no-restore two-outputs restart-no-restore-generic
     methods-fprintd restart-crash-locked fingerprint-timeout marker-stale
-    restart-crash-finger reload-explicit restart-launcher idle scale
+    restart-crash-finger reload-explicit restart-launcher modules-launcher idle scale
 )
 
 # ---- Jobs -----------------------------------------------------------------------------

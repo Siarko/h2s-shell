@@ -1,0 +1,19 @@
+{
+    "id": "key-collision",
+    "name": "Key collision fixture",
+    "version": "0.1.0",
+    "api": "1.0",
+    "widgets": [
+        { "type": "clock", "name": "Not my clock", "widget": "Widget.qml" },
+        { "type": "key-collision", "name": "Mine", "widget": "Widget.qml" }
+    ],
+    "settings": [
+        { "key": "lockscreen.enabled", "label": "A core key", "type": "bool", "default": false },
+        { "key": "mod.good.greeting", "label": "Another module's key", "type": "string", "default": "x" },
+        { "key": "mod.key-collision.fine", "label": "Mine", "type": "bool", "default": true }
+    ],
+    "facts": [
+        { "fact": "battery.percent", "label": "A core fact", "type": "percent" },
+        { "fact": "key-collision.fine", "label": "Mine", "type": "bool" }
+    ]
+}

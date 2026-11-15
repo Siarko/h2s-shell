@@ -196,18 +196,26 @@ check_within() {
 #                                    slow (60 s), lockwait (15 s) — so restart tests run in seconds
 # --shell-path <dir>                 put <dir> first on the shell's PATH (a stand-in program, such
 #                                    as a hyprctl that hangs)
+# --modules <list>                   H2S_SHELL_MODULES for the launcher: colon-separated, each a module
+#                                    directory or a directory of modules (the launcher's discovery,
+#                                    docs/plans/modules.md; tests/fixtures/modules holds the fixtures)
+# --data-dirs <list>                 XDG_DATA_DIRS for the launcher and the shell (where the launcher
+#                                    also looks for modules: <dir>/h2s-shell/modules/*); unset, the
+#                                    caller's
 #
 # Always: the shell reads Caps Lock from $WORK/leds (H2S_LOCK_LEDS_DIR; caps_led writes it),
 # never from the machine's /sys/class/leds — the real keyboard's state is not the test's.
 stack_start() {
     local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
     local window=0 fprintd="" lock_restore=true reload_seam="" hyprland_logs=true hyprland_stdout=false
-    local shell_env=() timings="" launcher_timings="" shell_path=""
+    local shell_env=() timings="" launcher_timings="" shell_path="" modules="" data_dirs=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --timings) timings=$2; shift 2 ;;
             --launcher-timings) launcher_timings=$2; shift 2 ;;
             --shell-path) shell_path=$2; shift 2 ;;
+            --modules) modules=$2; shift 2 ;;
+            --data-dirs) data_dirs=$2; shift 2 ;;
             --methods) methods=$2; shift 2 ;;
             --methods-script) methods_script=$2; shift 2 ;;
             --logind) logind=1; shift ;;
@@ -325,8 +333,9 @@ EOF
         H2S_LOCK_TOOLS="$tools" XDG_SESSION_ID="$session_id" H2S_LOCK_SYSTEM_PAM_DIR="$WORK/system-pam"
         H2S_LOCK_TEST_RELOAD="$reload_seam" H2S_SHELL_DIR="$LOCKTEST_SHELL" H2S_LOCK_AUTH_METHODS="$WORK/pam/methods.sh"
         H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland
-        H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings")
+        H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings" H2S_SHELL_MODULES="$modules")
     [ -z "$shell_path" ] || LAUNCHER_ENV+=(PATH="$shell_path:$PATH")
+    [ -z "$data_dirs" ] || LAUNCHER_ENV+=(XDG_DATA_DIRS="$data_dirs")
     start_launcher
     log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }
