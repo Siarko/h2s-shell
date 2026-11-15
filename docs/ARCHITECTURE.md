@@ -65,6 +65,7 @@ shell.qml                 process root — one Bar, one Hud, one ScreensaverSurf
 ├── Hud.qml               click-through overlay: toasts, volume OSD, queue badge
 │   └── hud/
 ├── screensaver/          screensaver surface + the WlSessionLock surface and prompt
+├── pam/                  the lock screen's own PAM configs, one per way of unlocking
 ├── components/           reusable building blocks (BarWidget, Logger, sliders, cards)
 └── singletons/           all shared state and all I/O
     ├── network/          nmcli/sysfs-backed network state

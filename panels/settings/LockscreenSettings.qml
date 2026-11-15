@@ -146,6 +146,11 @@ Flickable {
         }
 
         SchemaSettingEditor {
+            key: "lockscreen.lockOnSleep"
+            editIndex: root.editIndex
+        }
+
+        SchemaSettingEditor {
             key: "lockscreen.notificationsOnLock"
             editIndex: root.editIndex
             available: root._lockOn

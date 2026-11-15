@@ -155,6 +155,8 @@ Singleton {
         { key: "lockscreen.lockscreenTimeout", label: "Lock after", group: "lockscreen",
           type: "number", min: 5, max: 86400, suffix: "s", default: 300,
           legacy: ["lockscreen", "lockscreenTimeout"] },
+        { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
+          group: "lockscreen", type: "bool", default: true },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnLock"] },

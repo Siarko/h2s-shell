@@ -1,7 +1,6 @@
 import QtQuick
 import qs.components
 import QtQuick.Layouts
-import Quickshell.Services.Pam
 import qs.singletons
 
 Item {
@@ -22,27 +21,27 @@ Item {
 
     onVisibleChanged: if (visible) _input.forceActiveFocus()
 
-    function _tryAuth() {
-        if (_pam.active) return
-        _failed = false
-        _pam.start()
+    // A character typed before the field could take it (the key that woke the prompt)
+    function type(text) {
+        if (text.length === 1 && text >= " " && text !== "\x7f")
+            _input.insert(_input.length, text)
     }
 
-    PamContext {
-        id: _pam
-        config: "login"
-        onResponseRequiredChanged: if (responseRequired) respond(_input.text)
-        onCompleted: result => {
-            if (result === PamResult.Success) {
-                Lockscreen.unlock()
-            } else {
-                _errorMessage = result === PamResult.MaxTries
-                    ? "Too many attempts"
-                    : "Authentication failed"
-                _failed = true
-                _input.text = ""
-                _input.forceActiveFocus()
-            }
+    function _send() {
+        if (LockAuth.verifying) return
+        _failed = false
+        LockAuth.submit(_input.text)
+        // An answer to a further question: the field empties for the next one
+        _input.text = ""
+    }
+
+    Connections {
+        target: LockAuth
+        function onRejected() {
+            root._errorMessage = LockAuth.error
+            root._failed = true
+            _input.text = ""
+            _input.forceActiveFocus()
         }
     }
 
@@ -91,7 +90,7 @@ Item {
 
             Text {
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
-                text: "Password"
+                text: LockAuth.awaitingInput && LockAuth.question !== "" ? LockAuth.question : "Password"
                 color: Theme.glassTextMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -103,16 +102,16 @@ Item {
                 selectionColor: Theme.selection
                 selectedTextColor: Theme.selectedText
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
-                echoMode: TextInput.Password
+                echoMode: LockAuth.awaitingInput && LockAuth.answerVisible ? TextInput.Normal : TextInput.Password
                 inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-                color: _pam.active ? Theme.glassTextMuted : Theme.textPrimary
+                color: LockAuth.verifying ? Theme.glassTextMuted : Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 font.letterSpacing: 4
                 focus: true
-                readOnly: _pam.active
+                readOnly: LockAuth.verifying
                 onTextChanged: { root.activity(); if (text !== "") root._failed = false }
-                onAccepted: root._tryAuth()
+                onAccepted: root._send()
                 Keys.onEscapePressed: Lockscreen.unlock()
             }
         }
@@ -121,7 +120,7 @@ Item {
             Layout.fillWidth: true
             implicitHeight: Theme.lock.controlHeight
             radius: Theme.lock.controlRadius
-            color: (_pam.active || _unlockHover.lit)
+            color: (LockAuth.verifying || _unlockHover.lit)
                 ? Theme.glassHover
                 : Theme.glassRaised
 
@@ -129,7 +128,7 @@ Item {
 
             Text {
                 anchors.centerIn: parent
-                text: _pam.active ? "Verifying…" : "Unlock"
+                text: LockAuth.verifying ? "Verifying…" : "Unlock"
                 color: Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -137,9 +136,28 @@ Item {
 
             PointerArea {
                 id: _unlockHover
-                enabled: !_pam.active
+                enabled: !LockAuth.verifying
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root._tryAuth()
+                onClicked: root._send()
+            }
+        }
+
+        // The ways in that need nothing typed, while they are waiting: what PAM last
+        // said about each ("Place your finger…", "Failed to match fingerprint"), or
+        // the method's own hint before it has said anything
+        Repeater {
+            model: [LockAuth.fingerprint, LockAuth.securityKey]
+
+            Text {
+                required property var modelData
+                Layout.fillWidth: true
+                visible: modelData.available
+                text: modelData.message !== "" ? modelData.message : modelData.hint
+                color: modelData.messageIsError ? Theme.error : Theme.textSecondary
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
             }
         }
     }

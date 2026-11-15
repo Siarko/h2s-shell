@@ -1,0 +1,4 @@
+# The lock screen's fingerprint check, used when the system has no
+# /etc/pam.d/h2s-shell-fingerprint. Runs beside the password check, not before it.
+auth     required pam_fprintd.so
+account  required pam_permit.so

@@ -1,0 +1,5 @@
+# The lock screen's security key check (FIDO2/U2F, pam_u2f), used when the system has no
+# /etc/pam.d/h2s-shell-u2f and the user has keys in ~/.config/Yubico/u2f_keys.
+# "cue" makes pam_u2f say when to touch the key.
+auth     required pam_u2f.so cue
+account  required pam_permit.so

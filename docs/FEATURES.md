@@ -185,7 +185,25 @@ Two independent stages, both driven by Wayland idle notifications:
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached either after the screensaver or on its own idle timer, and shows a password
   prompt and optionally the notification list. On multi-monitor only one screen shows
-  the prompt.
+  the prompt. It also locks on request: logind's Lock signal (`loginctl lock-session`, or
+  `HandlePowerKey=lock` in logind.conf), caught by a `gdbus monitor` on the session, and
+  `h2s-shell ipc call lockscreen lock`.
+- **Unlocking** (`singletons/LockAuth.qml`) — by password, fingerprint or security key
+  (FIDO2/U2F), each a PAM conversation of its own, all running side by side: a finger on
+  the reader or a touch of the key unlocks with nothing typed, and a typed password is
+  checked at once. The prompt shows what the reader or key last said, and when PAM asks
+  for more after the password (a one-time code) the next thing typed answers it.
+  `scripts/lock-auth-methods.sh` says which are there: the password always, the
+  fingerprint when fprintd has a finger enrolled, the key when the system has a PAM
+  config for it or the user has `~/.config/Yubico/u2f_keys`. Each uses
+  `/etc/pam.d/h2s-shell-<password|fingerprint|u2f>` if the system has one (the NixOS
+  module writes them, and only those work there; without them the password goes through
+  `login`, which waits for the reader first), else the shell's own
+  `pam/<method>`.
+- **Sleep** — the screen locks before the computer sleeps (`lockscreen.lockOnSleep`), the
+  shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
+  the lock, so the desktop is not what shows on waking. The fingerprint and key
+  conversations stop for the sleep and start again after it.
 
 ## Network settings
 
@@ -330,6 +348,8 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `nmcli` (NetworkManager) | all network state and actions |
 | `hyprctl` / Hyprland IPC | workspaces, logout — expects a Lua config (`hyprland.lua`, Hyprland 0.5x): special workspaces and logout dispatch `hl.dsp.*` Lua expressions |
 | `systemctl` | restart, shutdown |
+| `gdbus`, `systemd-inhibit` (logind) | the lock screen: lock requests, sleep and wake, holding the sleep until locked |
+| `fprintd-list`, PAM (`pam_unix`, `pam_fprintd`, `pam_u2f`) | unlocking: which methods there are, and the checks themselves |
 | `notify-send` | the shell's own outbound notifications |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |

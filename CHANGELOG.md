@@ -10,7 +10,26 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Added
+- Lock screen: locks when systemd-logind asks for it — `loginctl lock-session`, or a power
+  key or lid switch set to `lock` in logind.conf — and on `ipc call lockscreen lock`.
+- Lock screen: unlocks with a fingerprint or a security key (FIDO2/U2F) as well as the
+  password, each checked on its own, so a finger on the reader unlocks with nothing typed
+  and a typed password no longer waits for the reader to give up. It shows what the
+  reader or key is waiting for, and asks for anything more PAM wants after the password
+  (a one-time code).
+- Lock screen: locks before the computer sleeps (Settings → Lockscreen, on by default),
+  holding the sleep back until the screen is covered.
+
 ### Fixed
+- Lock screen: with a fingerprint reader set up, a typed password sat on "Verifying…"
+  for half a minute.
+- Lock screen: a key press wakes the password prompt, as moving the pointer does; and the
+  prompt no longer stays hidden for good when the screen it was on went away while it
+  was showing (a laptop's over a suspend).
+- Lock screen: the fingerprint reader works again after the computer wakes. Its check was
+  started as the machine went to sleep and was dead on waking; now nothing is started
+  until it is back, and the reader is looked for again then.
 - Network settings: moving between the network pages no longer stops the new page's
   updates; the popup and the Wi-Fi page no longer stop each other's scanning; a saved Wi-Fi
   password with ':' or '\' shows as it is; a password being typed is never overwritten

@@ -15,6 +15,9 @@ WlSessionLockSurface {
     function _wake() {
         if (!_ready) return
         if (Lockscreen.promptActive && !_awake) return
+        // Coming back to the machine: a security key plugged in just now is looked for at once
+        if (!_awake)
+            LockAuth.nudge()
         _awake = true
         Lockscreen.promptActive = true
         _sleepTimer.restart()
@@ -23,7 +26,21 @@ WlSessionLockSurface {
     function _sleep() {
         _awake = false
         Lockscreen.promptActive = false
+        // A question left unanswered (a one-time code) is not kept waiting
+        LockAuth.cancelPassword()
         _prompt.reset()
+        _keys.forceActiveFocus()
+    }
+
+    // A surface goes away with its screen — and a laptop's screen goes away and comes
+    // back over a suspend. One that held the prompt has to give it up then: the surface
+    // made for the screen that comes back would otherwise never wake, the prompt being
+    // "active" on one that no longer exists.
+    Component.onDestruction: {
+        if (_awake) {
+            Lockscreen.promptActive = false
+            LockAuth.cancelPassword()
+        }
     }
 
     Timer {
@@ -52,6 +69,21 @@ WlSessionLockSurface {
         onPressed:         mouse => { root._wake(); mouse.accepted = false }
         onReleased:        mouse => { mouse.accepted = false }
         onClicked:         mouse => { mouse.accepted = false }
+    }
+
+    // A key wakes the prompt as the pointer does — the only way in when there is no
+    // pointer to move (a touchpad that did not come back from hibernation). It holds the
+    // keyboard while the prompt is hidden, the prompt's field being unable to; the key
+    // that woke it is not lost, it starts the password.
+    Item {
+        id: _keys
+        focus: true
+        Component.onCompleted: forceActiveFocus()
+        Keys.onPressed: event => {
+            root._wake()
+            if (root._awake)
+                _prompt.type(event.text)
+        }
     }
 
     // Waking swaps the notifications for the prompt: they fade across, the prompt growing
