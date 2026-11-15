@@ -11,7 +11,7 @@ interprets the QML directly, so there is no build step:
 
 ```
 quickshell                 # reads shell.qml from the current directory
-quickshell -p tests.qml    # runs the test suites, prints PASS/FAIL, exits
+tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
 ```
 
 On the desktop the shell is started by `scripts/launch.sh` (Hyprland's autostart calls
@@ -351,14 +351,19 @@ Four layers, so that what decides can be tested without what does (plan and cont
   registry live in a closure (`_build()`), not in properties. Same-process QML is still no
   security boundary (it can emit its child objects' signals, or run `loginctl
   unlock-session`) — plan section 7, "What other QML in the shell can reach". It also owns
-  idle (the two `IdleMonitor`s, bound declaratively), the screensaver and its commands,
+  idle (two `IdleMonitor`s, each made anew by `singletons/lock/IdleWatch.qml` whenever its
+  settings change — a live one whose timeout changes can stop reporting idle, a Quickshell
+  0.3.2 bug), the screensaver and its commands,
   and the password fallback (`LockIoRules.passwordFallback`, from a probe of the machine).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
   Per lock (`LockScope.qml`, created when a lock begins and destroyed when it has ended,
   so destruction is the cleanup): `PamMethod.qml` (one `PamContext` per method,
   conversations tagged with the rules' id, a refused `start()` reported, stale or second
   answers dropped) and `MethodDetector.qml` (one run of `scripts/lock-auth-methods.sh`,
-  tagged with its generation; a newer run destroys, so kills, the older). For the shell's
+  tagged with its generation; a newer run destroys, so kills, the older; exit 0 is an
+  answer, also "no fingerprint here", non-zero a question it could not answer, such as
+  fprintd stuck — the script asks fprintd over D-Bus with a 4 s deadline — and what it
+  says on stderr is logged). For the shell's
   lifetime: `LogindMonitor.qml` (one `gdbus monitor`, parsed by `LockRules.parseLogind`,
   restarted with a growing pause, kept from outliving a crashed shell by a stdin watcher)
   and `SleepInhibitor.qml` (`systemd-inhibit` held as a level, taken again when lost).
@@ -367,8 +372,15 @@ Four layers, so that what decides can be tested without what does (plan and cont
 - **Views** — `screensaver/LockSurface.qml` (one per screen, an instance with its own id)
   and `screensaver/LockPrompt.qml` render `Lockscreen.view` and report input. Keys arrive
   in one place per surface — a key catcher that holds the focus; the field never takes it
-  — and reach the field as the rules' `forwardKey` effects (`LockIoRules.editField`). What
-  a key event carries is typed; dead keys, compose sequences and input methods are not yet.
+  — and reach the field as the rules' `forwardKey` effects (`LockIoRules.editField`). The
+  catcher is a hidden, input-method-enabled `TextInput` (password hints, invisible), so text
+  Qt composes — dead keys, Compose sequences, an input method's commit — arrives too: sent
+  on as a `key` with that text and emptied from the catcher at once. Pointer motion counts
+  only where the pointer really moved (`LockIoRules.pointerMoved`), so a surface appearing
+  under a resting pointer does not wake the prompt. Caps Lock is inferred from the keys
+  (`LockIoRules.capsLockAfterKey`; Qt does not report it), kept by the driver as `capsLock`,
+  and said on the prompt. Notifications are listed by `screensaver/NotificationList.qml`
+  (plain text, nothing to act on; the lock screen's detail is "app only" by default).
 
 **Fail closed against the compositor**: ext-session-lock-v1 makes an unlock before the
 compositor's `locked` a protocol error, and Quickshell sends one whenever
@@ -380,6 +392,8 @@ only reported — the lock is never set again or given up (plan, section 7).
 **The Quickshell bug worked around**: Quickshell 0.3.2 never emits `lockStateChanged`
 when a `WlSessionLock` unlocks (`src/wayland/session_lock.cpp`), so a binding to its
 `locked` stays true after the first unlock — the old lock screen worked once per shell.
+(Fixed in Quickshell's master after 0.3.2, in no release yet; the analysis, with two more
+issues found on the way, is in `docs/upstream/quickshell-session-lock-unlock-notify.md`.)
 The driver never binds or watches `locked`: it sets it in the `lockCompositor` /
 `unlockCompositor` effects, reads it back only right after setting it true (to catch a
 refused lock), and takes the compositor's word from `secureStateChanged`, tagged with the
@@ -389,7 +403,8 @@ Where state lives: the lock's state only in the driver (in `_build()`'s closure,
 exposed — it holds the typed password between submit and PAM's prompt); the half-typed text
 only in the prompt's field; the I/O handles in the adapters. The test bed's seams, inert
 unless set: `H2S_LOCK_AUTH_METHODS` (read by the methods script), `H2S_LOCK_TOOLS` (a
-directory whose `gdbus` and `systemd-inhibit` stand in for the real ones) and
+directory whose `gdbus` and `systemd-inhibit` stand in for the real ones — the shell's
+and the methods script's) and
 `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
 `/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack).
 
@@ -442,7 +457,7 @@ section editor's picker and names, the widget settings pane and the popup all re
 4. One entry in `WidgetRegistry.entries` naming those files — the field list is in the
    comment at the top of that file.
 
-Then run `quickshell -p tests.qml`: the WidgetRegistry suite checks that every file the
+Then run `tests/run-unit.sh`: the WidgetRegistry suite checks that every file the
 registry names exists and compiles. Global settings (a page under `panels/settings/`)
 are still wired by hand in `SettingsWindow`'s navigation model and `sourceComponent`
 if-chain.
@@ -450,7 +465,11 @@ if-chain.
 ## Testing
 
 `tests/` holds a minimal harness (`TestCase.qml` with `assert`/`assertEqual`/`fail`) and
-the suites `tests.qml` lists. Most run their assertions in `Component.onCompleted`, on pure
+the suites `tests.qml` lists. `tests/run-unit.sh` runs them in a private headless labwc
+(private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
+privileges), so the suites' windows never show on the real screen; it finds labwc and
+Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any `FAIL`, a
+`TypeError`/`ReferenceError`, or a suite that never reported. Most run their assertions in `Component.onCompleted`, on pure
 functions (the `*Rules` and geometry singletons, parsers). A suite that throws counts as
 failed, not as missing.
 
@@ -459,8 +478,11 @@ A suite that needs the event loop sets `asynchronous: true`, does its work in
 (20 s at most). `PointerInputTest.qml` is one: it puts real components (`BarWidget`,
 `PopupWidget`) in a small layer window and drives them with QtTest's `TestCase` used by
 hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check what a mouse and
-a finger do. It needs a Wayland session (the window shows in a corner for a moment). A
-stylus cannot be sent that way.
+a finger do. It needs a Wayland session — `run-unit.sh` gives it its own. A stylus cannot
+be sent that way. `LockViewTest.qml` is another: the lock prompt and a notification card fed
+views the way `Lockscreen` feeds them (answer hidden or shown, a long question in full, an
+error, the compositor's late notice, "Unlocking…", the passive methods' lines, Caps Lock,
+each notification detail as plain text).
 
 `tests/device/` drives the running shell on a touch device through the whole stack — a
 virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —
@@ -474,8 +496,9 @@ lock screen end to end: locked for real, keys typed and the pointer moved throug
 compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
 `scripts/lock-auth-methods.sh`; the copy's own `pam/` configs only deny, and the "system"
 PAM directory the password fallback is chosen from is the test's own,
-`H2S_LOCK_SYSTEM_PAM_DIR`), logind's signals and the sleep inhibitor through stand-ins
-(`H2S_LOCK_TOOLS`). `tests/lock/run.sh`
+`H2S_LOCK_SYSTEM_PAM_DIR`), logind's signals, the sleep inhibitor and fprintd through
+stand-ins (`H2S_LOCK_TOOLS`; the real methods script runs against the fprintd one in
+`methods-script.sh` and `methods-fprintd.sh`). `tests/lock/run.sh`
 runs it; nothing appears on screen and the real session cannot be reached. See its README.
 
 Everything else is verified by hand: run `quickshell` from the repo root and check that

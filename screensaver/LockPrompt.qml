@@ -20,6 +20,8 @@ Item {
     required property var view
     // Whether this instance shows the prompt (view.promptSurface is its surface)
     property bool awake: false
+    // Caps Lock is known to be on (Lockscreen.capsLock): said under the field
+    property bool capsLock: false
 
     // Enter, or the Unlock button: the field's text, for the rules' `submit`
     signal submitted(string text)
@@ -64,9 +66,13 @@ Item {
         }
 
         Text {
+            objectName: "error"
             Layout.fillWidth: true
             visible: root._showError
             text: root.view.error
+            textFormat: Text.PlainText
+            Accessible.role: Accessible.AlertMessage
+            Accessible.name: text
             color: Theme.error
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
@@ -76,14 +82,31 @@ Item {
 
         // Information that is no error: the compositor has not confirmed the lock yet
         Text {
+            objectName: "notice"
             Layout.fillWidth: true
             visible: root.view.notice !== ""
             text: root.view.notice
+            textFormat: Text.PlainText
             color: Theme.textSecondary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
+        }
+
+        // PAM's question in full, when it is too long for the field's placeholder (which
+        // elides): "Enter the code sent to the phone ending in …" must not lose its end
+        Text {
+            objectName: "question"
+            Layout.fillWidth: true
+            visible: _placeholder.truncated
+            text: root.view.placeholder
+            textFormat: Text.PlainText
+            color: Theme.textSecondary
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
         }
 
         Rectangle {
@@ -98,8 +121,11 @@ Item {
             border.width: Theme.border.width
 
             Text {
-                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
+                id: _placeholder
+                objectName: "placeholder"
+                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
                 text: root.view.placeholder
+                textFormat: Text.PlainText
                 color: Theme.glassTextMuted
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
@@ -109,6 +135,9 @@ Item {
 
             TextInput {
                 id: _input
+                objectName: "field"
+                // A long password scrolls inside the field rather than running over its edge
+                clip: true
                 selectionColor: Theme.selection
                 selectedTextColor: Theme.selectedText
                 anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
@@ -124,7 +153,22 @@ Item {
                 activeFocusOnTab: false
                 selectByMouse: false
                 cursorVisible: root.awake
+                Accessible.role: Accessible.EditableText
+                Accessible.passwordEdit: echoMode === TextInput.Password
+                Accessible.name: root.view.placeholder
             }
+        }
+
+        // The most common reason for a password that is "wrong"
+        Text {
+            objectName: "capsLock"
+            Layout.fillWidth: true
+            visible: root.capsLock
+            text: "Caps Lock is on"
+            color: Theme.warning
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            horizontalAlignment: Text.AlignHCenter
         }
 
         Rectangle {
@@ -137,7 +181,11 @@ Item {
 
             Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
+            Accessible.role: Accessible.Button
+            Accessible.name: root.view.buttonText
+
             Text {
+                objectName: "button"
                 anchors.centerIn: parent
                 text: root.view.buttonText
                 color: Theme.textPrimary
@@ -168,6 +216,7 @@ Item {
                 Layout.fillWidth: true
                 visible: modelData.visible
                 text: modelData.text
+                textFormat: Text.PlainText
                 color: modelData.isError ? Theme.error : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall

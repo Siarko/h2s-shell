@@ -1,6 +1,6 @@
 # Lock screen: analysis and rework plan
 
-Written 2026-11-14, after two days of fixes that each exposed another fault. Stages 0–2 are
+Written 2026-11-14, after two days of fixes that each exposed another fault. Stages 0–3 are
 implemented, with the findings of their reviews fixed (section 7 is the current contract). It replaces patching with: a test bed
 first, then a pure state machine with unit tests, then the I/O around it.
 
@@ -62,7 +62,13 @@ never went through a real `WlSessionLock`.
   new `WlSessionLock` starts with `locked: false` unlocks the session (observed in the test
   compositor) — any file written in the shell's folder triggers one, unless
   `Quickshell.watchFiles` is false (the stop-gap, section 7).
-- `IdleMonitor` re-creates its notification on a timeout change by itself.
+- `IdleMonitor` re-creates its notification on a timeout change by itself — and that is
+  broken (found in Stage 3, observed): it deletes the old notification before creating the
+  new one, which often lands at the same address, so the property holding it does not
+  change and `isIdle`, bound to the old one, stays false for good. Every monitor of the
+  shell starts with the default timeout and gets the configured one when the profiles are
+  read: the screensaver and the idle lock never came. The driver makes a new monitor for
+  every change instead (`singletons/lock/IdleWatch.qml`).
 - `Process`: children are killed when the object is destroyed, but survive a crash.
 
 ### Defects found in review (beyond the root cause)
@@ -73,6 +79,8 @@ Security:
 2. Any file written in the checkout while locked reloads the shell and unlocks the screen,
    or leaves it locked with no client (the shell runs from the live checkout).
 3. Notifications are shown in full on the lock screen by default, one-time codes included.
+   (Stage 3: "app only" by default, the owner's decision; a seeded config still holding
+   the old default moves to it once.)
 4. A shell crash while locked leaves no way back short of a TTY: Hyprland has
    `allow_session_lock_restore` off and the shell is not restarted.
 5. `Lockscreen.unlock()` and `LockAuth.authenticated` are public: any QML can unlock.
@@ -90,7 +98,8 @@ Correctness:
     not re-acquired if it dies; the 1.5 s fallback can let the machine sleep unlocked.
 12. Passive methods answer any prompt with an empty string — failed password attempts in a
     loop if such a config ever reaches a password module.
-13. The shipped `pam/password` does not work on NixOS; `nullok` allows a blank password;
+13. The shipped `pam/password` does not work on NixOS (Stage 5 found this wrong for the
+    password: see "Stage 5" at the end; true for the fingerprint and key configs); `nullok` allows a blank password;
     the method script parses `fprintd-list`'s human-readable output.
 14. Orphaned `gdbus monitor` processes pile up after crashes.
 
@@ -189,7 +198,12 @@ removed and re-added while locked, lock requests while locked.
 
 **Stage 3 — views.** Rewrite `LockSurface`/`LockPrompt` as views. Harness tests with real
 typed keys: wake by key and by pointer, Enter and Backspace right after waking, typing
-during the fade, two outputs.
+during the fade, two outputs. (Done: the key catcher became an input-method-enabled text
+input, so dead keys, Compose and input methods type; the 300 ms pointer rule became "only
+real motion counts"; Caps Lock is said on the prompt; notifications are plain text, "app
+only" by default; harness tests for composition, AltGr, Caps Lock, the keypad, key repeat,
+non-ASCII bytes reaching PAM, two outputs, the fade-in over a desktop window, scaled and
+small outputs, the idle path and notifications; the views' states in `tests/LockViewTest.qml`.)
 
 **Stage 4 — failure and recovery.** Reload while locked keeps the lock (harness test);
 the shell killed while locked can be restarted and re-locks (`allow_session_lock_restore`,
@@ -475,17 +489,34 @@ Ordering guarantees within one step:
   else `key: ""` and the character in `text`; `autoRepeat` from the key event), and it comes
   back as `forwardKey` — also to the surface it came from. So the field sends `submit`
   (Enter forwarded, or the button) and no `activity` on typing: the `key` event already
-  extends the prompt's time. A pointer press anywhere on a surface sends `press`, plain
-  motion `activity`; pointer events in a surface's first 300 ms are dropped (the surface
-  appearing under a resting pointer is not somebody moving it); keys never are. What a key
-  event does not carry is not typed: dead keys, compose and input methods are a later stage.
+  extends the prompt's time. The key catcher is a hidden, input-method-enabled text input
+  (hints: hidden, sensitive, no prediction; password echo; invisible, so no preedit shows):
+  text that no single key event carries — a dead key and the letter after it, a Compose
+  sequence, an input method's commit — arrives as its commit and is sent as a `key` with
+  `key: ""` and that text (`autoRepeat` false), the catcher's own text emptied at once; a
+  dead key or a key inside a Compose sequence sends nothing until then (Qt consumes it).
+  Observed with Qt 6.12 under Hyprland 0.57: Hyprland offers text-input-v3 to a session-lock
+  surface, Qt takes `QWaylandInputContext` and composes dead keys and Compose sequences itself
+  from the locale's Compose table; a Backspace inside a sequence cancels it and still
+  deletes. A pointer press anywhere on a surface sends `press`; motion sends `activity` only
+  where the pointer really moved (`LockIoRules.pointerMoved`: not the first position a
+  surface sees — the pointer entering, or the surface appearing under it — and not the same
+  position again, which Qt Quick re-sends at every frame of a fade). This replaced "pointer
+  events in a surface's first 300 ms are dropped", which let a fade longer than 300 ms, or a
+  slow first frame, wake the prompt under a resting pointer, and dropped real presses.
+  Keys are never filtered. Caps Lock (which Qt does not report) is inferred from the keys
+  (`LockIoRules.capsLockAfterKey`: a letter's case against Shift; the Caps Lock key flips
+  what is known) and kept by the driver as `capsLock` (true / false / null), outside the
+  rules: the prompt says "Caps Lock is on".
 - **Never expose the state**: only `describe()`, `describeEvent()`, `describeEffect()`.
 - **Never keep old states or effects.** The secret lives in `state.secret` from submit to
   PAM's first hidden prompt, and travels in the `respondPam` effect (and a typed answer in
   `respondPam`, a key's character in `forwardKey`). Any old state kept around keeps the
   secret with it: the driver holds the current state only, drops each step's effects once
   run, and logs only through the describe functions.
-- **Methods script**: no timeout of its own needed — the rules time out (`detect`, 5 s).
+- **Methods script**: the rules time out (`detect`, 5 s), and the script keeps a deadline of
+  its own (4 s for fprintd), so that it ends — exit non-zero, a failure — before the rules
+  give up on it and nothing it started lingers (Stage 5).
 - **The password fallback** is chosen from the machine, as `scripts/lock-auth-methods.sh`
   chooses the password config — `LockIoRules.passwordFallback({ shellDirectory,
   systemDirectory, systemConfigReadable, nixos })`: `<system dir>/h2s-shell-password` when
@@ -508,8 +539,8 @@ Ordering guarantees within one step:
 ### What other QML in the shell can reach
 
 Same-process QML is not a security boundary; the driver only keeps the obvious doors shut.
-`Lockscreen` exposes `view`, `locked`, `screensaverVisible`, `lock(source)`, the surface
-functions and the IPC. The state, the event queue, the dispatch function and the surface
+`Lockscreen` exposes `view`, `locked`, `screensaverVisible`, `capsLock`, `lock(source)`, the
+surface functions and the IPC. The state, the event queue, the dispatch function and the surface
 registry live in the closure `_build()` makes, not in properties; `_api` holds only the
 operations above. The surface functions take the `LockSurface` object itself and act only for
 one registered by `addSurface` (which accepts only a `LockSurface` instance, once, while a lock
@@ -611,8 +642,10 @@ against code running in the shell.
   at expiry the timer re-arms for what is left — never more than `prompt` (a wall clock set
   back would otherwise keep the prompt awake for as long as it was set back).
 - **Idle and screensaver stay in the driver.** `IdleMonitor` is a Wayland object, and its
-  outcome is just `lockRequested("idle")`. `enabled`/`timeout` are bound declaratively (it
-  re-creates its notification on a timeout change by itself). `screensaverVisible`, the
+  outcome is just `lockRequested("idle")`. `enabled`/`timeout` go to an `IdleWatch`, which
+  makes a new `IdleMonitor` whenever they change (changing them on a live one can leave
+  `isIdle` false for good, section 1); `tests/lock/tests/idle.sh` and `idle-lock.sh` run the
+  idle path end to end, before and after an unlock. `screensaverVisible`, the
   "lock after the screensaver" timer and the screensaver commands are the driver's too; the
   rules take only `lockOnSleep` and `passwordFallback`.
 
@@ -662,10 +695,153 @@ against code running in the shell.
   returns to `unlocked` (a pending unlock keeps them until then).
 - **IPC `state`** is `describe(state)` plus `driver: { secure, sessionInForce, surfaces,
   screensaverVisible, inhibitorRunning, logindSession, lockScope, watchFiles,
-  passwordFallbackKnown }`.
+  passwordFallbackKnown, capsLock }`.
 - **The test bed's seams**, each inert unless set: `H2S_LOCK_AUTH_METHODS` (read by the
   methods script), `H2S_LOCK_TOOLS` (a directory with stand-ins for `gdbus` and
   `systemd-inhibit`: the test bed has no system bus, and the launcher puts the real gdbus
   first on PATH, so PATH could not serve), `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide
   configs are looked for, so that a test shell's password fallback is never the machine's
   real PAM stack).
+
+## 8. Stage 5: the system side (as implemented, 2026-11-14)
+
+### The methods script
+
+`scripts/lock-auth-methods.sh` asks fprintd over D-Bus with `gdbus call` (glib, already a
+dependency; and `H2S_LOCK_TOOLS` replaces it in the test bed): `Manager.GetDevices`, then
+`Device.ListEnrolledFingers("")` per reader until one has a finger — `""` means "the
+caller": naming a user, even oneself, is not needed, and naming another makes fprintd ask
+polkit for `setusername`, which puts an authentication dialog on the screen. The whole
+question has a 4 s deadline, each call `timeout`-wrapped with what is left. fprintd not
+installed (`ServiceUnknown`), no reader, no finger: an answer (exit 0, not offered); a
+time-out, any other error (no bus, `PermissionDenied` from an inactive session) or a reply
+that does not parse: a failure — the lines it could answer are printed first, then exit 1,
+the reason on stderr. The consumer agrees as it was: exit 0 is `methodsDetected`, anything
+else `methodsFailed` with its lines dropped (the password then takes the fallback, which is
+chosen the same way as the script's password line); `MethodDetector` now logs the script's
+stderr. Cost of dropping the lines: a key offered by the same run is not used until the next
+detection (at most 30 s later, at a wake of the prompt).
+
+A passive method is offered only with a config that can load its module: a system-wide
+`h2s-shell-<method>`, or the shipped one except on NixOS (there a module named without a
+path is looked for only in the linked libpam's store directory — the journal shows
+`PAM unable to dlopen(/nix/store/…-linux-pam-1.7.2/lib/security/pam_fprintd.so)`).
+
+The security key: offered when the user has a key where that config's pam_u2f looks, as
+pam_u2f 1.4 resolves it (`pam-u2f.c`, `resolve_authfile_path`): `authfile=` (with `expand`,
+`%u`/`%h`; relative → under the home directory), else `$XDG_CONFIG_HOME/Yubico/u2f_keys`, else
+`~/.config/Yubico/u2f_keys` (`sshformat`: `id_ecdsa_sk`). "Has a key" = a readable file with a
+`<user>:` line (the conversation runs as the user, so a root-only mapping file cannot serve).
+Not followed: `include`/`substack`, an `authfile` with spaces.
+
+Tests: `tests/lock/tests/methods-script.sh` (the script alone, every fprintd behaviour of the
+stand-in, the u2f rules, the 5 s bound, nothing left running) and `methods-fprintd.sh` (the
+shell with the real script: offered and unlocking by finger; not offered and not re-asked;
+fprintd hanging → failure logged with the script's reason, fallback, re-asked after 30 s and
+offered). Read-only against this machine's real fprintd: `password /etc/pam.d
+h2s-shell-password`, `fingerprint /etc/pam.d h2s-shell-fingerprint`, exit 0 in 0.06 s —
+`fprintd-list h2s` shows right-index-finger.
+
+### The shipped pam/password on NixOS: it does reach its helper
+
+Defect 13's "pam_unix cannot reach its helper there" is contradicted by the journal and the
+binaries. Quickshell 0.3.2 links `/nix/store/18ykcs87…-linux-pam-1.7.2/lib/libpam.so.0`; the
+system's stacks name `/nix/store/v3n5aklh…-linux-pam-1.7.2` (another build of the same
+version). A bare `pam_unix.so` resolves in the linked libpam's own `lib/security/`, and both
+builds' `pam_unix.so` carry the helper path `/run/wrappers/bin/unix_chkpwd` (`strings`), which
+exists, setuid root. The journal of 2026-11-13 shows the real shell's shipped config
+(service `password`) running that helper: `unix_chkpwd[19986]: password check failed for user
+(h2s)` at 22:35:17, and again at 22:39:41, 22:40:01, 22:40:19 — the helper ran and compared
+hashes, i.e. those passwords were rejected, not unreachable. The 23:03:50 failure (and
+22:42:23) has no helper line: unix_chkpwd does not log a blank-password check under `nullok`
+(`unix_chkpwd.c`: `if (!nullok || !blankpass)` around the log call), and `pam_unix` with
+`nullok` runs the helper with an empty password before prompting (`_unix_blankpasswd`), so
+those lines fit an empty password (or a helper that could not be executed, which is not
+logged either; how the old prompt could have sent an empty one was not traced). `PAM _pam_init_handlers: no default config other` is libpam not finding an
+`other` file in the config directory Quickshell passes (`pam_start_confdir`): harmless.
+How sure: high that the mechanism works (same module version and helper as `login`, helper
+seen running); not confirmed with the real password, which was not typed. So the script and
+`LockIoRules.passwordFallback` still say `login` on NixOS without the module's config;
+dropping that (login waits for the fingerprint first) should follow one real check — Stage 6:
+the owner runs the shipped config once with the real password (e.g. a test lock with no
+`/etc/pam.d/h2s-shell-password`), and if it unlocks, both places drop the `login` branch.
+
+### The shipped configs
+
+`auth` lines only (Quickshell runs `pam_authenticate` alone); `account` lines removed. No
+`nullok` (the rules refuse an empty password anyway; without it an account with no password
+cannot be unlocked by whatever is typed, and pam_unix no longer runs the helper twice).
+Passive configs: one module, `required` (its own code is the result: MaxTries and a missing
+reader stay distinguishable; `sufficient` + `pam_deny` would turn both into a plain failure);
+pam_u2f with `cue`, never `interactive`.
+
+**Arch (reasoning, not tested here).** `auth include system-auth` would bring what Arch puts
+there: `pam_faillock` (preauth/authfail — wrong passwords at the lock count towards the
+lockout, and a locked-out account cannot unlock by password at all until it expires),
+`pam_systemd_home` (needed for homed users), and whatever the administrator added —
+`pam_fprintd` in `system-auth` is a common recipe, and then the password conversation would
+wait for a finger, which is what separate conversations exist to avoid. Bare `pam_unix`
+works for `/etc/shadow` accounts (Arch's `unix_chkpwd` is setuid, as screen lockers need),
+never waits, has pam_unix's 2 s failure delay as its brute-force brake, and does not feed
+faillock. Recommendation: keep bare `pam_unix` as the shipped default; homed/LDAP/SSSD users,
+or anyone who wants faillock at the lock, write `/etc/pam.d/h2s-shell-password` (e.g. `auth
+include system-auth`, only if it has no fingerprint/key module) — the README says so.
+
+### The NixOS module
+
+- `h2s-shell-password`: NixOS's generated stack (so pam_unix, and homed/SSSD/LDAP/Kerberos/
+  kanidm when globally on — they are the password check) with every second factor off by
+  `mkDefault`: `fprintAuth`, `u2f.enable`, `p11Auth`, `yubicoAuth`, `howdy.enable`,
+  `oathAuth`, `otpwAuth`, `googleAuthenticator.enable`, `duoSecurity.enable`,
+  `sshAgentAuth`, `rssh`, `usshAuth`. A machine opts one back in on the service itself; no
+  module option of ours (nothing to add over NixOS's own).
+- `h2s-shell-fingerprint` (when `services.fprintd.enable`) and `h2s-shell-u2f` (when
+  `security.pam.u2f.enable`): `text` written out, `mkOverride 900` (above NixOS's generated
+  default, below a machine's plain definition) — one `auth required` line, absolute path.
+  Built from options instead, a global switch (oath, howdy, homed's prompting module,
+  mysql) would land in a passive stack. The u2f line takes `security.pam.u2f.settings`, with
+  `cue = true; interactive = false` forced.
+- Evaluated against this machine (the working copy's module in the system's
+  `nixosSystem`, its configuration copied with and without the hand-written pair): password
+  auth = `pam_unix sufficient likeauth try_first_pass` + `pam_deny required`; fingerprint =
+  `auth required …fprintd-1.94.5/lib/security/pam_fprintd.so`; u2f not generated. With
+  u2f (`interactive = true` set), oath, p11 and homed switched on in the evaluation: password
+  = homed + unix + deny (no oath, no p11), u2f = `auth required …pam_u2f.so
+  authfile=/etc/u2f_mappings cue [origin=pam://x y]` (no `interactive`), fingerprint
+  unchanged. No warnings or assertions.
+- No NixOS VM test: it would build a VM closure with Quickshell (long, large) and still need a
+  PAM driver inside; the evaluation above checks the generated text line by line instead.
+
+### For the owner's /etc/nixos
+
+Now (the `h2s-shell` flake input, pinned at bd30fff, has no PAM in its module): replace the
+hand-written `security.pam.services = { h2s-shell-password = …; h2s-shell-fingerprint = …; };`
+block in `configuration.nix` with
+
+```nix
+  # The lock screen's PAM configs (h2s-shell). Delete once the h2s-shell flake input's
+  # module writes them (nix/module.nix).
+  security.pam.services = {
+    h2s-shell-password = { fprintAuth = false; u2f.enable = false; };
+    h2s-shell-fingerprint.text = ''
+      auth required ${config.services.fprintd.package}/lib/security/pam_fprintd.so
+    '';
+  };
+```
+
+and rebuild (`sudo nixos-rebuild switch --flake /etc/nixos`). Generated password config:
+unchanged; fingerprint config: one `auth required` line (was `sufficient` + `pam_deny` +
+account/password/session lines) — a reader error or MaxTries now reaches the shell as such.
+Later (the input carries this module): delete that block, `nix flake update h2s-shell`,
+rebuild; the module then writes the same text. Keeping the block would also work (a plain
+definition wins over the module's), but would stop following the module.
+
+### Upstream
+
+`docs/upstream/quickshell-session-lock-unlock-notify.md` (a draft, not filed): the unlock
+notify (reproduced in the test compositor; fixed in Quickshell master by 18c95fae after
+v0.3.2, unreleased), a failed `fork()` in `PamContext.start()` ending in `kill(-1, SIGKILL)`
+(unfixed), and `locked = false` before `secure` sending `unlock_and_destroy` (unfixed).
+
+Not done in Stage 5: the logind monitor without `XDG_SESSION_ID` (Stage 5's list in
+section 4; not part of this work).

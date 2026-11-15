@@ -1,4 +1,13 @@
 # The lock screen's fingerprint check, used when the system has no
-# /etc/pam.d/h2s-shell-fingerprint. Runs beside the password check, not before it.
+# /etc/pam.d/h2s-shell-fingerprint (and not on NixOS, where a module named without a path
+# is looked for only in libpam's own directory: the NixOS module writes the system-wide
+# one). It runs beside the password check, not before it.
+#
+# A passive check: it must never reach a module that asks for typed input (pam_unix…).
+# The shell treats a passive check that asks for input as broken and never answers it —
+# an empty answer in a loop would be a failed password attempt each time. So
+# pam_fprintd alone, `required`: its result (success, failure, MaxTries, a reader not
+# there) is the result.
+#
+# Quickshell runs pam_authenticate and nothing else: only `auth` lines mean anything.
 auth     required pam_fprintd.so
-account  required pam_permit.so

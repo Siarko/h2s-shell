@@ -10,18 +10,31 @@ this client must be running before the lock client binds its seat.
 
 Usage: ltinput.py <protocol-dir> <keymap-file> <fifo>
 
-<protocol-dir> holds the generated `ltproto` bindings (tools.nix builds them). Commands,
-one per line, are written to <fifo>:
+<protocol-dir> holds the generated `ltproto` bindings (tools.nix builds them). The keyboard
+sends <keymap-file> (an XKB keymap, tools.nix compiles a few) and works out from it, with
+`xkbcli how-to-type`, which key and which modifiers type a character or a keysym — so a test
+can type with any layout, and a character the layout cannot type directly is fatal: the
+client ends with an error before anything of the command is typed, so a typed password is
+always exactly the one asked for. Commands, one per line, are written to <fifo>:
 
-  type <text>          type ASCII text (US layout); a character the table below lacks
-                       ends the client with an error before anything is typed, so a
-                       typed password is always exactly the one asked for
-  key <Name>           Return | BackSpace | Escape | Tab | space
+  type <text>          type the text: each character by the key and modifiers (Shift,
+                       AltGr) that give it directly in this layout. Refused while Caps Lock
+                       is on (the text typed would not be the text asked for): use `keys`
+  keys <text>          press the keys that type <text> with Caps Lock off, whatever the
+                       locks are now (with Caps Lock on, "abc" gives "ABC")
+  key <keysym>         one key by its keysym name, with the modifiers it needs: Return,
+                       BackSpace, Escape, Tab, space, dead_acute, Multi_key, KP_1 (needs Num
+                       Lock on), KP_Enter, … Caps_Lock and Num_Lock toggle the lock
+  hold <keysym> <s>    one key held down for <s> seconds, then released: the compositor's
+                       key repeat (Qt repeats on the client side) has its chance
   move <dx> <dy>       relative motion
   abs <x> <y> <w> <h>  absolute motion in a w*h extent
   click [left|right|middle]
   sleep <seconds>
   quit
+
+A key needing Num Lock while it is off (or the like) is fatal too: the client never sends
+another key in its place.
 
 Each command, once the compositor has received it (a roundtrip), is acknowledged by a
 line "done <n> <command>" appended to <fifo>.ack: the caller waits for it, so a test
@@ -30,6 +43,9 @@ the shell: whether the shell has received and handled the input is for the test 
 observe (through the shell's state).
 """
 import os
+import re
+import shutil
+import subprocess
 import sys
 import time
 
@@ -41,27 +57,82 @@ from ltproto.wayland import WlSeat  # noqa: E402
 from ltproto.wlr_virtual_pointer_unstable_v1 import ZwlrVirtualPointerManagerV1  # noqa: E402
 from ltproto.virtual_keyboard_unstable_v1 import ZwpVirtualKeyboardManagerV1  # noqa: E402
 
-# Linux evdev key codes of a US layout: (code, needs shift)
-KEYS = {}
-for index, character in enumerate("1234567890"):
-    KEYS[character] = (2 + index, False)
-for row, first_code in (("qwertyuiop", 16), ("asdfghjkl", 30), ("zxcvbnm", 44)):
-    for index, character in enumerate(row):
-        KEYS[character] = (first_code + index, False)
-        KEYS[character.upper()] = (first_code + index, True)
-for character, code, shift in (("-", 12, False), ("_", 12, True), ("=", 13, False), ("+", 13, True),
-                               (" ", 57, False), (".", 52, False), (",", 51, False), ("/", 53, False),
-                               ("!", 2, True), ("@", 3, True), ("#", 4, True), ("$", 5, True),
-                               ("%", 6, True), (";", 39, False), (":", 39, True)):
-    KEYS[character] = (code, shift)
-NAMED_KEYS = {"Return": 28, "BackSpace": 14, "Escape": 1, "Tab": 15, "space": 57}
 BUTTONS = {"left": 0x110, "right": 0x111, "middle": 0x112}
-SHIFT = 42
 KEYMAP_FORMAT_XKB_V1 = 1
+# The real modifiers' masks: their order is fixed in every keymap xkbcommon compiles
+MASKS = {"Shift": 1, "Lock": 2, "Control": 4, "Mod1": 8, "Mod2": 16, "Mod3": 32, "Mod4": 64, "Mod5": 128}
+# The virtual modifiers how-to-type names beside the real ones they map to
+ALIASES = {"LevelThree": "Mod5", "NumLock": "Mod2", "Alt": "Mod1", "Super": "Mod4"}
+# The modifiers a key may need here: held (Shift, AltGr) or locked (Num Lock). Never
+# Lock: Caps Lock is the test's to set, never a way to reach a character
+HELD = {"Shift": "Shift_L", "Mod5": "ISO_Level3_Shift"}
+LOCKED = {"Mod2": "Num_Lock"}
+LOCK_KEYSYMS = {"Caps_Lock": "Lock", "Num_Lock": "Mod2"}
+
+
+def fatal(message):
+    print("fatal:", message, file=sys.stderr, flush=True)
+    os._exit(3)  # sys.exit crashes in pywayland's teardown
+
+
+class Layout:
+    """What the keymap says types a character or a keysym, asked of xkbcli how-to-type"""
+
+    def __init__(self, path):
+        self.path = path
+        self.xkbcli = shutil.which("xkbcli")
+        if not self.xkbcli:
+            fatal("xkbcli is not on PATH (tools.nix provides it)")
+        self.cache = {}
+
+    def _ask(self, argument, keysym):
+        command = [self.xkbcli, "how-to-type", "--disable-compose", "--keymap=" + self.path]
+        # A character as its code point: "1" alone could be read as the code point 1, a
+        # leading "-" as an option
+        command += ["--keysym", argument] if keysym else ["U+%04X" % ord(argument)]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        entries = []
+        section = ""
+        for line in result.stdout.splitlines():
+            if line.startswith("==="):
+                section = line
+                continue
+            if "Direct access" not in section:
+                continue
+            match = re.match(r"^\s*(\d+)\s+(\S+)\s.*\[(.*)\]\s*$", line)
+            if not match:
+                continue
+            keycode, name = int(match.group(1)), match.group(2)
+            modifiers = {ALIASES.get(word, word) for word in match.group(3).split()}
+            entries.append((keycode, name, modifiers))
+        return entries
+
+    def resolve(self, argument, keysym=False):
+        """(evdev code, held modifiers, locked modifiers needed) for the gentlest way to type it"""
+        key = (argument, keysym)
+        if key in self.cache:
+            return self.cache[key]
+        candidates = []
+        for keycode, name, modifiers in self._ask(argument, keysym):
+            # Keys past the usual range (xkb 256+) exist only in the keymap's tables
+            if keycode > 255 or not modifiers <= set(HELD) | set(LOCKED):
+                continue
+            held = sorted(modifiers & set(HELD))
+            locked = sorted(modifiers & set(LOCKED))
+            # Fewest modifiers first; among modifier keys the usual right Alt for AltGr
+            candidates.append((len(modifiers), name != "RALT", keycode - 8, held, locked))
+        if not candidates:
+            self.cache[key] = None
+            return None
+        candidates.sort()
+        _, _, code, held, locked = candidates[0]
+        self.cache[key] = (code, held, locked)
+        return self.cache[key]
 
 
 def main():
     acknowledgement_path = fifo_path + ".ack"
+    layout = Layout(keymap_path)
     display = Display(os.environ.get("WAYLAND_DISPLAY"))
     display.connect()
     registry = display.get_registry()
@@ -93,24 +164,54 @@ def main():
     display.roundtrip()
     os.close(keymap_fd)
 
+    # The keys of the modifiers, found once in this layout
+    modifier_codes = {}
+    for modifier, keysym in list(HELD.items()) + list(LOCKED.items()) + [("Lock", "Caps_Lock")]:
+        found = layout.resolve(keysym, keysym=True)
+        if found and not found[1] and not found[2]:
+            modifier_codes[modifier] = found[0]
+
     started = time.monotonic()
+    locked_mask = 0
 
     def milliseconds():
         return int((time.monotonic() - started) * 1000) & 0xFFFFFFFF
 
-    def press(code, shift=False):
-        if shift:
-            keyboard.key(milliseconds(), SHIFT, 1)
-            keyboard.modifiers(1, 0, 0, 0)
+    def send_modifiers(depressed):
+        keyboard.modifiers(depressed, 0, locked_mask, 0)
+
+    def press(code, held=(), seconds=0.01):
+        depressed = 0
+        for modifier in held:
+            keyboard.key(milliseconds(), modifier_codes[modifier], 1)
+            depressed |= MASKS[modifier]
+        if held:
+            send_modifiers(depressed)
         keyboard.key(milliseconds(), code, 1)
         display.flush()
-        time.sleep(0.01)
+        time.sleep(seconds)
         keyboard.key(milliseconds(), code, 0)
-        if shift:
-            keyboard.key(milliseconds(), SHIFT, 0)
-            keyboard.modifiers(0, 0, 0, 0)
+        for modifier in reversed(held):
+            keyboard.key(milliseconds(), modifier_codes[modifier], 0)
+        if held:
+            send_modifiers(0)
         display.roundtrip()
         time.sleep(0.01)
+
+    def plan(argument, keysym):
+        """The key presses for one character or keysym, or a fatal error"""
+        found = layout.resolve(argument, keysym)
+        what = ("keysym " if keysym else "character ") + repr(argument)
+        if found is None:
+            fatal(f"cannot type {what}: no key gives it directly in {os.path.basename(keymap_path)}")
+        code, held, locked = found
+        for modifier in held:
+            if modifier not in modifier_codes:
+                fatal(f"cannot type {what}: the layout has no key for {modifier}")
+        for modifier in locked:
+            if not locked_mask & MASKS[modifier]:
+                fatal(f"cannot type {what}: it needs {LOCKED[modifier]} on")
+        return code, held
 
     print("ltinput ready", flush=True)
     count = 0
@@ -121,16 +222,24 @@ def main():
                 if not line:
                     continue
                 command, _, argument = line.partition(" ")
-                if command == "type":
-                    unmapped = sorted({character for character in argument if character not in KEYS})
-                    if unmapped:
-                        print("fatal: cannot type", unmapped, "(not in ltinput.py's key table)",
-                              file=sys.stderr, flush=True)
-                        os._exit(3)  # sys.exit crashes in pywayland's teardown
-                    for character in argument:
-                        press(*KEYS[character])
+                if command in ("type", "keys"):
+                    if command == "type" and locked_mask & MASKS["Lock"]:
+                        fatal("`type` with Caps Lock on would not type the text asked for: use `keys`")
+                    presses = [plan(character, False) for character in argument]
+                    for code, held in presses:
+                        press(code, held)
                 elif command == "key":
-                    press(NAMED_KEYS[argument])
+                    code, held = plan(argument, True)
+                    press(code, held)
+                    if argument in LOCK_KEYSYMS:
+                        locked_mask ^= MASKS[LOCK_KEYSYMS[argument]]
+                        send_modifiers(0)
+                elif command == "hold":
+                    name, _, seconds = argument.partition(" ")
+                    if name in LOCK_KEYSYMS:
+                        fatal("hold a lock key? use `key`")
+                    code, held = plan(name, True)
+                    press(code, held, float(seconds))
                 elif command == "move":
                     delta_x, delta_y = (float(value) for value in argument.split())
                     pointer.motion(milliseconds(), delta_x, delta_y)
@@ -153,6 +262,8 @@ def main():
                     display.roundtrip()
                     display.disconnect()
                     return
+                else:
+                    fatal(f"unknown command {command!r}")
                 display.roundtrip()
                 count += 1
                 with open(acknowledgement_path, "a") as acknowledgements:

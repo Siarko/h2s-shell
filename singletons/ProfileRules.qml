@@ -170,6 +170,36 @@ Singleton {
         return { profiles: newProfiles, globals: newGlobals, migratedKeys: done, copied: copied, failed: failed };
     }
 
+    // A default that changed, carried to configs written before the change, once per key.
+    // Seeding spells every default out in Full (seedProfiles), so a seeded config holds the
+    // old default as if the user had chosen it. For every schema entry with a
+    // `formerDefault` whose marker ("default:<key>") is not in `migratedKeys` yet: a Full
+    // whose value equals the former default loses it, so the new default applies; any
+    // other value there, and every other profile's, is the user's and stays. (A user who
+    // had picked the former default in Full by hand gets the new one once — which is why
+    // this is only used where the new default is the safer one.) Inputs are not modified.
+    // Returns { profiles, migratedKeys, changed: [keys] }.
+    function migrateDefaults(entries, migratedKeys, profiles) {
+        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
+        const done = (migratedKeys ?? []).slice();
+        const changed = [];
+        for (const entry of entries) {
+            if (!("formerDefault" in entry))
+                continue;
+            const marker = "default:" + entry.key;
+            if (done.includes(marker))
+                continue;
+            done.push(marker);
+            const full = newProfiles.find(profile => profile.name === "Full");
+            if (full && full.set && entry.key in full.set
+                    && JSON.stringify(full.set[entry.key]) === JSON.stringify(entry.formerDefault)) {
+                delete full.set[entry.key];
+                changed.push(entry.key);
+            }
+        }
+        return { profiles: newProfiles, migratedKeys: done, changed: changed };
+    }
+
     // A value at its old place in a config file from before profiles, parsed from JSON:
     // `path` is e.g. ["media", "visualizerStyle"], or a function (oldConfig) => value. The
     // old widget settings were a JSON string, so a path starting at "widgetProfiles"

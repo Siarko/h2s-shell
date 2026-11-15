@@ -54,7 +54,7 @@ check_within 5 "the compositor confirmed the lock (secure)" state_is secure true
 check "shell says locked" shell_status_is locked
 check "the shell's methods are the test stacks" state_is password_config "$WORK/pam/password"
 
-sleep 1 # the surface takes keys after 300 ms, and fades in
+sleep 1 # the surface fades in
 screenshot locked-asleep
 screenshot_ppm locked-asleep
 check "prompt not shown before any input" state_is prompt_awake false

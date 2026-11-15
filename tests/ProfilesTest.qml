@@ -184,6 +184,33 @@ TestCase {
         assertEqual(noFull.profiles[0].name, "Full", "without Full, one is created at the top");
         assertEqual(noFull.profiles[1].name, "Mine", "and the user's profiles follow");
 
+        // --- a default that changed (formerDefault), once ---
+        const detailKey = "lockscreen.lockNotificationDetail";
+        assertEqual(SettingsSchema.defaults[detailKey], "app", "the lock screen shows notifications' app only by default");
+        assertEqual(SettingsSchema.entry(detailKey).formerDefault, "full", "it used to be in full");
+        const seededBefore = [{ name: "Full", when: {}, set: { [detailKey]: "full", "polling.x": 1 } },
+                              { name: "Mine", when: onBattery, set: { [detailKey]: "full" } }];
+        const moved = ProfileRules.migrateDefaults(SettingsSchema.entries, [], seededBefore);
+        assert(!(detailKey in moved.profiles[0].set), "a Full still holding the old default loses it");
+        assertEqual(ProfileRules.resolve(SettingsSchema.defaults, moved.profiles, { "power.onBattery": false }).values[detailKey],
+            "app", "so the new default applies");
+        assertEqual(moved.profiles[0].set["polling.x"], 1, "Full keeps the rest");
+        assertEqual(moved.profiles[1].set[detailKey], "full", "another profile setting it keeps it: the user's");
+        assertEqual(JSON.stringify(moved.changed), JSON.stringify([detailKey]), "changed lists it");
+        assert(moved.migratedKeys.includes("default:" + detailKey), "and it is marked done");
+        assertEqual(seededBefore[0].set[detailKey], "full", "the input is not modified");
+        const chosen = ProfileRules.migrateDefaults(SettingsSchema.entries, [],
+            [{ name: "Full", when: {}, set: { [detailKey]: "title" } }]);
+        assertEqual(chosen.profiles[0].set[detailKey], "title", "a value the user chose stays");
+        assertEqual(chosen.changed.length, 0, "and nothing is reported");
+        const notSet = ProfileRules.migrateDefaults(SettingsSchema.entries, [], [{ name: "Full", when: {}, set: {} }]);
+        assertEqual(ProfileRules.resolve(SettingsSchema.defaults, notSet.profiles, {}).values[detailKey], "app",
+            "a config that never held the setting gets the new default");
+        const later = ProfileRules.migrateDefaults(SettingsSchema.entries, moved.migratedKeys,
+            [{ name: "Full", when: {}, set: { [detailKey]: "full" } }]);
+        assertEqual(later.profiles[0].set[detailKey], "full", "once done, \"full\" set again later is the user's and stays");
+        assertEqual(ProfileRules.seedProfiles(SettingsSchema.defaults)[0].set[detailKey], "app", "a new config is seeded with the new default");
+
         // --- the bar ---
         assertEqual(JSON.stringify(ProfileRules.sectionFromLegacy(["stt", "music", "sound"], '["", "x"]')),
             JSON.stringify([{ type: "stt", preset: "" }, { type: "music", preset: "x" }, { type: "sound", preset: "" }]),

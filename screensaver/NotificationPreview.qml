@@ -6,11 +6,19 @@ import qs.singletons
 //   "full"  — app, title and text
 //   "title" — app and title
 //   "app"   — the app alone, when even the title (a sender, say) gives too much away
+// Anything else counts as "app": a value this does not know shows the least.
+//
+// Every line is plain text: a notification's title or body shown as Text's default
+// (AutoText) would be taken for rich text when it looks like markup — links drawn, and an
+// <img> fetched, from a locked screen.
 Rectangle {
     id: root
 
     required property var modelData
-    property string detail: "full"
+    property string detail: "app"
+
+    readonly property bool _showTitle: detail === "full" || detail === "title"
+    readonly property bool _showBody: detail === "full"
 
     width: 360
     radius: Theme.notificationCard.radius
@@ -26,19 +34,23 @@ Rectangle {
         spacing: 2
 
         Text {
+            objectName: "app"
             visible: text !== ""
-            text: root.modelData.appName ?? ""
-            color: root.detail === "app" ? Theme.textPrimary : Theme.textDisabled
+            text: root.modelData?.appName ?? ""
+            textFormat: Text.PlainText
+            color: root._showTitle ? Theme.textDisabled : Theme.textPrimary
             font.family: Theme.fontFamily
-            font.pixelSize: root.detail === "app" ? Theme.fontSizeBodyLarge : Theme.fontSizeSmall
-            font.bold: root.detail === "app"
+            font.pixelSize: root._showTitle ? Theme.fontSizeSmall : Theme.fontSizeBodyLarge
+            font.bold: !root._showTitle
             width: parent.width
             elide: Text.ElideRight
         }
 
         Text {
-            visible: root.detail !== "app" && text !== ""
-            text: root.modelData.summary ?? ""
+            objectName: "title"
+            visible: root._showTitle && text !== ""
+            text: root._showTitle ? (root.modelData?.summary ?? "") : ""
+            textFormat: Text.PlainText
             color: Theme.textPrimary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
@@ -48,9 +60,10 @@ Rectangle {
         }
 
         Text {
-            visible: root.detail === "full" && text !== ""
-            // Plain: shown as Text guesses rich text, which would draw a body's HTML as is
-            text: NotificationMarkup.plainText(root.modelData.body)
+            objectName: "body"
+            visible: root._showBody && text !== ""
+            // Not even laid out when hidden: what the setting withholds is not in the scene
+            text: root._showBody ? NotificationMarkup.plainText(root.modelData?.body ?? "") : ""
             textFormat: Text.PlainText
             color: Theme.textSecondary
             font.family: Theme.fontFamily

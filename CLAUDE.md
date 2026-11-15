@@ -35,15 +35,23 @@ There is no build step:
 
 ```
 quickshell                 # reads shell.qml from the current directory
-quickshell -p tests.qml    # runs the test suites, prints PASS/FAIL, exits
+tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
+tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
 ```
+
+Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
+two suites open a small window, and the runner puts them in a private headless compositor
+(nothing shows on your screen). It finds Quickshell and the compositor as the lock test bed
+does (`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). When another run of
+either may be going on (two people or agents in one checkout), wrap them in
+`flock /tmp/h2s-locktest.flock …`.
 
 A running shell reloads itself when a file changes, but that reload is not enough after
 editing a singleton: it has been seen to rebuild the panels while keeping the old
 singleton, so new functions show up as `TypeError: ... is not a function`. Restart the
 shell fully after changing anything under `singletons/`.
 
-Beyond the one test suite, verification is manual: check that the bar renders, the clock
+Beyond the test suites, verification is manual: check that the bar renders, the clock
 ticks, cells respond to clicks, and popups toggle.
 
 ## Conventions
@@ -89,7 +97,7 @@ ticks, cells respond to clicks, and popups toggle.
 This repo gets worked on from two places, and they differ in one way that matters:
 
 - **On the host** (Arch, Hyprland) `quickshell` is installed, so changes can be run and
-  tested directly — `quickshell` from the repo root, `quickshell -p tests.qml` for the
+  tested directly — `quickshell` from the repo root, `tests/run-unit.sh` for the
   suites.
 - **In the dev container** (`.devcontainer/`) there is no Qt and no `quickshell`, so
   nothing can be run or linted. Changes made there have to be verified on the host, and

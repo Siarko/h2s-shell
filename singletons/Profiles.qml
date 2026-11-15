@@ -40,16 +40,20 @@ Singleton {
                                                   Config.migratedKeys, profiles, globals)
         for (const failure of result.failed)
             _log.error("Cannot migrate", failure)
-        if (result.migratedKeys.length === Config.migratedKeys.length)
+        // Then the defaults that changed since Full was seeded (ProfileRules.migrateDefaults)
+        const defaults = ProfileRules.migrateDefaults(SettingsSchema.entries, result.migratedKeys, result.profiles)
+        if (defaults.migratedKeys.length === Config.migratedKeys.length)
             return
-        if (result.copied.length > 0) {
+        if (result.copied.length > 0 || defaults.changed.length > 0)
             backUpConfig()
-            // Always shown, not only in debug: a one-time change to the user's config
+        // Always shown, not only in debug: a one-time change to the user's config
+        if (result.copied.length > 0)
             console.log("[Profiles] Moved into profiles from the old config:", result.copied.join(", "))
-        }
-        Config.profiles = JSON.stringify(result.profiles)
+        if (defaults.changed.length > 0)
+            console.log("[Profiles] Now at their new default (Full held the old one):", defaults.changed.join(", "))
+        Config.profiles = JSON.stringify(defaults.profiles)
         Config.globals = JSON.stringify(result.globals)
-        Config.migratedKeys = result.migratedKeys
+        Config.migratedKeys = defaults.migratedKeys
     }
 
     // The config file as JSON, with the sections from before profiles that Config no

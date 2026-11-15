@@ -15,8 +15,8 @@ LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about three and a half minutes (twenty-four tests,
-each starting its own stack in 2–3 s).
+130 when interrupted. A full run takes about seven minutes (thirty-eight tests, each
+starting its own stack in 2–3 s; the idle tests wait out real idle timeouts).
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running test and its stack, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
@@ -33,7 +33,10 @@ labwc        headless (wlroots' headless backend): only gives the nested composi
 │            and sway does not work as the parent
 └─ Hyprland  nested in labwc (Aquamarine's Wayland backend), Lua config written per run
    ├─ input/ltinput.py   one virtual keyboard + one virtual pointer, alive for the whole
-   │                     test, fed commands through a FIFO
+   │                     test, fed commands through a FIFO; the keymap is the test's
+   ├─ input/ltwindow.py  (stack_start --window) a solid magenta window: the desktop the
+   │                     lock must hide
+   ├─ dbus-daemon        (stack_start --session-bus) a private session bus, no activation
    └─ the shell          `H2S_SHELL_DIR=<the run's copy> h2s-shell`, a plain start
 ```
 
@@ -108,7 +111,12 @@ here may reach it.
   group and, when their PAM helper dies, by their own orphan check (`wait-finger.sh`).
 - **No session variables leak in**: `WAYLAND_DISPLAY`, `WAYLAND_SOCKET`, `DISPLAY`,
   Hyprland's and sway's sockets, `PIPEWIRE_REMOTE`, `PIPEWIRE_RUNTIME_DIR`,
-  `PULSE_SERVER`, the session id and the activation tokens are unset.
+  `PULSE_SERVER`, the session id and the activation tokens are unset; so are the input
+  method variables (`QT_IM_MODULE`, `XMODIFIERS`, …) and `LC_ALL`/`LC_CTYPE`, and `LANG` is
+  `en_US.UTF-8` — the locale picks the Compose table the dead-key and Compose tests rely on.
+- **A private session bus only when asked** (`stack_start --session-bus`, the notification
+  test): a `dbus-daemon` of the test's own, its socket in the private runtime dir, with no
+  service directories, so nothing is activated; the real session bus is never named.
 - **`HYPRLAND_NO_SD_*`**: the nested Hyprland does not push its environment into the
   user's systemd or notify it.
 
@@ -121,6 +129,17 @@ test stacks (`password=password-question` names another stack for a method);
 `stack_start --methods-script <file>` takes a test's own (a failing one, one naming a
 stack that is not there). Unless a test's own script is given, the list must include
 `password` (`stack_start` refuses it otherwise).
+
+**The real methods script** runs with `stack_start --fprintd <mode>`: the shell's
+`H2S_LOCK_AUTH_METHODS` names a wrapper that unsets the seam and runs the run's copy of
+`scripts/lock-auth-methods.sh`. It finds the test's "system-wide" configs
+(`H2S_LOCK_SYSTEM_PAM_DIR`: the password one as below, the test fingerprint stack as
+`h2s-shell-fingerprint`) and asks fprintd through the `gdbus` stand-in (`H2S_LOCK_TOOLS`;
+`--fprintd` implies `--logind`), which hands fprintd's calls to `standins/gdbus-fprintd`: it
+answers as fprintd would in the mode in `fprintd/mode` — `enrolled`, `none`, `second`,
+`nodevice`, `absent`, `hang`, `denied`, `nobus`, `malformed-devices`, `malformed-fingers`;
+`fprintd_mode <mode>` changes it during a test — and notes each call in `fprintd/log`.
+`methods-script.sh` runs the script alone against the same stand-in (no stack).
 
 **The password fallback** (used when the methods script fails or names no password, and for
 the next attempt after a password config that cannot be used) is chosen by the shell from
@@ -186,7 +205,7 @@ appends to `logind/signals` (`logind_signals lock unlock …` appends several in
 so that the shell handles them in one pass — an Unlock before the compositor can have
 confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
 `release <pid>` in `logind/log` (`inhibitor_held`, `inhibitor_record`). No bus is reached
-by either.
+by either (nor by the fprintd stand-in, above).
 
 ## Reading the shell's state
 
@@ -201,6 +220,7 @@ by either.
   one table in `lib.sh` (`state_field`) knows where each lives in the JSON; a name not in
   it is read as a dotted path (`phase.lastEnd`);
 - `compositor_locked` — `hyprctl -j locked` in the nested instance, the ground truth;
+- `pam/check-detail.log` (`password_details`) — what bytes the password stack received;
 - `screenshot <name>` and `screenshot_ppm <name>` (grim), `reddish_pixels <name>` (red in
   the prompt's area: it depends on the built-in theme's error colour being a clear red)
   and `prompt_region_changes <a> <b>` (pixels that differ in the prompt's area between
@@ -226,12 +246,30 @@ press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 ```
 
+`stack_start` takes, beside the methods: `--keymap us|us-intl|us-compose` (the layout the
+virtual keyboard sends: plain US, US international with dead keys and AltGr, US with a
+Compose key on the right Alt — tools.nix compiles them; the keyboard works out which key and
+modifiers type each character from the keymap itself, with `xkbcli how-to-type`, and a
+character no key gives directly is fatal), `--settings '<json>'` (the shell's settings, as
+the shell stores them: `write_settings` writes a config.json whose one profile sets these
+keys — short idle timeouts, a notification detail), `--session-bus` (with `notify <app>
+<summary> <body>` and `notification_server_up`), `--window` (the magenta stand-in). A test
+may set `LOCKTEST_PASSWORD` before `stack_start` (a password with é in it; no `| & \ $ \` "
+'`). `password_details` lists, per check, the length in bytes and the SHA-256 of what the
+password stack received (`pam/check-detail.log`, never the text), and `password_detail_of
+<text>` gives the line a text would give; `screenshot_output_ppm <output> <name>` takes one
+output.
+
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
 print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
 the test fails if any check failed. `check_within` re-runs its command, but its arguments
 were expanded once: to wait on something that changes, pass a function (`no_finger_waiters`,
 `lines_more_than <count> <regex> <file>`), never `test "$(…)"`. Input: `type_text`, `press_key
-Return|BackSpace|Escape|Tab|space`, `move_pointer x y`, `wake_prompt`. Input goes through
+<keysym>` (any keysym of the stack's keymap: `Return`, `BackSpace`, `Escape`, `Tab`,
+`dead_acute`, `Multi_key`, `KP_1`, `KP_Enter`, `Caps_Lock`, `Num_Lock`, …), `keys_text`
+(the keys for a text with Caps Lock off, whatever the locks are), `hold_key <keysym>
+<seconds>` (auto-repeat), `move_pointer x y`, `wake_prompt`. `type_text` refuses while Caps
+Lock is on (the text typed would not be the one asked for). Input goes through
 a FIFO to `input/ltinput.py`; a client that has died, or does not read within 5 s, aborts
 the test with its last words from `input.log`, and so does a character it cannot type
 (it refuses the whole string rather than type a different one). Its acknowledgement
@@ -258,8 +296,10 @@ not keep it.
 ## Tools
 
 `tools.nix` builds, from one pinned nixpkgs, labwc, Hyprland and hyprctl, grim, setpriv,
-a Python with pywayland, the Python bindings of the virtual keyboard/pointer protocols
-and a US keymap. The pin is the nixos-unstable revision the owner's system takes Hyprland
+a Python with pywayland, the Python bindings of the virtual keyboard/pointer and xdg-shell
+protocols, xkbcli, dbus-daemon, gdbus, and the keymaps (`share/keymaps/`: us, us-intl,
+us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh` and for
+`tests/run-unit.sh`. The pin is the nixos-unstable revision the owner's system takes Hyprland
 from, so the test bed runs the same Hyprland as the real session (the repo's flake pins
 nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves —
 `run.sh` prints a NOTE when the versions differ (both binaries asked `--version` only).

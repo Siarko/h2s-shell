@@ -11,9 +11,14 @@ import qs.singletons
 // as a `key` event, and comes back as a forwardKey effect to the surface showing the prompt
 // — this one or another — which edits its field (LockIoRules.editField). So no key is lost
 // to a focus change: not the one that wakes the prompt, not Enter or Backspace right after
-// it, not one typed while the prompt fades in, not one typed on another screen. (What a key
-// event does not carry is not typed: dead keys, compose sequences and input methods do not
-// work in the field yet.)
+// it, not one typed while the prompt fades in, not one typed on another screen.
+//
+// The catcher is a hidden text input, so that text which no single key event carries still
+// arrives: a dead key and the letter after it (´ then e: "é"), a Compose sequence, an input
+// method's commit. Qt composes those only for an item that accepts input methods — a plain
+// Item gets the dead key as a key without text, and the "é" was lost. What it commits is
+// sent on as a `key` event with that text, and the catcher's own text is emptied at once,
+// so what is typed is held in one place only: the prompt's field.
 //
 // Input is reported with this object itself (Lockscreen acts only for the LockSurface it
 // registered), never by an id another component could guess.
@@ -26,6 +31,8 @@ WlSessionLockSurface {
     // Quickshell sets it right after creating the instance)
     property var _surfaceId: null
     property bool _gone: false
+    // Between the notifications or the prompt and the screen's edge
+    readonly property int _margin: 16
 
     readonly property var _view: Lockscreen.view
     readonly property bool _awake: _surfaceId !== null && _view.promptSurface === _surfaceId
@@ -52,20 +59,36 @@ WlSessionLockSurface {
         _prompt.applyKey(key, text);
     }
 
-    // Pointer events in the first moments are the surface appearing under a resting
-    // pointer, not somebody moving it: they would wake the prompt on every lock. Keys are
-    // never filtered.
-    property bool _pointerReady: false
-    Timer { interval: 300; running: true; onTriggered: root._pointerReady = true }
+    // Motion counts only where the pointer really moved (LockIoRules.pointerMoved): a
+    // surface appearing under a resting pointer gets an enter and hover events at one
+    // place, and so does every frame of the fade (Qt Quick re-sends the hover when what
+    // is under the pointer changes) — those would wake the prompt on every lock. A press is
+    // always somebody.
+    property var _lastPointer: null
 
-    function _pointerActivity() {
-        if (_pointerReady && _surfaceId !== null)
+    function _pointerAt(x, y) {
+        const moved = LockIoRules.pointerMoved(_lastPointer, x, y);
+        _lastPointer = { x: x, y: y };
+        if (moved && _surfaceId !== null)
             Lockscreen.surfaceActivity(root);
     }
 
-    function _pointerPress() {
-        if (_pointerReady && _surfaceId !== null)
+    function _pointerPress(x, y) {
+        _lastPointer = { x: x, y: y };
+        if (_surfaceId !== null)
             Lockscreen.surfacePress(root);
+    }
+
+    function _key(key, text, autoRepeat, modifiers, qtKey) {
+        if (_surfaceId === null)
+            return;
+        // What Caps Lock is, from what the key typed (Qt reports no Caps Lock state):
+        // shown on the prompt, the usual reason for "my password is wrong"
+        const capsLock = LockIoRules.capsLockAfterKey(Lockscreen.capsLock, qtKey, text,
+            (modifiers & Qt.ShiftModifier) !== 0, autoRepeat);
+        if (capsLock !== Lockscreen.capsLock)
+            Lockscreen.surfaceCapsLock(root, capsLock);
+        Lockscreen.surfaceKey(root, key, text, autoRepeat);
     }
 
     // The lock fades in over the screen rather than cutting to it
@@ -82,35 +105,61 @@ WlSessionLockSurface {
         z: 100
         hoverEnabled: true
         propagateComposedEvents: true
+        // Hidden while the prompt sleeps (on every screen), shown while it is awake
         cursorShape: root._view.promptSurface !== null ? Qt.ArrowCursor : Qt.BlankCursor
-        onPositionChanged: mouse => { root._pointerActivity(); mouse.accepted = false }
+        onPositionChanged: mouse => { root._pointerAt(mouse.x, mouse.y); mouse.accepted = false }
         // A press anywhere brings the prompt to this surface (the rules decide); it goes
         // on to what is under it, the Unlock button
-        onPressed: mouse => { root._pointerPress(); mouse.accepted = false }
+        onPressed: mouse => { root._pointerPress(mouse.x, mouse.y); mouse.accepted = false }
         onReleased: mouse => { mouse.accepted = false }
         onClicked: mouse => { mouse.accepted = false }
     }
 
-    // The key catcher: the one place keys arrive (see the header). Return and the keypad's
-    // Enter both come as "Enter"; a character travels in `text`; a held key's repeats say
-    // so (the rules ignore a repeated Escape).
-    Item {
+    // The key catcher: the one place keys arrive (see the header). A key is sent as it
+    // comes — Return and the keypad's Enter both as "Enter", a character in `text`, a held
+    // key's repeats saying so (the rules ignore a repeated Escape) — and taken, so the
+    // catcher itself never edits. Text composed by Qt (dead keys, Compose, an input method)
+    // comes as a commit instead of a key: sent on with that text, and emptied at once.
+    // Invisible, and marked as a password to the input method: nothing predicted, learned
+    // or shown; a preedit (an input method's text before its commit) never shows.
+    TextInput {
         id: _keys
+        width: 1
+        height: 1
+        opacity: 0
         focus: true
+        echoMode: TextInput.Password
+        inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+        activeFocusOnPress: false
+        activeFocusOnTab: false
+        selectByMouse: false
+        cursorVisible: false
+        Accessible.ignored: true
+
         Keys.onPressed: event => {
             event.accepted = true;
-            if (root._surfaceId !== null)
-                Lockscreen.surfaceKey(root, LockIoRules.keyName(event.key), event.text, event.isAutoRepeat);
+            root._key(LockIoRules.keyName(event.key), event.text, event.isAutoRepeat, event.modifiers, event.key);
+        }
+
+        onTextChanged: {
+            if (text === "")
+                return;
+            const committed = text;
+            text = "";
+            root._key("", committed, false, 0, 0);
         }
     }
 
     // Waking swaps the notifications for the prompt: they fade across, the prompt growing
-    // slightly into place
+    // slightly into place. Never wider than the screen leaves room for (a small output, a
+    // large scale)
     LockPrompt {
         id: _prompt
         anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.width - 2 * root._margin)
         view: root._view
         awake: root._awake
+        capsLock: Lockscreen.capsLock === true
         visible: opacity > 0
         opacity: root._awake ? 1 : 0
         scale: root._awake ? 1 : 0.96
@@ -122,7 +171,9 @@ WlSessionLockSurface {
         }
     }
 
-    ListView {
+    // The notifications, at the detail the lock screen's setting allows (app only by
+    // default: their text is not for whoever stands at the screen)
+    NotificationList {
         readonly property bool shown: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
         visible: opacity > 0
         opacity: shown ? 1 : 0
@@ -130,18 +181,11 @@ WlSessionLockSurface {
         anchors {
             top: parent.top
             right: parent.right
-            topMargin: 16
-            rightMargin: 16
+            topMargin: root._margin
+            rightMargin: root._margin
         }
-        width: 360
-        height: Math.min(contentHeight, root.height - 32)
-        clip: true
-        spacing: 8
-        model: Notifications.notifications
-        interactive: false
-
-        delegate: NotificationPreview {
-            detail: Profiles.value("lockscreen.lockNotificationDetail") ?? "full"
-        }
+        width: Math.min(360, root.width - 2 * root._margin)
+        height: Math.min(contentHeight, root.height - 2 * root._margin)
+        detail: Profiles.value("lockscreen.lockNotificationDetail") ?? "app"
     }
 }

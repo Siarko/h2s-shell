@@ -2,7 +2,8 @@
 # through scripts/launch.sh with every program the shell calls on PATH. The running shell
 # inherits that PATH, so its own processes (nmcli, python3, cava…) find them too.
 #
-# systemctl and hyprctl are left to the system: each has to match the daemon it talks to.
+# systemctl, systemd-inhibit and hyprctl are left to the system: each has to match the
+# daemon it talks to. So are PAM's modules (the lock screen's checks).
 #
 # H2S_SHELL_DIR=<a git checkout> runs that checkout instead, with the same programs: for
 # development, where editing a file reloads the shell (the store copy never changes).
@@ -36,12 +37,12 @@ let
     python3 # scripts/google_auth.py, standard library only
     libnotify # notify-send
     jq # launch.sh reads the icon theme setting
-    glib # gsettings, the system icon theme
+    glib # gsettings (the system icon theme); gdbus (the lock: logind, fprintd)
     cava # the audio visualiser
     git # the version shown in the settings
     xdg-utils # the browser for the Google sign-in
     vips # vipsthumbnail: wallpapers resized to the screen, kept in ~/.cache
-    coreutils
+    coreutils # timeout, among the rest (the lock's methods script)
     gnused
     gnugrep
     gawk

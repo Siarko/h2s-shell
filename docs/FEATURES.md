@@ -184,7 +184,9 @@ Two independent stages, both driven by Wayland idle notifications:
   run when it activates and deactivates (not yet wired up — see CLEANUP.md #12).
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached either after the screensaver or on its own idle timer, and shows a password
-  prompt and optionally the notification list. It also locks on request: logind's Lock
+  prompt and optionally the notification list — the app's name only by default, or the
+  title, or everything (Settings → Lockscreen; it applies to every lock), always as plain
+  text with nothing to click. It also locks on request: logind's Lock
   signal for the shell's session (`loginctl lock-session`, or `HandlePowerKey=lock` in
   logind.conf) and `h2s-shell ipc call lockscreen lock`; a request while locked changes
   nothing. Every lock starts afresh: nothing of one lock carries into the next.
@@ -192,8 +194,10 @@ Two independent stages, both driven by Wayland idle notifications:
   and sleeps after 10 s without activity (a question left unanswered is cancelled then, a
   password check under way is not). A click on another screen brings it there; keys typed
   on another screen go to it where it is. No key is lost to a focus change: the key that
-  wakes it is typed into it, and so are Enter and Backspace right after (dead keys, compose
-  sequences and input methods do not work in it yet). The field empties only when
+  wakes it is typed into it, and so are Enter and Backspace right after. Dead keys, Compose
+  sequences, AltGr, the keypad and text an input method commits type into it (the input
+  method is told it is a password field: nothing predicted or learned). It says "Caps Lock
+  is on" once a letter typed shows it. The field empties only when
   what was sent is taken — a second Enter during a check is refused and keeps the text. It
   shows "Verifying…" while a password is checked, PAM's reason when one is refused, and
   what each passive method is doing. When the screen showing it goes away the prompt moves
@@ -205,11 +209,15 @@ Two independent stages, both driven by Wayland idle notifications:
   one-time code) the question replaces "Password" and the next thing typed answers it. An
   empty password is never sent. A fingerprint or key config that asks for typed input is
   not used. `scripts/lock-auth-methods.sh` says which are there: the password always, the
-  fingerprint when fprintd has a finger enrolled, the key when the system has a PAM config
-  for it or the user has `~/.config/Yubico/u2f_keys`. Each uses
+  fingerprint when fprintd (asked over D-Bus, within 4 s) has a finger enrolled for the
+  user, the key when the user has one registered where the key's PAM config looks
+  (pam_u2f's `authfile`, else `~/.config/Yubico/u2f_keys`). An answer of "not there" is
+  not asked again at every wake of the prompt; a question that could not be answered
+  (fprintd stuck or failing) is, at most every 30 s. Each uses
   `/etc/pam.d/h2s-shell-<password|fingerprint|u2f>` if the system has one (the NixOS
-  module writes them, and only those work there; without them the password goes through
-  `login`, which waits for the reader first), else the shell's own `pam/<method>`. When
+  module writes them; there the fingerprint and key work only with those, and without
+  the password one the password goes through `login`, which waits for the reader first),
+  else the shell's own `pam/<method>`. When
   the script fails, prints nothing or does not answer within 5 s, the password uses the
   fallback, chosen the same way (`/etc/pam.d/h2s-shell-password`, else `login` on NixOS,
   else the shipped `pam/password`); when the password's config cannot be used (PAM refuses
@@ -380,7 +388,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `hyprctl` / Hyprland IPC | workspaces, logout — expects a Lua config (`hyprland.lua`, Hyprland 0.5x): special workspaces and logout dispatch `hl.dsp.*` Lua expressions |
 | `systemctl` | restart, shutdown |
 | `gdbus`, `systemd-inhibit` (logind) | the lock screen: lock requests, sleep and wake, holding the sleep until locked |
-| `fprintd-list`, PAM (`pam_unix`, `pam_fprintd`, `pam_u2f`) | unlocking: which methods there are, and the checks themselves |
+| `gdbus` (fprintd), `timeout`; PAM (`pam_unix`, `pam_fprintd`, `pam_u2f`) | unlocking: which methods there are (`scripts/lock-auth-methods.sh`), and the checks themselves (fprintd and pam_u2f optional) |
 | `notify-send` | the shell's own outbound notifications |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |

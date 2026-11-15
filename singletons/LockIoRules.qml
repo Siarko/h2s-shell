@@ -128,6 +128,33 @@ Singleton {
         return _keyNames[qtKey] ?? "";
     }
 
+    // What a key pressed at a lock surface tells about Caps Lock, which Qt does not report:
+    // a letter's case against Shift — upper case without Shift, or lower case with it, is
+    // Caps Lock on (xkb's alphabetic keys: Shift and Lock cancel out) — and a press of the
+    // Caps Lock key itself flips what was known. Anything else (digits, named keys, an
+    // auto-repeat of Caps Lock) leaves `previous` as it is. `previous`: true, false or null
+    // (unknown) → the same.
+    function capsLockAfterKey(previous, qtKey, text, shift, autoRepeat) {
+        const known = previous === true || previous === false ? previous : null;
+        if (qtKey === Qt.Key_CapsLock)
+            return autoRepeat === true || known === null ? known : !known;
+        if (typeof text !== "string" || text.length !== 1)
+            return known;
+        const upper = text.toUpperCase();
+        const lower = text.toLowerCase();
+        if (upper === lower)
+            return known;
+        return (text === upper) !== (shift === true);
+    }
+
+    // Whether a pointer position reported on a lock surface is a real move: not the first
+    // one seen (the pointer entering, or the surface appearing under it), and not the same
+    // place again (Qt Quick re-sends the hover at the last position when the scene under it
+    // changes, every frame of a fade). `last`: { x, y } or null.
+    function pointerMoved(last, x, y) {
+        return last !== null && typeof last === "object" && (last.x !== x || last.y !== y);
+    }
+
     // ---- The prompt's field ----
 
     // What a forwardKey effect does to the field (plan, section 7): `text` (printable,

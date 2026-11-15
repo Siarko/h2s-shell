@@ -82,7 +82,7 @@ PanelWindow {
         }
 
         // Notification list — top right, below bar
-        ListView {
+        NotificationList {
             visible: Profiles.value("lockscreen.notificationsOnScreensaver") ?? true
             anchors {
                 top: parent.top
@@ -92,14 +92,7 @@ PanelWindow {
             }
             width: 360
             height: Math.min(contentHeight, root.height)
-            clip: true
-            spacing: 8
-            model: Notifications.notifications
-            interactive: false
-
-            delegate: NotificationPreview {
-                detail: Profiles.value("lockscreen.screensaverNotificationDetail") ?? "full"
-            }
+            detail: Profiles.value("lockscreen.screensaverNotificationDetail") ?? "full"
         }
     }
 }

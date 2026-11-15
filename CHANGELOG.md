@@ -27,7 +27,25 @@ section to the new version and date.
   why, each PAM conversation started, answered, aborted or finished, the methods found,
   failures to run a helper — never what was typed.
 
+- Lock screen: says "Caps Lock is on" under the password field — told from the letters
+  typed (the shell has no other way to know it), so it shows from the first letter typed
+  with Caps Lock on, and goes when one is typed with it off.
+
 ### Fixed
+- Lock screen: dead keys and Compose sequences type into the password field (and so does
+  what an input method commits). A password with "é" typed as ´ then e was checked as
+  "e" — the dead key was dropped — so it was refused, and the plain letter accepted in its
+  place. AltGr characters, Caps Lock, the keypad and held keys work as before.
+- Screensaver and idle lock: they could fail to come at all. Quickshell's idle monitor,
+  given the configured timeout once the settings were read (or any later change), could
+  stop reporting idle for good — seen every time in the test bed. Each is now made anew
+  whenever its settings change.
+- Lock screen: a notification's title or text that looks like markup is shown as written,
+  never as rich text (a link drawn, an image fetched while the screen is locked).
+- Lock screen: the prompt no longer wakes by itself when the lock appears under a resting
+  pointer on a slow first frame; a click in the first moments of a lock counts; the prompt
+  fits a small or highly scaled screen, a long password scrolls inside its field instead of
+  running over its edge, and a question too long for the field is shown in full above it.
 - Lock screen: it worked once per shell. After the first unlock the shell still believed
   the screen locked (Quickshell 0.3.2 never reports a session lock's unlock): a typed
   password was dropped without a word, the fingerprint reader was never asked again,
@@ -59,7 +77,20 @@ section to the new version and date.
   error) no longer makes every password fail for the rest of the lock: the next attempt
   uses the fallback, which is now chosen like the methods script's password config
   (`/etc/pam.d/h2s-shell-password` when readable, else `login` on NixOS, else the shipped
-  one) instead of the shipped config, which does not work on NixOS.
+  one) instead of always the shipped config.
+- Lock screen: which ways of unlocking the machine has is asked of fprintd over D-Bus, with
+  a time limit (4 s), instead of read from `fprintd-list`'s text. A machine without a
+  reader or an enrolled finger is no longer asked again at every wake of the prompt;
+  fprintd stuck (as it can be around a suspend) no longer leaves a process behind, and is
+  asked again later. A security key is offered only when the user has one registered where
+  the key's PAM config looks (its `authfile=`, or `~/.config/Yubico/u2f_keys`).
+- Lock screen: the shipped password config no longer unlocks an account that has no
+  password with whatever is typed (`nullok` removed), and the configs no longer carry
+  `account` lines that never ran. On NixOS the module's password config leaves out second
+  factors that would make the typed password wait or ask again (smartcard, face, one-time
+  codes…; each can be switched back on), and its fingerprint and security key configs hold
+  only their own module, so a global PAM switch can no longer put a password prompt in
+  them; the key's honours `security.pam.u2f.settings` but never `interactive`.
 - Lock screen: a security key config that never works stops being retried after a few
   rounds per lock.
 - Lock screen: the field empties only when what was sent is taken; a second Enter while a
@@ -393,6 +424,13 @@ section to the new version and date.
   number, a dot for each single-day event, in the event's colour (two rows of four at
   most), instead of one accent dot for the day.
 
+### Changed
+- Lock screen: notifications show the app only by default ("Notifications on the lock
+  screen show", Settings → Lockscreen): a message's text, a one-time code in it, is not for
+  whoever stands at the locked screen. A config still holding the old default ("In full",
+  which every config seeded before had) moves to the new one once; another choice stays.
+  The two notification settings are no longer greyed out when the idle lock is off: they
+  apply to every lock.
 ### Changed
 - Popups slide out from under the bar as a whole, and back under it, instead of being
   uncovered by a growing cut; the curves joining them to the bar stay until only the

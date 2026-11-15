@@ -3,7 +3,7 @@ import QtQuick
 import qs.singletons
 import qs.tests
 
-// Run with: quickshell -p tests.qml
+// Run with: tests/run-unit.sh (in a private headless compositor: two suites open a window)
 // Add new test suite components here as suites are created.
 QtObject {
     // First, before any suite runs: the suites use the real Config singleton, whose
@@ -39,9 +39,10 @@ QtObject {
     property var _lockRules: LockRulesTest {}
     property var _lockIoRules: LockIoRulesTest {}
     property var _pointerInput: PointerInputTest {}
+    property var _lockView: LockViewTest {}
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput]
+    readonly property var _asyncSuites: [_pointerInput, _lockView]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed

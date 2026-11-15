@@ -24,7 +24,9 @@ The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 - Hyprland with a Lua config (`hyprland.lua`, 0.5x), Quickshell 0.3.2, Qt 6
 - NetworkManager, BlueZ, UPower, power-profiles-daemon
-- `notify-send`, `python3`, `jq`, `gsettings`, `cava`, `git`, `xdg-open`, `vipsthumbnail` (libvips: wallpapers resized to the screen)
+- `notify-send`, `python3`, `jq`, `gsettings` and `gdbus` (glib), `cava`, `git`, `xdg-open`, `vipsthumbnail` (libvips: wallpapers resized to the screen), `systemd-inhibit`
+- For the lock screen's fingerprint and security key, optionally: fprintd, pam_u2f (see
+  [Lock screen](#lock-screen-password-fingerprint-security-key))
 - A JetBrainsMono Nerd Font
 
 The installers below bring all of these.
@@ -62,8 +64,9 @@ Add the flake to your system flake and enable the module:
 ```
 
 The module installs the `h2s-shell` command (the shell with every program it calls),
-the font, and turns on UPower, power-profiles-daemon, Bluetooth and NetworkManager
-unless your configuration says otherwise. Update with `nix flake update h2s-shell`.
+the font, the lock screen's PAM configs (see [Lock screen](#lock-screen-password-fingerprint-security-key)),
+and turns on UPower, power-profiles-daemon, Bluetooth and NetworkManager unless your
+configuration says otherwise. Update with `nix flake update h2s-shell`.
 
 Without the module: `nix run github:Siarko/h2s-shell`.
 
@@ -96,6 +99,37 @@ hl.bind("switch:off:Tablet Mode Switch", hl.dsp.exec_cmd(shell .. " ipc call tab
 The switch's name differs between machines (`gpio-keys` on the Framework 12): see the
 "Switches" in `hyprctl devices`. Hyprland reports only changes, so the shell starts as a
 laptop until the next one; `ipc call tablet set true` by hand corrects it.
+
+### Lock screen: password, fingerprint, security key
+
+The lock screen checks each way of unlocking in a PAM conversation of its own, side by
+side, so that a fingerprint reader waiting for a finger never holds up a typed password.
+`scripts/lock-auth-methods.sh` says which ways exist on the machine and which PAM config
+each one uses: `/etc/pam.d/h2s-shell-<method>` when the system has it, else the one
+shipped in `pam/`.
+
+- **NixOS**: the module writes the configs. `h2s-shell-password` is the system's usual
+  password stack (pam_unix, and systemd-homed, SSSD, LDAP or Kerberos when the system uses
+  them) without second factors — a module of those that you do want there is switched on
+  with e.g. `security.pam.services.h2s-shell-password.oathAuth = true;`.
+  `h2s-shell-fingerprint` exists when `services.fprintd.enable` is set, `h2s-shell-u2f` when
+  `security.pam.u2f.enable` is (with your `security.pam.u2f.settings`, always `cue`, never
+  `interactive`). Enroll a finger with `fprintd-enroll`; register a key with `pamu2fcfg`
+  (into `~/.config/Yubico/u2f_keys`, or the `authfile` your settings name).
+- **Arch and others**: nothing to set up for the password — the shipped `pam/password`
+  checks the local password (`pam_unix`, accounts in `/etc/shadow`). For the fingerprint,
+  install `fprintd` and enroll a finger (`fprintd-enroll`); for a security key, install
+  `pam-u2f` and register it: `mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`.
+  Each is offered only once that is done. Accounts that are not in `/etc/shadow`
+  (systemd-homed, LDAP/SSSD) need a `/etc/pam.d/h2s-shell-password` of the
+  administrator's, e.g. `auth include system-auth` — but only if `system-auth` does not
+  itself wait for a fingerprint or a key, or the password would wait for them too.
+
+A config of your own in `/etc/pam.d/h2s-shell-<method>`: only `auth` lines matter (the shell
+runs no account, session or password phase). The fingerprint and key configs must never
+reach a module that asks for typed input — no `pam_unix`, no `include` of a stack that has
+it, no `interactive` for pam_u2f, no key that needs a PIN: the lock treats a fingerprint or
+key check that asks for input as broken and stops it.
 
 ## Google Calendar
 

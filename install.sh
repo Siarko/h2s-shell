@@ -76,4 +76,13 @@ cat << EOF
    Or start it now, from a terminal in Hyprland:
 
      $target/scripts/launch.sh -d
+
+3. Optional, for the lock screen (the password works as it is):
+
+     fingerprint:   sudo pacman -S fprintd && fprintd-enroll
+     security key:  sudo pacman -S pam-u2f && mkdir -p ~/.config/Yubico \\
+                      && pamu2fcfg > ~/.config/Yubico/u2f_keys
+
+   Accounts not kept in /etc/shadow (systemd-homed, LDAP) need a
+   /etc/pam.d/h2s-shell-password: see "Lock screen" in the README.
 EOF

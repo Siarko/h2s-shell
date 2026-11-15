@@ -44,6 +44,7 @@ Scope {
             return;
         }
         _detector.event.connect(root._report);
+        _detector.logLine.connect(root._log);
     }
 
     function retire() {

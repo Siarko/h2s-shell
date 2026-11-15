@@ -166,6 +166,28 @@ TestCase {
         assertEqual(rules.detectionEvent(3, { started: true, exitCode: 0, crashed: false, lines: ["a", 5, null] }).lines.length, 1,
                     "only strings are passed on");
 
+        // --- Caps Lock, from what the keys typed ---
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "A", false, false), true, "a capital without Shift: on");
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "a", false, false), false, "a small letter without Shift: off");
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_A, "a", true, false), true, "a small letter with Shift: on (they cancel out)");
+        assertEqual(rules.capsLockAfterKey(true, Qt.Key_A, "A", true, false), false, "a capital with Shift: off");
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_Eacute, "É", false, false), true, "a letter beyond ASCII counts too");
+        assertEqual(rules.capsLockAfterKey(true, Qt.Key_1, "1", false, false), true, "a digit says nothing: as it was");
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_1, "!", true, false), null, "nor a symbol: still unknown");
+        assertEqual(rules.capsLockAfterKey(false, Qt.Key_Return, "\r", false, false), false, "nor a named key");
+        assertEqual(rules.capsLockAfterKey(false, 0, "ab", false, false), false, "nor several characters at once (a commit)");
+        assertEqual(rules.capsLockAfterKey(false, Qt.Key_CapsLock, "", false, false), true, "Caps Lock pressed flips it");
+        assertEqual(rules.capsLockAfterKey(true, Qt.Key_CapsLock, "", false, false), false, "both ways");
+        assertEqual(rules.capsLockAfterKey(true, Qt.Key_CapsLock, "", false, true), true, "not on an auto-repeat");
+        assertEqual(rules.capsLockAfterKey(null, Qt.Key_CapsLock, "", false, false), null, "unknown stays unknown");
+        assertEqual(rules.capsLockAfterKey(undefined, Qt.Key_1, "1", false, false), null, "junk before is unknown");
+
+        // --- pointer motion on a lock surface ---
+        assert(!rules.pointerMoved(null, 10, 10), "the first position (the pointer entering) is no move");
+        assert(!rules.pointerMoved({ x: 10, y: 10 }, 10, 10), "the same position again (a re-sent hover) is no move");
+        assert(rules.pointerMoved({ x: 10, y: 10 }, 11, 10), "another position is");
+        assert(!rules.pointerMoved("junk", 1, 1), "junk before is no move");
+
         // --- the helpers' restart pause ---
         const table = { minimum: 1000, maximum: 60000, healthyRun: 60000 };
         assertEqual(rules.restartDelay(0, 10, table), 1000, "the first quick failure waits the minimum");

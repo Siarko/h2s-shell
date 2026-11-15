@@ -12,12 +12,18 @@ import qs.singletons
 //
 // The script honours H2S_LOCK_AUTH_METHODS (the test bed's seam, tests/lock/README.md): it
 // is inherited from the shell's environment and read by the script, not here.
+//
+// Exit status 0 is an answer, any other a failure (LockIoRules.detectionEvent): the script
+// exits non-zero when a question could not be answered (fprintd timed out…), after printing
+// the lines it could answer, which a failure does not use. What it says on stderr — why it
+// failed — is logged as it comes.
 Process {
     id: root
 
     required property int generation
 
     signal event(var event)
+    signal logLine(string level, string message)
 
     // Set before the object is destroyed for a newer run: nothing more is reported
     property bool cancelled: false
@@ -35,6 +41,16 @@ Process {
         onRead: line => {
             if (line.trim() !== "")
                 root._lines = root._lines.concat([line]);
+        }
+    }
+
+    // The script's own words (it reads no input, so they hold nothing typed), cut short in
+    // case of a flood
+    stderr: SplitParser {
+        splitMarker: "\n"
+        onRead: line => {
+            if (line.trim() !== "" && !root.cancelled)
+                root.logLine("warning", "methods script: " + line.trim().slice(0, 300));
         }
     }
 

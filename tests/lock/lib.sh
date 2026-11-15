@@ -17,6 +17,9 @@
 
 set -uo pipefail
 
+# The password the "password" stack accepts. A test may set another before stack_start (a
+# password with é in it); it is written into the stack's check script, so it may not hold
+# characters the shell or sed would read: | & \ $ ` " ' or a newline (_write_pam_stacks).
 LOCKTEST_PASSWORD="lt-test-pass-42"
 # The answer the "password-question" stack wants to its second question
 LOCKTEST_ANSWER="lt-answer-7"
@@ -64,6 +67,11 @@ unset WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE HYPRLAND_CMD NOTIFY_SO
     SWAYSOCK XDG_SESSION_ID XDG_SESSION_TYPE XDG_CURRENT_DESKTOP LABWC_PID QS_CONFIG_PATH \
     QS_CONFIG_NAME DESKTOP_STARTUP_ID XDG_ACTIVATION_TOKEN WAYLAND_SOCKET PIPEWIRE_REMOTE \
     PIPEWIRE_RUNTIME_DIR PULSE_SERVER
+# The locale picks the Compose table (dead keys, Compose sequences): fixed, so that those
+# tests do not depend on the caller's. No input method module is asked for: Qt picks its
+# own, as in a session without one.
+unset LC_ALL LC_CTYPE LANGUAGE QT_IM_MODULE QT_IM_MODULES GTK_IM_MODULE XMODIFIERS
+export LANG=en_US.UTF-8
 
 stack_stop() {
     local group
@@ -149,17 +157,42 @@ check_within() {
 #                                    FALLBACK can unlock; by default it is a config that
 #                                    denies everything. Either way the fallback is a config of
 #                                    this test's, never the system's (_password_stack_is_safe)
+# --fprintd <mode>                   the shell runs the REAL methods script (the run's copy),
+#                                    which asks a stand-in fprintd in that mode (see
+#                                    _write_fprintd_standin; fprintd_mode changes it) and finds
+#                                    the test fingerprint stack as the "system-wide"
+#                                    h2s-shell-fingerprint; implies --logind (the stand-in
+#                                    gdbus is theirs)
+# --keymap <name>                   the layout the virtual keyboard sends: us (the
+#                                    default), us-intl (dead keys, AltGr), us-compose (a
+#                                    Compose key on the right Alt) — tools.nix compiles them
+# --settings <json>                  the shell starts with these settings ({ "key": value },
+#                                    SettingsSchema keys) in its one profile (write_settings)
+# --session-bus                      a private session bus (dbus-daemon, no service
+#                                    activation) for the shell instead of none, so its
+#                                    notification server registers and notify() can send
+# --window                           a stand-in desktop window (input/ltwindow.py: solid
+#                                    magenta) before the shell starts
 stack_start() {
-    local methods="password" methods_script="" logind=0 system_password=deny
+    local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
+    local window=0 fprintd=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --methods) methods=$2; shift 2 ;;
             --methods-script) methods_script=$2; shift 2 ;;
             --logind) logind=1; shift ;;
             --system-password-stack) system_password=stack; shift ;;
+            --fprintd) fprintd=$2; logind=1; shift 2 ;;
+            --keymap) keymap=$2; shift 2 ;;
+            --settings) settings=$2; shift 2 ;;
+            --session-bus) session_bus=1; shift ;;
+            --window) window=1; shift ;;
             *) abort "stack_start: unknown option $1" ;;
         esac
     done
+    local keymap_file=$TOOLS/share/keymaps/$keymap.xkb
+    [ -f "$keymap_file" ] || abort "stack_start: no keymap $keymap (tools.nix: share/keymaps)"
+    [ -z "$settings" ] || write_settings "$settings"
 
     # Hyprland 0.57 cannot run on the headless backend alone (no allocator); nested in a
     # headless labwc it can. sway does not work as the parent.
@@ -173,7 +206,10 @@ stack_start() {
 hl.monitor({ output = "", mode = "1920x1080@60", position = "auto", scale = "1" })
 hl.config({
     misc = { allow_session_lock_restore = true, disable_hyprland_logo = true,
-             force_default_wallpaper = 0, disable_autoreload = true },
+             force_default_wallpaper = 0, disable_autoreload = true,
+             -- No banners across the top of the screen (screenshots look at it): the warning
+             -- that it was not started by start-hyprland, a scale it adjusted
+             disable_watchdog_warning = true, disable_scale_notification = true },
     xwayland = { enabled = false },
     animations = { enabled = false },
     ecosystem = { no_update_news = true, no_donation_nag = true },
@@ -193,9 +229,21 @@ EOF
     INPUT_FIFO=$WORK/input.fifo
     mkfifo "$INPUT_FIFO"
     spawn "$WORK/input.log" python3 -I "$LOCKTEST_DIR/input/ltinput.py" \
-        "$TOOLS/share" "$TOOLS/share/us.xkb" "$INPUT_FIFO"
+        "$TOOLS/share" "$keymap_file" "$INPUT_FIFO"
     INPUT_PID=$SPAWNED_PID
     wait_until 10 grep -q ready "$WORK/input.log" || abort "the input client did not start (see input.log)"
+
+    if [ "$window" = 1 ]; then
+        spawn "$WORK/window.log" python3 -I "$LOCKTEST_DIR/input/ltwindow.py" "$TOOLS/share"
+        wait_until 10 grep -q ready "$WORK/window.log" || abort "the stand-in window did not start (see window.log)"
+    fi
+
+    # The shell's session bus: none (an address that leads nowhere), or a private one
+    local session_bus_address=$DBUS_SESSION_BUS_ADDRESS
+    if [ "$session_bus" = 1 ]; then
+        _start_session_bus
+        session_bus_address=$LOCKTEST_SESSION_BUS
+    fi
 
     _write_pam_stacks "$methods" "$methods_script"
     _write_system_pam "$system_password"
@@ -206,10 +254,20 @@ EOF
         tools=$WORK/standins
         session_id=$LOCKTEST_SESSION_ID
     fi
+    if [ -n "$fprintd" ]; then
+        mkdir -p "$WORK/fprintd"
+        echo "$fprintd" > "$WORK/fprintd/mode"
+        _write_fprintd_standin "$WORK/standins"
+        _write_real_methods_script
+    fi
 
     # The shell, as it is started for real: the launcher with H2S_SHELL_DIR pointing at
     # the run's copy of the checkout (run.sh), a plain start (never --restart, which stops
-    # every h2s-shell it finds)
+    # every h2s-shell it finds). The locale is fixed: it picks the Compose table, and the
+    # tests of dead keys and Compose sequences must not depend on the caller's. No input
+    # method module is asked for: Qt picks its own, as in a session without one (both set in
+    # the isolation block at the top).
+    QT_LOGGING_RULES=${LOCKTEST_QT_LOGGING:-} DBUS_SESSION_BUS_ADDRESS=$session_bus_address \
     H2S_LOCK_TOOLS=$tools XDG_SESSION_ID=$session_id H2S_LOCK_SYSTEM_PAM_DIR=$WORK/system-pam \
     H2S_SHELL_DIR=$LOCKTEST_SHELL H2S_LOCK_AUTH_METHODS=$WORK/pam/methods.sh QT_QPA_PLATFORM=wayland \
         spawn "$WORK/shell.log" "$LOCKTEST_LAUNCHER"
@@ -217,7 +275,7 @@ EOF
     wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
     SHELL_PID=$(pgrep -P "$timeout_pid" | head -n 1)
     wait_until 30 shell_ipc lockscreen status || abort "the shell's IPC does not answer (see shell.log)"
-    log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${methods_script:-$methods}${tools:+, logind stand-ins}"
+    log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }
 
 # The PAM stacks and the methods script the shell is pointed at (H2S_LOCK_AUTH_METHODS)
@@ -237,6 +295,11 @@ _write_pam_stacks() {
     for path in "$LOCKTEST_PAM_MODULES" "$WORK"; do
         [[ "$path" =~ ^/[A-Za-z0-9._/+-]*$ ]] || abort "a path with characters a PAM stack cannot hold: $path"
     done
+    # The password goes into a sed replacement and a double-quoted bash string
+    case "$LOCKTEST_PASSWORD" in
+        "" | *'|'* | *'&'* | *'\'* | *'$'* | *'`'* | *'"'* | *"'"* | *$'\n'*)
+            abort "LOCKTEST_PASSWORD holds a character the check script cannot hold" ;;
+    esac
     bash_path=$(command -v bash)
     coreutils=$(dirname "$(dirname "$(readlink -f "$(command -v rm)")")")
     for file in password password-question fingerprint check-password.sh check-answer.sh wait-finger.sh; do
@@ -286,6 +349,59 @@ _write_system_pam() {
     fi
 }
 
+# write_settings <json>: the shell's config.json in the private XDG_CONFIG_HOME, as the
+# shell stores settings — one profile, "Full", always active, setting these keys
+# ({ "lockscreen.screensaverEnabled": true, … }; SettingsSchema's keys, values as stored).
+# Every other setting is the schema's default. Before stack_start (it takes --settings).
+write_settings() {
+    mkdir -p "$XDG_CONFIG_HOME/h2s_shell"
+    python3 -I -c '
+import json, sys
+settings = json.loads(sys.argv[1])
+profiles = [{"name": "Full", "enabled": True, "when": {}, "set": settings}]
+json.dump({"profiles": json.dumps(profiles), "widgetPresets": "{}"}, open(sys.argv[2], "w"), indent=2)
+' "$1" "$XDG_CONFIG_HOME/h2s_shell/config.json" || abort "write_settings: not a JSON object: $1"
+}
+
+# A private session bus (stack_start --session-bus): a dbus-daemon of the test's own, with
+# no service directories (nothing is activated) and a socket in the private runtime dir.
+# The real session bus is never reached: the address is this socket's.
+_start_session_bus() {
+    local config=$WORK/session-bus.conf
+    cat > "$config" << EOF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:path=$RUN/test-session-bus</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+EOF
+    spawn "$WORK/session-bus.log" dbus-daemon --nofork --nopidfile --config-file="$config"
+    wait_until 5 test -S "$RUN/test-session-bus" || abort "the private session bus did not start (see session-bus.log)"
+    LOCKTEST_SESSION_BUS=unix:path=$RUN/test-session-bus
+}
+
+# notify <app> <summary> <body>: a notification sent to the shell's server on the private
+# session bus (stack_start --session-bus)
+notify() {
+    [ -n "${LOCKTEST_SESSION_BUS:-}" ] || abort "notify needs stack_start --session-bus"
+    DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
+        --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.Notify "$1" 0 "" "$2" "$3" '[]' '{}' 0 > /dev/null
+}
+# Whether the shell's notification server has registered on the private bus
+notification_server_up() {
+    DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session --dest org.freedesktop.DBus \
+        --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner \
+        org.freedesktop.Notifications 2> /dev/null | grep -q true
+}
+
 # ---- logind stand-ins (stack_start --logind) -----------------------------------------
 # The real system bus is cut off from the test bed, so logind's signals cannot reach the
 # shell. Two stand-ins are named to it instead, by H2S_LOCK_TOOLS (its seam, like the
@@ -313,6 +429,14 @@ _write_logind_standins() {
 # Stand-in for gdbus in the lock test bed (tests/lock/lib.sh): no bus is reached
 log=$WORK/logind/log
 signals=$WORK/logind/signals
+# fprintd's calls (the methods script's) go to the fprintd stand-in, when there is one
+case " \$* " in
+    *" net.reactivated.Fprint "*)
+        [ -x "$WORK/standins/gdbus-fprintd" ] && exec "$WORK/standins/gdbus-fprintd" "\$@"
+        echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable" >&2
+        exit 1
+        ;;
+esac
 case "\$1" in
     call)
         for argument in "\$@"; do last=\$argument; done
@@ -344,6 +468,89 @@ echo "release \$\$" >> "\$log"
 exit \$status
 EOF
     chmod +x "$WORK/standins/gdbus" "$WORK/standins/systemd-inhibit"
+}
+
+# ---- fprintd stand-in (stack_start --fprintd, tests/methods-script.sh) ----------------
+# The methods script asks fprintd over D-Bus with `gdbus call` (scripts/lock-auth-methods.sh).
+# _write_fprintd_standin <dir> writes <dir>/gdbus-fprintd, which answers those calls as
+# fprintd would in the mode named in $WORK/fprintd/mode (read at every call, so a test can
+# change it), and notes each call in $WORK/fprintd/log ("call <method> user=<argument>").
+#
+#   enrolled           one reader, a finger enrolled: (['right-index-finger'],)
+#   none               one reader, no finger enrolled (NoEnrolledPrints)
+#   second             two readers, a finger enrolled on the second only
+#   nodevice           no reader: (@ao [],)
+#   absent             fprintd not installed (ServiceUnknown)
+#   hang               the call never returns (fprintd stuck in activation)
+#   denied             ListEnrolledFingers refused (PermissionDenied)
+#   nobus              no system bus to connect to
+#   malformed-devices  GetDevices answers something that is not a list of readers
+#   malformed-fingers  ListEnrolledFingers answers something that is not a list of fingers
+_write_fprintd_standin() {
+    local dir=$1 bash_path coreutils
+    bash_path=$(command -v bash)
+    coreutils=$(dirname "$(dirname "$(readlink -f "$(command -v rm)")")")/bin
+    mkdir -p "$dir" "$WORK/fprintd"
+    [ -e "$WORK/fprintd/mode" ] || echo enrolled > "$WORK/fprintd/mode"
+    : >> "$WORK/fprintd/log"
+    cat > "$dir/gdbus-fprintd" << EOF
+#!$bash_path
+# Stand-in for fprintd behind gdbus in the lock test bed (tests/lock/lib.sh): no bus is reached
+mode=\$($coreutils/cat "$WORK/fprintd/mode" 2> /dev/null)
+method="" path="" argument="(none)"
+while [ \$# -gt 0 ]; do
+    case "\$1" in
+        --method) method=\${2##*.}; shift 2 ;;
+        --object-path) path=\$2; shift 2 ;;
+        --dest | --timeout) shift 2 ;;
+        call | --system) shift ;;
+        *) argument="'\$1'"; shift ;;
+    esac
+done
+echo "call \$method user=\$argument path=\$path mode=\$mode" >> "$WORK/fprintd/log"
+error() { echo "Error: GDBus.Error:\$1: \$2" >&2; exit 1; }
+case "\$mode" in
+    hang) exec $coreutils/sleep 120 ;;
+    absent) error org.freedesktop.DBus.Error.ServiceUnknown "The name is not activatable" ;;
+    nobus) echo "Error connecting: Could not connect: No such file or directory" >&2; exit 1 ;;
+esac
+case "\$method" in
+    GetDevices)
+        case "\$mode" in
+            nodevice) echo "(@ao [],)" ;;
+            second) echo "([objectpath '/net/reactivated/Fprint/Device/0', objectpath '/net/reactivated/Fprint/Device/1'],)" ;;
+            malformed-devices) echo "(<'not a list'>,)" ;;
+            *) echo "([objectpath '/net/reactivated/Fprint/Device/0'],)" ;;
+        esac
+        ;;
+    ListEnrolledFingers)
+        case "\$mode:\$path" in
+            enrolled:* | second:*/1) echo "(['right-index-finger'],)" ;;
+            denied:*) error net.reactivated.Fprint.Error.PermissionDenied "Not Authorized: net.reactivated.fprint.device.verify" ;;
+            malformed-fingers:*) echo "(Right Index Finger,)" ;;
+            *) error net.reactivated.Fprint.Error.NoEnrolledPrints "Failed to discover prints" ;;
+        esac
+        ;;
+    *) error org.freedesktop.DBus.Error.UnknownMethod "No such method" ;;
+esac
+EOF
+    chmod +x "$dir/gdbus-fprintd"
+}
+fprintd_mode() { echo "$1" > "$WORK/fprintd/mode"; log "fprintd stand-in: $1"; }
+
+# The methods script the shell runs with stack_start --fprintd: the REAL one (the run's copy),
+# with the seam that would replace it unset. It finds the test's stand-in system-wide configs
+# (H2S_LOCK_SYSTEM_PAM_DIR) and asks the fprintd stand-in (H2S_LOCK_TOOLS).
+_write_real_methods_script() {
+    {
+        echo "#!$(command -v bash)"
+        echo "# Written by tests/lock/lib.sh: the shell's own methods script, not a test's"
+        echo "unset H2S_LOCK_AUTH_METHODS"
+        echo "exec \"$LOCKTEST_SHELL/scripts/lock-auth-methods.sh\""
+    } > "$WORK/pam/methods.sh"
+    chmod +x "$WORK/pam/methods.sh"
+    # The fingerprint config the script will find "system-wide": the test stack
+    cp "$WORK/pam/fingerprint" "$WORK/system-pam/h2s-shell-fingerprint"
 }
 
 # logind_signal <lock|unlock|unlock-other|sleep|wake>: one line as `gdbus monitor` prints it
@@ -428,6 +635,8 @@ shell_ipc() {
 #   unlocking / pending  an unlock decided before the compositor confirmed, and by what
 #   notice               the prompt's notice line ("Waiting for the compositor…")
 #   timers               the names of the rules' timers running, comma-separated
+#   caps_lock            what the shell knows of Caps Lock: true / false / "" (unknown)
+#   screensaver          the shell's screensaverVisible (idle, or locked)
 state_field() {
     shell_ipc lockscreen state | python3 -I -c '
 import json, sys
@@ -475,6 +684,8 @@ facts = {
     "pending": lambda s: (s["phase"].get("pending") or {}).get("reason", ""),
     "notice": lambda s: s["view"]["notice"],
     "timers": lambda s: ",".join(s["timers"]),
+    "caps_lock": lambda s: s["driver"]["capsLock"],
+    "screensaver": lambda s: s["driver"]["screensaverVisible"],
 }
 name = sys.argv[1]
 if name in facts:
@@ -614,7 +825,17 @@ type_text() {
     _password_stack_is_safe || abort "not typing: the shell's password config ($(state_field password_config 2> /dev/null)) is not a test stack"
     send_input "type $1"
 }
+# keys_text <text>: the keys that type <text> with Caps Lock off, whatever the locks are
+# (with Caps Lock on, "abc" types "ABC"); same safety check as type_text
+keys_text() {
+    _password_stack_is_safe || abort "not typing: the shell's password config ($(state_field password_config 2> /dev/null)) is not a test stack"
+    send_input "keys $1"
+}
+# press_key <keysym>: Return, BackSpace, Escape, Tab, space, dead_acute, Multi_key, KP_1,
+# KP_Enter, Caps_Lock, Num_Lock, … (whatever the stack's keymap has)
 press_key() { send_input "key $1"; }
+# hold_key <keysym> <seconds>: held down, so that it auto-repeats
+hold_key() { send_input "hold $1 $2"; }
 move_pointer() { send_input "abs ${1:-960} ${2:-540} 1920 1080" "move 5 5"; }
 
 # Wakes the prompt by moving the pointer and waits for it to show: a test about
@@ -632,6 +853,17 @@ wake_prompt() {
 # ---- Evidence -----------------------------------------------------------------------
 
 screenshot() { grim "$WORK/$1.png" 2> /dev/null && log "screenshot $1.png"; }
+# screenshot_output_ppm <output> <name>: one output only, as <name>.ppm
+screenshot_output_ppm() { grim -o "$1" -t ppm "$WORK/$2.ppm" 2> /dev/null; }
+
+# What the password stack received, per check, in order: "length <bytes> sha256 <hex>"
+# lines (pam/check-detail.log; never the text), and the line a string would give
+password_details() { cat "$WORK/pam/check-detail.log" 2> /dev/null; }
+password_detail_of() {
+    local sum
+    sum=$(printf '%s' "$1" | sha256sum)
+    echo "length $(printf '%s' "$1" | wc -c) sha256 ${sum%% *}"
+}
 # The same as a PPM (<name>.ppm), which plain Python reads
 screenshot_ppm() { grim -t ppm "$WORK/$1.ppm" 2> /dev/null && log "screenshot $1.ppm"; }
 

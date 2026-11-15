@@ -45,6 +45,10 @@ Singleton {
     readonly property var view: _view
     readonly property bool locked: _view.locked
     readonly property bool screensaverVisible: _screensaverMonitor.isIdle || locked
+    // Whether Caps Lock is on, as far as the keys typed at the lock surfaces tell
+    // (LockIoRules.capsLockAfterKey): true, false, or null while unknown. Shown on the
+    // prompt; no part of the lock's state — the rules never see it
+    readonly property var capsLock: _capsLock
 
     // Locking needs no proof, so anything may ask (the IPC, idle, a future button)
     function lock(source) {
@@ -82,6 +86,11 @@ Singleton {
         _api?.input(surface, { type: "submit", text: text });
     }
 
+    // What a key on the surface told about Caps Lock: true, false or null (unknown)
+    function surfaceCapsLock(surface, on) {
+        _api?.capsLock(surface, on);
+    }
+
     // ---- Settings (docs/plans/global-profiles.md) ----
 
     readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
@@ -96,6 +105,7 @@ Singleton {
     // ---- The driver ----
 
     property var _view: LockRules.view(LockRules.initial({}))
+    property var _capsLock: null
     // The operations of the driver, closures over its private state; null until built
     property var _api: null
 
@@ -384,6 +394,10 @@ Singleton {
                 if (id !== null)
                     dispatch(Object.assign({}, event, { surface: id }));
             },
+            capsLock: (surface, on) => {
+                if (registered(surface) !== null)
+                    root._capsLock = on === true || on === false ? on : null;
+            },
             lockOnSleepChanged: () => dispatch({ type: "settings", values: { lockOnSleep: root.lockOnSleep } }),
             // What the IPC `state` answers: the rules' describe() (no secret, nothing that
             // times keystrokes), plus a few facts only the driver knows
@@ -398,7 +412,8 @@ Singleton {
                     logindSession: _logind.sessionPath,
                     lockScope: scope !== null,
                     watchFiles: Quickshell.watchFiles,
-                    passwordFallbackKnown: fallbackKnown
+                    passwordFallbackKnown: fallbackKnown,
+                    capsLock: root._capsLock
                 };
                 return JSON.stringify(described);
             }
@@ -486,11 +501,11 @@ Singleton {
     }
 
     // ---- Idle: the screensaver, and locking after it ----
-    // Bound declaratively: IdleMonitor re-creates its Wayland notification by itself when
-    // `enabled` or `timeout` change (src/wayland/idle_notify/monitor.cpp: updateNotification
-    // is the change handler of its parameters), so no toggling is needed.
+    // Through IdleWatch, which makes a new IdleMonitor whenever `enabled` or `timeout`
+    // change: changing them on a live IdleMonitor can leave its `isIdle` false for good in
+    // Quickshell 0.3.2 (see IdleWatch.qml) — the screensaver and the idle lock never came.
 
-    IdleMonitor {
+    IdleWatch {
         id: _screensaverMonitor
         enabled: root.screensaverEnabled
         timeout: root.screensaverTimeout
@@ -506,7 +521,7 @@ Singleton {
     }
 
     // Lock without a screensaver
-    IdleMonitor {
+    IdleWatch {
         enabled: root.lockscreenEnabled && !root.screensaverEnabled
         timeout: root.lockscreenTimeout
         onIsIdleChanged: if (isIdle) root.lock("idle")

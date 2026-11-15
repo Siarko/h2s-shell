@@ -37,6 +37,8 @@ import QtQuick
 //   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"],
 //              or a function (config) => value where it was spread over several places;
 //              its value there is copied into the profiles once (ProfileRules.migrateLegacy)
+//   formerDefault — the default before it changed: a seeded Full still holding it is taken
+//              never to have chosen and gets the new one, once (ProfileRules.migrateDefaults)
 Singleton {
     id: root
 
@@ -159,9 +161,13 @@ Singleton {
           group: "lockscreen", type: "bool", default: true },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
+          hint: "On every lock: idle, before sleep, a shortcut, another program locking the screen.",
           legacy: ["lockscreen", "notificationsOnLock"] },
+        // App only by default: a message's text, a one-time code in it, is not for whoever
+        // stands at the locked screen. Was "full": a Full seeded with that has it reset once
+        // (formerDefault, ProfileRules.migrateDefaults)
         { key: "lockscreen.lockNotificationDetail", label: "Notifications on the lock screen show",
-          group: "lockscreen", type: "enum", default: "full", options: [
+          group: "lockscreen", type: "enum", default: "app", formerDefault: "full", options: [
               { value: "full", label: "In full" },
               { value: "title", label: "Title only" },
               { value: "app", label: "App only" }

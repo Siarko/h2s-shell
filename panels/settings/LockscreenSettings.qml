@@ -150,16 +150,17 @@ Flickable {
             editIndex: root.editIndex
         }
 
+        // Not tied to "Enable lock screen" (the idle lock): they apply to every lock — sleep,
+        // a shortcut, another program locking the screen
         SchemaSettingEditor {
             key: "lockscreen.notificationsOnLock"
             editIndex: root.editIndex
-            available: root._lockOn
         }
 
         SchemaSettingEditor {
             key: "lockscreen.lockNotificationDetail"
             editIndex: root.editIndex
-            available: root._lockOn && root._edited("lockscreen.notificationsOnLock") !== false
+            available: root._edited("lockscreen.notificationsOnLock") !== false
         }
 
         Item {
