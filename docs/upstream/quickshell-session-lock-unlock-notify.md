@@ -1,6 +1,6 @@
 # Draft: Quickshell bug reports (not filed)
 
-Three findings from h2s-shell's lock screen rework, against **Quickshell 0.3.2** (revision
+Four findings from h2s-shell's lock screen rework, against **Quickshell 0.3.2** (revision
 4f508be500dea6e5732cc3d50382a0048b17e7b1, the `v0.3.2` tag). File:line references are into
 that release's `src/`. Status checked 2026-11-14 against
 `https://git.outfoxxed.me/quickshell/quickshell` (master, last commit 2026-10-21):
@@ -10,9 +10,10 @@ that release's `src/`. Status checked 2026-11-14 against
 | 1 | `WlSessionLock.locked` never notifies on unlock | **fixed** by 18c95fae "wayland/lock: emit lockStateChanged on unlock" (2026-10-16), after v0.3.2 (2026-10-08); in no release yet |
 | 2 | a failed `fork()` in `PamContext.start()` ends in `kill(-1, SIGKILL)` | not fixed (`subprocess.cpp`, `conversation.cpp` identical to 0.3.2) |
 | 3 | `locked = false` before the compositor's `locked` sends `unlock_and_destroy` (a protocol error) | not fixed (`session_lock/lock.cpp` identical) |
+| 4 | `qs ipc call` exits 0 when the call was not delivered ("Not ready to accept queries yet.") | not checked against master |
 
 So issue 1 only needs a release (a 0.3.3 would let distributions pick it up: nixpkgs
-unstable carries 0.3.2, nixos-26.05 0.3.0). Issues 2 and 3 are worth filing as they stand.
+unstable carries 0.3.2, nixos-26.05 0.3.0). Issues 2, 3 and 4 are worth filing as they stand (4 was found after the master check above).
 The upstream issue tracker itself was not searched.
 
 ---
@@ -196,3 +197,47 @@ The protocol's other way out, `destroy` before `locked` ("the client gave up"), 
 only by destroying the `WlSessionLock`, which leaves the process-wide manager believing a
 lock is active, so that process can never lock again — a related gap, if a client is to be
 able to give up on a compositor that never answers.
+
+---
+
+## 4. `qs ipc call` exits 0 when the call was not delivered
+
+### What happens
+
+While a shell reloads, `qs ipc call <target> <function>` prints "Not ready to accept queries
+yet." and exits with status **0**. The call was dropped; the caller cannot tell. A keybind
+such as `qs ipc call lockscreen lock` is then silently lost (observed with h2s-shell: a lock
+asked for during the ~2 s of a reload did not happen, and the command reported success).
+
+### Cause
+
+`IpcClient::connect` (`src/ipc/ipc.cpp:125-136`) runs the callback and returns 0 whatever it
+returned:
+
+```cpp
+callback(client);
+return 0;
+```
+
+`ipcCommand` (`src/launch/command.cpp:442-467`) passes it lambdas that return the status of
+`qs::io::ipc::comm::callFunction` / `getProperty` / … — `-1` for `NoCurrentGeneration`,
+`TargetNotFound`, `EntryNotFound` and a failed wait for the response
+(`src/io/ipccomm.cpp`) — and that status is discarded. "Not ready" itself comes from the
+server answering `NoCurrentGeneration` while `EngineGeneration::currentGeneration()` is
+null, i.e. while two generations exist (`src/core/generation.cpp:331-335`): from the end of
+a reload's synchronous build until the old generation's engine is deleted a few event-loop
+passes later.
+
+### Reproduction
+
+Any shell with an `IpcHandler`; save a file of it (a reload) and at once run
+`qs ipc call <target> <function>; echo $?` a few times: one prints "Not ready to accept
+queries yet." and `0` (observed). Likewise, from source (not run), `qs ipc call <target> nosuchfunction` prints
+"Function not found." and `0`.
+
+### Fix
+
+Return the callback's status from `IpcClient::connect` (make the callback return `int`).
+Possibly also hold queries arriving during a reload until the new generation is current,
+rather than refusing them. (Clients can work around it by matching the message and trying
+again, as h2s-shell's launcher now does: `scripts/launch.sh ipc`.)

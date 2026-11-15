@@ -289,12 +289,6 @@ Singleton {
         return facts;
     }
 
-    // What a starting shell does about the marker it found, `key` being this compositor
-    // session's ("?" while unknown): "lock" — it says locked, for this session (or one of
-    // the two keys is unknown: fail closed, a lock too many rather than one too few);
-    // "stale" — locked, but for another compositor session (the compositor died or was
-    // stopped since: a new session is a new login, nothing to take back); "none" —
-    // unlocked, nothing, or anything else.
     // What Hyprland says before a lock is taken back: the output of `hyprctl -j getoption
     // misc:allow_session_lock_restore` and `hyprctl -j locked`, one after the other →
     // { restoreAllowed, locked } (true / false, null when not said). A lock is refused for
@@ -315,6 +309,12 @@ Singleton {
         return facts?.restoreAllowed === false && facts?.locked === true;
     }
 
+    // What a starting shell does about the marker it found, `key` being this compositor
+    // session's ("?" while unknown): "lock" — it says locked, for this session (or one of
+    // the two keys is unknown: fail closed, a lock too many rather than one too few);
+    // "stale" — locked, but for another compositor session (the compositor died or was
+    // stopped since: a new session is a new login, nothing to take back); "none" —
+    // unlocked, nothing, or anything else.
     function markerDecision(marker, key) {
         const fields = String(marker ?? "").trim().split(/\s+/);
         if (fields[0] !== "locked")

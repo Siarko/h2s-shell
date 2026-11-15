@@ -15,8 +15,10 @@ LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about thirteen minutes (fifty-one tests, each
-starting its own stack in 2–3 s; the idle tests wait out real idle timeouts).
+130 when interrupted. A full run takes about fifteen minutes (fifty-seven tests, each
+starting its own stack in 2–3 s; the idle tests wait out real idle timeouts, the crash
+tests Quickshell's 10 s before it restarts a crash in place; the launcher's restart pauses
+are shortened where a test only needs their schedule, `--launcher-timings`).
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running test and its stack, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
@@ -97,8 +99,9 @@ here may reach it.
   and the shell runs from there. Edits to the checkout during a run cannot disturb it;
   `run.sh` notes them, as the results are for the copy taken at the start. (The shell itself
   no longer reloads while locked — file watching is off then — and `reload-while-locked.sh`
-  checks that; a reload asked for while locked keeps the lock, `reload-explicit.sh`; the
-  copy guards the rest of a run.) In the copy, `pam/` is replaced by
+  and `edit-while-locked.sh` check that; a reload asked for while locked keeps the lock,
+  `reload-explicit.sh`; the copy guards the rest of a run. Tests that edit the copy on
+  purpose — `edit-while-locked`, `reload-window`, `restart-locked-retry` — write only there.) In the copy, `pam/` is replaced by
   configs that only deny: the shipped `pam/password` (`pam_unix`, the real account) is one
   of the configs the shell's password fallback can be, and a typed test string must never
   reach the real password check. Logs and screenshots go
@@ -219,7 +222,13 @@ the real gdbus first). Unset — always, outside the test bed — nothing change
 appends to `logind/signals` (`logind_signals lock unlock …` appends several in one write,
 so that the shell handles them in one pass — an Unlock before the compositor can have
 confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
-`release <pid>` in `logind/log` (`inhibitor_held`, `inhibitor_record`). No bus is reached
+`release <pid>` in `logind/log`, each with its time (`inhibitor_held`, `inhibitor_record`; it
+runs the shell's command, so it sees the inhibitor's grace after its holder vanished, as
+the real one would hold logind). The `gdbus` stand-in's monitor prints gdbus's own first
+lines ("The name org.freedesktop.login1 is owned by …": the shell then asks whether a sleep
+is under way), and it answers the `PreparingForSleep` property from `logind/preparing`,
+which `logind_signal sleep` / `wake` set to true / false. Without a logind seam the shell's
+monitor never gets that far (no bus) and asks nothing. No bus is reached
 by either (nor by the fprintd stand-in, above).
 
 **Caps Lock** is read from the keyboards' LEDs (`/sys/class/leds/*::capslock`); the nested
@@ -299,7 +308,15 @@ of the real session. `start_launcher` starts a launcher (and shell) again, as `s
 did. `start_lock_watch <name>` / `stop_lock_watch` poll `hyprctl -j locked` every 50 ms
 across a gap, `lock_watch_never_unlocked` says no poll saw it unlocked. `marker_file_is
 <locked|unlocked>` reads the lock marker on disk; `protocol_errors` / `no_protocol_errors`
-look for a protocol error or a killed client in both logs.
+look for a protocol error or a killed client in both logs. `launcher_ipc <target> <function>` calls the shell
+the way the owner's keybind does (`h2s-shell ipc call …`: the launcher's `ipc`, which tries a
+call again while the shell reloads). `stack_start --launcher-timings "first=0.2 slow=2
+lockwait=5"` shortens the launcher's pauses (`H2S_LAUNCHER_TEST_TIMINGS`: the first pause,
+the slow retry while locked, how long a second launcher waits for the lock; seconds), and
+`--shell-path <dir>` puts a directory of stand-in programs first on the shell's PATH (a
+`hyprctl` that hangs: `restart-hyprctl-hang`). The launcher's own log is
+`$RUN/h2s-shell-launcher.log`; its lines also go to `shell.log`, as do the shell's, stamped
+(`--log-times`). `scripts/lock-log.sh` is run against the test shell in `lock-log`.
 
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
 print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
@@ -356,7 +373,8 @@ That a dead shell's PAM helper keeps a real fingerprint reader claimed, and that
 releases the claim once the helper is killed: the stand-in reproduces the lingering helper
 (`restart-kill-locked`), not fprintd. The real Hyprland config (the owner's); a real
 logout (the launcher stops when the compositor's socket is gone — reasoning, not run).
-Real fprintd (its claim held for a whole lock with `timeout=-1`) and security keys; a real
+logind itself: that it waits for a delay inhibitor held when PrepareForSleep went out and
+refuses a new one during a sleep (the stand-in inhibitor only records); real fprintd (its claim held for a whole lock with `timeout=-1`) and security keys; a real
 keyboard's Caps Lock LED following Caps Lock under Hyprland (the shell reads a file the test
 writes); `pam_unix` with the real password (`tests/manual/`); suspend and resume and
 the real logind (its signals are delivered by a stand-in, see the seams); real DRM hotplug

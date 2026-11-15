@@ -87,8 +87,13 @@ again, and one that died while the screen was locked locks again at once. For th
 lock screen needs one line in `hyprland.lua`'s `misc` settings,
 `allow_session_lock_restore = true` (without it Hyprland refuses to let a restarted lock
 screen take the lock back; see `docs/plans/lockscreen.md`, section 7, "Recovery").
-`h2s-shell --restart` stops the shell and starts it again, detached. Settings are kept in
-`~/.config/h2s_shell/`.
+`h2s-shell --restart` stops the shell (and its supervisor) and starts it again, detached;
+there is one supervisor per session (a second start waits briefly, then gives up). If the
+lock screen misbehaves, `h2s-shell --lock-log` (or `scripts/lock-log.sh`, also from a text
+console while the screen is locked) prints what happened: the shell's lock lines
+(Quickshell's log, `qs log`), the supervisor's log (`$XDG_RUNTIME_DIR/h2s-shell-launcher.log`)
+and the journal's PAM, fprintd and logind lines — nothing typed is ever logged. Settings
+are kept in `~/.config/h2s_shell/`.
 
 ### Tablet mode
 

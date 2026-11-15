@@ -1645,6 +1645,11 @@ Singleton {
             copy.text = "<redacted>";
         if ("key" in copy && copy.key !== "" && !namedKeys.includes(copy.key))
             copy.key = "<redacted>";
+        // What the password's PAM stack says is not logged either (a prompt, a verdict —
+        // nothing typed, but a module may echo what it got): the passive methods' messages
+        // ("Place your finger on the reader") are what tells a failure on the real machine
+        if (copy.type === "pamMessage" && copy.method === "password" && "message" in copy)
+            copy.message = "<not logged>";
         return copy;
     }
 }

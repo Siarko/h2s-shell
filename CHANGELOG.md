@@ -30,6 +30,13 @@ section to the new version and date.
 - Lock screen: every authentication event goes to the shell's log — locks and unlocks and
   why, each PAM conversation started, answered, aborted or finished, the methods found,
   failures to run a helper — never what was typed.
+- `h2s-shell --lock-log` (`scripts/lock-log.sh`): what happened to the lock screen in the last
+  half hour, readable from a text console while the screen is locked — the shell's lock
+  lines with their time (Quickshell's log), the supervisor's own log
+  (`$XDG_RUNTIME_DIR/h2s-shell-launcher.log`), the lock marker and the journal's PAM, fprintd
+  and logind lines. The log now also says when the prompt woke or slept and why, a refused
+  submit, the error shown, how long each PAM conversation took, the marker written, the
+  sleep inhibitor taken and released, and whether the shell is supervised.
 - Lock screen: the screen stays locked when the shell does not. The launcher (`h2s-shell`)
   now stays as the shell's supervisor and starts it again when it dies (a crash, a kill,
   the OOM killer; at most 5 times in 2 minutes; not after a deliberate stop while unlocked),
@@ -284,6 +291,15 @@ section to the new version and date.
   most), instead of one accent dot for the day.
 
 ### Changed
+- `h2s-shell` (the launcher): one supervisor per session — a second start waits a little for
+  the first to end and then gives up, and `--restart` tells the supervisor even when it is
+  between two restarts (two shells came of it). It now needs `flock` (util-linux), and
+  logs to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`. A shell that keeps dying while the screen
+  is locked is tried again once a minute instead of given up after five restarts. SIGHUP
+  (the terminal it was started from closing) no longer stops it.
+- `h2s-shell ipc call …` tries a call again for up to 3 s while the shell is reloading or
+  restarting (Quickshell drops it, "Not ready to accept queries yet.", and exits 0), and
+  fails if it was never taken: a Super+L pressed during a reload is no longer lost.
 - Lock screen setup: `install.sh` now suggests starting the shell with `launch.sh
   --restart` (detached and supervised, as the autostart runs it) instead of `launch.sh -d`,
   which ran it unsupervised — nothing started it again after a crash while locked. It and
@@ -319,6 +335,19 @@ section to the new version and date.
   action used to be an empty button.
 
 ### Fixed
+- Lock screen: closing the lid while the shell reloads (a file of it saved) now still locks
+  before sleep: the new generation asks logind whether a sleep is under way, and the old
+  one's sleep inhibitor holds logind a few seconds longer (narrowed, not closed: the lock
+  must be up within those seconds). The reload right after an unlock
+  that followed edits made while locked (which opened that window after every such
+  unlock) is gone.
+- `h2s-shell`: a shell stopped with SIGSTOP (or by a terminal) is no longer killed and
+  replaced; a dead compositor whose socket file is left behind is recognised (no restarts
+  against it, and none on a new compositor under the same name); the fingerprint helper of
+  a shell Quickshell had restarted in place is killed when that shell dies.
+- Lock screen: a shell killed right after an unlock comes back locked rather than believing
+  the screen unlocked while the compositor may still hold it; asking Hyprland before taking
+  a lock back no longer hangs for good when `hyprctl` does not answer.
 - Lock screen: the fingerprint no longer stops working after a few minutes on a lock
   nobody touches. Each round the reader's PAM module timed out on its own (30 s) counted
   as a fault, and the fifth broke the fingerprint until the next sleep.
@@ -330,9 +359,9 @@ section to the new version and date.
   gdbus, takes a user name and a key file name literally, and logs one line per reason.
 - Lock screen: a reload of the shell while locked no longer unlocks the screen — the new
   generation takes the lock over (and a new authentication is needed); a hard reload
-  restarts the shell, which locks again. Files edited while locked are reloaded once right
-  after the unlock (they used to wait for the next file change). After a crash, the old
-  shell's fingerprint conversation no longer keeps the reader from the new one.
+  restarts the shell, which locks again. Files edited while locked take effect at the next
+  file change after the unlock, as before. After a crash, the old shell's fingerprint
+  conversation no longer keeps the reader from the new one.
 - Lock screen: dead keys and Compose sequences type into the password field (and so does
   what an input method commits). A password with "é" typed as ´ then e was checked as
   "e" — the dead key was dropped — so it was refused, and the plain letter accepted in its

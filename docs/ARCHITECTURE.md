@@ -414,8 +414,8 @@ session):
   realizes it — so it takes the old lock over instead of unlocking. The rules go on from
   their `restored` event (a fresh lock on the carried compositor lock: no new lock request,
   fresh adapters, methods asked again, nothing typed before survives). File changes still do
-  not reload while locked (`watchFiles` off); edits made meanwhile are reloaded once right
-  after the unlock. A reload that cannot carry the lock (a hard reload, `reload(true)`)
+  not reload while locked (`watchFiles` off); edits made meanwhile take effect at the next
+  file change after the unlock (no reload at unlock: it dropped lock requests). A reload that cannot carry the lock (a hard reload, `reload(true)`)
   leaves Quickshell's process-wide lock manager with a stale lock: the process quits
   (status 1) and the launcher starts a fresh one, which the marker locks.
 - *A shell that stops while locked* — crash, SIGKILL, `qs kill`, `--restart` — comes back
@@ -423,15 +423,25 @@ session):
   <key>" from the lock request to the end of the lock, the key naming this compositor
   session: boot id, display, socket identity); a starting shell that finds "locked" for its
   session locks at once (a marker of another boot or compositor is stale and ignored).
-  `scripts/launch.sh` supervises the shell: it runs it as a child (in a process group of its
-  own) and starts it again when it dies, not when it was stopped on purpose (clean exit or
-  SIGTERM/INT/HUP while unlocked; SIGUSR1 to the launcher lets the shell go, which
-  `--restart` does), with a growing pause and at most 5 restarts in 2 minutes; it kills what
-  the dead shell left of Quickshell's own binary in that group (PAM helpers, which would
-  keep a fingerprint reader claimed). Quickshell's own crash handler restarts a crashed shell
+  `scripts/launch.sh` supervises the shell, one supervisor per session (a `flock` on
+  `$XDG_RUNTIME_DIR/h2s-shell-launcher.lock`): it runs it as a child (in a process group of
+  its own), waits for it to end (a stopped shell is left alone), and starts it again when it
+  dies, not when it was stopped on purpose (clean exit or SIGTERM/INT/HUP while unlocked;
+  SIGUSR1 to the launcher lets the shell go, which `--restart` does — to the lock's holder
+  even when no shell is alive), nor once its compositor is gone (another socket, or nobody
+  holding `<socket>.lock`); with a growing pause, at most 5 restarts in 2 minutes — then,
+  if the screen was locked, once a minute; it kills what the dead shell left of
+  Quickshell's own binary in that group (PAM helpers, which would keep a fingerprint reader
+  claimed; not the crash reporter). SIGHUP (its terminal closed) does not stop it. Quickshell's own crash handler restarts a crashed shell
   in the same process (unless it crashed within 10 s of starting): no second shell, and the
   launcher sees nothing — so the restarted shell itself kills, once, the PAM helpers its
   process had forked before the crash (`_helperSweep`).
+- *A reload while unlocked* (a file saved — dozens of times a day here) blocks the event
+  loop for about two seconds and tears the old generation down: IPC calls get "Not ready"
+  and logind's PrepareForSleep reaches no monitor. The launcher's `ipc` retries such calls
+  (3 s); the new logind monitor asks logind's `PreparingForSleep` once it listens; the old
+  generation's sleep inhibitor lingers 3 s after its holder vanished, so logind waits while
+  the new generation locks (plan section 7, "The reload window": what remains).
 - *The compositor will not give the lock back* (Hyprland without
   `misc:allow_session_lock_restore`): Hyprland refuses a new lock while a dead client's lock
   stands, and kills the client that asks. So under Hyprland the shell first asks `hyprctl`
@@ -450,10 +460,18 @@ and the methods script's),
 `/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack),
 `H2S_LOCK_TEST_RELOAD=1` (an IPC target `locktest` whose `reload(hard)` asks for
 `Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
-Caps Lock LEDs are read, `/sys/class/leds` otherwise) and `H2S_LOCK_TEST_TIMINGS` (JSON
-overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds).
+Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (JSON
+overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds) and the
+launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
 
 ### Logging
+
+The lock screen logs on its own terms (plan section 7, "Log every step"): every step of a
+lock, one line each, `[Lockscreen]`, always on, never typed text; Quickshell keeps them in
+`$XDG_RUNTIME_DIR/quickshell/by-id/<instance>/log.qslog` (`qs log`, stamped to the
+second), the supervisor in `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`, and
+`scripts/lock-log.sh` (`h2s-shell --lock-log`) prints both with the journal's PAM / fprintd /
+logind lines. The rest of the shell:
 
 `components/Logger.qml` gives each subsystem a prefixed, individually switchable logger:
 

@@ -188,16 +188,22 @@ check_within() {
 #                                    (H2S_LOCK_TEST_RELOAD=1): a test asks for Quickshell.reload()
 # --timings <json>                   LockRules.timings overrides for the shell
 #                                    (H2S_LOCK_TEST_TIMINGS): what takes minutes, in seconds
+# --launcher-timings "<k=s ...>"    the launcher's pauses (H2S_LAUNCHER_TEST_TIMINGS): first (1 s),
+#                                    slow (60 s), lockwait (15 s) — so restart tests run in seconds
+# --shell-path <dir>                 put <dir> first on the shell's PATH (a stand-in program, such
+#                                    as a hyprctl that hangs)
 #
 # Always: the shell reads Caps Lock from $WORK/leds (H2S_LOCK_LEDS_DIR; caps_led writes it),
 # never from the machine's /sys/class/leds — the real keyboard's state is not the test's.
 stack_start() {
     local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
     local window=0 fprintd="" lock_restore=true reload_seam="" hyprland_logs=true hyprland_stdout=false
-    local shell_env=() timings=""
+    local shell_env=() timings="" launcher_timings="" shell_path=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --timings) timings=$2; shift 2 ;;
+            --launcher-timings) launcher_timings=$2; shift 2 ;;
+            --shell-path) shell_path=$2; shift 2 ;;
             --methods) methods=$2; shift 2 ;;
             --methods-script) methods_script=$2; shift 2 ;;
             --logind) logind=1; shift ;;
@@ -314,7 +320,9 @@ EOF
     LAUNCHER_ENV=("${shell_env[@]}" QT_LOGGING_RULES="${LOCKTEST_QT_LOGGING:-}" DBUS_SESSION_BUS_ADDRESS="$session_bus_address"
         H2S_LOCK_TOOLS="$tools" XDG_SESSION_ID="$session_id" H2S_LOCK_SYSTEM_PAM_DIR="$WORK/system-pam"
         H2S_LOCK_TEST_RELOAD="$reload_seam" H2S_SHELL_DIR="$LOCKTEST_SHELL" H2S_LOCK_AUTH_METHODS="$WORK/pam/methods.sh"
-        H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland)
+        H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland
+        H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings")
+    [ -z "$shell_path" ] || LAUNCHER_ENV+=(PATH="$shell_path:$PATH")
     start_launcher
     log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }
@@ -470,6 +478,7 @@ _write_logind_standins() {
 # Stand-in for gdbus in the lock test bed (tests/lock/lib.sh): no bus is reached
 log=$WORK/logind/log
 signals=$WORK/logind/signals
+preparing=$WORK/logind/preparing
 # fprintd's calls (the methods script's) go to the fprintd stand-in, when there is one
 case " \$* " in
     *" net.reactivated.Fprint "*)
@@ -480,6 +489,14 @@ case " \$* " in
 esac
 case "\$1" in
     call)
+        # logind's PreparingForSleep (the shell asks once its monitor listens): logind/preparing
+        case " \$* " in
+            *" PreparingForSleep "*)
+                echo "call PreparingForSleep \$(cat "\$preparing" 2> /dev/null)" >> "\$log"
+                [ "\$(cat "\$preparing" 2> /dev/null)" = true ] && echo "(<true>,)" || echo "(<false>,)"
+                exit 0
+                ;;
+        esac
         for argument in "\$@"; do last=\$argument; done
         echo "call GetSession \$last" >> "\$log"
         if [ "\$last" = "$LOCKTEST_SESSION_ID" ]; then
@@ -492,6 +509,9 @@ case "\$1" in
     monitor)
         start=\$(( \$($coreutils/wc -l < "\$signals") + 1 ))
         echo "monitor \$\$" >> "\$log"
+        # As gdbus monitor says once its match is in place
+        echo "Monitoring signals from all objects owned by org.freedesktop.login1"
+        echo "The name org.freedesktop.login1 is owned by :1.0"
         exec $coreutils/tail -n +"\$start" -F "\$signals" 2> /dev/null
         ;;
 esac
@@ -502,10 +522,10 @@ EOF
 # Stand-in for systemd-inhibit in the lock test bed (tests/lock/lib.sh): no bus is reached
 log=$WORK/logind/log
 while [ "\${1#--}" != "\$1" ]; do shift; done
-echo "hold \$\$" >> "\$log"
+echo "hold \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
 "\$@"
 status=\$?
-echo "release \$\$" >> "\$log"
+echo "release \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
 exit \$status
 EOF
     chmod +x "$WORK/standins/gdbus" "$WORK/standins/systemd-inhibit"
@@ -617,6 +637,8 @@ logind_signal() {
         wake) line="/org/freedesktop/login1: org.freedesktop.login1.Manager.PrepareForSleep (false,)" ;;
         *) abort "logind_signal: unknown signal $1" ;;
     esac
+    # logind's PreparingForSleep property follows, as logind sets it around the signal
+    case "$1" in sleep) echo true > "$WORK/logind/preparing" ;; wake) echo false > "$WORK/logind/preparing" ;; esac
     echo "$line" >> "$WORK/logind/signals"
     log "logind stand-in: $1"
 }
@@ -785,6 +807,14 @@ no_protocol_errors() { [ -z "$(protocol_errors)" ]; }
 shell_ipc() {
     [ "$XDG_RUNTIME_DIR" = "$RUN" ] || abort "shell_ipc outside the private runtime dir"
     "$LOCKTEST_QS" ipc --pid "$SHELL_PID" call "$@"
+}
+
+# launcher_ipc <target> <function> [args...]: as the owner's keybind calls it — `h2s-shell
+# ipc call …`, the launcher's ipc path (scripts/launch.sh: it tries again while the shell
+# reloads or restarts) — inside the private runtime dir, where only this test's shells are
+launcher_ipc() {
+    [ "$XDG_RUNTIME_DIR" = "$RUN" ] || abort "launcher_ipc outside the private runtime dir"
+    env "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER" ipc call "$@"
 }
 
 # The JSON the shell's `lockscreen state` returns (LockRules.describe(state) plus the

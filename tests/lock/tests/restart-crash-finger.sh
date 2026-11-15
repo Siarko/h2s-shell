@@ -6,7 +6,9 @@
 # (Lockscreen: _helperSweep): the old conversation ends, the new shell's is the only one
 # waiting (`finger` fails on two), and a finger unlocks.
 #
-# Core dumps are off for this test's processes (ulimit -c 0), as in restart-crash-locked.
+# Then the launcher's side: that shell (relaunched in place) killed, the launcher kills its
+# PAM helper (below). Core dumps are off for this test's processes (ulimit -c 0), as in
+# restart-crash-locked.
 
 ulimit -c 0
 stack_start --methods "password fingerprint"
@@ -54,3 +56,50 @@ check_within 5 "confirmed" state_is secure true
 check_within 10 "the new shell's fingerprint conversation is the only one" _one_finger_waiter
 finger ok
 check_within 10 "a finger unlocks" compositor_unlocked
+
+# ---- The launcher's clean-up when a shell Quickshell relaunched in place dies (review S2) ----
+# The relaunched process carries __QUICKSHELL_CRASH_INFO_FD (and _DUMP_PID, _SIGNAL) in its
+# exec-time environment, and so does every PAM helper it forks. The launcher took any
+# `^__QUICKSHELL_CRASH` for Quickshell's crash reporter and spared it: the dead shell's
+# fingerprint helper (timeout=-1) lived on. Only the reporter has __QUICKSHELL_CRASH_DUMP_FD.
+relaunched_in_place() { tr '\0' '\n' < "/proc/$SHELL_PID/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_INFO_FD='; }
+if [ "$in_place" = 0 ]; then
+    log "the relaunch was not in place: crashing once more, for a shell relaunched in place"
+    started=$(stat -c %Y "/proc/$SHELL_PID")
+    until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
+    crashes_before=$(shell_log_count "Quickshell has been restarted")
+    failed_relaunches_before=$(shell_log_count 'Launching config: ""')
+    crashed_shell=$SHELL_PID
+    signal_shell SEGV
+    sleep 4
+    if [ "$(shell_log_count "Quickshell has been restarted")" -gt "$crashes_before" ] && kill -0 "$crashed_shell" 2> /dev/null \
+        && [ "$(shell_log_count 'Launching config: ""')" = "$failed_relaunches_before" ]; then
+        in_place=1
+    else
+        wait_for_new_shell "$crashed_shell" 20 || abort "no shell after the second crash"
+    fi
+    wait_until 20 shell_ipc lockscreen status || abort "the shell does not answer"
+fi
+if [ "$in_place" = 1 ]; then
+    check "the shell was relaunched in place (its exec-time environment says so)" relaunched_in_place
+    lock_by_ipc
+    check_within 5 "the relaunched shell locks" compositor_locked
+    check_within 8 "a fingerprint conversation runs" _one_finger_waiter
+    conversation=$(finger_waiters)
+    helper=$(awk '{ print $4 }' "/proc/$conversation/stat" 2> /dev/null)
+    check "its PAM helper is the shell's child" test "$(awk '{ print $4 }' "/proc/$helper/stat" 2> /dev/null)" = "$SHELL_PID"
+    check "the helper carries __QUICKSHELL_CRASH_* too (not the reporter's DUMP_FD)" \
+        sh -c "tr '\\0' '\\n' < /proc/$helper/environ | grep -q '^__QUICKSHELL_CRASH_INFO_FD=' && ! tr '\\0' '\\n' < /proc/$helper/environ | grep -q '^__QUICKSHELL_CRASH_DUMP_FD='"
+    old_shell=$SHELL_PID
+    signal_shell KILL
+    check_within 10 "the launcher starts a new shell" wait_for_new_shell "$old_shell" 10
+    helper_gone() { [ ! -e "/proc/$helper" ] || [ "$(awk '{ print $3 }' "/proc/$helper/stat" 2> /dev/null)" = Z ]; }
+    check_within 5 "the dead shell's PAM helper was killed by the launcher" helper_gone
+    check "the launcher said so" grep -aq "killing what the shell left behind: $helper " "$WORK/shell.log"
+    check_within 10 "the new shell locks" state_is phase locked
+    check_within 10 "exactly one fingerprint conversation (the orphan's is over)" _one_finger_waiter
+    finger ok
+    check_within 10 "a finger unlocks" compositor_unlocked
+else
+    log "NOT exercised: Quickshell's relaunch was not in place twice in a row"
+fi

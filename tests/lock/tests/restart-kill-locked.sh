@@ -47,7 +47,7 @@ wake_prompt || fail "the new shell's prompt did not wake"
 check_within 5 "the methods are known" state_is armed true
 finger ok
 check_within 10 "the finger unlocks the new shell's lock" compositor_unlocked
-check "the marker says unlocked" state_is marker unlocked
+check_within 3 "the marker says unlocked" state_is marker unlocked
 
 # Later cycles: by password, then by finger
 lock_by_ipc

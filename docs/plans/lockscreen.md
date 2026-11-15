@@ -1,7 +1,8 @@
 # Lock screen: analysis and rework plan
 
-Written 2026-11-14, after two days of fixes that each exposed another fault. Stages 0–3 are
-implemented, with the findings of their reviews fixed (section 7 is the current contract). It replaces patching with: a test bed
+Written 2026-11-14, after two days of fixes that each exposed another fault. Stages 0–5 are
+implemented, with the findings of their reviews fixed (section 7 is the current contract);
+Stage 6, the one check on the real machine, is prepared (`lockscreen-real-machine.md`). It replaces patching with: a test bed
 first, then a pure state machine with unit tests, then the I/O around it.
 
 Sources: a read of Quickshell 0.3.2's source (`src/services/pam/`, `src/wayland/session_lock*`,
@@ -250,18 +251,35 @@ is the launcher's, not Hyprland's: an `exec` runs once. Harness tests `reload-ex
 `restart-crash-locked`, `restart-launcher`, `restart-no-restore`,
 `restart-no-restore-generic`, `marker-stale`; the rules' entry in `tests/LockRulesTest.qml`
 (behaviour 14, sweep and liveness from carried locks). **The owner must add one line to
-the Hyprland config** — section 7, "What the owner adds to hyprland.lua".)
+the Hyprland config** — section 7, "What the owner adds to hyprland.lua". Review fixes
+(before Stage 6): no reload at unlock, the reload window narrowed, one supervisor per
+session, a stopped shell left alone, the compositor's identity, slow retries while locked,
+the marker's "unlocked" after the unlock request is out, the hyprctl question bounded —
+tests `reload-window`, `supervisor`, `restart-locked-retry`, `restart-compositor-gone`,
+`restart-hyprctl-hang`, `lock-log`, and `restart-crash-finger`'s launcher half.)
 
 **Stage 5 — the system side.** PAM configs and the NixOS module (no `nullok`, no reliance
 on `account`, the fingerprint config independent of the global switch), the method script
 (D-Bus instead of parsing `fprintd-list`, a timeout), the logind monitor without
 `XDG_SESSION_ID`. Report the Quickshell bug upstream.
 
-**Stage 6 — the real machine, once.** What no harness covers, as a short checklist for
-the owner: real password, real fingerprint, lid close and open, hibernation, power key.
+**Stage 6 — the real machine, once.** Prepared, not performed: the checklist is
+**`docs/plans/lockscreen-real-machine.md`** — escape routes first, then deployment
+checks, then the tests cheapest first, each with what must happen, the log lines to match
+and what it proves; any failure: `scripts/lock-log.sh` and stop. Before it, from the
+review of Stage 4: the reload at unlock removed, the reload window narrowed, one
+supervisor per session, the launcher's other findings fixed, and every step of a lock
+logged with a wall-clock stamp (section 7, "Log every step"). The notes below are what the
+checklist was built from.
+What no harness covers: real password, real fingerprint, lid close and open, hibernation,
+power key.
 From Stage 4: (1) with `allow_session_lock_restore = true` added to `hyprland.lua` and the
 shell started by Hyprland's autostart (so supervised: `pgrep -af scripts/launch.sh` shows
-the launcher), start `sleep 30; pkill -KILL -f 'quickshell -p .*h2s-shell'` in a terminal,
+the launcher), kill the shell by its pid — the launcher's pid from
+`$XDG_RUNTIME_DIR/h2s-shell-launcher.lock`, the shell its child: `launcher=$(cat
+"$XDG_RUNTIME_DIR/h2s-shell-launcher.lock"); shell=$(pgrep -P "$launcher"); (sleep 30; kill
+-KILL "$shell") &` (never a pattern kill: `pkill -f` also matches the PAM helpers, forks of
+the shell with its command line, and test-bed shells; checklist step 2.14) — then
 lock, wait: the prompt comes back within a few seconds, Hyprland's red "lockscreen app died"
 screen shows at most for that long; (2) the same with a finger on the reader right after:
 it unlocks at once (fprintd released the dead shell's claim when the launcher killed its
@@ -390,7 +408,9 @@ back but a TTY; a lenient one unlocks. So:
   `view` is included. **The driver exposes only this** — the IPC `state`, logs, test output.
   `describeEvent(event)` and `describeEffect(effect)` are what may be logged of events and
   effects: any `text` is replaced by `"<redacted>"`, a `key` is kept only when it is one of
-  `namedKeys`.
+  `namedKeys`, and a `pamMessage` of the password's conversation has its `message`
+  replaced by `"<not logged>"` (a passive method's message — "Place your finger…" — is
+  kept: it is what explains a failure).
 - `running(state) → { conversations: [{ method, conversation }], timers, lockTimers }`.
 - Parsers: `parseMethods(lines)` (array or string → `{ method: { directory, config } }`,
   junk skipped, first line per method wins), `parseLogind(line, sessionPath)` (→ one of the
@@ -487,7 +507,7 @@ Ids are compared strictly (`===`): a conversation id is the number the rules gav
 | `adoptCompositorLock` | `session` | (`restored` only, first) remembers `session` as the one in force and sets `WlSessionLock.locked = true` — on a reload, before Quickshell realizes the new `WlSessionLock`, so that it takes the old one's lock over; nothing is sent to the compositor. Writes the lock marker ("locked"), and checks once the reload is done that the lock is held (else the process quits for a fresh one, see "Reload") |
 | `lockCompositor` | `session` | writes the lock marker ("locked", before anything else: see "Restart"), sets `WlSessionLock.locked = true`, remembers `session` as the one in force, **then reads `locked` back**: false means Quickshell refused (no ext-session-lock, no surface component, `lock()` failing — all without a signal, and in each case before any lock object exists); it sets `locked = false` again (which sends nothing then, and clears Quickshell's target so the next lock is not a no-op) and queues `compositorFinished { session }` |
 | `unlockCompositor` | `session, reason, method?` | only for a confirmed session (the compositor rule); sets `WlSessionLock.locked = false` — refused, with an error, if the lock is not `secure` |
-| `announceLocked` | `locked` | tells the shell (`Profiles.screenLocked`); true: turns Quickshell's file watching off (`Quickshell.watchFiles = false`: no reload from file changes while locked, see "Reload") and asks for the password fallback again; false: restores file watching as it was, and if it was on, looks for QML/JS files of the shell changed since the lock began and reloads once if there are |
+| `announceLocked` | `locked` | tells the shell (`Profiles.screenLocked`); true: turns Quickshell's file watching off (`Quickshell.watchFiles = false`: no reload from file changes while locked, see "Reload") and asks for the password fallback again; false: restores file watching as it was (nothing else: edits made while locked take effect at the next file change) |
 | `detectMethods` | `generation` | runs the methods script (killing an older run) and reports its lines with this generation |
 | `startPam` | `method, conversation, configDirectory, config` | configures that method's PamContext and starts it; `start()` false → `pamStartFailed` |
 | `abortPam` | `method, conversation` | aborts it — only if `conversation` is the adapter's current one, else nothing |
@@ -594,6 +614,27 @@ Ordering guarantees within one step:
   keys, which carried a stale "on" into the next lock and took a composed capital — dead
   key + Shift+e, Compose, an input method's commit — for Caps Lock.)
 - **Never expose the state**: only `describe()`, `describeEvent()`, `describeEffect()`.
+- **Log every step** (Stage 6: what is read when the real machine fails), one line per
+  event, prefixed `[Lockscreen]`, never typed text or its length: every event of
+  `_loggedEvents` taken or ignored (with the reason) and every effect of `_loggedEffects`
+  (through the describe functions: the lock request and its source, the compositor asked /
+  confirmed / refused, methods detected — the configs per method — or failed with the
+  reason, each PAM start with its config, each PAM message — the password's not logged —,
+  each completion), the rules' `log` effects (retries, backoff, broken, refusals, the
+  unlock with its reason and method), and the driver's own: "driver started" (supervised
+  or not), "lock marker: locked <key>" / "unlocked", "<method> conversation <id> ended:
+  <result> after <ms> ms (<config>)", and what the views showed, logged after the step's
+  effects so that the log reads in order — "prompt awake on surface <id> (<screen>), woken
+  by <event>", "prompt asleep (<cause>)", "submit refused: <reason>", "prompt shows:
+  <error>", "the lock screen is up / gone". The adapters log the methods script's stderr,
+  PAM errors, the inhibitor's start and release, the monitor's restarts and the
+  `PreparingForSleep` answer; the recovery logs restores, reloads carried, quits for a
+  restart. Wall-clock stamps: Quickshell's log file has them (`qs log --log-times`), and the
+  launcher starts the shell with `--log-times` for its stderr. Where it all is, and the
+  one command that prints it: `scripts/lock-log.sh` (the running instance's and recently
+  ended instances' `$XDG_RUNTIME_DIR/quickshell/by-id/<id>/log.qslog`, the supervisor's
+  `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`, the marker, and the journal's PAM / fprintd /
+  polkit / logind lines; `lock-log` in the test bed).
 - **Never keep old states or effects.** The secret lives in `state.secret` from submit to
   PAM's first hidden prompt, and travels in the `respondPam` effect (and a typed answer in
   `respondPam`, a key's character in `forwardKey`). Any old state kept around keeps the
@@ -616,10 +657,49 @@ Ordering guarantees within one step:
   - File changes do not reload while locked: `Quickshell.watchFiles` is false from
     `announceLocked(true)` to `announceLocked(false)` (kept from the stop-gap: a reload now
     carries the lock, but it is the recovery path, not one to take at every file written
-    while the owner is away). At `announceLocked(false)` — the unlock is complete, nothing
-    of the lock is carried — the driver looks for QML/JS files changed since the lock began
-    (`find -newermt`) and reloads once if there are (Quickshell's new watcher does not see
-    what changed before it; the edits used to wait for the next file change).
+    while the owner is away). At `announceLocked(false)` file watching is simply switched
+    back on; edits made while locked take effect at the next file change (Quickshell's new
+    watcher does not see what changed before it). A reload right at the unlock (Stage 4,
+    `find -newermt` and `Quickshell.reload(false)`) was removed after review: it opened the
+    reload window below right after every unlock that followed an edit — the owner's
+    Super+L dropped, a lid closed then slept unlocked (`reload-window`).
+  - **The reload window** (any reload, above all a file saved while unlocked — the normal
+    case while the shell is developed). From source and observed: `RootWrapper::reloadGraph`
+    builds the whole new generation synchronously, with the event loop blocked (about two
+    seconds for this shell), then `onReload` tears the old generation down (`deleteLater`,
+    its engine deleted a pass later); a `Process` of the new generation starts only at its
+    `postReload`, after the old one is destroyed (`Process::startProcessIfReady` waits for
+    `isPostReload`). Meanwhile: an IPC call is answered "Not ready to accept queries yet."
+    (two generations exist; `src/io/ipccomm.cpp`) and `qs ipc` still exits 0; the old
+    logind monitor's lines are never read (event loop blocked, then the old engine
+    interrupted) and the new monitor is not yet listening — a PrepareForSleep in between
+    reaches nobody; the old generation's inhibitor dies with its `Process` (SIGKILL to the
+    direct child), and logind refuses a new inhibitor once a sleep is under way (systemd's
+    `logind-dbus.c`, `method_inhibit`: "already running"; from source as known, not observed
+    here). Narrowed
+    from our side, three ways:
+    - `scripts/launch.sh ipc` (what the Super+L bind runs) tries a call again for up to 3 s
+      when Quickshell answers "Not ready to accept queries yet." or finds no running
+      instance (a restart), and exits 1 if it was never taken.
+    - The logind monitor, once listening (gdbus monitor's "The name org.freedesktop.login1
+      is owned by …" line, which it prints after its match is in place), asks logind's
+      `PreparingForSleep` property (`gdbus call … org.freedesktop.DBus.Properties.Get`;
+      read-only, no polkit). True while the rules think the machine awake: the driver
+      dispatches `prepareForSleep` (logged), and the monitor drops its own PrepareForSleep
+      for that same sleep should it still arrive (within 10 s, no `resumed` between). Done
+      at every start of the monitor: a reload, a start, a restart of the monitor.
+    - The sleep inhibitor (`singletons/lock/SleepInhibitor.qml`) runs `systemd-inhibit`
+      beside a small `sh` (the direct child Quickshell kills), reading the same input:
+      released at once on the release line, and `graceSeconds` (3 s) after its input
+      closes without one — this generation gone. logind waits for it (it was held when
+      PrepareForSleep went out), so the new generation has those seconds to lock.
+    What remains: a PrepareForSleep during a reload still locks only if the new generation
+    has its lock confirmed before logind gives up waiting — within 3 s of the old
+    generation's teardown, and within logind's `InhibitDelayMaxSec` (5 s) of the signal;
+    with a reload of about two seconds, a signal in its first moments leaves about three
+    seconds for the rest of the build, the teardown, the monitor's start and the lock
+    (observed in the test bed: well within; on the real machine: Stage 6). A crash or kill
+    of the shell while awake delays a sleep that comes then by up to 3 s.
   - A soft reload while locked keeps the lock. `_carried`, a `PersistentProperties` placed
     before the `WlSessionLock` in `Lockscreen.qml` (keep it there: children are matched by
     position), holds `held` (this process has a compositor lock: from a `lockCompositor`
@@ -645,11 +725,20 @@ Ordering guarantees within one step:
   kill`, SIGTERM, `h2s-shell --restart`).
   - The lock marker, `$XDG_RUNTIME_DIR/h2s-shell-lock`, written synchronously and
     atomically (`FileView`, `blockWrites`, `atomicWrites`): "locked <key>" in
-    `lockCompositor` (before the request) and `adoptCompositorLock`, "unlocked" when the
-    lock has ended (the step that returns to unlocked, after its effects) — except a lock
-    the marker asked to take back that the compositor refused (it still holds its lock).
-    The key is the compositor session: `<boot id>:<WAYLAND_DISPLAY>:<the socket's device,
-    inode, ctime>`, from a probe at start ("?" until then).
+    `lockCompositor` (before the request) and `adoptCompositorLock`; "unlocked" 250 ms
+    after the step that returned to unlocked (`_markerUnlockDelay`), not in it — except a
+    lock the marker asked to take back that the compositor refused (it still holds its
+    lock). Why late: that step also set `WlSessionLock.locked = false`, and Quickshell's
+    `unlock_and_destroy` only reaches the compositor when the event loop next flushes the
+    Wayland connection; ext-session-lock-v1 has no reply to the unlock (and `secure` turns
+    false inside the setter, before anything is sent), so "the compositor confirmed the
+    unlock" cannot be had — a wait past the flush is what can. A shell killed within those
+    250 ms comes back locked (fail closed: one authentication too many), never believing a
+    session unlocked that the compositor still holds. A newer "locked" cancels a pending
+    "unlocked"; a reload in between writes it in the new generation (`_carried
+    .markerUnlockPending`, read by the start probe instead of taking the marker's "locked"
+    for a lock to restore). The key is the compositor session: `<boot id>:<WAYLAND_DISPLAY>:
+    <the socket's device, inode, ctime>`, from a probe at start ("?" until then).
   - At start the driver reads the marker (`LockIoRules.markerFacts`, `markerDecision`):
     "locked" with this session's key — or with "?" on either side (fail closed) — locks at
     once (`lockRequested { source: "restore" }`); "locked" with another key is stale (the
@@ -659,17 +748,54 @@ Ordering guarantees within one step:
     (not a link), else there is no marker (logged). The marker grants nothing: "locked"
     only causes a lock.
   - `scripts/launch.sh` supervises the shell (it no longer `exec`s Quickshell): the shell
-    runs as its child, in a process group of its own (`set -m`), with
-    `H2S_SHELL_SUPERVISOR=<launcher pid>` in its environment. When it ends the launcher
-    first kills what is left in that group running Quickshell's binary (PAM helpers — not
-    the crash reporter, nothing else), then starts it again unless it was stopped on
-    purpose: exit 0 or SIGTERM/SIGINT/SIGHUP while the marker says unlocked; the launcher
-    told to stop (SIGUSR1: let the shell go; SIGTERM/INT/HUP: also stop it); the compositor
-    gone (its socket removed: the end of the session). Pauses 1, 2, 4, 8, 16 s while the
-    shell keeps dying within 30 s; more than 5 restarts in 2 minutes and the launcher gives
-    up. `--restart` sends SIGUSR1 to each shell's supervisor (checked: the parent named in
-    its environment, running `launch.sh`) before `qs kill`, then starts a new launcher with
-    `setsid` (its own messages to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`).
+    runs as its child (`qs --log-times -p …`, its input from /dev/null), in a process group
+    of its own (`set -m`), with `H2S_SHELL_SUPERVISOR=<launcher pid>` in its environment.
+    - **One supervisor per session**: it holds `$XDG_RUNTIME_DIR/h2s-shell-launcher.lock`
+      (`flock`, util-linux: in `nix/package.nix`'s runtime programs; Arch's base) and writes
+      its pid there; the shell and the pauses' `sleep` do not inherit the descriptor. A
+      second launcher waits for the lock (15 s), then gives up with "launcher <pid> still
+      supervises the shell of this session: not starting a second one" (exit 1). Without
+      `flock` it says so and goes on unguarded. (Per user, as the marker is: two compositor
+      sessions of one user are not supported.)
+    - It waits for the shell to END (`wait -f`, bash ≥ 5.1; older bash polls a stopped
+      child): a stopped shell (SIGSTOP, SIGTTIN/SIGTTOU) is left alone — `wait` used to
+      return at the stop and the stopped shell was killed and replaced. When bash has
+      already reaped the shell and kept no record (`wait` 127, seen with bash 5.3 in about one
+      run in four of a test), the shell has ended and its status is lost: taken for a crash
+      (restarted) — the loop used to spin there and never restart it.
+    - When it ends the launcher first kills what is left in that group running Quickshell's
+      binary (PAM helpers — not the crash reporter, the only process with
+      `__QUICKSHELL_CRASH_DUMP_FD` in its environment: a shell relaunched in place carries
+      the other `__QUICKSHELL_CRASH_*` variables, and so do the PAM helpers it forks; nothing
+      else), then starts it again unless it was stopped on purpose: exit 0 or
+      SIGTERM/SIGINT/SIGHUP (129/130/143) while the marker says unlocked; the launcher told
+      to stop (SIGUSR1: let the shell go; SIGTERM/SIGINT: also stop it); the compositor gone.
+      SIGHUP to the launcher (the terminal it was started from closed) is logged and
+      ignored: the shell runs on, supervised — stopping it then left a locked session with
+      no prompt.
+    - "The compositor is gone": its socket is not the one seen at the launcher's start
+      (device, inode, ctime — a new compositor under the same name is another session,
+      whose own autostart starts its shell), or nobody holds `<socket>.lock`
+      (libwayland-server keeps an exclusive flock on it while serving the socket; a crashed
+      compositor leaves the socket file behind). Checked when the shell died and again
+      after the pause.
+    - Pauses 1, 2, 4, 8, 16 s while the shell keeps dying within 30 s; more than 5 restarts
+      in 2 minutes: given up — unless the marker says locked (and the compositor is alive):
+      then tried again every 60 s, each attempt logged, for as long as it stays so (giving
+      up left the owner at the compositor's dead-lock screen with no shell). A shell that
+      runs 30 s resets the count; the lock over (marker unlocked), deaths are counted
+      afresh. `H2S_LAUNCHER_TEST_TIMINGS` ("first=0.1 slow=2 lockwait=3", seconds) shortens
+      the pauses for the test bed (inert unless set).
+    - `--restart` sends SIGUSR1 to the supervisor holding the lock (checked: the pid in the
+      lock file, the user's, running `launch.sh`, the lock really held) whether or not a
+      shell is alive — one sleeping before a restart used to be told nothing and started a
+      second shell — and to each running shell's supervisor (the parent named in its
+      environment, running `launch.sh`), before `qs kill`; then starts a new launcher with
+      `setsid` (input and output /dev/null), which waits for the old one's lock.
+    - Its messages, one line each, `<date time.ms> h2s-shell launcher[<pid>]: …`, go to
+      stderr and to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log` (moved to `.old` past 512 KB):
+      Hyprland's autostart reads nobody's stderr.
+    - `launch.sh ipc call|prop …`: see "The reload window" (tried again for up to 3 s).
   - Quickshell's crash handler restarts a crashed shell in the same process (same pid: the
     launcher sees nothing, there is never a second shell); a crash within 10 s of starting
     exits 255 instead, and the launcher restarts it. The PAM helpers the crashed image had
@@ -678,27 +804,39 @@ Ordering guarantees within one step:
     carries; the LAST children of `Lockscreen.qml`, after `CapsLockLed`, so the ones before
     keep their positions) the driver kills its own children that run Quickshell's binary
     and started before the check — not the crash reporter (`__QUICKSHELL_CRASH_DUMP_FD` in
-    its environment). A process started fresh has none. Needed since the fingerprint
+    its environment) — and only in a process that was relaunched in place (its exec-time
+    environment, `/proc/<pid>/environ`, holds `__QUICKSHELL_CRASH_INFO_FD`; qunsetenv does
+    not change that block): a process started fresh sweeps nothing. It cannot hit a helper
+    of the new image's own conversations: those are forked after a methods detection that
+    starts no earlier than the sweep's own `sh` (both Processes, started at the first
+    `postReload` at the earliest), so they never have an earlier start time (`-lt`: the
+    same clock tick is spared); what the image forks before the sweep runs `sh`, not
+    Quickshell's binary. The launcher's clean-up is the other layer (a shell that died),
+    with the same two tests at another moment. Needed since the fingerprint
     configs wait with no time limit (`timeout=-1`, section 8): such a helper would keep the
     reader claimed for good (`restart-crash-finger`).
   - Under Hyprland (`HYPRLAND_INSTANCE_SIGNATURE` set) a lock is taken back only after
     asking `hyprctl -j getoption misc:allow_session_lock_restore` and `hyprctl -j locked`
-    (`LockIoRules.hyprlandLockFacts`): restoring not allowed and the session locked means
-    the lock would be refused and the shell killed for asking (section 1), so it is not
-    asked for. Anything else, or no Hyprland, asks.
+    (`LockIoRules.hyprlandLockFacts`), each bounded by `timeout 2` (a hung hyprctl stalled
+    the restore for good while the status said "unlocked"): restoring not allowed and the
+    session locked means the lock would be refused and the shell killed for asking (section
+    1), so it is not asked for. Anything else — no answer included (logged: "Hyprland did
+    not answer") — or no Hyprland, asks (`restart-hyprctl-hang`).
 - **Recovery** (the compositor will not give the lock back). The shell sets
   `_restorePending`: `locked` stays true for the rest of the shell (no idle lock, the
   screensaver logic as locked), the IPC `status` says `compositor-locked`, `lock()` asks for
   the lock back rather than a new one, the marker stays "locked", and it looks again after
   5 s, doubling to a minute (`_restoreTable`). A refusal by the compositor itself (without
   the Hyprland question) is handled the same. Without Hyprland's answer each attempt may
-  get the shell killed: the launcher's bound (5 restarts in 2 minutes) ends that.
+  get the shell killed: the launcher slows down to one attempt a minute after 5 restarts in
+  2 minutes (the marker says locked), so no hot loop, and a shell comes back by itself once
+  the setting is on.
   The owner's ways back, from another console (Ctrl+Alt+F2, log in):
   - `hyprctl -i 0 eval 'hl.config({ misc = { allow_session_lock_restore = true } })'` (with
     `XDG_RUNTIME_DIR` set, as a login sets it; `-i 0` is the first Hyprland instance) — the
     shell's next look takes the lock (within a minute; at once with `h2s-shell --restart`),
     and the prompt is back. Then add the line below to the config for good.
-  - If no shell runs any more (the launcher gave up, or the shell was never supervised):
+  - If no shell runs any more (the launcher was killed, or the shell was never supervised):
     after the line above, start it from that console as Hyprland's autostart does
     (`H2S_SHELL_DIR=$HOME/src/h2s-shell h2s-shell --restart`), with `WAYLAND_DISPLAY` and
     `HYPRLAND_INSTANCE_SIGNATURE` set to the session's (`hyprctl instances` lists both); it
@@ -883,10 +1021,13 @@ against code running in the shell.
   cannot get its prompt back until the setting is switched on (the owner's config; "What
   the owner adds"); meanwhile Hyprland's own "lockscreen app died" screen shows. Under a
   compositor that the shell cannot ask, a refused lock may get the shell killed at each
-  attempt: 5 restarts, then the launcher gives up and the way back is a console.
+  attempt: 5 quick restarts, then one a minute for as long as the marker says locked (a
+  shell that comes up once the compositor gives the lock back); the way back meanwhile is
+  a console.
 - Another locker holding the session (hyprlock, swaylock) when the shell restarts with a
   "locked" marker: under Hyprland with restoring allowed the shell asks, is refused and
-  killed, up to the launcher's bound; with restoring off it waits. Not a supported setup.
+  killed, 5 times quickly, then once a minute; with restoring off it waits. Not a supported
+  setup.
 - The PAM helpers left by a dead shell are killed by its launcher (a shell that died) or
   by the shell itself (restarted in place by Quickshell's crash handler: "Restart"). A
   helper of a shell that was not supervised (or of a launcher killed with it) lingers:
@@ -913,7 +1054,21 @@ against code running in the shell.
   timeout — more than it is worth; not done.
 - The marker is written before the lock request: a shell killed between the two comes back
   locked although the compositor never was (fail closed: one authentication too many). A
-  shell killed between the unlock and writing "unlocked" likewise.
+  shell killed — or stopped on purpose, SIGTERM or `qs kill` — within 250 ms after an unlock
+  likewise: the launcher starts it again and it locks ("unlocked" is written only then, past
+  the flush of the unlock request: "Restart"); one killed after it, with the request still
+  unread by a compositor that hangs, would come back believing the session unlocked —
+  ext-session-lock-v1 gives no confirmation of an unlock to wait for.
+- **The reload window** ("Reload"): for the ~2 s of a reload, an IPC call is dropped by
+  Quickshell (the launcher's `ipc` tries again for 3 s: a raw `qs ipc` caller is not
+  covered, and `qs ipc` still exits 0 — upstream draft, issue 4), and a PrepareForSleep is
+  heard only through the `PreparingForSleep` question after the reload, locking in time only
+  if the lock is confirmed within the old inhibitor's 3 s grace and logind's 5 s maximum
+  delay. Not closed: that would need the inhibitor and the monitor in a process that
+  outlives reloads (the supervisor), duplicating the rules' sleep logic there and leaving an
+  unsupervised shell without lock-before-sleep — more than the narrowed window is worth.
+- Edits made while locked take effect at the next file change after the unlock, not at
+  the unlock (no reload at unlock: "Reload").
 - If even ending a conversation throws on an internal error, the verify timer may be left
   running; its expiry is then ignored (the password is no longer pending).
 
@@ -954,7 +1109,9 @@ against code running in the shell.
   `/sys/class/leds`: the nested compositor has no keyboard, and the real one's LED is not
   the test's) and `H2S_LOCK_TEST_TIMINGS` (a JSON object of `LockRules.timings` overrides
   handed to `initial()`: minutes of rounds in seconds; `initial()` drops unknown names and
-  bad values; the timings decide when, never whether, a lock ends).
+  bad values; the timings decide when, never whether, a lock ends), and the launcher's
+  `H2S_LAUNCHER_TEST_TIMINGS` (its pauses — first, slow — and how long a new launcher
+  waits for the lock, in seconds: restart tests in seconds instead of minutes).
 
 ## 8. Stage 5: the system side (as implemented, 2026-11-14)
 
@@ -1145,7 +1302,23 @@ definition wins over the module's), but would stop following the module.
 `docs/upstream/quickshell-session-lock-unlock-notify.md` (a draft, not filed): the unlock
 notify (reproduced in the test compositor; fixed in Quickshell master by 18c95fae after
 v0.3.2, unreleased), a failed `fork()` in `PamContext.start()` ending in `kill(-1, SIGKILL)`
-(unfixed), and `locked = false` before `secure` sending `unlock_and_destroy` (unfixed).
+(unfixed), `locked = false` before `secure` sending `unlock_and_destroy` (unfixed), and —
+from the review of Stage 4 — `qs ipc call` exiting 0 when the call was dropped ("Not ready
+to accept queries yet." during a reload), which the launcher's `ipc` now works around.
 
 Not done in Stage 5: the logind monitor without `XDG_SESSION_ID` (Stage 5's list in
 section 4; not part of this work).
+
+## Backlog (after the real-machine check)
+
+- **First, before further lock work:** run the harness tests in parallel — each test already has its own isolated stack; a `-j N` in `tests/lock/run.sh` would cut the ~15 min run to a few minutes.
+- `scripts/launch.sh`: during the restart pause check the compositor every second, or have a new launcher wait for the lock longer than the longest pause (a fast re-login after a shell death at logout can leave the new session without a shell).
+- `scripts/launch.sh`: when `wait` returns 127, keep polling if the child is still alive and ours.
+- Wrap the `qs ipc` calls in `timeout 5`.
+- `recorded_supervisor` could prove the pid is the lock holder via `/proc/locks`.
+- Write the marker's pending "unlocked" on destruction when the unlock was already flushed.
+- CapsLockLed: a read arriving while a stale probe runs briefly shows the old answer.
+- Remove Escape's unlock after the check (LockRules `escapeUnlocks` and the tests that expect it — the checklist's last section, `docs/plans/lockscreen-real-machine.md` section 3, says exactly what).
+- The screensaver drops when a profile changes its timeout while it shows.
+- The three upstream Quickshell issues and the `qs ipc` exit-status one (`docs/upstream/`) are drafted, not filed.
+- Whether to drop the `login` fallback on NixOS, once `tests/manual/pam-probe.sh` (checklist 2.17) settles it.

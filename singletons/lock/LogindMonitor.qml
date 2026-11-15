@@ -31,6 +31,9 @@ Scope {
 
     signal event(var event)
     signal logLine(string level, string message)
+    // logind said, when asked right after the monitor began listening, that it is preparing
+    // for sleep (its PrepareForSleep came before anyone here listened: a reload, a start)
+    signal preparingForSleep()
 
     readonly property string sessionId: Quickshell.env("XDG_SESSION_ID") ?? ""
     // This session's object path once known; "" until then, or for none
@@ -46,6 +49,9 @@ Scope {
     property int _monitorDelay: 0
     property int _lookupDelay: 0
     property bool _lookupFailureLogged: false
+    // When PreparingForSleep was found true (ms): the monitor's own PrepareForSleep(true)
+    // for that same sleep, should it still arrive, is not reported twice
+    property double _sleepFoundAt: 0
 
     function start() {
         if (sessionId === "")
@@ -121,9 +127,24 @@ Scope {
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: line => {
+                // gdbus monitor's own first lines: it asks for logind's owner after adding its
+                // match, so either answer means it is listening from now on
+                if (/^The name org\.freedesktop\.login1 (is owned by|does not have an owner)/.test(line)) {
+                    _sleepCheck.running = true;
+                    return;
+                }
                 const parsed = LockRules.parseLogind(line, root.sessionPath);
-                if (parsed !== null)
-                    root.event(parsed);
+                if (parsed === null)
+                    return;
+                if (parsed.type === "resumed")
+                    root._sleepFoundAt = 0;
+                if (parsed.type === "prepareForSleep" && root._sleepFoundAt > 0
+                        && Date.now() - root._sleepFoundAt < 10000) {
+                    root._sleepFoundAt = 0;
+                    root.logLine("info", "logind's PrepareForSleep arrived after all; already acted on (PreparingForSleep)");
+                    return;
+                }
+                root.event(parsed);
             }
         }
 
@@ -143,5 +164,36 @@ Scope {
         id: _monitorRestart
         repeat: false
         onTriggered: root._startMonitor()
+    }
+
+    // ---- A sleep that began before the monitor listened ----
+    // A PrepareForSleep sent while no monitor of this shell listened is lost: during a reload
+    // (Quickshell builds the new generation with the event loop blocked — the old monitor's
+    // lines are never read — then tears the old one down; the new generation's processes
+    // start only after that), at a start, after a restart of the monitor. So once the monitor
+    // listens, logind is asked whether it is preparing for sleep (its PreparingForSleep
+    // property: read-only, no polkit). A sleep signalled from then on reaches the monitor.
+    Process {
+        id: _sleepCheck
+        property string _output: ""
+        command: [root._gdbus, "call", "--system", "--dest", "org.freedesktop.login1",
+            "--object-path", "/org/freedesktop/login1", "--method", "org.freedesktop.DBus.Properties.Get",
+            "org.freedesktop.login1.Manager", "PreparingForSleep"]
+        stdout: StdioCollector {
+            onStreamFinished: _sleepCheck._output = text
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            const output = _output;
+            _output = "";
+            if (/^\(<\s*true\s*>,?\)/.test(output.trim())) {
+                root._sleepFoundAt = Date.now();
+                root.logLine("warning", "logind is preparing for sleep (PreparingForSleep is true) as the monitor starts listening");
+                root.preparingForSleep();
+            } else if (!/^\(<\s*false\s*>,?\)/.test(output.trim())) {
+                root.logLine("info", "could not ask logind whether it is preparing for sleep: " + (output.trim().slice(0, 200) || "no answer"));
+            }
+        }
     }
 }

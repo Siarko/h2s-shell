@@ -1719,6 +1719,10 @@ TestCase {
                     "secrets: … but a named key is kept");
         const forward = LockRules.describeEffect({ type: "forwardKey", surface: "s1", key: "q", text: "p" });
         assert(forward.text === "<redacted>" && forward.key === "<redacted>", "secrets: … and a forwarded key's");
+        assertEqual(LockRules.describeEvent({ type: "pamMessage", method: "password", conversation: 1, message: "Password:" }).message,
+                    "<not logged>", "secrets: … and what the password's PAM stack says");
+        assertEqual(LockRules.describeEvent({ type: "pamMessage", method: "fingerprint", conversation: 2, message: "Place your finger" }).message,
+                    "Place your finger", "secrets: … but a passive method's message is kept (it is what explains a failure)");
         assert(lock.state.secret === null, "secrets: dropped once PAM has it");
 
         // Log effects never carry typed text, on any path a password takes

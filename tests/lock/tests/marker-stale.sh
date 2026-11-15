@@ -38,7 +38,7 @@ press_key Escape
 check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
 press_key Escape
 check_within 5 "unlocked" compositor_unlocked
-check "the marker says unlocked" test "$(cat "$marker")" = "unlocked"
+check_within 3 "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
 
 # ---- From another boot ----
 restart_with_marker "locked $(key_of 00000000-0000-0000-0000-000000000000)"
@@ -70,7 +70,7 @@ check_within 5 "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check "the marker says unlocked" test "$(cat "$marker")" = "unlocked"
+check_within 3 "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
 
 # ---- A key the old shell did not know yet ("?": it locked before its probe answered) ----
 restart_with_marker "locked ?"

@@ -11,7 +11,7 @@ press_key Escape
 check_within 3 "(Escape wakes the prompt)" state_is prompt_awake true
 press_key Escape
 check_within 5 "unlocked" compositor_unlocked
-check "the marker says unlocked" state_is marker unlocked
+check_within 3 "the marker says unlocked" state_is marker unlocked
 
 old_shell=$SHELL_PID
 signal_shell KILL
@@ -32,6 +32,9 @@ press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
 # Stopped on purpose while unlocked: not started again
+# (once the marker says so: within 250 ms of an unlock it still says "locked", and a shell
+# that stops then is started again and locks — fail closed, docs/plans/lockscreen.md, section 7)
+check_within 3 "the marker says unlocked" marker_file_is unlocked
 old_shell=$SHELL_PID
 signal_shell TERM
 check_within 5 "SIGTERM stops the shell" test ! -e "/proc/$old_shell"

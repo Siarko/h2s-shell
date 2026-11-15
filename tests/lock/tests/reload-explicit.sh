@@ -5,7 +5,8 @@
 # and the rules go on from `restored`. Without that, the new WlSessionLock starts with
 # `locked` false and unlocks the session with no authentication.
 #
-# Checked: the compositor never reports unlocked across the reload (polled every 50 ms), the
+# Checked: the compositor never reports unlocked across the reload (polled every 50 ms) and
+# Hyprland's debug log shows no new lock across it (it logs each lock, and no unlock), the
 # shell says locked, the same process, a prompt that wakes, the password unlocks, no
 # protocol error in either log; a later lock and unlock work (the process can lock again).
 # Then two reloads in a row while locked. (A reload while the compositor has not yet
@@ -19,6 +20,10 @@
 # harmless since its lock manager was handed over.
 
 stack_start --reload-seam --hyprland-debug
+
+# Hyprland logs every new session lock ("Session got locked by"), and no unlock at all: an
+# unlock and a lock again across a reload would show as one lock too many
+hyprland_locks() { sed 's/\x1b\[[0-9;]*m//g' "$WORK/hyprland.log" | grep -ac "Session got locked by"; }
 
 lock_by_ipc
 check_within 5 "locked" compositor_locked
@@ -42,6 +47,7 @@ check "the compositor's lock is still secure" state_is secure true
 check "the same process (a reload, not a restart)" kill -0 "$SHELL_PID"
 check "file watching is off while locked (also after the reload)" state_is watch_files false
 check_within 5 "the reloaded shell has its lock surface" state_is surfaces 1
+check "Hyprland's own log: one lock, never a new one across the reload" test "$(hyprland_locks)" = 1
 log "surface instances the rules know: $(state_field surfaces); session $(state_field session) (was $session_before)"
 describe_lock
 
@@ -51,7 +57,7 @@ type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks after the reload" compositor_unlocked
 check "the shell says unlocked" shell_status_is unlocked
-check "the marker says unlocked" state_is marker unlocked
+check_within 3 "the marker says unlocked" state_is marker unlocked
 
 lock_by_ipc
 check_within 5 "the reloaded shell locks again" compositor_locked
@@ -70,6 +76,7 @@ check_within 10 "the shell answers, locked" shell_status_is locked
 sleep 2
 stop_lock_watch
 check "the compositor never reported unlocked across two reloads in a row" lock_watch_never_unlocked
+check "Hyprland's own log: the second lock only, no new one across the two reloads" test "$(hyprland_locks)" = 2
 check "the same process" kill -0 "$SHELL_PID"
 wake_prompt || fail "the prompt did not wake after two reloads"
 check_within 5 "the methods are known" state_is armed true

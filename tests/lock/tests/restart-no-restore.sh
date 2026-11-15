@@ -64,5 +64,5 @@ check_within 5 "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check "the marker says unlocked" state_is marker unlocked
+check_within 3 "the marker says unlocked" state_is marker unlocked
 log "Hyprland on the lock: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/hyprland.log" | grep -a -E 'SessionLock|sessionLock|lockscreen|relock|restore' | grep -v -i 'clock\|LED\|Mod index' | tr '\n' '|')"

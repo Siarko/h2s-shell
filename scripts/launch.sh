@@ -9,13 +9,21 @@
 # dies (a crash, a kill, the OOM killer) — above all a shell that dies while the screen is
 # locked: the compositor keeps the session locked, and only a new shell can show a prompt
 # again (it finds the lock marker and locks at once; docs/plans/lockscreen.md, section 7,
-# "Restart"). See supervise() for what counts as stopping on purpose.
+# "Restart"). See supervise() for what counts as stopping on purpose. One supervisor per
+# session: it holds $XDG_RUNTIME_DIR/h2s-shell-launcher.lock (flock), and a second launcher
+# waits a little for it to end, then gives up. What it does is logged, timestamped, to
+# $XDG_RUNTIME_DIR/h2s-shell-launcher.log (scripts/lock-log.sh prints it).
 #
 #   launch.sh            start the shell, supervised (extra arguments go to qs; with -d,
 #                        Quickshell's own daemon mode, the shell is not supervised: its
 #                        starter exits at once. --restart is the detached, supervised start)
-#   launch.sh --restart  stop the running shell and start it again, detached (supervised)
-#   launch.sh ipc ARGS   `qs ipc ARGS` to this shell, e.g. `ipc call tablet set true`
+#   launch.sh --restart  stop the running shell (and its supervisor) and start it again,
+#                        detached (supervised)
+#   launch.sh ipc ARGS   `qs ipc ARGS` to this shell, e.g. `ipc call tablet set true`; a
+#                        call made while the shell reloads or restarts is tried again for
+#                        up to 3 s, and fails (status 1) if never taken
+#   launch.sh --lock-log [--minutes N] [--no-journal]
+#                        what happened to the lock screen (scripts/lock-log.sh)
 #   launch.sh --list     the installed icon themes, one per line
 #   launch.sh --resolve  the icon theme the shell would start with
 #   launch.sh --preview THEME
@@ -182,13 +190,45 @@ process_parent() {
     echo "$2"
 }
 
+runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+# What the launcher says, one timestamped line per event, also when nobody reads its
+# stderr (Hyprland's autostart): `scripts/lock-log.sh` prints it with the shell's log
+launcher_log=$runtime_dir/h2s-shell-launcher.log
+# One supervisor per session: the one running holds this lock and writes its pid in it
+lock_file=$runtime_dir/h2s-shell-launcher.lock
+
+say() {
+    local line
+    line="$(date '+%F %T.%3N') h2s-shell launcher[$$]: $*"
+    echo "$line" >&2
+    [ /dev/stderr -ef "$launcher_log" ] || echo "$line" >> "$launcher_log" 2> /dev/null
+}
+
+# The supervisor holding the lock, if any: the pid in the lock file, and only if that
+# process runs this script, is the user's, and the lock is really held
+recorded_supervisor() {
+    local pid=""
+    [ -f "$lock_file" ] && read -r pid < "$lock_file" 2> /dev/null
+    [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" != $$ ] && [ -O "/proc/$pid" ] || return 1
+    tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q 'scripts/launch\.sh' || return 1
+    if command -v flock > /dev/null; then
+        # Taken by nobody: the pid is a leftover (a supervisor killed with SIGKILL)
+        flock -n -s "$lock_file" true 2> /dev/null && return 1
+    fi
+    echo "$pid"
+}
+
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
 # the request over its socket) is terminated, then killed. The settings window is closed
 # first: Quickshell tearing it down with a text field focused crashed it on the way out
-# (QInputMethod::commit on the dying window), and the crash report popped up. A supervised
-# shell's supervisor is told first to let it go (SIGUSR1), or it would start it again.
+# (QInputMethod::commit on the dying window), and the crash report popped up. The
+# supervisor is told first to let the shell go (SIGUSR1), or it would start it again — the
+# one holding the lock whether or not a shell is alive (it may be in its pause before a
+# restart: told nothing, it would start a second shell beside the new one), and the
+# supervisor of each shell found.
 stop_shell() {
     local pids supervisor
+    supervisor=$(recorded_supervisor) && kill -USR1 "$supervisor" 2> /dev/null
     pids=$(shell_pids)
     [ -n "$pids" ] || return
     for pid in $pids; do
@@ -225,10 +265,6 @@ prepare_environment() {
     fi
 }
 
-runtime_dir=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
-
-say() { echo "h2s-shell launcher: $*" >&2; }
-
 # The lock marker the shell writes (singletons/Lockscreen.qml): "locked <key>" while it holds
 # or asks for a lock of the session
 died_locked() {
@@ -238,12 +274,33 @@ died_locked() {
     [ "$word" = locked ]
 }
 
-# The compositor is still there to start a shell in: its socket exists (a compositor that
-# exits removes it — the end of the session, when nothing is to be started again)
-compositor_alive() {
+compositor_socket() {
     local display=${WAYLAND_DISPLAY:-wayland-0}
-    case "$display" in /*) ;; *) display=$runtime_dir/$display ;; esac
-    [ -S "$display" ]
+    case "$display" in /*) echo "$display" ;; *) echo "$runtime_dir/$display" ;; esac
+}
+socket_identity() { stat -L -c '%d:%i:%Z' "$(compositor_socket)" 2> /dev/null; }
+
+# The compositor this launcher started under is still there. Not just "a socket file at
+# that path": a compositor that crashed leaves its socket behind, and one started later
+# under the same name is another session (whose own autostart starts its own shell). So:
+# the socket is the one seen when this launcher started (device, inode, ctime — as the
+# lock marker's key), and its compositor holds it: libwayland-server keeps an exclusive
+# flock on `<socket>.lock` for as long as it serves the socket.
+compositor_alive() {
+    local socket
+    socket=$(compositor_socket)
+    [ -S "$socket" ] || return 1
+    if [ -n "$compositor_identity" ] && [ "$(socket_identity)" != "$compositor_identity" ]; then
+        say "the compositor's socket $socket is not the one this launcher started under (a new compositor session)"
+        return 1
+    fi
+    if [ -e "$socket.lock" ] && command -v flock > /dev/null; then
+        if flock -n -s "$socket.lock" true 2> /dev/null; then
+            say "nobody holds $socket.lock: the compositor is dead (its socket was left behind)"
+            return 1
+        fi
+    fi
+    return 0
 }
 
 # What a dead shell left behind in its process group, of its own program: PAM helpers.
@@ -253,7 +310,9 @@ compositor_alive() {
 # process group of its own (set -m, below), whose id is its pid and cannot be reused while
 # anything is left in it; of what is left only processes running Quickshell's binary are
 # killed — never a program the shell started (a terminal, a browser), nor Quickshell's
-# crash reporter (marked by its environment).
+# crash reporter. The reporter is told by `__QUICKSHELL_CRASH_DUMP_FD`, which only it gets
+# (src/crash/handler.cpp): a shell Quickshell relaunched in place carries the other
+# `__QUICKSHELL_CRASH_*` variables in its environment, and so does every PAM helper it forks.
 clean_up_after() {
     local group=$1 stat pid binary
     for stat in /proc/[0-9]*/stat; do
@@ -265,9 +324,79 @@ clean_up_after() {
         [ "$3" = "$group" ] || continue
         binary=$(readlink "/proc/$pid/exe" 2> /dev/null) || continue
         case "${binary##*/}" in *quickshell*) ;; *) continue ;; esac
-        tr '\0' '\n' < "/proc/$pid/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH' && continue
+        tr '\0' '\n' < "/proc/$pid/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_DUMP_FD=' && continue
         say "killing what the shell left behind: $pid ($binary)"
         kill -KILL "$pid" 2> /dev/null
+    done
+}
+
+# The pauses, in milliseconds: the first after a quick death (doubling while the shell
+# keeps dying within 30 s of starting), and the slow retry of a shell that died while
+# locked and keeps dying; and how long a new launcher waits for an old one to end.
+# H2S_LAUNCHER_TEST_TIMINGS ("first=0.1 slow=2 lockwait=3", seconds) shortens them for the
+# lock test bed — inert unless set, and like the shell's test seams it grants nothing.
+pause_first_ms=1000
+pause_slow_ms=60000
+lock_wait=15
+seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
+for timing in ${H2S_LAUNCHER_TEST_TIMINGS:-}; do
+    value=$(seconds_to_ms "${timing#*=}")
+    [ -n "$value" ] || continue
+    case "$timing" in
+        first=*) pause_first_ms=$value ;;
+        slow=*) pause_slow_ms=$value ;;
+        lockwait=*) lock_wait=$(( (value + 999) / 1000 )) ;;
+    esac
+done
+ms_to_seconds() { awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | sed 's/\.\?0*$//'; }
+
+# Becomes the session's one supervisor: takes the lock, waiting (bounded) for a launcher
+# that is ending — `--restart` starts this one while the old one lets its shell go — and
+# gives up when another keeps it (a second autostart, a second terminal). Without flock
+# (it is util-linux's, in every base system) it goes on unguarded.
+become_supervisor() {
+    if ! command -v flock > /dev/null; then
+        say "flock is not installed: cannot make sure no other launcher supervises a shell"
+        return 0
+    fi
+    if ! exec {lock_fd}>> "$lock_file"; then
+        say "cannot open $lock_file: going on without the one-supervisor guard"
+        return 0
+    fi
+    if ! flock -n "$lock_fd"; then
+        local holder
+        holder=$(recorded_supervisor) || holder="?"
+        say "another launcher (pid $holder) supervises the shell: waiting up to $lock_wait s for it to end"
+        if ! flock -w "$lock_wait" "$lock_fd"; then
+            holder=$(recorded_supervisor) || holder="?"
+            say "launcher $holder still supervises the shell of this session: not starting a second one" \
+                "(h2s-shell --restart replaces it)"
+            exit 1
+        fi
+    fi
+    echo $$ > "$lock_file"
+}
+
+# Waits until the shell process ends — not when it only stops (SIGSTOP while debugging,
+# SIGTTIN/SIGTTOU from a terminal): with job control on, a plain `wait` returns at a stop,
+# and the stopped shell was taken for a dead one, killed and replaced. `wait -f` (bash 5.1)
+# waits for the end; a trapped signal still interrupts it, and the loop waits again while
+# the process exists. Older bash: a stopped child is polled.
+wait_for_shell() {
+    while :; do
+        if [ "$wait_ends" = 1 ]; then wait -f "$child"; else wait "$child"; fi
+        status=$?
+        # bash already reaped it and kept no record (seen with bash 5.3: "wait_for: No record
+        # of process", while `kill -0` still found the pid for a while — a busy loop that
+        # never restarted the shell). It has ended; its status is lost: taken for a crash
+        # (restarted — the safe side for a lock screen)
+        if [ "$status" = 127 ]; then
+            say "the shell's exit status was lost (bash kept no record of it): taken for a crash"
+            status=255
+            return 0
+        fi
+        kill -0 "$child" 2> /dev/null || return 0
+        [ "$wait_ends" = 1 ] || sleep 1
     done
 }
 
@@ -275,60 +404,118 @@ clean_up_after() {
 # purpose. On purpose: it quit cleanly (`qs kill`, exit status 0) or by SIGTERM / SIGINT /
 # SIGHUP — unless the screen was locked (the marker says so), since then only a new shell
 # can give the owner a prompt; or this script was told to stop (SIGUSR1: let the shell go,
-# as stop_shell does; SIGTERM/SIGINT/SIGHUP: stop it too); or the compositor is gone (the
-# session ended). Anything else — a crash Quickshell's own handler gave up on (it restarts
-# a crashed shell in the same process unless it crashed within 10 s of starting, then it
-# exits with 255), SIGKILL, the OOM killer — starts it again after a pause: 1 s, doubling
-# while it keeps dying within 30 s of starting, and never more than 5 times in 2 minutes
-# (a shell that cannot start is not started forever).
+# as stop_shell does; SIGTERM/SIGINT: stop it too); or the compositor is gone (the session
+# ended, or crashed). SIGHUP (the terminal it was started from closed) is not a request to
+# stop: the shell runs on, supervised. Anything else — a crash Quickshell's own handler
+# gave up on (it restarts a crashed shell in the same process unless it crashed within 10 s
+# of starting, then it exits with 255), SIGKILL, the OOM killer — starts it again after a
+# pause: 1 s, doubling while it keeps dying within 30 s of starting. More than 5 restarts
+# in 2 minutes: given up — unless the screen was locked when it died and the compositor is
+# still there, since giving up then leaves the owner at the compositor's dead-lock screen
+# for good: tried again every minute, until one runs (a later fix, a setting switched on).
 supervise() {
     prepare_environment
     export H2S_SHELL_SUPERVISOR=$$
-    local child="" stopping="" status started delay=1
-    local recent=()
-    trap 'stopping=1' USR1
-    trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2> /dev/null' TERM INT HUP
+    local child="" stopping="" status=0 started delay_ms=$pause_first_ms slow="" lock_fd=""
+    local recent=() wait_ends=0
+    [ "${BASH_VERSINFO[0]}" -gt 5 ] || { [ "${BASH_VERSINFO[0]}" -eq 5 ] && [ "${BASH_VERSINFO[1]}" -ge 1 ]; } && wait_ends=1
+    [ -f "$launcher_log" ] && [ "$(stat -c %s "$launcher_log" 2> /dev/null || echo 0)" -gt 524288 ] \
+        && mv -f "$launcher_log" "$launcher_log.old" 2> /dev/null
+    become_supervisor
+    # (Without the lock, a descriptor of no consequence: the redirections below close it)
+    [ -n "$lock_fd" ] || exec {lock_fd}< /dev/null
+    compositor_identity=$(socket_identity)
+    say "supervising the shell in $shell_dir (compositor socket $(compositor_socket)${compositor_identity:+, $compositor_identity})"
+    trap 'stopping=1; say "told to let the shell go (SIGUSR1)"' USR1
+    trap 'stopping=1; say "told to stop (SIGTERM/SIGINT): stopping the shell"; [ -n "$child" ] && kill -TERM "$child" 2> /dev/null' TERM INT
+    trap 'say "SIGHUP (the terminal it was started from closed?): the shell runs on, supervised"' HUP
     # Each child in a process group of its own: what it leaves behind can be found
     set -m
     while :; do
         started=$SECONDS
-        qs -p "$shell_dir" "$@" &
+        # Not the lock's descriptor (a shell outliving this launcher would keep the next one
+        # out), nor a terminal's input (a background job reading it is stopped)
+        qs --log-times -p "$shell_dir" "$@" < /dev/null {lock_fd}>&- &
         child=$!
-        # `wait` returns early when a trapped signal arrives: wait again while it runs
-        while :; do
-            wait "$child"
-            status=$?
-            [ -z "$(jobs -pr)" ] && break
-        done
+        say "started the shell: pid $child"
+        wait_for_shell
         clean_up_after "$child"
         child=""
         [ -n "$stopping" ] && break
         if ! died_locked; then
             case "$status" in
-                0) break ;;
+                0) say "the shell quit (status 0)"; break ;;
                 129 | 130 | 143) say "the shell was stopped (status $status)"; break ;;
             esac
         fi
+        compositor_alive || { say "the shell exited (status $status); the compositor is gone: not starting it again"; break; }
         local now=$SECONDS kept=() time
+        if [ $((now - started)) -ge 30 ]; then
+            delay_ms=$pause_first_ms
+            slow=""
+            recent=()
+        fi
         for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
         recent=("${kept[@]}" "$now")
-        if [ "${#recent[@]}" -gt 5 ]; then
-            say "the shell died $((${#recent[@]} - 1)) times in 2 minutes: not starting it again"
-            exit 1
+        # The slow retries were for a locked screen; that over (a shell came up and was
+        # unlocked), deaths are counted afresh
+        if [ -n "$slow" ] && ! died_locked; then
+            slow=""
+            recent=("$now")
+            delay_ms=$pause_first_ms
         fi
-        if [ $((now - started)) -ge 30 ]; then delay=1; fi
-        say "the shell exited (status $status)$(died_locked && echo ' while the screen was locked'): starting it again in $delay s"
-        sleep "$delay" &
+        if [ -z "$slow" ] && [ "${#recent[@]}" -gt 5 ]; then
+            if died_locked; then
+                slow=1
+                say "the shell died $((${#recent[@]} - 1)) times in 2 minutes while the screen was locked: trying again every $(ms_to_seconds "$pause_slow_ms") s"
+            else
+                say "the shell died $((${#recent[@]} - 1)) times in 2 minutes: not starting it again"
+                exit 1
+            fi
+        fi
+        [ -n "$slow" ] && delay_ms=$pause_slow_ms
+        say "the shell exited (status $status)$(died_locked && echo ' while the screen was locked'): starting it again in $(ms_to_seconds "$delay_ms") s"
+        sleep "$(ms_to_seconds "$delay_ms")" {lock_fd}>&- &
         wait $! 2> /dev/null
-        [ $((now - started)) -lt 30 ] && delay=$((delay * 2))
+        kill $! 2> /dev/null
+        [ -z "$slow" ] && [ $((now - started)) -lt 30 ] && delay_ms=$((delay_ms * 2))
         [ -n "$stopping" ] && break
         compositor_alive || { say "the compositor is gone: not starting the shell again"; break; }
     done
+    say "supervisor ends"
+}
+
+# `qs ipc` to this shell, with one thing added: Quickshell answers "Not ready to accept
+# queries yet." while it reloads (two generations alive for a moment, src/io/ipccomm.cpp)
+# and exits 0 all the same — the owner's Super+L was silently lost. Such a request, and one
+# made while no shell runs (the supervisor restarting it), is tried again for up to 3 s;
+# still not taken, it fails (status 1).
+ipc_with_retry() {
+    case "$1" in
+        call | prop) ;;
+        *) exec qs -p "$shell_dir" ipc "$@" ;;
+    esac
+    local errors output status attempt
+    errors=$(mktemp "${TMPDIR:-/tmp}/h2s-shell-ipc.XXXXXX") || exec qs -p "$shell_dir" ipc "$@"
+    for attempt in $(seq 1 30); do
+        output=$(qs -p "$shell_dir" ipc "$@" 2> "$errors")
+        status=$?
+        # (Quickshell prints these on its standard output or error, depending on the case)
+        { printf '%s\n' "$output"; cat "$errors"; } | grep -qE 'Not ready to accept queries yet|No running instances' || break
+        [ "$attempt" = 30 ] && { status=1; break; }
+        sleep 0.1
+    done
+    [ -n "$output" ] && printf '%s\n' "$output"
+    cat "$errors" >&2
+    rm -f "$errors"
+    return "$status"
 }
 
 case "$1" in
     # Straight to the running shell: no icon theme to work out
-    ipc) exec qs -p "$shell_dir" "$@" ;;
+    ipc) shift; ipc_with_retry "$@"; exit $? ;;
+    # The lock screen's log, for reading after a failed attempt (the wrapper's PATH has qs)
+    --lock-log) shift; exec "$shell_dir/scripts/lock-log.sh" "$@" ;;
     --list) list_themes ;;
     --resolve) resolve_theme ;;
     --preview) preview_theme "$2" ;;
@@ -336,13 +523,14 @@ case "$1" in
         stop_shell
         shift
         # A new supervisor, out of this process's session (the settings' "Restart to apply"
-        # runs this from inside the shell being stopped); what it says goes to a log in the
-        # runtime dir, the shell's own log is Quickshell's
+        # runs this from inside the shell being stopped). It waits for the old one to end
+        # (the lock); what it says goes to the launcher's log, the shell's own log is
+        # Quickshell's (`qs log`, scripts/lock-log.sh)
         self=$(readlink -f "$0")
         if command -v setsid > /dev/null; then
-            setsid "$self" "$@" < /dev/null >> "$runtime_dir/h2s-shell-launcher.log" 2>&1 &
+            setsid "$self" "$@" < /dev/null > /dev/null 2>&1 &
         else
-            ( trap '' HUP; exec "$self" "$@" ) < /dev/null >> "$runtime_dir/h2s-shell-launcher.log" 2>&1 &
+            ( trap '' HUP; exec "$self" "$@" ) < /dev/null > /dev/null 2>&1 &
         fi
         ;;
     *)

@@ -30,6 +30,7 @@ Scope {
 
     // A read now (and one shortly after); a read asked for while one runs is run after it
     function read() {
+        _discard = false;
         _settle.restart();
         _run();
     }
@@ -37,10 +38,15 @@ Scope {
     // Forgotten (a new lock): unknown until the next read answers
     function forget() {
         _settle.stop();
+        _again = false;
+        // A read still running (the 250 ms re-read after the last key of the lock before)
+        // answers for the old lock: its answer is dropped
+        _discard = _probe.running;
         _on = null;
     }
 
     property bool _again: false
+    property bool _discard: false
     property var _lines: []
 
     function _run() {
@@ -78,7 +84,10 @@ Scope {
                 return;
             const lines = root._lines;
             root._lines = [];
-            root._on = LockIoRules.capsLockFromLeds(lines);
+            if (root._discard)
+                root._discard = false;
+            else
+                root._on = LockIoRules.capsLockFromLeds(lines);
             if (root._again) {
                 root._again = false;
                 root._run();

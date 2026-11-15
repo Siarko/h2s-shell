@@ -187,6 +187,8 @@ Singleton {
             timings: root._testTimings()
         });
         let viewJson = "";
+        // What publish() saw change, to be logged at the end of the step
+        let viewLog = [];
         // Surface objects ↔ ids; the timers by name; the per-lock adapters; the session of
         // the last lockCompositor; Quickshell.watchFiles as it was before the lock
         const surfaceIds = new Map();
@@ -200,14 +202,15 @@ Singleton {
         // Recovery (see the header). `lockKey`: this compositor session's key for the
         // marker, "?" until the start probe has answered (a marker with "?" counts as this
         // session's: fail closed). `restoring`: the lock in force or being asked for is one
-        // the marker asked to take back — until the compositor confirms it. `lockedAt`: when
-        // the lock began (seconds), for the edits made while locked
+        // the marker asked to take back — until the compositor confirms it
         let lockKey = "?";
         let markerState = "";
         let restoring = false;
         let restoreDelay = 0;
         let restoreRefusalLogged = false;
-        let lockedAt = 0;
+        // Each PAM conversation's start, for the duration logged at its end: { method:
+        // { conversation, at, config } }
+        const pamStarts = {};
 
         const log = root._log;
         const describeEvent = event => JSON.stringify(LockRules.describeEvent(event));
@@ -237,6 +240,8 @@ Singleton {
             const logged = root._loggedEvents.includes(event?.type);
             if (result.error === true)
                 log("error", "internal error in the rules on " + describeEvent(event) + (result.ignored ? ": " + result.ignored : ""));
+            if (event?.type === "pamCompleted")
+                logPamEnd(event, result.ignored);
             if (result.ignored !== "") {
                 if (logged)
                     log("info", "ignored " + describeEvent(event) + ": " + result.ignored);
@@ -251,11 +256,12 @@ Singleton {
                     if (state.phase.status !== "unlocked" && scope === null)
                         scope = createScope();
                 },
-                publish: publish,
+                publish: () => publish(event),
                 execute: execute,
                 // The lock is over and its effects (aborts included) have run: its adapters
                 // go, and with them anything they still had running
                 finish: () => {
+                    finishViewLog();
                     if (state.phase.status === "unlocked" && scope !== null) {
                         const ending = scope;
                         scope = null;
@@ -271,17 +277,57 @@ Singleton {
 
         // `view` is replaced only when it changed: pointer motion moves the prompt's deadline
         // in the state at every event, which the views need not hear about
-        function publish() {
+        // What the owner saw change goes to the log too, with what caused it (`cause`: the
+        // event of the step): the prompt waking and sleeping, a refused submit, an error shown
+        function publish(cause) {
             const view = LockRules.view(state);
             const json = JSON.stringify(view);
             if (json === viewJson)
                 return;
-            const woke = view.promptSurface !== null && root._view.promptSurface === null;
+            const before = root._view;
+            const woke = view.promptSurface !== null && before.promptSurface === null;
+            const slept = view.promptSurface === null && before.promptSurface !== null;
             viewJson = json;
             root._view = view;
+            const by = cause ? cause.type + (cause.type === "timer" ? " " + cause.name : "")
+                + (cause.type === "key" && cause.key ? " " + cause.key : "") : "start";
+            // Said after the step's effects (finishViewLog), so that the log reads in the
+            // order things happened: the verdict, then what the prompt showed for it
+            const said = [];
+            if (woke)
+                said.push("prompt awake on surface " + view.promptSurface + " (" + view.promptScreen + "), woken by " + by);
+            else if (slept && view.locked)
+                said.push("prompt asleep (" + by + ")");
+            if (view.refusal !== "" && view.refusal !== before.refusal)
+                said.push("submit refused: " + view.refusal);
+            if (view.error !== "" && view.error !== before.error)
+                said.push("prompt shows: " + view.error);
+            if (view.locked !== before.locked)
+                said.push(view.locked ? "the lock screen is up" : "the lock screen is gone");
+            viewLog = viewLog.concat(said);
+            if (!cause)
+                finishViewLog();
             // Caps Lock is read from its LED when somebody comes back to the prompt
             if (woke)
                 _capsLed.read();
+        }
+
+        function finishViewLog() {
+            const lines = viewLog;
+            viewLog = [];
+            for (const line of lines)
+                log("info", line);
+        }
+
+        // A PAM conversation's end, with how long it ran and its config (the start effect
+        // logs the start); `ignored`: why the rules did not take it, if they did not
+        function logPamEnd(event, ignored) {
+            const start = pamStarts[event.method];
+            if (!start || start.conversation !== event.conversation)
+                return;
+            delete pamStarts[event.method];
+            log("info", event.method + " conversation " + event.conversation + " ended: " + event.result + " after "
+                + (Date.now() - start.at) + " ms (" + start.config + ")" + (ignored ? "; not taken: " + ignored : ""));
         }
 
         function execute(effect) {
@@ -343,25 +389,27 @@ Singleton {
                 Profiles.screenLocked = effect.locked;
                 // No reload while locked, from file changes: a reload carries the lock over
                 // now (`restored`), but that is the recovery path, not one to take at every
-                // file written while the owner is away. Edits made meanwhile are looked
-                // for at the unlock, and reloaded then (editsWhileLocked)
+                // file written while the owner is away. At the unlock file watching is
+                // simply switched back on: edits made meanwhile take effect at the next
+                // file change. (A reload right after the unlock was tried and removed: for
+                // its ~2 s a lock request by IPC was dropped and logind's PrepareForSleep
+                // missed — the lid closed right after an unlock slept unlocked.)
                 if (effect.locked) {
                     // Nothing of an earlier lock's Caps Lock is shown: read at the wake
                     _capsLed.forget();
                     watchFilesBefore = Quickshell.watchFiles;
                     Quickshell.watchFiles = false;
-                    lockedAt = Math.floor(Date.now() / 1000);
                     probeFallback();
                 } else {
                     Quickshell.watchFiles = watchFilesBefore;
-                    if (watchFilesBefore)
-                        editsWhileLocked();
                 }
                 break;
             case "detectMethods":
                 scopeFor(effect)?.detect(effect.generation);
                 break;
             case "startPam":
+                pamStarts[effect.method] = { conversation: effect.conversation, at: Date.now(),
+                    config: effect.configDirectory + "/" + effect.config };
                 scopeFor(effect)?.pam(effect.method)?.start(effect.conversation, effect.configDirectory, effect.config);
                 break;
             case "abortPam":
@@ -452,9 +500,29 @@ Singleton {
         function writeMarker(word) {
             if (root._markerPath === "")
                 return;
+            // A pending "unlocked" never overwrites a newer "locked"
+            _markerUnlockDelay.stop();
+            _carried.markerUnlockPending = false;
             markerState = word;
             _marker.setText(word === "locked" ? "locked " + lockKey + "\n" : "unlocked\n");
+            log("info", "lock marker: " + (word === "locked" ? "locked " + lockKey : "unlocked"));
         }
+
+        // "unlocked" goes on disk a moment after the step that ended the lock, not in it:
+        // that step also set `locked = false`, and Quickshell's unlock_and_destroy is only
+        // queued then — it reaches the compositor when the event loop flushes the Wayland
+        // connection. A shell killed in between used to leave the compositor locked and a
+        // marker saying "unlocked": its successor came up believing the session unlocked,
+        // and the owner sat at the compositor's dead-lock screen. Now the marker says
+        // "locked" until the request is long sent: killed then, the successor locks again
+        // (fail closed — one authentication too many). ext-session-lock-v1 has no reply to
+        // the unlock (and `secure` turns false inside the setter, before anything is
+        // sent), so a short wait is the confirmation to be had.
+        function markerUnlockDue() {
+            if (state.phase.status === "unlocked" && !restoring && !_carried.held && markerState === "locked")
+                writeMarker("unlocked");
+        }
+        _markerUnlockDelay.triggered.connect(markerUnlockDue);
 
         // The lock this shell had (or asked for) is over. A lock the marker asked to take
         // back and the compositor refused is not over for the compositor: it keeps its lock
@@ -471,7 +539,14 @@ Singleton {
             restoring = false;
             root._restorePending = false;
             restoreDelay = 0;
-            writeMarker("unlocked");
+            if (markerState === "locked") {
+                if (!_markerUnlockDelay.running)
+                    _markerUnlockDelay.restart();
+                // A reload in the meantime writes it in the new generation (the start probe)
+                _carried.markerUnlockPending = true;
+            } else {
+                writeMarker("unlocked");
+            }
         }
 
         // The compositor will not (or did not) give the lock back: said once, shown in the
@@ -533,7 +608,10 @@ Singleton {
         _restoreProbe.answered.connect(output => {
             if (!restoring || state.phase.status !== "unlocked")
                 return;
-            if (LockIoRules.lockSurelyRefused(LockIoRules.hyprlandLockFacts(output))) {
+            const facts = LockIoRules.hyprlandLockFacts(output);
+            if (facts.restoreAllowed === null && facts.locked === null)
+                log("warning", "Hyprland did not answer (hyprctl, 2 s each): asking for the lock back anyway");
+            if (LockIoRules.lockSurelyRefused(facts)) {
                 restoreRefused("Hyprland is locked and does not allow restoring the lock; not asking, which would get "
                     + "this shell killed");
                 return;
@@ -572,6 +650,13 @@ Singleton {
             }
             if (facts.key !== "")
                 lockKey = facts.key;
+            // A reload came between an unlock and its "unlocked" (markerUnlockDue): the old
+            // generation sent its unlock long before this one could start
+            if (_carried.markerUnlockPending && !_carried.held && state.phase.status === "unlocked") {
+                markerState = "locked";
+                writeMarker("unlocked");
+                return;
+            }
             // A lock in force got "?" in its marker: now the key is known
             if (markerState === "locked")
                 writeMarker("locked");
@@ -583,23 +668,6 @@ Singleton {
                 if (state.phase.status === "unlocked" && markerState === "")
                     writeMarker("unlocked");
             }
-        });
-
-        // Files of the shell changed while it was locked (Quickshell's file watching was off,
-        // and a new watcher does not see what changed before it): one reload now, after the
-        // unlock — which is complete by then; nothing of the lock is carried
-        function editsWhileLocked() {
-            if (!_editsProbe.running) {
-                _editsProbe.since = lockedAt;
-                _editsProbe.running = true;
-            }
-        }
-
-        _editsProbe.answered.connect(changed => {
-            if (changed === "" || state.phase.status !== "unlocked" || !Quickshell.watchFiles)
-                return;
-            log("info", "files of the shell changed while it was locked (" + changed + "): reloading now");
-            Qt.callLater(() => Quickshell.reload(false));
         });
 
         _restoreRetry.triggered.connect(tryRestore);
@@ -617,6 +685,19 @@ Singleton {
             });
         });
         _logind.event.connect(dispatchFrom(root._logindEvents));
+        // logind is already preparing for sleep when the monitor starts listening: its
+        // PrepareForSleep came while no monitor of this shell could hear it — the shell
+        // reloading (the event loop blocked, then the old generation torn down) or starting.
+        // Taken as that PrepareForSleep, once (only while the rules think the machine is
+        // awake): the lock goes up now, while logind still waits for the inhibitor the old
+        // generation held (SleepInhibitor: kept a few seconds after its holder vanished)
+        _logind.preparingForSleep.connect(() => {
+            if (state.sleep.status !== "awake")
+                return;
+            log("warning", "logind is preparing for sleep and no PrepareForSleep was heard (it came while the shell was "
+                + "reloading or starting): acting on it now");
+            dispatch({ type: "prepareForSleep" });
+        });
 
         const registered = surface => surfaceIds.has(surface) ? surfaceIds.get(surface) : null;
 
@@ -696,6 +777,9 @@ Singleton {
             }
         };
 
+        const supervisor = Quickshell.env("H2S_SHELL_SUPERVISOR") ?? "";
+        log("info", "driver started" + (supervisor !== "" ? ", supervised by the launcher (pid " + supervisor + ")"
+            : ", NOT supervised (started without scripts/launch.sh): a shell that dies while locked is not started again"));
         publish();
         dispatch({ type: "started" });
         probeFallback();
@@ -719,6 +803,8 @@ Singleton {
         id: _carried
         property bool held: false
         property bool secure: false
+        // The lock ended and the marker's "unlocked" is still to be written (markerUnlockDue)
+        property bool markerUnlockPending: false
         onReloaded: {
             if (held)
                 root._api?.restoreAfterReload(secure);
@@ -809,32 +895,15 @@ Singleton {
         }
     }
 
-    // The shell's QML or JS files changed since `since` (seconds): the first one found, or ""
-    Process {
-        id: _editsProbe
-        signal answered(string changed)
-        property int since: 0
-        property string _found: ""
-        command: ["find", Quickshell.shellDir, "-path", "*/.git", "-prune", "-o", "(", "-name", "*.qml", "-o", "-name", "*.js", ")",
-            "-newermt", "@" + since, "-print", "-quit"]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => {
-                if (_editsProbe._found === "" && line.trim() !== "")
-                    _editsProbe._found = line.trim();
-            }
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            const found = _found;
-            _found = "";
-            answered(found);
-        }
-    }
-
     Timer {
         id: _restoreRetry
+        repeat: false
+    }
+
+    // The marker's "unlocked" after a lock ended (see markerUnlockDue in _build)
+    Timer {
+        id: _markerUnlockDelay
+        interval: 250
         repeat: false
     }
 
@@ -844,7 +913,10 @@ Singleton {
         id: _restoreProbe
         signal answered(string output)
         property string _output: ""
-        command: ["sh", "-c", "hyprctl -j getoption misc:allow_session_lock_restore; echo; hyprctl -j locked"]
+        // Each question bounded (2 s): a hung hyprctl used to stall the restore for good while
+        // the status said "unlocked". No answer is no answer: the lock is asked for (the
+        // generic path), as without Hyprland
+        command: ["sh", "-c", "timeout 2 hyprctl -j getoption misc:allow_session_lock_restore; echo; timeout 2 hyprctl -j locked"]
         stdout: StdioCollector {
             onStreamFinished: _restoreProbe._output = text
         }
@@ -1006,8 +1078,17 @@ Singleton {
     // claimed for good, and the new shell's fingerprint would fail at its claim. So once per
     // process (`done` is carried over soft reloads, which leave the helpers to their own
     // PamContexts), children of this process running Quickshell's binary that started
-    // before this check are killed — not Quickshell's crash reporter (marked by its
-    // environment). A process started fresh has none.
+    // before this check are killed — not Quickshell's crash reporter (only it has
+    // `__QUICKSHELL_CRASH_DUMP_FD`, src/crash/handler.cpp). And only in a process that WAS
+    // relaunched in place: its exec-time environment (/proc/<pid>/environ, which qunsetenv
+    // does not change) holds `__QUICKSHELL_CRASH_INFO_FD`; a process started fresh sweeps
+    // nothing. Why it cannot hit a helper of this process's own conversations: those are
+    // forked after the methods script has answered, which is after this check's `sh` was
+    // forked (both are Processes, started at the generation's first postReload at the
+    // earliest), and a process forked later never has an earlier start time (equal, within
+    // one clock tick, is spared: `-lt`). What else this process forks before the check runs
+    // `sh`, not Quickshell's binary. The launcher's clean-up (scripts/launch.sh) is the other
+    // layer, for a shell that died: the same two tests, at another moment.
     PersistentProperties {
         id: _helperSweepOnce
         property bool done: false
@@ -1025,6 +1106,7 @@ Singleton {
             "shell=$PPID\n"
             + "read -r own < /proc/$$/stat; own=${own##*) }; set -- $own; own_start=${20}\n"
             + "binary=$(readlink /proc/$shell/exe)\n"
+            + "tr '\\0' '\\n' < /proc/$shell/environ 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_INFO_FD=' || exit 0\n"
             + "for stat in /proc/[0-9]*/stat; do\n"
             + "    pid=${stat#/proc/}; pid=${pid%/stat}\n"
             + "    [ \"$pid\" = $$ ] && continue\n"

@@ -9,8 +9,10 @@ import qs.singletons
 // the screen can lock first. Lives for the shell's lifetime.
 //
 // The lock is held for as long as `systemd-inhibit` runs; it ends when a line arrives on
-// its input (the release), or when the shell goes away and that input closes with it — so
-// a crashed shell leaves no inhibitor behind. When it ends while still wanted (logind
+// its input (the release), or a few seconds after the shell goes away and that input closes
+// with it (`graceSeconds`, below) — so a crashed shell leaves no inhibitor behind for long,
+// and a reload leaves logind waiting while the new generation locks. When it ends while
+// still wanted (logind
 // restarted, no system bus) it is taken again after a growing pause
 // (LockIoRules.restartDelay), never in a tight loop; after a release this shell asked for,
 // a new hold starts at once.
@@ -57,18 +59,37 @@ Scope {
         _process.running = true;
     }
 
+    // systemd-inhibit holds the lock while its command runs: `read -r release`, which ends at
+    // once on the release line, and — when its input closes without one (this shell gone:
+    // crashed, killed, or this generation torn down by a reload) — only after `graceSeconds`.
+    // Those seconds bridge a reload: logind refuses a new inhibitor while a sleep is
+    // already under way, and waits only for the ones held when it said PrepareForSleep, so
+    // the old generation's inhibitor is what keeps the machine up while the new generation
+    // locks (LogindMonitor asks logind about a sleep it did not hear). For that it must not
+    // be the process Quickshell kills when the old generation's Process goes (SIGKILL to its
+    // direct child): a small sh is, and systemd-inhibit runs beside it, reading the same input.
+    readonly property int graceSeconds: 3
+
     Process {
         id: _process
         stdinEnabled: true
-        command: [root.toolDirectory !== "" ? root.toolDirectory + "/systemd-inhibit" : "systemd-inhibit",
-            "--what=sleep", "--mode=delay", "--who=h2s-shell",
-            "--why=Lock the screen before sleep", "sh", "-c", "read -r release"]
+        command: ["sh", "-c",
+            "exec 3<&0\n"
+            + "\"$0\" --what=sleep --mode=delay --who=h2s-shell '--why=Lock the screen before sleep' "
+            + "sh -c \"read -r release || sleep $1\" <&3 3<&- &\n"
+            + "wait $!",
+            root.toolDirectory !== "" ? root.toolDirectory + "/systemd-inhibit" : "systemd-inhibit",
+            String(root.graceSeconds)]
 
         onRunningChanged: {
-            if (running)
+            if (running) {
+                root.logLine("info", "sleep inhibitor: systemd-inhibit started (delay lock wanted)");
                 return;
+            }
             const released = root._releasing;
             root._releasing = false;
+            if (released)
+                root.logLine("info", "sleep inhibitor released");
             if (!root.wanted)
                 return;
             if (released) {

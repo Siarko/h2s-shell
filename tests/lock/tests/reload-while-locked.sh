@@ -25,13 +25,10 @@ wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-# (The file written while locked is reloaded once right after the unlock — Stage 4,
-# edit-while-locked.sh — so the shell may be mid-reload for a moment here)
 check_within 5 "file watching is on again after the unlock" state_is watch_files true
-check_within 10 "the edit made while locked was reloaded at the unlock" grep -aq "files of the shell changed while it was locked" "$WORK/shell.log"
-wait_until 10 shell_status_is unlocked
-check "file watching is still on after that reload" state_is watch_files true
-reloads_before=$(grep -ac "Reloading configuration" "$WORK/shell.log")
+sleep 1
+check "the unlock itself did not reload (edit-while-locked.sh)" \
+    test "$(grep -ac "Reloading configuration" "$WORK/shell.log")" = "$reloads_before"
 
 echo "// written by tests/lock reload-while-locked.sh after the unlock" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
 log "wrote to the shell's copy after the unlock"

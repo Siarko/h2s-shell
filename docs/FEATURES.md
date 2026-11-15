@@ -236,11 +236,14 @@ Two independent stages, both driven by Wayland idle notifications:
   ("Unlocking…"), since unlocking a lock the compositor has not confirmed is a protocol
   error. A confirmation late by more than 5 s is shown ("Waiting for the compositor…").
 - **Failure and recovery** — the screen stays locked whatever happens to the shell. A file
-  written in its folder while locked does not reload it; the shell reloads once right after
-  the unlock instead. A reload asked for while locked keeps the lock (a new authentication
-  is needed). A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
+  written in its folder while locked does not reload it (the edit takes effect at the next
+  file change after the unlock). A reload asked for while locked keeps the lock (a new
+  authentication is needed); a lid closed while the shell reloads still locks before sleep
+  as long as the lock is up within a few seconds (plan section 7, "The reload window").
+  A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
   `h2s-shell --restart` — is started again by the launcher (`h2s-shell`, which stays as its
-  supervisor; at most 5 restarts in 2 minutes) or by Quickshell's own crash handler, and
+  supervisor, one per session; 5 quick restarts in 2 minutes, then once a minute for as long
+  as the screen is locked) or by Quickshell's own crash handler, and
   locks again at once: it finds the lock marker it left in `$XDG_RUNTIME_DIR`. A shell
   stopped on purpose while unlocked is not started again. What it left behind (a
   fingerprint conversation holding the reader) is killed. Under Hyprland this needs
@@ -410,6 +413,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `gdbus` (fprintd), `timeout`; PAM (`pam_unix`, `pam_fprintd`, `pam_u2f`) | unlocking: which methods there are (`scripts/lock-auth-methods.sh`), and the checks themselves (fprintd and pam_u2f optional) |
 | `notify-send` | the shell's own outbound notifications |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
+| `flock`, `setsid` (util-linux) | `scripts/launch.sh`: one supervisor per session (without `flock` it warns and goes on unguarded), the detached restart |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |

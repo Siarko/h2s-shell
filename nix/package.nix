@@ -27,6 +27,7 @@
 , gnugrep
 , gawk
 , findutils
+, util-linux
 }:
 
 let
@@ -47,6 +48,7 @@ let
     gnugrep
     gawk
     findutils
+    util-linux # flock: one supervisor per session (launch.sh); setsid: the detached restart
   ];
 in
 stdenvNoCC.mkDerivation {
