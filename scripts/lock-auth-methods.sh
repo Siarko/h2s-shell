@@ -11,6 +11,15 @@
 #   password     always
 #   fingerprint  when fprintd has a finger enrolled for the user
 #   u2f          when the system has a config for it, or the user has registered keys
+#
+# H2S_LOCK_AUTH_METHODS, when set, names an executable that answers instead of this
+# script, in the same format. The lock test bed (tests/lock/) uses it to run the real
+# shell against PAM stacks of its own rather than the system's. It lives here, in the
+# detection step, so that it holds whatever QML asks the question. It grants nothing:
+# whoever can set the shell's environment can already run anything as the user.
+if [ -n "${H2S_LOCK_AUTH_METHODS:-}" ]; then
+    exec "$H2S_LOCK_AUTH_METHODS"
+fi
 
 shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 system_dir=/etc/pam.d

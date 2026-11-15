@@ -1,0 +1,6 @@
+# The test bed's stand-in for a fingerprint reader: a conversation that asks nothing and
+# blocks until the test answers it (see wait-finger.sh). Same shape as "password".
+auth     [success=1 default=ignore] @PAM_MODULES@/pam_exec.so quiet @WORK@/pam/wait-finger.sh
+auth     requisite @PAM_MODULES@/pam_deny.so
+auth     required  @PAM_MODULES@/pam_permit.so
+account  required  @PAM_MODULES@/pam_permit.so

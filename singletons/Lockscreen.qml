@@ -121,6 +121,7 @@ Singleton {
     // ---- Lock requests from outside ----
     // h2s-shell ipc call lockscreen lock       (Arch: launch.sh ipc call ...)
     // h2s-shell ipc call lockscreen status
+    // h2s-shell ipc call lockscreen state      (JSON, for tests/lock/)
     // No unlock here: that would let any program skip the password prompt.
     IpcHandler {
         target: "lockscreen"
@@ -132,6 +133,38 @@ Singleton {
 
         function status(): string {
             return root.locked ? "locked" : "unlocked";
+        }
+
+        // What the lock test bed (tests/lock/) reads to know where the lock stands, as
+        // JSON. Read-only, and nothing secret: no typed text. `locked` is the shell's
+        // own mirror, which everything here acts on; `sessionLockLocked` is the
+        // WlSessionLock's property read at this moment, and `secure` whether the
+        // compositor confirmed the lock — they can disagree, which is the point.
+        function state(): string {
+            const passive = method => ({
+                available: method.available,
+                waiting: method.waiting,
+                message: method.message,
+                messageIsError: method.messageIsError
+            });
+            return JSON.stringify({
+                locked: root.locked,
+                sessionLockLocked: _lock.locked,
+                secure: _lock.secure,
+                promptActive: root.promptActive,
+                screensaverVisible: root.screensaverVisible,
+                auth: {
+                    active: LockAuth._active,
+                    verifying: LockAuth.verifying,
+                    awaitingInput: LockAuth.awaitingInput,
+                    question: LockAuth.question,
+                    error: LockAuth.error,
+                    passwordConfig: LockAuth._passwordConfig === "" ? ""
+                        : LockAuth._passwordDirectory + "/" + LockAuth._passwordConfig,
+                    fingerprint: passive(LockAuth.fingerprint),
+                    securityKey: passive(LockAuth.securityKey)
+                }
+            });
         }
     }
 
