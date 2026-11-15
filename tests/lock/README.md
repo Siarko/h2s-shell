@@ -337,11 +337,14 @@ call again while the shell reloads). `stack_start --launcher-timings "first=0.2 
 lockwait=5"` shortens the launcher's pauses (`H2S_LAUNCHER_TEST_TIMINGS`: the first pause,
 the slow retry while locked, how long a second launcher waits for the lock; seconds), and
 `--shell-path <dir>` puts a directory of stand-in programs first on the shell's PATH (a
-`hyprctl` that hangs: `restart-hyprctl-hang`). `--modules <list>` sets the launcher's `H2S_SHELL_MODULES`
-(module directories or directories of modules: `tests/fixtures/modules` holds the fixture
-modules, `modules`), `--data-dirs <list>` its `XDG_DATA_DIRS` (where it also looks for modules,
-`modules-launcher`; unset, the caller's — so a module installed system-wide would be found by
-every test shell). The launcher's own log is
+`hyprctl` that hangs: `restart-hyprctl-hang`). `--modules <list>` sets the launcher's
+`H2S_SHELL_MODULE_PATH` (its input: module directories or directories of modules;
+`tests/fixtures/modules` holds the fixture modules, `modules`), `--data-dirs <list>` its
+`H2S_SHELL_MODULE_DATA_DIRS` (the data dirs it searches for `h2s-shell/modules/*`,
+`modules-launcher`). Unset, no data dir is searched: a module installed system-wide is not
+seen by the test shells, which keep the caller's `XDG_DATA_DIRS` for icons and fonts. Their
+data home is the run's own. `--launcher-timings "discoveryhang=60"` makes every module search
+hang (`modules-discovery`: the launcher's 3 s bound). The launcher's own log is
 `$RUN/h2s-shell-launcher.log`; its lines also go to `shell.log`, as do the shell's, stamped
 (`--log-times`). `scripts/lock-log.sh` is run against the test shell in `lock-log`.
 

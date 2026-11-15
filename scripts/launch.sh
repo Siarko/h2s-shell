@@ -255,68 +255,102 @@ stop_shell() {
     done
 }
 
-# The modules the shell loads (docs/plans/modules.md): H2S_SHELL_MODULES, colon-separated,
-# each the canonical path of a directory holding a module.json (symlinks resolved: one
-# directory reached by two spellings would load its singletons twice), each once, in search
-# order — the shell takes the first module of an id and reports the others:
-#   1. what H2S_SHELL_MODULES held when this launcher started (a developer's checkouts), each
-#      a module directory or a directory of modules
-#   2. $XDG_DATA_HOME/h2s-shell/modules/*   (~/.local/share)
-#   3. each $XDG_DATA_DIRS/h2s-shell/modules/*
-# Worked out before every start of the shell, so a module installed since is picked up by the
-# next one. The shell's environment carries the result, and a --restart run from inside it is
-# handed that as entries of 1: the ones 2 or 3 find again keep their place there, not first.
+# The modules the shell loads (docs/plans/modules.md). Input and output are two variables:
+#   H2S_SHELL_MODULE_PATH   input, the developer's: colon-separated, each a module directory or
+#                           a directory of modules (checkouts being worked on). Read, never
+#                           written here.
+#   H2S_SHELL_MODULES       output, the shell's: colon-separated canonical paths of directories
+#                           holding a module.json (symlinks resolved: one directory reached by
+#                           two spellings would load its singletons twice), each once, in search
+#                           order — the shell takes the first module of an id and reports the
+#                           others. Exported for the shell at every start; never read here: the
+#                           shell and all it starts inherit it, and a --restart run from there
+#                           must not take an old list (an updated module's old path, a removed
+#                           module) for a developer's entries.
+#   H2S_SHELL_MODULE_DATA_DIRS
+#                           the data directories searched instead of $XDG_DATA_DIRS (which the
+#                           shell needs as it is: icons, fonts, mime data); set and empty: none.
+#                           The lock test bed points it away from the caller's system.
+# Search order: 1. H2S_SHELL_MODULE_PATH's entries, 2. $XDG_DATA_HOME/h2s-shell/modules/*
+# (~/.local/share), 3. each data dir's h2s-shell/modules/*. Worked out before every start of
+# the shell (a module installed since is picked up by the next one), in a process of its own
+# under a hard bound ($discovery_seconds s): a hung mount under a data dir must not keep the
+# shell — perhaps a locked session's only prompt — from starting. Late or failed: no modules,
+# logged. At most $max_modules modules and $max_modules_length bytes (a longer environment
+# string fails the shell's execve with E2BIG: no shell at all); the rest is dropped, logged.
 # H2S_SHELL_SAFE_MODE is the supervisor's, set per start (supervise): never inherited.
-modules_given=${H2S_SHELL_MODULES-}
+launcher_script=$(readlink -f "$0")
+discovery_seconds=3
+max_modules=200
+max_modules_length=65536
 module_roots() {
     echo "${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/modules"
     local IFS=:
-    for dir in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+    for dir in ${H2S_SHELL_MODULE_DATA_DIRS-${XDG_DATA_DIRS:-/usr/local/share:/usr/share}}; do
         [ -n "$dir" ] && echo "$dir/h2s-shell/modules"
     done
 }
-# A module directory's canonical path; fails for anything else (and a path with a ":", which
-# the list cannot hold)
-module_path() {
-    local path
-    [ -f "$1/module.json" ] || return 1
-    path=$(cd -- "$1" 2> /dev/null && pwd -P) || return 1
-    case "$path" in *:*) return 1 ;; esac
-    echo "$path"
-}
-discover_modules() {
-    local given=() explicit=() searched=() result=() entry dir path root seen=":" discovered=":"
-    unset H2S_SHELL_SAFE_MODE
-    while read -r root; do
-        for dir in "$root"/*/; do
-            path=$(module_path "$dir") && searched+=("$path") && discovered="$discovered$path:"
-        done
-    done < <(module_roots)
-    IFS=: read -r -a given <<< "$modules_given"
+# The search itself, run as `launch.sh --discover-modules` (by discover_modules): the list on
+# standard output. It forks nothing per entry: module.json is looked for first, and the
+# canonical path is the working directory after a `cd -P`, in this throwaway process.
+find_modules() {
+    local given=() candidates=() result=() entry dir path root seen=":" length=0 dropped=0
+    # Test seam (H2S_LAUNCHER_TEST_TIMINGS "discoveryhang=S"): a search that takes S seconds,
+    # as one stuck on a hung mount would
+    [ -z "$discovery_hang_ms" ] || sleep "$(ms_to_seconds "$discovery_hang_ms")"
+    IFS=: read -r -a given <<< "${H2S_SHELL_MODULE_PATH-}"
     for entry in "${given[@]}"; do
         [ -n "$entry" ] || continue
-        if path=$(module_path "$entry"); then
-            explicit+=("$path")
+        if [ -f "$entry/module.json" ]; then
+            candidates+=("$entry")
         elif [ -d "$entry" ]; then
             for dir in "$entry"/*/; do
-                path=$(module_path "$dir") && explicit+=("$path")
+                [ -f "${dir}module.json" ] && candidates+=("$dir")
             done
         fi
     done
-    for path in "${explicit[@]}"; do
-        case "$discovered" in *":$path:"*) continue ;; esac
+    while read -r root; do
+        for dir in "$root"/*/; do
+            [ -f "${dir}module.json" ] && candidates+=("$dir")
+        done
+    done < <(module_roots)
+    for entry in "${candidates[@]}"; do
+        cd -P -- "$entry" 2> /dev/null || continue
+        path=$PWD
+        # (A path with a ":" cannot be in the list)
+        case "$path" in *:*) continue ;; esac
         case "$seen" in *":$path:"*) continue ;; esac
         seen="$seen$path:"
+        if [ ${#result[@]} -ge "$max_modules" ] || [ $((length + ${#path} + 1)) -gt "$max_modules_length" ]; then
+            dropped=$((dropped + 1))
+            continue
+        fi
+        length=$((length + ${#path} + 1))
         result+=("$path")
     done
-    for path in "${searched[@]}"; do
-        case "$seen" in *":$path:"*) continue ;; esac
-        seen="$seen$path:"
-        result+=("$path")
-    done
-    H2S_SHELL_MODULES=$(IFS=:; echo "${result[*]}")
-    export H2S_SHELL_MODULES
-    [ ${#result[@]} -eq 0 ] || say "modules: ${#result[@]} ($H2S_SHELL_MODULES)"
+    [ "$dropped" = 0 ] || say "modules: $dropped dropped (at most $max_modules modules and $max_modules_length bytes)"
+    [ ${#result[@]} -eq 0 ] || say "modules: ${#result[@]} ($(IFS=:; echo "${result[*]}"))"
+    (IFS=:; printf '%s' "${result[*]}")
+}
+# Exports H2S_SHELL_MODULES for the next start: the search, bounded. `timeout` runs it in a
+# process group of its own and signals the whole group (a `sleep`, a stuck `cd` go too); -k:
+# KILL a second after a TERM that did not end it. Its standard output is the list.
+discover_modules() {
+    local list status=0
+    unset H2S_SHELL_SAFE_MODE
+    if command -v timeout > /dev/null; then
+        list=$(timeout -k 1 "$discovery_seconds" "$BASH" "$launcher_script" --discover-modules < /dev/null) || status=$?
+    else
+        list=$("$BASH" "$launcher_script" --discover-modules < /dev/null) || status=$?
+    fi
+    if [ "$status" = 124 ] || [ "$status" = 137 ]; then
+        say "module discovery took longer than $discovery_seconds s: starting the shell without modules"
+        list=""
+    elif [ "$status" != 0 ]; then
+        say "module discovery failed (status $status): starting the shell without modules"
+        list=""
+    fi
+    export H2S_SHELL_MODULES="$list"
 }
 
 prepare_environment() {
@@ -415,9 +449,11 @@ clean_up_after() {
 # locked and keeps dying; and how long a new launcher waits for an old one to end.
 # H2S_LAUNCHER_TEST_TIMINGS ("first=0.1 slow=2 lockwait=3", seconds) shortens them for the
 # lock test bed — inert unless set, and like the shell's test seams it grants nothing.
+# "discoveryhang=S" makes module discovery take S seconds, as on a hung mount (find_modules).
 pause_first_ms=1000
 pause_slow_ms=60000
 lock_wait=15
+discovery_hang_ms=""
 seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
 for timing in ${H2S_LAUNCHER_TEST_TIMINGS:-}; do
     value=$(seconds_to_ms "${timing#*=}")
@@ -426,6 +462,7 @@ for timing in ${H2S_LAUNCHER_TEST_TIMINGS:-}; do
         first=*) pause_first_ms=$value ;;
         slow=*) pause_slow_ms=$value ;;
         lockwait=*) lock_wait=$(( (value + 999) / 1000 )) ;;
+        discoveryhang=*) discovery_hang_ms=$value ;;
     esac
 done
 ms_to_seconds() { awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | sed 's/\.\?0*$//'; }
@@ -514,7 +551,12 @@ supervise() {
     # Each child in a process group of its own: what it leaves behind can be found
     set -m
     while :; do
-        discover_modules
+        # (Bounded, closing the lock's descriptor: a search the bound could not kill must not
+        # keep the next launcher out)
+        discover_modules {lock_fd}>&-
+        # Told to stop while the search ran (a --restart's stop_shell: its new launcher waits
+        # for this one to end, and a shell started now would be one it never sees)
+        [ -n "$stopping" ] && break
         # Crash-loop safe mode (docs/plans/modules.md): a shell that died quickly twice in a
         # row is started without modules — a module that crashes it at start would otherwise
         # keep the session without a bar, or locked without a prompt. A start that lives past
@@ -546,7 +588,19 @@ supervise() {
             slow=""
             recent=()
         fi
-        if [ $((now - started)) -lt 30 ]; then quick_deaths=$((quick_deaths + 1)); else quick_deaths=0; fi
+        # What this counter can see: how long the PROCESS it started lived. Not how long the
+        # image that died ran: Quickshell relaunches a crashed shell in place (same pid, unseen
+        # here), so a process that lived long may have died seconds after such a relaunch.
+        # Quickshell's own rule says when: a crash within 10 s of its (re)start is not
+        # relaunched but exits 255 — so 255 after a long life is a quick death of a relaunched
+        # image, counted (as is a lost status, taken for 255: the safe side). Any other end
+        # after 30 s ends the run of quick deaths. The real crash-loop guard is the shell's own
+        # count (docs/plans/modules.md, section 4).
+        if [ $((now - started)) -lt 30 ] || [ "$status" = 255 ]; then
+            quick_deaths=$((quick_deaths + 1))
+        else
+            quick_deaths=0
+        fi
         for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
         recent=("${kept[@]}" "$now")
         # The slow retries were for a locked screen; that over (a shell came up and was
@@ -604,6 +658,8 @@ ipc_with_retry() {
 }
 
 case "$1" in
+    # Internal: the module search, run by discover_modules under its bound
+    --discover-modules) find_modules; exit 0 ;;
     # Straight to the running shell: no icon theme to work out
     ipc) shift; ipc_with_retry "$@"; exit $? ;;
     # The lock screen's log, for reading after a failed attempt (the wrapper's PATH has qs)

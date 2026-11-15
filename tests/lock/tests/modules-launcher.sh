@@ -1,9 +1,12 @@
 # The launcher's side of modules (scripts/launch.sh, docs/plans/modules.md):
 #
-# (1) Discovery: H2S_SHELL_MODULES as the shell gets it — the explicit entries first, then
-#     $XDG_DATA_HOME/h2s-shell/modules/*, then each $XDG_DATA_DIRS/h2s-shell/modules/*; only
-#     directories with a module.json; canonical (a symlink resolved), each once. A module
-#     with an id already taken comes later in the list and the shell reports it.
+# (1) Discovery: H2S_SHELL_MODULES as the shell gets it — H2S_SHELL_MODULE_PATH's entries
+#     first, then $XDG_DATA_HOME/h2s-shell/modules/*, then each data dir's
+#     h2s-shell/modules/* (--data-dirs); only directories with a module.json; canonical (a
+#     symlink resolved), each once. A module
+#     with an id already taken comes later in the list and the shell reports it. An inherited
+#     H2S_SHELL_MODULES (the launcher's output, which a --restart run from inside the shell
+#     inherits) is not input: a stale module named there is not loaded.
 # (2) Crash-loop safe mode: the shell killed quickly twice (SIGKILL, through signal_shell,
 #     which checks the pid is the shell under test) — the third start has
 #     H2S_SHELL_SAFE_MODE=1, loads no module, and the lock still works; a start that lives
@@ -30,6 +33,10 @@ mkdir -p "$home_modules/not-a-module"
 mkdir -p "$system_modules" && ln -s "$home_modules/alpha" "$system_modules/alpha-link" || abort "cannot link alpha"
 make_module "$system_modules/beta-copy" beta
 make_module "$system_modules/zeta" zeta
+# An old list inherited (as from a shell started before a module update): a module of an id
+# the list also has elsewhere, which would win if this were taken as input
+make_module "$WORK/stale/old-alpha" alpha
+export H2S_SHELL_MODULES="$WORK/stale/old-alpha:$WORK/stale"
 expected="$(canonical "$WORK/dev/explicit"):$(canonical "$home_modules/alpha"):$(canonical "$home_modules/beta"):$(canonical "$system_modules/beta-copy"):$(canonical "$system_modules/zeta")"
 
 stack_start --modules "$WORK/dev/explicit" --data-dirs "$system_root:$WORK/no-such-dir" --launcher-timings "first=0.2"
@@ -49,8 +56,10 @@ safe_mode_of_shell() { process_env "$SHELL_PID" H2S_SHELL_SAFE_MODE; }
 
 # ---- (1) discovery ----
 log "H2S_SHELL_MODULES: $(process_env "$SHELL_PID" H2S_SHELL_MODULES)"
-check "the order: explicit, data home, data dirs; canonical; the symlinked duplicate once" \
+check "the order: H2S_SHELL_MODULE_PATH, data home, data dirs; canonical; the symlinked duplicate once; the inherited list ignored" \
     test "$(process_env "$SHELL_PID" H2S_SHELL_MODULES)" = "$expected"
+check "the inherited list's stale module: not loaded" test "$(module_field old-alpha state)" = absent
+check "H2S_SHELL_MODULE_PATH is passed on unchanged" test "$(process_env "$SHELL_PID" H2S_SHELL_MODULE_PATH)" = "$WORK/dev/explicit"
 check "explicit: loaded" module_state_is explicit loaded
 check "alpha: loaded" module_state_is alpha loaded
 check "beta (data home): loaded" module_state_is beta loaded
