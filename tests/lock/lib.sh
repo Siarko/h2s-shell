@@ -199,6 +199,8 @@ check_within() {
 # --modules <list>                   H2S_SHELL_MODULE_PATH for the launcher: colon-separated, each a module
 #                                    directory or a directory of modules (the launcher's discovery,
 #                                    docs/plans/modules.md; tests/fixtures/modules holds the fixtures)
+# --shell-env NAME=value            one more variable in the launcher's (so the shell's) environment
+#                                    (a test seam such as H2S_SHELL_TEST_MODULE_CHECK_PATH); repeatable
 # --data-dirs <list>                 the data dirs the launcher searches for modules (<dir>/h2s-shell/modules/*;
 #                                    H2S_SHELL_MODULE_DATA_DIRS). Unset: none — never the caller's XDG_DATA_DIRS,
 #                                    which the shell keeps for icons and fonts
@@ -208,7 +210,7 @@ check_within() {
 stack_start() {
     local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
     local window=0 fprintd="" lock_restore=true reload_seam="" hyprland_logs=true hyprland_stdout=false
-    local shell_env=() timings="" launcher_timings="" shell_path="" modules="" data_dirs=""
+    local shell_env=() timings="" launcher_timings="" shell_path="" modules="" data_dirs="" extra_env=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --timings) timings=$2; shift 2 ;;
@@ -216,6 +218,7 @@ stack_start() {
             --shell-path) shell_path=$2; shift 2 ;;
             --modules) modules=$2; shift 2 ;;
             --data-dirs) data_dirs=$2; shift 2 ;;
+            --shell-env) extra_env+=("$2"); shift 2 ;;
             --methods) methods=$2; shift 2 ;;
             --methods-script) methods_script=$2; shift 2 ;;
             --logind) logind=1; shift ;;
@@ -335,6 +338,7 @@ EOF
         H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland
         H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings" H2S_SHELL_MODULE_PATH="$modules" H2S_SHELL_MODULE_DATA_DIRS="$data_dirs")
     [ -z "$shell_path" ] || LAUNCHER_ENV+=(PATH="$shell_path:$PATH")
+    [ ${#extra_env[@]} -eq 0 ] || LAUNCHER_ENV+=("${extra_env[@]}")
     start_launcher
     log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }

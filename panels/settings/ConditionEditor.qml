@@ -56,7 +56,7 @@ Item {
             Pill {
                 fontSize: Theme.fontSizeBody
                 minimumHeight: 24
-                label: (root.factType?.label ?? root.leaf.fact) + " ▾"
+                label: (root.factType?.label ?? ProfileRules.unknownFactLabel(root.leaf.fact)) + " ▾"
                 picked: root._pickingFact
                 onClicked: root._pickingFact = !root._pickingFact
             }

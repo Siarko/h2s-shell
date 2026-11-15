@@ -8,6 +8,8 @@ Item {
 
     property var module: null
     property var context: null
+    // (API 1.2) On screen: given by the core, kept current
+    property bool shown: false
     // How often the context was handed over (it should be only when it changes by value)
     property int contextChanges: 0
     onContextChanged: contextChanges += 1

@@ -157,5 +157,6 @@ else
     check "relaunched in the same process" test "$SHELL_PID" = "$crashed_shell"
     check_within 20 "the relaunched shell counted the crash: 1" guard_count_is 1
     check "… in its file, under its identity (pid:crash)" grep -Eq "^$SHELL_PID:[0-9]+ 1\$" "$RUN/h2s-shell-module-starts"
-    check "… not safe mode yet" test "$(module_field good state)" = loaded
+    # Modules arrive after the shell is up (their files are read by a process): waited for
+    check_within 15 "… not safe mode yet (good loads)" module_state_is good loaded
 fi

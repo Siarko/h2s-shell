@@ -45,7 +45,22 @@ TestCase {
                                     { "screen.locked": true }), "nested");
         assert(!ProfileRules.matches(low, {}), "an unknown fact satisfies nothing");
         // On purpose: "battery is not below 20 %" is true on a desktop that has no battery
-        assert(ProfileRules.matches({ not: low }, {}), "not of an unknown fact holds");
+        assert(ProfileRules.matches({ not: low }, {}), "not of an unknown core fact holds");
+        // A module's fact not known (its module absent, off, or not loaded yet): neither it nor
+        // its negation holds — a `not` profile no longer switches on at every start
+        const connected = { fact: "tailscale.connected", is: true };
+        assert(!ProfileRules.matches(connected, {}), "an unknown module fact: does not hold");
+        assert(!ProfileRules.matches({ not: connected }, {}), "… nor does its not");
+        assert(!ProfileRules.matches({ not: { not: connected } }, {}), "… nor not-not");
+        assertEqual(ProfileRules.evaluate({ not: connected }, {}), null, "evaluate: unknown");
+        assert(!ProfileRules.matches({ fact: "tailscale.connected", is: false }, { "tailscale.connected": null }), "null is unknown too");
+        assert(ProfileRules.matches({ not: connected }, { "tailscale.connected": false }), "known false: its not holds");
+        assert(ProfileRules.matches({ any: [connected, onBattery] }, facts), "any: a true child wins over an unknown one");
+        assert(!ProfileRules.matches({ any: [connected, { fact: "power.onBattery", is: false }] }, facts), "any: unknown and false — does not hold");
+        assert(!ProfileRules.matches({ not: { any: [connected, { fact: "power.onBattery", is: false }] } }, facts), "… nor its not");
+        assert(ProfileRules.matches({ not: { all: [connected, { fact: "power.onBattery", is: false }] } }, facts), "all: a false child decides, so its not holds");
+        assert(!ProfileRules.matches({ all: [connected, onBattery] }, facts), "all: unknown and true — does not hold");
+        assertEqual(ProfileRules.describeLeaf({ fact: "nosuch.thing", is: true }), "nosuch.thing (module not installed)", "an undeclared fact named as a module's not installed");
         assert(!ProfileRules.matches({ fact: "power.onBattery" }, facts), "a leaf without a comparison never holds");
         assert(ProfileRules.matches({ fact: "panel.open", is: "hardware" }, { "panel.open": ["calendar", "hardware"] }), "is on a list: contains");
         assert(!ProfileRules.matches({ fact: "panel.open", is: "hardware" }, { "panel.open": [] }), "is on an empty list");

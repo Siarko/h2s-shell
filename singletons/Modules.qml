@@ -3,13 +3,16 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import QtCore
 
 // The shell's modules (docs/plans/modules.md): one ModuleHost fed from the environment the
 // launcher builds — H2S_SHELL_MODULES, the canonical module directories in search order, and
 // H2S_SHELL_SAFE_MODE=1 after the shell died quickly twice (scripts/launch.sh) — loaded as
-// soon as this singleton exists. shell.qml touches it before it builds the bars. The core's
-// registries (WidgetRegistry, WidgetPresets, SettingsSchema, ProfileRules.factTypes, Profiles'
-// facts, the settings window's pages, ModuleSlot) read the merged lists from here.
+// soon as this singleton exists (load() only starts processes: nothing is read here). shell.qml
+// touches it before it builds the bars. The registries the lock screen's settings go through
+// (WidgetRegistry, SettingsSchema, ProfileRules.factTypes, Profiles' facts) read ModuleLists,
+// which this feeds — never this singleton; the settings window's pages, ModuleSlot and the VPN
+// slots read it here.
 //
 // The start guard (ModuleHost.guardFile, ModuleRules.startGuardScript):
 // $XDG_RUNTIME_DIR/h2s-shell-module-starts counts Quickshell's relaunches of this process after
@@ -94,6 +97,27 @@ Singleton {
         id: _host
     }
 
+    // The plain lists the core's registries read (ModuleLists: they never touch this
+    // singleton, so nothing the lock screen needs constructs or waits for the host)
+    Binding { target: ModuleLists; property: "widgetEntries"; value: _host.widgetEntries }
+    Binding { target: ModuleLists; property: "settingEntries"; value: _host.settingEntries }
+    Binding { target: ModuleLists; property: "factTypes"; value: _host.factTypes }
+    Binding { target: ModuleLists; property: "factValues"; value: _host.factValues }
+    Binding { target: ModuleLists; property: "settled"; value: _host.settled }
+
+    // Entering safe mode, once: a notification says so (`modules list` says why)
+    property bool _safeModeNotified: false
+    readonly property bool _inSafeMode: _host.safeMode
+    on_InSafeModeChanged: _notifySafeMode()
+
+    function _notifySafeMode() {
+        if (!_host.safeMode || _safeModeNotified || Config.readOnly)
+            return;
+        _safeModeNotified = true;
+        Notifier.send("Started without modules: " + (_host.safeModeReason || "safe mode"),
+                      { body: "qs ipc call modules list tells more", urgency: "normal" });
+    }
+
     Component.onCompleted: {
         try {
             const value = Quickshell.env("H2S_SHELL_MODULES");
@@ -101,16 +125,28 @@ Singleton {
             const runtime = Quickshell.env("XDG_RUNTIME_DIR");
             if (!Config.readOnly && typeof runtime === "string" && runtime.startsWith("/"))
                 _host.guardFile = runtime + "/h2s-shell-module-starts";
+            // The stores' directory, private before any module runs (api/ModuleStore.qml)
+            if (!Config.readOnly)
+                _host.storeDirectory = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "") + "/h2s_shell/modules";
             // Test seam: the guard's window, shortened by the lock test bed
             const window = Number(Quickshell.env("H2S_SHELL_TEST_MODULE_GUARD_MS"));
             if (window > 0)
                 _host.guardClearMs = window;
+            // Test seams of the lock bed (tests/lock/tests/modules-hung.sh): a directory put
+            // first on the file check's PATH (a `head` that hangs) and the checks' deadline
+            const checkPath = Quickshell.env("H2S_SHELL_TEST_MODULE_CHECK_PATH");
+            if (typeof checkPath === "string" && checkPath.startsWith("/"))
+                _host.checkEnvironment = { PATH: checkPath + ":" + (Quickshell.env("PATH") ?? "") };
+            const checkMs = Number(Quickshell.env("H2S_SHELL_TEST_MODULE_CHECK_MS"));
+            if (checkMs > 0)
+                _host.checkTimeoutMs = checkMs;
             _host.load(typeof value === "string" ? value : "", {
                 safeMode: safe,
                 safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting twice in a row"
             });
             if (safe)
                 console.warn("[Modules] safe mode (the shell died quickly twice): no module is loaded");
+            _notifySafeMode();
         } catch (error) {
             console.error("[Modules] the module host failed, running without modules:", error);
         }

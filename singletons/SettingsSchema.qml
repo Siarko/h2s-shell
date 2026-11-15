@@ -64,7 +64,14 @@ Singleton {
 
     // Popup mode per widget type that opens a popup (WidgetRegistry), click by default:
     // hover cannot fire on a touch screen
-    readonly property var _popupModeEntries: WidgetRegistry.entries.filter(widget => widget.popup).map(widget => ({
+    // The core's widget types' only (part of coreEntries, so a new config's Full spells them
+    // out); a module's widget types' popup modes are added with the modules' entries, so its
+    // default is never frozen into a new config's Full
+    readonly property var _popupModeEntries: _popupModeEntriesOf(WidgetRegistry.coreEntries)
+    readonly property var _modulePopupModeEntries: _popupModeEntriesOf(WidgetRegistry.entries.filter(widget => widget.module))
+
+    function _popupModeEntriesOf(widgets) {
+        return widgets.filter(widget => widget.popup).map(widget => Object.assign({
         key: "widgets." + widget.type + ".popupMode", label: widget.name + " popup", group: "popupMode",
         type: "enum", default: WidgetRegistry.defaultPopupMode,
         legacy: config => root._oldWidgetSettings(config)[widget.type]?.["_popupMode"],
@@ -73,13 +80,14 @@ Singleton {
             { value: "hover", label: "Hover" },
             { value: "none", label: "None" }
         ]
-    }))
+        }, widget.module ? { module: widget.module } : {}));
+    }
 
     // The core's settings; then the loaded modules' (Modules.settingEntries: keys mod.<id>.*,
     // each naming its `module`), which go with their module when it is turned off — a
     // profile's values for them are kept, unused, and apply again when it is back
     readonly property var coreEntries: _baseEntries.concat(_popupModeEntries)
-    readonly property var entries: ModuleRules.mergeSettingEntries(coreEntries, Modules.settingEntries)
+    readonly property var entries: ModuleRules.mergeSettingEntries(coreEntries, _modulePopupModeEntries.concat(ModuleLists.settingEntries))
 
     readonly property var _baseEntries: [
         // ── General ──

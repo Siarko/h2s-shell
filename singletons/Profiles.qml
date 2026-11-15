@@ -338,7 +338,7 @@ Singleton {
     // The modules' facts (Modules.factValues: <id>.*, plain values checked against their
     // declared types — nothing a module sets can throw here) under the core's, then what is
     // simulated
-    readonly property var facts: Object.assign({}, Modules.factValues, realFacts, simulated)
+    readonly property var facts: Object.assign({}, ModuleLists.factValues, realFacts, simulated)
 
     // Settings pinned as global: { key: value }
     readonly property var globals: {

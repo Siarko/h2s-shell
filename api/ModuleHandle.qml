@@ -31,6 +31,11 @@ QtObject {
     readonly property var status: host ? (host.statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null) : null
     // True while the module is enabled and loaded: everything that acts follows this
     readonly property bool active: host ? host.activeIds.includes(moduleId) : false
+
+    // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
+    // the module is active: re-read what may have changed while it slept, restart what a
+    // long sleep broke — instead of a clock that watches for jumps
+    signal resumed()
     readonly property string directory: status?.directory ?? ""
     readonly property string version: status?.version ?? ""
     readonly property string name: status?.name ?? ""
@@ -82,7 +87,10 @@ QtObject {
     // ---- Facts (its own: <id>.*, declared in its manifest) ----
 
     // Sets one of its facts ("ready" or "<id>.ready") for profile conditions, checked against
-    // its declared type; null: not known. Only while active. → "" when set, else why not
+    // its declared type; null: not known. Only while active. → "" when set, else why not.
+    // Facts are for slow-changing state (connected, on a network): every change re-resolves
+    // the profiles and re-evaluates every setting binding in the shell, so set one when its
+    // value changes, never on a clock. Setting the value it already has does nothing.
     function setFact(name, newValue) {
         return host ? host.setFact(moduleId, name, newValue) : "no host";
     }

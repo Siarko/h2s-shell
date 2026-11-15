@@ -20,7 +20,7 @@ TestCase {
         const rules = ModuleRules;
 
         // --- the API version ---
-        assertEqual(Api.version, "1.1", "the module API is 1.1 (api/Api.qml)");
+        assertEqual(Api.version, "1.2", "the module API is 1.2 (api/Api.qml)");
         assert(rules.parseApi(Api.version) !== null, "the shell's API version is major.minor");
         assert(rules.apiCompatibility("1.0", "1.0").compatible, "same version: compatible");
         assert(rules.apiCompatibility("1.0", "1.3").compatible, "an older minor on a newer shell: compatible");
@@ -494,6 +494,46 @@ TestCase {
         assertEqual(declared.join(","), "module,context,names,text,content", "rootProperties: the root's own, writable ones; not nested, commented or quoted");
         assertEqual(JSON.stringify(rules.initialProperties(["module"], { module: 1, context: 2 })), "{\"module\":1}", "initialProperties: only the declared");
         assertEqual(rules.rootProperties(null).length, 0, "rootProperties: no text, none");
+        // A regex literal holding a brace does not throw the depth off
+        assertEqual(rules.rootProperties("Item {\n    function f(s) { return /[{]+/.test(s) && s.split(/{/).length > 0; }\n    property var module\n    property var context: x.replace(/\\{/g, \"\")\n}\n").join(","),
+                    "module,context", "rootProperties: braces inside regex literals ignored");
+        // Only `property var module` gets the handle; other spellings get a warning
+        assertEqual(rules.rootProperties("Item {\n    property int module\n    property var context\n}\n").join(","), "context", "rootProperties: `property int module` is not a module property");
+        assertEqual(rules.rootProperties("Item {\n    readonly property var module: null\n}\n").length, 0, "rootProperties: a readonly module is not one");
+        assert(rules.modulePropertyWarning("W.qml", "Item {\n    property int module\n}\n").includes("only `property var module`"), "modulePropertyWarning: property int module");
+        assert(rules.modulePropertyWarning("W.qml", "Item {\n    readonly property var module: null\n}\n").includes("readonly"), "modulePropertyWarning: readonly");
+        assertEqual(rules.modulePropertyWarning("W.qml", "Item {\n    property var module: null\n    Item { property int module }\n}\n"), "", "modulePropertyWarning: the right spelling (a nested object's is not the root's)");
+
+        // The file check's texts (A1: read in the check's process, never on the GUI thread)
+        const texts = rules.fileTexts(["0:{\"a\":", "0:1}", "0\tok", "1:half", "2\tis not a regular file", "3:", "3\tok", "4:x", "4:", "4\tok"]);
+        assertEqual(JSON.stringify(texts), "{\"0\":\"{\\\"a\\\":\\n1}\",\"3\":\"\",\"4\":\"x\\n\"}",
+                    "fileTexts: the lines of each answered file joined; a text without its ok (cut short) dropped; the last line break kept");
+
+        // A2: Api.openUrl's rule
+        for (const good of ["https://login.tailscale.com/a/1", "http://example.org", "mailto:me@example.org", "HTTPS://X"])
+            assertEqual(rules.openUrlProblem(good), "", "openUrl: " + good + " is opened");
+        for (const bad of ["", "/etc/passwd", "file:///etc/passwd", "x.desktop", "/usr/share/applications/evil.desktop", "-help", "--version",
+                           "javascript:alert(1)", "ftp://x", "smb://host/share", "steam://run/1", "https://a\nb", "https://" + "a".repeat(5000), "www.example.org"])
+            assert(rules.openUrlProblem(bad) !== "", "openUrl refuses " + JSON.stringify(bad.slice(0, 40)) + ": " + rules.openUrlProblem(bad));
+        assertEqual(rules.openUrlProblem("file:///home/me/x.txt", { allowFile: true }), "", "openUrl: file: with { allowFile: true }");
+        assert(rules.openUrlProblem("/home/me/x.txt", { allowFile: true }) !== "", "… but never a bare path");
+        assert(rules.openUrlProblem("smb://x", { allowFile: true }) !== "", "… and allowFile allows file: only");
+        assert(rules.openUrlProblem("file:///x", { allowFile: "yes" }) !== "", "… exactly true");
+        assertEqual(Api.openUrl("file:///etc/passwd"), false, "Api.openUrl refuses (nothing run)");
+        assertEqual(Api.openUrl("/etc/passwd"), false, "Api.openUrl refuses a bare path");
+
+        // A4: notify-send's argv — every option, then "--", then summary and body
+        const argv = Notifier.command("-a evil", { body: "--action=x=y", urgency: "low", actions: [{ id: "ok", label: "OK" }] });
+        const dash = argv.indexOf("--");
+        assert(dash > 0 && argv[dash + 1] === "-a evil" && argv[dash + 2] === "--action=x=y" && argv.length === dash + 3,
+               "Notifier.command: summary and body after \"--\": " + JSON.stringify(argv));
+        assert(argv.indexOf("--wait") > 0 && argv.indexOf("--wait") < dash && argv.indexOf("--action=ok=OK") < dash, "… options (--wait, --action) before it");
+        assertEqual(JSON.stringify(Notifier.command("Hi")), "[\"notify-send\",\"--app-name=H2S Shell\",\"--\",\"Hi\"]", "Notifier.command: the plain case");
+
+        // Popup modes of module widget types: never core entries (a new config's Full must
+        // not freeze a module's default)
+        assert(!SettingsSchema.coreEntries.some(entry => entry.module !== undefined || !WidgetRegistry.coreEntries.some(widget => entry.key === "widgets." + widget.type + ".popupMode") && entry.group === "popupMode"),
+               "SettingsSchema.coreEntries: only the core widget types' popup modes");
 
         // The import check: qs.tests only in a module's tests
         assertEqual(rules.importWarnings("tests/T.qml", "import qs.tests\nItem {}", true).length, 0, "a test suite may import qs.tests");

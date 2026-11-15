@@ -63,7 +63,7 @@ Singleton {
     // Every widget type: the core's, then the loaded modules' (Modules.widgetEntries — their
     // files absolute file:// URLs, each entry naming its `module`). A module turned off takes
     // its types with it: a bar section naming one keeps the entry and shows nothing there.
-    readonly property var entries: ModuleRules.mergeWidgetEntries(coreEntries, Modules.widgetEntries)
+    readonly property var entries: ModuleRules.mergeWidgetEntries(coreEntries, ModuleLists.widgetEntries)
 
     readonly property var types: entries.map(entry => entry.type)
 

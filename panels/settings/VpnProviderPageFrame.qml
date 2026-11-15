@@ -85,7 +85,18 @@ Flickable {
                     source = "";
                     return;
                 }
-                setSource(_url, Modules.initialProperties(_url, {}));
+                setSource(_url, Modules.initialProperties(_url, { shown: _shown }));
+            }
+            // On screen (module API 1.2: a module page that declares `property bool shown`
+            // gets it, kept current, as ModuleContribution gives it)
+            readonly property bool _shown: visible && (Window.window?.visible ?? false)
+            on_ShownChanged: {
+                try {
+                    if (item !== null && "shown" in item)
+                        item.shown = _shown;
+                } catch (error) {
+                    // Not writable there
+                }
             }
             property var _passed: null
             onLoaded: {

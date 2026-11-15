@@ -3,11 +3,13 @@ import Quickshell
 import Quickshell.Io
 import qs.components
 
-// The module host (docs/plans/modules.md): given the module directories, it reads each
-// manifest at once (a blocking read of a regular file — FileView refuses anything else), checks
-// it with ModuleRules, checks every file the module names (a process: resolved inside the
-// module's directory, a regular file, not too large — before anything of the module is read or
-// loaded), counts the start (the start guard, below), checks the programs the modules require
+// The module host (docs/plans/modules.md): given the module directories, it reads NOTHING on
+// the GUI thread before its check — each module.json and qmldir, and then the text of every
+// file the module names (for the import check and the properties a root object declares), come
+// out of one process, the file check (ModuleRules.fileCheckScript: resolved inside the module's
+// directory, a regular file, not too large), under checkTimeoutMs; a module whose files did
+// not answer in time is failed, with the reason, and the shell goes on. It checks the manifest
+// with ModuleRules, counts the start (the start guard, below), checks the programs the modules require
 // (a process), creates each enabled, compatible module's `main` by URL inside a guard, and keeps
 // every module's status, its handle (api/ModuleHandle.qml), its facts and the merged
 // contributions as plain reactive lists. A module is "pending" until all of that has answered.
@@ -56,6 +58,14 @@ Scope {
     // How long the file and program checks may take before what they did not answer counts
     // as failed (a hung directory on PATH must not leave a module pending for good)
     property int checkTimeoutMs: 5000
+    // The modules' stores' directory (api/ModuleStore.qml; "" — the suites' default — none):
+    // made private (mode 700, and its parent if it has to be made) at the first load(), before
+    // any module is created, so no store ever lands in a directory others can read
+    property string storeDirectory: ""
+    // Added to the file check's environment (the suites' and the lock bed's seam: a PATH whose
+    // `head` hangs, as a mount that answers stat and then blocks on read would)
+    property var checkEnvironment: ({})
+    property bool _storeDirectoryKnown: true
 
     // The canonical module directories given to load(), in search order, and the entries
     // that were not absolute paths
@@ -81,6 +91,10 @@ Scope {
     property int generation: 0
     readonly property bool checkingPrograms: _programCheck.running
     readonly property bool checkingFiles: _fileCheck.running
+    // load() has been called and every module has settled (none pending, no check running):
+    // its facts are as known as they will get
+    readonly property bool settled: _loadCalled && !_fileCheck.running && !statuses.some(status => status.state === "pending")
+    property bool _loadCalled: false
     // The ids of the modules loaded now (their handles' `active`): set before a main is
     // created, so the main sees itself active while it is built
     property var activeIds: []
@@ -120,11 +134,12 @@ Scope {
             const parsed = ModuleRules.moduleDirectories(directoryList);
             directories = parsed.directories;
             ignoredEntries = parsed.ignored;
-            const records = parsed.directories.map(directory => _readModule(directory));
-            const order = ModuleRules.precedence(records.map(record => ({ directory: record.directory, id: record.manifest.id })));
-            records.forEach((record, index) => record.shadowedBy = order[index].shadowedBy);
-            _records = records;
+            // Nothing is read here: each module is pending until the file check (a process,
+            // under checkTimeoutMs) has handed over its module.json and qmldir
+            _records = parsed.directories.map(directory => _newRecord(directory));
+            _loadCalled = true;
             _startGuard();
+            _makeStoreDirectory();
             _checkFiles();
             _apply();
         } catch (error) {
@@ -238,7 +253,9 @@ Scope {
         const checked = ModuleRules.factValue(declared.type, value, declared.options);
         if (!checked.ok)
             return fact + ": " + checked.error;
-        if (record.facts[fact] === checked.value)
+        // Unchanged (null and never set are both "not known"): nothing is published, so no
+        // setting binding is re-evaluated for it
+        if ((record.facts[fact] ?? null) === checked.value)
             return "";
         record.facts = Object.assign({}, record.facts, { [fact]: checked.value });
         _publishFacts();
@@ -331,49 +348,54 @@ Scope {
         return list;
     }
 
-    // A file's text, read at once: { text } or { error }. FileView reads only a regular file
-    // (a FIFO or a device is refused, never opened)
-    function _readFile(path) {
-        const view = _reader.createObject(root);
-        if (!view)
-            return { error: "cannot be read" };
-        let failure = "";
-        view.loadFailed.connect(error => failure = FileViewError.toString(error));
-        view.path = path;
-        const text = view.text();
-        view.destroy();
-        return failure !== "" ? { error: failure } : { text: text };
-    }
-
-    function _readModule(directory) {
-        const file = _readFile(directory + "/module.json");
-        const manifest = ModuleRules.parseManifest(file.error === undefined ? file.text : null);
-        if (file.error !== undefined)
-            manifest.errors = ["module.json cannot be read: " + file.error];
-        const record = {
-            directory: directory, manifest: manifest, compatible: false,
-            errors: manifest.errors.slice(), warnings: manifest.warnings.slice(),
+    // A module not read yet: pending until the file check hands over its module.json
+    function _newRecord(directory) {
+        return {
+            directory: directory, manifest: { valid: false, errors: [], warnings: [] }, manifestRead: false,
+            compatible: false, errors: [], warnings: [],
             shadowedBy: "", qmldirText: "", filesChecked: true, mainFileError: "",
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
             rootProperties: ({})
         };
+    }
+
+    // The file check answered for a module's module.json and qmldir (`answers`: { file: "ok"
+    // | why not }, `texts`: { file: text })
+    function _manifestAnswered(record, answers, texts) {
+        record.manifestRead = true;
+        const read = answers["module.json"] === "ok";
+        const manifest = ModuleRules.parseManifest(read ? texts["module.json"] : null);
+        if (!read)
+            manifest.errors = ["module.json cannot be read: " + (answers["module.json"] ?? "it could not be read within " + checkTimeoutMs / 1000 + " s")];
+        record.manifest = manifest;
+        record.errors = manifest.errors.slice();
+        record.warnings = manifest.warnings.slice();
         if (!manifest.valid)
-            return record;
+            return;
         const compatibility = ModuleRules.apiCompatibility(manifest.api, apiVersion);
         record.compatible = compatibility.compatible;
         if (!compatibility.compatible) {
             record.errors.push(compatibility.reason);
-            return record;
+            return;
         }
         record.warnings.push(...ModuleRules.unknownSlotWarnings(manifest));
-        record.qmldirText = _readFile(directory + "/qmldir").text ?? "";
-        // Its files are checked (a process) before any is read or loaded
+        const qmldir = answers["qmldir"];
+        if (qmldir === "ok") {
+            record.qmldirText = texts["qmldir"] ?? "";
+        } else if (qmldir !== "does not exist") {
+            // A qmldir that is there but cannot be read (a FIFO, a link out, too large, a
+            // read that did not answer): every file of the module imports its directory
+            record.mainFileError = "qmldir " + (qmldir ?? "could not be read within " + checkTimeoutMs / 1000 + " s");
+            return;
+        }
+        // Its files are checked (the same process) before any is loaded
         record.filesChecked = false;
-        return record;
     }
 
     // ---- The file check ----
 
+    // The texts it reads: module.json and qmldir at most maxManifestBytes, every other file
+    // at most maxFileBytes
     function _checkFiles() {
         // One run at a time: a load() while one runs asks again when it has answered (its
         // answer is for records that are gone, and ignored)
@@ -382,22 +404,33 @@ Scope {
             return;
         }
         const asked = [];
+        // First every manifest not read yet (precedence needs them all); their files in the
+        // next run
         for (const record of _records) {
-            if (record.filesChecked)
+            if (record.manifestRead)
                 continue;
-            const files = ModuleRules.filesToCheck(record.manifest, record.qmldirText);
-            // Nothing to check: settled at once
-            if (files.length === 0)
-                _filesAnswered(record, {});
-            for (const entry of files)
-                asked.push({ record: record, file: entry.file });
+            for (const file of ["module.json", "qmldir"])
+                asked.push({ record: record, file: file, stage: "manifest", cap: ModuleRules.maxManifestBytes });
+        }
+        if (asked.length === 0) {
+            for (const record of _records) {
+                if (record.filesChecked)
+                    continue;
+                const files = ModuleRules.filesToCheck(record.manifest, record.qmldirText);
+                // Nothing to check: settled at once
+                if (files.length === 0)
+                    _filesAnswered(record, {}, {});
+                for (const entry of files)
+                    asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleRules.maxFileBytes });
+            }
         }
         if (asked.length === 0)
             return;
         _fileCheck.asked = asked;
         _fileCheck.lines = [];
-        _fileCheck.command = ["sh", "-c", ModuleRules.fileCheckScript, "sh", String(ModuleRules.maxFileBytes)]
-            .concat(...asked.map(entry => [entry.record.directory, entry.file]));
+        _fileCheck.environment = checkEnvironment ?? {};
+        _fileCheck.command = ["sh", "-c", ModuleRules.fileCheckScript, "sh"]
+            .concat(...asked.map(entry => [String(entry.cap), entry.record.directory, entry.file]));
         _fileCheck.running = true;
         _fileCheckDeadline.restart();
     }
@@ -405,25 +438,45 @@ Scope {
     // The check answered (or ran out of time: what it did not answer counts as failed)
     function _fileCheckDone(asked, lines) {
         const answers = ModuleRules.parseFileCheck(lines);
-        const bad = new Map();
+        const texts = ModuleRules.fileTexts(lines);
+        const byRecord = new Map();
         asked.forEach((entry, index) => {
             if (!_records.includes(entry.record))
                 return;
-            if (!bad.has(entry.record))
-                bad.set(entry.record, {});
+            if (!byRecord.has(entry.record))
+                byRecord.set(entry.record, { stage: entry.stage, answers: {}, texts: {} });
             const answer = answers[String(index)];
-            if (answer !== "ok")
-                bad.get(entry.record)[entry.file] = answer ?? "could not be checked in time";
+            byRecord.get(entry.record).answers[entry.file] = answer ?? "could not be checked within " + checkTimeoutMs / 1000 + " s";
+            if (texts[String(index)] !== undefined)
+                byRecord.get(entry.record).texts[entry.file] = texts[String(index)];
         });
-        for (const [record, files] of bad) {
-            if (!record.filesChecked)
-                _filesAnswered(record, files);
+        let manifests = false;
+        for (const [record, answered] of byRecord) {
+            if (answered.stage === "manifest" && !record.manifestRead) {
+                _manifestAnswered(record, answered.answers, answered.texts);
+                manifests = true;
+            } else if (answered.stage === "files" && !record.filesChecked) {
+                const bad = {};
+                for (const file of Object.keys(answered.answers)) {
+                    if (answered.answers[file] !== "ok")
+                        bad[file] = answered.answers[file];
+                }
+                _filesAnswered(record, bad, answered.texts);
+            }
+        }
+        if (manifests) {
+            const order = ModuleRules.precedence(_records.map(record => ({ directory: record.directory, id: record.manifest.id })));
+            _records.forEach((record, index) => record.shadowedBy = order[index].shadowedBy);
+            // Reassigned so that what reads them in a binding (handleAt: Api.moduleAt in a
+            // module's singleton) sees the ids now known
+            _records = _records.slice();
         }
         _applyGuarded();
     }
 
-    // Drops the entries whose files failed, then reads the rest for the import check
-    function _filesAnswered(record, bad) {
+    // Drops the entries whose files failed, then takes the rest's texts (from the check) for
+    // the import check and the properties their root objects declare
+    function _filesAnswered(record, bad, texts) {
         const checked = ModuleRules.withoutBadFiles(record.manifest, bad, record.qmldirText);
         record.manifest = Object.assign(checked.manifest);
         record.errors.push(...checked.errors);
@@ -437,13 +490,59 @@ Scope {
                 files.push(listed);
         }
         for (const name of files.concat(record.manifest.tests ?? [])) {
-            const content = _readFile(record.directory + "/" + name);
-            if (content.error !== undefined) {
-                record.errors.push(name + " cannot be read: " + content.error);
+            const text = texts?.[name];
+            if (typeof text !== "string") {
+                record.errors.push(name + " cannot be read");
                 continue;
             }
-            record.rootProperties[name] = ModuleRules.rootProperties(content.text);
-            record.warnings.push(...ModuleRules.importWarnings(name, content.text, (record.manifest.tests ?? []).includes(name)));
+            record.rootProperties[name] = ModuleRules.rootProperties(text);
+            // Only the files the core builds and hands `module` (main, the entries' components);
+            // a singleton finding its handle with Api.moduleAt in a readonly property is fine
+            const moduleWarning = ModuleRules.manifestFiles(record.manifest).includes(name) ? ModuleRules.modulePropertyWarning(name, text) : "";
+            if (moduleWarning !== "")
+                record.warnings.push(moduleWarning);
+            record.warnings.push(...ModuleRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
+        }
+    }
+
+    // ---- The stores' directory ----
+
+    // Once per host: mkdir -p under umask 077 (a parent it has to make is 700 too), then
+    // chmod 700 — a directory made earlier by anything else is closed as well. Modules wait
+    // for it (as for the start guard), at most checkTimeoutMs
+    property bool _storeDirectoryMade: false
+
+    function _makeStoreDirectory() {
+        if (storeDirectory === "" || _storeDirectoryMade || _storeDirectoryCheck.running)
+            return;
+        _storeDirectoryKnown = false;
+        _storeDirectoryCheck.command = ["sh", "-c", "umask 077; mkdir -p -- \"$1\" && chmod 700 -- \"$1\"", "sh", storeDirectory];
+        _storeDirectoryCheck.running = true;
+        _storeDirectoryDeadline.restart();
+    }
+
+    function _storeDirectoryAnswered(ok) {
+        _storeDirectoryDeadline.stop();
+        if (_storeDirectoryKnown)
+            return;
+        _storeDirectoryKnown = true;
+        _storeDirectoryMade = ok;
+        if (!ok)
+            console.warn("[Modules] the modules' store directory " + storeDirectory + " could not be made private (mode 700)");
+        _applyGuarded();
+    }
+
+    Process {
+        id: _storeDirectoryCheck
+        onExited: (exitCode, exitStatus) => root._storeDirectoryAnswered(exitCode === 0)
+    }
+
+    Timer {
+        id: _storeDirectoryDeadline
+        interval: root.checkTimeoutMs
+        onTriggered: {
+            _storeDirectoryCheck.running = false;
+            root._storeDirectoryAnswered(false);
         }
     }
 
@@ -511,7 +610,8 @@ Scope {
             const programs = manifest.programs ?? [];
             const facts = {
                 valid: manifest.valid, compatible: record.compatible, duplicate: record.shadowedBy !== "",
-                filesChecked: record.filesChecked, mainFileError: record.mainFileError, guardKnown: _guardKnown,
+                manifestRead: record.manifestRead,
+                filesChecked: record.filesChecked, mainFileError: record.mainFileError, guardKnown: _guardKnown && _storeDirectoryKnown,
                 safeMode: safeMode, settingsKnown: settingsKnown, enabled: !disabledIds.includes(manifest.id),
                 programsKnown: programs.every(program => _programs.has(program)),
                 missingPrograms: programs.filter(program => _programs.get(program) === false),
@@ -532,7 +632,7 @@ Scope {
                 _destroyMain(record);
                 // Off, or waiting: a later start tries the main again
                 record.mainError = "";
-                if (state === "pending" && record.filesChecked && _guardKnown && settingsKnown)
+                if (state === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown)
                     unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
             }
             if (state !== "loaded" && Object.keys(record.facts).length > 0)
@@ -698,11 +798,24 @@ Scope {
         _programDeadline.restart();
     }
 
-    property Component _reader: Component {
-        FileView {
-            preload: false
-            blockAllReads: true
-            printErrors: false
+    // The machine woke (SystemSleep, neutral: the lock screen reports it there): each active
+    // module's handle says so (module API 1.2, `module.resumed()`)
+    function forwardResumed() {
+        for (const [id, made] of _handles) {
+            if (!activeIds.includes(id))
+                continue;
+            try {
+                made.resumed();
+            } catch (error) {
+                console.warn("[Modules] " + id + ": its resumed() handler threw:", error);
+            }
+        }
+    }
+
+    Connections {
+        target: SystemSleep
+        function onResumed() {
+            root.forwardResumed();
         }
     }
 
@@ -743,10 +856,10 @@ Scope {
             _fileCheck.lines = [];
             if (asked.length > 0)
                 root._fileCheckDone(asked, lines);
-            if (_fileCheck.again) {
-                _fileCheck.again = false;
-                root._checkFiles();
-            }
+            // The next stage (the files of the manifests just read), or what a load() during
+            // this run asked for; nothing when nothing is left to check
+            _fileCheck.again = false;
+            root._checkFiles();
         }
     }
 

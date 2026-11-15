@@ -58,7 +58,13 @@ TestCase {
     property var _queried: null
     property var _results: ({})
 
+    // The store is read by a process (API 1.2): everything starts once it has answered
     function runAsync() {
+        _then("the store is read", () => module?.store?.ready === true, () => _run());
+        _clock.start();
+    }
+
+    function _run() {
         const standIn = module.directory + "/tests/stand-in.sh";
         // --- the handle ---
         assert(module !== null, "Api.moduleAt(Qt.resolvedUrl(\".\")) finds the module's handle from any of its files");
@@ -75,7 +81,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.1", "Api.version");
+        assertEqual(Api.version, "1.2", "Api.version");
         assert(Api.slots.some(slot => slot.name === "network.popup.sections"), "the slot table names the slots offered");
 
         // --- the theme, read-only ---
@@ -94,6 +100,16 @@ TestCase {
             Api.theme.row.radius = 1234;
         } catch (error) {}
         assertEqual(Api.theme.row.radius, radius, "a group is a frozen copy");
+        // Deep: nothing nested is the core's own object (API 1.2)
+        const nestedOpen = group => Object.keys(group).some(key => {
+            const value = group[key];
+            return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype
+                && (!Object.isFrozen(value) || nestedOpen(value));
+        });
+        for (const name of ["capsule", "popup", "row", "settings", "border"])
+            assert(Object.isFrozen(Api.theme[name]) && !nestedOpen(Api.theme[name]), "theme." + name + ": frozen all the way down");
+        const easing = Api.theme.curve("enter");
+        assert(easing === null || typeof easing !== "object" || Object.isFrozen(easing), "curve(): a frozen copy");
 
         // --- settings: its own only ---
         assertEqual(module.value("greeting"), "hello", "value(name): its setting's default");
@@ -135,22 +151,29 @@ TestCase {
         action.run(["sh", standIn, "a b", "c"], result => suite._results.plain = result);
         action.run(["sh", standIn], result => suite._results.code = result, { STAND_IN_EXIT: "3" });
         admin.elevate = ["sh", module.directory + "/tests/fake-pkexec.sh"];
-        admin.run(["sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
-        admin.run(["126"], "Dismissing", result => suite._results.dismissed = result);
-        admin.run(["127"], "Refusing", result => suite._results.refused = result);
+        admin.run(["/bin/sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
+        admin.run(["/bin/sh", standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
+        admin.run(["/bin/sh", standIn], "Refusing", result => suite._results.refused = result, { FAKE_PKEXEC_EXIT: "127" });
+        // API 1.2: a program that is not there, or not given by an absolute path, is notFound —
+        // never shown as "not authorised" (pkexec would exit 127 for it); pkexec not asked
+        admin.run(["/nonexistent/h2s-no-such-program"], "Missing", result => suite._results.missing = result, { FAKE_PKEXEC_EXIT: "127" });
+        admin.run(["sh", standIn], "Relative", result => suite._results.relative = result);
         admin.run("not a list", "Nothing", result => suite._results.bad = result);
         query.command = ["sh", standIn, "queried"];
         query.request();
 
-        _then("the commands answered", () => Object.keys(_results).length === 6 && _queried !== null, () => {
+        _then("the commands answered", () => Object.keys(_results).length === 8 && _queried !== null, () => {
             assert(_results.plain.ok && JSON.stringify(_results.plain.lines) === "[\"a b\",\"c\"]", "CommandAction: its lines, arguments kept whole");
             assertEqual(_results.code.code, 3, "CommandAction: the exit status (environment passed)");
             assert(_results.root.ok && _results.root.lines[0] === "as root", "PrivilegedAction: run through the elevating program");
             assert(_results.dismissed.dismissed && !_results.dismissed.ok, "PrivilegedAction: 126 is dismissed");
             assert(_results.refused.refused && !_results.refused.dismissed, "PrivilegedAction: 127 is refused");
             assert(!_results.bad.ok, "PrivilegedAction: not a command — refused, answered");
+            assert(_results.missing.notFound && !_results.missing.refused && !_results.missing.dismissed && !_results.missing.ok,
+                   "PrivilegedAction: a missing program is notFound, not refused: " + JSON.stringify(_results.missing));
+            assert(_results.relative.notFound && !_results.relative.refused, "PrivilegedAction: a relative path is notFound (an absolute path is required)");
+            assert(!_results.root.notFound && _results.refused.notFound === false, "PrivilegedAction: notFound false when the program is there");
             assertEqual(JSON.stringify(_queried), "[\"queried\"]", "CommandQuery: its lines");
         });
-        _clock.start();
     }
 }

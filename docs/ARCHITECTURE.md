@@ -509,12 +509,16 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   Quickshell's in-place relaunches after a crash in a row, neither living 30 s — which the
   launcher does not see; the shell counts them (`$XDG_RUNTIME_DIR/h2s-shell-module-starts`).
 - **The host**: `singletons/ModuleHost.qml`, one instance in the `Modules` singleton, which
-  `shell.qml` touches before the bars. It reads and checks the manifests, checks the files and
-  required programs (processes, with a deadline), creates each enabled module's `main` inside
+  `shell.qml` touches before the bars. It reads no module file on the GUI thread: the
+  manifests, qmldirs and file texts come out of its file check (a process, with a deadline),
+  then it checks them and the required programs (a process too), creates each enabled module's `main` inside
   a guard, keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
   exposes the statuses and the merged contributions. `qs ipc call modules list` prints them;
   `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`).
-- **The registries** read the merged lists: `WidgetRegistry.entries` (the core's
+- **The registries** read the merged lists — through `ModuleLists` (plain values the
+  `Modules` singleton feeds; never `Modules` itself, so the lock screen, which reads its
+  settings through Profiles, never constructs or waits for the host; modules arrive after the
+  first frame): `WidgetRegistry.entries` (the core's
   `coreEntries`, then modules' — files as `file://` URLs, each entry naming its `module`),
   `WidgetPresets.defaults`, `SettingsSchema.entries` (popup-mode entries follow the registry),
   `ProfileRules.factTypes` and `Profiles.facts`, `SettingsWindow.pages` (`corePages`, then
@@ -525,7 +529,8 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   (only when its root object declares it: `Modules.initialProperties`).
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
-  screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/`).
+  screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
+  components they build, transitively: `tests/lock-closure.sh`).
 
 Writing a module, from the author's side (everything through `import qs.api` and
 `import qs.components`; nothing from `qs.singletons`):
@@ -570,8 +575,10 @@ What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the 
 `main`, which the host destroys when the module is turned off, or binds to `module.active`
 (a singleton's timer: `running: module.active`) — a module's singletons outlive the main.
 A singleton finds its handle with `Api.moduleAt(Qt.resolvedUrl("."))`. Commands go through
-`CommandAction` / `CommandQuery` / `PrivilegedAction` (pkexec: 126 dismissed, quietly; 127
-refused, said once). Preferences are settings (`mod.<id>.*`, `module.value` /
+`CommandAction` / `CommandQuery` / `PrivilegedAction` (pkexec, by an absolute path checked first —
+`notFound` otherwise; 126 dismissed, quietly; 127 refused, said once). Wake-up: `module.resumed()`;
+a page or slot contribution that declares `property bool shown` does its expensive reading only
+while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 `module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
 
 - **Tests**: `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
@@ -579,7 +586,7 @@ refused, said once). Preferences are settings (`mod.<id>.*`, `module.value` /
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the
-  lock-bed tests `modules`, `modules-launcher` and `modules-discovery`. A module's own suites
+  lock-bed tests `modules`, `modules-launcher`, `modules-discovery` and `modules-hung`. A module's own suites
   run with `tests/run-modules.sh <module dir>…` — the module may live in another repository;
   it is loaded into the shell's own host, with this tree as the config root, so its suites
   extend `TestCase` (`import qs.tests`, allowed in its tests only), use `qs.api` as in the

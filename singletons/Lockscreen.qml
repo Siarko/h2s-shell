@@ -685,6 +685,12 @@ Singleton {
             });
         });
         _logind.event.connect(dispatchFrom(root._logindEvents));
+        // The machine woke: told to the neutral SystemSleep too (whoever else cares — the
+        // module host, for module.resumed() — listens there, never here)
+        _logind.event.connect(event => {
+            if (event?.type === "resumed")
+                Qt.callLater(SystemSleep.reportResumed);
+        });
         // logind is already preparing for sleep when the monitor starts listening: its
         // PrepareForSleep came while no monitor of this shell could hear it — the shell
         // reloading (the event loop blocked, then the old generation torn down) or starting.

@@ -8,7 +8,11 @@ import qs.singletons
 // Component.onCompleted; `context` is passed again only when it changes by value
 // (ModuleRules.sameContext), so a contribution is not poked by a re-read that changed nothing
 // of it. `properties` ({ name: value }) are passed the same way (a settings page's editIndex).
-// Gone, or blank, while the module is not active.
+// `shown` (module API 1.2), when the root object declares `property bool shown`: true while
+// the contribution is on screen — the place it sits in visible and its window open — kept
+// current, so a page or a slot contribution does expensive work (polling, watching) only while
+// it is seen. Gone, or blank, while the module is not active. A change of `url` and of the
+// module's state together (another module's page picked) builds it once, not twice.
 //
 // ModuleSlot builds each contribution with one; ModuleHost.slotComponent hands one out as a
 // Component for core places that take a Component per module (the VPN slots); the settings
@@ -38,14 +42,38 @@ Item {
 
     property var _passedContext: null
     property var _passedProperties: ({})
+    // On screen: where it sits is visible (its own `visible` follows `ready`, so the parent's
+    // is read) and its window is open
+    readonly property bool shown: (parent?.visible ?? false) && (Window.window?.visible ?? false)
+    property bool _loadQueued: false
+    property bool _completed: false
 
-    on_ActiveChanged: _load()
-    onUrlChanged: _load()
-    Component.onCompleted: _load()
+    on_ActiveChanged: _queueLoad()
+    onUrlChanged: _queueLoad()
+    Component.onCompleted: {
+        _completed = true;
+        _load();
+    }
     onContextChanged: _passContext()
     onPropertiesChanged: _passProperties()
+    onShownChanged: _passProperties()
+
+    // url and the module's state often change in one go (the settings window picks another
+    // module's page: moduleId and url): one build for both, at the end of the event
+    function _queueLoad() {
+        if (!_completed || _loadQueued)
+            return;
+        _loadQueued = true;
+        Qt.callLater(_load);
+    }
+
+    // What the root object is given besides module and context
+    function _allProperties() {
+        return Object.assign({}, properties ?? {}, { shown: shown });
+    }
 
     function _load() {
+        _loadQueued = false;
         _loader.source = "";
         error = "";
         if (!_active)
@@ -62,10 +90,10 @@ Item {
             return;
         }
         _passedContext = context;
-        _passedProperties = Object.assign({}, properties ?? {});
+        _passedProperties = _allProperties();
         // The compiled file is cached: this does not compile it again
         // Given only what its root object declares (a Loader warns about the rest)
-        _loader.setSource(url, host.initialProperties(url, Object.assign({}, properties ?? {}, { module: host.handle(moduleId), context: context })));
+        _loader.setSource(url, host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: context })));
     }
 
     function _failed(text) {
@@ -88,17 +116,18 @@ Item {
 
     function _passProperties() {
         const target = _loader.item;
-        if (!target || ModuleRules.sameContext(_passedProperties, properties ?? {}))
+        const wanted = _allProperties();
+        if (!target || ModuleRules.sameContext(_passedProperties, wanted))
             return;
-        for (const key of Object.keys(properties ?? {})) {
+        for (const key of Object.keys(wanted)) {
             try {
                 if (key in target && key !== "module" && key !== "context")
-                    target[key] = properties[key];
+                    target[key] = wanted[key];
             } catch (thrown) {
                 // Not writable there: left alone
             }
         }
-        _passedProperties = Object.assign({}, properties ?? {});
+        _passedProperties = wanted;
     }
 
     Loader {

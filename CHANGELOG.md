@@ -13,6 +13,18 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, docs/plans/modules.md "Module API 1.0").
+- 1.2: `module.resumed()` (signal: the machine woke from sleep; only while active); `shown`
+  given to a settings page or slot contribution (and a VPN page) whose root declares
+  `property bool shown` — true while on screen, kept current; `PrivilegedAction`'s answer has
+  `notFound` (command[0] must be an absolute path to an executable file, checked before
+  pkexec: a missing program is a plain failure, never "not authorised");
+  `Api.openUrl(url, options)` opens only http:, https:, mailto: — file: with
+  `{ allowFile: true }` — and refuses (logs) everything else, a bare path included (a
+  tightening, taken as a fix); `module.store` is written synchronously and atomically (600, in
+  a 700 directory the host makes first), flushed when destroyed, read by a process and capped
+  (a file over 1 MiB is refused and left alone); `Api.theme`'s groups and `curve()` are deep
+  frozen copies; `setFact` with the value a fact has is a no-op; only `property var module`
+  receives the handle (other spellings get a warning in the module's status).
 - 1.1: the VPN provider seam's slots `network.vpn.row`, `network.vpn.card` and
   `network.vpn.page` in the slot table — a module's VPN provider (`VpnProvider` from
   `qs.components`, its `providerId` the module's id) fills them through its manifest's
@@ -371,6 +383,17 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Modules: the shell reads no module file on its GUI thread while starting (the manifest,
+  qmldir and the files' texts come out of the module host's time-limited check), and nothing
+  the lock screen needs waits for the modules — a module on a mount that hangs on read can no
+  longer keep the shell, and a locked session after a crash, from coming up; the module is
+  failed after 5 s, with the reason. Entering safe mode now says so in a notification.
+- Profiles: a condition on a module's fact that is not known (its module absent or still
+  loading) holds neither way — `not <fact>` no longer switches a profile (and possibly the
+  power profile) on at every start; the condition editor names such a fact
+  "(module not installed)".
+- Notifications: a summary or body starting with "-" is no longer read by notify-send as an
+  option.
 - Lock screen: closing the lid while the shell reloads (a file of it saved) now still locks
   before sleep: the new generation asks logind whether a sleep is under way, and the old
   one's sleep inhibitor holds logind a few seconds longer (narrowed, not closed: the lock

@@ -32,10 +32,16 @@ Singleton {
     ]
     // The core's, then the loaded modules' (Modules.factTypes: <id>.*; types bool, number,
     // percent, string, enum), which go with their module
-    readonly property var factTypes: ModuleRules.mergeFactTypes(coreFactTypes, Modules.factTypes)
+    readonly property var factTypes: ModuleRules.mergeFactTypes(coreFactTypes, ModuleLists.factTypes)
 
     function factType(fact) {
         return factTypes.find(type => type.fact === fact) ?? null;
+    }
+
+    // How the condition editor names a fact no one declares now (its module is not
+    // installed, turned off or not loaded yet): conditions on it hold neither way
+    function unknownFactLabel(fact) {
+        return String(fact) + " (module not installed)";
     }
 
     // The leaves of a condition the settings editor can show as a flat list, or null when
@@ -52,7 +58,7 @@ Singleton {
     // One leaf as text, e.g. "On battery", "Battery level < 20 %", "Popup open: hardware"
     function describeLeaf(leaf) {
         const type = factType(leaf.fact);
-        const label = type?.label ?? leaf.fact;
+        const label = type?.label ?? unknownFactLabel(leaf.fact);
         if (leaf.lt !== undefined)
             return label + " < " + leaf.lt + (type?.type === "percent" ? " %" : "");
         if (leaf.gt !== undefined)
@@ -74,23 +80,44 @@ Singleton {
         return leaves.map(describeLeaf).join(" and ");
     }
 
+    // Whether a condition holds. A module's fact that is not known (missing or null: its
+    // module not installed, off, or not loaded yet) makes a comparison neither true nor false
+    // but unknown, and `not` of unknown is unknown too: a condition holds only when it is
+    // known to (a core fact not known stays two-valued — see evaluate). So
+    // `not tailscale.connected` does not hold while Tailscale's module is absent or loading —
+    // before, it held at every start until the module answered, and such a profile
+    // switched on and off (and could flip the system power profile).
     function matches(condition, facts) {
+        return evaluate(condition, facts) === true;
+    }
+
+    // Three-valued: true, false, or null (unknown). all: false if any child is false, else
+    // unknown if any is, else true; any: true if any child is true, else unknown if any is,
+    // else false; not: the negation, unknown staying unknown.
+    function evaluate(condition, facts) {
         if (!condition || Object.keys(condition).length === 0)
             return true;
-        if (condition.all !== undefined)
-            return condition.all.every(child => matches(child, facts));
-        if (condition.any !== undefined)
-            return condition.any.some(child => matches(child, facts));
-        if (condition.not !== undefined)
-            return !matches(condition.not, facts);
+        if (condition.all !== undefined || condition.any !== undefined) {
+            const isAll = condition.all !== undefined;
+            const results = (isAll ? condition.all : condition.any).map(child => evaluate(child, facts));
+            if (results.includes(!isAll))
+                return !isAll;
+            return results.includes(null) ? null : isAll;
+        }
+        if (condition.not !== undefined) {
+            const inner = evaluate(condition.not, facts);
+            return inner === null ? null : !inner;
+        }
         if (condition.fact === undefined)
             return false;
 
         const value = facts?.[condition.fact];
-        // An unknown or not-yet-known fact satisfies no comparison, so a profile never
-        // switches on because a fact is missing
+        // A core fact not known (a battery level on a desktop) is two-valued, on purpose: no
+        // comparison holds and its `not` does ("the battery is not below 20 %" on a desktop).
+        // Any other fact — a module's, absent until its module has loaded and set it, or for
+        // good when it is not installed — is unknown, and so is its `not`
         if (value === undefined || value === null)
-            return false;
+            return coreFactTypes.some(type => type.fact === condition.fact) ? false : null;
         if (condition.is !== undefined)
             return Array.isArray(value) ? value.includes(condition.is) : value === condition.is;
         if (condition.lt !== undefined)

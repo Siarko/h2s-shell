@@ -125,12 +125,14 @@ targets are reserved ids, which a suite derives from the tree).
 ### The host and the status model, as built (M1–M2)
 
 `singletons/ModuleHost.qml` (an instance per host; the shell's is in the `Modules`
-singleton, fed from the environment; `shell.qml` touches it first). It reads each manifest
-with a blocking `FileView` read (only a regular file is read; missing or unreadable: the
-module fails with FileView's reason), checks it, checks every file the module names (one
-process: resolved inside the directory, regular, ≤ 1 MiB — entries failing it dropped, a
-failing main or qmldir file fails the module), reads the files left for the import check
-(and for the properties their root objects declare), counts the start (the start guard),
+singleton, fed from the environment; `shell.qml` touches it first). It reads no module file on
+the GUI thread before its check (since the M2 review): `module.json` and `qmldir` (≤ 256 KiB),
+then the text of every file the module names, come out of the file check — one process at a
+time, `ModuleRules.fileCheckScript`: resolved inside the directory, regular, ≤ 1 MiB, the text
+printed with its "ok" after it, so a text cut short by the deadline is never taken. Missing or
+unreadable module.json: the module fails with the reason; entries failing the check dropped, a
+failing main or qmldir file fails the module. With the texts it parses the manifest, checks
+the imports (and reads the properties the root objects declare), counts the start (the start guard),
 looks the required programs up on PATH (one process), waits for the config (which modules
 are off), then creates each `main` by `file://` URL with its handle as `module`. Each check
 has a 5 s deadline (`checkTimeoutMs`): what it did not answer counts as failed (a program as
@@ -144,6 +146,31 @@ to `errors` and the module stays loaded. The merged contributions of the loaded 
 `factValues`) are ordered by module id, then manifest order, with absolute `file://` URLs,
 and are reassigned only when they change. `qs ipc call modules list` prints all of it as JSON,
 with `safeModeReason` (which counter put the shell in safe mode) and `startGuard`.
+
+A mount that answers `stat` and then blocks on read leaves a module `pending` for at most the
+deadline, then `failed` ("module.json cannot be read: could not be checked within 5 s"; one
+check process serves all modules, so the others in that run fail with it); the shell — the
+lock screen with it — never waits for it (below). The one read left on the GUI thread is
+`Qt.createComponent` of a module's files when they are loaded: only after the check has read
+each of them once, as regular files inside the module; a file that starts blocking between
+the two is not contained. Entering safe mode (either counter) sends one notification,
+"Started without modules: <reason>" (Notifier; not under the test runners); no banner yet.
+
+**What is known at the first frame** (since the M2 review). Nothing of the modules, by design.
+The core's registries — Profiles' facts, ProfileRules' fact types, SettingsSchema's entries,
+WidgetRegistry's entries — read `ModuleLists`: plain values, no host, no I/O, which the
+`Modules` singleton feeds from its host as modules settle (`ModuleLists.settled` once nothing
+is pending). So nothing on the lock screen's path — `Lockscreen` → `Profiles.value` →
+`SettingsSchema.entries` (+ the popup-mode entries from `WidgetRegistry`) → `ModuleLists` —
+constructs the host or waits for it, and `Modules.load()` itself only starts processes.
+Before the modules answer there is no module widget, page, slot or setting, and a module's
+facts are absent: a profile condition on an absent module fact holds neither way
+(`ProfileRules.evaluate`, three-valued — unknown, and `not` of unknown stays unknown — so
+`not tailscale.connected` no longer switches a profile on, and the power profile with it, at
+every start; a core fact not known stays two-valued, on purpose, as before; the condition
+editor names an undeclared fact "<name> (module not installed)"). The bar comes up, then the
+modules' widgets join it. The lock-bed test `modules-hung` locks and unlocks while a module's
+files hang.
 
 The start guard (M2): Quickshell relaunches a crashed shell in place (execve, same pid)
 unless it crashed within 10 s of starting, so the launcher — which sees processes — misses a
@@ -171,11 +198,11 @@ carries on; anything a module's singletons do later (the contract below); a modu
 blocks the event loop or crashes the process (safe mode, §4 item 5). A module's singletons
 outlive its main: turning it off destroys the main, not them.
 
-## 3a. Module API 1.1 (1.0 built in M2; 1.1 adds the VPN slots)
+## 3a. Module API 1.2 (1.0 built in M2; 1.1 adds the VPN slots; 1.2 the M2-review fixes)
 
 The module author's whole world: `import qs.api` and `import qs.components` (the VPN
 provider base type, `components/VpnProvider.qml`, since 1.1). Everything
-below is API 1.0 unless marked 1.1; adding anything is a minor bump, changing or removing anything a major
+below is API 1.0 unless marked 1.1 or 1.2; adding anything is a minor bump, changing or removing anything a major
 one (`ModuleRules.apiVersion`, the CHANGELOG's "Module API" heading). The doc comments in
 `api/*.qml`, `components/ModuleSlot.qml` and `ModuleRules.slotTable` are the specification.
 
@@ -183,21 +210,23 @@ one (`ModuleRules.apiVersion`, the CHANGELOG's "Module API" heading). The doc co
 every object it builds from the manifest — bar widgets, popup panels, widget settings panes,
 settings pages, slot contributions — the module's handle as the initial property `module`,
 set before `Component.onCompleted`, when the file's root object declares it
-(`property var module`; the core reads what the root declares from the text the host already
-read, so a Loader is never handed a property it would warn about). Anything else — a
+(`property var module` — exactly: since 1.2 `property int module` or a readonly one gets nothing and
+a warning in the module's status; the core reads what the root declares from the text the host
+already read — a pragmatic reader that skips comments, strings and regex literals where one can
+start — so a Loader is never handed a property it would warn about). Anything else — a
 singleton, an object the module makes itself — calls `Api.moduleAt(Qt.resolvedUrl("."))`:
 the handle of the module whose directory holds the file. A module's own assets:
 `Qt.resolvedUrl("icons/x.svg")` or `module.url("icons/x.svg")`.
 
 | `Api.` | Signature | What it does |
 |---|---|---|
-| `version` | string | "1.1" |
+| `version` | string | "1.2" |
 | `theme` | ThemeTokens | the theme's tokens, read-only, following the theme in use: colours (`accent`, `textPrimary`, … the core's semantic ones), `fontFamily`, `fontSize*`, `fontScale`, frozen groups (`capsule`, `popup`, `row`, `listItem`, `button`, `iconButton`, `pill`, `field`, `checkbox`, `tooltip`, `border`, `settings`), `reduceMotion`, `animationSpeed`, `scaled(w)`, `popupWidth(name, base)`, `duration(role)`, `curve(name)` |
 | `slots` | [{ name, where, context, since }] | the slot table (frozen) |
 | `module(id)` | → handle or null | a module's handle |
 | `moduleAt(url)` | → handle or null | the handle of the module whose directory holds `url` |
 | `notify(summary, options)` | | a notification (Notifier's options: body, urgency, icon, expireTime, actions, …) |
-| `openUrl(url)` | → bool | `xdg-open` through CommandAction; refuses "" and what starts with "-" |
+| `openUrl(url, options)` | → bool | `xdg-open` (an argv, no shell) — only a link with a scheme, and only `http:`, `https:`, `mailto:`; `file:` (and nothing else) with `{ allowFile: true }`; anything else (no scheme, a bare path, a `.desktop` file, another scheme, "-…", control characters, > 4096) refused and logged → false (`ModuleRules.openUrlProblem`; 1.2 — before, almost anything was passed on) |
 | `copy(text)` | | the clipboard |
 | `openSettings(pageId)` | | the settings window on a page (a core one's id or a module's) |
 
@@ -206,14 +235,15 @@ the handle of the module whose directory holds the file. A module's own assets:
 | `moduleId`, `name`, `version`, `directory` | strings | who it is (QML reserves `id`) |
 | `status` | object | its status, as `modules list` has it |
 | `active` | bool | true while enabled and loaded — what acts follows it |
+| `resumed()` | signal | (1.2) the machine woke from sleep; told only while active. Source: logind's PrepareForSleep(false), which the lock screen follows anyway, reported to the neutral `SystemSleep` singleton (it knows neither the lock nor modules); the host forwards it to the active handles |
 | `manifest` | object | the checked manifest, frozen |
 | `url(relative)` | → string | a file of the module as a URL |
 | `settingKey(key)` | → string | "greeting" → "mod.<id>.greeting"; "" when not its own |
 | `value(key)` | → value | its own setting as the profiles in effect have it (`Profiles.value`); undefined for any other key |
 | `setValue(key, value)` | → "" or why not | writes its own setting the way the shell writes from outside a settings page (`Profiles.writeInEffect`: pinned global, else the profile it comes from, else Full), checked against its declaration |
-| `setFact(name, value)` | → "" or why not | one of its declared facts ("ready" or "<id>.ready"), checked against its type (null: not known); only while active; pushed into `Profiles.facts` |
+| `setFact(name, value)` | → "" or why not | one of its declared facts ("ready" or "<id>.ready"), checked against its type (null: not known); only while active; pushed into `Profiles.facts` (through `ModuleLists`). Facts are for slow-changing state: each change re-resolves the profiles and every setting binding — set one when its value changes; the same value again is a no-op (1.2) |
 | `facts` | object | its facts as the profiles see them |
-| `store` | ModuleStore | `data`, `ready`, `get(key, fallback)`, `set(key, value)` → bool, `remove(key)`, `flush()` — a JSON object in `~/.config/h2s_shell/modules/<id>.json` (the shell's private config directory), written a second after the last change as Config is, never while `Config.readOnly`; ≤ 1 MiB |
+| `store` | ModuleStore | `data`, `ready`, `get(key, fallback)`, `set(key, value)` → bool, `remove(key)`, `flush()` — a JSON object in `~/.config/h2s_shell/modules/<id>.json`. (1.2) The directory is made 700 (and a parent it has to make) by the host before any module loads; each write is synchronous and atomic, the file then 600; written a second after the last change, at `flush()`, and when the store is destroyed (module off, reload — a quit runs no JavaScript); read by a process, size-capped: a file > 1 MiB is refused, the store stays empty and is not written that session (`refusedReason`, the module's status); sets before `ready` are kept over what is read; never written while `Config.readOnly`; two shells: last writer wins |
 | `notify(summary, options)` | | a notification under the module's name |
 | `openSettings(page)` | | its page: "" → "<id>", "x" → "<id>.x" |
 | `reportError(text)` | | a run-time failure, shown in its status |
@@ -224,13 +254,15 @@ the handle of the module whose directory holds the file. A module's own assets:
 | `SectionTitle`, `Heading`, `Hint`, `DetailRow { label; value }`, `SwitchRow { label; hint; checked; need; toggled() }` | the settings window's building blocks (thin wrappers of `panels/settings/*`, which stay where they are) |
 | `CommandAction` | `run(command, done, environment)` → done({ ok, code, lines, error }); one after another |
 | `CommandQuery` | a `Process`: `command`, `request()`, `done(lines)` |
-| `PrivilegedAction` | `run(command, what, done, environment)` through pkexec (`elevate`, a stand-in in suites) → done({ ok, code, dismissed (126: nothing shown), refused (127: `Authentication.reportDenied(what)`), lines, error }); other failures notified "<what> failed" unless `notifyFailures: false` |
+| `PrivilegedAction` | `run(command, what, done, environment)` through pkexec (`elevate`, a stand-in in suites) → done({ ok, code, dismissed (126: nothing shown), refused (127: `Authentication.reportDenied(what)`), notFound (1.2), lines, error }). (1.2) `command[0]` must be an absolute path to an executable regular file, checked before pkexec is asked: else `notFound`, a plain failure with its own message (never "not authorised" — pkexec exits 127 for a program it cannot run too). A command that itself exits 126 or 127 cannot be told from pkexec's own. Other failures notified "<what> failed" unless `notifyFailures: false` |
 | `ThemeTokens`, `ModuleHandle`, `ModuleStore` | what `Api.theme`, a handle and its store are |
 
 **Settings pages.** A page (manifest `settingsPages`) is a plain Item — a `ColumnLayout` —
 laid out at the page's width and scrolled by the window by its `implicitHeight` (it must not
 scroll itself), built in a guard (`ModuleContribution`), with `module` and, when it declares
-it, `editIndex` kept current. Its place: under a core group (`parent`: `network`; the group's
+it, `editIndex` kept current. (1.2) A page or slot contribution whose root declares `property bool shown`
+gets it, kept current: true while it is on screen (where it sits visible, its window open) — read
+expensive data only while shown (`ModuleContribution`; the VPN page frame too). Its place: under a core group (`parent`: `network`; the group's
 tab wins), under the Modules group (System tab; `parent: "modules"` or a parent the core does
 not have), or at the end of its tab.
 
@@ -298,7 +330,9 @@ it sets. `tests/ModuleRegistriesTest.qml` checks it with the `vpn-slots` fixture
 
 Enforced:
 1. No extension point in `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` (checked by
-   `ModuleRegistriesTest` from the tree).
+   `ModuleRegistriesTest` from the tree, following the components those files build, transitively:
+   `tests/lock-closure.sh`, a pragmatic walk of instantiated type names through `import qs.…`
+   lines — singletons used by name and Loader sources are not followed).
 2. Settings keys forced into `mod.<id>.*`, facts into `<id>.*`: a module cannot touch
    `lockscreen.*` or any core key.
 3. Facts arrive as checked plain values; a module cannot break `Profiles`.
@@ -316,7 +350,9 @@ Enforced:
 6. A lock-bed test: a broken and a busy module installed — the lock still locks and
    unlocks.
    Built (M1) with the broken fixtures (`tests/lock/tests/modules.sh`); a busy one is not
-   there yet.
+   there yet. A hung one (M2 review): `modules-hung` — every read of the module's
+   files hangs (a stand-in `head` on the file check's PATH); the lock locks and unlocks while it
+   is pending, and it is `failed` after the deadline.
 
 Convention only (QML has no sandbox): a load-time check warns about a module whose files
 import anything outside an allowlist (`QtQuick*`, `Quickshell`, `Quickshell.Io`,

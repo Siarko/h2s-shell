@@ -79,7 +79,7 @@ Singleton {
     // imports qs.singletons, and the two importing each other would be a cycle. Adding to
     // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
     // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
-    readonly property string apiVersion: "1.1"
+    readonly property string apiVersion: "1.2"
 
     // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
     //
@@ -798,18 +798,24 @@ Singleton {
         return files;
     }
 
-    // The check's shell script: arguments cap, then pairs of (directory, file); prints one
-    // line per pair, "<index>\tok" or "<index>\t<why not>" — by index, so no path is echoed
-    // back and parsed
-    readonly property string fileCheckScript: "cap=$1; shift; i=0; "
-        + "while [ $# -ge 2 ]; do dir=$1; file=$2; shift 2; "
+    // The check's shell script: arguments in triples (cap, directory, file); prints, per
+    // triple, the file's text — each line prefixed "<index>:" — then "<index>\tok", or only
+    // "<index>\t<why not>". By index, so no path is echoed back and parsed. The texts come
+    // out of this process because reading is what can block (a mount that answers stat and
+    // then hangs on read): the host reads no module file on the GUI thread — manifest, qmldir
+    // and the texts for the import and property checks all come from here, under the host's
+    // checkTimeoutMs, and a triple without its "ok" line when the deadline kills the process
+    // counts as failed. The "ok" comes after the text, so a text cut short is never whole.
+    readonly property string fileCheckScript: "i=0; "
+        + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
         + "real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; "
         + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
         + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
         + "else case \"$real\" in \"$real_dir\"/*) "
         + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
         + "else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; "
-        + "if [ \"$size\" -ge 0 ] && [ \"$size\" -le \"$cap\" ]; then printf '%s\\tok\\n' $i; "
+        + "if [ \"$size\" -ge 0 ] && [ \"$size\" -le \"$cap\" ]; then "
+        + "{ head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
         + "*) printf '%s\\tleaves the module directory through a link\\n' $i ;; esac; fi; "
         + "i=$((i+1)); done"
@@ -823,6 +829,27 @@ Singleton {
                 result[match[1]] = match[2].slice(0, 200);
         }
         return result;
+    }
+
+    // The texts in the check's output lines → { index: text }, only of the files it answered
+    // "ok" for (a text without its "ok" may be cut short)
+    function fileTexts(lines) {
+        const answered = parseFileCheck(lines);
+        const parts = {};
+        for (const line of lines ?? []) {
+            const match = /^([0-9]+):/.exec(String(line));
+            if (!match)
+                continue;
+            (parts[match[1]] = parts[match[1]] ?? []).push(String(line).slice(match[0].length));
+        }
+        const texts = {};
+        for (const index of Object.keys(answered)) {
+            // The script adds one line break after the text, so that a last line without one
+            // is still a line of its own: joining the lines drops it again
+            if (answered[index] === "ok")
+                texts[index] = (parts[index] ?? []).join("\n");
+        }
+        return texts;
     }
 
     // A manifest without the entries whose files failed the check. `bad`: { file: why }.
@@ -925,17 +952,94 @@ Singleton {
     // reads anyway.
 
     // The writable properties the root object of a QML file declares directly (not a nested
-    // object's; not readonly ones), by name. Never throws.
+    // object's; not readonly ones), by name. `module` counts only as `property var module`
+    // (the handle is an object; another type would make the Loader warn and drop it —
+    // modulePropertyWarning says so in the module's status). Never throws.
+    //
+    // A pragmatic reader, not a QML parser: it skips comments, strings and template literals,
+    // and a regular-expression literal where one can start (after one of ( , = : [ ! & | ? { } ;
+    // or `return`), so their braces do not count. Not handled: a regex literal after
+    // anything else (`x = a / b / c` is division; `)` then `/` too) — such a file may lose its
+    // initial properties (it is then given none, and its `module` comes from Api.moduleAt).
     function rootProperties(text) {
+        const rootText = _rootText(text);
+        const names = [];
+        const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+([A-Za-z_][\w.]*(?:<[\w.]+>)?)\s+([A-Za-z_]\w*)/g;
+        let match;
+        while ((match = pattern.exec(rootText)) !== null) {
+            if (/\breadonly\s+property/.test(match[0]) || names.includes(match[3]))
+                continue;
+            if (match[3] === "module" && match[2] !== "var")
+                continue;
+            names.push(match[3]);
+        }
+        return names;
+    }
+
+    // A warning when a file's root object declares `module` in a way that never gets the
+    // handle (readonly, or a type other than var); "" otherwise
+    function modulePropertyWarning(file, text) {
+        const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+([A-Za-z_][\w.]*(?:<[\w.]+>)?)\s+module\b/g;
+        const rootText = _rootText(text);
+        let match;
+        while ((match = pattern.exec(rootText)) !== null) {
+            if (/\breadonly\s+property/.test(match[0]) || match[2] !== "var")
+                return file + ": its root declares `" + match[0].trim() + "` — only `property var module` is given the module's handle";
+        }
+        return "";
+    }
+
+    // The text of a QML file's root object at depth 1: comments, strings and regex literals
+    // blanked, nested objects reduced to ";"
+    function _rootText(text) {
         if (typeof text !== "string")
-            return [];
+            return "";
         const source = text.slice(0, maxFileBytes);
         let depth = 0;
         let rootText = "";
+        // The last significant character outside comments and strings, and the word before
+        // it: where a "/" starts a regex literal rather than divides
+        let last = "";
+        let lastWord = "";
         for (let i = 0; i < source.length; i++) {
             const character = source[i];
             const next = source[i + 1];
+            if (/\s/.test(character)) {
+                if (depth === 1)
+                    rootText += character;
+                continue;
+            }
             // Comments and strings are skipped whole
+            if (character === "/" && next !== "/" && next !== "*"
+                    && (last === "" || "(,=:[!&|?{};".includes(last) || lastWord === "return")) {
+                let j = i + 1;
+                let inClass = false;
+                while (j < source.length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
+                    if (source[j] === "\\")
+                        j++;
+                    else if (source[j] === "[")
+                        inClass = true;
+                    else if (source[j] === "]")
+                        inClass = false;
+                    j++;
+                }
+                i = j;
+                last = "/";
+                lastWord = "";
+                if (depth === 1)
+                    rootText += " ";
+                continue;
+            }
+            const wordMatch = /[A-Za-z_$]/.test(character) ? /^[A-Za-z_$][\w$]*/.exec(source.slice(i, i + 64)) : null;
+            if (wordMatch) {
+                if (depth === 1)
+                    rootText += wordMatch[0];
+                i += wordMatch[0].length - 1;
+                last = "a";
+                lastWord = wordMatch[0];
+                continue;
+            }
+            lastWord = "";
             if (character === "/" && next === "/") {
                 const end = source.indexOf("\n", i);
                 i = end < 0 ? source.length : end - 1;
@@ -954,10 +1058,12 @@ Singleton {
                     j++;
                 }
                 i = j;
+                last = "a";
                 if (depth === 1)
                     rootText += " ";
                 continue;
             }
+            last = character;
             if (character === "{") {
                 depth++;
                 if (depth === 2)
@@ -971,14 +1077,7 @@ Singleton {
             if (depth === 1)
                 rootText += character;
         }
-        const names = [];
-        const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+[A-Za-z_][\w.]*(?:<[\w.]+>)?\s+([A-Za-z_]\w*)/g;
-        let match;
-        while ((match = pattern.exec(rootText)) !== null) {
-            if (!/\breadonly\s+property/.test(match[0]) && !names.includes(match[2]))
-                names.push(match[2]);
-        }
-        return names;
+        return rootText;
     }
 
     // Of `wanted` ({ name: value }), the ones the root object declares (`declared`, from
@@ -1080,6 +1179,9 @@ Singleton {
     //   filesChecked       the check of the module's files has answered (false: pending)
     //   guardKnown         the start guard has answered (false: pending; see startGuard)
     function stateOf(facts) {
+        // module.json not answered yet (the file check reads it): pending
+        if (facts?.manifestRead === false)
+            return "pending";
         if (!facts?.valid)
             return "failed";
         if (facts.duplicate)
@@ -1307,6 +1409,35 @@ Singleton {
         if (underModules.length > 0)
             pages.push(Object.assign({}, modulesGroup), ...underModules);
         return { pages: pages, problems: problems };
+    }
+
+    // ---- Api.openUrl ----
+
+    // The schemes Api.openUrl passes to xdg-open; file: only when asked for ({ allowFile: true })
+    readonly property var openUrlSchemes: ["http", "https", "mailto"]
+
+    // Why Api.openUrl refuses a link ("" when it may be opened): it must have a scheme
+    // (`scheme:` at the start), the scheme must be http, https or mailto — or file with
+    // options.allowFile === true — and the link no longer than 4096, without control
+    // characters, not starting with "-"
+    function openUrlProblem(url, options) {
+        if (typeof url !== "string" || url === "")
+            return "empty";
+        if (url.length > 4096)
+            return "longer than 4096 characters";
+        if (/[\u0000-\u001f\u007f]/.test(url))
+            return "holds control characters";
+        if (url.startsWith("-"))
+            return "starts with \"-\"";
+        const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(url);
+        if (!match)
+            return "has no scheme (a bare path is not opened)";
+        const scheme = match[1].toLowerCase();
+        if (openUrlSchemes.includes(scheme))
+            return "";
+        if (scheme === "file")
+            return options?.allowFile === true ? "" : "a file: link needs { allowFile: true }";
+        return "the scheme " + scheme + ": is not opened (only " + openUrlSchemes.join(", ") + ", and file with allowFile)";
     }
 
     // ---- What a module hands the core at run time ----

@@ -227,12 +227,13 @@ TestCase {
             }
             assertEqual(host.hostError, "", "… and the host did not fail");
             host.load("/nonexistent-h2s-module:" + fixtures + "/good", {});
+            assertEqual(host.directories.length, 2, "a colon-separated list, as in H2S_SHELL_MODULES");
+            assertEqual(host.statuses[0]?.state, "pending", "nothing read at load(): pending until the file check answers");
+        });
+        _then("good loads from a colon-separated list", () => _status("good")?.state === "loaded", () => {
             const missing = host.statuses[0];
             assertEqual(missing?.state, "failed", "a directory without module.json: failed");
             assert(_has(missing?.errors, "module.json cannot be read"), "… said so: " + missing?.errors.join("; "));
-            assertEqual(host.directories.length, 2, "a colon-separated list, as in H2S_SHELL_MODULES");
-        });
-        _then("good loads from a colon-separated list", () => _status("good")?.state === "loaded", () => {
             assertEqual(_goodState.mains, 1, "good loaded beside a missing directory");
             host.unload();
         });
@@ -307,12 +308,102 @@ TestCase {
             assert(!host.safeMode, "… no safe mode");
             host.guardFile = "";
             host.unload();
+
+            // A1: files that hang on read (a mount that answers stat, then blocks). The check's
+            // `head` is a stand-in that sleeps past the deadline; load() itself reads nothing
+            suite._made = null;
+            _sh("mkdir -p \"$1/hung-bin\" && printf '#!/bin/sh\\nsleep 3\\nexit 1\\n' > \"$1/hung-bin/head\" && chmod +x \"$1/hung-bin/head\"",
+                [_scratch], code => suite._made = code);
+        });
+        _then("the hanging stand-in is made", () => _made !== null, () => {
+            assertEqual(_made, 0, "made the hanging head");
+            host.checkEnvironment = { PATH: _scratch + "/hung-bin:" + Quickshell.env("PATH") };
+            host.checkTimeoutMs = 800;
+            const before = Date.now();
+            host.load(_dirs(["good"]), {});
+            const loadMs = Date.now() - before;
+            const valueBefore = Date.now();
+            const lockOnSleep = Profiles.value("lockscreen.lockOnSleep");
+            const valueMs = Date.now() - valueBefore;
+            assert(loadMs < 200, "load() returns at once while the module's files hang (" + loadMs + " ms)");
+            assert(lockOnSleep !== undefined && valueMs < 100, "Profiles.value(\"lockscreen.lockOnSleep\") answers at once (" + valueMs + " ms): " + lockOnSleep);
+            assertEqual(_status("good")?.state, "pending", "… the module pending meanwhile");
+            suite._hungSince = Date.now();
+        });
+        _then("the hung module fails after the bound", () => _status("good")?.state === "failed", () => {
+            const waited = Date.now() - _hungSince;
+            assert(waited >= 600, "… not before the deadline (" + waited + " ms)");
+            assert(_has(_status("good")?.errors, "module.json cannot be read") && _has(_status("good")?.errors, "within 0.8 s"),
+                   "failed, with the reason: " + _status("good")?.errors.join("; "));
+            assertEqual(host.mainObject("good"), null, "… nothing of it loaded");
+            host.checkEnvironment = ({});
+            host.checkTimeoutMs = 5000;
+            host.load(_dirs(["good"]), {});
+        }, 4000);
+        _then("good loads again with a working check", () => _status("good")?.state === "loaded", () => {
+            assertEqual(_status("good")?.warnings.length, 0, "… no warnings");
+            host.unload();
+
+            // A3: the stores' directory made private at the host's start; a store's file
+            // written synchronously, atomically, 600; flushed when destroyed; a huge file
+            // refused on read
+            host.storeDirectory = _scratch + "/config/h2s_shell/modules";
+            host.load(_dirs(["good"]), {});
+        });
+        _then("the store directory is made", () => _settled() && host._storeDirectoryMade, () => {
+            suite._store = _storeComponent.createObject(suite, { moduleId: "storetest", path: host.storeDirectory + "/storetest.json" });
+        });
+        _then("the store is read (missing: empty)", () => _store?.ready, () => {
+            assertEqual(JSON.stringify(_store.data), "{}", "a missing file: an empty store");
+            assert(_store.set("token", "secret") && _store.set("n", 2), "set");
+            // Destroyed within the second before its timer would write: it writes now
+            _store.destroy();
+            _store = null;
+            suite._exists = null;
+            _sh("sleep 0.3; cat \"$1/storetest.json\"; echo; stat -c '%a' \"$1\" \"$1/storetest.json\" \"$2\"", [host.storeDirectory, _scratch + "/config/h2s_shell"],
+                (code, output) => suite._exists = output);
+        });
+        _then("the store's file is read back", () => _exists !== null, () => {
+            const lines = _exists.trim().split("\n");
+            assertEqual(lines[0], "{\"token\":\"secret\",\"n\":2}", "destroyed right after set(): the value is on disk");
+            assertEqual(lines[1], "700", "the stores' directory: 700");
+            assertEqual(lines[3], "700", "… and the parent it made: 700");
+            suite._exists = null;
+            // The chmod 600 is detached: read it a moment later
+            _sh("sleep 0.3; stat -c '%a' \"$1/storetest.json\"; head -c 2097152 /dev/zero | tr '\\0' x > \"$1/huge.json\"", [host.storeDirectory], (code, output) => suite._exists = output.trim());
+        });
+        _then("the file's mode is read", () => _exists !== null, () => {
+            assertEqual(_exists, "600", "the store's file: 600");
+            suite._store = _storeComponent.createObject(suite, { moduleId: "huge", path: host.storeDirectory + "/huge.json" });
+        });
+        _then("the huge store is read", () => _store?.ready, () => {
+            assertEqual(JSON.stringify(_store.data), "{}", "a 2 MiB store file: refused on read, the store empty");
+            assert(_has([_store.refusedReason], "larger than"), "… said why: " + _store.refusedReason);
+            _store.set("x", 1);
+            _store.flush();
+            _store.destroy();
+            _store = null;
+            suite._exists = null;
+            _sh("stat -c %s \"$1/huge.json\"", [host.storeDirectory], (code, output) => suite._exists = output.trim());
+        });
+        _then("the huge file is untouched", () => _exists !== null, () => {
+            assertEqual(_exists, "2097152", "… and never overwritten");
+            host.unload();
+            host.storeDirectory = "";
             _sh("rm -rf \"$1\"", [_scratch], () => {});
         });
         _clock.start();
     }
 
     property var _goodState: null
+    property var _hungSince: 0
+    property var _store: null
+    property Component _storeComponent: Component {
+        ModuleStore {
+            // The runner's Config is read-only: this store writes, into the test's own directory
+            writable: true
+        }
+    }
     property var _made: null
     property var _exists: null
     // The test's own files: in the private runtime directory the runner gives it

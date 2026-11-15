@@ -345,7 +345,10 @@ the slow retry while locked, how long a second launcher waits for the lock; seco
 `modules-launcher`). Unset, no data dir is searched: a module installed system-wide is not
 seen by the test shells, which keep the caller's `XDG_DATA_DIRS` for icons and fonts. Their
 data home is the run's own. `--launcher-timings "discoveryhang=60"` makes every module search
-hang (`modules-discovery`: the launcher's 3 s bound). The launcher's own log is
+hang (`modules-discovery`: the launcher's 3 s bound). `--shell-env NAME=value` adds a variable
+to the launcher's (so the shell's) environment: `modules-hung` gives the shell's module file
+check a `head` that hangs (`H2S_SHELL_TEST_MODULE_CHECK_PATH`) and a 15 s deadline
+(`H2S_SHELL_TEST_MODULE_CHECK_MS`). The launcher's own log is
 `$RUN/h2s-shell-launcher.log`; its lines also go to `shell.log`, as do the shell's, stamped
 (`--log-times`). `scripts/lock-log.sh` is run against the test shell in `lock-log`.
 

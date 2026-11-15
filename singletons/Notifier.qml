@@ -24,7 +24,10 @@ import QtQuick
 Singleton {
     id: root
 
-    function send(summary, opts) {
+    // notify-send's argv for a notification (pure; tests/NotifierTest.qml). Every option
+    // comes first, then "--", then the summary and the body: text from anywhere (a module, a
+    // command's stderr, a peer's name) that starts with "-" is never parsed as an option.
+    function command(summary, opts) {
         let options = opts ?? {};
         let cmd = ["notify-send"];
 
@@ -73,13 +76,19 @@ Singleton {
                 cmd.push("--action=" + action.id + "=" + action.label);
         }
 
-        let needWait = hasActions || !!options.onDismissed;
-
-        cmd.push(summary);
-        if (options.body)
-            cmd.push(options.body);
-        if (needWait)
+        if (hasActions || !!options.onDismissed)
             cmd.push("--wait");
+
+        cmd.push("--", String(summary ?? ""));
+        if (options.body)
+            cmd.push(String(options.body));
+        return cmd;
+    }
+
+    function send(summary, opts) {
+        let options = opts ?? {};
+        const cmd = command(summary, options);
+        let needWait = (options.actions && options.actions.length > 0) || !!options.onDismissed;
 
         // A process of its own per notification: one shared process meant a second
         // interactive notification killed the first's `notify-send --wait` and took over

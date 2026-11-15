@@ -35,6 +35,7 @@ TestCase {
     property var _goodState: null
     property int _ticksAtStop: 0
     property var _grepped: null
+    property int _resumes: 0
     property real _waitUntil: 0
 
     function _then(description, condition, action, timeoutMs) {
@@ -189,6 +190,27 @@ TestCase {
             const wrapped = Modules.slotComponent("network.popup.sections", "good").createObject(suite, { context: { slot: "x", n: 1 } });
             assert(wrapped?.ready && wrapped.item.context.n === 1 && wrapped.item.module === handle, "… built, with the handle and the context set on it");
             wrapped?.destroy();
+            // API 1.2: `shown` passed to a contribution that declares it, following where it sits
+            assertEqual(built.item.shown, built.shown, "shown: passed to a contribution that declares it");
+            assertEqual(built.shown, false, "… false where no window shows it (the suite's slot is in none)");
+            // API 1.2: resumed() on the handle of an active module when the machine wakes
+            suite._resumes = 0;
+            handle.resumed.connect(() => suite._resumes++);
+            SystemSleep.reportResumed();
+            assertEqual(_resumes, 1, "module.resumed(): told when the machine wakes (SystemSleep)");
+            // A module widget's popup mode: in the schema with the module, never in the core's
+            // entries or defaults (a new config's Full must not freeze it)
+            assertEqual(SettingsSchema.entry("widgets.good.popupMode")?.module, "good", "a module widget's popup mode: in the schema, with its module");
+            assert(!SettingsSchema.coreEntries.some(entry => entry.key === "widgets.good.popupMode"), "… never among the core's entries");
+            assert(!("widgets.good.popupMode" in SettingsSchema.coreDefaults), "… nor the core's defaults");
+            assert("widgets.clock.popupMode" in SettingsSchema.coreDefaults || !WidgetRegistry.coreEntries.some(entry => entry.type === "clock" && entry.popup),
+                   "… while a core widget's is");
+            // Facts: setting the value it has publishes nothing
+            const factsBefore = Modules.host.factValues;
+            assertEqual(handle.setFact("ready", true), "", "setFact: the same value again");
+            assert(Modules.host.factValues === factsBefore, "… a no-op: factValues not reassigned (no setting binding re-evaluated)");
+            assertEqual(ModuleLists.factValues["good.ready"], true, "Profiles' facts come from ModuleLists (plain values the host feeds)");
+            assert(ModuleLists.settled, "… which says when the modules have settled");
 
             // Off
             assert(Modules.setEnabled("good", false), "setEnabled(good, false)");
@@ -198,6 +220,8 @@ TestCase {
             const handle = Modules.handle("good");
             assert(!handle.active, "the handle: not active");
             assertEqual(Modules.host.mainObject("good"), null, "its main destroyed");
+            SystemSleep.reportResumed();
+            assertEqual(_resumes, 1, "resumed(): not told while the module is off");
             assert(_has(Modules.status("broken-slot")?.errors, "slot notifications.popup.top"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
             assertEqual(_slots["network.popup.sections"].count, 0, "its slot contribution gone");
             assertEqual(_slots["network.popup.sections"].implicitHeight, 0, "… the slot empty again");
@@ -226,14 +250,18 @@ TestCase {
             _identity("unloaded");
             // The reserved ids against the tree: every IPC target, and every widget type, popup
             // key and settings page id shaped like a module id
-            _grep.command = ["sh", "-c", "cd \"$1\" && grep -rhoE 'target: *\"[^\"]+\"' --include=*.qml . | grep -v fixtures | sed 's/.*\"\\(.*\\)\"/\\1/' | sort -u; grep -rlE 'ModuleSlot|ModuleContribution|Modules\\.' screensaver singletons/lock singletons/Lockscreen.qml pam 2>/dev/null | sed 's/^/LOCK:/'",
+            _grep.command = ["sh", "-c", "cd \"$1\" && grep -rhoE 'target: *\"[^\"]+\"' --include=*.qml . | grep -v fixtures | sed 's/.*\"\\(.*\\)\"/\\1/' | sort -u; sh tests/lock-closure.sh .; t=$(mktemp -d -p \"${XDG_RUNTIME_DIR:-/tmp}\") && mkdir -p $t/screensaver $t/components && printf 'import QtQuick\\nimport qs.components\\nItem {\\n    Shared { }\\n}\\n' > $t/screensaver/A.qml && printf 'import QtQuick\\nItem { Inner {} }\\n' > $t/components/Shared.qml && printf 'import QtQuick\\nItem { ModuleSlot {} }\\n' > $t/components/Inner.qml && sh tests/lock-closure.sh $t | sed 's/^/SELFTEST:/'; rm -rf $t",
                              "sh", Quickshell.shellDir];
             _grep.running = true;
         });
         _then("the tree's IPC targets are read", () => _grepped !== null, () => {
             const lockFiles = _grepped.filter(name => name.startsWith("LOCK:"));
-            assertEqual(lockFiles.join(", "), "", "nothing of the module system on the lock screen (screensaver/, singletons/lock/, Lockscreen, pam/)");
-            const names = _grepped.filter(name => name !== "good" && !name.startsWith("LOCK:"))
+            assertEqual(lockFiles.join(", "), "", "nothing of the module system on the lock screen (screensaver/, singletons/lock/, Lockscreen, pam/ and the components they build, transitively: tests/lock-closure.sh)");
+            const walked = Number((_grepped.find(name => name.startsWith("LOCKFILES:")) ?? "LOCKFILES:0").slice(10));
+            assert(walked >= 10, "… the walk reached the lock screen's files and what they build (" + walked + ")");
+            assert(_grepped.includes("SELFTEST:LOCK:components/Inner.qml"),
+                   "… and catches a ModuleSlot in a component a lock file builds through another (a made-up tree): " + _grepped.filter(name => name.startsWith("SELFTEST")).join(", "));
+            const names = _grepped.filter(name => name !== "good" && !/^(LOCK|LOCKFILES|SELFTEST):/.test(name))
                 .concat(WidgetRegistry.coreEntries.map(each => each.type), WidgetRegistry.coreEntries.filter(each => each.popup).map(each => each.popup),
                         _window.corePages.map(each => each.id), ["tray-menu"]);
             assert(_grepped.length >= 5, "the core's IPC targets were found (" + _grepped.join(", ") + ")");
