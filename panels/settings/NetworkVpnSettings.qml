@@ -257,23 +257,20 @@ Item {
                     onUseRequested: VpnManager.connect(modelData.uuid)
                     onStopRequested: VpnManager.disconnect(modelData.uuid)
                     onNoticeActionRequested: VpnManager.attend(modelData.uuid)
+                    // A provider's page: "Settings…", under the card's primary button
+                    hasSettings: _settingsPage !== "" || _pageUrl !== ""
+                    settingsTooltip: "Its own settings: " + VpnManager.typeName(modelData)
+                    onSettingsRequested: {
+                        if (!VpnManager.openSettingsPageOf(modelData))
+                            root._providerPage = modelData.uuid;
+                    }
 
-                    // A provider's own: its extras (slot network.vpn.card), and its page
+                    // A provider's own: its extras (slot network.vpn.card)
                     VpnExtras {
                         Layout.fillWidth: true
                         slot: VpnManager.slots.card
                         vpn: _vpn.modelData
                         extra: ({ open: _vpn.open })
-                    }
-                    SmallButton {
-                        objectName: "vpnProviderSettings"
-                        visible: _vpn._settingsPage !== "" || _vpn._pageUrl !== ""
-                        label: "Settings…"
-                        tooltip: "Its own settings: " + VpnManager.typeName(_vpn.modelData)
-                        onClicked: {
-                            if (!VpnManager.openSettingsPageOf(_vpn.modelData))
-                                root._providerPage = _vpn.modelData.uuid;
-                        }
                     }
 
                     // The networks it comes up with (set in their editors)

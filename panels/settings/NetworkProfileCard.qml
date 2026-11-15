@@ -5,8 +5,8 @@ import qs.singletons
 import qs.singletons.network
 
 // A saved connection profile on its kind's page (System → Network → Wi-Fi, Ethernet): its
-// name and a line about it, connect or disconnect at once, and, opened, connect
-// automatically, priority, edit connection and forget — plus what the page adds (`data`:
+// name and a line about it, connect or disconnect at once, and, opened, edit connection and
+// forget (under that button), connect automatically and priority — plus what the page adds (`data`:
 // the Wi-Fi password). Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
 // page offers ("" when there is none: out of range, no cable); disconnecting takes the
 // device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
@@ -44,6 +44,10 @@ Rectangle {
     property bool external: false
     property bool editable: !external
     property bool deletable: !external
+    // Its own settings elsewhere (a VPN provider's page): "Settings…" under the primary
+    // button, opened, emitting settingsRequested
+    property bool hasSettings: false
+    property string settingsTooltip: ""
     // An operation runs: the button waits
     property bool busy: NetworkProfiles.connecting
     // polkit's answer for connecting it, for PrivilegedMark ("" nothing marked)
@@ -62,11 +66,14 @@ Rectangle {
     signal editRequested()
     signal useRequested()
     signal stopRequested()
+    signal settingsRequested()
     signal noticeActionRequested()
 
     implicitHeight: _column.implicitHeight + 16
     radius: Theme.settings.cardRadius
-    color: open ? Theme.surface : (_headerArea.lit ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0))
+    // Opened, a tint over the page's background, not Theme.surface: the buttons inside are
+    // Theme.surface at rest, and on a card of the same colour they read as plain text
+    color: open || _headerArea.lit ? Theme.fillSubtle : Qt.alpha(Theme.fillSubtle, 0)
     border.width: Theme.border.width
     border.color: profile.active ? Theme.accent : Theme.outline
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
@@ -96,7 +103,9 @@ Rectangle {
                 spacing: 10
 
                 ColumnLayout {
+                    id: _titleBlock
                     Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignTop
                     spacing: 1
                     Text {
                         Layout.fillWidth: true
@@ -116,44 +125,106 @@ Rectangle {
                         color: root.profile.active ? Theme.success : Theme.textMuted
                     }
                 }
-                PrivilegedMark {
-                    need: root.need
-                }
-                // As in the network popup: connect in the confirm colour, disconnect in the
-                // delete colour
-                SmallButton {
-                    visible: root.profile.active || (root.usable && root.canUse && root.useQuestion === "")
-                    label: root.profile.active ? root.stopLabel : root.useLabel
-                    kind: root.profile.active ? "delete" : "save"
-                    available: !root.busy
-                    onClicked: {
-                        if (root.external && root.profile.active)
-                            root.stopRequested();
-                        else if (root.external)
-                            root.useRequested();
-                        else if (!root.profile.active)
-                            NetworkProfiles.activate(root.profile.uuid, root.useDevice);
-                        else if (root.stopsProfile)
-                            NetworkProfiles.deactivate(root.profile.uuid, root.stopLabel + " " + root.title);
-                        else
-                            NetworkProfiles.disconnectDevice(root.profile.device, "Disconnecting " + root.title);
+                // The actions, on the right: the primary one (connect or disconnect) and,
+                // opened, the secondary ones stacked under it, all on one right edge — so
+                // the text keeps the left and elides instead of running under them
+                ColumnLayout {
+                    id: _actions
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 4
+
+                    // At least as tall as the name and its line, the primary button
+                    // centred in it: closed, the card looks as it did; and the secondary
+                    // buttons start at the same place whether or not the primary shows
+                    Item {
+                        id: _primarySlot
+                        Layout.alignment: Qt.AlignRight
+                        implicitWidth: _primaryRow.implicitWidth
+                        implicitHeight: Math.max(_primaryRow.implicitHeight, _titleBlock.implicitHeight)
+
+                        Row {
+                            id: _primaryRow
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            spacing: 10
+
+                            PrivilegedMark {
+                                anchors.verticalCenter: parent.verticalCenter
+                                need: root.need
+                            }
+                            // As in the network popup: connect in the confirm colour, disconnect
+                            // in the delete colour
+                            SmallButton {
+                                objectName: "profilePrimary"
+                                visible: root.profile.active || (root.usable && root.canUse && root.useQuestion === "")
+                                label: root.profile.active ? root.stopLabel : root.useLabel
+                                kind: root.profile.active ? "delete" : "save"
+                                available: !root.busy
+                                onClicked: {
+                                    if (root.external && root.profile.active)
+                                        root.stopRequested();
+                                    else if (root.external)
+                                        root.useRequested();
+                                    else if (!root.profile.active)
+                                        NetworkProfiles.activate(root.profile.uuid, root.useDevice);
+                                    else if (root.stopsProfile)
+                                        NetworkProfiles.deactivate(root.profile.uuid, root.stopLabel + " " + root.title);
+                                    else
+                                        NetworkProfiles.disconnectDevice(root.profile.device, "Disconnecting " + root.title);
+                                }
+                            }
+                            DeleteButton {
+                                visible: !root.profile.active && root.usable && root.canUse && root.useQuestion !== ""
+                                label: root.useLabel
+                                fontSize: Theme.fontSizeBody
+                                confirmLabel: root.useQuestion
+                                cancelTip: "Cancel"
+                                available: !root.busy
+                                onConfirmed: {
+                                    if (root.external)
+                                        root.useRequested();
+                                    else
+                                        NetworkProfiles.activate(root.profile.uuid, root.useDevice);
+                                }
+                            }
+                        }
+                    }
+
+                    SmallButton {
+                        objectName: "profileSettings"
+                        visible: root.open && root.hasSettings
+                        Layout.alignment: Qt.AlignRight
+                        label: "Settings…"
+                        tooltip: root.settingsTooltip
+                        onClicked: root.settingsRequested()
+                    }
+                    SmallButton {
+                        objectName: "profileEdit"
+                        visible: root.open && root.editable
+                        Layout.alignment: Qt.AlignRight
+                        label: "Edit connection…"
+                        tooltip: root.editTooltip
+                        onClicked: root.editRequested()
+                    }
+                    DeleteButton {
+                        objectName: "profileForget"
+                        visible: root.open && root.deletable
+                        Layout.alignment: Qt.AlignRight
+                        // The stack's size: as tall as the buttons above it
+                        fontSize: Theme.fontSizeBody
+                        label: root.forgetLabel
+                        confirmLabel: root.forgetLabel + "?"
+                        cancelTip: "Keep it"
+                        onConfirmed: {
+                            root.forgotten();
+                            NetworkProfiles.forget([root.profile.uuid], root.forgetAction + " " + root.title);
+                        }
                     }
                 }
-                DeleteButton {
-                    visible: !root.profile.active && root.usable && root.canUse && root.useQuestion !== ""
-                    label: root.useLabel
-                    fontSize: Theme.fontSizeBody
-                    confirmLabel: root.useQuestion
-                    cancelTip: "Cancel"
-                    available: !root.busy
-                    onConfirmed: {
-                        if (root.external)
-                            root.useRequested();
-                        else
-                            NetworkProfiles.activate(root.profile.uuid, root.useDevice);
-                    }
-                }
+                // Level with the primary button, not with the whole stack
                 Text {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredHeight: _primarySlot.implicitHeight
+                    verticalAlignment: Text.AlignVCenter
                     text: root.open ? "▾" : "▸"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
@@ -244,28 +315,6 @@ Rectangle {
                 id: _extra
                 Layout.fillWidth: true
                 spacing: 6
-            }
-
-            RowLayout {
-                visible: root.editable || root.deletable
-                Layout.fillWidth: true
-                SmallButton {
-                    visible: root.editable
-                    label: "Edit connection…"
-                    tooltip: root.editTooltip
-                    onClicked: root.editRequested()
-                }
-                Item { Layout.fillWidth: true }
-                DeleteButton {
-                    visible: root.deletable
-                    label: root.forgetLabel
-                    confirmLabel: root.forgetLabel + "?"
-                    cancelTip: "Keep it"
-                    onConfirmed: {
-                        root.forgotten();
-                        NetworkProfiles.forget([root.profile.uuid], root.forgetAction + " " + root.title);
-                    }
-                }
             }
         }
     }

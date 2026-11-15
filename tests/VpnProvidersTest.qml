@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import qs.singletons
 import qs.singletons.network
 
@@ -628,6 +629,61 @@ TestCase {
                    "row: with a status — taller, holding both lines (" + rowWith.height + ")");
             assert(suite._texts(suite._card).includes("A note") && suite._texts(suite._card).includes("Disconnect"),
                    "views: a provider's card — its notice, its button");
+            // Its "Settings…", opened: a button (SmallButton) under the primary one, on its
+            // right edge; the text block stops short of the buttons
+            const card = suite._card;
+            const primary = suite._named(card, "profilePrimary");
+            const settings = suite._named(card, "profileSettings");
+            assert(primary !== null && settings !== null && !settings.visible, "card: closed — no Settings…");
+            let settingsAsked = 0;
+            card.settingsRequested.connect(() => settingsAsked++);
+            card.hasSettings = true;
+            card.open = true;
+            assert(settings.visible && settings.label === "Settings…" && settings.kind === "normal" && typeof settings.clicked === "function"
+                   && settings.radius === Theme.button.radius, "card: opened — Settings… is a SmallButton (the shell's normal button)");
+            assert(!suite._named(card, "profileEdit").visible && !suite._named(card, "profileForget").visible,
+                   "card: external — no Edit connection…, no Forget");
+            settings.clicked();
+            assertEqual(settingsAsked, 1, "card: Settings… emits settingsRequested");
+            // Where it sits, by structure — in no window nothing polishes, so the geometry
+            // is checked on screen (the Tailscale module's lock-bed test): the primary
+            // button's slot and Settings… in one column right of the text block, Settings…
+            // after the slot and right-aligned, the primary anchored right in its slot
+            const actions = settings.parent;
+            const slot = primary.parent.parent;
+            const stack = Array.from(actions.children);
+            assert(slot.parent === actions && stack.indexOf(slot) >= 0 && stack.indexOf(slot) < stack.indexOf(settings),
+                   "card: Settings… in the primary button's column, under it");
+            assert((settings.Layout.alignment & Qt.AlignRight) && (slot.Layout.alignment & Qt.AlignRight)
+                   && primary.parent.anchors.right === slot.right, "card: Settings… on the primary button's right edge");
+            const header = actions.parent;
+            const titleBlock = Array.from(header.children).find(child => child !== actions && child.Layout.fillWidth);
+            assert(titleBlock !== undefined && Array.from(header.children).indexOf(titleBlock) < Array.from(header.children).indexOf(actions),
+                   "card: the text block on the left, filling the rest (it elides, never runs under the buttons)");
+            assert(card.color !== Theme.surface, "card: opened, not Theme.surface — its buttons (Theme.surface) stay visible as buttons");
+            // Busy, or no primary button at all: the slot keeps its height, Settings… stays put
+            const slotHeight = slot.implicitHeight;
+            card.busy = true;
+            assertEqual(slot.implicitHeight, slotHeight, "card: busy — the primary's slot keeps its height (Settings… does not move)");
+            card.busy = false;
+            card.canUse = false;
+            card.profile = Object.assign({}, card.profile, { active: false });
+            assert(!primary.visible && slot.implicitHeight === slotHeight, "card: no primary button — its slot keeps the text block's height");
+            card.profile = suite._vpn("vpt:two");
+            card.canUse = true;
+            card.open = false;
+            // A NetworkManager profile's (Wi-Fi, Ethernet, a VPN of its own): Edit connection…
+            // and Forget, buttons in the same column, under the primary one
+            const own = suite._make("../panels/settings/NetworkProfileCard.qml", { width: 300, open: true,
+                profile: { uuid: "x", name: "Home", active: false, autoconnect: false, priority: 0, device: "" } });
+            const edit = suite._named(own, "profileEdit");
+            const forget = suite._named(own, "profileForget");
+            const ownStack = Array.from(edit.parent.children);
+            assert(edit.visible && forget.visible && !suite._named(own, "profileSettings").visible && forget.parent === edit.parent
+                   && ownStack.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownStack.indexOf(edit)
+                   && ownStack.indexOf(edit) < ownStack.indexOf(forget) && (forget.Layout.alignment & Qt.AlignRight),
+                   "card: a NetworkManager profile — Edit connection… then Forget, right-aligned under the primary");
+            own.destroy();
             suite._rowOne = suite._row("vpt:one");
             suite._extrasOne = suite._extrasOf(suite._rowOne);
             assert(suite._extrasOne?.item?.context?.provider === suite._fakeOne, "views: the row's extras get the provider object in their context");

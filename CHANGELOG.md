@@ -395,6 +395,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Settings → System → Network (Wi-Fi, Ethernet, VPN): on an opened connection card the buttons
+  read as plain text (the card was the buttons' own colour); they are buttons again, and
+  "Settings…", "Edit connection…" and "Forget"/"Delete" now sit under Connect/Disconnect,
+  on its right edge, instead of at the bottom of the card.
 - Authentication prompt (polkit): with a fingerprint reader first in polkit's PAM stack
   (NixOS's default) the prompt showed only "Place your finger…" — no field, Esc dead — for
   up to 30 s until the reader gave up. The field is there from the start: a password typed

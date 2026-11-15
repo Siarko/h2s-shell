@@ -126,6 +126,7 @@ QtObject {
     //   qs ipc call settings open
     //   qs ipc call settings openPage profiles     (a page's id: SettingsWindow.pages)
     //   qs ipc call settings currentPage           (the open page's id, the one the list selects)
+    //   qs ipc call settings itemRect profileSettings   (where a shown item is, for tests)
     //   qs ipc call settings toggle
     //   qs ipc call settings close
     property var _settingsIpc: IpcHandler {
@@ -152,6 +153,28 @@ QtObject {
 
         function close(): void {
             settingsWindow.visible = false;
+        }
+
+        // For tests driving the window from outside: the first shown item with that
+        // objectName, in the window's own logical pixels ("{}" none) — the compositor knows
+        // where the window is (hyprctl clients), the shell does not
+        function itemRect(name: string): string {
+            const find = item => {
+                for (const child of item?.children ?? []) {
+                    if (child.objectName === name && child.visible)
+                        return child;
+                    const found = find(child);
+                    if (found)
+                        return found;
+                }
+                return null;
+            };
+            const item = settingsWindow.visible ? find(settingsWindow.contentItem) : null;
+            if (!item)
+                return "{}";
+            const topLeft = item.mapToItem(null, 0, 0);
+            return JSON.stringify({ x: Math.round(topLeft.x), y: Math.round(topLeft.y),
+                                    width: Math.round(item.width), height: Math.round(item.height) });
         }
     }
 

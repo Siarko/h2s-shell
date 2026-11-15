@@ -356,7 +356,7 @@ has (read from `/etc/pam.d/polkit-1`).
 A separate floating window, reachable from the Settings widget, from
 `Shell.openSettings(pageId)`, or over IPC — which also works with no Settings widget on
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
-`openPage bar_appearance`), `currentPage` (the open page's id), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
+`openPage bar_appearance`), `currentPage` (the open page's id), `itemRect <objectName>` (where a shown item is in the window, for tests), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
 a profile, and **Appearance**, whose pages edit a theme. The sidebar shows which profiles
 are active right now, and picks what the tab's pages edit — the profile (with the theme it
 uses, a click away) or the theme (with the profiles that use it, and Preview to show it
