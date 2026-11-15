@@ -14,8 +14,10 @@
 #     PrepareForSleep: both lock (no reload in between any more).
 # (2) A file saved while unlocked: a lock by the launcher's IPC sent while the shell
 #     reloads is taken (tried again), and it exits 0 only when taken.
-# (3) A PrepareForSleep while the shell reloads: the lock goes up, and the inhibitor held
-#     when the signal came is let go only after the compositor locked.
+# (3) A PrepareForSleep while the shell reloads: the lock goes up, and logind — which
+#     refuses new inhibitors once the sleep is under way — would sleep only after the
+#     compositor locked: the last inhibitor held when the signal came is let go after the
+#     lock, and the lock comes within logind's 5 s maximum delay of the signal.
 
 stack_start --logind
 
@@ -75,6 +77,16 @@ wait_until 10 shell_status_is locked
 unlock_for_test || fail "logind's Unlock did not unlock"
 
 # ---- (3) PrepareForSleep while the shell reloads ----
+# What decides it is what logind waits for (systemd's src/login/logind-dbus.c): after
+# PrepareForSleep(true) it sleeps as soon as no delay inhibitor is left, or InhibitDelayMaxSec
+# (5 s) after the signal, whichever comes first — and it refuses new delay inhibitors until
+# the wake (the stand-in does too). So the inhibitors that count are the ones held when the
+# signal went out, and the machine sleeps at min(the last of their releases, signal + 5 s):
+# the lock must be confirmed by then. One of them may be an earlier reload's, still in its
+# grace, let go before the lock: harmless, logind waits for the last.
+grace=$(sed -n 's/.*readonly property int graceSeconds: *\([0-9.]*\).*/\1/p' "$LOCKTEST_SHELL/singletons/lock/SleepInhibitor.qml")
+[ -n "$grace" ] || abort "graceSeconds not found in SleepInhibitor.qml"
+delay_max=5
 for offset in 0 0.4; do
     wait_until 10 shell_status_is unlocked
     wait_until 5 inhibitor_held || fail "[$offset] the inhibitor is not held before the reload"
@@ -82,20 +94,21 @@ for offset in 0 0.4; do
     echo "// written by tests/lock reload-window.sh, unlocked (3, $offset)" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
     wait_until 5 reloading_since "$before" || abort "the shell did not reload on a file change"
     sleep "$offset"
-    # The inhibitors held when the signal goes out: the ones logind would wait for
-    held_at_signal=$(awk '$1 == "hold" { held[$2] = 1 } $1 == "release" { delete held[$2] } END { for (pid in held) print pid }' "$WORK/logind/log")
+    # The inhibitors held when the signal goes out — the ones logind waits for — oldest first
+    held_at_signal=$(awk '$1 == "hold" { held[$2] = ++n } $1 == "release" { delete held[$2] } END { for (pid in held) print held[pid], pid }' "$WORK/logind/log" | sort -n | awk '{ print $2 }')
     signal_line=$(wc -l < "$WORK/shell.log")
+    signal_at=${EPOCHREALTIME/,/.}
     logind_signal sleep
-    locked_at=""
     if wait_until 8 compositor_locked; then
         pass "[$offset] a PrepareForSleep during a reload locks"
     else
         fail "[$offset] a PrepareForSleep during a reload locks (the lid-close lock was LOST)"
     fi
     # Until the shell logged the confirmation and every inhibitor held at the signal was let
-    # go (a wait, not a fixed sleep; one never let go within it counts as let go after)
+    # go, or logind's maximum delay ran out (a wait, not a fixed sleep)
     settled() {
         [ -n "$(confirmed_after "$signal_line")" ] || return 1
+        awk -v now="${EPOCHREALTIME/,/.}" -v since="$signal_at" -v max="$delay_max" 'BEGIN { exit !(now + 0 > since + max) }' && return 0
         local pid
         for pid in $held_at_signal; do
             awk -v pid="$pid" '$1 == "release" && $2 == pid { found = 1 } END { exit !found }' "$WORK/logind/log" || return 1
@@ -103,13 +116,25 @@ for offset in 0 0.4; do
     }
     wait_until 8 settled || log "[$offset] not settled within 8 s (confirmation logged and the inhibitors let go)"
     locked_at=$(confirmed_after "$signal_line")
+    last_release=0
+    released=""
     for pid in $held_at_signal; do
         released=$(awk -v pid="$pid" '$1 == "release" && $2 == pid { print $3 }' "$WORK/logind/log" | tail -n 1)
-        log "[$offset] inhibitor $pid, held when the signal came: released at ${released:-not yet}, the compositor locked at ${locked_at:-never}"
-        check "[$offset] the inhibitor held when the signal came is let go only after the lock (logind waits for it)" \
-            awk -v released="${released:-9999999999}" -v locked="${locked_at:-9999999999}" 'BEGIN { exit !(released + 0 >= locked + 0) }'
+        log "[$offset] inhibitor $pid, held when the signal came: released at ${released:-not yet}"
+        last_release=$(awk -v a="$last_release" -v b="${released:-9999999999}" 'BEGIN { printf "%.6f", (b + 0 > a + 0) ? b : a }')
     done
-    [ -n "$held_at_signal" ] || fail "[$offset] no inhibitor was held when the signal came"
+    [ -n "$held_at_signal" ] || fail "[$offset] no inhibitor was held when the signal came (logind sleeps at once)"
+    # Taken while the sleep was under way: none (refused), as with logind
+    holds_during=$(awk -v since="$signal_at" '$1 == "hold" && $3 + 0 > since + 0 { n++ } END { print n + 0 }' "$WORK/logind/log")
+    refusals=$(awk -v since="$signal_at" '$1 == "refuse" && $3 + 0 > since + 0 { n++ } END { print n + 0 }' "$WORK/logind/log")
+    sleeps_at=$(awk -v r="$last_release" -v s="$signal_at" -v max="$delay_max" 'BEGIN { c = s + max; printf "%.6f", (r + 0 < c) ? r : c }')
+    # The timings. The old generation's inhibitor is the newest held at the signal: its input
+    # closed at the old generation's teardown, and it ended `grace` seconds after that.
+    log "[$offset] timings (s): $(awk -v s="$signal_at" -v t="${released:-9999999999}" -v g="$grace" -v l="${locked_at:-9999999999}" -v z="$sleeps_at" -v r="$last_release" -v max="$delay_max" \
+        'BEGIN { td = t - g; printf "signal->teardown %.3f, teardown->locked %.3f, signal->locked %.3f, logind sleeps at signal+%.3f (%s), margin %.3f", td - s, l - td, l - s, z - s, (r + 0 < s + max) ? "last release" : "InhibitDelayMaxSec", z - l }'); holds taken while sleeping: $holds_during, refused: $refusals"
+    check "[$offset] no inhibitor was taken while the sleep was under way (logind refuses them)" test "$holds_during" = 0
+    check "[$offset] logind would sleep only after the lock: the last inhibitor held at the signal is let go after it, within InhibitDelayMaxSec of the signal" \
+        awk -v z="$sleeps_at" -v l="${locked_at:-9999999999}" 'BEGIN { exit !(l + 0 <= z + 0) }'
     log "[$offset] how the shell heard of it: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/shell.log" | grep -a -E 'PreparingForSleep|"type":"prepareForSleep"' | tail -n 2 | sed 's/^.*\[Lockscreen\] //' | tr '\n' '|')"
     wake_and_settle
     unlock_for_test || fail "[$offset] logind's Unlock did not unlock"

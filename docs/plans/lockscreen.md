@@ -678,9 +678,21 @@ Ordering guarantees within one step:
     logind monitor's lines are never read (event loop blocked, then the old engine
     interrupted) and the new monitor is not yet listening — a PrepareForSleep in between
     reaches nobody; the old generation's inhibitor dies with its `Process` (SIGKILL to the
-    direct child), and logind refuses a new inhibitor once a sleep is under way (systemd's
-    `logind-dbus.c`, `method_inhibit`: "already running"; from source as known, not observed
-    here). Narrowed
+    direct child), and logind refuses a new inhibitor once a sleep is under way. From
+    systemd v260's source (read 2026-11-15, not observed on the real logind):
+    `bus_manager_shutdown_or_sleep_now_or_later` (`src/login/logind-dbus.c:2153-2192`) sends
+    PrepareForSleep(true), then — if any delay inhibitor is held — sets `delayed_action` and a
+    timer of `inhibit_delay_max` (`:2117-2131`; 5 s by default, `logind-core.c:43`);
+    `manager_dispatch_delayed` (`:2061-2099`, run after every event, `logind.c:1336`) sleeps as
+    soon as `manager_is_inhibited` (`logind-inhibit.c:399-451`) finds no delay inhibitor left,
+    or when the timer fires ("Delay lock is active … but inhibitor timeout is reached"). And
+    `method_inhibit` (`logind-dbus.c:3856-3862`) answers `BUS_ERROR_OPERATION_IN_PROGRESS`
+    ("The operation inhibition has been requested for is already running") while
+    `delayed_action` covers sleep — from the signal until the job ends after the wake
+    (`:4440-4448`). So the new generation cannot take an inhibitor of its own: only the ones
+    held when the signal went out count, and the machine sleeps at min(the last of their
+    releases, signal + 5 s). The test bed's `systemd-inhibit` stand-in refuses likewise
+    between `logind_signal sleep` and `wake`. Narrowed
     from our side, three ways:
     - `scripts/launch.sh ipc` (what the Super+L bind runs) tries a call again for up to 3 s
       when Quickshell answers "Not ready to accept queries yet." or finds no running
@@ -698,12 +710,25 @@ Ordering guarantees within one step:
       closes without one — this generation gone. logind waits for it (it was held when
       PrepareForSleep went out), so the new generation has those seconds to lock.
     What remains: a PrepareForSleep during a reload still locks only if the new generation
-    has its lock confirmed before logind gives up waiting — within 3 s of the old
-    generation's teardown, and within logind's `InhibitDelayMaxSec` (5 s) of the signal;
-    with a reload of about two seconds, a signal in its first moments leaves about three
-    seconds for the rest of the build, the teardown, the monitor's start and the lock
-    (observed in the test bed: well within; on the real machine: Stage 6). A crash or kill
-    of the shell while awake delays a sleep that comes then by up to 3 s.
+    has its lock confirmed before logind stops waiting. With s the signal, T the old
+    generation's teardown (s ≤ T ≤ s + b, b the build of the new generation: the signal can
+    come at any moment of it), d the time from T to `compositorLocked`, g the grace: logind
+    sleeps at min(T + g, s + 5), the lock is confirmed at T + d, so it needs
+    d < g (the grace) and b + d < 5 (logind's cap, worst alignment: the signal at the very
+    start of the build). g above 5 − (T − s) buys nothing (the cap comes first), so g ≤ 5;
+    beyond that, a longer grace only delays a sleep after a crash. Measured in the test bed
+    (`reload-window`, 2026-11-15, 36 samples, alone and beside three other stacks): d
+    0.052 / 0.062 / 0.073 s (min / median / max) — the new generation's monitor asks
+    `PreparingForSleep` within ~20 ms of its start and the lock follows in ~50 ms — and s→T
+    0.30 / 0.58 / 1.01 s (the signal sent as the reload's first log line appears, or 0.4 s
+    later), so the lock came at most 1.07 s after the signal and at least 2.93 s before
+    logind would sleep. g stays 3 s: ~2.9 s of margin over d, and
+    with b ≈ 2 s on the real machine (an older estimate; Stage 6 measures it) b + d stays
+    well under 5. (The earlier flake of this check, ±0.1 s, was not this race: the test
+    asked every inhibitor held at the signal to outlast the lock, and one of them was the
+    previous reload's, still in its grace and let go on its own schedule — harmless, logind
+    waits for the last.) A crash or kill of the shell while awake delays a sleep that comes
+    then by up to 3 s.
   - A soft reload while locked keeps the lock. `_carried`, a `PersistentProperties` placed
     before the `WlSessionLock` in `Lockscreen.qml` (keep it there: children are matched by
     position), holds `held` (this process has a compositor lock: from a `lockCompositor`
@@ -1071,8 +1096,11 @@ against code running in the shell.
   Quickshell (the launcher's `ipc` tries again for 3 s: a raw `qs ipc` caller is not
   covered, and `qs ipc` still exits 0 — upstream draft, issue 4), and a PrepareForSleep is
   heard only through the `PreparingForSleep` question after the reload, locking in time only
-  if the lock is confirmed within the old inhibitor's 3 s grace and logind's 5 s maximum
-  delay. Not closed: that would need the inhibitor and the monitor in a process that
+  if the lock is confirmed within the old inhibitor's 3 s grace after the teardown and
+  logind's 5 s maximum delay after the signal (logind refuses the new generation's own
+  inhibitor while the sleep is under way). Measured in the test bed: the lock at most 0.07 s
+  after the teardown and 1.07 s after the signal; the real machine's build time is Stage 6's
+  to measure. Not closed: that would need the inhibitor and the monitor in a process that
   outlives reloads (the supervisor), duplicating the rules' sleep logic there and leaving an
   unsupervised shell without lock-before-sleep — more than the narrowed window is worth.
 - Edits made while locked take effect at the next file change after the unlock, not at

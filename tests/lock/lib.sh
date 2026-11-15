@@ -464,8 +464,10 @@ notification_server_up() {
 #                    `gdbus monitor …` prints, as gdbus would, every line appended to
 #                    logind/signals after it started (logind_signal writes them), and
 #                    notes each start in logind/log ("monitor <pid>")
-#   systemd-inhibit  notes "hold <pid>" in logind/log, runs the command it was given (the
-#                    shell's `read -r release`) and notes "release <pid>" when that ends
+#   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
+#                    (the shell's `read -r release`) and notes "release <pid> <time>" when
+#                    that ends; between logind_signal sleep and wake it refuses, as logind
+#                    does ("refuse <pid> <time>", exit 1, the command not run)
 #
 # The shell runs with XDG_SESSION_ID=$LOCKTEST_SESSION_ID.
 LOCKTEST_SESSION_ID=lt1
@@ -526,6 +528,14 @@ EOF
 # Stand-in for systemd-inhibit in the lock test bed (tests/lock/lib.sh): no bus is reached
 log=$WORK/logind/log
 while [ "\${1#--}" != "\$1" ]; do shift; done
+# As logind's Inhibit() does (systemd v260 src/login/logind-dbus.c, method_inhibit): no new
+# delay lock while the sleep it would delay is under way — from PrepareForSleep(true) until
+# the wake (logind/preparing, written by logind_signal)
+if [ "\$(cat "$WORK/logind/preparing" 2> /dev/null)" = true ]; then
+    echo "refuse \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+    echo "Failed to inhibit: The operation inhibition has been requested for is already running" >&2
+    exit 1
+fi
 echo "hold \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
 "\$@"
 status=\$?

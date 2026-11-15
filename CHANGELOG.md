@@ -297,6 +297,9 @@ section to the new version and date.
   logs to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`. A shell that keeps dying while the screen
   is locked is tried again once a minute instead of given up after five restarts. SIGHUP
   (the terminal it was started from closing) no longer stops it.
+- `h2s-shell` (the launcher): after the shell dies it looks for leftover PAM helpers without
+  starting a process per running process, so the restart comes ~1.5 s sooner (more on a
+  busy machine).
 - `h2s-shell ipc call …` tries a call again for up to 3 s while the shell is reloading or
   restarting (Quickshell drops it, "Not ready to accept queries yet.", and exits 0), and
   fails if it was never taken: a Super+L pressed during a reload is no longer lost.

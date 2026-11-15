@@ -243,7 +243,11 @@ so that the shell handles them in one pass — an Unlock before the compositor c
 confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
 `release <pid>` in `logind/log`, each with its time (`inhibitor_held`, `inhibitor_record`; it
 runs the shell's command, so it sees the inhibitor's grace after its holder vanished, as
-the real one would hold logind). The `gdbus` stand-in's monitor prints gdbus's own first
+the real one would hold logind). Between `logind_signal sleep` and `wake` it refuses, as
+logind's `Inhibit()` does while the sleep is under way (systemd's `logind-dbus.c`,
+`method_inhibit`: "already running"): it records `refuse <pid>`, prints systemd-inhibit's
+error and exits 1 without running the command — so a test cannot credit a new generation
+with an inhibitor logind would not have given it (`reload-window`). The `gdbus` stand-in's monitor prints gdbus's own first
 lines ("The name org.freedesktop.login1 is owned by …": the shell then asks whether a sleep
 is under way), and it answers the `PreparingForSleep` property from `logind/preparing`,
 which `logind_signal sleep` / `wake` set to true / false. Without a logind seam the shell's
@@ -396,8 +400,9 @@ That a dead shell's PAM helper keeps a real fingerprint reader claimed, and that
 releases the claim once the helper is killed: the stand-in reproduces the lingering helper
 (`restart-kill-locked`), not fprintd. The real Hyprland config (the owner's); a real
 logout (the launcher stops when the compositor's socket is gone — reasoning, not run).
-logind itself: that it waits for a delay inhibitor held when PrepareForSleep went out and
-refuses a new one during a sleep (the stand-in inhibitor only records); real fprintd (its claim held for a whole lock with `timeout=-1`) and security keys; a real
+logind itself: that it waits for the delay inhibitors held when PrepareForSleep went out,
+up to InhibitDelayMaxSec (the stand-in inhibitor records holds and releases, and refuses a
+new one during a sleep; `reload-window` computes when logind would have slept); real fprintd (its claim held for a whole lock with `timeout=-1`) and security keys; a real
 keyboard's Caps Lock LED following Caps Lock under Hyprland (the shell reads a file the test
 writes); `pam_unix` with the real password (`tests/manual/`); suspend and resume and
 the real logind (its signals are delivered by a stand-in, see the seams); real DRM hotplug

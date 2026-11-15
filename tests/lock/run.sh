@@ -40,9 +40,10 @@ declare -A EXPECTED_FAILING_CHECKS=(
 # reason for each; a test goes here only when its subject is timing, not because it
 # flaked — a flake on a condition the test should have waited for is fixed in the test.
 declare -A SERIAL=(
-    [reload-window]="a logind signal sent 0 and 0.4 s into a reload, and which inhibitor is let go before the new generation's lock: on a loaded machine a reload takes seconds, the old generation lets its inhibitor go later, and the test's window is no longer the one it means (it is a near thing even alone: tens of ms either way)"
-    [supervisor]="catches the launcher inside its 3 s pause after a death (and races --restart against it): the launcher's look round /proc after a death takes seconds on a machine running five stacks"
+    [reload-window]="a logind signal sent 0 and 0.4 s into a reload: on a loaded machine a reload takes longer, and the moments it means (early in the build, late in it) are no longer the ones it hits (the margin it checks is ~2.9 s, loaded or not)"
 )
+# (`supervisor` left this list once the launcher's look round /proc after a death stopped
+# forking per process: 1.5 s -> 0.04 s, and 5/5 in a parallel run of the restart tests)
 
 # Started first in a parallel run, the longest first, so that the run does not end
 # waiting for one long test started last (seconds in a parallel run, rounded). Only an

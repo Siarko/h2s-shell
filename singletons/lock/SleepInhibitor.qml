@@ -68,6 +68,15 @@ Scope {
     // locks (LogindMonitor asks logind about a sleep it did not hear). For that it must not
     // be the process Quickshell kills when the old generation's Process goes (SIGKILL to its
     // direct child): a small sh is, and systemd-inhibit runs beside it, reading the same input.
+    //
+    // How long: with s the signal, T this generation's teardown (s <= T <= s + b, b the new
+    // generation's build) and d the time from T to the new generation's compositorLocked,
+    // logind sleeps at min(T + grace, s + 5) and the lock comes at T + d, so it takes
+    //     d < grace <= 5   and   b + d < 5   (InhibitDelayMaxSec, worst case: s at the
+    // build's start; a grace past 5 - (T - s) is cut short by logind anyway). Measured in the
+    // lock test bed (reload-window): d 0.05-0.07 s, s to T up to 1.01 s. 3 s leaves ~2.9 s of
+    // margin, and costs a sleep right after a crash at most 3 s. docs/plans/lockscreen.md,
+    // "The reload window".
     readonly property int graceSeconds: 3
 
     Process {

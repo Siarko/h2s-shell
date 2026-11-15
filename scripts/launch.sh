@@ -183,8 +183,9 @@ supervisor_of() {
 # A process's parent, from /proc (the command name may hold spaces and parentheses: the
 # fields are read after the last ")")
 process_parent() {
-    local stat
-    stat=$(cat "/proc/$1/stat" 2> /dev/null) || return 1
+    local stat=""
+    { IFS= read -r -d '' stat < "/proc/$1/stat"; } 2> /dev/null
+    [ -n "$stat" ] || return 1
     stat=${stat##*) }
     set -- $stat
     echo "$2"
@@ -313,18 +314,33 @@ compositor_alive() {
 # crash reporter. The reporter is told by `__QUICKSHELL_CRASH_DUMP_FD`, which only it gets
 # (src/crash/handler.cpp): a shell Quickshell relaunched in place carries the other
 # `__QUICKSHELL_CRASH_*` variables in its environment, and so does every PAM helper it forks.
+# It runs right after a death, before the restart (perhaps with the session locked and no
+# lock client), so the walk forks nothing per process: every stat is read with bash's own
+# `read`; only the few in the group cost a `readlink`, and their environment is read with
+# `mapfile`.
 clean_up_after() {
-    local group=$1 stat pid binary
+    local group=$1 stat pid binary fields variable crash_reporter
+    local -a environment
     for stat in /proc/[0-9]*/stat; do
         pid=${stat#/proc/}
         pid=${pid%/stat}
-        stat=$(cat "$stat" 2> /dev/null) || continue
-        stat=${stat##*) }
-        set -- $stat
+        [ "$pid" = "$$" ] && continue
+        # The whole file, up to its end (the command name may hold a newline)
+        fields=""
+        { IFS= read -r -d '' fields < "$stat"; } 2> /dev/null
+        [ -n "$fields" ] || continue
+        fields=${fields##*) }
+        set -- $fields
         [ "$3" = "$group" ] || continue
         binary=$(readlink "/proc/$pid/exe" 2> /dev/null) || continue
         case "${binary##*/}" in *quickshell*) ;; *) continue ;; esac
-        tr '\0' '\n' < "/proc/$pid/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_DUMP_FD=' && continue
+        environment=()
+        { mapfile -t -d '' environment < "/proc/$pid/environ"; } 2> /dev/null
+        crash_reporter=""
+        for variable in "${environment[@]}"; do
+            [[ "$variable" == __QUICKSHELL_CRASH_DUMP_FD=* ]] && { crash_reporter=1; break; }
+        done
+        [ -n "$crash_reporter" ] && continue
         say "killing what the shell left behind: $pid ($binary)"
         kill -KILL "$pid" 2> /dev/null
     done
