@@ -11,6 +11,10 @@ QtObject {
     // finish() at the end. tests.qml waits for it (`done`) before quitting.
     property bool asynchronous: false
     property bool done: !asynchronous
+    // How long an asynchronous suite may take before the module runner (tests-modules.qml)
+    // fails it as timed out, in ms — from the moment the suites start; the runner caps it at
+    // 60 s. A suite with many concurrent scenarios sets more than the default.
+    property int timeLimitMs: 20000
 
     function assert(condition, message) {
         if (condition) {

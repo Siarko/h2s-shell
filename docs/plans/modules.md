@@ -108,7 +108,7 @@ h2s-shell-tailscale/              its own repository and flake
 | `slots` | optional | `[{ slot, component }]`; `slot` a dotted name, one of the slot table (§3a; another: a warning, shown nowhere) |
 | `requires.programs` | optional | program names looked up on PATH |
 | `setupHints` | optional | texts, shown while a program is missing |
-| `tests` | optional | `.qml` suites (`tests/run-modules.sh`) |
+| `tests` | optional | `.qml` suites (`tests/run-modules.sh`); an asynchronous one has `timeLimitMs` (20 s default, at most 60 s) — set it from `Component.onCompleted` when `"timeLimitMs" in suite`, so the suite still compiles on a shell without it |
 
 Files are relative paths inside the module's directory (no `..`, no leading `/`, `.qml`), and
 (M2, enforced before any is read or loaded) each must resolve, symlinks followed, to a

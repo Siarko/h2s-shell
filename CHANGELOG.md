@@ -339,6 +339,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Module test runner: each asynchronous suite has its own time limit (`TestCase.timeLimitMs`,
+  20 s by default, capped at 60 s), instead of one 20 s deadline shared by every module suite
+  running side by side.
 - Settings → Network → VPN: "Settings…" on a VPN whose module has its own settings page
   (Tailscale) goes to that page — the list on the left selects it, under Network beside
   VPN — instead of opening a copy of it over the VPN page with a Back button. The framed

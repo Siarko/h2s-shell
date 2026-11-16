@@ -73,6 +73,13 @@ QtObject {
         _suites = suites;
     }
 
+    // The cap on a suite's own time limit (TestCase.timeLimitMs)
+    readonly property int maxTimeLimitMs: 60000
+    function timeLimitOf(suite) {
+        const limit = typeof suite.timeLimitMs === "number" && suite.timeLimitMs > 0 ? suite.timeLimitMs : 20000;
+        return Math.min(limit, maxTimeLimitMs);
+    }
+
     property var _clock: Timer {
         interval: 50
         running: true
@@ -88,13 +95,18 @@ QtObject {
                 root._waited = 0;
                 return;
             }
+            // Each asynchronous suite has its own limit (TestCase.timeLimitMs, 20 s by default,
+            // at most maxTimeLimitMs), counted from the start of the suites (they run side by side);
+            // the runner quits once none is pending
             const pending = root._suites.filter(suite => suite.asynchronous && !suite.done);
-            if (pending.length > 0 && root._waited < 20000)
+            for (const suite of pending) {
+                if (root._waited >= root.timeLimitOf(suite)) {
+                    suite.fail("timed out (" + Math.round(root.timeLimitOf(suite) / 1000) + " s)");
+                    suite.finish();
+                }
+            }
+            if (pending.some(suite => !suite.done))
                 return;
-            pending.forEach(suite => {
-                suite.fail("timed out");
-                suite.finish();
-            });
             root.host.unload();
             Qt.quit();
         }

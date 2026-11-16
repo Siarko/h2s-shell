@@ -670,7 +670,10 @@ failed, not as missing.
 
 A suite that needs the event loop sets `asynchronous: true`, does its work in
 `runAsync()` and calls `finish()`; `tests.qml` lists it in `_asyncSuites` and waits for it
-(20 s at most). `PointerInputTest.qml` is one: it puts real components (`BarWidget`,
+(60 s at most, for all of them together). A module's suites (`tests/run-modules.sh`,
+`tests-modules.qml`) each get their own limit, counted from the start of the suites:
+`TestCase.timeLimitMs`, 20 s by default, capped at 60 s — a suite with many concurrent
+scenarios declares more. Of the shell's own, `PointerInputTest.qml` is one asynchronous suite: it puts real components (`BarWidget`,
 `PopupWidget`) in a small layer window and drives them with QtTest's `TestCase` used by
 hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check what a mouse and
 a finger do. It needs a Wayland session — `run-unit.sh` gives it its own. A stylus cannot

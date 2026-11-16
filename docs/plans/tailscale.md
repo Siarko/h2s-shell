@@ -451,6 +451,42 @@ Advertising routes or an exit node under blocking needs the forward chain too �
      re-apply them with `tailscale set` afterwards.
   3. sharing this computer: advertise an exit node and routes, the SSH server, the web
      client switch; ssh into a device from its row;
+     **Built 2026-11-16** (module 0.4.0, still module API 1.2; one core change, to the module test
+     runner: each asynchronous suite its own `TestCase.timeLimitMs`, 20 s default, capped at 60 s —
+     the live suite declares 45 s): the page's
+     Sharing (exit node `set --advertise-exit-node=`, subnet routes `set --advertise-routes=<the
+     whole list>` checked first — address/prefix, no host bits, no /0, no duplicate, a warning in
+     100.64.0.0/10 —, each with its approval, the web interface `--webclient` with its link; under
+     "More": `--advertise-connector`, `--snat-subnet-routes`, `--stateful-filtering`,
+     `--relay-server-port`, `--report-posture`, the netfilter mode and the tags read only) and SSH
+     (`set --ssh=`, the ACL page linked, off with the reason without the tailnet's SSH capability);
+     a device row with `sshHostKeys` copies `ssh <MagicDNS name>`; About: `--update-check`,
+     `--auto-update` (off with the reason on NixOS). **From 1.104.4's source**: the exit node and
+     the routes are one preference; `set` with one of the two flags keeps the other half
+     (cli/set.go calcAdvertiseRoutesForSet), so the module never sends both; using and offering an
+     exit node at once is refused by the daemon (ipnlocal checkExitNodePrefsLocked) — refused
+     before it runs, "Stop using it" offered; approval = the route in status's Self.AllowedIPs
+     (PrimaryRoutes: served now; ExitNodeOption: both /0 approved); `--advertise-tags` is a flag of
+     `up` only (not offered; shown read only); there is no `--posture-checking` (it is
+     `--report-posture`); auto-update is refused on NixOS (clientupdate: updateNixos is not an
+     auto-updater); the lose-ssh confirmation of `set --ssh` asks only inside an SSH session over
+     Tailscale (SSH_CLIENT; pkexec clears it). IP forwarding is read from /proc (a seam for the
+     two paths: H2S_TAILSCALE_FORWARDING_DIR) when something is offered and the page is shown or
+     after offering; the warning gives `services.tailscale.useRoutingFeatures = "server"` (option
+     checked in nixpkgs) or the sysctls; nothing is written. No terminal is opened from a device
+     row: the core has no terminal setting or launch API (a possible later addition). Fixed with
+     it (owner's report): a name set while disconnected is shown as set, with "the tailnet shows it
+     after connecting" while status still has the old one. Verified: the module's suites (the
+     rules on redacted fixtures, the live side against the stand-ins — whose `set` follows set.go's
+     composition and refusals) and the lock-bed test (a route and the exit node offered through
+     pkexec, waiting for approval, approved by the stand-in's admin, the forwarding warning from
+     the bed's fake /proc, SSH on, a rename while off). Open: the owner's check on the real daemon
+     (T4) — approval and forwarding as the real control plane reports them. After the review: a
+     route edit is an intent (add X / remove X) planned from prefs read again under the
+     operation lock, before the plain run and before the pkexec retry; refused while prefs are
+     unread, not re-read since the last operation, or cut at 256; a profile changed since the
+     click aborts ("Changed meanwhile"); once pkexec's dialog is up its argv is fixed (a change made
+     elsewhere during the dialog is overwritten);
   4. Taildrop: send to a device, receive with a notification and a folder;
   5. serve and funnel (list, add, remove), certificates for the machine's name,
      tailnet lock status, an exit node per network;
