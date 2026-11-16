@@ -297,7 +297,11 @@ filter — but the daemon's own packets (WireGuard to peers, DERP relays, the co
 server) leave on the physical link and are dropped, except DNS (port 53, any address),
 replies to connections that came in, peers on the local network when "Allow the local
 network" is on, and traffic routed into another VPN's interface (`wg*`, `tun*`…, accepted)
-— a NetworkManager full-tunnel VPN that is up can carry Tailscale. So with blocking on and
+— a NetworkManager full-tunnel VPN that is up can carry Tailscale only when its default route
+is in the main table (OpenVPN-style): tailscaled's own packets carry fwmark 0x80000 and are
+routed by the main table (ip rule priority 5210), so with a NetworkManager WireGuard full
+tunnel that uses its own policy table they leave on the physical link and are dropped (from
+reading, untested). So with blocking on and
 no other VPN up, Tailscale cannot connect, and a running one stops carrying traffic beyond
 the local network.
 
@@ -348,7 +352,8 @@ Advertising routes or an exit node under blocking needs the forward chain too �
   offline, health warnings, daemon not running, not operator (every change denied),
   become-operator through a stand-in pkexec, the stream dying and returning, resume.
 - The real daemon is touched only by the owner. Agents may run read-only commands
-  only, and never `up`, `down`, `set`, `login`, `ping`, `netcheck`.
+  only, and never `up`, `down`, `set`, `login`, `switch <id>`, `logout`. (Step 2: the
+  owner allowed `netcheck`, `ping` and GETs on the LocalAPI for research.)
 
 ## 6. Stages (after M0–M2 of modules.md; M3 can run beside them)
 
@@ -411,6 +416,39 @@ Advertising routes or an exit node under blocking needs the forward chain too �
      "page visible" signal in the API).
   2. accounts and tailnets (switch, add, remove), hostname, key expiry and re-auth,
      health, update notice, diagnostics (netcheck, DERP, ping a device);
+     **Built 2026-11-16** (module 0.3.0, still on module API 1.2 — no core change): the page's
+     Accounts (the account in use from status/prefs; the list `switch --list --json` only on
+     request — root or the operator only, so through pkexec, kept in memory, updated in place
+     after a switch or removal; switch, `switch remove <id>` with the delete button but never
+     the account in use, add = a bare `login`, `set --nickname=`); a personal tailnet named by
+     its MagicDNS suffix on the card and the page, the e-mail address only as the account;
+     This device (`set --hostname=` checked as one DNS label, the system's name back,
+     addresses to copy — `Api.copy` exists —, online and home relay, the key's expiry, a
+     warning from 14 days and on the entry's status line within 7, the admin console linked —
+     no "Renew", see below); Diagnostics, collapsed and run on request (`version
+     --json`, `netcheck --format=json` with region names from `debug derp-map`, `dns status
+     --json`, every health warning with its title, the update notice, "Copy diagnostics"
+     without keys or links; no `bugreport`); ping from a device row (`ping --c=1
+     --timeout=3s`). Facts relied on, observed read-only on 1.104.4: the profiles LocalAPI is
+     403 for a non-operator; `switch remove <id>` exists; netcheck's JSON follows a "# Warning"
+     line; `dns status --json`'s shape. **Established by the review from 1.104.4's source**
+     (cmd/tailscale/cli/login.go, up.go; ipn/ipnlocal/profiles.go): a bare `login` ALWAYS
+     calls SwitchToEmptyProfile first, before any URL — the connection drops for the whole
+     browser wait; the same account is then merged into its old profile (findMatchingProfiles)
+     with login's default prefs (exit node, accept-routes, hostname, advertised routes,
+     shields-up, SSH, nickname, operator lost); another account becomes a new profile;
+     cancelling leaves the daemon on the unpersisted empty profile, logged out, and `switch
+     <id>` restores the old one with its prefs. Hence: no "Renew" (removed after the review);
+     "Add account" says it disconnects; after a login from a logged-in profile that did not
+     finish, the next read decides (no login → "Switch back"); beside an expired key's "Log in"
+     the page says logging in again resets the settings. Not verified: whether `set
+     --hostname` itself rejects what the module refuses (dots). Open: the owner's check on the
+     real machine (T4).
+     **Backlog (step 2)**: non-destructive re-auth — POST /localapi/v0/login-interactive as
+     root; open question how the auth URL reaches the user (BrowseToURL goes to the initiating
+     actor's watcher; check whether status's AuthURL carries it); needs a real-machine check.
+     Snapshot the prefs before a same-account login (an expired key's "Log in") and offer to
+     re-apply them with `tailscale set` afterwards.
   3. sharing this computer: advertise an exit node and routes, the SSH server, the web
      client switch; ssh into a device from its row;
   4. Taildrop: send to a device, receive with a notification and a folder;
