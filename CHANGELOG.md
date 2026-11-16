@@ -13,6 +13,10 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, docs/plans/modules.md "Module API 1.0").
+- 1.3: `Api.networks` — the saved Wi-Fi and Ethernet networks (no hotspots, VPNs or bridge
+  ports) as frozen `{ id (profile UUID), name, kind, active }`, active first — and
+  `Api.vpnsUp` — the VPNs up now as frozen `{ name, type, provider }`; both read-only, a new
+  array only when the content changes.
 - 1.2: `module.resumed()` (signal: the machine woke from sleep; only while active); `shown`
   given to a settings page or slot contribution (and a VPN page) whose root declares
   `property bool shown` — true while on screen, kept current; `PrivilegedAction`'s answer has

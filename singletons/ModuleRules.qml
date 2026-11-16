@@ -79,7 +79,7 @@ Singleton {
     // imports qs.singletons, and the two importing each other would be a cycle. Adding to
     // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
     // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
-    readonly property string apiVersion: "1.2"
+    readonly property string apiVersion: "1.3"
 
     // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
     //
@@ -1438,6 +1438,65 @@ Singleton {
         if (scheme === "file")
             return options?.allowFile === true ? "" : "a file: link needs { allowFile: true }";
         return "the scheme " + scheme + ": is not opened (only " + openUrlSchemes.join(", ") + ", and file with allowFile)";
+    }
+
+    // ---- Facts the core publishes read-only (API 1.3) ----
+
+    // Api.networks: the saved networks this computer joins, from NetworkProfiles' profiles
+    // (Nmcli.profiles) and Wi-Fi details (Nmcli.wifiDetails) → [{ id, name, kind, active }].
+    // `id` is the profile's UUID — the key system.vpnWithNetworks uses, as names may repeat.
+    // Only Wi-Fi (not a hotspot: mode "ap" is this computer's own network) and Ethernet, and
+    // not a port of a bridge or bond (the bridge is what joins). `active` only when fully up
+    // ("activated"), so a module does not act on a network still connecting. Those active
+    // first, then the rest, each in the given order. Garbage is skipped, never thrown on.
+    function apiNetworks(profiles, wifiDetails) {
+        const details = _isObject(wifiDetails) ? wifiDetails : {};
+        const active = [];
+        const inactive = [];
+        for (const profile of Array.isArray(profiles) ? profiles : []) {
+            if (!_isObject(profile) || !_isString(profile.uuid, 200))
+                continue;
+            if (profile.kind !== "wifi" && profile.kind !== "ethernet")
+                continue;
+            if (typeof profile.port === "string" && profile.port !== "")
+                continue;
+            const wifi = _has(details, profile.uuid) ? details[profile.uuid] : null;
+            if (profile.kind === "wifi" && _isObject(wifi) && wifi.mode === "ap")
+                continue;
+            const network = { id: profile.uuid, name: typeof profile.name === "string" ? profile.name : "",
+                kind: profile.kind, active: profile.state === "activated" };
+            (network.active ? active : inactive).push(network);
+        }
+        return active.concat(inactive);
+    }
+
+    // Api.vpnsUp: the VPNs up now (VpnManager.activeVpns) → [{ name, type, provider }] —
+    // `type` "wireguard", "vpn" … or "provider", `provider` the providerId of a provider's VPN
+    // ("" for NetworkManager's). In the given order; garbage skipped, never thrown on.
+    function apiVpnsUp(activeVpns) {
+        const list = [];
+        for (const vpn of Array.isArray(activeVpns) ? activeVpns : []) {
+            if (!_isObject(vpn))
+                continue;
+            const type = typeof vpn.type === "string" ? vpn.type : "";
+            list.push({ name: typeof vpn.name === "string" ? vpn.name : "", type: type,
+                provider: type === "provider" && typeof vpn.provider === "string" ? vpn.provider : "" });
+        }
+        return list;
+    }
+
+    // A JSON text of a list of plain objects → that list, the list and each entry frozen —
+    // what Api hands out (a module cannot change the core's copy)
+    function frozenRows(text) {
+        let rows = [];
+        try {
+            rows = JSON.parse(text);
+        } catch (error) {
+            rows = [];
+        }
+        if (!Array.isArray(rows))
+            rows = [];
+        return Object.freeze(rows.map(row => Object.freeze(row)));
     }
 
     // ---- What a module hands the core at run time ----

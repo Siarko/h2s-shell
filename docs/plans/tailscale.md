@@ -517,5 +517,48 @@ Advertising routes or an exit node under blocking needs the forward chain too �
      sent, and the file/folder dialogs by click (pasted paths and drops work without them);
   5. serve and funnel (list, add, remove), certificates for the machine's name,
      tailnet lock status, an exit node per network;
+     **Built 2026-11-16** (module 0.6.0, module API 1.3 — one core addition: `Api.networks` (NetworkManager's
+     saved Wi-Fi and Ethernet profiles `{ id (UUID, the key of system.vpnWithNetworks), name, kind, active }`,
+     hotspots and ports left out) and `Api.vpnsUp` (`{ name, type, provider }` of the VPNs up), pure parts
+     `ModuleRules.apiNetworks` / `apiVpnsUp`, tested in ModuleRulesTest; a module may not read the network
+     singletons, and there is no per-network settings slot). **Established from 1.104.4's source**: the
+     serve config is readable by any user (ipn/localapi/serve.go GET: PermitRead; observed `serve status
+     --json` → `{}`, `lock status --json` readable, both unprivileged), writable by root or the operator
+     (403 "serve config denied"); a config holding a Path handler or a unix socket needs root or a
+     sudo-capable operator; tailscaled itself (root) opens served files at request time, following links
+     (ipnlocal serveFileOrDirectory) — so **path serving is not offered** (existing path entries are listed
+     and removable); the CLI does read-modify-write with the config's ETag, `serve` sets a handler with
+     Funnel off for its host:port and `funnel` with Funnel on (cli/serve_v2.go applyFunnel), so Funnel per
+     entry = the entry's own handler sent again; `serve` with HTTPS on a node without the `https`
+     capability enters enableFeatureInteractive (prints a link, may wait) — refused before it runs; Funnel
+     needs the `https` and `funnel` node attributes and a port in `https://tailscale.com/cap/funnel-ports
+     ?ports=…` (the CLI checks only 443 — the module checks the real port), and is refused under shields up
+     (ipnlocal setServeConfigLocked); the cert LocalAPI needs write access (root, operator) or
+     TS_PERMIT_CERT_UID and the CLI writes the files itself (cert 0644, key 0600, atomically) — so
+     **certificates are the operator's, as the user**, into `<data home>/h2s-shell/tailscale/certs` (700),
+     the domain only status's CertDomains entry equal to this node's MagicDNS name; `lock status --json` is
+     tslockjsonv1 (schema "1"); locked out = enabled, keys present, NodeKeySigned false. Built: the page's
+     Serve (collapsed; read when open on screen and after changes; add a local port over HTTPS 443/8443/10000
+     with an optional path, a TCP forward, Funnel per entry, remove, stop all; every change an intent
+     planned from prefs and the config read again under the change lock, before the plain run and before
+     the pkexec retry; preconditions with the admin console's link), Certificates (collapsed; end date via
+     openssl when installed), Tailnet lock (status; locked out → the entry's attention while connected,
+     "Open admin console"), Exit node by network (a table in the module's store keyed by the network's id;
+     acted on once per set of marked networks up — a manual choice afterwards stays; operator only, origin
+     "network", never a prompt; a conflict between two networks does nothing), a line when another VPN is up
+     beside the exit node (the API says which VPNs are up, not whether one is a full tunnel). `errorKind`
+     takes the daemon's "must be root, or be an operator and able to run 'sudo tailscale'" as denied (a
+     config holding a path set by root: the retry through pkexec re-posts it; the module adds no path).
+     Verified: the rules on synthetic fixtures in the real shapes (ServeTest), the live side against the
+     stand-ins (ServeLiveTest: share through pkexec with the module's argv, Funnel on, HTTPS off refused
+     before anything runs, the operator's certificate with modes 700/644/600 and none for others, locked
+     out → attention, exit node set by network as the operator and not otherwise), the lock-bed test (see
+     the module's CHANGELOG). Not observed (the real daemon here: Stopped, no CertDomains, no `https`
+     capability): a real HTTPS share, Funnel, a certificate, an enabled lock — the owner's check (T4).
+     **Backlog (step 5)**: certificate renewal (the daemon renews its cache when asked; a timer per
+     certificate, or on resume, would rewrite the files); path serving only if Tailscale ever serves paths
+     with the configuring user's rights; tailnet lock administration (init, sign, add/remove keys,
+     disable) stays out; Funnel over TCP; telling a full-tunnel VPN from a split one (needs each VPN's
+     never-default / allowed IPs through the API);
   6. a bar widget and popup of its own.
 - Several tailnets: supported in step 2 rather than assumed away.

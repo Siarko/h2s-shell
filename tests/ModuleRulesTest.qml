@@ -20,7 +20,7 @@ TestCase {
         const rules = ModuleRules;
 
         // --- the API version ---
-        assertEqual(Api.version, "1.2", "the module API is 1.2 (api/Api.qml)");
+        assertEqual(Api.version, "1.3", "the module API is 1.3 (api/Api.qml)");
         assert(rules.parseApi(Api.version) !== null, "the shell's API version is major.minor");
         assert(rules.apiCompatibility("1.0", "1.0").compatible, "same version: compatible");
         assert(rules.apiCompatibility("1.0", "1.3").compatible, "an older minor on a newer shell: compatible");
@@ -362,6 +362,70 @@ TestCase {
         assertEqual(rules.merge(null).widgetEntries.length, 0, "nothing to merge: empty lists");
 
         _m2(rules, alpha, zeta);
+        _api13(rules);
+    }
+
+    // API 1.3: Api.networks and Api.vpnsUp — the pure mappings, on realistic and hostile input
+    function _api13(rules) {
+        // Profiles as Nmcli.profiles reads them
+        const profile = (uuid, name, kind, state, port) => ({ uuid: uuid, name: name, type: kind, kind: kind, device: "",
+            autoconnect: true, priority: 0, lastUsed: 0, active: state !== "", port: port ?? "", state: state });
+        const profiles = [
+            profile("u-home", "Home", "wifi", ""),
+            profile("u-hotspot", "Hotspot", "wifi", "activated"),
+            profile("u-office", "Office LAN", "ethernet", "activated"),
+            profile("u-wg", "wg0", "vpn", "activated"),
+            profile("u-bridge", "br0", "bridge", "activated"),
+            profile("u-port", "br0 port", "ethernet", "activated", "bridge"),
+            profile("u-lo", "lo", "loopback", "activated"),
+            profile("u-cafe", "Cafe", "wifi", "activated"),
+            profile("u-train", "Train", "wifi", "activating")
+        ];
+        const wifi = { "u-home": { ssid: "home", mode: "infrastructure" }, "u-hotspot": { ssid: "mine", mode: "ap" },
+                       "u-cafe": { ssid: "cafe", mode: "infrastructure" } };
+        assertEqual(JSON.stringify(rules.apiNetworks(profiles, wifi)), JSON.stringify([
+            { id: "u-office", name: "Office LAN", kind: "ethernet", active: true },
+            { id: "u-cafe", name: "Cafe", kind: "wifi", active: true },
+            { id: "u-home", name: "Home", kind: "wifi", active: false },
+            { id: "u-train", name: "Train", kind: "wifi", active: false }]),
+            "apiNetworks: Wi-Fi and Ethernet, active first (\"activated\" only), no hotspot, VPN, bridge, port or loopback");
+        assertEqual(rules.apiNetworks([profile("u-unread", "New", "wifi", "")], {}).length, 1,
+                    "apiNetworks: a Wi-Fi profile whose details are not read yet is kept");
+        assertEqual(rules.apiNetworks([], {}).length, 0, "apiNetworks: no profiles, none");
+        for (const bad of [null, undefined, "x", 3, {}, [null, 1, "x", [], {}, { uuid: "" }, { uuid: 5, kind: "wifi" }]])
+            assertEqual(rules.apiNetworks(bad, null).length, 0, "apiNetworks: garbage skipped — " + JSON.stringify(bad));
+        assertEqual(JSON.stringify(rules.apiNetworks([{ uuid: "u-bare", kind: "ethernet" }, { uuid: "constructor", kind: "wifi", name: 7 }], "junk")),
+                    JSON.stringify([{ id: "u-bare", name: "", kind: "ethernet", active: false },
+                                    { id: "constructor", name: "", kind: "wifi", active: false }]),
+                    "apiNetworks: missing fields defaulted; a prototype-named UUID is just a UUID");
+
+        // VPNs as VpnManager.activeVpns has them
+        const vpns = [
+            { uuid: "u-wg", name: "wg-home", type: "wireguard", active: true, state: "activated", device: "wg0" },
+            { uuid: "tailscale:main", name: "Tailscale", type: "provider", provider: "tailscale", entryId: "main", state: "activated" },
+            { uuid: "u-ovpn", name: "Work", type: "vpn", provider: "sneaky", state: "activated" }
+        ];
+        assertEqual(JSON.stringify(rules.apiVpnsUp(vpns)), JSON.stringify([
+            { name: "wg-home", type: "wireguard", provider: "" },
+            { name: "Tailscale", type: "provider", provider: "tailscale" },
+            { name: "Work", type: "vpn", provider: "" }]),
+            "apiVpnsUp: name, type, and the providerId only for a provider's VPN, in order");
+        assertEqual(rules.apiVpnsUp([]).length, 0, "apiVpnsUp: none up, none");
+        for (const bad of [null, undefined, "x", 3, {}, [null, 1, "x", []]])
+            assertEqual(rules.apiVpnsUp(bad).length, 0, "apiVpnsUp: garbage skipped — " + JSON.stringify(bad));
+        assertEqual(JSON.stringify(rules.apiVpnsUp([{ type: "provider", provider: 3 }, {}])),
+                    JSON.stringify([{ name: "", type: "provider", provider: "" }, { name: "", type: "", provider: "" }]),
+                    "apiVpnsUp: missing or wrong fields defaulted");
+
+        // What Api hands out: frozen, the list and each entry
+        const rows = rules.frozenRows(JSON.stringify([{ id: "a" }]));
+        assert(Object.isFrozen(rows) && Object.isFrozen(rows[0]) && rows[0].id === "a", "frozenRows: the list and its entries frozen");
+        for (const bad of ["", "{", "{}", "null", undefined])
+            assertEqual(rules.frozenRows(bad).length, 0, "frozenRows: not a JSON list → [] — " + JSON.stringify(bad));
+        assert(Array.isArray(Api.networks) && Object.isFrozen(Api.networks), "Api.networks: a frozen list");
+        assert(Array.isArray(Api.vpnsUp) && Object.isFrozen(Api.vpnsUp), "Api.vpnsUp: a frozen list");
+        assert(Api.networks.every(network => Object.isFrozen(network) && typeof network.id === "string"
+                                  && (network.kind === "wifi" || network.kind === "ethernet")), "Api.networks: frozen entries of the shape");
     }
 
     // M2: the API version's home, presetDefaults, the slot table, the registries' merges, the

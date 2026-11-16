@@ -4,11 +4,12 @@ import Quickshell
 import QtQuick
 import qs.singletons
 import qs.singletons.io as Io
+import qs.singletons.network
 
-// The module API (docs/plans/modules.md, "Module API 1.0", 1.1 and 1.2): with qs.components, everything a
+// The module API (docs/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.2" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.3" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same and this
 //                          minor is at least the one asked for. Adding anything bumps the minor;
 //                          changing or removing anything bumps the major.
@@ -24,6 +25,15 @@ import qs.singletons.io as Io
 //                          else (no scheme, a bare path, another scheme) refused, logged, false
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
+//   Api.networks           (1.3) the saved networks this computer joins, frozen:
+//                          [{ id (the NetworkManager profile UUID, system.vpnWithNetworks' key),
+//                          name, kind ("wifi" | "ethernet"), active (bool, fully up) }] — no
+//                          hotspots, VPNs, bridges or their ports; active ones first, then
+//                          NetworkProfiles' order; empty until the profiles are read. A new
+//                          array only when something in it changed
+//   Api.vpnsUp             (1.3) the VPNs up now, frozen: [{ name, type ("wireguard", "vpn"…
+//                          or "provider"), provider (a provider's providerId, else "") }];
+//                          a new array only when something in it changed
 //
 // And these types (files beside this one):
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
@@ -43,6 +53,15 @@ Singleton {
 
     // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
     readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))
+
+    // (1.3) Through a JSON text: a string property notifies only when its value changes, so
+    // a module reacting to these is not woken by every re-read of the profiles
+    readonly property string _networksText: NetworkProfiles.listRead
+        ? JSON.stringify(ModuleRules.apiNetworks(NetworkProfiles.profiles, NetworkProfiles.wifi)) : "[]"
+    readonly property var networks: ModuleRules.frozenRows(_networksText)
+
+    readonly property string _vpnsUpText: JSON.stringify(ModuleRules.apiVpnsUp(VpnManager.activeVpns))
+    readonly property var vpnsUp: ModuleRules.frozenRows(_vpnsUpText)
 
     function module(id) {
         return Modules.handle(id);

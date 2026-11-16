@@ -198,11 +198,11 @@ carries on; anything a module's singletons do later (the contract below); a modu
 blocks the event loop or crashes the process (safe mode, §4 item 5). A module's singletons
 outlive its main: turning it off destroys the main, not them.
 
-## 3a. Module API 1.2 (1.0 built in M2; 1.1 adds the VPN slots; 1.2 the M2-review fixes)
+## 3a. Module API 1.3 (1.0 built in M2; 1.1 adds the VPN slots; 1.2 the M2-review fixes; 1.3 `Api.networks` and `Api.vpnsUp`)
 
 The module author's whole world: `import qs.api` and `import qs.components` (the VPN
 provider base type, `components/VpnProvider.qml`, since 1.1). Everything
-below is API 1.0 unless marked 1.1 or 1.2; adding anything is a minor bump, changing or removing anything a major
+below is API 1.0 unless marked 1.1, 1.2 or 1.3; adding anything is a minor bump, changing or removing anything a major
 one (`ModuleRules.apiVersion`, the CHANGELOG's "Module API" heading). The doc comments in
 `api/*.qml`, `components/ModuleSlot.qml` and `ModuleRules.slotTable` are the specification.
 
@@ -220,7 +220,7 @@ the handle of the module whose directory holds the file. A module's own assets:
 
 | `Api.` | Signature | What it does |
 |---|---|---|
-| `version` | string | "1.2" |
+| `version` | string | "1.3" |
 | `theme` | ThemeTokens | the theme's tokens, read-only, following the theme in use: colours (`accent`, `textPrimary`, … the core's semantic ones), `fontFamily`, `fontSize*`, `fontScale`, frozen groups (`capsule`, `popup`, `row`, `listItem`, `button`, `iconButton`, `pill`, `field`, `checkbox`, `tooltip`, `border`, `settings`), `reduceMotion`, `animationSpeed`, `scaled(w)`, `popupWidth(name, base)`, `duration(role)`, `curve(name)` |
 | `slots` | [{ name, where, context, since }] | the slot table (frozen) |
 | `module(id)` | → handle or null | a module's handle |
@@ -229,6 +229,8 @@ the handle of the module whose directory holds the file. A module's own assets:
 | `openUrl(url, options)` | → bool | `xdg-open` (an argv, no shell) — only a link with a scheme, and only `http:`, `https:`, `mailto:`; `file:` (and nothing else) with `{ allowFile: true }`; anything else (no scheme, a bare path, a `.desktop` file, another scheme, "-…", control characters, > 4096) refused and logged → false (`ModuleRules.openUrlProblem`; 1.2 — before, almost anything was passed on) |
 | `copy(text)` | | the clipboard |
 | `openSettings(pageId)` | | the settings window on a page (a core one's id or a module's) |
+| `networks` | [{ id, name, kind, active }] | (1.3) the saved networks this computer joins, frozen, read-only: `id` the NetworkManager profile UUID (the key `system.vpnWithNetworks` uses), `name` the profile's name, `kind` "wifi" or "ethernet", `active` true when the profile is "activated". No hotspots, VPNs, bridges, bonds or their ports. Those active first, then the rest, each in NetworkProfiles' order; empty until the profiles are first read. A new array only when its content changes (`ModuleRules.apiNetworks`) |
+| `vpnsUp` | [{ name, type, provider }] | (1.3) the VPNs up now ("activated"), frozen, read-only: `type` "wireguard", "vpn"… or "provider", `provider` a provider's `providerId`, else "". A new array only when its content changes (`ModuleRules.apiVpnsUp`) |
 
 | handle (`module.`) | Signature | What it does |
 |---|---|---|
