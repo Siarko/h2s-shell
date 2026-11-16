@@ -63,3 +63,10 @@ since today everything is English only.
 - `SmallButton` / `DeleteButton` have no keyboard focus or activation.
 - Opened connection cards have about 20 px of empty space under the detail
   line (the action stack is taller than the two text lines).
+- The module's live suites depend on machine load (about 50 scenarios, each a
+  shell client with stand-in processes): they pass ten runs in a row at load
+  40, but any new scenario should wait on conditions, never on fixed sleeps.
+- Tailscale, left for later (details in tailscale.md §8): re-authentication
+  without the profile reset (`login-interactive`), re-applying settings after
+  a same-account login, certificate renewal, a terminal launcher for SSH.
+- Never clicked on a real machine: the file and folder dialogs of Taildrop.

@@ -230,7 +230,7 @@ the handle of the module whose directory holds the file. A module's own assets:
 | `copy(text)` | | the clipboard |
 | `openSettings(pageId)` | | the settings window on a page (a core one's id or a module's) |
 | `networks` | [{ id, name, kind, active }] | (1.3) the saved networks this computer joins, frozen, read-only: `id` the NetworkManager profile UUID (the key `system.vpnWithNetworks` uses), `name` the profile's name, `kind` "wifi" or "ethernet", `active` true when the profile is "activated". No hotspots, VPNs, bridges, bonds or their ports. Those active first, then the rest, each in NetworkProfiles' order; empty until the profiles are first read. A new array only when its content changes (`ModuleRules.apiNetworks`) |
-| `vpnsUp` | [{ name, type, provider }] | (1.3) the VPNs up now ("activated"), frozen, read-only: `type` "wireguard", "vpn"… or "provider", `provider` a provider's `providerId`, else "". A new array only when its content changes (`ModuleRules.apiVpnsUp`) |
+| `vpnsUp` | [{ name, type, provider }] | (1.3) the VPNs up now ("activated"), frozen, read-only: `type` "wireguard", "vpn"… or "provider", `provider` a provider's `providerId`, else "". A new array only when its content changes (`ModuleRules.apiVpnsUp`). Both show every installed module the saved network names and the VPN names (modules are trusted, in-process) |
 
 | handle (`module.`) | Signature | What it does |
 |---|---|---|

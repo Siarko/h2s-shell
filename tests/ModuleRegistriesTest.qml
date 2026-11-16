@@ -247,7 +247,9 @@ TestCase {
             // Off
             assert(Modules.setEnabled("good", false), "setEnabled(good, false)");
         });
-        _then("good is off", () => Modules.status("good")?.state === "disabled", () => {
+        // The main is destroyed later (deleteLater), its children's onDestruction with it: wait for
+        // that rather than looking in the same tick
+        _then("good is off", () => Modules.status("good")?.state === "disabled" && _goodState.registrations.length === 0, () => {
             _identity("good off");
             const handle = Modules.handle("good");
             assert(!handle.active, "the handle: not active");

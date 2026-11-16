@@ -33,7 +33,9 @@ import qs.singletons.network
 //                          array only when something in it changed
 //   Api.vpnsUp             (1.3) the VPNs up now, frozen: [{ name, type ("wireguard", "vpn"…
 //                          or "provider"), provider (a provider's providerId, else "") }];
-//                          a new array only when something in it changed
+//                          a new array only when something in it changed.
+//                          Both show every installed module the saved network names and the
+//                          VPN names: modules are trusted and run in the shell's process
 //
 // And these types (files beside this one):
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
