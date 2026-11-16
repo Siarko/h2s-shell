@@ -31,6 +31,27 @@ Plan: [modules.md](modules.md).
 2. M5 — NixOS packaging, the safe-mode banner, the author guide.
 3. M6 — signatures.
 
+## 3. Texts and languages (large; added 2026-11-16)
+
+The owner's words: the hints and other texts in the settings "sound very
+strongly like AI"; all of them need a pass. Combine it with language support,
+since today everything is English only.
+
+1. Inventory: every user-visible string in the shell and in the modules
+   (settings labels, hints, tooltips, warnings, notifications, the lock
+   screen, the polkit prompt, popups).
+2. A voice guide agreed with the owner before rewriting: short, plain,
+   the way a person would say it; a handful of before/after examples the
+   owner approves. No explaining the obvious, no stacked clauses.
+3. Translation mechanism: decide between Qt's own (`qsTr`, `.ts`/`.qm`
+   files — check what Quickshell supports and how it reloads) and a small
+   string table of the shell's own; language chosen in the settings,
+   following the system locale by default; the module API gets a way for a
+   module to ship its own translations.
+4. Rewrite the English texts by the guide, then add Polish as the first
+   second language. The owner reviews the texts — this is not a task to
+   finish unattended.
+
 ## Backlog (no order)
 
 - The lock test `fallback` failed once (the PAM stand-in never answered):

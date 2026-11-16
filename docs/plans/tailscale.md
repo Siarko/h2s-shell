@@ -488,6 +488,33 @@ Advertising routes or an exit node under blocking needs the forward chain too �
      click aborts ("Changed meanwhile"); once pkexec's dialog is up its argv is fixed (a change made
      elsewhere during the dialog is overwritten);
   4. Taildrop: send to a device, receive with a notification and a folder;
+     **Built 2026-11-16, revised after its security review** (module 0.5.0, still module API 1.2 —
+     no core change: QtQuick.Dialogs is importable by modules, `module.notify` takes actions, "Open
+     folder" is `Api.openUrl(file:, { allowFile: true })` on the folder). **Privileges, from
+     1.104.4's source**: the LocalAPI's `file-put` and `files/` need write access — root or the
+     profile's operator (feature/taildrop/localapi.go `!h.PermitWrite` → 403; ipn/ipnauth
+     IsReadonlyConn); `file-targets` and the bus need read only; the CLI opens and writes the files
+     with the caller's uid (cli/file.go); received files wait in /var/lib/tailscale/files/…, root's.
+     **Decision: Taildrop is the operator's, run as the user, never through pkexec.** A root send was
+     built and rejected in review: paths are not canonical and root opens them long after any
+     user-side check, so a swapped file or parent link makes root read and send what the user cannot;
+     no cheap check closes that race. A root `file get` leaves root's files in the user's folder.
+     Not the operator: one line and "Let this user manage Tailscale without a password";
+     "Stop being the operator" is `set --operator=`. Built: sending (`file cp -- <paths…> <IPv4>:`
+     outside the change lock — the entry is not busy; Disconnect, logout, account switches and
+     unload kill it; Cancel kills it; stopped after 2 minutes without OutgoingFiles progress, 6 h
+     at most; a `find -P` only for messages), targets from status's TaildropTarget; arrivals from
+     IncomingFiles (Done) and FilesWaiting (on every non-initial message — local.go sendToLocked),
+     a notification, "Files received" on the entry; saving by the operator (GET `files/<name>` with
+     curl into a staging dir in a user-owned non-link folder, rename into place, then DELETE; names
+     re-sanitised — tailscaled allows a leading "." and "-"); auto-save per arrival, never
+     "overwrite", no retry of a left file until the next arrival or a manual Save. With it:
+     `_runChange` refuses a second change while one runs. Verified: rules on synthetic fixtures,
+     the live side against the stand-ins (a refused non-operator, send, Disconnect ending a send,
+     cancel, a stall, the race, the operator's save with adversarial names, a linked folder,
+     auto-save without loops), the lock-bed test. Not known from the bus: the sender. Open: the
+     owner's check on the real daemon (T4) — the 403 for non-operators, the bus's file fields as
+     sent, and the file/folder dialogs by click (pasted paths and drops work without them);
   5. serve and funnel (list, add, remove), certificates for the machine's name,
      tailnet lock status, an exit node per network;
   6. a bar widget and popup of its own.
