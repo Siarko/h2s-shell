@@ -79,7 +79,7 @@ Singleton {
     // imports qs.singletons, and the two importing each other would be a cycle. Adding to
     // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
     // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
-    readonly property string apiVersion: "1.2"
+    readonly property string apiVersion: "1.3"
 
     // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
     //

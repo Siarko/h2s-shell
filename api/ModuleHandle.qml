@@ -84,6 +84,51 @@ QtObject {
         return Profiles.writeInEffect(full, newValue) === false ? full + ": no profile in effect to write it to" : "";
     }
 
+    // ---- Its bar widgets' presets (API 1.3; WidgetPresets, the shared library) ----
+    // A bar widget gets the name of its entry's preset as `preset`, its settings pane as
+    // `presetName`; these read and write a key of such a preset. Its own widget types only
+    // (a type its manifest's `widgets` declares). A convention between cooperating modules, not a
+    // security boundary: a module runs in the shell's process.
+
+    // True when `type` is one of its loaded widget types
+    function _ownWidgetType(type) {
+        return moduleId !== "" && WidgetRegistry.moduleOf(String(type ?? "")) === moduleId;
+    }
+
+    // A key of a preset, or the manifest's presetDefaults when the preset does not set it (or
+    // the entry has none: preset ""). Undefined for another module's or the core's type. Call
+    // it in a binding: it follows edits.
+    function presetValue(type, preset, key) {
+        return _ownWidgetType(type) ? WidgetPresets.value(String(type), String(preset ?? ""), String(key ?? "")) : undefined;
+    }
+
+    // Writes a key of one of its existing presets (plain JSON; undefined removes it, back to the
+    // default). It never creates a preset (the section editor does). The preset as it would be
+    // after the write is checked as a whole: names as keys, at most 50 keys and 16 KiB.
+    // → "" when written, else why not (another's type, no such preset, a bad key or value)
+    function setPresetValue(type, preset, key, newValue) {
+        if (!_ownWidgetType(type))
+            return "\"" + type + "\" is not one of " + moduleId + "'s widget types";
+        const name = String(preset ?? "");
+        if (!WidgetPresets.validName(name))
+            return "no preset to write to";
+        if (!WidgetPresets.exists(String(type), name))
+            return "no preset \"" + name + "\" of " + type;
+        const keyName = String(key ?? "");
+        if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(keyName) || keyName === "__proto__")
+            return "the key " + JSON.stringify(keyName) + " is not a name";
+        const merged = WidgetPresets.stored(String(type), name);
+        if (newValue === undefined)
+            delete merged[keyName];
+        else
+            merged[keyName] = newValue;
+        const problem = ModuleRules.presetDefaultsProblem(merged);
+        if (problem !== "")
+            return problem;
+        WidgetPresets.set(String(type), name, keyName, newValue);
+        return "";
+    }
+
     // ---- Facts (its own: <id>.*, declared in its manifest) ----
 
     // Sets one of its facts ("ready" or "<id>.ready") for profile conditions, checked against

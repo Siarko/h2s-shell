@@ -518,4 +518,25 @@ Advertising routes or an exit node under blocking needs the forward chain too �
   5. serve and funnel (list, add, remove), certificates for the machine's name,
      tailnet lock status, an exit node per network;
   6. a bar widget and popup of its own.
+     **Built 2026-11-16** (module API 1.3 — one core addition: `module.presetValue(type, preset,
+     key)` / `setPresetValue(…)`, since a module could declare `presetDefaults` but not read its
+     widget's presets; the module uses them only when present, so it still loads on 1.2 with the
+     defaults). The widget "tailscale" (not on the bar by default; Settings → Bar → Add widget):
+     the provider's glyph coloured as the network widget colours links (dim: nothing to use; plain:
+     off; accent: connected, dimmed while changing; warning: attention), a globe while an exit node
+     is in use, a Taildrop badge, a text from its preset (none / state / exit node). No tooltip (built first in a popup
+     window of its own, removed in review: it would have been the shell's first PopupWindow, on the
+     bar's layer surface, mapped on every hover); bar text is plain text since then (BarText). No middle
+     click: no widget of the shell has one. The popup: state and Connect / Disconnect / the
+     attention's action, the account, the network row's exit-node chooser, this device's
+     addresses, devices (online first, capped by the preset, "All devices…"), "Send file…" for the
+     operator (opens the page, whose Taildrop section opens the file chooser once on screen —
+     a request honoured only within 10 s and while still operator, connected and the target there; no
+     file dialog in a popup), received files with Save, Settings… and the admin console. A popup panel is not told
+     which widget opened it: the widget leaves its preset name in the module's `Tailscale`
+     singleton when its popup opens. All of it renders the client's state (`TailscaleWidgetRules`,
+     pure); nothing new runs. Verified: the module's suites (the rules, the popup and widget with
+     plain clients, crafted names plain, the widget built in the shell's host) and the lock-bed test
+     (the widget on the bed's bar, connected with a badge, its popup opened by a click, a file saved
+     and the exit node chosen and cleared from it, the lock covering it).
 - Several tailnets: supported in step 2 rather than assumed away.

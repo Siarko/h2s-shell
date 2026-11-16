@@ -198,7 +198,7 @@ carries on; anything a module's singletons do later (the contract below); a modu
 blocks the event loop or crashes the process (safe mode, §4 item 5). A module's singletons
 outlive its main: turning it off destroys the main, not them.
 
-## 3a. Module API 1.2 (1.0 built in M2; 1.1 adds the VPN slots; 1.2 the M2-review fixes)
+## 3a. Module API 1.3 (1.0 built in M2; 1.1 adds the VPN slots; 1.2 the M2-review fixes; 1.3 widget presets)
 
 The module author's whole world: `import qs.api` and `import qs.components` (the VPN
 provider base type, `components/VpnProvider.qml`, since 1.1). Everything
@@ -220,7 +220,7 @@ the handle of the module whose directory holds the file. A module's own assets:
 
 | `Api.` | Signature | What it does |
 |---|---|---|
-| `version` | string | "1.2" |
+| `version` | string | "1.3" |
 | `theme` | ThemeTokens | the theme's tokens, read-only, following the theme in use: colours (`accent`, `textPrimary`, … the core's semantic ones), `fontFamily`, `fontSize*`, `fontScale`, frozen groups (`capsule`, `popup`, `row`, `listItem`, `button`, `iconButton`, `pill`, `field`, `checkbox`, `tooltip`, `border`, `settings`), `reduceMotion`, `animationSpeed`, `scaled(w)`, `popupWidth(name, base)`, `duration(role)`, `curve(name)` |
 | `slots` | [{ name, where, context, since }] | the slot table (frozen) |
 | `module(id)` | → handle or null | a module's handle |
@@ -246,6 +246,8 @@ the handle of the module whose directory holds the file. A module's own assets:
 | `store` | ModuleStore | `data`, `ready`, `get(key, fallback)`, `set(key, value)` → bool, `remove(key)`, `flush()` — a JSON object in `~/.config/h2s_shell/modules/<id>.json`. (1.2) The directory is made 700 (and a parent it has to make) by the host before any module loads; each write is synchronous and atomic, the file then 600; written a second after the last change, at `flush()`, and when the store is destroyed (module off, reload — a quit runs no JavaScript); read by a process, size-capped: a file > 1 MiB is refused, the store stays empty and is not written that session (`refusedReason`, the module's status); sets before `ready` are kept over what is read; never written while `Config.readOnly`; two shells: last writer wins |
 | `notify(summary, options)` | | a notification under the module's name |
 | `openSettings(page)` | | its page: "" → "<id>", "x" → "<id>.x" |
+| `presetValue(type, preset, key)` | → value | (1.3) a key of a preset of one of its own widget types (WidgetPresets); the manifest's `presetDefaults` when the preset does not set it or `preset` is ""; undefined for a type not its own. Its bar widget gets `preset`, its widget settings pane `presetName` |
+| `setPresetValue(type, preset, key, value)` | → "" or why not | (1.3) writes that key of an existing preset (plain JSON, a name as key; undefined removes it, back to the default); never creates a preset; the preset after the write at most 50 keys and 16 KiB. The own-type rule (here and in `presetValue`) is a convention between cooperating modules, not a security boundary: modules run in the shell's process and could reach the library anyway |
 | `reportError(text)` | | a run-time failure, shown in its status |
 
 | Types | |

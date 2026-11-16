@@ -5,10 +5,10 @@ import QtQuick
 import qs.singletons
 import qs.singletons.io as Io
 
-// The module API (docs/plans/modules.md, "Module API 1.0", 1.1 and 1.2): with qs.components, everything a
+// The module API (docs/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.2" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.3" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same and this
 //                          minor is at least the one asked for. Adding anything bumps the minor;
 //                          changing or removing anything bumps the major.

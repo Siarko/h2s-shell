@@ -81,7 +81,17 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.2", "Api.version");
+        assertEqual(Api.version, "1.3", "Api.version");
+
+        // --- its widget's presets (API 1.3) ---
+        assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");
+        assertEqual(module.presetValue("clock", "", "format"), undefined, "… the core's types: nothing");
+        assert(module.setPresetValue("clock", "Clock", "format", "x") !== "", "setPresetValue: refused for a type not its own");
+        assert(module.setPresetValue("good", "", "label", "x") !== "", "… refused without a preset");
+        assert(module.setPresetValue("good", "No such preset", "label", "x") !== "", "… refused for a preset that does not exist (it never creates one)");
+        assertEqual(module.presetValue("good", "No such preset", "label"), "G", "… nothing written: still the default");
+        assert(module.setPresetValue("good", "__proto__", "label", "x") !== "", "… refused for the name __proto__");
+        // Writing to a preset the section editor made: tests/ModuleRegistriesTest.qml
         assert(Api.slots.some(slot => slot.name === "network.popup.sections"), "the slot table names the slots offered");
 
         // --- the theme, read-only ---
