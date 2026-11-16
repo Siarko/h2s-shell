@@ -40,23 +40,40 @@ Singleton {
         return Object.keys(all[type] ?? {});
     }
 
+    // Own properties only: a name like "__proto__" or "constructor" must never reach the
+    // object's prototype (library[type]["__proto__"] is Object.prototype, which "exists")
+    function _own(object, key) {
+        return object !== null && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
+    }
+
+    // A name a preset may have: not empty, never "__proto__" (setting it would set a prototype)
+    function validName(name) {
+        return typeof name === "string" && name !== "" && name !== "__proto__";
+    }
+
     function exists(type, name) {
-        return name !== "" && (all[type] ?? {})[name] !== undefined;
+        return validName(name) && _own(_own(all, type), name) !== undefined;
+    }
+
+    // The keys a preset itself sets (a copy; {} when it does not exist)
+    function stored(type, name) {
+        const preset = validName(name) ? _own(_own(all, type), name) : undefined;
+        return preset !== null && typeof preset === "object" ? JSON.parse(JSON.stringify(preset)) : {};
     }
 
     // A key of a preset, or the type's default. Call in a binding: it follows edits.
     function value(type, name, key) {
-        const stored = name !== "" ? all[type]?.[name]?.[key] : undefined;
-        return stored !== undefined ? stored : defaults[type]?.[key];
+        const stored = validName(name) ? _own(_own(_own(all, type), name), key) : undefined;
+        return stored !== undefined ? stored : _own(_own(defaults, type), key);
     }
 
     // Writes a key; undefined removes it, so it falls back to the default again
     function set(type, name, key, newValue) {
-        if (name === "")
+        if (!validName(name) || key === "__proto__" || type === "__proto__")
             return;
         const library = JSON.parse(JSON.stringify(all));
-        library[type] = library[type] ?? {};
-        library[type][name] = library[type][name] ?? {};
+        library[type] = _own(library, type) ?? {};
+        library[type][name] = _own(library[type], name) ?? {};
         if (newValue === undefined)
             delete library[type][name][key];
         else
@@ -66,10 +83,10 @@ Singleton {
 
     // An empty preset, so a new name exists as soon as it is given
     function create(type, name) {
-        if (name === "" || exists(type, name))
+        if (!validName(name) || type === "__proto__" || exists(type, name))
             return;
         const library = JSON.parse(JSON.stringify(all));
-        library[type] = library[type] ?? {};
+        library[type] = _own(library, type) ?? {};
         library[type][name] = {};
         Config.widgetPresets = JSON.stringify(library);
     }

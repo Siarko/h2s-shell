@@ -30,6 +30,7 @@ QtObject {
     property var _roundedOutline: RoundedOutlineTest {}
     property var _coverColors: CoverColorsTest {}
     property var _playerRules: PlayerRulesTest {}
+    property var _barText: BarTextTest {}
     property var _barGeometry: BarGeometryTest {}
     property var _pointerRules: PointerRulesTest {}
     property var _batteryRules: BatteryRulesTest {}

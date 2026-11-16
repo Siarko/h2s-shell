@@ -143,6 +143,38 @@ TestCase {
             // WidgetPresets
             assertEqual(WidgetPresets.value("good", "", "label"), "G", "WidgetPresets: the module's presetDefaults");
             assertEqual(WidgetPresets.value("clock", "", "format"), "hh:mm:ss", "… the core's untouched");
+            // API 1.3: a module writes its widget's existing presets through its handle
+            {
+                const savedPresets = Config.widgetPresets;
+                const goodHandle = Modules.handle("good");
+                assert(goodHandle.setPresetValue("good", "Mine", "label", "H") !== "", "setPresetValue: no such preset, refused (never created)");
+                assert(!WidgetPresets.exists("good", "Mine"), "… and none made");
+                WidgetPresets.create("good", "Mine");
+                assertEqual(goodHandle.setPresetValue("good", "Mine", "label", "H"), "", "… an existing preset: written");
+                assertEqual(goodHandle.presetValue("good", "Mine", "label"), "H", "presetValue: its value");
+                assertEqual(goodHandle.presetValue("good", "Mine", "count"), 3, "… a key it does not set: the default");
+                assertEqual(goodHandle.setPresetValue("good", "Mine", "label", undefined), "", "undefined removes a key");
+                assertEqual(goodHandle.presetValue("good", "Mine", "label"), "G", "… back to the default");
+                assert(goodHandle.setPresetValue("good", "Mine", "bad key", 1) !== "", "a key that is not a name: refused");
+                assert(goodHandle.setPresetValue("good", "Mine", "__proto__", { polluted: true }) !== "", "… __proto__ as a key: refused");
+                for (let i = 0; i < 49; i++)
+                    goodHandle.setPresetValue("good", "Mine", "k" + i, i);
+                assertEqual(Object.keys(WidgetPresets.stored("good", "Mine")).length, 49, "49 keys written");
+                assertEqual(goodHandle.setPresetValue("good", "Mine", "k49", 49), "", "… the 50th: still fine");
+                assert(goodHandle.setPresetValue("good", "Mine", "k50", 50) !== "", "… a 51st: refused (the preset as a whole, after the write)");
+                assert(goodHandle.setPresetValue("good", "Mine", "k0", "x".repeat(17 * 1024)) !== "", "… larger than 16 KiB after the write: refused");
+                assertEqual(goodHandle.setPresetValue("good", "Mine", "k0", undefined), "", "… removing a key always fits");
+                // __proto__ and inherited names are never presets (own properties only)
+                assert(!WidgetPresets.exists("good", "__proto__") && !WidgetPresets.exists("good", "constructor")
+                       && !WidgetPresets.exists("clock", "toString"), "WidgetPresets.exists: never an inherited property");
+                assert(goodHandle.setPresetValue("good", "__proto__", "label", "x") !== "", "setPresetValue: the name __proto__ refused");
+                WidgetPresets.set("good", "__proto__", "polluted", true);
+                WidgetPresets.create("good", "__proto__");
+                assert(({}).polluted === undefined && !WidgetPresets.exists("good", "__proto__"), "WidgetPresets.set and create: __proto__ does nothing");
+                assertEqual(WidgetPresets.value("good", "constructor", "label"), "G", "WidgetPresets.value: an inherited name reads the default");
+                assertEqual(goodHandle.presetValue("clock", "", "format"), undefined, "presetValue: another's type, nothing");
+                Config.widgetPresets = savedPresets;
+            }
             // SettingsSchema, Profiles
             assertEqual(SettingsSchema.entry("mod.good.greeting")?.default, "hello", "SettingsSchema: the module's setting");
             assertEqual(SettingsSchema.entry("widgets.good.popupMode")?.default, "click", "… its widget's popup mode entry, made from the registry");

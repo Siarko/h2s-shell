@@ -16,7 +16,13 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.3: `Api.networks` — the saved Wi-Fi and Ethernet networks (no hotspots, VPNs or bridge
   ports) as frozen `{ id (profile UUID), name, kind, active }`, active first — and
   `Api.vpnsUp` — the VPNs up now as frozen `{ name, type, provider }`; both read-only, a new
-  array only when the content changes.
+  array only when the content changes. `module.presetValue(type, preset, key)` and
+  `module.setPresetValue(type, preset, key, value)` — a module reads and writes the presets of its own bar widgets (WidgetPresets, falling
+  back to its manifest's `presetDefaults`), so its widget and its widget settings pane can use
+  the `preset` / `presetName` the bar and the section editor give them. Writing needs an existing
+  preset (it never creates one), refuses `__proto__` and keys that are not names, and keeps the
+  preset within 50 keys and 16 KiB. WidgetPresets reads and writes own properties only (a preset
+  named `__proto__` or `constructor` no longer "exists").
 - 1.2: `module.resumed()` (signal: the machine woke from sleep; only while active); `shown`
   given to a settings page or slot contribution (and a VPN page) whose root declares
   `property bool shown` — true while on screen, kept current; `PrivilegedAction`'s answer has
@@ -402,6 +408,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Text on the bar (BarText) is always plain text: a track title, a window name or a module's
+  device name holding markup showed it rendered as rich text (Qt's AutoText); it now shows the
+  characters as they are.
 - Settings → System → Network (Wi-Fi, Ethernet, VPN): on an opened connection card the buttons
   read as plain text (the card was the buttons' own colour); they are buttons again, and
   "Settings…", "Edit connection…" and "Forget"/"Delete" now sit under Connect/Disconnect,

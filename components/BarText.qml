@@ -68,6 +68,9 @@ Item {
 
         Text {
             id: _text
+            // Always plain: a widget may show what others name (a track, a window, a tailnet's
+            // device) — AutoText would render markup in it as rich text
+            textFormat: Text.PlainText
             text: root._stacked ? root._characters.join("\n") : root.text
             width: root._stacked ? implicitWidth : root._along
             height: implicitHeight
