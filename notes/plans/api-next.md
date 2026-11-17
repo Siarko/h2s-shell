@@ -1,6 +1,40 @@
 # Module API: the next versions
 
-Status: a plan, for the owner to approve. Nothing here is built.
+Status: a plan, for the owner's final approval. Every question asked is answered (§8).
+Nothing here is built.
+
+## At a glance
+
+**A module will be able to**
+- run commands, also as administrator, through the shell (time limits, live output);
+- put its own rows, buttons and opening parts at named places in the shell's settings
+  pages, popups and network cards: before, after, at the start or at the end of a part;
+- build its screens only from the shell's public elements, choosing a kind (primary,
+  secondary, danger, warning, success) and a size, never a colour, so the shell can
+  change its insides without breaking modules;
+- show its icon on a closed network card; open a file chooser; offer an API to other
+  modules.
+
+**A user will see**
+- buttons that stop or delete something with a coloured border, filling with the colour
+  under the pointer (network and Bluetooth popups, network cards);
+- the small choice buttons (pills) in three sizes; 2 pixels lower in the profile
+  condition editor and the widget settings pane;
+- a password prompt that says "Module" and "Authorization", the exact command one click
+  away; with another password agent, a notification saying the same;
+- the exit node of a network on that network's opened card, the Tailscale icon on the
+  closed one; the table on the Tailscale page goes.
+
+**Order of work**: 47 small changes, each with its test. (1) Running things and facts,
+16. (2) Places, public elements, the new looks, the icon, 17. (3) A module's API for other
+modules, 2. (4) The Tailscale module moves onto all of it, 11, then one change removes
+the old ways.
+
+**Risks**: rebuilding the network card (held by a test written on the old card); the file
+chooser may not open from the shell (a one-day trial first; if it fails, that part
+waits); telling the shell's own password request apart rests on the system message's
+wording (read once by hand on NixOS and Arch); with another password agent one
+administrator run waits for the other.
 
 It covers tracker steps 3 (API extension), 4 (UI anchors) and 5 (a module's public API), and
 says what step 6 (the Tailscale migration) then removes. The owner's decisions in
@@ -28,7 +62,7 @@ onto the same new piece.
 | 3 | A long-lived stream (`curl … watch-ipn-bus`) as a bare `Process` (`TC` `_stream`) | `NetworkEvents.qml`, `lock/LogindMonitor.qml` | Runner with `timeoutMs: 0` and `onStdout`. The restart backoff stays the module's |
 | 4 | Generation tokens so late answers are dropped (`TC` `_alive`, and in `CertClient`, `LockClient`, `ServeClient`, `TaildropClient`) | `ModuleHost` `_storeDirectoryKnown`, `_guardKnown` | Runner: no callback after `cancel()` or destruction |
 | 5 | The elevated login runs `[pkexecPath, …]` itself, to read the login link while it waits (`TC` near `_opProcess = _spawn([pkexecPath]…`) | — | Privileged start, streamed (§3.4) |
-| 6 | Two `PrivilegedAction`s, `_admin` and `_adminSpare` (`TC` `_freeAdmin`) | — | A cancelled run leaves the queue at once (§3.4) |
+| 6 | Two `PrivilegedAction`s, `_admin` and `_adminSpare` (`TC` `_freeAdmin`) | — | A cancelled run answers at once; the queue is the shell's (§3.4) |
 | 7 | Maps pkexec's 126/127 again (`TR` `pkexecOutcome`) | — | Goes with #5 |
 | 8 | Sets `PrivilegedAction.elevate` to its own pkexec (`TC` `_admin.elevate = …`) | — | The shell picks pkexec; in test mode the stand-in (§3.3, §3.4) |
 | 9 | Finds tailscale, timeout, pkexec, curl and judges whether the user could replace them (`TC` `_resolveTools`, `TR` `toolsProbe`) | `ModuleHost._checkPrograms` finds names, returns no path and no verdict | Program lookup with trust (§3.2) |
@@ -77,7 +111,7 @@ Shell-side defects found on the way, fixed in the same slices: `Api.networks` ca
 hotspot for a moment (`listRead` turns true before the Wi-Fi mode is read); the polkit
 prompt shows polkit's message with no `textFormat` (`polkit/AuthPrompt.qml`), and the
 blocks `qs.api` already offers (`SwitchRow`, `Heading`, `Hint`, `SectionTitle`) show a
-module's text with none either, against the plain-text rule (§4.8); `ModuleHandle.host`
+module's text with none either, against the plain-text rule (§4.9); `ModuleHandle.host`
 and `Api.module(id)` hand a module the host and other modules (§5.4).
 
 Module-internal, not API: the operation lock and "plain first, then elevated" (the module
@@ -210,14 +244,14 @@ result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, ca
   (§3.2); the lookup takes the wrapper directory first.
 - **One queue for the whole shell** (`singletons/PrivilegedRuns.qml`): one password
   question at a time.
-  - *When the next run may start* (pending, C3; default below). A run holds the head of
-    the queue while its password question can still come: with the shell's agent, until
-    its polkit request ended, or 2 s passed with none (no password was asked: one log
-    line, C4 pending; the other answer is a notification each time). Then the next run
-    starts, though the first still runs: a long streamed run does not block the others.
-    With another agent the shell cannot see the question, so a run holds the head until
-    it ends, at most 2 minutes. The other answer to C3: a run holds the head until it
-    ends, always.
+  - *When the next run may start.* Only the password question is one at a time. A run
+    holds the head of the queue while its question can still come: until its polkit
+    request ended, or 2 s passed with none. Then the next run may start and ask, though
+    the first still runs: a long streamed run does not block the others. With another
+    agent the shell cannot see the question, so there it is strictly one run at a time: a
+    run holds the head until it ends, at most 2 minutes.
+  - *No password was asked* (a polkit rule allowed the run): nothing on screen; the log
+    line below is all.
   - *After a cancel* the next run waits until the cancelled pkexec has exited, or
     `killAfterMs` has passed. Otherwise the cancelled run's request, still on its way,
     would be shown with the next run's lines, and two live requests meet a known
@@ -238,11 +272,10 @@ result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, ca
   - `unprintable`: a word of `argv` holds a control or format character (Unicode Cc, Cf:
     a newline, a right-to-left override). Such a command could not be shown as it is.
   - `locked`; `no-purpose` (`what` empty after cleaning); `notFound` as today.
-- **The session locks** (pending, C2; default): the open prompt is closed and every
-  waiting run ends as `dismissed`, quietly, with `blocked: "locked"`. The prompt is a
-  window above everything (`polkit/AuthPrompt.qml`), and a password asked behind or over
-  the lock screen is the thing the rule forbids. The other answer: they wait and are asked
-  after the unlock.
+- **The session locks:** the open prompt is closed and every waiting run ends as
+  `dismissed`, quietly, with `blocked: "locked"`; the user clicks again after unlocking.
+  The prompt is a window above everything (`polkit/AuthPrompt.qml`), and a password asked
+  behind or over the lock screen is the thing the rule forbids.
 - **Root helpers.** By the rule above, nothing under a module's own directory in the user's
   data home ever runs as root. No module has a root helper today; where a packaged helper
   is looked up is designed when the first one needs it.
@@ -280,8 +313,7 @@ opened:
   request. Opened, it shows the real command: the very list of words the shell hands to
   pkexec, the shell's `timeout` in front included, joined with shell quoting. Nothing is
   dropped, folded or cut: a command that could not be shown as it is was refused before
-  (`unprintable`). A long one is shown whole, in a box that scrolls (pending, C5; the
-  other answer: its beginning and its end). The line is a `PointerArea` like a card's
+  (`unprintable`). A long one is shown whole, in a box that scrolls. The line is a `PointerArea` like a card's
   header; it never takes the keyboard from the password field.
 - **The two values are cleaned and capped:** control and format characters (Cc, Cf)
   dropped, white space folded to one line, cut with "…" at 40 each. All texts are
@@ -307,14 +339,15 @@ opened:
   is wanted: the shell cannot know whether that agent will ask.
 
 The old `PrivilegedAction` type keeps working until the closing slice (§7), listed in the
-module's `deprecations` (§6); its runs go through the same queue and are announced with `Module  Not named` and no
-`Authorization` line.
+module's `deprecations` (§6); its runs go through the same queue and are announced with
+`Module  Not named` and no `Authorization` line.
 
 Test: `PolkitRulesTest` (announcement cleaning and caps, the bracketed id, matching by
 both paths, a run announced once, a hostile name and `what`, an `argv` with a newline and
 with U+202E refused, the notification's texts); a shell suite with a stand-in pkexec that
 prints and sleeps: streaming, cancel while queued and after start, the next run waiting
-for a cancelled one's exit, the head released as C3 says, the time limit in the argv,
+for a cancelled one's exit, the head released when the request ended and after 2 s
+with none, the time limit in the argv,
 every `blocked` reason, 127 reported once, a module turned off with runs waiting and
 running, a lock with runs waiting; for each agent state a notification recorded before
 the stand-in starts, or none; the command shown equal to the stand-in's own arguments; a
@@ -515,7 +548,9 @@ The anchors of this round. Every `context` also has `anchor` and `placement`.
 | `settings.network_wifi.saved.card.settings` | the same card's opened part | append | — | `networkId`, `name`, `kind`, `active` |
 | `settings.network_ethernet.profiles.card` | each wired profile's card | marks | — | — |
 | `settings.network_ethernet.profiles.card.settings` | the same card's opened part | append | — | as the saved Wi-Fi network's |
-| the three cards' `.actions` | the card's buttons | append, with slice U7 (§4.8) | as the card | as the card's `settings` |
+| `settings.network_wifi.saved.card.actions` | the same card's buttons | append | — | as its `settings` |
+| `settings.network_ethernet.profiles.card.actions` | the wired profile card's buttons | append | — | as its `settings` |
+| `settings.network_vpn.vpns.card.actions` | the VPN card's buttons | append | own-provider | as the VPN's row |
 
 The first four contexts are today's slots' (verified: `ModuleRules.slotTable`), with
 `otherVpns` added (§3.8). A block kind can take more than the table offers (a section's
@@ -532,7 +567,7 @@ needs it. Hotspot cards stand in another section (`hotspots`) and are not publis
   blocks, changing titles or wrapping them in layouts changes nothing.
 - The list of anchors is a table, `ModuleRules.anchorTable`:
   `{ path, kind, placements, takes, marks, context, scope, since, where }`. `Api.anchors` is its
-  frozen copy; the documentation's list is generated from it. Only paths in the table take
+  frozen copy; a test holds the documentation's list to it (§7, Z). Only paths in the table take
   content: naming a block does not publish it.
 - Views built by a module are not anchors in this round, and neither are a module's
   elements (§4.5 says why).
@@ -627,8 +662,10 @@ orders elements, so a later rule changes one function.
    from the lock screen's path);
 3. with the fixture module on: one element per published placement of each path appears,
    in the order of §4.1, with the documented context; an unknown path gives a status error;
-   a mark set and cleared shows and goes on a closed card (§4.10); with U7, a button in
-   each kind on an `actions` region, and an element that is not the button refused (§4.8).
+   a mark set and cleared shows and goes on a closed card (§4.10); a button of each kind
+   on an `actions` region, and an element that is not the button refused (§4.8). The
+   fixture module is that region's consumer: the Tailscale module puts no button on a
+   card in this round.
 
 The suites run with no D-Bus (verified: `tests/headless.sh`), so building a network page
 reads nothing real. Repeated blocks need an item to be live: the VPN page gets
@@ -688,8 +725,8 @@ the card's path:
 | `<card>.settings` | the opened column | above "Connect automatically" | under the page's own rows | anything; `SettingsRow` or `ExpandingRow` is what fits |
 | `<card>.actions` | the secondary buttons | under the primary button, above "Settings…" | under "Edit connection…", above "Forget" / "Delete" | the public `SmallButton` (§4.9), of any kind |
 
-The table (§4.2) publishes only what a module uses: `append` on the saved networks'
-`settings`, `prepend` on the VPN cards' (where today's slot stands).
+The table (§4.2) publishes `append` on the saved networks' `settings`, `prepend` on the
+VPN cards' (where today's slot stands), and `append` on every published card's `actions`.
 
 - **Built while the card is open,** both. A page keeps one card open (`_open`: verified),
   so a module's element exists once per page, not once per network. Closing the card
@@ -706,12 +743,11 @@ The table (§4.2) publishes only what a module uses: `append` on the saved netwo
 
 - "Forget" stays last whatever a module adds. The region right-aligns each button at its
   own width, as the card's are; it gives a button at most a third of the card's width, and
-  a longer label is cut (the internal button gains eliding). The size is `normal`.
-- Every kind is allowed, with or without asking first (the owner's decision). What
-  follows from it, for the owner to rule on when this place is built (C1): a module's
-  `danger` button that acts on the first click may stand directly above the shell's
-  "Forget", which asks first. The earlier ground for "any kind" was that nothing dangerous
-  acts on one click; a `danger` button without `confirm` does (§4.9).
+  a longer label is cut (the internal button gains eliding). The size is `m`.
+- Every kind is allowed, with or without asking first (the owner's decision). So a
+  module's `danger` button that acts on the first click may stand directly above the
+  shell's "Forget", which asks first. A module that wants the caution sets
+  `confirm: true` itself.
 - **Why a button is required there and nothing else is.** The stack sits in the card's
   header beside the name; anything but a button breaks the header of every card.
   `settings` is a full-width column where today's VPN card content (detail rows,
@@ -723,9 +759,9 @@ The table (§4.2) publishes only what a module uses: `append` on the saved netwo
   `qs.api`, and `qs.api` imports `qs.components`; the core keeps those two from importing
   each other (verified: `ModuleRules.qml`'s note on `apiVersion`). A module that fakes the
   mark has made a mistake no guard here is for (§2, trust).
-- **When it is built** (pending, C1). No slice of the Tailscale migration puts a button on
-  a card. Default: the region is designed here and built when a module first needs it,
-  as slice U7; nothing else waits for it. The other answer: U7 now, after U5.
+- **Built in this round** (the owner's decision), as slice U6: the card's button column
+  published as an anchor, with the two rules above. No slice of the Tailscale migration
+  uses it; the pin test's fixture module does (§4.6).
 
 **A closed card** builds no module element. It can show the module's icon (§4.10).
 
@@ -831,7 +867,9 @@ look in the same change (F1a), so the shell's and a module's buttons stay alike:
   device's row in the Bluetooth popup. Two of the 17 ask before turning something on
   ("Connect" on a card, "Turn on" for a hotspot): those become `primary` with `confirm`,
   not `danger`.
-- Where a red border at rest may be too much is Q1 in §8.
+- All of them take the border (the owner's decision), the small "✕" on every row of the
+  Bluetooth popup and the per-row "Disconnect" buttons included. The shell keeps no
+  borderless danger look.
 
 Today's internal looks, mapped:
 
@@ -1085,7 +1123,7 @@ fixture modules (provider off and on, the dependent follows; the object given is
 - **The manifest check gains a floor.** `ModuleRules.apiFloor` is the oldest API version
   whose modules still run unchanged on this shell. `apiCompatibility` then answers: same
   major, `apiFloor` ≤ the module's `api` ≤ the shell's. Below the floor the module is
-  `incompatible`, with the reason "written for module API 1.3; this shell needs 1.25 or
+  `incompatible`, with the reason "written for module API 1.3; this shell needs 1.26 or
   newer (the module needs updating)". So a tightening is never silent.
 - **The floor is never the version that removes.** A module cannot ask for a version the
   shell does not have yet, so a slice that removes sets the floor to the last version that
@@ -1157,16 +1195,16 @@ minor.
 | U4b `NetworkProfileCard` on `SettingsCard` | — | `NetworkProfileCard.qml` | a geometry test written first, on the old card: where its named parts stand, closed and open, as a Wi-Fi, a wired, a hotspot and a provider's card; the same numbers after |
 | U4c The VPN page | 1.20 | `NetworkVpnSettings.qml`, `network/VpnManager.qml`, table rows | `AnchorsTest`, `VpnProvidersTest`; by hand once |
 | U5 The Wi-Fi and Ethernet pages | 1.21 | `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, table rows | `AnchorsTest`; by hand once |
-| U6a A module's icon | 1.22 | `ModuleRules` (manifest `icon`), `ModuleHost.qml` (the file check), `components/ModuleIcon.qml` | `ModuleRulesTest` (each kind, each refusal); a fixture per kind and one whose file cannot be drawn: the letter and the status error |
-| U6b The mark on a closed card | 1.23 | `ModuleRules` (`cardMarks`, the table's card rows), `ModuleHost.qml`, `api/ModuleHandle.qml` (`setMark`, `clearMark`), `components/SettingsCard.qml` | `ModuleRulesTest` (order, three, the cap, a module off); `AnchorsTest` |
-| U7 The card's button place (pending, C1: default when a module needs it) | next free | `components/SettingsCard.qml` (`actions`), `AnchorContent.qml` (`takes`), table rows | `AnchorsTest`: a button of each kind, a non-button refused; the geometry test of U4b with a button added |
+| U6 The card's button place | 1.22 | `components/SettingsCard.qml` (`actions`), `AnchorContent.qml` (`takes`, the mark), table rows, the fixture module | `AnchorsTest`: a button of each kind, a non-button refused, "Forget" still last; the geometry test of U4b with a button added |
+| U7a A module's icon | 1.23 | `ModuleRules` (manifest `icon`), `ModuleHost.qml` (the file check), `components/ModuleIcon.qml` | `ModuleRulesTest` (each kind, each refusal); a fixture per kind and one whose file cannot be drawn: the letter and the status error |
+| U7b The mark on a closed card | 1.24 | `ModuleRules` (`cardMarks`, the table's card rows), `ModuleHost.qml`, `api/ModuleHandle.qml` (`setMark`, `clearMark`), `components/SettingsCard.qml` | `ModuleRulesTest` (order, three, the cap, a module off); `AnchorsTest` |
 
 ### Step 5
 
 | Slice | API | Files | Verified by |
 |---|---|---|---|
-| P1 `exports` and `uses` | 1.24 | `ModuleRules` (`dependencyPlan`, state), `ModuleHost.qml`, `api/ModuleHandle.qml`, two fixtures | `ModuleRulesTest`, `ModulesTest` |
-| P2 Reach: `moduleStatus`, the old ways deprecated | 1.25 | `api/Api.qml`, `api/ModuleHandle.qml`, `ModuleRules` (import check) | `ModuleRulesTest`, `ModulesTest` |
+| P1 `exports` and `uses` | 1.25 | `ModuleRules` (`dependencyPlan`, state), `ModuleHost.qml`, `api/ModuleHandle.qml`, two fixtures | `ModuleRulesTest`, `ModulesTest` |
+| P2 Reach: `moduleStatus`, the old ways deprecated | 1.26 | `api/Api.qml`, `api/ModuleHandle.qml`, `ModuleRules` (import check) | `ModuleRulesTest`, `ModulesTest` |
 
 ### Step 6: the module, then the closing slice
 
@@ -1180,7 +1218,7 @@ Each module slice raises its manifest `api` and removes one group of §1:
 | M4 Main and popup | 16–19 | B1 |
 | M5 Helpers and facts | 22–33 | C1, C2, D1 |
 | M6 Its row and card move from `slots` to `anchors` | the `slots` field | U2, U4c |
-| M7 The exit node per network on the network cards, with the mark | 21 | F3, U5, U6b, M6 |
+| M7 The exit node per network on the network cards, with the mark | 21 | F3, U5, U7b, M6 |
 | M8 "Send file…" from the popup; both Taildrop dialogs through the chooser | 20 | E1 |
 | M9 The manual "for now" override | — (module state) | M7 |
 | M10 Public elements only: every `import qs.components` goes (17 files, 13 types), with the renames of §4.9 | — (the import) | T1, F1–F4 |
@@ -1190,8 +1228,8 @@ M10 is one change per group of files (the popup, the page's sections, the widget
 with the module's UI suites green; the list of `deprecations` in the module's status
 counts down to none.
 
-**Z, the closing slice (core; the next minor; the floor becomes 1.25, P2's version).**
-It merges after M11 is released. M11's module declares 1.25 and uses none of the old
+**Z, the closing slice (core; 1.27; the floor becomes 1.26, P2's version).**
+It merges after M11 is released. M11's module declares 1.26 and uses none of the old
 ways, so it runs on the shell before Z and after it; a module still written for less is
 `incompatible` after Z, with the reason. (The floor cannot be Z's own version: a module
 cannot ask for a version the shell does not have yet, `apiCompatibility`.) Z removes the
@@ -1204,18 +1242,42 @@ the allowed imports (an error in the status); makes the six older `qs.api` types
 compares the anchors and the public elements listed in `docs/` with `anchorTable` and
 `ApiElementsTest`'s list, so the reference cannot drift.
 
-### What can run in parallel
+### Size, and what can run in parallel
 
-- S0 first. Chains that must stay in order: A0 → A1 → A2 → A2b → A3 → A4 → A5;
-  A3 and C1 → A6; U0 → U1a → U1b → U2; F1a → F1b → F2, F3, F4 (these three in any order); T1 → F2;
-  U1a → U4a → U4b → U4c → U5 → U6b; U6a any time after S0; P1 → P2.
-- Parallel to the A chain: B1, C1, the U chain and the F chain. The F chain touches only
-  `api/`, two new files in `components/` and the texts of a few internal ones, so it runs
-  beside U0–U2.
-- C2 after A3 (test kit); D1 after C1 (`NetworkRules` delegates to `AddressRules`); E0 any
-  time, E1 after A3 and E0.
-- Module slices M1–M11 touch only the module's repository and run beside the core slices
-  that do not block them.
+47 slices. S is a day or less of work with its test, M a few days, L about a week or a
+slice whose review needs care.
+
+| Step | Slices | S | M | L |
+|---|---|---|---|---|
+| 3 | 16 | A0, A2b, B1, A6, D1, E0 | S0, A1b, A2, A3, A5, C1, C2, E1 | A1, A4 |
+| 4 | 17 | U1b, T1, F4, U6, U7b | U0, U2, F1a, F1b, F2, F3, U4a, U4c, U5, U7a | U1a, U4b |
+| 5 | 2 | P2 | — | P1 |
+| 6 | 12 | M4, M6, M8, M9, M11 | M2, M3, M5, M7, Z | M1, M10 |
+
+**Order that must hold.** S0 first. Then:
+- A0 → A1 → A1b; A1 → A2 → A2b → A3 → A4 → A5; A3 and C1 → A6.
+- C1 → D1; A3 → C2; E0, then with A3 → E1; B1 alone.
+- U0 → U1a → U1b → U2; U1a → U4a → U4b → U4c → U5 → U6 → U7b; U7a before U7b.
+- F1a → F1b → F2, F3, F4 (these three in any order); T1 → F2; F1b → U6.
+- P1 → P2, after A3. Z last, after M11 is released.
+
+**Lanes for independent agents.** Each lane is one agent at a time; lanes do not edit the
+same files, except as named below.
+
+| Lane | Slices | Lives in |
+|---|---|---|
+| Commands and administrator runs | A0, A1, A1b, A2, A2b, A3, A4, A5, A6 | `singletons/io/`, `ModuleHost.qml`, `polkit/` |
+| Facts and helpers | B1, C1, D1, C2, E0, E1 | new singletons, `api/Api.qml`, `network/` |
+| Places | U0, U1a, U1b, U2, U4a, U4b, U4c, U5, U6, U7b | `components/` (the blocks), `panels/` |
+| Elements and looks | T1, F1a, F1b, F2, F3, F4, U7a | `api/`, `components/SmallButton.qml`, `DeleteButton.qml`, `Pill.qml`, the theme |
+| Dependencies | P1, P2 | `ModuleRules`, `ModuleHost.qml` |
+| The module | M1–M11 | the module's repository; each after the core slices it needs |
+
+Where lanes meet, one slice at a time:
+- `ModuleHost.qml`: A1b, A2, A3, B1, C2, E1, U1a, U7a, U7b, P1.
+- `components/SettingsCard.qml`: U4a, U6, U7b (all in the places lane, plus U7b's mark).
+- The version line, the `Api.qml` header and the CHANGELOG: every slice with a version,
+  as its last edit before the merge.
 
 ### Later, not in this round
 
@@ -1230,63 +1292,32 @@ Recorded, not designed (the owner, 2026-11-17; also in the tracker's "Later"):
 
 ---
 
-## 8. The owner's answers, and what is still open
+## 8. The owner's answers
 
-Answered 2026-11-17:
+All of 2026-11-17. Nothing is open.
 
 | What | The owner's answer | Where |
 |---|---|---|
 | Where the per-network exit node sits | The saved network's card, opened. The connection editor can follow as a second anchor once a module's row can join a form | §4.7 |
-| A module's privileged run when another polkit agent answers | Run, with a shell notification just before, naming the module and what for | §3.4 |
-| The prompt's "what for" | A few words given with each run: "Module: Tailscale, Authorization: Send a file" must already say what it is about. The labels "Module" and "Authorization" stay | §3.4 |
-| The command in the prompt | Hidden; shown on a click; it must be the real command | §3.4 |
-| The file chooser | In this round, a minimal version | §3.9 |
 | Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) | §4.1 |
 | The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. Modules use only those, and as many as they can | §4.9 |
 | Variants | A module picks a meaning, not a look, on every element. A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`; more may come. Asking first is separate and goes with any kind | §4.9 |
+| Buttons with a tone | A class of bordered buttons, `danger`, `warning`, `success`: a border in the tone's colour at rest, the whole background in it under the pointer. Every such button in the shell takes it, the per-row ones in the popups included | §4.9 |
 | "Cancel" | No kind of its own: a module's "Cancel" is `secondary` | §4.9 |
 | Pills | Three sizes, `s`, `m`, `l`, standard, set by the theme, offered through the API. The shell's 24 px pills become `s` (22 px) | §4.9 |
-| Buttons with a tone | A class of bordered buttons, `danger`, `warning`, `success`: a border in the tone's colour at rest, the whole background in it under the pointer | §4.9 |
-| A module's button on a card | The shell's button, of any kind, always above "Forget" / "Delete" | §4.8 |
+| A module's button on a card | Built in this round. The shell's button, of any kind, always above "Forget" / "Delete"; a `danger` one may act on the first click | §4.8 |
 | An element that opens | The shell's `ExpandingRow` | §4.9 |
 | A closed card | Shows the module's icon when the module has something set for that network; the detail is on the opened card | §4.10 |
 | A module's icon | A glyph of the icon font, an SVG file or an image file; the module chooses | §4.10 |
+| The prompt's "what for" | A few words given with each run: "Module: Tailscale, Authorization: Send a file" must already say what it is about. The labels "Module" and "Authorization" stay | §3.4 |
+| The command in the prompt | Hidden; shown on a click; the real command; a long one whole, scrolling | §3.4 |
+| A module's privileged run when another polkit agent answers | Run, with a shell notification just before, naming the module and what for | §3.4 |
+| A prompt open or waiting when the screen locks | Cancelled as if dismissed; the user clicks again after unlocking | §3.4 |
+| A long privileged action | Only the password question is one at a time; with another agent strictly one action at a time | §3.4 |
+| A privileged run for which no password is asked | Nothing on screen; one log line naming the module | §3.4 |
+| The file chooser | In this round, a minimal version | §3.9 |
 | The order of modules (loading, and elements in one place) | Both wanted, both later; for now by module id | §7, "Later" |
 | Modules' own elements, element libraries | Later | §7, "Later" |
-
-**Asked, answer pending.** The plan is written for the default; the other answer changes
-only the place named.
-
-| # | Question | Default in the plan | The other answer | Where |
-|---|---|---|---|---|
-| C1 | Build the place for a module's button on a card now, or when a module first needs one? | when one needs it (slice U7 waits) | U7 now, after U5 | §4.8 |
-| C2 | A password prompt open, or waiting, when the screen locks | closed, as if dismissed | waits, asked after the unlock | §3.4 |
-| C3 | May one long privileged action hold up the others? | no: only the password question is one at a time | yes: strictly one action at a time | §3.4 |
-| C4 | A module's privileged run for which no password was asked | a log line | a notification every time | §3.4 |
-| C5 | A very long command in the prompt | all of it, in a box that scrolls | its beginning and its end | §3.4 |
-
-**Still open: one place.** Written to be read on its own.
-
-**Q1. The small "✕" on every row of the Bluetooth popup.**
-
-- *Today.* The Bluetooth popup lists the paired devices, one row each. At the end of every
-  row is a small grey "✕" that forgets the device; it asks first (it turns into the
-  question). A connected device's row also has "Disconnect". Today all of these are grey
-  until the pointer is on them.
-- *What changes.* By your decision a danger button has a red border at rest. Both buttons
-  are danger buttons. With six paired devices the popup would show a column of six
-  red-bordered "✕", plus a red-bordered "Disconnect" on each connected one.
-- *The same, smaller, elsewhere.* "Disconnect" on each connected VPN's row in the network
-  popup (rarely more than one or two); an opened, connected network card has "Disconnect"
-  and "Forget", two red borders, one above the other.
-- *Options.* (a) Everything takes the border; the Bluetooth popup gets its red column.
-  (b) Inside the shell, an icon-only button that repeats on every row of a list stays
-  without the border (grey at rest, red under the pointer, as today); every button with a
-  word on it takes the border. This quiet look is the shell's own and is not offered to
-  modules until one needs it. (c) As (b), and also the per-row "Disconnect" buttons in the
-  two popups stay without it.
-- *The plan as written:* (a). *Recommendation:* **(b)**: a border on a word says what the
-  button is; a column of red squares only makes noise.
 
 ---
 
@@ -1338,7 +1369,7 @@ only the place named.
   default alias (F3); a wrapper `Item` that takes its size from the item inside stands in
   a `RowLayout` and a `ColumnLayout` as that item did (F1, in `ApiElementsTest`).
 - An SVG painted in one colour through `QtQuick.Effects` looks right at the size of a line
-  of text (U6a). A glyph the font lacks shows as an empty box and cannot be detected.
+  of text (U7a). A glyph the font lacks shows as an empty box and cannot be detected.
 - `tests/run-modules.sh` can be made to fail on an import error in a module's status.
 - A `ScriptModel` keeps a delegate when its item's values change. If it rebuilds it
   instead, a module's element on that card is rebuilt too: harmless, an opened
