@@ -1207,6 +1207,49 @@ Singleton {
         return "on " + argumentsList.slice(1).join(" ");
     }
 
+    // `status`'s lines read: { status ("on …" or "off"), rules (the version of the script that
+    // switched it on; 0 when it does not say: a version before 4) }
+    function lockdownStatusReply(lines) {
+        const status = String((lines ?? [])[0] ?? "off").trim() || "off";
+        const rulesLine = (lines ?? []).map(line => String(line).trim()).find(line => /^rules [0-9]{1,6}$/.test(line));
+        return { status: status, rules: status.startsWith("on") && rulesLine ? parseInt(rulesLine.slice(6)) : 0 };
+    }
+
+    // The rules loaded are the ones wanted: the same arguments, switched on by a script at
+    // least as new as the shell's copy (older rules are switched on again, as changed ones are)
+    function lockdownCurrent(status, rulesVersion, expectedStatus, scriptVersion) {
+        return status === expectedStatus && (rulesVersion ?? 0) >= (scriptVersion ?? 0);
+    }
+
+    // What the blocking does next (VpnLockdown._follow), from `facts` { ready (the settings,
+    // the script check, the boot and the VPNs' details read), busy (a switch or a lookup
+    // running), passwordFree, askedAtStart, force ("Apply again"), wanted, nftFound, status,
+    // rulesVersion, expectedStatus, scriptVersion, refused, hosts }:
+    //   "wait"    not ready, or busy: asked again when that ends (nothing is used up)
+    //   "ask"     the installed script's status first (once, after it became password-free)
+    //   "no-nft"  wanted, but nftables is missing
+    //   "keep"    nothing to switch
+    //   "refused" refused before for these very rules: said, not asked again by itself
+    //   "on", "off" switch; "idle" off and not wanted
+    function lockdownNextStep(facts) {
+        if (!facts.ready || facts.busy)
+            return "wait";
+        if (facts.passwordFree && !facts.askedAtStart && !facts.force)
+            return "ask";
+        if (facts.wanted) {
+            if (!facts.nftFound)
+                return "no-nft";
+            if (!facts.force && lockdownCurrent(facts.status, facts.rulesVersion, facts.expectedStatus, facts.scriptVersion))
+                return "keep";
+            if (!facts.force && facts.refused === facts.expectedStatus + facts.hosts)
+                return "refused";
+            return "on";
+        }
+        if (String(facts.status ?? "").startsWith("on"))
+            return !facts.force && facts.refused === "off" ? "keep" : "off";
+        return "idle";
+    }
+
     // The polkit rule letting `user` run the script at `programs` (quoted paths, or Nix
     // expressions) without a password — only in their own, active, local session
     function lockdownPolkitRule(user, programs) {

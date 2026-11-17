@@ -20,7 +20,9 @@
 #                   always pass
 #       addresses   the VPN servers' addresses (IPv4, IPv6), comma-separated, or "-"
 #   h2s-vpn-lockdown off
-#   h2s-vpn-lockdown status    "on <lan> <interfaces> <addresses>" as switched on, or "off"
+#   h2s-vpn-lockdown status    "on <lan> <interfaces> <addresses>" as switched on, then
+#                              "rules <version>": the version of the script that switched it
+#                              on (none from a version before 4); or "off"
 #   h2s-vpn-lockdown version
 #
 # What gets out while it is on: loopback; the VPNs' interfaces; virtual interfaces
@@ -228,7 +230,7 @@ case ${1:-} in
         addresses=$(checked_list "$4" address "$MOST_ADDRESSES") || exit 2
         nft=$(nft_command) || exit 2
         ruleset "$lan" "$interfaces" "$addresses" | "$nft" -f -
-        printf 'on %s %s %s\n' "$lan" "$interfaces" "$addresses" > "$STATE.new"
+        printf 'on %s %s %s\nrules %s\n' "$lan" "$interfaces" "$addresses" "$VERSION" > "$STATE.new"
         mv -f "$STATE.new" "$STATE"
         ;;
     off)
@@ -242,6 +244,7 @@ case ${1:-} in
         nft=$(nft_command) || exit 2
         if "$nft" list table inet "$TABLE" > /dev/null 2>&1 && [ -f "$STATE" ]; then
             head -n1 "$STATE"
+            sed -n 's/^rules \([0-9][0-9]*\)$/rules \1/p' "$STATE" | head -n1
         else
             echo "off"
         fi

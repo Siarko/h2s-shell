@@ -873,7 +873,9 @@ Item {
                     visible: _kinds.length > 0
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: _kinds.join(" and ") + " cannot connect while traffic is blocked."
+                    // One kind known: by its name; else a plain sentence
+                    text: _kinds.length === 1 && _kinds[0] !== "" ? _kinds[0] + " cannot connect while traffic is blocked."
+                        : "A VPN picked here cannot connect while traffic is blocked."
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.warning

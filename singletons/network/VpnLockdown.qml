@@ -18,8 +18,11 @@ import qs.singletons.network
 //   - not installed: the shell's own copy, asking for the password at each switch; what
 //     was switched on, in which boot, is remembered in Config (root's to read back).
 // Switched again only when its arguments change (a VPN's interface or server, the local
-// network), a moment after the last change. A refused password is not asked again by
-// itself: the page offers "Apply again". Started with the shell (shell.qml).
+// network), or when the rules loaded come from a script older than the shell's copy (the
+// script records its VERSION with them; `status` reports it), a moment after the last
+// change. A refused password is not asked again by itself: the page offers "Apply again";
+// installing the script, so that none is needed, lifts the refusal. Started with the shell
+// (shell.qml).
 //
 // Per network, the blocking comes a moment after the network is up (and, without the
 // installed script, after the password): until then nothing is blocked. "Always" has no
@@ -127,11 +130,15 @@ Singleton {
         _serverMap = memory.serverMap ?? {};
         // Switched on in this boot: on. In an earlier one: gone with the reboot.
         _status = memory.status && memory.bootId === _bootId ? memory.status : "off";
+        _rulesVersion = _status.startsWith("on") ? (parseInt(memory.rules) || 0) : 0;
         state = _status.startsWith("on") ? "on" : "off";
         _memoryRead = true;
     }
     // The status the script last reported, or the one remembered for this boot
     property string _status: ""
+    // The version of the script that switched the loaded rules on (0 unknown: from before
+    // version 4); rules older than the shell's copy are switched on again
+    property int _rulesVersion: 0
     // A refused or failed switch (its status, or "off"): not tried again by itself until
     // something changes, or "Apply again"
     property string _refused: ""
@@ -196,13 +203,6 @@ Singleton {
             root.checked = true;
             if (changed)
                 root.installedAsks = false;
-            // A new copy installed while blocking: its rules loaded in place of the old copy's
-            if (root._applyAfterInstall && changed && root.helperState === "ready") {
-                root._applyAfterInstall = false;
-                root.apply();
-                return;
-            }
-            root._applyAfterInstall = false;
             root._schedule();
         }
     }
@@ -237,7 +237,15 @@ Singleton {
     }
     onExpectedStatusChanged: _schedule()
     on_HostsChanged: _schedule()
-    onPasswordFreeChanged: _schedule()
+    // A password refused is no reason to hold back once none is needed (the script
+    // installed): its status is asked, and stale or changed rules switched on again
+    onPasswordFreeChanged: {
+        if (passwordFree) {
+            _refused = "";
+            _askedAtStart = false;
+        }
+        _schedule();
+    }
     Connections {
         target: VpnManager
         function onDetailsReadChanged() {
@@ -320,7 +328,9 @@ Singleton {
             return;
         _runScript(["status"], result => {
             if (result.ok) {
-                root._status = (result.lines[0] ?? "off").trim();
+                const reply = NetworkRules.lockdownStatusReply(result.lines);
+                root._status = reply.status;
+                root._rulesVersion = reply.rules;
                 root.state = root._status.startsWith("on") ? "on" : "off";
             }
             root._schedule();
@@ -333,38 +343,33 @@ Singleton {
         _follow(true);
     }
 
+    // The decision is NetworkRules.lockdownNextStep's, from the state as it is now: nothing
+    // is used up by a call that has to wait (busy, not ready) — the next one decides again
     function _follow(force) {
         // The VPNs' interfaces and servers read first: arguments made without them would
         // differ from the ones switched on, and switch again at every start
-        if (!Config.ready || !checked || _bootId === "" || !VpnManager.detailsRead || _action.busy || _resolve.running)
-            return;
-        if (!_memoryRead)
+        const ready = Config.ready && checked && _bootId !== "" && VpnManager.detailsRead;
+        const busy = _action.busy || _resolve.running;
+        if (ready && !busy && !_memoryRead)
             _readMemory();
-        if (passwordFree && !_askedAtStart) {
+        const step = NetworkRules.lockdownNextStep({
+            ready: ready, busy: busy, passwordFree: passwordFree, askedAtStart: _askedAtStart, force: force === true,
+            wanted: wanted, nftFound: nftFound, status: _status, rulesVersion: _rulesVersion,
+            expectedStatus: expectedStatus, scriptVersion: scriptVersion, refused: _refused, hosts: _hosts
+        });
+        if (step === "ask") {
             _askedAtStart = true;
             _askStatus();
-            return;
-        }
-        const on = _status.startsWith("on");
-        if (wanted) {
-            if (!nftFound) {
-                state = "failed";
-                failure = "nftables is not installed: the blocking needs it.";
-                return;
-            }
-            if (!force && _status === expectedStatus)
-                return;
-            if (!force && _refused === expectedStatus + _hosts) {
-                // Refused before for these very rules: said, not asked again by itself
-                state = "failed";
-                return;
-            }
+        } else if (step === "no-nft") {
+            state = "failed";
+            failure = "nftables is not installed: the blocking needs it.";
+        } else if (step === "refused") {
+            state = "failed";
+        } else if (step === "on") {
             _findServersThenSwitchOn();
-        } else if (on) {
-            if (!force && _refused === "off")
-                return;
+        } else if (step === "off") {
             _switchOff();
-        } else {
+        } else if (step === "idle") {
             // Nothing to do: a refusal from before is not carried to the next time
             _refused = "";
             state = "off";
@@ -372,9 +377,11 @@ Singleton {
         }
     }
 
-    // Whether what is loaded differs from what is wanted (the page offers "Apply again")
+    // Whether what is loaded differs from what is wanted (the page offers "Apply again"):
+    // rules from a script older than the shell's copy included
     readonly property bool mismatched: checked && state !== "asking" && state !== "working"
-        && (state === "failed" || wanted !== _status.startsWith("on"))
+        && (state === "failed" || wanted !== _status.startsWith("on")
+            || (wanted && _status.startsWith("on") && _rulesVersion < scriptVersion))
 
     // The servers by their names, each found through the system's resolver; those not
     // found keep their last addresses
@@ -424,14 +431,17 @@ Singleton {
         const scriptArguments = switchArguments.slice();
         const status = expectedStatus;
         const hosts = _hosts;
+        // The script that runs: the installed one without a password, else the shell's copy
+        const version = passwordFree ? installedVersion : scriptVersion;
         state = passwordFree ? "working" : "asking";
         _runScript(scriptArguments, result => {
             if (result.ok) {
                 root._status = status;
+                root._rulesVersion = version;
                 root.state = "on";
                 root.failure = "";
                 root._refused = "";
-                root._remember({ status: status, bootId: root._bootId, serverMap: root._serverMap });
+                root._remember({ status: status, rules: version, bootId: root._bootId, serverMap: root._serverMap });
             } else {
                 root._fail(status + hosts, result, "Blocking traffic outside the VPN");
             }
@@ -444,6 +454,7 @@ Singleton {
         _runScript(["off"], result => {
             if (result.ok) {
                 root._status = "off";
+                root._rulesVersion = 0;
                 root.state = "off";
                 root.failure = "";
                 root._refused = "";
@@ -473,8 +484,6 @@ Singleton {
     // script, which anyone may read). NixOS keeps /etc itself: its module is shown instead.
     readonly property string polkitRule: NetworkRules.lockdownPolkitRule(user, ['"' + installedPath + '"'])
     property string installFailure: ""
-    // Installed while the blocking is on: switched on again once the new copy is seen
-    property bool _applyAfterInstall: false
 
     function install(): void {
         installFailure = "";
@@ -483,10 +492,7 @@ Singleton {
             + 'printf "%s" "$3" > "$2/polkit.rules"; chmod 0644 "$2/polkit.rules"; '
             // polkit's rules folder kept as it is (root's to read on Arch: 0750 root:polkitd)
             + '[ -d "$(dirname "$4")" ] || install -d -m 0750 "$(dirname "$4")"; install -m 0644 -o root -g root "$2/polkit.rules" "$4"',
-            "sh", scriptPath, installFolder, polkitRule, polkitRulePath], result => {
-                root._applyAfterInstall = result.ok && root.wanted && root._status.startsWith("on");
-                root._installed(result, "Installing the blocking script");
-            });
+            "sh", scriptPath, installFolder, polkitRule, polkitRulePath], result => root._installed(result, "Installing the blocking script"));
     }
 
     function uninstall(): void {

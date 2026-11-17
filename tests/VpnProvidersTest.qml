@@ -429,7 +429,7 @@ TestCase {
 
         // The provider kinds among a network's VPNs: what the blocking does not let through
         assertEqual(JSON.stringify(VpnManager.providerKindsAmong(["vpt:one", "2f0c8d0e-1111-4222-8333-944455556666", "vpt:two", "away:x", "vpt:a:b"])),
-                    JSON.stringify(["Fake VPN", "away"]), "kinds: each provider once, by its type name or, away, by its id; none for NetworkManager's");
+                    JSON.stringify(["Fake VPN", ""]), "kinds: each provider once, by its type name, \"\" for one away; none for NetworkManager's");
         assertEqual(VpnManager.providerKindsAmong([]).length + VpnManager.providerKindsAmong(undefined).length, 0, "kinds: none picked — none");
 
         // Slots

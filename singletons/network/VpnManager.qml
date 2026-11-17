@@ -356,8 +356,8 @@ Singleton {
         return parts !== null && parts.provider !== "" ? parts.provider + " · " + parts.entry + " (not available)" : id;
     }
 
-    // The kinds of the provider VPNs among `ids` ("Tailscale"; a provider not here by its
-    // id), each once: those the blocking of traffic outside a VPN does not let through
+    // The kinds of the provider VPNs among `ids` ("Tailscale"; "" for one whose provider is
+    // not here), each once: those the blocking of traffic outside a VPN does not let through
     // (VpnLockdown; docs/plans/tailscale.md §8), for the views to say so where a VPN is
     // linked to a network that blocks
     function providerKindsAmong(ids): var {
@@ -367,7 +367,7 @@ Singleton {
             if (parts === null || parts.provider === "")
                 continue;
             const vpn = vpns.find(entry => entry.uuid === id);
-            const kind = vpn !== undefined ? typeName(vpn) : parts.provider;
+            const kind = vpn !== undefined ? typeName(vpn) : "";
             if (!kinds.includes(kind))
                 kinds.push(kind);
         }
