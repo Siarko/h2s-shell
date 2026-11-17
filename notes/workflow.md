@@ -59,11 +59,12 @@ Agents clean up only their own temporary files.
 
 | What | Command | Needs |
 |---|---|---|
-| Core unit suites | `tests/run-unit.sh [--log <file>] [suites…]` | today: `nix` |
-| Runner self-test | `tests/run-unit-selftest.sh` | today: `nix` |
+| Core unit suites | `tests/run-unit.sh [--log <file>] [suites…]` | Quickshell, labwc, util-linux, coreutils — labwc from `nix` where there is one, else from `PATH` |
+| Runner self-test | `tests/run-unit-selftest.sh` | as the unit suites |
+| Tool lookup self-test | `tests/resolve-selftest.sh` | bash, coreutils, `setsid`; no `nix`, no labwc |
 | Lock screen, end to end | `tests/lock/run.sh [tests…]` | `nix`; about 15 minutes for all |
-| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | today: `nix` |
-| A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | today: `nix` |
+| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites |
+| A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | as the unit suites |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | `nix` |
 
 - A suite is named by its file without `.qml` (`tests/run-unit.sh FormatTest LockRulesTest`),
@@ -73,9 +74,15 @@ Agents clean up only their own temporary files.
 - When more than one run can happen at once on a machine, wrap each in
   `flock /tmp/h2s-locktest.flock …`.
 - All of them run in an invisible compositor. They use the processor, nothing shows.
-- From the Arch machine, the runs that need `nix` go over SSH to the NixOS machine, in a
-  working tree there that is fetched to the commit under test. The tracker's test split
-  (step 10, planned in step 1) is what lets the general set run on Arch directly.
+- The unit and module suites take their tools from the pinned `tests/lock/tools.nix` where
+  there is a `nix` command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` chooses);
+  the first lines of a run say which, with the versions. A missing tool ends the run with
+  status 2, named with its use. A report says which source a run had.
+  - NixOS: `nix` provides labwc.
+  - Arch: without `nix`, labwc has to be installed; Quickshell is the `qs` on `PATH`.
+- The lock bed runs need `nix`. From a machine without it they go over SSH to one that has
+  it, in a working tree there that is fetched to the commit under test. The tracker's test
+  split (step 10) is what lets them run from the system's tools too.
 
 ## Deploying to the running shell
 

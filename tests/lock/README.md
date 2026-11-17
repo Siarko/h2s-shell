@@ -39,7 +39,8 @@ first (`LONG_TESTS` in `run.sh`), and the tests in `SERIAL` — those whose subj
 timing a loaded machine cannot keep, each with its reason — run alone after the others.
 `-j 1` is the old way: one after another, the output as it comes.
 
-It needs `nix` (for the tools), the `h2s-shell` launcher on PATH (the NixOS module puts
+It needs `nix` (for the tools: `resolve.sh` does not take the lock bed's from the system,
+and ends the run with status 2 where there is no `nix` or with `H2S_TEST_TOOLS=system`), the `h2s-shell` launcher on PATH (the NixOS module puts
 it there; `LOCKTEST_LAUNCHER` names another). Nothing privileged: no root, no seat, no
 GPU device, no real input device.
 
@@ -397,8 +398,8 @@ not keep it.
 a Python with pywayland, the Python bindings of the virtual keyboard/pointer and xdg-shell
 protocols, xkbcli, dbus-daemon, gdbus, wl-copy/wl-paste (the primary selection a middle
 click would paste, set inside the nested compositor while locked: `paste.sh`), wlr-randr
-(labwc's output size), and the keymaps (`share/keymaps/`: us, us-intl, us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh` and for
-`tests/run-unit.sh`. The pin is the nixos-unstable revision the owner's system takes Hyprland
+(labwc's output size), and the keymaps (`share/keymaps/`: us, us-intl, us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh`; for
+`tests/run-unit.sh` and `tests/run-modules.sh` it finds labwc and setpriv only, here or, on a machine without `nix`, on `PATH`. The pin is the nixos-unstable revision the owner's system takes Hyprland
 from, so the test bed runs the same Hyprland as the real session (the repo's flake pins
 nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves —
 `run.sh` prints a NOTE when the versions differ (both binaries asked `--version` only).

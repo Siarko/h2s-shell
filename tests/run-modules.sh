@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs modules' own test suites, in the same private, headless compositor as the shell's
-# (tests/headless.sh, shared with tests/run-unit.sh).
+# (tests/headless.sh, shared with tests/run-unit.sh), with the same tools from the same
+# place (see tests/run-unit.sh).
 #
 #   tests/run-modules.sh <module dir>…                 the suites each module's manifest lists
 #   tests/run-modules.sh --suite <name> … <dir>…       only the named ones (--suite once per
@@ -24,7 +25,7 @@
 # Exit status as tests/run-unit.sh: 0 when every suite passed, 1 when a check FAILed, a
 # module did not load, a suite timed out or did not report, a TypeError / ReferenceError was
 # printed or Quickshell exited non-zero, 2 when the runner could not be set up (no module
-# directory given, one that does not exist or has no module.json, tools) or a --suite name
+# directory given, one that does not exist or has no module.json, a missing tool) or a --suite name
 # is no suite of the modules given, all of them loaded (nothing runs then).
 set -uo pipefail
 

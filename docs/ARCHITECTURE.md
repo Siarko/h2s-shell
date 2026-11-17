@@ -657,7 +657,7 @@ the suites `tests.qml` lists. `tests/run-unit.sh` (and `tests/run-modules.sh`, f
 own suites — see [Modules](#modules); both share `tests/headless.sh`) runs them in a private headless labwc
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
 privileges), so the suites' windows never show on the real screen; it finds labwc and
-Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any `FAIL`, a
+Quickshell through `tests/lock/resolve.sh` ("Where the test tools come from", below) and fails on any `FAIL`, a
 `TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
 summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`
 checks that verdict against stand-in Quickshells, and the suite count (`tests/count-suites.sh`:
@@ -724,3 +724,36 @@ there runs a single PAM conversation with the real password against the shipped
 Everything else is verified by hand: run `quickshell` from the repo root and check that
 the bar renders, the clock ticks, cells respond, and popups toggle. Apart from the lock
 screen, there is no automated coverage of any singleton that touches the system.
+
+### Where the test tools come from
+
+The unit and module suites need Quickshell, labwc, `setpriv` and `setsid` (util-linux) and
+`timeout` (coreutils). `tests/lock/resolve.sh` takes labwc and `setpriv` from one source
+for the whole run: the pinned build of `tests/lock/tools.nix` when a `nix` command exists,
+else the programs on `PATH`, in whatever version is installed. `H2S_TEST_TOOLS=nix` or
+`H2S_TEST_TOOLS=system` chooses. Quickshell is `LOCKTEST_QS` when set, else the one the
+`h2s-shell` launcher runs (`LOCKTEST_LAUNCHER` names another launcher), else `qs` or
+`quickshell` on `PATH`. A run starts by saying what it took:
+
+```
+tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4
+quickshell: /usr/bin/qs 0.3.2 (PATH)
+```
+
+Versions are printed, not checked. A missing tool is a set-up error: status 2, every
+missing tool named with its use, nothing run. `tests/resolve-selftest.sh` checks the lookup
+against stand-in programs; it needs neither `nix` nor labwc.
+
+The lock test bed takes its tools from `nix` only: without it, or with
+`H2S_TEST_TOOLS=system`, `tests/lock/run.sh` ends with status 2 and says so.
+
+#### NixOS
+
+`nix` builds the pinned tools. The launcher is the package's `h2s-shell`, so the suites run
+the Quickshell the installed shell runs.
+
+#### Arch
+
+Without `nix`, labwc has to be installed: a development dependency, which `install.sh`
+does not install. There is no `h2s-shell` command, so the suites run the `qs` on `PATH`.
+With `nix` installed, the pinned tools are used as on NixOS.

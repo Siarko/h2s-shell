@@ -174,6 +174,7 @@ temp_base=${TMPDIR:-/tmp}
 
 # ---- Tools, the launcher and its Quickshell (resolve.sh, shared with tests/run-unit.sh) ----
 # Resolved once here and handed to every test in its environment
+LOCKTEST_NEED=lock
 source "$LOCKTEST_DIR/resolve.sh"
 
 # PAM modules must belong to the libpam the process loads: taken from Quickshell's

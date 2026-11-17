@@ -18,12 +18,18 @@
 # nowhere, a private HOME and XDG directories, no new privileges) and the verdict are
 # tests/headless.sh's, shared with tests/run-modules.sh.
 #
+# Needs Quickshell, labwc, setpriv, setsid and timeout. labwc and setpriv are the pinned
+# ones of tests/lock/tools.nix where there is a `nix` command, else those on PATH
+# (H2S_TEST_TOOLS=nix or =system says which); Quickshell is LOCKTEST_QS, else the one the
+# h2s-shell launcher runs, else qs or quickshell on PATH (tests/lock/resolve.sh). The first
+# lines printed say what was taken.
+#
 # Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, a
 # TypeError / ReferenceError was printed, Quickshell exited non-zero (a crash after a
 # partial summary included) or fewer suites reported than tests.qml registers — with names:
 # a named or needed suite did not report, or another one did —, 2 when the runner could not
-# be set up, a name is empty or not a suite of tests.qml, or the suites of tests.qml cannot
-# be read reliably (nothing runs then).
+# be set up (a missing tool is named, with its use), a name is empty or not a suite of
+# tests.qml, or the suites of tests.qml cannot be read reliably (nothing runs then).
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)

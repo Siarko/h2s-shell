@@ -7,8 +7,11 @@
 # The compositor is a headless labwc (wlroots' headless backend, no input devices) in a
 # private runtime dir, with D-Bus addresses that lead nowhere, a private HOME and XDG
 # directories (Config is read-only under the runners anyway), no new privileges. The tools
-# are found as the lock test bed finds them (tests/lock/resolve.sh: labwc from
-# tests/lock/tools.nix, Quickshell from the h2s-shell launcher, or LOCKTEST_QS).
+# are found by tests/lock/resolve.sh, shared with the lock test bed: labwc and setpriv from
+# the pinned tests/lock/tools.nix where there is a `nix` command, else from PATH
+# (H2S_TEST_TOOLS=nix or =system says which); Quickshell is LOCKTEST_QS, else the one the
+# h2s-shell launcher runs, else qs or quickshell on PATH. The run's first lines say what was
+# taken; a missing tool is a set-up error (exit 2) that names it.
 #
 #   headless_setup                         the private dirs and the compositor (exit 2 on failure)
 #   headless_run <root.qml> <copy> [VAR=value…]
@@ -30,6 +33,9 @@ LOCKTEST_DIR=$REPO/tests/lock
 # Read by resolve.sh
 # shellcheck disable=SC2034
 PROBE_TIMEOUT=5
+# What these runners use of the tools: the compositor, not the lock bed's whole set
+# shellcheck disable=SC2034
+LOCKTEST_NEED=unit
 probe=""
 work=""
 
@@ -60,14 +66,14 @@ headless_setup() {
     chmod 700 "$work/run"
     echo '<?xml version="1.0"?><labwc_config/>' > "$work/labwc/rc.xml"
 
-    isolated=(env -i PATH="$LOCKTEST_TOOLS/bin:$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/run"
+    isolated=(env -i PATH="${LOCKTEST_TOOLS:+$LOCKTEST_TOOLS/bin:}$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/run"
         XDG_CONFIG_HOME="$work/xdg/config" XDG_CACHE_HOME="$work/xdg/cache" XDG_DATA_HOME="$work/xdg/data"
         XDG_STATE_HOME="$work/xdg/state" LANG=en_US.UTF-8
         DBUS_SESSION_BUS_ADDRESS="unix:path=$work/run/no-session-bus"
         DBUS_SYSTEM_BUS_ADDRESS="unix:path=$work/run/no-system-bus" LIBSEAT_BACKEND=disabled-for-test)
 
     "${isolated[@]}" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
-        "$SETPRIV" --no-new-privs setsid timeout 300 labwc -C "$work/labwc" > "$work/labwc.log" 2>&1 < /dev/null &
+        "$SETPRIV" --no-new-privs setsid timeout 300 "$LOCKTEST_LABWC" -C "$work/labwc" > "$work/labwc.log" 2>&1 < /dev/null &
     labwc_pid=$!
     for _ in $(seq 1 100); do [ -S "$work/run/wayland-0" ] && break; sleep 0.1; done
     [ -S "$work/run/wayland-0" ] || { cat "$work/labwc.log" >&2; setup_error "the headless compositor did not start"; }

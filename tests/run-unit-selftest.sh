@@ -35,7 +35,9 @@
 #   flock /tmp/h2s-locktest.flock tests/run-unit-selftest.sh
 #
 # Each case starts the runner's private headless compositor (nothing shows); no shell runs
-# (`real` runs tests.qml, the module cases tests-modules.qml).
+# (`real` runs tests.qml, the module cases tests-modules.qml). The tools are found as the
+# runner finds them (tests/run-unit.sh), so the verdict is guarded with the pinned tools and
+# with the system's.
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)

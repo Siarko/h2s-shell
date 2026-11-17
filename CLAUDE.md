@@ -49,6 +49,7 @@ quickshell                 # reads shell.qml from the current directory
 tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
 tests/run-unit.sh FormatTest LockRulesTest   # only the named suites, and the suites they need
 tests/run-unit-selftest.sh # checks the runners' own verdict
+tests/resolve-selftest.sh  # checks where the runners take their tools from
 tests/run-modules.sh <dir> # a module's suites, against this tree
 tests/run-modules.sh --suite GoodApiTest <dir>   # only the named ones (--suite once per suite)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
@@ -58,9 +59,14 @@ Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` d
 two suites open a small window, and the runner puts them in a private headless compositor
 (nothing shows on your screen). While iterating, name the suites the change touches (a suite
 is named by its file in `tests/` without `.qml`; a wrong name is an error, nothing runs);
-run them all before committing. `--log <file>`, before the names, also saves the output. It finds Quickshell and the compositor as the lock test bed
-does (`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). When another run of
-either may be going on (two people or agents in one checkout), wrap them in
+run them all before committing. `--log <file>`, before the names, also saves the output.
+
+The unit and module suites take that compositor (labwc) from the pinned
+`tests/lock/tools.nix` where there is a `nix` command, else from `PATH`
+(`H2S_TEST_TOOLS=nix` or `=system` says which), and say which in their first lines; a
+missing tool ends the run with status 2 and its name (`tests/lock/resolve.sh`;
+`LOCKTEST_QS` names another Quickshell). The lock test bed needs `nix`. When another run
+of either may be going on (two people or agents in one checkout), wrap them in
 `flock /tmp/h2s-locktest.flock …`.
 
 A running shell reloads itself when a file changes, but that reload is not enough after
@@ -121,16 +127,24 @@ decided and why belongs in `notes/tracker.md`.
 
 What differs between the two systems for development:
 
-- **Quickshell.** The test runners take the Quickshell the `h2s-shell` launcher runs,
-  asking the launcher itself (`tests/lock/resolve.sh`); `LOCKTEST_QS` names another one.
-  On NixOS the launcher is this flake's package (`nix/package.nix`). On Arch `install.sh`
-  installs Quickshell from pacman and puts no `h2s-shell` command on `PATH`, so the runners
-  need `LOCKTEST_LAUNCHER` (a launcher) and, if it cannot say, `LOCKTEST_QS` (`qs`) set.
-- **Test tools.** The headless compositor (labwc), Hyprland and the other tools of the
-  test beds are pinned in `tests/lock/tools.nix` and built through `nix`
-  (`tests/lock/resolve.sh`, used by `tests/headless.sh` and `tests/lock/run.sh`). So today
-  every runner needs `nix`, also on Arch; the test split (tracker, steps 1 and 10) is to
-  give a general set that does not.
+- **Quickshell.** The test runners take `LOCKTEST_QS` when it is set, else the Quickshell
+  the `h2s-shell` launcher runs (`LOCKTEST_LAUNCHER` names another launcher), asking the
+  launcher itself, else `qs` or `quickshell` on `PATH` (`tests/lock/resolve.sh`).
+  - NixOS: the launcher is this flake's package (`nix/package.nix`).
+  - Arch: `install.sh` installs Quickshell from pacman and puts no `h2s-shell` command on
+    `PATH`, so the unit and module suites run the `qs` on `PATH`. The lock test bed needs a
+    launcher (`LOCKTEST_LAUNCHER`).
+- **Test tools.** One source for a whole run (`tests/lock/resolve.sh`, used by
+  `tests/headless.sh` and `tests/lock/run.sh`): the pinned build of `tests/lock/tools.nix`
+  where there is a `nix` command, else the system's programs on `PATH`, un-pinned;
+  `H2S_TEST_TOOLS=nix` or `=system` chooses. Each run prints the source and the versions.
+  - The unit and module suites (`run-unit.sh`, `run-unit-selftest.sh`, `run-modules.sh`)
+    need labwc (the headless compositor), `setpriv` and `setsid` (util-linux) and `timeout`
+    (coreutils). NixOS: `nix` provides labwc and `setpriv`. Arch, without `nix`: labwc is a
+    package to have installed for development (`install.sh` does not install it).
+  - `tests/resolve-selftest.sh` needs none of them but `setsid` and `timeout`.
+  - The lock test bed takes its tools from `nix` only, on both systems; the test split
+    (tracker, steps 1 and 10) is to lift that.
 - **Paths.** Scripts start with `#!/usr/bin/env bash`: NixOS has no `/bin/bash`.
   System files differ (NixOS: `/run/current-system/sw/bin`, `/etc/static`, a generated
   `/etc/pam.d`); code that reads them handles both systems.
