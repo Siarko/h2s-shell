@@ -1,0 +1,44 @@
+# shellcheck shell=bash
+# The flake's package (nix/package.nix): it builds, holds the shell without the parts left
+# out, and its h2s-shell command runs the checkout H2S_SHELL_DIR names with every program
+# the shell calls on PATH. Builds into the store, links nothing, writes no lock file.
+need nix "builds the flake's package"
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/system-package.XXXXXX") || cannot_run "cannot create a temp dir"
+trap 'rm -rf "$work"' EXIT
+out=$(cd "$REPO" && nix --extra-experimental-features "nix-command flakes" build --no-link \
+    --no-write-lock-file --print-out-paths "path:$REPO#h2s-shell" 2> "$work/nix.log" | tail -n 1)
+if [ -z "$out" ]; then
+    tail -n 20 "$work/nix.log"
+fi
+check "the package builds" test -n "$out" -a -d "$out"
+[ -n "$out" ] || return 0
+
+number=$(sed -n 's/.*readonly property string number: "\([^"]*\)".*/\1/p' "$REPO/singletons/Version.qml")
+check "its version is singletons/Version.qml's ($number)" test -n "$number" -a "${out#*-h2s-shell-}" = "$number"
+check "it holds the shell" test -f "$out/share/h2s-shell/shell.qml"
+for left_out in tests/lock notes docs; do
+    check "$left_out is not in it" test ! -e "$out/share/h2s-shell/$left_out"
+done
+check "it has the h2s-shell command" test -x "$out/bin/h2s-shell"
+
+# The launcher, asked with nothing of this session: a stand-in launch.sh in the checkout it
+# is pointed at says which arguments and which programs reached it. PATH is empty, so a
+# program found is one the package brings.
+programs=(qs nmcli bluetoothctl python3 notify-send jq gsettings gdbus cava git xdg-open vipsthumbnail flock setsid timeout)
+mkdir -p "$work/checkout/scripts" "$work/home"
+{
+    echo '#!/bin/sh'
+    echo 'echo "arguments: $*"'
+    for program in "${programs[@]}"; do
+        echo "command -v $program > /dev/null && echo 'found: $program'"
+    done
+    echo 'exit 0'
+} > "$work/checkout/scripts/launch.sh"
+chmod +x "$work/checkout/scripts/launch.sh"
+answer=$(timeout 20 env -i PATH="" HOME="$work/home" H2S_SHELL_DIR="$work/checkout" "$out/bin/h2s-shell" one two 2>&1)
+answered() { grep -qxF -- "$1" <<< "$answer"; }
+check "the launcher runs the checkout H2S_SHELL_DIR names, with its arguments" answered "arguments: one two"
+for program in "${programs[@]}"; do
+    check "$program is on the launcher's PATH" answered "found: $program"
+done
