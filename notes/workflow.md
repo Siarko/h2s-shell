@@ -63,7 +63,7 @@ Agents clean up only their own temporary files.
 | Runner self-test | `tests/run-unit-selftest.sh` | as the unit suites |
 | Tool lookup self-test | `tests/resolve-selftest.sh` | bash, coreutils, `setsid`; no `nix`, no labwc |
 | Lock screen, end to end | `tests/lock/run.sh [tests…]` | `nix`; about 15 minutes for all |
-| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites |
+| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites: it only hands the module to the core tree's `tests/run-modules.sh` (a core tree without it: status 2) |
 | A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | as the unit suites |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | `nix` |
 

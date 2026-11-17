@@ -5,7 +5,9 @@
 # config root Quickshell is started in) first.
 #
 # The compositor is a headless labwc (wlroots' headless backend, no input devices) in a
-# private runtime dir, with D-Bus addresses that lead nowhere, a private HOME and XDG
+# private runtime dir (outside it, a labwc built with Xwayland also holds an X socket in
+# /tmp/.X11-unix and its /tmp/.X<n>-lock for the length of a run, on a display number no
+# session uses; nothing is started on it, and both go when labwc ends), with D-Bus addresses that lead nowhere, a private HOME and XDG
 # directories (Config is read-only under the runners anyway), no new privileges. The tools
 # are found by tests/lock/resolve.sh, shared with the lock test bed: labwc and setpriv from
 # the pinned tests/lock/tools.nix where there is a `nix` command, else from PATH
@@ -17,7 +19,9 @@
 #   headless_run <root.qml> <copy> [VAR=value…]
 #                                          Quickshell on that root file, with those variables
 #                                          added; its output printed (and copied to <copy>
-#                                          unless ""); HEADLESS_LOG, HEADLESS_STATUS set
+#                                          unless ""); HEADLESS_LOG, HEADLESS_STATUS set.
+#                                          An interrupt (INT, TERM, HUP) ends the run at
+#                                          once, Quickshell and the compositor with it
 #   headless_verdict <title> <expected> <where> [exactly [<suite name>…]]
 #                                          the summary; returns 1 on any FAIL line, a
 #                                          TypeError / ReferenceError, a non-zero exit of
@@ -40,6 +44,13 @@ probe=""
 work=""
 
 headless_cleanup() {
+    # Quickshell, when the run is ended while it runs: `timeout` hands TERM on to it; what
+    # is left of the two after a moment is killed (timeout leads a process group of its own)
+    if [ -n "${quickshell_pid:-}" ]; then
+        kill -TERM "$quickshell_pid" 2> /dev/null
+        for _ in $(seq 1 20); do kill -0 "$quickshell_pid" 2> /dev/null || break; sleep 0.1; done
+        kill -KILL -- "-$quickshell_pid" "$quickshell_pid" 2> /dev/null
+    fi
     [ -n "${labwc_pid:-}" ] && { kill -TERM -- "-$labwc_pid" 2> /dev/null; sleep 0.3; kill -KILL -- "-$labwc_pid" 2> /dev/null; }
     [ -n "$probe" ] && rm -rf "$probe"
     [ -n "$work" ] && rm -rf "$work"
@@ -85,8 +96,13 @@ headless_run() {
     HEADLESS_LOG=$work/unit.log
     headless_started=$SECONDS
     "${isolated[@]}" "$@" WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
-        "$SETPRIV" --no-new-privs timeout 240 "$LOCKTEST_QS" -p "$root" > "$HEADLESS_LOG" 2>&1 < /dev/null
+        "$SETPRIV" --no-new-privs timeout 240 "$LOCKTEST_QS" -p "$root" > "$HEADLESS_LOG" 2>&1 < /dev/null &
+    # Waited for, not run in the foreground: bash runs a trap only when the foreground
+    # command ends, so an interrupt would be held until Quickshell is done
+    quickshell_pid=$!
+    wait "$quickshell_pid"
     HEADLESS_STATUS=$?
+    quickshell_pid=""
     [ -n "$output_copy" ] && cp "$HEADLESS_LOG" "$output_copy"
     cat "$HEADLESS_LOG"
 }

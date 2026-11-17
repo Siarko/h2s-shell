@@ -3,7 +3,8 @@
 # against fabricated PATHs of stand-in executables: a `nix` that prints a made-up store
 # path, a labwc, a launcher, a qs that only answer --version. For each case: the source
 # taken, the lines printed, what the caller is handed, and for a missing tool exit 2 with a
-# line naming each one.
+# line naming each one. And what the programs resolve.sh starts get of the caller's session
+# (the launcher it asks, a program asked for its version): nothing.
 #
 #   tests/resolve-selftest.sh
 #
@@ -32,7 +33,7 @@ link_real() {
         ln -s "$real" "$work/$directory/$name"
     done
 }
-link_real base env mktemp tail head grep wc cat rm mkdir chmod
+link_real base env mktemp tail head grep wc cat rm mkdir chmod sleep
 link_real session setsid timeout
 
 # stand_in <file> <line>…: an executable made of those lines
@@ -46,18 +47,22 @@ stand_in() {
     } > "$file"
     chmod +x "$file"
 }
-# answers <file> <text>: a program that only answers --version
-answers() { stand_in "$1" "[ \"\${1:-}\" = --version ] && echo '$2'" "exit 0"; }
-# A setpriv that runs the command it is given (after --no-new-privs)
+# answers <file> <text>: a program that only answers --version, and leaves the environment
+# it was asked in beside itself (<file>.env)
+answers() { stand_in "$1" "[ \"\${1:-}\" = --version ] && { env > '$work/$1.env'; echo '$2'; }" "exit 0"; }
+# A setpriv that writes down its first argument and runs the command it is given after it
 setpriv_stand_in() {
-    stand_in "$1" "if [ \"\${1:-}\" = --version ]; then echo 'setpriv from util-linux $2'; exit 0; fi" 'shift' 'exec "$@"'
+    stand_in "$1" "if [ \"\${1:-}\" = --version ]; then echo 'setpriv from util-linux $2'; exit 0; fi" \
+        "echo \"\$1\" >> '$work/setpriv.calls'" 'shift' 'exec "$@"'
 }
 
 # The system's tools
 answers system/labwc "labwc 7.8.9 (+xwayland +nls) wlroots-0.19.0"
 setpriv_stand_in system/setpriv 6.5.4
 answers hyprland/Hyprland "Hyprland 0.50.0 built from branch v0.50.0"
-answers hyprland-same/Hyprland "Hyprland 0.57.1 built from another branch"
+answers hyprland-same/Hyprland "Hyprland 0.57.1 built from branch v0.57.1"
+stand_in hyprland-silent/Hyprland "exit 3"
+answers hyprland-commit/Hyprland "Hyprland 0.57.1 built from another commit"
 
 # What a nix build of tools.nix would print: a store path, made up, holding the whole set
 store=$work/store/aaaaaaaa-h2s-locktest-tools
@@ -84,19 +89,26 @@ nix_stand_in nix-no-labwc "$work/store/dddddddd-h2s-locktest-tools"
 stand_in nix-failing/nix "echo 'error: the stand-in build failed' >&2" "exit 1"
 
 # Quickshells, and launchers: one that runs the launch.sh it is pointed at (H2S_SHELL_DIR)
-# with its own qs first on PATH, one that says nothing
+# with its own qs first on PATH, one that says nothing, one that never answers. The first
+# leaves what it was started with: its environment, and its session (the sixth field of
+# /proc/<pid>/stat)
 answers qs/qs "Quickshell 0.0.1 (revision , distributed by a stand-in)"
 answers quickshell/quickshell "Quickshell 0.0.2 (revision , distributed by a stand-in)"
 answers given/qs "Quickshell 0.0.3"
 answers launcher-qs/qs "Quickshell 0.0.4"
 answers qs-mute/qs "a program that names no version"
-stand_in launcher/h2s-shell "echo called >> '$work/launcher.calls'" "PATH=$work/launcher-qs:\$PATH" 'exec "$H2S_SHELL_DIR/scripts/launch.sh"'
+stand_in launcher/h2s-shell "echo called >> '$work/launcher.calls'" "env > '$work/launcher.env'" \
+    'read -r _ _ _ _ _ session _ < /proc/$$/stat' "echo \"\$session\" > '$work/launcher.session'" \
+    "PATH=$work/launcher-qs:\$PATH" 'exec "$H2S_SHELL_DIR/scripts/launch.sh"'
 stand_in launcher-mute/h2s-shell "echo called >> '$work/launcher.calls'" "exit 0"
+stand_in launcher-hangs/h2s-shell "echo called >> '$work/launcher.calls'" "exec sleep 60"
 touch "$work/not-executable"
 
 # What a runner does: defines what resolve.sh asks of its caller, sources it, and here
 # prints what it was handed
 cat > "$work/driver.sh" << 'DRIVER'
+# As strict as the runners are
+set -uo pipefail
 setup_error() {
     echo "driver: $*" >&2
     [ -n "$probe" ] && rm -rf "$probe"
@@ -105,9 +117,11 @@ setup_error() {
 LOCKTEST_DIR=$1
 LOCKTEST_NEED=$2
 temp_base=$3
-PROBE_TIMEOUT=2
+PROBE_TIMEOUT=1
 probe=""
 source "$LOCKTEST_DIR/resolve.sh"
+read -r _ _ _ _ _ session _ < /proc/$$/stat
+echo "session=$session"
 echo "source=$LOCKTEST_TOOL_SOURCE"
 echo "tools=$LOCKTEST_TOOLS"
 echo "labwc=$LOCKTEST_LABWC"
@@ -125,7 +139,8 @@ resolve() {
     case_name=$name
     for part in $3; do path+="${path:+:}$work/$part"; done
     shift 3
-    rm -f "$work/nix.calls" "$work/launcher.calls"
+    rm -f "$work/nix.calls" "$work/launcher.calls" "$work/setpriv.calls" "$work/launcher.env" "$work/launcher.session"
+    find "$work" -name '*.env' -delete
     env -i PATH="$path" "$@" "$bash_path" "$work/driver.sh" "$REPO/tests/lock" "$need" "$work/temp" \
         > "$work/$name.out" 2> "$work/$name.err" < /dev/null
     status=$?
@@ -148,6 +163,17 @@ silent_on() {
 }
 # hands_over_nothing: resolve.sh ended the run; the caller got no tools
 hands_over_nothing() { silent_on out "source="; silent_on out "tools:"; silent_on out "quickshell:"; }
+# has_line <file, in $work> <line>, lacks_variable <file> <name>: of what a stand-in left.
+# A file that is not there fails both: the stand-in was not started
+has_line() {
+    if grep -q -x -F -- "$2" "$work/$1" 2> /dev/null; then pass "$1 has: $2"; else failed "$1 lacks: $2 ($(tr '\n' ' ' < "$work/$1" 2>&1))"; fi
+}
+lacks_variable() {
+    if [ -e "$work/$1" ] && ! grep -q -- "^$2=" "$work/$1"; then pass "$1 has no $2"; else failed "$1 has $2, or is not there"; fi
+}
+# The session the tests' author sits in, as the driver's environment
+hostile=(WAYLAND_DISPLAY=wayland-1 DISPLAY=:0 HOME=/hostile/home XDG_RUNTIME_DIR=/hostile/run
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/hostile/run/bus HYPRLAND_INSTANCE_SIGNATURE=hostile)
 called() { if [ -e "$work/$1.calls" ]; then pass "$1 was called"; else failed "$1 was not called"; fi; }
 not_called() { if [ -e "$work/$1.calls" ]; then failed "$1 was called"; else pass "$1 was not called"; fi; }
 
@@ -277,6 +303,51 @@ prints out "launcher=$work/launcher/h2s-shell"
 prints out "qs=$work/launcher-qs/qs"
 called launcher
 
+# What the launcher is started with, when the caller sits in a session: nothing of it. A
+# launcher that ignored H2S_SHELL_DIR would start a real shell, so it gets a private HOME
+# and runtime dir (the probe's, gone afterwards), no display, D-Bus addresses that lead
+# nowhere, no new privileges, a session of its own
+resolve launcher-isolated unit "base session system launcher qs" "${hostile[@]}"
+exits 0
+prints out "qs=$work/launcher-qs/qs"
+probe_dir=$(sed -n 's/^H2S_SHELL_DIR=//p' "$work/launcher.env" 2> /dev/null)
+case "$probe_dir" in
+    "$work"/temp/locktest-probe.*) pass "the launcher was pointed at the probe's dir" ;;
+    *) failed "the launcher was pointed at '$probe_dir', not at a probe dir in $work/temp" ;;
+esac
+has_line launcher.env "HOME=$probe_dir/home"
+has_line launcher.env "XDG_RUNTIME_DIR=$probe_dir/run"
+has_line launcher.env "DBUS_SESSION_BUS_ADDRESS=unix:path=$probe_dir/run/no-session-bus"
+has_line launcher.env "DBUS_SYSTEM_BUS_ADDRESS=unix:path=$probe_dir/run/no-system-bus"
+has_line launcher.env "LIBSEAT_BACKEND=disabled-for-test"
+lacks_variable launcher.env WAYLAND_DISPLAY
+lacks_variable launcher.env DISPLAY
+lacks_variable launcher.env HYPRLAND_INSTANCE_SIGNATURE
+has_line setpriv.calls "--no-new-privs"
+launcher_session=$(cat "$work/launcher.session" 2> /dev/null)
+driver_session=$(sed -n 's/^session=//p' "$work/$case_name.out")
+if [ -n "$launcher_session" ] && [ -n "$driver_session" ] && [ "$launcher_session" != "$driver_session" ]; then
+    pass "the launcher ran in a session of its own"
+else
+    failed "the launcher ran in session '$launcher_session', the caller's is '$driver_session'"
+fi
+# … and so does a program asked for its version: an empty environment
+for asked in system/labwc launcher-qs/qs; do
+    for variable in WAYLAND_DISPLAY DISPLAY HOME XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS HYPRLAND_INSTANCE_SIGNATURE; do
+        lacks_variable "$asked.env" "$variable"
+    done
+done
+
+# A launcher that never answers is stopped, and said to be one
+hang_started=$SECONDS
+resolve launcher-hangs unit "base session system launcher-hangs qs" "${hostile[@]}"
+exits 2
+# The driver's PROBE_TIMEOUT is 1 s (and 2 s more before the kill); the launcher sleeps 60
+if [ $((SECONDS - hang_started)) -le 10 ]; then pass "stopped within the probe's time"; else failed "took $((SECONDS - hang_started)) s"; fi
+prints err "driver: the launcher ($work/launcher-hangs/h2s-shell) did not answer within 1 s when asked which qs it runs — does it honour H2S_SHELL_DIR? (or set LOCKTEST_QS)"
+silent_on out "qs="
+called launcher
+
 # A launcher that does not say (here: the one LOCKTEST_LAUNCHER names, before the h2s-shell
 # on PATH): an error, although PATH has a qs
 resolve launcher-mute unit "base session system launcher qs" LOCKTEST_LAUNCHER="$work/launcher-mute/h2s-shell"
@@ -318,15 +389,25 @@ prints out "quickshell: $work/qs-mute/qs version unknown (PATH)"
 # ---- The pinned Hyprland against the system's (nix only) ---
 resolve hyprland-differs unit "base session nix hyprland qs"
 exits 0
-prints out "NOTE: the pinned Hyprland (0.57.1) is not the system's (0.50.0): move the pin in tools.nix"
+prints out "NOTE: the pinned Hyprland (Hyprland 0.57.1 built from branch v0.57.1) is not the system's (Hyprland 0.50.0 built from branch v0.50.0): move the pin in tools.nix"
+
+# The whole line counts: the same number from another commit is another Hyprland
+resolve hyprland-commit unit "base session nix hyprland-commit qs"
+exits 0
+prints out "NOTE: the pinned Hyprland (Hyprland 0.57.1 built from branch v0.57.1) is not the system's (Hyprland 0.57.1 built from another commit): move the pin in tools.nix"
 
 resolve hyprland-same unit "base session nix hyprland-same qs"
 exits 0
 silent_on out "NOTE"
 
-resolve hyprland-unreadable unit "base session nix-mute-hyprland hyprland qs"
+# One that prints a line without a number is still compared; one that prints nothing cannot be
+resolve hyprland-no-number unit "base session nix-mute-hyprland hyprland qs"
 exits 0
-prints out "NOTE: cannot compare the pinned Hyprland (version unknown) with the system's (0.50.0)"
+prints out "NOTE: the pinned Hyprland (no number here) is not the system's (Hyprland 0.50.0 built from branch v0.50.0): move the pin in tools.nix"
+
+resolve hyprland-unreadable unit "base session nix hyprland-silent qs"
+exits 0
+prints out "NOTE: cannot compare the pinned Hyprland (Hyprland 0.57.1 built from branch v0.57.1) with the system's (version unknown)"
 
 resolve hyprland-system unit "base session system hyprland qs"
 exits 0

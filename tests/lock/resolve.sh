@@ -56,15 +56,18 @@ tool_use() {
     esac
 }
 
-# tool_version <program>: the first version number in the first line the program prints
-# when asked (`--version` prints and exits; nothing of the session reaches it). A program
-# that does not say is "version unknown", never a guess.
-tool_version() {
+# version_line <program>: the first line the program prints when asked for its version
+# (`--version` prints and exits; the program gets an empty environment, so nothing of the
+# session reaches it)
+version_line() { timeout 5 env -i "$1" --version 2> /dev/null < /dev/null | head -n 1; }
+# version_number <line>: the first version number in it. A line without one is "version
+# unknown", never a guess.
+version_number() {
     local version
-    version=$(timeout 5 env -i "$1" --version 2> /dev/null < /dev/null | head -n 1 \
-        | grep -o -E '[0-9]+(\.[0-9]+)+[A-Za-z0-9.+~-]*' | head -n 1)
+    version=$(printf '%s\n' "$1" | grep -o -E '[0-9]+(\.[0-9]+)+[A-Za-z0-9.+~-]*' | head -n 1)
     echo "${version:-version unknown}"
 }
+tool_version() { version_number "$(version_line "$1")"; }
 
 case "${LOCKTEST_NEED:-}" in
     unit | lock) ;;
@@ -149,21 +152,21 @@ fi
 
 if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     tools_line="tools: nix (tests/lock/tools.nix, pinned: $LOCKTEST_TOOLS)"
-    pinned_hyprland=$(tool_version "$LOCKTEST_TOOLS/bin/Hyprland")
+    pinned_hyprland=$(version_line "$LOCKTEST_TOOLS/bin/Hyprland")
 else
     tools_line="tools: system (PATH, not pinned)"
 fi
 tools_line+=" — labwc $(tool_version "$LOCKTEST_LABWC"), setpriv $(tool_version "$SETPRIV")"
-[ "$LOCKTEST_NEED" = lock ] && tools_line+=", Hyprland $pinned_hyprland"
+[ "$LOCKTEST_NEED" = lock ] && tools_line+=", Hyprland $(version_number "$pinned_hyprland")"
 echo "$tools_line"
 
-# The pinned Hyprland is meant to be the system's: say so when it is not, and when that
-# cannot be told
+# The pinned Hyprland is meant to be the system's: say so when it is not (the whole line
+# is compared: it names the commit too), and when that cannot be told
 system_hyprland=$(type -P Hyprland)
 if [ "$LOCKTEST_TOOL_SOURCE" = nix ] && [ -n "$system_hyprland" ]; then
-    system_version=$(tool_version "$system_hyprland")
-    if [ "$pinned_hyprland" = "version unknown" ] || [ "$system_version" = "version unknown" ]; then
-        echo "NOTE: cannot compare the pinned Hyprland ($pinned_hyprland) with the system's ($system_version)"
+    system_version=$(version_line "$system_hyprland")
+    if [ -z "$pinned_hyprland" ] || [ -z "$system_version" ]; then
+        echo "NOTE: cannot compare the pinned Hyprland (${pinned_hyprland:-version unknown}) with the system's (${system_version:-version unknown})"
     elif [ "$pinned_hyprland" != "$system_version" ]; then
         echo "NOTE: the pinned Hyprland ($pinned_hyprland) is not the system's ($system_version): move the pin in tools.nix"
     fi

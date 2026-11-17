@@ -230,4 +230,53 @@ check module-unknown "no suite ran" reports_nothing module-unknown.log
 } > "$work/module-extra"
 chmod +x "$work/module-extra"
 verdict module-extra module-extra 1 --suite GoodStateTest "$good"
+
+# interrupted: the runner is told to end while Quickshell runs (a stand-in that never
+# ends). It ends at once with status 130 and leaves nothing: not Quickshell, not the
+# compositor, not its temp dir. TERM stands for an interrupt here: a command a script starts
+# in the background ignores INT.
+{
+    echo "#!$(command -v bash)"
+    # Asked for its version (the runner's first lines), it only ends
+    echo '[ "${1:-}" = --version ] && exit 0'
+    echo "echo \"\$XDG_RUNTIME_DIR\" > '$work/sleeper.started'"
+    echo "exec sleep 200"
+} > "$work/sleeper"
+chmod +x "$work/sleeper"
+LOCKTEST_QS=$work/sleeper "$REPO/tests/run-unit.sh" > "$work/interrupted.log" 2>&1 &
+runner_pid=$!
+for _ in $(seq 1 1200); do
+    [ -s "$work/sleeper.started" ] && break
+    kill -0 "$runner_pid" 2> /dev/null || break
+    sleep 0.1
+done
+# The runner's own processes, and theirs (timeout, and the compositor or Quickshell under it)
+runner_processes=()
+for child in $(pgrep -P "$runner_pid"); do
+    runner_processes+=("$child")
+    for grandchild in $(pgrep -P "$child"); do runner_processes+=("$grandchild"); done
+done
+runner_dir=$(dirname "$(cat "$work/sleeper.started" 2> /dev/null)")
+check interrupted "Quickshell was running, in the runner's temp dir" test -d "$runner_dir" -a "$runner_dir" != .
+check interrupted "the compositor and Quickshell are the runner's processes" test "${#runner_processes[@]}" -ge 4
+kill -TERM "$runner_pid" 2> /dev/null
+interrupted_at=$SECONDS
+for _ in $(seq 1 100); do kill -0 "$runner_pid" 2> /dev/null || break; sleep 0.1; done
+if kill -0 "$runner_pid" 2> /dev/null; then
+    echo "FAIL interrupted: run-unit.sh still runs $((SECONDS - interrupted_at)) s after the interrupt"
+    failures=$((failures + 1))
+    kill -KILL "$runner_pid" "${runner_processes[@]}" 2> /dev/null
+    wait "$runner_pid" 2> /dev/null
+    [ "$runner_dir" != . ] && rm -rf "$runner_dir"
+else
+    wait "$runner_pid"
+    check interrupted "run-unit.sh exited 130" test $? = 130
+    none_left() {
+        local process
+        for process in "${runner_processes[@]}"; do kill -0 "$process" 2> /dev/null && return 1; done
+        return 0
+    }
+    check interrupted "none of its processes is left" none_left
+    check interrupted "its temp dir is gone" test ! -e "$runner_dir"
+fi
 [ "$failures" = 0 ]
