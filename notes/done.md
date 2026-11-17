@@ -904,3 +904,21 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       "Try the prompt". Verified on both machines by the user. Plan:
       [plans/polkit.md](plans/polkit.md).
 
+- [x] **11.36 A System tab in the settings** (agreed 2026-11-12) — found done when the
+      trackers were merged (2026-11-17): Settings → System holds Authentication and Network
+      (`panels/SettingsWindow.qml`), no profile picker; the rule by who holds the value
+      stands for later pages.
+- [x] **11.37 Network management, the System tab's first page** (requested 2026-11-12) —
+      found done when the trackers were merged (2026-11-17): Overview, Wi-Fi, Ethernet and
+      VPN pages, the connection editor, VPN import (`panels/settings/Network*.qml`,
+      `singletons/network/`). Plan: [plans/network.md](plans/network.md). Left: a QR code
+      to join a network (`qrencode`), in the tracker's backlog.
+
+## From next-steps.md (merged into the tracker 2026-11-17)
+
+- [x] **Tailscale to completion** (order of 2026-11-15, steps 1–5): accounts, hostname,
+      diagnostics; sharing (exit node, routes, tags) and Tailscale SSH; Taildrop; serve,
+      Funnel, certificates, tailnet lock status, exit node per network; the module's bar
+      widget. All in the module repository's CHANGELOG (Unreleased, 0.6.0).
+- [x] The Tailscale page's "Tailnet" field showed an e-mail address for a personal
+      tailnet — fixed: `TailscaleRules.tailnetName` skips e-mail-like names.

@@ -1,0 +1,134 @@
+# Tracker
+
+The one list of what is next, for the shell and its modules (the module repository
+`h2s-shell-tailscale` keeps no tracker of its own). Done items go to [done.md](done.md).
+Plans are in [plans/](plans/). Machines are named only "the NixOS machine" and "the Arch
+machine".
+
+## Now
+
+- [ ] Step 0, workflow: start with 0(a), the test runners running one suite or one scenario.
+
+## Order of work
+
+0. Workflow — open
+   - [ ] (a) the test runners can run one suite or one scenario
+   - [ ] (b) each agent gets its own working trees and its own test bed, so runs go in
+         parallel; a module is always tested against a pinned core tree nobody is editing
+   - [x] (c) recurring defects written down as development rules in `CLAUDE.md` (both
+         repositories); the list grows with every review
+   - [ ] (d) fix the known flaky live tests first: the Tailscale stand-in's event-stream
+         replay timing (`tools/stand-in/curl`); the tailnet-lock read that is not retried
+         (`module/LockClient.qml`)
+   - [ ] (e) a small read-only check against the real Tailscale daemon at deploy: state,
+         device list, no repeated log lines
+   - [ ] (f) decide where development runs (see Open points)
+1. Planning, no code — open
+   - [ ] revise [plans/api-next.md](plans/api-next.md): UI anchors and their naming
+         convention, a module's public API, the password prompt's "who and what for",
+         a minor may tighten
+   - [ ] analysis + plan: PAM configuration from the shell (polkit and lock screen, NixOS
+         and Arch)
+   - [ ] plan: the test split (general + per system)
+   - [ ] plan: installing, updating and removing modules, with the Settings → Modules page
+   - [ ] revise [plans/documentation.md](plans/documentation.md) and
+         [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
+         below (environment-neutral, both systems together, `notes/`, verification at
+         major releases)
+2. Release — open
+   - [ ] `lockscreen.lockOnSleep` default off (`singletons/SettingsSchema.qml`, today `true`)
+   - [ ] versioning rule corrected (`CHANGELOG.md` header, `singletons/Version.qml` comment;
+         `CLAUDE.md` done)
+   - [ ] cut a minor release (today 2.0.0)
+3. API extension in the core, in small slices, per [plans/api-next.md](plans/api-next.md) — open
+   - [ ] command runner
+   - [ ] program lookup with trust
+   - [ ] test mode
+   - [ ] privileged start
+   - [ ] shared module object
+   - [ ] helpers
+   - [ ] system and network facts
+4. UI anchors; today's slots (`components/ModuleSlot.qml`, `Api.slots`) moved onto them — open
+5. A module's public API for other modules, basic version — open
+6. Tailscale module migration — open
+   - [ ] every workaround removed
+   - [ ] exit node per network in the connection's options (through an anchor)
+   - [ ] the manual "for now" override
+7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
+   (splits, hubs, test hooks, the module's read/clock performance, the network editor's save
+   that can lose the kill-switch choice). Runs alongside 3–6 where slices do not collide — open
+8. Modules closed for now (see Decisions) — open
+   - [ ] the trust model written down honestly
+   - [ ] Settings → Modules: enable, disable, reload, install, update, remove from a repository
+   - [ ] the safe-mode banner
+9. Lock — open
+   - [ ] lock supervisor limit (3 restarts while locked, then stay locked, tell the user)
+   - [ ] lock-before-sleep conflict detection
+   - [ ] screensaver and lock screen working together checked
+10. Test split implemented — open
+11. PAM configuration from the shell — open
+12. Documentation for users and developers per [plans/documentation.md](plans/documentation.md);
+    the architecture and API chapters after 3–7 — open
+
+Later:
+- pttd (dictation) as its own module in its own repository (was TODO 11.24); until then
+  the protocol is in [pttd-protocol.md](pttd-protocol.md)
+- global default programs (the terminal among them)
+- NixOS option for modules (`programs.h2s-shell.modules`); module signatures
+- UI texts pass and translations, in one go; the owner reviews the voice (short plain wording)
+- documentation as a site with per-system tabs
+
+## Decisions
+
+All by the owner, 2026-11-17.
+
+- The module API is ours: a module never works around a gap; the API is extended first.
+- Larger work goes analysis → plan (owner approves) → implementation.
+- Versioning: a settings migration may ship in a minor release, never in a patch. The pending release is a minor.
+- `lockscreen.lockOnSleep` defaults to off. To investigate: detecting, independent of the system, that something else locks the screen, and telling the user.
+- Lock supervisor: at most 3 restarts while locked; then the session stays locked, the user logs in on a TTY and starts the launcher by hand; the user is told what happened and how to look into it; documented.
+- Tests: one general set independent of the system, plus a set per system (NixOS, Arch). A developer runs the general set and their system's.
+- PAM: the order of password and fingerprint is the system's PAM stack, not the prompt's. Wanted: configuring PAM rules from the shell; needs its own analysis and plan.
+- Documentation: English only; Markdown with "NixOS" and "Arch" subsections wherever the systems differ (a site with tabs maybe later); pages for system-only features where it makes sense; never one system without the other; nothing refers to or relies on the developers' own environments (user names, home paths, machines); screenshots are the owner's; docs verified for consistency at each major release, not on every change; `docs/` never links into `notes/`.
+- Module API: a minor version may tighten behaviour for now (nobody else uses the shell yet); the rule is tightened when needed.
+- Module API, UI anchors: views are built from shared blocks (settings page, section, card, row, popup section) that register under a path derived from where they stand; a module names a path, a placement (before, after, appended inside) and its element. Addressable: settings pages and popup content; not the bar (the user places widgets there). One naming convention for anchors; the list of anchors pinned by a test and documented. Today's slots move onto anchors.
+- Module API: a module may publish its own versioned API object for other modules (declared in the manifest; a dependent module gets only that object). Basic version in this round. Reaching into another module or the host goes away.
+- Privileged runs by a module: no time window; the password prompt says which module asks and what for, next to the actual command.
+- Exit node (Tailscale): a manual choice "for now" that overrides the per-network setting, and a per-network choice in that connection's options (through an anchor).
+- No terminal setting of its own: a global "default programs" setting later.
+- Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
+- Coding is done by strong models only; no weaker models for mechanical moves.
+
+## Backlog / later
+
+From the old TODO (numbers kept, see done.md for the rest):
+- [ ] 11.34 A command button bar widget: label and/or icon, a command per click (left, right, middle, maybe long press), run detached
+- [ ] 11.31 Popups clear of the on-screen keyboard: done for a bar at the top; left: a bar at the bottom, popups by a bar at a side, the settings window (`panels/Popup.qml`)
+- [ ] 11.32 "Settings saved" toast seen with nothing changed (the NixOS machine, 2026-11-08) — reproduce first
+- [ ] 11.23 Installing: `install.sh` untested on Arch; on a first run `Config` chmods `config.json` before it exists (one warning); publishing (AUR, docs for others) later
+- [ ] 11.20 Animation editor; animations as data assigned to named element slots
+- [ ] 11.5 Bar shape and anchoring ("dynamic island") — needs working out with the owner first
+- [ ] 11.7 Themes stage 8, matugen: a template mapping its palette to the colour tokens, a "wallpaper" theme reading it (`colorsFrom` exists), docs
+- [ ] 11.8 Compositor integration, Hyprland first (scroll sensitivity, volume step, …) — first a plan, `notes/plans/compositor.md`, agreed with the owner
+- [ ] A QR code to join a network (`qrencode`) (left from 11.37)
+- [ ] A bar widget to shuffle the wallpaper, or a command button (11.34)
+- 11.6 Styling with CSS-like selectors — shelved; [plans/selectors.md](plans/selectors.md), [plans/styles.md](plans/styles.md)
+
+From next-steps (2026-11-15):
+- [ ] The muted status line has low contrast on the green tint of an active row in the network popup (not re-checked)
+- [ ] The lock test `fallback` failed once (the PAM stand-in never answered): find out why
+- [ ] Module widgets pop in after the first frame (`singletons/ModuleLists.qml`: by design today)
+- [ ] A start guard for slow crash loops (not re-checked)
+- [ ] Quickshell 0.3.2: a second polkit request while a prompt is open replaces it, never finished (upstream)
+- [ ] `SmallButton` / `DeleteButton` have no keyboard focus or activation
+- [ ] Opened connection cards have about 20 px of empty space under the detail line (not re-checked)
+- [ ] Tailscale later: re-authentication without the profile reset (`login-interactive`), settings re-applied after a same-account login, certificate renewal, a terminal launcher for SSH (with the default programs)
+- [ ] Taildrop's file and folder dialogs never clicked on a real machine
+- [ ] M5 author guide for modules (with step 12)
+
+Found while writing the development rules (2026-11-17):
+- [ ] `singletons/network/VpnLockdown.qml` without the installed script: a network coming up asks for the password by itself, and runs the shell tree's own `scripts/h2s-vpn-lockdown` as root (user-writable in a checkout) — against two development rules
+
+## Open points
+
+- Where development runs: the owner offers the Arch machine (much faster) as the main development machine, with NixOS-only tests run remotely on the NixOS machine. Not decided.

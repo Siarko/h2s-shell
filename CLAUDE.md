@@ -10,24 +10,33 @@ by the Quickshell runtime.
 
 ## Documentation
 
-Read these before making structural changes:
+`docs/` holds user and developer documentation only; for now that is (both to be
+rewritten, see the tracker's step 12):
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — runtime model, directory layout,
   module resolution, the Process/SplitParser I/O idiom, the config system, the widget
   contract, how to add a widget, testing.
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
-- **[notes/cleanup.md](notes/cleanup.md)** — the known-problems backlog, prioritised, with
-  file:line references. Check this before "fixing" something — it may already be filed,
-  with the analysis done.
-- **[docs/TODO.md](docs/TODO.md)** — the cleanup checklist derived from it, in the agreed
-  order, with the current progress. Start here when resuming cleanup work.
-- **[notes/done.md](notes/done.md)** — the done items of TODO.md, numbers kept, with
-  their notes; look an item number up here when it is not in TODO.md.
-- **[notes/plans/styles.md](notes/plans/styles.md)** — the shell's CSS variant for themes: selectors,
-  cascade, properties, at-rules. Keep it in step with what the compiler accepts.
-- **[notes/pttd-protocol.md](notes/pttd-protocol.md)** — the `pttd`
-  dictation daemon's socket protocol.
+
+Working notes live in **`notes/`** — not documentation, may be out of date, never linked
+from `docs/` or the README:
+
+- **[notes/tracker.md](notes/tracker.md)** — the one tracker for the shell and its
+  modules: what is next, the order of work, the owner's decisions. **Start here when
+  resuming work.**
+- **[notes/done.md](notes/done.md)** — done items, numbers kept ("TODO 11.22" in a commit
+  or comment), with their notes.
+- **[notes/cleanup.md](notes/cleanup.md)** — findings from a full read, with severities;
+  check it before "fixing" something.
+- **`notes/plans/`** — designs and delivery plans per feature; **`notes/reviews/`**,
+  **`notes/upstream/`** (drafts of Quickshell issues), `notes/pttd-protocol.md` (the
+  dictation daemon's socket protocol).
+
+The rules for `docs/`: English only; where NixOS and Arch differ, a "NixOS" and an "Arch"
+subsection — never one system without the other; nothing that names or relies on a
+developer's own environment (user names, home paths, machines); checked for consistency at
+each major release.
 
 ## Running
 
@@ -36,6 +45,8 @@ There is no build step:
 ```
 quickshell                 # reads shell.qml from the current directory
 tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
+tests/run-unit-selftest.sh # checks run-unit.sh's own verdict
+tests/run-modules.sh <dir> # a module's suites, against this tree
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
 ```
 
@@ -87,8 +98,9 @@ ticks, cells respond to clicks, and popups toggle.
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically. (A
   module directory, loaded by URL from outside the scanned tree, is the exception: see
   "Modules" in `docs/ARCHITECTURE.md`.)
-- **Versioning:** the number is in `singletons/Version.qml` (semver — major for config
-  migrations or behaviour changes, minor for features, patch for fixes). With every
+- **Versioning:** the number is in `singletons/Version.qml` (semver — major for changes
+  to behaviour people rely on, minor for features, patch for fixes; a settings migration
+  may ship in a minor release, never in a patch). With every
   user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves
   them to a new section, bumps the number and tags `v<number>`. `tests/VersionTest.qml`
   checks the two agree.
@@ -96,16 +108,61 @@ ticks, cells respond to clicks, and popups toggle.
 
 ## Environment
 
-This repo gets worked on from two places, and they differ in one way that matters:
+The shell is developed and tested on NixOS and on Arch, by several sessions on different
+machines. Nothing about a session survives outside this repository: what is next, what was
+decided and why belongs in `notes/tracker.md`.
 
-- **On the host** (Arch, Hyprland) `quickshell` is installed, so changes can be run and
-  tested directly — `quickshell` from the repo root, `tests/run-unit.sh` for the
-  suites.
-- **In the dev container** (`.devcontainer/`) there is no Qt and no `quickshell`, so
-  nothing can be run or linted. Changes made there have to be verified on the host, and
-  anything claimed about runtime behaviour is reasoning, not observation.
+What differs between the two systems for development:
 
-The container bind-mounts this folder, so the files are the same on both sides. But
-`~/.claude` is a container-local volume: session state, plans and memory do **not**
-travel. Anything that has to survive the move belongs in this repo — which is what
-`docs/TODO.md` is for.
+- **Quickshell.** The test runners take the Quickshell the `h2s-shell` launcher runs,
+  asking the launcher itself (`tests/lock/resolve.sh`); `LOCKTEST_QS` names another one.
+  On NixOS the launcher is this flake's package (`nix/package.nix`). On Arch `install.sh`
+  installs Quickshell from pacman and puts no `h2s-shell` command on `PATH`, so the runners
+  need `LOCKTEST_LAUNCHER` (a launcher) and, if it cannot say, `LOCKTEST_QS` (`qs`) set.
+- **Test tools.** The headless compositor (labwc), Hyprland and the other tools of the
+  test beds are pinned in `tests/lock/tools.nix` and built through `nix`
+  (`tests/lock/resolve.sh`, used by `tests/headless.sh` and `tests/lock/run.sh`). So today
+  every runner needs `nix`, also on Arch; the test split (tracker, steps 1 and 10) is to
+  give a general set that does not.
+- **Paths.** Scripts start with `#!/usr/bin/env bash`: NixOS has no `/bin/bash`.
+  System files differ (NixOS: `/run/current-system/sw/bin`, `/etc/static`, a generated
+  `/etc/pam.d`); code that reads them handles both systems.
+
+## Development rules
+
+Each comes from defects reviews found more than once. Add to the list when a review finds a
+new kind.
+
+- **Text from outside the shell** (a module, a daemon, a command's output, a network name)
+  is shown as plain text (`textFormat: Text.PlainText`), on one line, length-capped; never
+  interpreted as markup, never put on a command line unquoted. — Markup injection and
+  shell injection both happened.
+- **Nothing asks for a password without the user's click.** Automatic actions (timers,
+  network changes, IPC) never prompt; a dismissed prompt is silent (`PrivilegedAction`'s
+  `dismissed`). — An unasked prompt trains people to type passwords into anything.
+- **Decisions live in pure functions in `*Rules.qml`** with unit cases; clients and
+  singletons only do I/O and call them. A state machine's lifetime rules are rules too
+  (`LockRules.step`). — What is not pure is not tested.
+- **A button's label and its effect are one decision**, derived from the current state when
+  the view is built. — Labels and actions drifted apart.
+- **A failed read is "unknown/unsafe", never "fine".** — Silent failures showed as healthy.
+- **Late answers lose.** An answer from a process started before the state changed must not
+  overwrite newer state. — Stale reads overwrote fresh ones.
+- **Log on a change of outcome, not on every attempt;** repeated work follows a backoff. —
+  Logs filled with the same line every few seconds.
+- **Live tests wait on conditions, never on fixed sleeps;** a test that cannot fail is
+  deleted. — Sleeps make tests flaky under load.
+- **Tests never touch the real session, polkit, PAM, the network or a real daemon:** stand-ins
+  only, and stand-ins never meet the real `pkexec`. — A test must not change the machine.
+- **Root helpers and scripts run as root are never loaded from a place the user can
+  write.** — Otherwise any user process can become root at the next prompt.
+- **The module API is ours.** If it lacks something, stop and extend it (minor version, a
+  `### Module API` line in `CHANGELOG.md`, the reference in `api/Api.qml`) — never build a
+  substitute in a module. — Workarounds in modules became the real API.
+- **Nothing relies on one developer's environment;** NixOS and Arch are treated together. —
+  Code and docs that worked on one machine only.
+- **Docs and comments describe the code as it is,** never how or when it was built.
+  User-visible strings are the few plain words a person would put on a control. — History
+  in comments goes stale; long hints read as machine-written.
+- **One slice = one change with its test.** While iterating run only the suites the change
+  touches; run the full set before committing. — Small reviewed steps, fast feedback.
