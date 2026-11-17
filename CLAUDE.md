@@ -47,14 +47,18 @@ There is no build step:
 ```
 quickshell                 # reads shell.qml from the current directory
 tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
-tests/run-unit-selftest.sh # checks run-unit.sh's own verdict
+tests/run-unit.sh FormatTest LockRulesTest   # only the named suites, and the suites they need
+tests/run-unit-selftest.sh # checks the runners' own verdict
 tests/run-modules.sh <dir> # a module's suites, against this tree
+tests/run-modules.sh --suite GoodApiTest <dir>   # only the named ones (--suite once per suite)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
 ```
 
 Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
 two suites open a small window, and the runner puts them in a private headless compositor
-(nothing shows on your screen). It finds Quickshell and the compositor as the lock test bed
+(nothing shows on your screen). While iterating, name the suites the change touches (a suite
+is named by its file in `tests/` without `.qml`; a wrong name is an error, nothing runs);
+run them all before committing. `--log <file>`, before the names, also saves the output. It finds Quickshell and the compositor as the lock test bed
 does (`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). When another run of
 either may be going on (two people or agents in one checkout), wrap them in
 `flock /tmp/h2s-locktest.flock …`.

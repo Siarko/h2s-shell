@@ -11,6 +11,7 @@ interprets the QML directly, so there is no build step:
 ```
 quickshell                 # reads shell.qml from the current directory
 tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
+tests/run-unit.sh FormatTest LockRulesTest   # only the named suites
 ```
 
 On the desktop the shell is started by `scripts/launch.sh` (Hyprland's autostart calls
@@ -660,7 +661,23 @@ Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any 
 `TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
 summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`
 checks that verdict against stand-in Quickshells, and the suite count (`tests/count-suites.sh`:
-a suite written with arguments counts too). Most run their assertions in `Component.onCompleted`, on pure
+a suite written with arguments counts too).
+
+Both runners can run a part: `tests/run-unit.sh FormatTest LockRulesTest` runs the named
+suites (a suite is named by its type, the file in `tests/` without `.qml`), and
+`tests/run-modules.sh --suite GoodApiTest <module dir>…` the named suites of the modules
+given. `--log <file>`, before the names, also saves the output. The list of suites stays
+`tests.qml`: the runner reads the suites from its `property var _name: SomethingTest {…}`
+lines, and which suites a suite is given (`ModuleRegistriesTest { after: _modules; … }`
+waits for them) — those run with it and are counted. The names reach `TestCase` as
+`H2S_TEST_SUITES`: every suite is still built, one that was not selected does nothing
+(`TestCase.selected`), and it is found by its `suiteName` followed by `Test`, so a suite's
+file is called that. With names the verdict wants exactly the selected suites to report; a
+name that is no suite ends the runner with status 2 before anything is started. For a
+module the names reach `tests-modules.qml` as `H2S_TEST_MODULE_SUITES`, which creates only
+those suites and says so when a name is in no module's list.
+
+Most suites run their assertions in `Component.onCompleted`, on pure
 functions (the `*Rules` and geometry singletons, parsers). A suite that throws counts as
 failed, not as missing.
 

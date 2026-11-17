@@ -4,7 +4,10 @@ import qs.singletons
 import qs.tests
 
 // Run with: tests/run-unit.sh (in a private headless compositor: two suites open a window)
-// Add new test suite components here as suites are created.
+// Add new test suite components here as suites are created, one `property var _name:
+// SomethingTest {…}` each: tests/run-unit.sh reads the suites, and which suites a suite is
+// given, from these lines (tests/count-suites.sh). With suites named to the runner, the
+// others are built and do not run (TestCase.selected).
 QtObject {
     // First, before any suite runs: the suites use the real Config singleton, whose
     // file is the user's
@@ -51,7 +54,8 @@ QtObject {
     readonly property var _asyncSuites: [_pointerInput, _lockView, _modules, _moduleRegistries, _vpnProviders]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
-    // asynchronous ones are done — or after a deadline, counting those as failed
+    // asynchronous ones are done — or after a deadline, counting those as failed. A suite
+    // that was not selected is done from the start.
     property var _quit: Timer {
         interval: 50
         running: true

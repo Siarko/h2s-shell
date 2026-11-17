@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 
 QtObject {
     id: suite
@@ -10,7 +11,14 @@ QtObject {
     // this and does its work in runAsync(), started once every suite is built, calling
     // finish() at the end. tests.qml waits for it (`done`) before quitting.
     property bool asynchronous: false
-    property bool done: !asynchronous
+    // Whether this suite runs: tests/run-unit.sh names the suites to run in H2S_TEST_SUITES
+    // (their types, "FormatTest:LockRulesTest"; not set: all of them). A suite's type is its
+    // suiteName followed by "Test". One that is left out does nothing and reports nothing.
+    readonly property bool selected: {
+        const names = Quickshell.env("H2S_TEST_SUITES");
+        return typeof names !== "string" || names === "" || names.split(":").includes(suiteName + "Test");
+    }
+    property bool done: !asynchronous || !selected
     // How long an asynchronous suite may take before the module runner (tests-modules.qml)
     // fails it as timed out, in ms — from the moment the suites start; the runner caps it at
     // 60 s. A suite with many concurrent scenarios sets more than the default.
@@ -58,6 +66,8 @@ QtObject {
     }
 
     Component.onCompleted: {
+        if (!selected)
+            return;
         if (asynchronous) {
             Qt.callLater(() => {
                 console.log("\n=== " + suite.suiteName + " ===");

@@ -59,12 +59,17 @@ Agents clean up only their own temporary files.
 
 | What | Command | Needs |
 |---|---|---|
-| Core unit suites | `tests/run-unit.sh` | today: `nix` |
+| Core unit suites | `tests/run-unit.sh [--log <file>] [suites…]` | today: `nix` |
 | Runner self-test | `tests/run-unit-selftest.sh` | today: `nix` |
 | Lock screen, end to end | `tests/lock/run.sh [tests…]` | `nix`; about 15 minutes for all |
-| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh` in the module repository | today: `nix` |
+| Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | today: `nix` |
+| A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | today: `nix` |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | `nix` |
 
+- A suite is named by its file without `.qml` (`tests/run-unit.sh FormatTest LockRulesTest`),
+  a lock test by its file without `.sh`. A name that does not exist is an error (status 2)
+  and nothing runs. While iterating, run the suites the change touches; before committing,
+  everything.
 - When more than one run can happen at once on a machine, wrap each in
   `flock /tmp/h2s-locktest.flock …`.
 - All of them run in an invisible compositor. They use the processor, nothing shows.

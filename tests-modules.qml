@@ -9,7 +9,10 @@ import qs.tests
 // the shell's own module host (the Modules singleton's, so the core's registries see the
 // modules as in the shell) — exactly as the shell loads them — then creates each loaded module's suites (its
 // manifest's "tests") by URL. A module that did not load, one that lists no suites and a
-// suite that does not compile are FAILs. Imports qs.tests so that Quickshell makes the
+// suite that does not compile are FAILs. With H2S_TEST_MODULE_SUITES (suite file names without
+// ".qml", colon-separated: tests/run-modules.sh --suite) only those suites are created; a
+// name that no module lists, all of them loaded, is printed as MODULE-SUITES-UNKNOWN and
+// nothing is created. Imports qs.tests so that Quickshell makes the
 // TestCase type available to the modules' suites (they are loaded by URL).
 QtObject {
     id: root
@@ -32,9 +35,16 @@ QtObject {
         console.error("  FAIL: " + message);
     }
 
+    // A suite's name for the selection: its file without the directory and ".qml"
+    function suiteNameOf(file) {
+        return String(file).replace(/^.*\//, "").replace(/\.qml$/, "");
+    }
+
     function _runSuites() {
         console.log("\n=== modules ===");
-        const runnable = [];
+        const value = Quickshell.env("H2S_TEST_MODULE_SUITES");
+        const selected = typeof value === "string" && value !== "" ? value.split(":") : [];
+        let runnable = [];
         for (const status of host.statuses) {
             const label = (status.id || "?") + " (" + status.directory + ")";
             if (status.state !== "loaded") {
@@ -49,6 +59,16 @@ QtObject {
                 _fail("module " + label + " lists no test suites (\"tests\" in its module.json)");
             for (const test of tests)
                 runnable.push({ module: status.id, url: ModuleRules.fileUrl(status.directory, test), file: test });
+        }
+        if (selected.length > 0) {
+            runnable = runnable.filter(entry => selected.includes(suiteNameOf(entry.file)));
+            // Only when every module loaded: a module that did not load is a failure of its
+            // own, not a wrong name
+            const unknown = selected.filter(name => !runnable.some(entry => suiteNameOf(entry.file) === name));
+            if (unknown.length > 0 && host.statuses.every(status => status.state === "loaded")) {
+                console.log("MODULE-SUITES-UNKNOWN: " + unknown.join(" "));
+                runnable = [];
+            }
         }
         console.log("MODULE-SUITES-EXPECTED: " + runnable.length);
         const suites = [];

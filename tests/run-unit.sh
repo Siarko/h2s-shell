@@ -3,8 +3,16 @@
 # on the screen: PointerInputTest and LockViewTest open a small window, and in the real
 # session it would appear there, under your pointer.
 #
-#   tests/run-unit.sh            the suites of this checkout
-#   tests/run-unit.sh <log>      the output also saved to <log>
+#   tests/run-unit.sh                            every suite tests.qml registers
+#   tests/run-unit.sh FormatTest LockRulesTest   only the named ones (a suite is named by its
+#                                                type, the file in tests/ without ".qml")
+#   tests/run-unit.sh --log <file> [<suite>…]    the output also saved to <file>
+#
+# A named suite brings the suites tests.qml gives it (ModuleRegistriesTest is given
+# ModulesTest and VpnProvidersTest and waits for them): they run and are counted too. The
+# names reach tests/TestCase.qml as H2S_TEST_SUITES; every suite is still built, the others
+# do not run. A suite is found there by its suiteName followed by "Test", so that is what its
+# file is called.
 #
 # The isolation (a headless labwc in a private runtime dir, D-Bus addresses that lead
 # nowhere, a private HOME and XDG directories, no new privileges) and the verdict are
@@ -12,21 +20,47 @@
 #
 # Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, a
 # TypeError / ReferenceError was printed, Quickshell exited non-zero (a crash after a
-# partial summary included) or fewer suites reported than tests.qml registers, 2 when the
-# runner could not be set up.
+# partial summary included) or fewer suites reported than tests.qml registers — with names:
+# a named or needed suite did not report, or another one did —, 2 when the runner could not
+# be set up or a name is not a suite of tests.qml (nothing runs then).
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 # shellcheck disable=SC2034  # read by tests/headless.sh
 HEADLESS_NAME=run-unit.sh
-# shellcheck source=headless.sh
-source "$REPO/tests/headless.sh"
 # shellcheck source=count-suites.sh
 source "$REPO/tests/count-suites.sh"
 
+output_copy=""
+if [ "${1:-}" = --log ]; then
+    output_copy=${2:-}
+    [ -n "$output_copy" ] || { echo "run-unit.sh: --log needs a file" >&2; exit 2; }
+    shift 2
+fi
+case "${1:-}" in -*) echo "usage: tests/run-unit.sh [--log <file>] [<suite>…]" >&2; exit 2 ;; esac
+
+# Before anything is started: a name tests.qml does not register must not end as a pass
+selected=()
+if [ $# -gt 0 ]; then
+    unknown=$(suites_with_needed "$REPO/tests.qml" "$@" 2>&1 > /dev/null) || {
+        echo "run-unit.sh: no suite named '$unknown' in tests.qml (a suite is named by its type: FormatTest); nothing was run" >&2
+        exit 2
+    }
+    mapfile -t selected < <(suites_with_needed "$REPO/tests.qml" "$@")
+    [ ${#selected[@]} -gt 0 ] || { echo "run-unit.sh: no suite named; nothing was run" >&2; exit 2; }
+    echo "run-unit.sh: running ${selected[*]}"
+fi
+
+# shellcheck source=headless.sh
+source "$REPO/tests/headless.sh"
 headless_setup
-headless_run "$REPO/tests.qml" "${1:-}"
-# Every suite tests.qml registers (`property var _name: SomethingTest {…}`) must report
-expected=$(count_suites "$REPO/tests.qml")
-headless_verdict "Unit suites" "$expected" "in tests.qml"
+if [ ${#selected[@]} -gt 0 ]; then
+    headless_run "$REPO/tests.qml" "$output_copy" H2S_TEST_SUITES="$(IFS=:; echo "${selected[*]}")"
+    # Exactly the selected suites must report, under the names TestCase gives them
+    headless_verdict "Unit suites" ${#selected[@]} "selected" exactly "${selected[@]%Test}"
+else
+    headless_run "$REPO/tests.qml" "$output_copy"
+    # Every suite tests.qml registers (`property var _name: SomethingTest {…}`) must report
+    headless_verdict "Unit suites" "$(count_suites "$REPO/tests.qml")" "in tests.qml"
+fi
 exit $?

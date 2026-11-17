@@ -15,13 +15,16 @@
 #                                          Quickshell on that root file, with those variables
 #                                          added; its output printed (and copied to <copy>
 #                                          unless ""); HEADLESS_LOG, HEADLESS_STATUS set
-#   headless_verdict <title> <expected> <where>
+#   headless_verdict <title> <expected> <where> [exactly [<suite name>…]]
 #                                          the summary; returns 1 on any FAIL line, a
 #                                          TypeError / ReferenceError, a non-zero exit of
 #                                          Quickshell (a crash after a partial summary
 #                                          included), a time-out, or fewer suites reporting
 #                                          than <expected> (<where> says where they are
-#                                          registered); 0 otherwise
+#                                          registered, or "selected"); with `exactly` (a
+#                                          selection was run) also on more suites reporting
+#                                          than <expected>, and on a named suite (TestCase's
+#                                          suiteName) not reporting; 0 otherwise
 
 LOCKTEST_DIR=$REPO/tests/lock
 # Read by resolve.sh
@@ -83,7 +86,8 @@ headless_run() {
 }
 
 headless_verdict() {
-    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 summary fails errors reported
+    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 summary fails errors reported name
+    shift 3
     summary=$(grep -E -- '^.*--- .*: [0-9]+/[0-9]+ passed' "$HEADLESS_LOG" | sed 's/^.*--- /--- /')
     fails=$(grep -c -E '  FAIL: ' "$HEADLESS_LOG")
     errors=$(grep -c -E 'TypeError|ReferenceError' "$HEADLESS_LOG")
@@ -98,6 +102,15 @@ headless_verdict() {
     [ "$status" != 0 ] && [ "$status" != 124 ] && { echo "  quickshell exited with status $status"; failed=1; }
     reported=$(printf '%s\n' "$summary" | grep -c -- '^--- ')
     [ "$reported" -lt "$expected" ] && { echo "  only $reported of the $expected suites $where reported"; failed=1; }
+    # A selection: each of its suites, and no other. A suite left out by mistake and one run
+    # by mistake are both a wrong answer to "run these"
+    if [ "${1:-}" = exactly ]; then
+        shift
+        [ "$reported" -gt "$expected" ] && { echo "  $reported suites reported, $expected were $where"; failed=1; }
+        for name in "$@"; do
+            printf '%s\n' "$summary" | grep -q -F -- "--- $name: " || { echo "  $name did not report"; failed=1; }
+        done
+    fi
     [ -n "$summary" ] || { echo "  no suite reported: quickshell did not run them"; failed=1; }
     return $failed
 }
