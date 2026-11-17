@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.api
 import qs.singletons
 
@@ -8,6 +9,21 @@ import qs.singletons
 // may throw.
 TestCase {
     suiteName: "ModuleRules"
+
+    property var _changelog: FileView {
+        path: Qt.resolvedUrl("../CHANGELOG.md")
+        blockLoading: true
+    }
+
+    // The newest "- 1.x:" line under the first "### Module API" of a changelog's text, "" for
+    // none
+    function _newestApiLine(text) {
+        const start = String(text).indexOf("\n### Module API\n");
+        if (start < 0)
+            return "";
+        const section = String(text).slice(start + 1).split(/\n##+ /)[0];
+        return /^- (\d+\.\d+):/m.exec(section)?.[1] ?? "";
+    }
 
     function _manifest(fields) {
         return JSON.stringify(Object.assign({ id: "tailscale", name: "Tailscale", version: "0.1.0", api: "1.0" }, fields ?? {}));
@@ -21,7 +37,9 @@ TestCase {
         const rules = ModuleRules;
 
         // --- the API version ---
-        assertEqual(Api.version, "1.3", "the module API is 1.3 (api/Api.qml)");
+        assertEqual(_newestApiLine("# C\n\n### Module API\nText\n- 1.7: b\n- 1.6: a\n\n### Added\n- 2.0: no\n"), "1.7", "a changelog's newest API line is the first under \"Module API\"");
+        assertEqual(_newestApiLine("# C\n\n### Module API\nText\n\n### Added\n- 2.0: no\n"), "", "… none there: none, not a line of another section");
+        assertEqual(Api.version, _newestApiLine(_changelog.text()), "the module API's version is the newest \"- 1.x:\" line under \"Module API\" in CHANGELOG.md");
         assert(rules.parseApi(Api.version) !== null, "the shell's API version is major.minor");
         assert(rules.apiCompatibility("1.0", "1.0").compatible, "same version: compatible");
         assert(rules.apiCompatibility("1.0", "1.3").compatible, "an older minor on a newer shell: compatible");
@@ -33,6 +51,27 @@ TestCase {
         for (const bad of ["1", "1.0.0", "v1.0", " 1.0", "1.0 ", "01.0", "1.-1", "", null, undefined, 1.0, {}, [], "1.0\n"])
             assert(!rules.apiCompatibility(bad, "1.0").compatible, "not major.minor: incompatible — " + JSON.stringify(bad));
         assert(rules.parseApi("10.25").major === 10 && rules.parseApi("10.25").minor === 25, "two-digit parts");
+
+        // --- the floor: the oldest API version whose modules still run unchanged ---
+        const floor = rules.parseApi(rules.apiFloor);
+        const offered = rules.parseApi(rules.apiVersion);
+        assert(floor !== null && offered !== null && floor.major === offered.major && floor.minor <= offered.minor,
+               "the shell's floor is major.minor, of the shell's major and not above its version");
+        assert(rules.apiCompatibility(rules.apiVersion, rules.apiVersion).compatible, "a module written for this shell's version runs on it");
+        assert(rules.apiCompatibility(rules.apiFloor, rules.apiVersion).compatible, "… and one written for its floor");
+        assert(rules.apiCompatibility("1.26", "1.27", "1.26").compatible, "at the floor: compatible");
+        assert(rules.apiCompatibility("1.27", "1.27", "1.26").compatible, "between the floor and the shell's: compatible");
+        const below = rules.apiCompatibility("1.3", "1.27", "1.26");
+        assert(!below.compatible, "below the floor: not");
+        assertEqual(below.reason, "written for module API 1.3; this shell needs 1.26 or newer (the module needs updating)", "… and it says what the shell needs");
+        assert(!rules.apiCompatibility("1.25", "1.27", "1.26").compatible, "one minor below the floor: not");
+        assert(_has([rules.apiCompatibility("1.28", "1.27", "1.26").reason], "newer shell"), "above the shell's, with a floor: a newer shell is needed");
+        assert(_has([rules.apiCompatibility("0.9", "1.27", "1.26").reason], "the shell has 1.27"), "another major, with a floor: the major's reason");
+        assertEqual(rules.apiCompatibility("1.0", "1.3", rules.apiFloor).compatible, rules.apiCompatibility("1.0", "1.3").compatible, "no floor given: the shell's own");
+        for (const bad of ["1", "", null, {}, "1.x", 1.0])
+            assert(!rules.apiCompatibility("1.3", "1.3", bad).compatible && _has([rules.apiCompatibility("1.3", "1.3", bad).reason], "floor"),
+                   "a floor that is not major.minor lets nothing through — " + JSON.stringify(bad));
+        assert(!rules.apiCompatibility("1.3", "1.3", "2.0").compatible, "a floor of a later major: nothing below it runs");
 
         // --- a realistic manifest ---
         const tailscale = ModuleManifestRules.parseManifest(JSON.stringify({
@@ -329,8 +368,14 @@ TestCase {
         assertEqual(ModuleMergeRules.statusOf({ manifest: tailscale, state: "loaded" }).setupHints.length, 0, "… not otherwise");
         assertEqual(ModuleMergeRules.statusOf(null).state, "failed", "a status of nothing: failed, no throw");
         assertEqual(Object.keys(status).sort().join(","),
-                    "api,description,directory,enabled,errors,id,missingPrograms,name,setupHints,shadowedBy,state,version,warnings",
+                    "api,deprecations,description,directory,enabled,errors,id,missingPrograms,name,setupHints,shadowedBy,state,version,warnings",
                     "a status holds exactly these fields (plain data)");
+        assertEqual(status.deprecations.length, 0, "a status of a module that uses no old way: no deprecations");
+        const oldWays = [rules.deprecation("slots", "`anchors`")];
+        const deprecated = ModuleMergeRules.statusOf({ manifest: tailscale, state: "loaded", warnings: [], deprecations: oldWays });
+        assertEqual(deprecated.deprecations.join("|"), "slots: use `anchors` (goes with the shell's next tightening)", "the old ways a module uses are listed in its status");
+        assert(deprecated.deprecations !== oldWays, "… as a copy");
+        assertEqual(deprecated.warnings.length, 0, "… and are no warnings");
 
         // --- merging ---
         const zeta = ModuleManifestRules.parseManifest(JSON.stringify({ id: "zeta", name: "Z", version: "1", api: "1.0",

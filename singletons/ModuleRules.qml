@@ -33,10 +33,24 @@ Singleton {
 
     // The module API this shell offers, "major.minor" — published as Api.version (qs.api).
     // Kept here, not in api/, so that the host (qs.singletons) never imports qs.api: qs.api
-    // imports qs.singletons, and the two importing each other would be a cycle. Adding to
-    // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
-    // anything bumps the major. notes/plans/modules.md, "Module API 1.0", is the surface.
+    // imports qs.singletons, and the two importing each other would be a cycle.
+    // notes/plans/modules.md, "Module API 1.0", is the surface.
+    //
+    // THE VERSION RULE. Every change to the API bumps the minor once and has one "- 1.x:"
+    // line under "Module API" in CHANGELOG.md (tests/ModuleRulesTest.qml compares the newest
+    // with this number); what a change refuses or removes is named there after "Tightened:".
+    // Until the first release announced as open to module authors a minor may also remove
+    // things: the old way keeps working while it is listed among a module's `deprecations`
+    // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
+    // minor only adds: a removal needs a major version, after at least one release in which
+    // the thing was listed as deprecated.
     readonly property string apiVersion: "1.3"
+
+    // The oldest API version whose modules still run unchanged on this shell: a module
+    // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
+    // tightening is never silent. Never the version that removes something — a module cannot
+    // ask for a version no shell has yet — but the last one that only added.
+    readonly property string apiFloor: "1.0"
 
     // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
     //
@@ -105,7 +119,8 @@ Singleton {
     //   loaded           running: its main (if any) was created, its contributions count
     //   disabled         turned off in Settings → Modules (Config.disabledModules)
     //   failed           its manifest is unusable, or its main could not be created
-    //   incompatible     written for another module API
+    //   incompatible     written for another module API: another major, a newer minor than
+    //                    the shell's, or one below the shell's floor (apiFloor)
     //   missing-program  a program in requires.programs is not on PATH
     //   duplicate        another module with the same id came first (search-path order)
     //   pending          waiting for the check of its required programs
@@ -157,21 +172,38 @@ Singleton {
         return match ? { major: Number(match[1]), minor: Number(match[2]) } : null;
     }
 
-    // Whether a module asking for API `wanted` runs on a shell with API `shell`
+    // Whether a module asking for API `wanted` runs on a shell with API `shell` whose floor
+    // is `floor` (not given: `apiFloor`): the same major, and floor ≤ wanted ≤ shell
     // → { compatible, reason }
-    function apiCompatibility(wanted, shell) {
+    function apiCompatibility(wanted, shell, floor) {
+        const oldest = floor === undefined ? apiFloor : floor;
         const module = parseApi(wanted);
         const have = parseApi(shell);
+        const least = parseApi(oldest);
         if (!module)
             return { compatible: false, reason: "its API version " + show(wanted) + " is not \"major.minor\"" };
         if (!have)
             return { compatible: false, reason: "the shell's API version " + show(shell) + " is not \"major.minor\"" };
+        // A floor that cannot be read lets nothing through: it is what keeps a module off
+        // things this shell no longer has
+        if (!least)
+            return { compatible: false, reason: "the shell's API floor " + show(oldest) + " is not \"major.minor\"" };
         if (module.major !== have.major)
             return { compatible: false, reason: "written for module API " + wanted + "; the shell has " + shell
                      + (module.major > have.major ? " (a newer shell is needed)" : " (the module needs updating)") };
         if (module.minor > have.minor)
             return { compatible: false, reason: "needs module API " + wanted + "; the shell has " + shell + " (a newer shell is needed)" };
+        if (least.major > module.major || (least.major === module.major && least.minor > module.minor))
+            return { compatible: false, reason: "written for module API " + wanted + "; this shell needs " + oldest
+                     + " or newer (the module needs updating)" };
         return { compatible: true, reason: "" };
+    }
+
+    // One line of a module's `deprecations` (statusOf): an old way the module still uses and
+    // what replaces it — "slots: use `anchors` (goes with the shell's next tightening)".
+    // Listed, never a warning: a module's warnings stay empty while it only uses old ways.
+    function deprecation(what, use) {
+        return String(what) + ": use " + String(use) + " (goes with the shell's next tightening)";
     }
 
     // ---- Api.openUrl ----

@@ -10,9 +10,18 @@ import qs.singletons.network
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
 //   Api.version            "1.3" — this shell's module API, "major.minor". A module's manifest
-//                          asks for one ("api"); it loads when the major is the same and this
-//                          minor is at least the one asked for. Adding anything bumps the minor;
-//                          changing or removing anything bumps the major.
+//                          asks for one ("api"); it loads when the major is the same, this
+//                          minor is at least the one asked for, and the one asked for is not
+//                          below the shell's floor (ModuleRules.apiFloor: the oldest version
+//                          whose modules still run unchanged). Every change bumps the minor
+//                          and has its "- 1.x:" line under "Module API" in CHANGELOG.md.
+//                          Until the first release announced as open to module authors a
+//                          minor may also remove things: the old way keeps working while it
+//                          is listed in the module's status (`deprecations`, in `modules
+//                          list`), then goes in a change that raises the floor — a module
+//                          below it does not load, and says why. From that release on a
+//                          removal needs a major version, after at least one release that
+//                          listed the thing as deprecated.
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
 //   Api.slots              the slots the core offers: [{ name, where, context, since }]
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null

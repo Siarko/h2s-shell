@@ -16,7 +16,8 @@ import QtQuick
 //   version       required. The module's own version, ^[0-9A-Za-z][0-9A-Za-z.+~-]{0,63}$
 //                 (semver recommended, not enforced).
 //   api           required. The module API it is written for, "major.minor" (Api.version):
-//                 compatible when the major is the shell's and the minor not above it.
+//                 compatible when the major is the shell's and the minor neither above the
+//                 shell's nor below its floor (ModuleRules.apiFloor).
 //   description   optional string.
 //   main          optional. A .qml file the host creates once the module is enabled: its
 //                 IPC handlers, its facts, its long-lived objects. A module of widgets only

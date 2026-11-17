@@ -128,6 +128,8 @@ Singleton {
 
     // One module's status, as the host keeps it and `qs ipc call modules list` prints it.
     // Every field plain data; nothing the module itself computed (no secrets).
+    // `deprecations`: the old ways of the API the module still uses, one line each
+    // (ModuleRules.deprecation) — they work, and go with the shell's next tightening.
     function statusOf(record) {
         const manifest = record?.manifest ?? null;
         const state = typeof record?.state === "string" ? record.state : "failed";
@@ -142,6 +144,7 @@ Singleton {
             enabled: record?.enabled !== false,
             errors: (record?.errors ?? []).slice(),
             warnings: (record?.warnings ?? []).slice(),
+            deprecations: (record?.deprecations ?? []).slice(),
             missingPrograms: (record?.missingPrograms ?? []).slice(),
             setupHints: state === "missing-program" ? (manifest?.setupHints ?? []).slice() : [],
             shadowedBy: record?.shadowedBy ?? ""

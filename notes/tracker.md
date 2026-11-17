@@ -14,8 +14,9 @@ machine. How sessions work is in [workflow.md](workflow.md).
 
 State on 2026-11-17, end of the session on the Arch machine. One topic at a time from here
 (the owner). The test split is done; the next topic is the API plan's implementation
-(index [plans/api-next.md](plans/api-next.md)): first the theme token test, the
-`ModuleRules.qml` split, the file chooser trial, then the bordered buttons.
+(index [plans/api-next.md](plans/api-next.md)): the theme token test, the
+`ModuleRules.qml` split and the version gate are done on branch `api-batch-1` (below);
+next the file chooser trial, then the bordered buttons.
 
 - [x] **Test split** ([plans/test-split.md](plans/test-split.md)): done — a general set
       that runs on NixOS and on Arch, a set per system (`tests/run-system.sh`), and one
@@ -23,10 +24,47 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
 - [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
       nix tool lookup is remembered; the whole lock bed takes about three minutes on either
       machine.
+- [ ] **API plan, first batch**: done on branch `api-batch-1` (three commits, not merged,
+      not reviewed): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
+      `ModuleRules.qml` split into five files (S0, a pure move), and the version gate (A0:
+      `ModuleRules.apiFloor`, `apiCompatibility` with the floor, `deprecations` in a
+      module's status, the CHANGELOG ↔ `apiVersion` test). Run on the Arch machine only
+      (system tools, not pinned); not run on the NixOS machine. Next per the index: the
+      file chooser trial (E0), then the lanes that S0 and A0 open — the command runner
+      (A1), the shared module object (B1), helpers (C1), the anchor rules (U0), a module's
+      icon (U7a) — and, with no dependency, pills in three sizes (T1) and the bordered
+      buttons (F1a). Left open by this batch:
+  - `deprecations` is in the status (`ModuleMergeRules.statusOf`) and the wording is
+    `ModuleRules.deprecation(what, use)`, but the host passes none yet: nothing is
+    deprecated before F4 and P2. The first of those adds `record.deprecations` in
+    `ModuleHost.qml` with its test. There is no Settings → Modules page to show the list
+    on; `modules list` prints it.
+  - S0 followed `versioning.md` ("the pure split, nothing else; `ModuleRulesTest`
+    unchanged"), not the two extras of `architecture-cleanup.md` §2.1: the suite is still
+    one file (only its qualifiers changed), and the tokenizer cases named there (template
+    strings, `"` inside `'…'`, `//` in a string, a `/` that divides) are not added.
+  - S0 made the shared readers public as the plan says (`isObject`, `isString`, `has`,
+    `get`, `show`), and `isNumber` with them: `ModuleRules.settingValueProblem` and the
+    manifest check both use it, so it could not stay private to one file.
+  - The plans and notes still name the functions by their old home
+    (`ModuleRules.statusOf`, `ModuleRules.allowedImports`, `ModuleRules.precedence`, …):
+    they are in `ModuleMergeRules`, `ModuleSourceRules`, `ModuleManifestRules` and
+    `ModuleFileRules` now. Slice rows that say "`ModuleRules` (import check)" mean
+    `ModuleSourceRules`.
+  - A floor of another major than the shell's is not designed (the plan has no 2.0): the
+    rule compares major then minor, so a floor above the shell's version lets nothing
+    load. `ModuleRulesTest` asserts that the floor is of the shell's major and not above
+    its version.
+  - Seen, not touched: the unit run logs "[NetworkEvents] nmcli monitor exited,
+    restarting in 1000 ms" — the unit suites start `nmcli monitor` (it exits at once in
+    the private session). Worth a look against the rule that tests never touch a real
+    daemon.
+  - Seen, not touched: `api/ThemeTokens.qml`'s header says "Part of the module API 1.0";
+    the list is now pinned by the test, the header does not say so.
 - [ ] **API plan**: approved by the owner on 2026-11-17.
       [plans/api-next.md](plans/api-next.md) is the index with the slice list (48 slices);
       one file per area is under `plans/api-next/`. A brief for a slice names the index and
-      the slice's area file, nothing more. Implementation is next; first slices: the theme token test, the `ModuleRules.qml` split, the file
+      the slice's area file, nothing more. Implementation has started (the first batch, above); next slices: the file
       chooser trial, then the bordered buttons. Not yet done: a short independent review
       of what changed after the last one (button kinds, icons, the password queue, a
       module's own elements) — fold it into the review of the first slices of each area.

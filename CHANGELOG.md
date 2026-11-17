@@ -349,6 +349,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Modules: a module written for a module API older than the oldest this shell still runs
+  unchanged (its floor, today 1.0) is listed as incompatible, with the version the shell
+  needs. A module's status (`modules list`) gains `deprecations`: the old ways of the API it
+  still uses. Until the shell is announced as open to module authors a minor version of the
+  API may remove things that were listed there; after that only a major one.
 - Only through the VPN: Tailscale's `tailscale*` interfaces are no longer let out as virtual
   interfaces (a tailnet reaches the internet through exit nodes and subnet routers). The
   script is version 4 and records its version with the rules it loads: the VPN page offers

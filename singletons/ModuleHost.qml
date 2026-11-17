@@ -73,7 +73,7 @@ Scope {
     property var ignoredEntries: []
     // One status per directory, in search order (ModuleMergeRules.statusOf):
     // { id, name, version, api, description, directory, state, enabled, errors, warnings,
-    //   missingPrograms, setupHints, shadowedBy }
+    //   deprecations, missingPrograms, setupHints, shadowedBy }
     property var statuses: []
     // The loaded modules' contributions, merged (ModuleMergeRules.merge): what the core's
     // registries read. Every file an absolute file:// URL; every entry has `module`.
