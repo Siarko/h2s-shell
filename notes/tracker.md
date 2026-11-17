@@ -37,18 +37,14 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
       `tests/headless.sh`; correct "about 15 minutes" (it is 4–5) here and in `CLAUDE.md`.
       Until then: on Arch no flock for unit, module and self-test runs; iterate on Arch with
       named suites; the NixOS machine only for the final pass and the lock bed.
-- [ ] **API plan** ([plans/api-next.md](plans/api-next.md)) is final on branch
-      `plan-api-next` (`036d35e`, working tree `h2s-shell-wt-plans`; it also carries the
-      owner's decisions of the day in this file's Decisions — merge it). Open: one more
-      decision to fold in (below), a short review of what changed since the independent
-      review (buttons, icons, the password queue, the slice list), then the owner's
-      approval. First slices: the `ModuleRules.qml` split, the file chooser trial, the
-      bordered buttons.
-- Decided after the plan's last commit (the owner, 2026-11-17), to fold into it: modules are
-  **not** kept from building their own elements. They use the public elements wherever
-  that is possible and makes sense, and the theme's colours always; building something the
-  API does not offer is fine. So importing the shell's internal elements stays the thing
-  to avoid, but "only public elements" is not a rule and not an error.
+- [ ] **API plan**: approved by the owner on 2026-11-17.
+      [plans/api-next.md](plans/api-next.md) is the index with the slice list (48 slices);
+      one file per area is under `plans/api-next/`. A brief for a slice names the index and
+      the slice's area file, nothing more. Implementation starts after the test split is
+      closed; first slices: the theme token test, the `ModuleRules.qml` split, the file
+      chooser trial, then the bordered buttons. Not yet done: a short independent review
+      of what changed after the last one (button kinds, icons, the password queue, a
+      module's own elements) — fold it into the review of the first slices of each area.
 
 How to run a session cheaply (the owner asked; this session used most of its budget): one
 topic at a time; collect the owner's answers and hand them to an agent in one go; a fresh
@@ -144,7 +140,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
     - [ ] the release that says so; from it a removal from the module API needs a major
           version
 
-What steps 3–6 must leave possible for 13–15 is in [plans/api-next.md](plans/api-next.md), §11 "Doors to keep open".
+What steps 3–6 must leave possible for 13–15 is in [plans/api-next/versioning.md](plans/api-next/versioning.md), §11 "Doors to keep open".
 
 Later:
 - pttd (dictation) as its own module in its own repository (was TODO 11.24); until then
