@@ -44,12 +44,23 @@ probe=""
 work=""
 
 headless_cleanup() {
+    # A second interrupt while this runs must not end it half-way, with the compositor,
+    # Quickshell and the temp dir left behind
+    trap '' INT TERM HUP
     # Quickshell, when the run is ended while it runs: `timeout` hands TERM on to it; what
-    # is left of the two after a moment is killed (timeout leads a process group of its own)
+    # is left of the two after a moment is killed. The group: timeout leads a process group
+    # of its own, named after its pid, and that number stays ours while anything is in the
+    # group — what outlives timeout there is killed too. timeout itself only when it is
+    # still there: once it is gone its pid names nothing of ours.
     if [ -n "${quickshell_pid:-}" ]; then
+        local quickshell_gone=""
         kill -TERM "$quickshell_pid" 2> /dev/null
-        for _ in $(seq 1 20); do kill -0 "$quickshell_pid" 2> /dev/null || break; sleep 0.1; done
-        kill -KILL -- "-$quickshell_pid" "$quickshell_pid" 2> /dev/null
+        for _ in $(seq 1 20); do
+            kill -0 "$quickshell_pid" 2> /dev/null || { quickshell_gone=1; break; }
+            sleep 0.1
+        done
+        kill -KILL -- "-$quickshell_pid" 2> /dev/null
+        [ -n "$quickshell_gone" ] || kill -KILL "$quickshell_pid" 2> /dev/null
     fi
     [ -n "${labwc_pid:-}" ] && { kill -TERM -- "-$labwc_pid" 2> /dev/null; sleep 0.3; kill -KILL -- "-$labwc_pid" 2> /dev/null; }
     [ -n "$probe" ] && rm -rf "$probe"

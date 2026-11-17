@@ -32,6 +32,14 @@
 # (`unbalanced`: said, not counted short), and every suite's suiteName against its file name
 # (`names`: a named suite is found by its suiteName followed by "Test").
 #
+# and how the runner ends:
+#
+#   unreadable          a tests.qml like `unbalanced`: status 2, nothing started
+#   interrupted         told to end while Quickshell runs: status 130 at once, no
+#                       process and no temp dir left
+#   interrupted-twice   a Quickshell that ignores the request, and a second interrupt
+#                       during the cleanup: the same
+#
 #   flock /tmp/h2s-locktest.flock tests/run-unit-selftest.sh
 #
 # Each case starts the runner's private headless compositor (nothing shows); no shell runs
@@ -231,10 +239,27 @@ check module-unknown "no suite ran" reports_nothing module-unknown.log
 chmod +x "$work/module-extra"
 verdict module-extra module-extra 1 --suite GoodStateTest "$good"
 
+# unreadable: a tests.qml whose suites cannot be read reliably (the `unbalanced` file) ends
+# the runner with status 2 before anything is started, with and without a name. The runner
+# takes its tree from where it is, so a copy of it beside that file reads that file (and
+# has no headless.sh to start anything with).
+mkdir -p "$work/tree/tests"
+cp "$REPO/tests/run-unit.sh" "$REPO/tests/count-suites.sh" "$work/tree/tests/"
+cp "$work/unbalanced.qml" "$work/tree/tests.qml"
+refuses_unreadable() {
+    "$work/tree/tests/run-unit.sh" "$@" > "$work/unreadable.log" 2>&1
+    [ $? = 2 ] && grep -q "^run-unit.sh: cannot read the suites of tests.qml: .*nothing was run" "$work/unreadable.log" \
+        && [ "$(grep -c . "$work/unreadable.log")" = 1 ]
+}
+check unreadable "run-unit.sh exited 2 and said why, nothing else" refuses_unreadable
+check unreadable "… with a suite named too" refuses_unreadable FirstTest
+
 # interrupted: the runner is told to end while Quickshell runs (a stand-in that never
 # ends). It ends at once with status 130 and leaves nothing: not Quickshell, not the
 # compositor, not its temp dir. TERM stands for an interrupt here: a command a script starts
 # in the background ignores INT.
+# interrupted-twice: a Quickshell that does not end when told to (TERM ignored), and a
+# second interrupt while the runner is stopping it: the runner still leaves nothing.
 {
     echo "#!$(command -v bash)"
     # Asked for its version (the runner's first lines), it only ends
@@ -242,41 +267,86 @@ verdict module-extra module-extra 1 --suite GoodStateTest "$good"
     echo "echo \"\$XDG_RUNTIME_DIR\" > '$work/sleeper.started'"
     echo "exec sleep 200"
 } > "$work/sleeper"
-chmod +x "$work/sleeper"
-LOCKTEST_QS=$work/sleeper "$REPO/tests/run-unit.sh" > "$work/interrupted.log" 2>&1 &
-runner_pid=$!
-for _ in $(seq 1 1200); do
-    [ -s "$work/sleeper.started" ] && break
-    kill -0 "$runner_pid" 2> /dev/null || break
-    sleep 0.1
-done
-# The runner's own processes, and theirs (timeout, and the compositor or Quickshell under it)
+{
+    echo "#!$(command -v bash)"
+    echo '[ "${1:-}" = --version ] && exit 0'
+    # Says when it was told to end, which is when the runner has begun to clean up
+    echo "trap \"echo told > '$work/stubborn.told'\" TERM"
+    echo "(trap '' TERM; exec sleep 200) &"
+    echo "echo \"\$XDG_RUNTIME_DIR\" > '$work/stubborn.started'"
+    echo 'while kill -0 $! 2> /dev/null; do wait; done'
+} > "$work/stubborn"
+chmod +x "$work/sleeper" "$work/stubborn"
+
+runner_pid=""
 runner_processes=()
-for child in $(pgrep -P "$runner_pid"); do
-    runner_processes+=("$child")
-    for grandchild in $(pgrep -P "$child"); do runner_processes+=("$grandchild"); done
-done
-runner_dir=$(dirname "$(cat "$work/sleeper.started" 2> /dev/null)")
-check interrupted "Quickshell was running, in the runner's temp dir" test -d "$runner_dir" -a "$runner_dir" != .
-check interrupted "the compositor and Quickshell are the runner's processes" test "${#runner_processes[@]}" -ge 4
-kill -TERM "$runner_pid" 2> /dev/null
-interrupted_at=$SECONDS
-for _ in $(seq 1 100); do kill -0 "$runner_pid" 2> /dev/null || break; sleep 0.1; done
-if kill -0 "$runner_pid" 2> /dev/null; then
-    echo "FAIL interrupted: run-unit.sh still runs $((SECONDS - interrupted_at)) s after the interrupt"
-    failures=$((failures + 1))
-    kill -KILL "$runner_pid" "${runner_processes[@]}" 2> /dev/null
-    wait "$runner_pid" 2> /dev/null
-    [ "$runner_dir" != . ] && rm -rf "$runner_dir"
-else
-    wait "$runner_pid"
-    check interrupted "run-unit.sh exited 130" test $? = 130
-    none_left() {
-        local process
-        for process in "${runner_processes[@]}"; do kill -0 "$process" 2> /dev/null && return 1; done
-        return 0
-    }
-    check interrupted "none of its processes is left" none_left
-    check interrupted "its temp dir is gone" test ! -e "$runner_dir"
-fi
+runner_dir=""
+# descendants <pid>: its children and theirs, to any depth
+descendants() {
+    local child
+    for child in $(pgrep -P "$1"); do
+        echo "$child"
+        descendants "$child"
+    done
+}
+none_left() {
+    local process
+    for process in "${runner_processes[@]}"; do kill -0 "$process" 2> /dev/null && return 1; done
+    return 0
+}
+# Whatever of a case's runner is still there, and its temp dir: after the case, and when
+# this script is ended in the middle of one. The runner is asked first — it stops what it
+# started, also what was not written down here yet — then the pids written down are killed.
+stop_runner() {
+    local process
+    if [ -n "$runner_pid" ] && kill -TERM "$runner_pid" 2> /dev/null; then
+        for _ in $(seq 1 50); do kill -0 "$runner_pid" 2> /dev/null || break; sleep 0.1; done
+    fi
+    for process in $runner_pid "${runner_processes[@]}"; do
+        kill -0 "$process" 2> /dev/null && kill -KILL "$process" 2> /dev/null
+    done
+    [ -n "$runner_pid" ] && wait "$runner_pid" 2> /dev/null
+    case "$runner_dir" in /tmp/ut.*) rm -rf "$runner_dir" ;; esac
+    runner_pid=""
+    runner_processes=()
+    runner_dir=""
+}
+trap 'trap "" INT TERM HUP; stop_runner; rm -rf "$work"' EXIT
+
+# interrupt <case> <stand-in> <processes it makes the runner have> [twice]
+interrupt() {
+    local name=$1 quickshell=$2 expected_processes=$3 twice=${4:-} status
+    LOCKTEST_QS=$work/$quickshell "$REPO/tests/run-unit.sh" > "$work/$name.log" 2>&1 &
+    runner_pid=$!
+    for _ in $(seq 1 1200); do
+        [ -s "$work/$quickshell.started" ] && break
+        kill -0 "$runner_pid" 2> /dev/null || break
+        sleep 0.1
+    done
+    # timeout and the compositor, timeout and Quickshell (and what Quickshell started)
+    mapfile -t runner_processes < <(descendants "$runner_pid")
+    runner_dir=$(dirname "$(cat "$work/$quickshell.started" 2> /dev/null)")
+    check "$name" "Quickshell was running, in the runner's temp dir" test -d "$runner_dir" -a "$runner_dir" != .
+    check "$name" "the compositor and Quickshell are the runner's processes" test "${#runner_processes[@]}" -ge "$expected_processes"
+    kill -TERM "$runner_pid" 2> /dev/null
+    if [ -n "$twice" ]; then
+        for _ in $(seq 1 100); do [ -s "$work/$quickshell.told" ] && break; sleep 0.1; done
+        check "$name" "Quickshell was told to end: the runner is cleaning up" test -s "$work/$quickshell.told"
+        kill -TERM "$runner_pid" 2> /dev/null
+    fi
+    for _ in $(seq 1 100); do kill -0 "$runner_pid" 2> /dev/null || break; sleep 0.1; done
+    if kill -0 "$runner_pid" 2> /dev/null; then
+        echo "FAIL $name: run-unit.sh still runs 10 s after the interrupt"
+        failures=$((failures + 1))
+    else
+        wait "$runner_pid"
+        status=$?
+        check "$name" "run-unit.sh exited 130" test "$status" = 130
+        check "$name" "none of its processes is left" none_left
+        check "$name" "its temp dir is gone" test ! -e "$runner_dir"
+    fi
+    stop_runner
+}
+interrupt interrupted sleeper 4
+interrupt interrupted-twice stubborn 5 twice
 [ "$failures" = 0 ]
