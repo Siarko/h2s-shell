@@ -241,6 +241,15 @@ Found during the test split (2026-11-17):
       is too loose (any origin containing the repository's name, so a fork reads as
       "Already installed"); a target directory without `shell.qml` is left to `git clone`'s
       own error
+- [ ] The lock screen's password fallback, from the review of its probe (2026-11-17), all low:
+      the direct question's own branch (`test -e /etc/NIXOS`, `singletons/Lockscreen.qml`) is
+      never run live — `tests/lock/tests/fallback.sh` always names the system; add a stack
+      without `H2S_LOCK_SYSTEM` and an unrunnable script. A fallback taken at a failed
+      detection can be the unusable one when the right one arrives a moment later
+      (`singletons/LockRules.qml:914`; NixOS, shell restarted while locked, script not
+      runnable): replace it in `_settingsChanged` while no password conversation runs.
+      Neither probe has a time limit. The request numbering lives in the driver, untested:
+      a rules function with unit cases when next touched.
 
 ## Open points
 
