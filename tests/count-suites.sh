@@ -7,8 +7,13 @@
 #                                  given (`SomethingTest { after: _other }` prints
 #                                  "SomethingTest OtherTest"), whether its arguments are on
 #                                  that line or on the ones after it
-#   count_suites <root.qml>        how many it registers; a suite written with arguments
-#                                  counts as well
+#   count_suites <root.qml>        how many it registers: its registration lines, counted
+#                                  without reading what follows them; a suite written with
+#                                  arguments counts as well
+#   suites_agree <root.qml>        whether registered_suites found as many: it follows the
+#                                  braces of a suite written over several lines, and a brace
+#                                  in a string or a comment there can hide the suites after
+#                                  it. The runner does not start on a list it cannot trust
 #   suites_with_needed <root.qml> <suite>…
 #                                  those suites and every suite they are given, each once,
 #                                  one per line; returns 1 and prints the name on stderr for
@@ -16,10 +21,11 @@
 
 registered_suites() {
     awk '
-        # Every `_name` a text refers to (`after: _modules`), as " _name" words
+        # Every `_name` a text refers to (`after: _modules`, `after: root._modules`), as
+        # " _name" words
         function references(text,    found, word) {
             found = ""
-            while (match(text, /(^|[^A-Za-z0-9_.])_[A-Za-z0-9]+/)) {
+            while (match(text, /(^|[^A-Za-z0-9_])_[A-Za-z0-9]+/)) {
                 word = substr(text, RSTART, RLENGTH)
                 sub(/^[^_]/, "", word)
                 found = found " " word
@@ -68,7 +74,11 @@ registered_suites() {
 }
 
 count_suites() {
-    registered_suites "$1" | grep -c .
+    grep -c -E '^[[:space:]]*property var _[A-Za-z0-9]+: [A-Za-z0-9]+Test[[:space:]]*\{' "$1"
+}
+
+suites_agree() {
+    [ "$(registered_suites "$1" | grep -c .)" = "$(count_suites "$1")" ]
 }
 
 suites_with_needed() {
@@ -80,7 +90,6 @@ suites_with_needed() {
     while [ ${#queue[@]} -gt 0 ]; do
         name=${queue[0]}
         queue=("${queue[@]:1}")
-        [ -n "$name" ] || continue
         [ -n "${seen[$name]:-}" ] && continue
         known=0
         while read -r -a line; do
@@ -92,5 +101,6 @@ suites_with_needed() {
         seen[$name]=1
         result+=("$name")
     done
-    printf '%s\n' "${result[@]}"
+    # Nothing asked for, nothing printed: printf would print one empty line
+    [ ${#result[@]} -eq 0 ] || printf '%s\n' "${result[@]}"
 }

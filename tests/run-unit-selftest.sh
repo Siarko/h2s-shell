@@ -13,8 +13,11 @@
 #   needed     ModuleRegistriesTest: the suites it is given are run with it   → must pass
 #   logged     --log <file> with a named suite: the output is in the file     → must pass
 #   unknown    a name tests.qml does not register: status 2, nothing started
+#   empty      an empty name, alone or beside a suite: status 2, nothing started
 #   silent     one of two named suites does not report                        → must fail
 #   extra      a suite that was not named reports as well                     → must fail
+#   renamed    as many suites report as were named, one of them another suite → must fail
+#   real       (the real Quickshell) FormatTest named: Format reports, alone  → must pass
 #
 # tests/run-modules.sh with --suite, on the fixture module tests/fixtures/modules/good — the
 # first two with the real Quickshell, so tests-modules.qml's part is checked too:
@@ -24,13 +27,15 @@
 #   module-extra      (stand-in) more suites report than were selected        → must fail
 #
 # the suite count against a small root file whose suites are written with and without
-# arguments (`arguments`: each one must count), and the suites a suite is given, read from
-# the same file (`given`).
+# arguments (`arguments`: each one must count), the suites a suite is given, read from the
+# same file (`given`, `qualified`), a root file whose suites cannot be read reliably
+# (`unbalanced`: said, not counted short), and every suite's suiteName against its file name
+# (`names`: a named suite is found by its suiteName followed by "Test").
 #
 #   flock /tmp/h2s-locktest.flock tests/run-unit-selftest.sh
 #
 # Each case starts the runner's private headless compositor (nothing shows); no shell runs
-# (the module cases run tests-modules.qml).
+# (`real` runs tests.qml, the module cases tests-modules.qml).
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
@@ -41,6 +46,7 @@ source "$REPO/tests/count-suites.sh"
 
 expected=$(count_suites "$REPO/tests.qml")
 [ "$expected" -gt 1 ] || { echo "cannot count the suites in tests.qml"; exit 2; }
+suites_agree "$REPO/tests.qml" || { echo "cannot read the suites of tests.qml: its registration lines and the suites read from them differ in number"; exit 2; }
 
 failures=0
 
@@ -53,15 +59,16 @@ Item {
     property var _open: OpenTest {
         after: _ordered
     }
+    property var _qualified: QualifiedTest { after: root._spaced }
     property var notASuite: Helper {}
     // property var _commented: CommentedTest {}
 }
 QML
 counted=$(count_suites "$work/arguments.qml")
-if [ "$counted" = 4 ]; then
-    echo "PASS arguments: 4 suites counted"
+if [ "$counted" = 5 ] && suites_agree "$work/arguments.qml"; then
+    echo "PASS arguments: 5 suites counted, and as many read"
 else
-    echo "FAIL arguments: $counted suites counted, expected 4"
+    echo "FAIL arguments: $counted suites counted, $(registered_suites "$work/arguments.qml" | grep -c .) read, expected 5"
     failures=$((failures + 1))
 fi
 
@@ -71,6 +78,46 @@ if [ "$needed" = "OpenTest PlainTest OrderedTest SpacedTest " ]; then
     echo "PASS given: OpenTest brings OrderedTest, PlainTest and SpacedTest"
 else
     echo "FAIL given: OpenTest and PlainTest gave '$needed'"
+    failures=$((failures + 1))
+fi
+
+# A suite named through the root object is given all the same
+needed=$(suites_with_needed "$work/arguments.qml" QualifiedTest | tr '\n' ' ')
+if [ "$needed" = "QualifiedTest SpacedTest " ]; then
+    echo "PASS qualified: QualifiedTest brings SpacedTest"
+else
+    echo "FAIL qualified: QualifiedTest gave '$needed'"
+    failures=$((failures + 1))
+fi
+
+# A brace in a string hides the suites after it from the reading that follows braces: the
+# two counts differ, and that is what the runner refuses to start on
+cat > "$work/unbalanced.qml" << 'QML'
+Item {
+    property var _first: FirstTest {
+        label: "{"
+    }
+    property var _second: SecondTest {}
+    property var _third: ThirdTest { after: _first }
+}
+QML
+if [ "$(count_suites "$work/unbalanced.qml")" = 3 ] && ! suites_agree "$work/unbalanced.qml"; then
+    echo "PASS unbalanced: 3 suites counted, the reading that differs is noticed"
+else
+    echo "FAIL unbalanced: $(count_suites "$work/unbalanced.qml") suites counted, $(registered_suites "$work/unbalanced.qml" | grep -c .) read, and no difference noticed"
+    failures=$((failures + 1))
+fi
+
+# TestCase finds a named suite by its suiteName followed by "Test", the runner by its file
+misnamed=""
+for file in "$REPO"/tests/*Test.qml; do
+    type=$(basename "$file" .qml)
+    grep -q -E "^[[:space:]]*suiteName: \"${type%Test}\"[[:space:]]*$" "$file" || misnamed="$misnamed $type"
+done
+if [ -z "$misnamed" ]; then
+    echo "PASS names: every suite's suiteName is its file name without Test"
+else
+    echo "FAIL names: suiteName is not the file name without Test in:$misnamed"
     failures=$((failures + 1))
 fi
 
@@ -88,7 +135,8 @@ stand_in partial $((expected - 1)) 'exit 0'
 stand_in complete "$expected" 'exit 0'
 
 # Reports the suites the runner selected (H2S_TEST_SUITES), under the names TestCase prints
-# (the type without "Test"); `silent` leaves the last one out, `extra` adds one
+# (the type without "Test"); `silent` leaves the last one out, `extra` adds one, `renamed`
+# reports another suite in place of the last
 selecting_stand_in() {
     {
         echo "#!$(command -v bash)"
@@ -102,6 +150,7 @@ selecting_stand_in() {
 selecting_stand_in obedient ''
 selecting_stand_in silent 'unset "names[-1]"'
 selecting_stand_in extra 'names+=(UnnamedTest)'
+selecting_stand_in renamed 'names[-1]=UnnamedTest'
 
 # verdict <case> <stand-in, or "real" for the Quickshell the runners find> <expected status>
 #         [<argument of the runner>…]: the runner is $runner
@@ -146,7 +195,8 @@ verdict partial partial 1
 verdict complete complete 0
 
 verdict selected obedient 0 FormatTest LockRulesTest
-check selected "the two suites reported" reports selected.log LockRules
+check selected "FormatTest reported" reports selected.log Format
+check selected "LockRulesTest reported" reports selected.log LockRules
 verdict needed obedient 0 ModuleRegistriesTest
 check needed "ModulesTest was run with it" reports needed.log Modules
 check needed "VpnProvidersTest was run with it" reports needed.log VpnProviders
@@ -154,8 +204,15 @@ verdict logged obedient 0 --log "$work/copy.log" FormatTest
 check logged "the output is in the file" reports copy.log Format
 verdict unknown obedient 2 FormatTest NoSuchTest
 check unknown "no suite ran" reports_nothing unknown.log
+verdict empty obedient 2 ""
+check empty "no suite ran" reports_nothing empty.log
+verdict empty-beside obedient 2 "" FormatTest
+check empty-beside "no suite ran" reports_nothing empty-beside.log
 verdict silent silent 1 FormatTest LockRulesTest
 verdict extra extra 1 FormatTest
+verdict renamed renamed 1 FormatTest LockRulesTest
+verdict real real 0 FormatTest
+check real "Format reported, alone" reports_only real.log "Format"
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good

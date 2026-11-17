@@ -22,7 +22,8 @@
 # TypeError / ReferenceError was printed, Quickshell exited non-zero (a crash after a
 # partial summary included) or fewer suites reported than tests.qml registers — with names:
 # a named or needed suite did not report, or another one did —, 2 when the runner could not
-# be set up or a name is not a suite of tests.qml (nothing runs then).
+# be set up, a name is empty or not a suite of tests.qml, or the suites of tests.qml cannot
+# be read reliably (nothing runs then).
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
@@ -39,15 +40,22 @@ if [ "${1:-}" = --log ]; then
 fi
 case "${1:-}" in -*) echo "usage: tests/run-unit.sh [--log <file>] [<suite>…]" >&2; exit 2 ;; esac
 
+# The expected count and the selection both come from tests.qml's registration lines: when
+# the two ways of reading them disagree, neither can be trusted
+suites_agree "$REPO/tests.qml" \
+    || { echo "run-unit.sh: cannot read the suites of tests.qml: $(count_suites "$REPO/tests.qml") registration lines, $(registered_suites "$REPO/tests.qml" | grep -c .) suites read from them (a brace in a string or comment of a suite's arguments?); nothing was run" >&2; exit 2; }
+
 # Before anything is started: a name tests.qml does not register must not end as a pass
 selected=()
+for name in "$@"; do
+    [ -n "$name" ] || { echo "run-unit.sh: an empty suite name; nothing was run" >&2; exit 2; }
+done
 if [ $# -gt 0 ]; then
     unknown=$(suites_with_needed "$REPO/tests.qml" "$@" 2>&1 > /dev/null) || {
         echo "run-unit.sh: no suite named '$unknown' in tests.qml (a suite is named by its type: FormatTest); nothing was run" >&2
         exit 2
     }
     mapfile -t selected < <(suites_with_needed "$REPO/tests.qml" "$@")
-    [ ${#selected[@]} -gt 0 ] || { echo "run-unit.sh: no suite named; nothing was run" >&2; exit 2; }
     echo "run-unit.sh: running ${selected[*]}"
 fi
 
