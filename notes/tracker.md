@@ -22,11 +22,12 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
     merge after a look; `21626a1` the lock bed with the system's tools — **not reviewed**,
     never run on Arch (needs the packages `python-pywayland` and `wlr-randr` there, and
     `/usr/bin` first on `PATH`); first Arch runs with a scrubbed environment, `harness` first.
-  - module branch `test-split` (working tree `h2s-shell-tailscale-wt`): `d005946` (own
-    harness removed, reviewed: merge), `655b385` (deterministic `connect-before-read`) and
-    the follow-up commits an agent was finishing (review fixes, the stand-in's `pause` race
-    behind the `slow-up-disconnect` flake, fixed waits → conditions, the machine-wide
-    `pgrep "sleep 5"` in `tools/test.sh`) — check the branch's log, review, merge.
+  - module branch `test-split` (working tree `h2s-shell-tailscale-wt`): `655b385` (deterministic `connect-before-read`) and
+    four follow-ups, finished and passing on both machines, **not reviewed**: `f3d0a48`
+    (review fixes), `4900484` (the stand-in's `pause` race behind the `slow-up-disconnect`
+    flake; cause only partly confirmed, its new check is probabilistic), `3e713ad` (fixed
+    waits → conditions), `a5fdaa4` (`tools/test.sh` no longer looks for `sleep 5`
+    machine-wide). A short review, then merge. `d005946` is merged.
   - then: speed (below), system detection behind a seam, `tests/run-system.sh`,
     `install.sh` under stand-ins, `tests/run-all.sh`.
 - [ ] **Test speed** (measured 2026-11-17): the waiting is the machine-wide flock, not the
