@@ -364,11 +364,16 @@ author writes.
 
 | Block | File (new, `components/`) | What it is | Placements |
 |---|---|---|---|
-| Settings page | `SettingsPage.qml` | a page's root: scrolling, margins, heading | append |
-| Section | `SettingsSection.qml` | a titled group on a page | before, after, append |
-| Card | `SettingsCard.qml` | a framed item that opens (a saved network, a VPN) | before, after, append (built while open) |
+| Settings page | `SettingsPage.qml` | a page's root: scrolling, margins, heading | prepend, append |
+| Section | `SettingsSection.qml` | a titled group on a page | before, after, prepend, append |
+| Card | `SettingsCard.qml` | a framed item that opens (a saved network, a VPN) | before, after; inside it through its regions (§4.8) |
 | Row | `SettingsRow.qml` | one line: a label with a control or a value | before, after |
-| Popup section | `PopupSection.qml` | a group in a popup panel; the panel's root is one too | before, after, append |
+| Popup section | `PopupSection.qml` | a group in a popup panel; the panel's root is one too | before, after, prepend, append |
+| Card region | part of `SettingsCard.qml` | a named part of a card: its actions, its settings (§4.8) | prepend, append |
+
+The four placements: `before` and `after` put an element next to the block, outside it;
+`prepend` and `append` put it inside, as the first or the last of the block's content (a
+page's heading and a section's title stay above a prepended element).
 
 **How consistent the views are today** (verified by reading `panels/`):
 - 26 settings pages with four kinds of root: `Flickable` (14), `ShapeSettings` (5),
@@ -414,9 +419,10 @@ Examples, from today's views:
 | `popup.network.connections` | the VPN, Ethernet and Wi-Fi parts of the network popup | append: today's `network.popup.sections` |
 | `popup.network.connections.vpn.row` | each VPN's row in the popup | after: today's `network.vpn.row` |
 | `popup.notifications.list` | the notification list | before: today's `notifications.popup.top` |
-| `settings.network_vpn.vpns.card` | each VPN's card | append: today's `network.vpn.card` |
-| `settings.network_wifi.saved.card` | each saved Wi-Fi network's card | append: the exit node for this network |
-| `settings.network_ethernet.profiles.card` | each wired profile's card | append: the same |
+| `settings.network_vpn.vpns.card.settings` | each VPN's card, its opened part | append: today's `network.vpn.card` |
+| `settings.network_wifi.saved.card.settings` | each saved Wi-Fi network's card, its opened part | append: the exit node for this network |
+| `settings.network_wifi.saved.card.actions` | the same card's buttons | append: one more button under "Edit connection" |
+| `settings.network_ethernet.profiles.card.settings` | each wired profile's card, its opened part | append: the same |
 
 ### 4.3 How a path is derived and stays stable
 
@@ -438,6 +444,7 @@ Examples, from today's views:
   `ScriptModel` keyed by `ModuleRules.contributionKey`, each element in a
   `ModuleContribution` guard. It is created only when the module host lists content for
   that path and placement, so a block nobody targets costs one string.
+- `prepend` and `append` hosts are the first and the last child of the block's content.
 - `before` and `after` hosts sit inside the block's own item, above and below its content.
   The parent layout sees one item, so a block works in a `Column`, a layout, or as a
   `Repeater`'s delegate. A hidden block hides its `before` and `after` content with it.
@@ -457,7 +464,7 @@ module's element only on the items of its own VPN provider, as the VPN slots do 
 Manifest:
 
 ```
-"anchors": [{ "at": "settings.network_wifi.saved.card", "place": "append", "component": "ExitNodeRow.qml" }]
+"anchors": [{ "at": "settings.network_wifi.saved.card.settings", "place": "append", "component": "ExitNodeRow.qml" }]
 ```
 
 ### 4.5 Missing anchors, and order
@@ -498,7 +505,7 @@ data (`tests/FakeVpnProvider.qml` exists for the VPN ones).
 | `notifications.popup.top` | `popup.notifications.list`, before |
 | `settings.general.bottom` | `settings.general`, append |
 | `network.vpn.row` | `popup.network.connections.vpn.row`, after, own-provider |
-| `network.vpn.card` | `settings.network_vpn.vpns.card`, append, own-provider |
+| `network.vpn.card` | `settings.network_vpn.vpns.card.settings`, append, own-provider |
 | `network.vpn.page` | removed: a provider's page is its `settingsPage` (API 1.2); the module does not use the slot |
 
 During the migration a manifest's `slots` entries are read as these anchors, with a
@@ -508,11 +515,42 @@ slice (§7).
 **First consumer: the exit node per network.** The saved network's card, opened, already
 holds that network's own choices, each applied at once (connect automatically, priority:
 `NetworkProfileCard.qml`). The module appends one row there, on
-`settings.network_wifi.saved.card` and `settings.network_ethernet.profiles.card`, with
+`settings.network_wifi.saved.card.settings` and
+`settings.network_ethernet.profiles.card.settings`, with
 context `{ networkId (the profile's UUID, as in Api.networks), name, kind, active, open }`.
 The choice stays in `module.store`, keyed by `networkId`, and applies at once like its
 neighbours. Hotspots and VPNs have other paths, so the row never shows there.
 `NetworkExitTable.qml` on the module's page goes.
+
+### 4.8 Inside a card
+
+A card is not one list: `NetworkProfileCard.qml` has a header (name and a line), a stack of
+buttons on the right (the primary one; opened, the secondary ones under it), a notice line,
+and, opened, its settings. So a card takes no `prepend` or `append` itself; it has two
+regions, each an anchor under the card's path:
+
+| Region | What a module's element is there | Built |
+|---|---|---|
+| `<card>.actions` | a button in the stack of secondary buttons, on the same right edge; the card gives it its width | while the card is open |
+| `<card>.settings` | a row among the card's own settings (connect automatically, priority) | while the card is open |
+
+The header and the notice line are not regions: a module does not change a card's name,
+its line or its primary button. A module's state on a closed card is not offered in this
+round.
+
+What a module puts there is built from the shell's own blocks, so it looks and behaves as
+its neighbours do. `qs.api` gives, besides the five blocks:
+
+- `Button` (today's `components/SmallButton.qml`): the element for `actions`, and for a
+  button at the end of a row.
+- `Row` (`SettingsRow.qml`): a label, an optional second line, and a control or a value.
+- `ExpandingRow` (new, `components/SettingsExpandingRow.qml`): a row that opens, with the
+  same mark and click area as a card; its content is the module's and is built while it is
+  open. This is how a module adds an opening element — to a card's `settings`, a section
+  or a page. An `ExpandingRow` in a module's element is not an anchor.
+
+The element's `context` on both regions is the card's: `{ networkId, name, kind, active,
+open }`.
 
 ---
 
@@ -629,7 +667,7 @@ order takes the next free minor.
 |---|---|---|---|
 | U1 Blocks, table, manifest field; the General page | 1.13 | the five block files, `components/AnchorContent.qml` (from `ModuleSlot`), `singletons/Anchors.qml`, `ModuleRules.qml` (`anchorTable`, manifest `anchors`, slot aliases, order), `ModuleHost.qml`, `api/Api.qml`, `SettingsWindow.qml`, `GeneralSettings.qml`, `api/` names for the blocks | `AnchorsTest`; `ModuleRegistriesTest` slot cases still pass through the aliases |
 | U2 Popups | 1.14 | `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; by hand: both popups unchanged to the eye |
-| U3 Network pages and cards | 1.15 | `NetworkVpnSettings.qml`, `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, `NetworkProfileCard.qml`, `network/VpnManager.qml` (`extrasFor`) | `AnchorsTest`, `VpnProvidersTest`; by hand |
+| U3 Network pages and cards | 1.15 | `NetworkVpnSettings.qml`, `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, `NetworkProfileCard.qml` (a `SettingsCard` with the regions `actions` and `settings`), `components/SettingsExpandingRow.qml`, `api/` names `Button`, `Row`, `ExpandingRow`, `network/VpnManager.qml` (`extrasFor`) | `AnchorsTest`, `VpnProvidersTest`; by hand |
 
 ### Step 5
 
@@ -681,7 +719,7 @@ Each module slice raises its manifest `api` and removes one group of §1:
 | Q2 | A module's privileged run when another polkit agent answers, so the shell's prompt cannot say who asks | (a) run, and show a shell notification "Module X asks for the administrator's password: …" just before; (b) run, say nothing; (c) refuse | **(a).** The decision is kept as far as the shell can; nothing breaks for people who keep their own agent |
 | Q3 | Where the prompt's "what for" comes from | (a) the text given with each run, cleaned and capped (§3.4); (b) a fixed list of purposes in the manifest, a run names one | **(a).** The module has dozens of commands, each with its own words today; the command line is shown beside it either way. (b) can be added if modules from others arrive |
 | Q4 | Is the file chooser part of this round? Step 3's list does not name it; without it workaround 20 stays | in (slice E1) / later | **In, as the last slice**, after its spike. If the spike fails, the small shell window |
-| Q5 | The other `qs.components` types a module uses (`PopupWidget`, `SmallButton`, `Dropdown`, …: 13) are allowed but not versioned | wrap them in `qs.api` and pin them with a test now / after step 6 / leave | **After step 6**, as its own slice. The five blocks get `qs.api` names in U1 because anchors make them API; the rest is not a workaround and would widen this round |
+| Q5 | The other `qs.components` types a module uses (`PopupWidget`, `SmallButton`, `Dropdown`, …: 13) are allowed but not versioned | wrap them in `qs.api` and pin them with a test now / after step 6 / leave | **After step 6**, as its own slice. The five blocks get `qs.api` names in U1, and `Button`, `Row` and `ExpandingRow` in U3 (§4.8), because anchors make them API; the rest is not a workaround and would widen this round |
 | Q6 | Order of several modules' elements on one anchor | by module id / search-path order (today) / a manifest `order` number | **By module id**: the same on every machine, nothing to configure |
 
 ---
