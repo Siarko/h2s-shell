@@ -161,6 +161,8 @@ All by the owner, 2026-11-17.
 - Password prompt: the labels are "Module" and "Authorization"; the command is hidden and shown on a click, and is the real command. (Replaces "next to the actual command" above as to where it shows.) With another polkit agent the run goes ahead, with a shell notification naming module and purpose just before.
 - File chooser for modules: a minimal version in this round.
 - Exit node per network: it sits on the saved network's opened card.
+- Module API, variants are meanings, not looks: a button is `primary` (the primary colour; performs the action), `secondary` (plain; an in-between step, opens something) or `confirmation.<tone>` (asks first; `confirmation.danger`, `confirmation.primary`). Nothing dangerous acts on a first click. A module may put any of the three among a network card's buttons. The same approach for all public elements.
+- Module API, a module's icon: a glyph of the icon font, an SVG file or an image file; the module chooses.
 
 ## Backlog / later
 
