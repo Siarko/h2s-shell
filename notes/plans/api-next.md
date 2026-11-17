@@ -222,19 +222,26 @@ result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, ca
   is looked up is designed when the first one needs it.
 
 **The prompt** (`polkit/AuthPrompt.qml`, when the shell's agent answers). Under the shell's
-title: two labelled lines in the body size, the command under them, small and muted, then
+title: two labelled lines in the body size, a line "Command" that opens on a click, then
 polkit's own message and action as today.
 
 ```
 Authentication required
 Module          Tailscale
 Authorization   Send a file
-/usr/bin/tailscale file cp -- report.pdf laptop:
+▸ Command
+```
+
+opened:
+
+```
+▾ Command
+/usr/bin/timeout -k 3 30 /usr/bin/tailscale file cp -- report.pdf laptop:
 ```
 
 - **One pure function makes every text:** `PolkitRules.announcement({ moduleName, moduleId,
-  what, argv })` → `{ module, authorization, command, summary, body }`. The prompt and the
-  notification below only show them.
+  what, pkexecArgv })` → `{ module, authorization, command, summary, body }`. The prompt
+  and the notification below only show them.
 - **`Module`**: the manifest's `name`, taken by the shell from the handle the run was
   started on. The id follows in brackets only when the name does not read as the id (name
   lower-cased, letters and digits only, differs from the id): "Tailscale", but
@@ -243,15 +250,17 @@ Authorization   Send a file
   id is what keeps it honest.
 - **`Authorization`**: the run's `what`, a few words naming the action ("Send a file",
   "Connect"), never a sentence.
-- **The command**: the run's `argv`, joined with shell quoting, without the `timeout` the
-  shell puts in front of it. Always visible, not behind a "Details" click: the decision
-  says "next to the actual command", and it is the one text here the module did not word.
-  No label; at most two lines.
+- **`Command`** (the owner's decision: hidden, shown on a click). Closed for every new
+  request. Opened, it shows the real command: exactly the words the shell hands to pkexec,
+  joined with shell quoting, the shell's `timeout` in front included. It is the same list
+  the shell starts, not a second text made for showing, so what is read is what runs; and
+  it agrees with polkit's own message, which names `timeout` (below). The line is a
+  `PointerArea` like a card's header; it never takes the keyboard from the password field.
 - **Plain and capped.** The rule drops control characters, folds white space to one line
-  and cuts with "…": name 40, `what` 40, command 160 characters. All texts are
+  and cuts with "…": name 40, `what` 40, the command 400 characters (it wraps). All texts are
   `Text.PlainText`; polkit's message and action become plain text too.
-- **Not spoofable as the shell.** A module's words only fill the two values and the command
-  line. The title, the labels and the frame are the shell's; one line per value, so a text
+- **Not spoofable as the shell.** A module's words only fill the two values and the opened
+  command. The title, the labels and the frame are the shell's; one line per value, so a text
   cannot fake a second line.
 - **Which request is announced.** The agent's flow carries only `message`, `actionId` and
   `cookie` (verified in Quickshell's polkit types): no command line, no caller. So
@@ -259,10 +268,11 @@ Authorization   Send a file
   action is pkexec's (`org.freedesktop.policykit.exec`) and the message names the program
   pkexec is given, which is the shell's `timeout`, not the module's `argv[0]` (assumed:
   pkexec's message holds that program's path in every locale). So polkit's own message
-  names only `timeout`; the command line above is what tells the user what runs. Anything else shows
+  names only `timeout`; the two lines and the opened command tell the user what runs.
+  Anything else shows
   as today, with no module lines: a request the shell did not start is never dressed up.
 - **Another agent answers** (`Authentication.state` is `other`): the shell cannot change
-  that prompt. The run goes ahead (the owner's answer, Q2), and when it reaches the head of
+  that prompt. The run goes ahead (the owner's answer), and when it reaches the head of
   the queue, just before pkexec starts, the shell sends one notification from the same
   rule: summary `Module: Tailscale`, body `Authorization: Send a file`, plain text. The
   shell cannot know whether that agent will ask at all (a polkit rule may allow the run),
@@ -278,7 +288,8 @@ hostile name and `what`, the notification's two texts); a shell suite with a sta
 pkexec that prints and sleeps: streaming, cancel while queued and after start, a second run
 not blocked by a cancelled one, the time limit in the argv, every `blocked` reason, 127
 reported once, with the agent state `other` one notification recorded before the stand-in
-starts and none with `active`; a `LockViewTest`-style view test for the prompt's lines.
+starts and none with `active`, and the command shown equal to the stand-in's own
+arguments; a `LockViewTest`-style view test for the prompt's lines and the click.
 
 
 ### 3.5 Shared module object, and what a popup panel is given
@@ -364,7 +375,7 @@ module.chooseFiles({ mode: "open" | "openMany" | "folder", title, startDirectory
 result = { paths: [absolute…], cancelled, blocked ("" | "locked" | "busy"), error }
 ```
 
-A minimal version in this round (the owner's answer, Q4). It covers what the module's
+A minimal version in this round (the owner's answer). It covers what the module's
 dialogs do today (verified in its `TaildropSection.qml`): several files to send, starting
 in the home directory; the folder for received files, starting in the current one. Saving
 under a new name and name filters come when a module needs them.
@@ -490,7 +501,7 @@ a placement is published when a module needs it. Hotspot cards stand in another 
 - So a path changes only when a block is renamed or moved under another block. Reordering
   blocks, changing titles or wrapping them in layouts changes nothing.
 - The list of anchors is a table, `ModuleRules.anchorTable`:
-  `{ path, kind, placements, takes, context, scope, since, where }`. `Api.anchors` is its
+  `{ path, kind, placements, takes, marks, context, scope, since, where }`. `Api.anchors` is its
   frozen copy; the documentation's list is generated from it. Only paths in the table take
   content: naming a block does not publish it.
 - Views built by a module are not anchors in this round, and neither are a module's
@@ -558,32 +569,10 @@ unknown `anchors` field with a warning (verified: `ModuleRules`, "unknown field 
   elements there stay together. Stable across machines (verified: `ModuleRules.merge` sorts
   by id today, not by the search path).
 
-**A module may say where it stands among the others** (proposed; Q6). An anchor entry takes
-`"afterModules": ["<module id>", …]` and `"beforeModules": […]` (not `after` / `before`:
-those are placements). They order this module's elements against those modules' elements
-on the same path and placement.
-
-- A named module that is not installed, is off, or has nothing there is ignored. So a wish
-  costs nothing when the other module is absent, and no module needs another to load.
-- The order is a pure rule, `ModuleRules.anchorOrder(entries)`: the modules in id order;
-  then, repeatedly, the first module in that order whose predecessors are all placed.
-- A module that can reach itself through the wishes is in a cycle. Wishes between two such
-  modules are dropped, each of them gets a warning in its status naming the other, and they
-  fall back to id order.
-- A module orders itself against modules only, never against the shell's own content: that
-  is what the path and the placement say.
-
-Why module ids, and not the other ways:
-
-| Way | Absent module | Cycles | What an author must know | Verdict |
-|---|---|---|---|---|
-| **Module ids** (this) | ignored | possible; dropped with a warning | the other module's id, public already (`uses`) | enough: order matters between modules, rarely between single elements |
-| Named elements of other modules | ignored | possible | an element's name: a new public name per element that the other module may rename without notice | finer than needed; more to break |
-| A module's elements as anchors others target | the path is missing: an error, or a new "optional" kind of entry | none | the other module's views | the list of anchors stops being a table the shell pins and documents; and two modules on one such anchor need an order again |
-| A number (weight) | no effect | none | every other module's number | numbers only mean something when all authors agree on a scale; ends in 999 |
-
-A later step can put the user's own order of modules (Settings → Modules) in front of the
-id order; the rule takes the base order as an argument, so nothing else changes.
+The order of modules, both the order they are loaded in and the order of their elements
+in one place, is the owner's to design in a later stage (§7, "Later"). Until then there is
+one rule everywhere: by module id. `ModuleRules.anchorContent` is the only place that
+orders elements, so a later rule changes one function.
 
 ### 4.6 The test that pins the list
 
@@ -597,7 +586,8 @@ id order; the rule takes the base order as an argument, so nothing else changes.
    from the lock screen's path);
 3. with the fixture module on: one element per published placement of each path appears,
    in the order of §4.1, with the documented context; an unknown path gives a status error;
-   an element that is not a `SmallButton` on an `actions` region is refused (§4.8).
+   an element that is not the public `SmallButton` on an `actions` region is refused
+   (§4.8); a mark set and cleared shows and goes on a closed card (§4.10).
 
 The suites run with no D-Bus (verified: `tests/headless.sh`), so building a network page
 reads nothing real. Repeated blocks need an item to be live: the VPN page gets
@@ -605,7 +595,7 @@ reads nothing real. Repeated blocks need an item to be live: the VPN page gets
 `NetworkProfiles.profiles` (a plain property: verified).
 
 The pure parts have their own cases in `ModuleRulesTest`: the manifest check, the slot
-aliases, `anchorContent` (scope), `anchorOrder`.
+aliases, `anchorContent` (scope and order), `cardMarks` (§4.10).
 
 ### 4.7 Today's slots, and the first consumer
 
@@ -637,7 +627,7 @@ holds that network's own choices, each applied at once (connect automatically, p
 The choice stays in `module.store`, keyed by `networkId`, and applies at once like its
 neighbours. Hotspots and VPNs have other paths, so the row never shows there.
 `NetworkExitTable.qml` on the module's page goes; with it goes the one place that showed
-every network's choice at a glance (Q7).
+every network's choice at a glance; the icon on the closed cards takes its place (§4.10).
 
 ### 4.8 Inside a card
 
@@ -653,7 +643,7 @@ the card's path:
 
 | Region | Holds | `prepend` | `append` | An element must be |
 |---|---|---|---|---|
-| `<card>.actions` | the secondary buttons | under the primary button, above "Settings…" | under "Edit connection…", above "Forget" / "Delete" | a `SmallButton` |
+| `<card>.actions` | the secondary buttons | under the primary button, above "Settings…" | under "Edit connection…", above "Forget" / "Delete" | the public `SmallButton` (§4.9) |
 | `<card>.settings` | the opened column | above "Connect automatically" | under the page's own rows | anything; `SettingsRow` or `ExpandingRow` is what fits |
 
 - **Built while the card is open,** both. A page keeps one card open (`_open`: verified),
@@ -662,11 +652,10 @@ the card's path:
 - **`actions`.** "Forget" stays last whatever a module adds: the destructive button is
   never pushed up or left in the middle. The region right-aligns each button at its own
   width, as the card's are; it gives a button at most a third of the card's width, and a
-  longer label is cut (`SmallButton` gains eliding). The stack's text size is
-  `SmallButton`'s default.
+  longer label is cut (`SmallButton` gains eliding). The stack's size is `normal`.
 - **Why a button is required there and nothing else is.** The stack sits in the card's
   header beside the name; anything but a button breaks the header of every card. The host
-  checks the built element (`instanceof` the core `SmallButton`; assumed to work for a QML
+  checks the built element (`instanceof` the public `SmallButton`; assumed to work for a QML
   type, checked in `QuickshellPinTest` first) and refuses another with an error in the
   module's status. `settings` is a full-width column where today's VPN card content
   (detail rows, warnings, a hint) is legitimate, so there the blocks are offered, not
@@ -681,34 +670,131 @@ the card's path:
 - **Not regions:** the header's name and line, the primary button, the notice line. A
   module does not change them.
 
-**A closed card shows nothing of a module** in this round. What that costs and a cheap
-answer are Q7: a short mark at the end of the card's line (text, not an element).
+- **Variants on `actions`.** A module's button there is shown in the `normal` variant
+  (proposed; Q1 in §8): a red one-click button beside the card's "Forget", which asks
+  first, or a second confirm-coloured button beside "Connect", would make the card's own
+  buttons harder to read. Another variant is shown as `normal`, with a warning in the
+  module's status.
 
-**The blocks a module builds with.** `qs.api` gains three names. Not `Row` and `Button`:
-with `import QtQuick` beside `import qs.api` those would silently replace QtQuick's `Row`
-(and Controls' `Button`) in a module's file.
+**A closed card** builds no module element. It can show the module's icon (§4.10).
 
-| `qs.api` name | Is | Properties (the pinned ones) |
-|---|---|---|
-| `SmallButton` | `components/SmallButton.qml` | `label`, `available`, `kind`, `tooltip`, `clicked()` |
-| `SettingsRow` | the row block | `label`, `hint` (a second, muted line), `value` (a text on the right), and as children the controls on the right |
-| `ExpandingRow` | new, `components/ExpandingRow.qml` | `label`, `hint`, `open`, and as its child the content, built while open |
+### 4.9 Public elements
 
-- **`ExpandingRow`** is how a module adds an element that opens, on a card's `settings`, a
-  section or a page. Its line looks and answers as a card's header does: the same "▸" /
-  "▾" mark, the whole line a `PointerArea` (`centred: false`), lit by `lit`. Its child is
-  held as a `Component` (QML wraps a child given to a `Component` property, as a
-  `Repeater`'s delegate: assumed, checked in `QuickshellPinTest`), so nothing of it exists
-  while closed. It is not an anchor.
-- **Themed.** The blocks read `Theme` only; a module sets no colour or size on them.
+A module builds its views from **public elements**: types in `qs.api`, made for the API,
+that use the shell's internal components inside (the owner's decision). The shell changes
+its internals freely; a public element keeps its own properties. Modules are meant to use
+as many of them as they can, and at the end of the migration a module imports nothing from
+`qs.components`.
+
+**How an element is made.**
+
+- **A control is a wrapper, not a subtype.** `api/SmallButton.qml` is an `Item` holding the
+  internal button. It declares only the public properties and signals and maps them onto
+  the internal ones; it takes its size from the inner item, so it stands in a layout as the
+  internal one does. A subtype would hand a module every internal property with it; that
+  is what today's six `qs.api` types are (verified: `Settings.SwitchRow {}`).
+- **A base type is a subtype:** `PopupWidget`, `BarText`, `BarRow`, `PointerArea`,
+  `VpnProvider`. The bar, the pointer and `VpnManager` need the object itself. Their
+  public properties are pinned by name; what else they inherit is not promised.
+- **Variants are small enumerated properties,** never a colour or a size in pixels:
+  `variant` for what the element is, `size` for how large (the module passes `fontSize`
+  today: verified). An unknown value shows as the default, with one warning in the
+  module's status.
+- **Themed.** Elements read `Theme` only.
 - **Pointer and keyboard.** Everything that lights up does so through `PointerArea`'s
   `lit`. None of the shell's buttons takes the keyboard today (tracker backlog); when they
-  do, modules built from these blocks get it with them.
-- **Plain text.** Every text property of a block the API offers is shown as
-  `Text.PlainText`, on one line where it is a label. That is not so today for `SwitchRow`,
-  `Heading`, `Hint` and `SectionTitle`, which the API already offers (verified: no
-  `textFormat`); the slice fixes them. `tests/ApiBlocksTest.qml`
-  pins the property names above and checks that a label "<b>x</b>" is shown as written.
+  do, every module gets it with the elements.
+- **Plain text.** Every text property is shown as `Text.PlainText`, on one line where it
+  is a label. That is not so today for `SwitchRow`, `Heading`, `Hint` and `SectionTitle`
+  (verified: no `textFormat`); F3 fixes them.
+- **Pinned** by `tests/ApiElementsTest.qml`: for every element its public property and
+  signal names; every variant value builds; a label "<b>x</b>" is shown as written. A
+  change to that list is an API version change.
+
+**The starting set**: what the Tailscale module uses from `qs.components` (13 types:
+verified), what `qs.api` offers already (6), and what the anchors need (3 new).
+
+| Public element | Inside | Public properties and signals | Variants |
+|---|---|---|---|
+| `SmallButton` | `components/SmallButton.qml` | `label`, `available`, `checked`, `tooltip`, `clicked()` | `variant`: `normal`, `confirm`, `confirmChange`, `cancel`, `delete` (today's `kind`: normal, save, saveChange, cancel, delete); `size`: `normal`, `small`, `tiny` |
+| `DeleteButton` | `components/DeleteButton.qml` | `label`, `question`, `cancelTooltip`, `available`, `asking`, `confirmed()` | `size` |
+| `Dropdown` | `components/Dropdown.qml` | `options`, `value`, `placeholder`, `picked(value)` | `size` |
+| `InputField` | `components/InputField.qml` | `text`, `placeholder`, `problem`, `password`, `revealed`, `accepted()`, `edited()`, `editingFinished()` | `variant`: `plain`, `outlined`; `size` |
+| `Pill` | `components/Pill.qml` | `label`, `picked`, `tooltip`, `clicked()` | `size`: `normal`, `large` |
+| `Checkbox` | `components/Checkbox.qml` | `label`, `checked`, `toggled()` | — |
+| `ToggleSwitch` | `components/ToggleSwitch.qml` | `checked`, `available`, `toggled()` | — |
+| `PrivilegedMark` | `components/PrivilegedMark.qml` | `need` | `need`: none, `auth` (asks for a password), `no` (not allowed) |
+| `SwitchRow` | `panels/settings/SwitchRow.qml` | `label`, `hint`, `checked`, `need`, `toggled()` | as `PrivilegedMark` |
+| `DetailRow` | `panels/settings/DetailRow.qml` | `label`, `value` | — |
+| `SettingsRow` (new) | the row block (§4.1) | `label`, `hint`, `value`; its children are the controls on the right | — |
+| `ExpandingRow` (new) | `components/ExpandingRow.qml` | `label`, `hint`, `open`; its child is the content | — |
+| `Heading`, `SectionTitle` | `panels/settings/` | `text` | the two are the two levels |
+| `Hint` | `panels/settings/Hint.qml` | `text` | — |
+| `Notice` (new) | a line as the card's notice line | `text` | `variant`: `warning`, `error`, `success` |
+| `SettingEditor` | `panels/settings/SchemaSettingEditor.qml` | `key`, `editIndex` | — |
+| `PopupWidget`, `BarText`, `BarRow` | `components/` (base types) | what a bar widget sets today, pinned by name | — |
+| `PointerArea` | `components/PointerArea.qml` (base type) | `lit`, `centred`, `reach`, and a `MouseArea`'s own | — |
+| `VpnProvider` | `components/VpnProvider.qml` (base type) | its documented contract (API 1.1), without `rowExtras`, `cardExtras`, `pageUrl` | — |
+
+- The names are the internal ones where a module uses them today, so the migration is a
+  change of import and of the few properties that became variants. None is `Row` or
+  `Button`: with `import QtQuick` beside `import qs.api` those would silently replace
+  QtQuick's `Row` (and Controls' `Button`) in a module's file.
+- `Notice` replaces the warning lines the module writes by hand as a `Text` in the
+  theme's warning colour (verified: `TailscaleCard.qml`).
+- `ExpandingRow` is how a module adds an element that opens, on a card's `settings`, a
+  section or a page. Its line looks and answers as a card's header does: the same "▸" /
+  "▾" mark, the whole line a `PointerArea` (`centred: false`). Its child is held as a
+  `Component` (QML wraps a child given to a `Component` property, as a `Repeater`'s
+  delegate: assumed, checked in `QuickshellPinTest`), so nothing of it exists while closed.
+  It is not an anchor.
+- The six that `qs.api` offers already stay subtypes until the closing slice, which makes
+  them wrappers (a tightening: a module could set an internal property on them today).
+
+**How the set grows.** A module that needs an element, a property or a variant the set
+lacks stops and has it added: one public element or one variant per slice, a minor version,
+its line in `ApiElementsTest`. Nothing is added ahead of a module that needs it.
+
+**Keeping modules off the internals.** QML cannot stop an import. The import check
+(`ModuleRules.allowedImports`) reports `import qs.components` as a warning in the module's
+status from the slice that completes the set (F4), and as an error from the closing slice,
+when `qs.components` leaves the allowed list. The module still loads (the owner's earlier
+decision: the check never refuses); the error shows in Settings → Modules and
+`modules list`, and `tests/run-modules.sh` fails a module that has it.
+
+### 4.10 The module's icon on a closed card
+
+A closed card shows no module element, but it can show a module's icon: "something of
+this module is set for this network". The detail is on the opened card, in the module's
+row (the exit node's name).
+
+- **Where.** At the end of the card's name line, after the name, before the buttons; the
+  name is cut first, the icons keep their place. Shown open and closed.
+- **What the icon is.** One glyph of the shell's icon font, declared once in the manifest:
+  `"icon": "<glyph>"`. The shell draws glyphs this way everywhere, and the module already
+  gives one for its VPN provider and its bar widget (verified: `VpnProvider.glyph`). The
+  manifest check takes one visible character, nothing else. The shell draws it: the body
+  text size, the muted text colour. No file, no QML of the module, no colour or size from
+  the module.
+- **Setting and clearing.**
+
+  ```
+  module.setMark(path, itemId, label)     // label: what it stands for, "Exit node: home"
+  module.clearMark(path, itemId)
+  ```
+
+  `path` is a card's path whose table row says `marks` (in this round the saved Wi-Fi
+  networks' and the wired profiles' cards); `itemId` is the item's id as in the card's
+  context (`networkId`). `label` is the icon's accessible name and its tooltip, shown as
+  "Tailscale: Exit node: home": plain text, one line, 40 characters. A module with no
+  `icon` in its manifest, or a path that takes no marks: nothing shows, one warning in the
+  status. At most 200 marks per module and path.
+- **Several modules on one card:** in module id order, at most three icons, then "+2" in
+  the muted colour with the rest in its tooltip. A pure rule,
+  `ModuleRules.cardMarks(marks, path, itemId)` → `{ shown: [{ module, icon, label }], more }`.
+- **The module goes off:** the host holds the marks and drops that module's, so its icons
+  go at once. They are not stored; a module sets them again when it starts.
+- A mark does nothing on a click; the card's header keeps the click.
 
 ---
 
@@ -765,10 +851,10 @@ fixture modules (provider off and on, the dependent follows; the object given is
 - The import check (`ModuleRules.allowedImports`) reports `qs.singletons*` and another
   module's directory as an error in the status, not a warning. The module still loads (the
   owner's earlier decision: the check never refuses).
-- `qs.components` stays allowed in this round (Q5). The module uses 13 of its types
-  (verified): `BarRow`, `BarText`, `Checkbox`, `DeleteButton`, `Dropdown`, `InputField`,
-  `Pill`, `PointerArea`, `PopupWidget`, `PrivilegedMark`, `SmallButton`, `ToggleSwitch`,
-  `VpnProvider`.
+- `qs.components` leaves the allowed imports with the closing slice (§4.9). The module
+  uses 13 of its types (verified): `BarRow`, `BarText`, `Checkbox`, `DeleteButton`,
+  `Dropdown`, `InputField`, `Pill`, `PointerArea`, `PopupWidget`, `PrivilegedMark`,
+  `SmallButton`, `ToggleSwitch`, `VpnProvider`; in 17 of its files.
 
 ---
 
@@ -785,7 +871,7 @@ fixture modules (provider off and on, the dependent follows; the object given is
   something a module could rely on raises it to its own version. `apiCompatibility` then
   answers: same major, `apiFloor` ≤ the module's `api` ≤ the shell's. Below the floor the
   module is `incompatible`, with the reason "written for module API 1.3; this shell needs
-  1.21 or newer (the module needs updating)". So a tightening is never silent.
+  1.24 or newer (the module needs updating)". So a tightening is never silent.
 - **During this plan the floor moves once.** Slices in steps 3–5 only add: the old ways
   (`PrivilegedAction`, `elevate`, `slots`, `Api.module`, `host`) keep working, with a
   warning in the module's status. New calls are strict from their first version. One
@@ -831,10 +917,13 @@ order, or after one that was dropped, takes the next free minor.
 | U0 Anchor rules | — | `ModuleRules.qml` (`anchorTable`, empty; the path rule; the manifest's `anchors` check; slot aliases; `anchorContent`), `tests/ModuleRulesTest.qml` | rule cases |
 | U1 The host and the page block; the General page | 1.13 | `components/AnchorBlock.qml`, `AnchorContent.qml` (from `ModuleSlot`), `SettingsPage.qml`, `singletons/Anchors.qml`, `ModuleRules.qml` (the first table row), `ModuleHost.qml`, `api/Api.qml` (`anchors`), `SettingsWindow.qml`, `GeneralSettings.qml`, `tests/lock-closure.sh` | `AnchorsTest` (new); the walk up `parent` in `QuickshellPinTest`; `ModuleRegistriesTest` slot cases still pass through the aliases |
 | U2 Popups | 1.14 | `components/PopupSection.qml`, `PopupRow.qml`, `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; by hand: both popups unchanged to the eye |
-| U3 The blocks a module builds with | 1.15 | `components/SettingsRow.qml`, `ExpandingRow.qml`, `SmallButton.qml` (eliding), `api/` names `SmallButton`, `SettingsRow`, `ExpandingRow`; plain text in `SwitchRow`, `Heading`, `Hint`, `SectionTitle` | `ApiBlocksTest` (new); two pins in `QuickshellPinTest` (§4.8) |
-| U4 The card and its regions; the VPN page | 1.16 | `components/SettingsSection.qml`, `SettingsCard.qml`, `NetworkProfileCard.qml` (on `SettingsCard`), `NetworkVpnSettings.qml`, `AnchorContent.qml` (scope, `takes`), `network/VpnManager.qml` | `AnchorsTest`, `VpnProvidersTest`; by hand: the three network pages unchanged to the eye |
-| U5 The Wi-Fi and Ethernet pages | 1.17 | `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, `ModuleRules.qml` (table rows) | `AnchorsTest`; by hand |
-| U6 Order among modules (if Q6 says so) | 1.18 | `ModuleRules.qml` (`anchorOrder`, the two manifest fields), a second fixture | `ModuleRulesTest` (absent module, cycle, stability); `AnchorsTest` with two fixtures |
+| F1 Public elements: the pattern, and the buttons | 1.15 | `api/SmallButton.qml`, `api/DeleteButton.qml` (wrappers, `variant`, `size`), `components/SmallButton.qml` (eliding), `tests/ApiElementsTest.qml` | `ApiElementsTest` (new): names, every variant, plain text; a wrapper in a layout, in `QuickshellPinTest` |
+| F2 Public elements: the controls | 1.16 | `api/Dropdown.qml`, `InputField.qml`, `Pill.qml`, `Checkbox.qml`, `ToggleSwitch.qml`, `PrivilegedMark.qml` | `ApiElementsTest` |
+| F3 Public elements: rows and texts | 1.17 | `components/SettingsRow.qml`, `ExpandingRow.qml`, `api/SettingsRow.qml`, `ExpandingRow.qml`, `Notice.qml`; plain text in `SwitchRow`, `Heading`, `Hint`, `SectionTitle` | `ApiElementsTest`; the `Component` child in `QuickshellPinTest` |
+| F4 Public elements: the base types; the import warning | 1.18 | `api/PopupWidget.qml`, `BarText.qml`, `BarRow.qml`, `PointerArea.qml`, `VpnProvider.qml`, `ModuleRules.qml` (import check: `qs.components` warns) | `ApiElementsTest`; `ModuleRulesTest`; `VpnProvidersTest` with a provider made from `qs.api` |
+| U4 The card and its regions; the VPN page | 1.19 | `components/SettingsSection.qml`, `SettingsCard.qml`, `NetworkProfileCard.qml` (on `SettingsCard`), `NetworkVpnSettings.qml`, `AnchorContent.qml` (scope, `takes`), `network/VpnManager.qml` | `AnchorsTest`, `VpnProvidersTest`; `instanceof` in `QuickshellPinTest`; by hand: the three network pages unchanged to the eye |
+| U5 The Wi-Fi and Ethernet pages | 1.20 | `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, `ModuleRules.qml` (table rows) | `AnchorsTest`; by hand |
+| U6 The module's icon on a closed card | 1.21 | `ModuleRules.qml` (manifest `icon`, `cardMarks`), `ModuleHost.qml`, `api/ModuleHandle.qml` (`setMark`, `clearMark`), `components/SettingsCard.qml` | `ModuleRulesTest` (the glyph check, order, the cap, a module off); `AnchorsTest` |
 
 U4 changes `NetworkProfileCard`, which all three network pages use, so its hand check
 covers all three although only the VPN page gains anchors there.
@@ -843,8 +932,8 @@ covers all three although only the VPN page gains anchors there.
 
 | Slice | API | Files | Verified by |
 |---|---|---|---|
-| P1 `exports` and `uses` | 1.19 | `ModuleRules.qml` (`dependencyPlan`, state), `ModuleHost.qml`, `api/ModuleHandle.qml`, two fixtures | `ModuleRulesTest`, `ModulesTest` |
-| P2 Reach warnings, `moduleStatus` | 1.20 | `api/Api.qml`, `api/ModuleHandle.qml`, `ModuleRules.qml` (import check) | `ModuleRulesTest`, `ModulesTest` |
+| P1 `exports` and `uses` | 1.22 | `ModuleRules.qml` (`dependencyPlan`, state), `ModuleHost.qml`, `api/ModuleHandle.qml`, two fixtures | `ModuleRulesTest`, `ModulesTest` |
+| P2 Reach warnings, `moduleStatus` | 1.23 | `api/Api.qml`, `api/ModuleHandle.qml`, `ModuleRules.qml` (import check) | `ModuleRulesTest`, `ModulesTest` |
 
 ### Step 6: the module, then the closing slice
 
@@ -858,30 +947,48 @@ Each module slice raises its manifest `api` and removes one group of §1:
 | M4 Main and popup | 16–19 | B1 |
 | M5 Helpers and facts | 22–33 | C1, C2, D1 |
 | M6 Its row and card move from `slots` to `anchors` | the `slots` field | U2, U4 |
-| M7 The exit node per network on the network cards | 21 | U3, U5, M6 |
+| M7 The exit node per network on the network cards, with the icon | 21 | F3, U5, U6, M6 |
 | M8 "Send file…" from the popup; both Taildrop dialogs through the chooser | 20 | E1 |
 | M9 The manual "for now" override | — (module state) | M7 |
+| M10 Public elements only: every `import qs.components` goes (17 files, 13 types); `kind` and `fontSize` become `variant` and `size`; hand-made warning lines become `Notice` | — (the import) | F1–F4 |
 
-**Z, the closing slice (core, 1.21, floor 1.21):** removes the `PrivilegedAction` type and
+M10 is one change per group of files (the popup, the page's sections, the widget), each
+with the module's UI suites green; the import warning in the module's status counts down
+to none.
+
+**Z, the closing slice (core, 1.24, floor 1.24):** removes the `PrivilegedAction` type and
 `elevate`, the `slots` field, `Api.slots`, `components/ModuleSlot.qml`,
 `components/VpnExtras.qml` with `VpnProvider.rowExtras` / `cardExtras` (the stand-in in
-`VpnProvidersTest` becomes a fixture module), `network.vpn.page`, `Api.module`, `host`; row
-34 of §1 goes in the module with its `api` raised to Z's version.
+`VpnProvidersTest` becomes a fixture module), `network.vpn.page`, `Api.module`, `host`;
+`qs.components` leaves the allowed imports (an error in the status), and the six older
+`qs.api` types become wrappers (§4.9); row 34 of §1 goes in the module with its `api`
+raised to Z's version.
 
 ### What can run in parallel
 
 - Chains that must stay in order: A0 → A1 → A2 → A3 → A4 → A5 → A6; U0 → U1 → U2;
-  U1 → U3 → U4 → U5; P1 → P2.
-- Parallel to the A chain: B1, C1, and the U chain (it lives in `components/` and
-  `panels/`). U2 and U3 are parallel to each other; U6 any time after U1.
+  F1 → F2, F3, F4 (these three in any order); U1 and F1 → U4 → U5 → U6; P1 → P2.
+- Parallel to the A chain: B1, C1, the U chain and the F chain. The F chain touches only
+  `api/` and two new files in `components/`, so it runs beside U0–U2.
 - C2 after A3 (test kit); D1 after C1 (`NetworkRules` delegates to `AddressRules`); E0 any
   time, E1 after A3 and E0.
 - Everything touches `ModuleRules.qml`, `api/Api.qml`'s header and the CHANGELOG. To keep
   that from colliding, the pure split of `ModuleRules.qml` into five files
   (`architecture-cleanup.md` §2.1) goes first, and each slice adds its version line last,
   at merge.
-- Module slices M1–M9 touch only the module's repository and run beside the core slices
+- Module slices M1–M10 touch only the module's repository and run beside the core slices
   that do not block them.
+
+### Later, not in this round
+
+Recorded, not designed (the owner, 2026-11-17; also in the tracker's "Later"):
+
+- **The order of modules:** the order in which modules are loaded, and the order of
+  different modules' elements in one place. Two separate things. Until then both are by
+  module id (loading also follows `uses`, §5.2).
+- **Modules' own elements:** a module defines an element of its own, with its own public
+  styles that a theme can set, and publishes it through a public API, so that libraries of
+  extra elements can exist.
 
 ---
 
@@ -889,23 +996,56 @@ Each module slice raises its manifest `api` and removes one group of §1:
 
 Answered 2026-11-17:
 
-| # | Question | Answer |
+| What | The owner's answer | Where |
 |---|---|---|
-| Q1 | Where the per-network exit node sits | The saved network's card, opened (`…card.settings`). The connection editor can follow as a second anchor once a module's row can join a form |
-| Q2 | A module's privileged run when another polkit agent answers | Run, with a shell notification just before, naming the module and what for (§3.4) |
-| Q3 | The prompt's "what for" | The text given with each run, a few words: "Module: Tailscale, Authorization: Send a file" must already say what it is about (§3.4) |
-| Q4 | The file chooser | In this round, a minimal version (§3.9) |
-| — | Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) |
+| Where the per-network exit node sits | The saved network's card, opened. The connection editor can follow as a second anchor once a module's row can join a form | §4.7 |
+| A module's privileged run when another polkit agent answers | Run, with a shell notification just before, naming the module and what for | §3.4 |
+| The prompt's "what for" | A few words given with each run: "Module: Tailscale, Authorization: Send a file" must already say what it is about. The labels "Module" and "Authorization" stay | §3.4 |
+| The command in the prompt | Hidden; shown on a click; it must be the real command | §3.4 |
+| The file chooser | In this round, a minimal version | §3.9 |
+| Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) | §4.1 |
+| The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. Modules use only those, and as many as they can | §4.9 |
+| Variants | A public element lets a module pick its variant (a plain, a confirm, a delete button, …); for all elements, not only buttons | §4.9 |
+| A module's button on a card | The shell's button, always above "Forget" / "Delete" | §4.8 |
+| An element that opens | The shell's `ExpandingRow` | §4.9 |
+| A closed card | Shows the module's icon when the module has something set for that network; the detail is on the opened card | §4.10 |
+| The order of modules (loading, and elements in one place) | Both wanted, both later; for now by module id | §7, "Later" |
+| Modules' own elements, element libraries | Later | §7, "Later" |
 
-Open:
+Still open. Each is written to be read on its own.
 
-| # | Question | Choices | Recommendation |
-|---|---|---|---|
-| Q5 | The module builds its screens from 13 of the shell's ready-made controls (buttons, a drop-down, a text field, …). Today they are the shell's internals: if the shell renames one or changes how it is used, the module breaks and nothing says why. Promising them (a test then refuses such a change unless the API version goes up) costs the shell the freedom to change 13 more things | promise them now / after step 6 / never | **After step 6**, as its own slice. `SmallButton` is promised in U3 already, because anchors need it; the other 12 are not workarounds and would widen this round |
-| Q6 | When two modules put something in the same place, which comes first? By default the module's id, alphabetically. Should a module be able to say "show me after module X / before module Y"? And did you mean whole modules, or one particular element of another module? | (a) ids only; (b) wishes naming modules (§4.5); (c) wishes naming single elements; (d) a number | **(b)**, as slice U6. It can wait until a second module exists without changing anything else, since with one module there is nothing to order |
-| Q7 | With the exit node on the opened card, a closed card shows nothing of it, and the module's table of all networks goes. Should a card's line be able to carry a short mark from a module ("Exit: home")? It would be a text the module sets per network, shown by the shell at the end of the card's line: plain, one line, 24 characters at most; no module element is built on closed cards | no mark in this round / the mark | **The mark**, as one more slice after U5 (`module.setMark(path, itemId, text)`, a pure rule joining marks in module order, the card's line). Cheap, and without it the choice per network is visible only one card at a time |
-| Q8 | The password prompt: "Module" and "Authorization" stand out; where does the command go? | (a) always visible under them, small, at most two lines; (b) behind a "Details" click | **(a)**: the decision says "next to the actual command", and it is the one text the module did not word. The labels' words ("Module", "Authorization") are yours from the example; say if you want others |
-| Q9 | Inside a card (§4.8): a module's button must be the shell's button and goes above "Forget", never under it; a module's row goes above or under the card's rows; an element that opens is the shell's `ExpandingRow` | as proposed / changes | **As proposed** |
+**Q1. Which kinds of button may a module put among a card's buttons?**
+
+- *Today.* An opened network card (Settings → Network → Wi-Fi, a saved network) has its
+  buttons on the right: "Connect" in the confirm colour, under it "Edit connection…" in
+  the plain look, and last "Forget", which turns red and asks "Forget?" before it does
+  anything.
+- *What is new.* A module can add its own button to that stack, above "Forget". The
+  shell's button comes in five looks: plain, confirm (green), confirm a change, cancel,
+  delete (red under the pointer, acts on the first click).
+- *Example.* A module adds "Remove exit node" in the delete look. The card then has two
+  red buttons one above the other; the module's acts at once, the shell's asks first. Or
+  it adds a second green button next to "Connect", and the eye no longer finds the card's
+  main action.
+- *Options.* (a) Only the plain look in that stack; another look is shown as plain.
+  Elsewhere (the module's own rows, its page, its popup) every look is allowed. (b) Every
+  look everywhere.
+- *Recommendation:* **(a)**. A module that must delete something from a card does it in
+  its own row, with the button that asks first.
+
+**Q2. What is a module's icon?**
+
+- *Today.* The shell draws its icons as characters of an icon font (the VPN mark in the
+  network popup is one). The Tailscale module already names such a character for its VPN
+  entry and its bar widget.
+- *What is new.* The icon a closed card shows for a module (your answer above).
+- *Options.* (a) One character of the icon font, named in the module's manifest. The shell
+  draws it in its own size and colour, so it always fits the theme; a module can only pick
+  among the font's icons. (b) A picture file shipped with the module (the real Tailscale
+  logo, in its colours). It looks like the brand, but it does not follow the theme, and
+  the shell has to check, scale and tint a file it did not make.
+- *Recommendation:* **(a)** now. A picture can be added later without changing how marks
+  are set.
 
 ---
 
@@ -952,8 +1092,13 @@ Open:
 - NetworkManager may or may not report `tailscale0`'s addresses; the filter covers both.
 - A block can find its enclosing block by walking `parent` at completion, also inside a
   `Loader` and a `Repeater` delegate. U1 starts by checking it in `QuickshellPinTest`.
-- `instanceof` tells a built element is a `SmallButton`; a child given to a `Component`
-  property is wrapped, not built (§4.8). U3 starts by checking both.
+- `instanceof` tells a built element is the public `SmallButton` (U4); a child given to a
+  `Component` property is wrapped, not built (F3); a wrapper `Item` that takes its size
+  from the item inside stands in a `RowLayout` and a `ColumnLayout` as that item did (F1).
+  Each slice starts by checking its own in `QuickshellPinTest`.
+- The shell's font has a glyph for whatever a module names as its icon; a missing one
+  shows as an empty box.
+- `tests/run-modules.sh` can be made to fail on an import error in a module's status.
 - A `ScriptModel` keeps a delegate when its item's values change. If it rebuilds it
   instead, a module's element on that card is rebuilt too: harmless, an opened
   `ExpandingRow` closes.
@@ -968,8 +1113,8 @@ Open:
 - **The prompt cannot identify its caller.** The flow has no command line or process id;
   matching rests on the queue's head and pkexec's message (the assumption above). With
   another agent the shell cannot show anything in the prompt, and that prompt names only
-  `timeout`: the notification (Q2) is all the user is told.
-- **"Connection's options" has two homes** with different save models (Q1).
+  `timeout`: the notification is all the user is told.
+- **"Connection's options" has two homes** with different save models; the owner chose the card (§8).
 - **The VPN slots are filtered per provider** and built through `VpnManager.extrasFor` and
   `VpnExtras`, not `ModuleSlot`. U2 and U4 move a module's content to the anchor hosts with
   `scope`; `VpnExtras` stays for a provider that is no module's (the test stand-in) until
@@ -977,6 +1122,12 @@ Open:
 - **One card for four uses.** `NetworkProfileCard` serves Wi-Fi, Ethernet, hotspots and
   VPN providers; rebuilding it on `SettingsCard` (U4) is the largest visual risk of step 4,
   and all three network pages are checked by hand in that slice.
+- **A public control is one more `Item`** around the internal one (§4.9). The module has
+  65 buttons; the cost is small but real, and layout properties a module sets must reach
+  the wrapper, not the inside.
+- **Variants freeze today's looks.** What the internal components offer as `kind`,
+  `fontSize`, `outlined` becomes five, three and two named values; a look the shell adds
+  later is a new variant, a look it drops needs a mapping.
 - **A block's root gains a level** (§4.4), so a converted view's layout properties move
   from today's item to the block. Views that anchor into their children by `id` need care.
 - **`ModuleRules.qml` is one 1667-line file** that nearly every slice edits; the planned

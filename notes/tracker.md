@@ -128,6 +128,11 @@ Later:
 - NixOS option for modules (`programs.h2s-shell.modules`); module signatures
 - UI texts pass and translations, in one go; the owner reviews the voice (short plain wording)
 - documentation as a site with per-system tabs
+- module order: the order in which modules are loaded, and the order of different modules'
+  elements in one place (two separate things; until then both by module id)
+- modules' own elements: a module defines an element with its own public styles, settable
+  by a theme, and publishes it through a public API, so that libraries of extra elements
+  can exist
 
 ## Decisions
 
@@ -149,6 +154,13 @@ All by the owner, 2026-11-17.
 - No terminal setting of its own: a global "default programs" setting later.
 - Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
 - Coding is done by strong models only; no weaker models for mechanical moves.
+- Module API, placements: `before`, `after` (outside the block), `prepend`, `append` (inside, first and last).
+- Module API, public elements: modules build their views only from public elements made for the API (in `qs.api`), which use the shell's internal components inside; the internals stay free to change, the public elements keep compatibility. Modules should use as many standard elements as they can. Each public element lets a module pick a variant (kinds of button and the like), for all elements, never raw colours or sizes. In this round.
+- Module API, network cards: a module's button on a card is the shell's button, always above "Forget" / "Delete"; an element that opens is the shell's `ExpandingRow`. A closed card shows the module's icon when the module has something set for that network; the detail is on the opened card.
+- Module API, order: by module id for now; a module's say in the load order and in the order of elements in one place comes later.
+- Password prompt: the labels are "Module" and "Authorization"; the command is hidden and shown on a click, and is the real command. (Replaces "next to the actual command" above as to where it shows.) With another polkit agent the run goes ahead, with a shell notification naming module and purpose just before.
+- File chooser for modules: a minimal version in this round.
+- Exit node per network: it sits on the saved network's opened card.
 
 ## Backlog / later
 
