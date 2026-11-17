@@ -134,6 +134,9 @@ From next-steps (2026-11-15):
 - [ ] Opened connection cards have about 20 px of empty space under the detail line (not re-checked)
 - [ ] Tailscale later: re-authentication without the profile reset (`login-interactive`), settings re-applied after a same-account login, certificate renewal, a terminal launcher for SSH (with the default programs)
 - [ ] Taildrop's file and folder dialogs never clicked on a real machine
+- [ ] Tailscale module: warn when an accepted subnet route covers the local network the
+      computer is on (replies to LAN peers then leave through the tunnel and LAN connections
+      to this computer fail); seen with "Use routes from other devices" on
 - [ ] M5 author guide for modules (with step 12)
 
 Found while writing the development rules (2026-11-17):
