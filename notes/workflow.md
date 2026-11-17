@@ -61,8 +61,8 @@ Agents clean up only their own temporary files.
 |---|---|---|
 | Core unit suites | `tests/run-unit.sh [--log <file>] [suites…]` | Quickshell, labwc, util-linux, coreutils — labwc from `nix` where there is one, else from `PATH` |
 | Runner self-test | `tests/run-unit-selftest.sh` | as the unit suites |
-| Tool lookup self-test | `tests/resolve-selftest.sh` | bash, coreutils, `setsid`; no `nix`, no labwc |
-| Lock screen, end to end | `tests/lock/run.sh [tests…]` | the lock bed's tools (`tests/lock/README.md`, "Tools") — from `nix` where there is one, else from `PATH`; a launcher (`h2s-shell`, else the bed's own); about 15 minutes for all |
+| Tool lookup self-test | `tests/resolve-selftest.sh` | bash, coreutils, findutils, `setsid` and `flock` (util-linux); no `nix`, no labwc |
+| Lock screen, end to end | `tests/lock/run.sh [tests…]` | the lock bed's tools (`tests/lock/README.md`, "Tools") — from `nix` where there is one, else from `PATH`; a launcher (`h2s-shell`, else the bed's own); about three minutes for all |
 | Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites: it only hands the module to the core tree's `tests/run-modules.sh` (a core tree without it: status 2) |
 | A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | as the unit suites |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | as the lock screen's |
@@ -71,13 +71,16 @@ Agents clean up only their own temporary files.
   a lock test by its file without `.sh`. A name that does not exist is an error (status 2)
   and nothing runs. While iterating, run the suites the change touches; before committing,
   everything.
-- When more than one run can happen at once on a machine, wrap each in
-  `flock /tmp/h2s-locktest.flock …`.
+- Only the lock bed needs the machine to itself (its tests depend on timing):
+  `tests/lock/run.sh` takes `/tmp/h2s-locktest.flock` itself for the length of a run, and
+  says so while it waits for another run. The unit, module and self-test runners take no
+  lock and run side by side.
 - All of them run in an invisible compositor. They use the processor, nothing shows.
 - Every runner takes its tools from the pinned `tests/lock/tools.nix` where there is a
   `nix` command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` chooses); the first
   lines of a run say which, with the versions. A missing tool ends the run with status 2,
-  named with its use. A report says which source a run had.
+  named with its use. A report says which source a run had. With `nix` the built path is
+  remembered between runs (`tests/lock/resolve.sh`; `H2S_TEST_TOOLS_CACHE=0` asks nix again).
   - NixOS: `nix` provides labwc, and the lock bed's whole set.
   - Arch: without `nix`, labwc has to be installed, and for the lock bed the packages
     `docs/ARCHITECTURE.md` names ("Where the test tools come from"); Quickshell is the `qs`

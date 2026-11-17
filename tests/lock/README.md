@@ -18,11 +18,20 @@ LOCKTEST_EXTRA_TESTS=<dir> tests/lock/run.sh <name>   # a test from another dire
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about five minutes with the default four tests at
+130 when interrupted. A full run takes about three minutes with the default four tests at
 a time, about fifteen one after another (each test starts its own stack, in
 2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
 it restarts a crash in place; the launcher's restart pauses are shortened where a test only
 needs their schedule, `--launcher-timings`).
+
+**One run at a time on a machine.** The tests depend on timing, and a run starts as many
+at once as the machine keeps on schedule; a second run beside it would have both fail for
+no fault of the shell. So `run.sh` takes a lock itself — `flock` on
+`/tmp/h2s-locktest.flock`, held from its start to its end — and while another run has it,
+prints one line and waits. A caller that wraps the run in `flock /tmp/h2s-locktest.flock …`
+hands its lock on, and the run does not wait for it (not with `flock -o`, which keeps the
+lock from the command). The tests' own processes do not hold it. The unit, module and
+self-test runners take no lock.
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running tests and their stacks, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
@@ -428,6 +437,12 @@ tests):
   nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves — a run
   prints a NOTE when the versions differ (both binaries asked `--version` only). It is
   fetched with `fetchTarball` and a hash, which needs no experimental Nix feature.
+  Asking nix takes seconds at every start, so the store path it gave is remembered: a file
+  in `${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/`, named after a hash of `tools.nix`,
+  every file it names with a relative path, and the system. The path is taken from there
+  only while it exists and holds every part the run needs; otherwise nix is asked and the
+  file rewritten. The `tools:` line says "remembered from an earlier run" then;
+  `H2S_TEST_TOOLS_CACHE=0` asks nix whatever is remembered.
 - **`system`** — without `nix`, or with `H2S_TEST_TOOLS=system`: every program is the one on
   `PATH`, in whatever version is installed, and `run.sh` has the rest made for the run, in
   its artifacts dir (`tools/`; `make_system_tools` in `resolve.sh`): `bin/` links to those

@@ -15,6 +15,10 @@
 # h2s-shell launcher runs, else qs or quickshell on PATH. The run's first lines say what was
 # taken; a missing tool is a set-up error (exit 2) that names it.
 #
+# Nothing here is shared with another run but the processor — every run has its own
+# compositor, runtime dir and home — so these runners take no lock and run side by side
+# (the lock test bed, whose tests depend on timing, takes one: tests/lock/run.sh).
+#
 #   headless_setup                         the private dirs and the compositor (exit 2 on failure)
 #   headless_run <root.qml> <copy> [VAR=value…]
 #                                          Quickshell on that root file, with those variables
@@ -62,7 +66,21 @@ headless_cleanup() {
         kill -KILL -- "-$quickshell_pid" 2> /dev/null
         [ -n "$quickshell_gone" ] || kill -KILL "$quickshell_pid" 2> /dev/null
     fi
-    [ -n "${labwc_pid:-}" ] && { kill -TERM -- "-$labwc_pid" 2> /dev/null; sleep 0.3; kill -KILL -- "-$labwc_pid" 2> /dev/null; }
+    # The compositor: asked to end, waited for (it takes some tens of milliseconds; two
+    # seconds at most), and what is left of its group then is killed. labwc_pid is the
+    # `timeout` that leads the group; it ends when labwc has, and until this bash has
+    # waited for it, it is still listed, as a zombie
+    if [ -n "${labwc_pid:-}" ]; then
+        local state
+        kill -TERM -- "-$labwc_pid" 2> /dev/null
+        for _ in $(seq 1 100); do
+            state=""
+            { read -r _ _ state _ < "/proc/$labwc_pid/stat"; } 2> /dev/null
+            [ -z "$state" ] || [ "$state" = Z ] && break
+            sleep 0.02
+        done
+        kill -KILL -- "-$labwc_pid" 2> /dev/null
+    fi
     [ -n "$probe" ] && rm -rf "$probe"
     [ -n "$work" ] && rm -rf "$work"
 }

@@ -17,6 +17,15 @@
 #
 # setsid and timeout are taken from PATH with either source (tools.nix does not hold them).
 #
+# With nix, the store path it built is remembered, so that a later start does not have nix
+# evaluate tools.nix again (seconds, at every runner's start): a file in
+# ${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/, named after a hash of what the build is
+# made from — tools.nix, every file it names (tools_inputs, below) and the system. The
+# remembered path is taken only while it is still there and holds what this caller needs;
+# otherwise nix is asked as before and the file rewritten. H2S_TEST_TOOLS_CACHE=0 asks nix
+# whatever is remembered (and rewrites the file). Without a cache directory that can be
+# written, or without sha256sum, nix is asked every time.
+#
 # The lock bed's set is what tools.nix builds: bin/ (labwc, Hyprland, hyprctl, grim, python3
 # with pywayland, setpriv, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr) and
 # share/ (ltproto: the Python bindings of the input protocols; us.xkb and keymaps/: the
@@ -40,6 +49,7 @@
 # Prints what it took, before any test (the launcher line for the lock need only):
 #
 #   tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4, Hyprland 0.57.2
+#   tools: nix (tests/lock/tools.nix, pinned: /nix/store/…-h2s-locktest-tools, remembered from an earlier run) — …
 #   launcher: /…/tests/lock/launcher.sh (the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH)
 #   quickshell: /usr/bin/qs 0.3.2 (asked of the launcher /…/tests/lock/launcher.sh)
 #
@@ -103,6 +113,72 @@ case "${H2S_TEST_TOOLS:-}" in
     *) setup_error "H2S_TEST_TOOLS must be nix or system, not '$H2S_TEST_TOOLS'" ;;
 esac
 
+# ---- The pinned set's path, remembered ------------------------------------------------
+# tools_inputs: the files the build of tools.nix is made from, one per line, relative to
+# this directory: tools.nix and every file it names with a relative path — one that starts
+# with ./ or ../, in its code or in a comment (a directory named so: every file in it). Fails when one of them is not there — then nothing is
+# remembered. A file tools.nix reaches any other way (a path put together from strings, a
+# file one of these imports) has to be added here: a remembered path that such a change
+# does not move would be tests run with old tools.
+tools_inputs() {
+    local path
+    echo tools.nix
+    while IFS= read -r path; do
+        if [ -f "$path" ]; then
+            echo "$path"
+        elif [ -d "$path" ]; then
+            find "$path" -type f || return 1
+        else
+            return 1
+        fi
+    done < <(grep -o -E '\.{1,2}/[A-Za-z0-9._+-][A-Za-z0-9._/+-]*' tools.nix | LC_ALL=C sort -u)
+}
+# tools_cache_file: the file the path is remembered in, for the tree as it is now; fails
+# when there is no way to remember one
+tools_cache_file() {
+    local base=${XDG_CACHE_HOME:-${HOME:+$HOME/.cache}} inputs key
+    [[ "$base" == /* ]] && type -P sha256sum > /dev/null && type -P uname > /dev/null \
+        && type -P find > /dev/null && type -P sort > /dev/null && type -P mv > /dev/null || return 1
+    inputs=$(cd "$LOCKTEST_DIR" && tools_inputs) && [ -n "$inputs" ] || return 1
+    inputs=$(LC_ALL=C sort -u <<< "$inputs") || return 1
+    local names=()
+    mapfile -t names <<< "$inputs"
+    # The system, and each file's name and contents (a file renamed is another build too)
+    local system sums
+    system=$(uname -sm) && sums=$(cd "$LOCKTEST_DIR" && sha256sum -- "${names[@]}") || return 1
+    key=$(printf '%s\n' "h2s-shell test tools 1" "$system" "$sums" | sha256sum) || return 1
+    key=${key%% *}
+    [ ${#key} = 64 ] || return 1
+    echo "$base/h2s-shell-tests/tools-nix-$key"
+}
+# pinned_parts: what this caller needs the pinned set to hold
+pinned_parts() {
+    if [ "$LOCKTEST_NEED" = lock ]; then
+        printf '%s\n' "${lock_programs[@]/#/bin/}" share/ltproto share/us.xkb share/keymaps
+    else
+        printf '%s\n' bin/labwc bin/setpriv
+    fi
+}
+# remembered_tools <file>: the path in it, when it is still a tool set this caller can use
+remembered_tools() {
+    local path part
+    { IFS= read -r path < "$1"; } 2> /dev/null || return 1
+    [[ "$path" == /* ]] && [ -d "$path" ] || return 1
+    while IFS= read -r part; do
+        [ -e "$path/$part" ] || return 1
+    done < <(pinned_parts)
+    echo "$path"
+}
+# remember_tools <file> <path>: written beside it and moved into place, so that a reader
+# never sees half a path. Not being able to is not an error: nix is asked next time
+remember_tools() {
+    local directory=${1%/*} new
+    mkdir -p "$directory" 2> /dev/null || return 0
+    new=$(mktemp "$directory/.tools-nix.XXXXXX" 2> /dev/null) || return 0
+    if printf '%s\n' "$2" > "$new" 2> /dev/null && mv -f "$new" "$1" 2> /dev/null; then return 0; fi
+    rm -f "$new"
+}
+
 # The programs of the lock bed's set, as tools.nix's bin/ names them
 lock_programs=(labwc Hyprland hyprctl grim python3 setpriv xkbcli dbus-daemon gdbus wl-copy wl-paste wlr-randr)
 
@@ -110,24 +186,29 @@ lock_programs=(labwc Hyprland hyprctl grim python3 setpriv xkbcli dbus-daemon gd
 # Everything missing is collected and reported at once, below
 missing=()
 if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
-    # Pinned in tools.nix; built (or fetched from the cache) once and reused from the store
-    echo "resolving tools (tools.nix)…"
-    nix_log=$(mktemp "$temp_base/locktest-nix.XXXXXX") || setup_error "cannot create a temp file in $temp_base"
-    LOCKTEST_TOOLS=$(nix build --no-link --print-out-paths --impure -f "$LOCKTEST_DIR/tools.nix" 2> "$nix_log" | tail -n 1)
-    if [ -z "$LOCKTEST_TOOLS" ]; then
-        cat "$nix_log" >&2
-        rm -f "$nix_log"
-        setup_error "nix could not build tests/lock/tools.nix (output above)"
-    fi
-    rm -f "$nix_log"
-    if [ "$LOCKTEST_NEED" = lock ]; then
-        needed_tools=("${lock_programs[@]/#/bin/}" share/ltproto share/us.xkb share/keymaps)
+    # Pinned in tools.nix; built (or fetched from nix's binary cache) once and reused from
+    # the store. The path nix gave last time is taken when it still stands (above)
+    LOCKTEST_TOOLS=""
+    tools_remembered=""
+    tools_cache=$(tools_cache_file) || tools_cache=""
+    if [ -n "$tools_cache" ] && [ "${H2S_TEST_TOOLS_CACHE:-}" != 0 ] && LOCKTEST_TOOLS=$(remembered_tools "$tools_cache"); then
+        tools_remembered=1
     else
-        needed_tools=(bin/labwc bin/setpriv)
+        echo "resolving tools (tools.nix)…"
+        nix_log=$(mktemp "$temp_base/locktest-nix.XXXXXX") || setup_error "cannot create a temp file in $temp_base"
+        LOCKTEST_TOOLS=$(nix build --no-link --print-out-paths --impure -f "$LOCKTEST_DIR/tools.nix" 2> "$nix_log" | tail -n 1)
+        if [ -z "$LOCKTEST_TOOLS" ]; then
+            cat "$nix_log" >&2
+            rm -f "$nix_log"
+            setup_error "nix could not build tests/lock/tools.nix (output above)"
+        fi
+        rm -f "$nix_log"
     fi
-    for tool in "${needed_tools[@]}"; do
+    while IFS= read -r tool; do
         [ -e "$LOCKTEST_TOOLS/$tool" ] || missing+=("the pinned tool set ($LOCKTEST_TOOLS) lacks $tool ($(tool_use "$tool"))")
-    done
+    done < <(pinned_parts)
+    # Remembered only when it is a set this caller could use
+    [ -z "$tools_remembered" ] && [ -n "$tools_cache" ] && [ ${#missing[@]} -eq 0 ] && remember_tools "$tools_cache" "$LOCKTEST_TOOLS"
     LOCKTEST_LABWC=$LOCKTEST_TOOLS/bin/labwc
     SETPRIV=$LOCKTEST_TOOLS/bin/setpriv
     needed_tools=(setsid timeout)
@@ -251,7 +332,7 @@ if [ ${#missing[@]} -gt 0 ]; then
 fi
 
 if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
-    tools_line="tools: nix (tests/lock/tools.nix, pinned: $LOCKTEST_TOOLS)"
+    tools_line="tools: nix (tests/lock/tools.nix, pinned: $LOCKTEST_TOOLS${tools_remembered:+, remembered from an earlier run})"
     pinned_hyprland=$(version_line "$LOCKTEST_TOOLS/bin/Hyprland")
     hyprland_version=$(version_number "$pinned_hyprland")
 else

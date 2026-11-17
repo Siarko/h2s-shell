@@ -16,6 +16,11 @@
 # very store path the real session runs. Move the pin when the system's Hyprland moves
 # (run.sh prints a NOTE when the two versions differ).
 #
+# The runners remember the store path this builds, under a hash of this file and of every
+# file it names with a relative path (resolve.sh: tools_inputs), and do not ask nix again
+# while those are unchanged. A file read here in any other way — a path put together from
+# strings, a file one of those files imports — has to be added to tools_inputs.
+#
 # Quickshell is deliberately not here: the shell under test is started through the
 # installed `h2s-shell` launcher, with the Quickshell that launcher puts on PATH, as in
 # real use. PAM modules are not here either: run.sh takes them from the libpam that

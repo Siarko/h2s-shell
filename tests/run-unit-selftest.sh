@@ -40,9 +40,10 @@
 #   interrupted-twice   a Quickshell that ignores the request, and a second interrupt
 #                       during the cleanup: the same
 #
-#   flock /tmp/h2s-locktest.flock tests/run-unit-selftest.sh
+#   tests/run-unit-selftest.sh
 #
-# Each case starts the runner's private headless compositor (nothing shows); no shell runs
+# It takes no lock, as the runner takes none: another run beside it shares only the
+# processor. Each case starts the runner's private headless compositor (nothing shows); no shell runs
 # (`real` runs tests.qml, the module cases tests-modules.qml). The tools are found as the
 # runner finds them (tests/run-unit.sh), so the verdict is guarded with the pinned tools and
 # with the system's.

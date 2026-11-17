@@ -67,8 +67,13 @@ command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` says which), and sa
 in its first lines; a missing tool ends the run with status 2 and its name
 (`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). The lock test bed starts
 the shell through a launcher: `LOCKTEST_LAUNCHER`, else `h2s-shell` on `PATH`, else its own
-`tests/lock/launcher.sh`. When another run of either may be going on (two people or agents in one checkout), wrap them in
-`flock /tmp/h2s-locktest.flock …`.
+`tests/lock/launcher.sh`.
+
+Only the lock test bed needs the machine to itself — its tests depend on timing, and a run
+starts as many at once as the machine keeps on schedule. `tests/lock/run.sh` takes the lock
+for that itself (`/tmp/h2s-locktest.flock`, for the length of the run) and says so when it
+waits for another run; wrapping it in `flock` on that file still works. The unit, module and
+self-test runners take no lock: they share nothing but the processor, and run side by side.
 
 A running shell reloads itself when a file changes, but that reload is not enough after
 editing a singleton: it has been seen to rebuild the panels while keeping the old
@@ -141,11 +146,16 @@ What differs between the two systems for development:
   `tests/headless.sh` and `tests/lock/run.sh`): the pinned build of `tests/lock/tools.nix`
   where there is a `nix` command, else the system's programs on `PATH`, un-pinned;
   `H2S_TEST_TOOLS=nix` or `=system` chooses. Each run prints the source and the versions.
+  With `nix`, the store path it built is remembered in
+  `${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/` and taken at the next start without
+  asking nix, as long as `tools.nix` and the files it names are unchanged and the path still
+  holds the tools; `H2S_TEST_TOOLS_CACHE=0` asks nix anyway.
   - The unit and module suites (`run-unit.sh`, `run-unit-selftest.sh`, `run-modules.sh`)
     need labwc (the headless compositor), `setpriv` and `setsid` (util-linux) and `timeout`
     (coreutils). NixOS: `nix` provides labwc and `setpriv`. Arch, without `nix`: labwc is a
     package to have installed for development (`install.sh` does not install it).
-  - `tests/resolve-selftest.sh` needs none of them but `setsid` and `timeout`.
+  - `tests/resolve-selftest.sh` needs none of them but `setsid`, `timeout` and `flock`
+    (util-linux; the lock test bed needs `flock` too).
   - The lock test bed (`tests/lock/run.sh`) needs labwc, Hyprland with hyprctl, grim,
     wlr-randr, wl-copy and wl-paste, xkbcli, dbus-daemon, gdbus, `setpriv`, a `python3`
     that imports pywayland, and the Python bindings of its input protocols and its

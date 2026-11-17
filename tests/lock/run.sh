@@ -14,6 +14,9 @@
 #                                   <dir>/<name>.sh, written as these are); a name is looked
 #                                   for here first. Without names: these and that dir's
 #
+# One run at a time on a machine: a run holds /tmp/h2s-locktest.flock from its start to its
+# end and waits, saying so, while another run has it (see "One run at a time", below).
+#
 # Exit status: 0 when every test passed (or failed exactly as expected, see below), 1
 # when one failed (a test that could not start its stack counts as failed), 2 when the
 # test bed itself could not be set up before any test ran, 130 when interrupted.
@@ -62,7 +65,7 @@ LONG_TESTS=(
 # How many tests run at once: -j N (or -jN, --jobs N) before the test names, else
 # LOCKTEST_JOBS, else one fewer than the cores, at most 4: each test is two compositors and
 # a Qt shell, and with 5 at once on 6 cores (load 12) the launcher's restart tests no longer
-# fit their schedule; at 4 the load stays near 8 and a full run takes some five minutes.
+# fit their schedule; at 4 the load stays near 8 and a full run takes some three minutes.
 jobs=${LOCKTEST_JOBS:-}
 args=()
 while [ $# -gt 0 ]; do
@@ -84,6 +87,7 @@ fi
 # ---- Cleanup, whatever ends the run --------------------------------------------------
 probe=""
 ARTIFACTS=""
+lock_wait=""            # the pid of the flock waiting for another run to end, while it waits
 declare -A RUNNING=()   # pid of a running test's timeout -> the test's name
 declare -A RUNTIME=()   # name of a running test -> its private runtime dir
 declare -A TAIL=()      # name of a running test -> the pid of the tail showing its log (-j 1)
@@ -138,6 +142,7 @@ on_signal() {
     local name
     echo >&2
     echo "run.sh: interrupted, stopping the test bed" >&2
+    [ -n "$lock_wait" ] && kill "$lock_wait" 2> /dev/null
     stop_tests
     for name in "${!TAIL[@]}"; do kill "${TAIL[$name]}" 2> /dev/null; done
     sweep LOCKTEST_RUN_ID "${LOCKTEST_RUN_ID:-}"
@@ -165,6 +170,46 @@ setup_error() {
 
 [ "$(id -u)" != 0 ] || setup_error "do not run as root"
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || setup_error "the number of jobs (-j / LOCKTEST_JOBS) must be a positive whole number, not '$jobs'"
+
+# ---- One run at a time ---------------------------------------------------------------
+# The tests depend on timing — a restart's schedule, an idle time-out, a prompt that must
+# wake within seconds — and a run starts as many at once as the machine keeps on schedule
+# (the jobs, above). Two runs side by side are twice that, and both fail for no reason of
+# the shell's. So a run takes a lock for the whole machine, itself: nobody has to remember
+# to, and the runners that share nothing but the processor (the unit, module and self-test
+# runners) take none.
+#
+# The lock is flock(2) on LOCK_FILE, held by an open file of this bash until it exits. A
+# caller that already wrapped the run in `flock /tmp/h2s-locktest.flock …` handed that open
+# file on, lock and all: it is found among this process's open files and used, so the run
+# does not wait for its own caller. (`flock -o`, which closes the file before it starts the
+# command, would have the run wait for its caller for ever: not with -o.) The tests are
+# started without the file: what outlived a run could otherwise keep the next one waiting.
+# LOCKTEST_LOCK_FILE names another file — for tests/resolve-selftest.sh, which checks this
+# without waiting for a real run.
+LOCK_FILE=${LOCKTEST_LOCK_FILE:-/tmp/h2s-locktest.flock}
+lock_fd=""
+take_lock() {
+    local link
+    type -P flock > /dev/null || setup_error "flock not found on PATH (util-linux: one run of the lock test bed at a time)"
+    [ -e "$LOCK_FILE" ] || : 2> /dev/null >> "$LOCK_FILE"
+    for link in /proc/$$/fd/*; do
+        [ "$link" -ef "$LOCK_FILE" ] && { lock_fd=${link##*/}; break; }
+    done
+    if [ -z "$lock_fd" ]; then
+        # (Read-only: enough for a lock, and a file another user made can be opened so)
+        exec {lock_fd}< "$LOCK_FILE" || setup_error "cannot open the lock file $LOCK_FILE"
+    fi
+    flock -n "$lock_fd" && return 0
+    echo "run.sh: waiting for another run of the lock test bed to end ($LOCK_FILE)…"
+    # In the background and waited for: an interrupt must end the wait at once (bash runs a
+    # trap only when the foreground command ends). It locks the same open file as this bash
+    flock "$lock_fd" &
+    lock_wait=$!
+    wait "$lock_wait" || setup_error "could not take the lock $LOCK_FILE"
+    lock_wait=""
+}
+take_lock
 
 # Paths are substituted into PAM stacks (sed, split at whitespace by PAM): only plain
 # characters are allowed in the temp dir
@@ -361,7 +406,7 @@ start_test() {
         "$SETPRIV" --no-new-privs timeout -k 10 "$PER_TEST_TIMEOUT" bash -c '
             source "$LOCKTEST_DIR/lib.sh"
             source "$2"
-            [ "$FAILURES" -eq 0 ]' _ "$name" "${TEST_FILE[$name]}" > "$ARTIFACTS/$name/test.log" 2>&1 < /dev/null &
+            [ "$FAILURES" -eq 0 ]' _ "$name" "${TEST_FILE[$name]}" > "$ARTIFACTS/$name/test.log" 2>&1 < /dev/null {lock_fd}<&- &
     pid=$!
     RUNNING[$pid]=$name
     if serial_output; then
