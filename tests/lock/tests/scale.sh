@@ -1,8 +1,12 @@
 # The prompt on a scaled and on a small output: whole, inside the screen, and working.
 #
-#   WAYLAND-1 at a fractional scale (1.5: 1280x720 logical) and at scale 3 (640x360
-#   logical): the prompt woken there shows wholly inside the output (what changed against
-#   the asleep screen does not touch its edges), and the password typed there unlocks;
+#   WAYLAND-1 asked for a fractional scale (1.5) and for scale 3, in its `preferred` mode:
+#   that mode is 1280x720 pixels (Hyprland's window in labwc as it first came up, not the
+#   1920x1080 the stack sets), and Hyprland takes the nearest scale that divides it evenly —
+#   1.6 (800x450 logical) and 3.2 (400x225 logical). The test logs what was taken and
+#   assumes none of these numbers: the prompt woken there shows wholly inside the output
+#   (what changed against the asleep screen does not touch its edges), and the password
+#   typed there unlocks;
 #   a small output (300x260, scale 1, right of it): the prompt narrows to fit (the card is
 #   320 wide, plus a margin each side) and a press there brings it, whole.
 #
@@ -48,6 +52,23 @@ for monitor in json.load(sys.stdin):
         print(monitor["scale"], round(monitor["width"] / monitor["scale"]), round(monitor["height"] / monitor["scale"]))' "$1"
 }
 scaled() { [ "$(output_scale WAYLAND-1 | cut -d' ' -f1)" != "$1" ]; }
+# An output's size in pixels, as Hyprland has it now ("300 260"); nothing when it is not there
+output_pixels() {
+    hyprctl -j monitors | python3 -I -c '
+import json, sys
+for monitor in json.load(sys.stdin):
+    if monitor["name"] == sys.argv[1]:
+        print(monitor["width"], monitor["height"])' "$1"
+}
+# The name of the headless output beside WAYLAND-1, once it is there (false until then)
+small_output() {
+    local name
+    name=$(hyprctl -j monitors | python3 -I -c '
+import json, sys
+print(" ".join(monitor["name"] for monitor in json.load(sys.stdin) if monitor["name"].startswith("HEADLESS")))')
+    [ -n "$name" ] && echo "${name%% *}"
+}
+small_output_is() { [ "$(output_pixels "$small")" = "$1 $2" ]; }
 
 # Hyprland takes the nearest scale that divides the mode evenly: what it took is logged
 for scale in 1.5 3; do
@@ -70,15 +91,15 @@ for scale in 1.5 3; do
 done
 
 # A small output beside it
+before=$(output_scale WAYLAND-1 | cut -d' ' -f1)
 monitor_rule WAYLAND-1 preferred 0x0 1
+wait_until 3 scaled "$before" || abort "the scale 1 was not taken back"
 hyprctl output create headless > /dev/null
-wait_until 5 test -n "$(hyprctl -j monitors | python3 -I -c 'import json,sys; print(" ".join(m["name"] for m in json.load(sys.stdin) if m["name"].startswith("HEADLESS")))')" \
-    || abort "no headless output"
-small=$(hyprctl -j monitors | python3 -I -c 'import json,sys; print([m["name"] for m in json.load(sys.stdin) if m["name"].startswith("HEADLESS")][0])')
+wait_until 5 small_output || abort "no headless output"
+small=$(small_output)
 read -r _ main_width main_height <<< "$(output_scale WAYLAND-1)"
 monitor_rule "$small" 300x260@60 "${main_width}x0" 1
-wait_until 3 test "$(hyprctl -j monitors | python3 -I -c 'import json,sys,os; print([m["width"] for m in json.load(sys.stdin) if m["name"] == sys.argv[1]][0])' "$small")" = 300 \
-    || abort "the small output did not take 300x260"
+wait_until 3 small_output_is 300 260 || abort "the small output did not take 300x260 (it is $(output_pixels "$small"))"
 lock_by_ipc
 check_within 5 "small: locked" compositor_locked
 check_within 5 "small: two surfaces" state_is surfaces 2

@@ -19,7 +19,7 @@ Exit status 0 when every test passed or failed exactly as expected, 1 when one f
 a test marked as failing passed; a test whose stack does not come up counts as failed),
 2 when the test bed could not be set up before any test ran (tools, launcher, paths),
 130 when interrupted. A full run takes about five minutes with the default four tests at
-a time, about fifteen one after another (fifty-nine tests, each starting its own stack in
+a time, about fifteen one after another (each test starts its own stack, in
 2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
 it restarts a crash in place; the launcher's restart pauses are shortened where a test only
 needs their schedule, `--launcher-timings`).
@@ -143,11 +143,21 @@ here may reach it.
   shell helper re-parented to a subreaper. Not the scripts `pam_exec` runs: they get
   PAM's environment only, without the marker. Those are stopped with the shell's process
   group and, when their PAM helper dies, by their own orphan check (`wait-finger.sh`).
-- **No session variables leak in**: `WAYLAND_DISPLAY`, `WAYLAND_SOCKET`, `DISPLAY`,
-  Hyprland's and sway's sockets, `PIPEWIRE_REMOTE`, `PIPEWIRE_RUNTIME_DIR`,
-  `PULSE_SERVER`, the session id and the activation tokens are unset; so are the input
-  method variables (`QT_IM_MODULE`, `XMODIFIERS`, …) and `LC_ALL`/`LC_CTYPE`, and `LANG` is
+- **No session variables leak in**: `run.sh` starts each test with an empty environment
+  and a list of what to keep of the caller's — `PATH`, `TMPDIR`, `USER`, `LOGNAME`, `TZ`,
+  `LOCALE_ARCHIVE`, `XDG_DATA_DIRS`, and the two settings for a test
+  (`LOCKTEST_QT_LOGGING`, `LOCKTEST_PROCESS_TIMEOUT`) — so no display, bus, seat, agent
+  socket or toolkit setting of the session reaches the shell under test (`harness.sh`
+  checks a few). `lib.sh` unsets the session's variables by name as well (`WAYLAND_DISPLAY`,
+  `WAYLAND_SOCKET`, `DISPLAY`, Hyprland's and sway's sockets, `PIPEWIRE_REMOTE`,
+  `PIPEWIRE_RUNTIME_DIR`, `PULSE_SERVER`, the session id, the activation tokens, the input
+  method variables, `LC_ALL`/`LC_CTYPE`), should the list ever grow, and sets `LANG` to
   `en_US.UTF-8` — the locale picks the Compose table the dead-key and Compose tests rely on.
+- **No core files.** Tests that crash the shell on purpose (`restart-crash-locked`,
+  `restart-crash-finger`, `modules`) would each leave a core of Quickshell where the system
+  keeps them, outside the run's directories; the run's processes have a core size limit of
+  0, so none is written. What remains, where crashes go to `systemd-coredump`: a journal
+  entry per crash (`coredumpctl list` shows them, with no core file).
 - **A private session bus only when asked** (`stack_start --session-bus`, the notification
   test): a `dbus-daemon` of the test's own, its socket in the private runtime dir, with no
   service directories, so nothing is activated; the real session bus is never named.

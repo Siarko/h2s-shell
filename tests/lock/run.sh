@@ -206,6 +206,11 @@ fi
 declare -A TEST_FILE=()
 for name in "${tests[@]}"; do
     [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || setup_error "no test $name (tests/lock/tests/$name.sh)"
+    # A test's logs go to a directory of its name in the run's artifacts dir, beside the
+    # run's own
+    case "$name" in
+        tools | shell | shells | .started) setup_error "a test cannot be called $name: the run keeps something of its own under that name in its artifacts dir" ;;
+    esac
     if [ -f "$LOCKTEST_DIR/tests/$name.sh" ]; then
         TEST_FILE[$name]=$LOCKTEST_DIR/tests/$name.sh
     elif [ -n "${LOCKTEST_EXTRA_TESTS:-}" ] && [ -f "$LOCKTEST_EXTRA_TESTS/$name.sh" ]; then
@@ -301,6 +306,12 @@ classify() {
     echo XFAIL
 }
 
+# No core files: some tests crash the shell on purpose (restart-crash-*, modules), and a
+# core of Quickshell is some 15 MB kept outside the run's directories. Inherited by every
+# process of every test. (Where crashes go to systemd-coredump, it still writes its journal
+# entry for each; it stores no core for a process whose limit is 0.)
+ulimit -c 0 2> /dev/null
+
 started=$SECONDS
 declare -A results=()
 declare -A test_started=()
@@ -329,10 +340,21 @@ start_test() {
     runtime=${RUNTIME[$name]}
     chmod 700 "$runtime"
     cp -a "$shell_template" "$copy" || { setup_failed "$name" "cannot copy the shell to $copy"; return; }
+    # The test gets nothing of the caller's environment but what is named here: where
+    # programs and temp files are, who runs it, the time zone, the locale data and the data
+    # dirs (NixOS finds its locales and the shell its icons and fonts through them), and the
+    # two settings a caller may give a test (lib.sh reads them). No display, no bus, no seat,
+    # no agent socket, no toolkit setting of the session: lib.sh then sets the test's own,
+    # and still unsets the session's variables by name, should this list ever grow.
     # Everything of the test runs with no new privileges: setuid programs (pkexec,
     # unix_chkpwd) cannot gain any, so nothing the shell starts can reach polkit or the
     # real password database
-    env LOCKTEST_DIR="$LOCKTEST_DIR" LOCKTEST_SHELL="$copy" LOCKTEST_TOOLS="$LOCKTEST_TOOLS" \
+    env -i PATH="$PATH" ${TMPDIR:+TMPDIR="$TMPDIR"} ${USER:+USER="$USER"} ${LOGNAME:+LOGNAME="$LOGNAME"} \
+        ${TZ:+TZ="$TZ"} ${LOCALE_ARCHIVE:+LOCALE_ARCHIVE="$LOCALE_ARCHIVE"} \
+        ${XDG_DATA_DIRS:+XDG_DATA_DIRS="$XDG_DATA_DIRS"} \
+        ${LOCKTEST_QT_LOGGING:+LOCKTEST_QT_LOGGING="$LOCKTEST_QT_LOGGING"} \
+        ${LOCKTEST_PROCESS_TIMEOUT:+LOCKTEST_PROCESS_TIMEOUT="$LOCKTEST_PROCESS_TIMEOUT"} \
+        LOCKTEST_DIR="$LOCKTEST_DIR" LOCKTEST_SHELL="$copy" LOCKTEST_TOOLS="$LOCKTEST_TOOLS" \
         LOCKTEST_PAM_MODULES="$LOCKTEST_PAM_MODULES" LOCKTEST_LAUNCHER="$LOCKTEST_LAUNCHER" \
         LOCKTEST_QS="$LOCKTEST_QS" LOCKTEST_ARTIFACTS="$ARTIFACTS/$name" LOCKTEST_RUN_ID="$LOCKTEST_RUN_ID" \
         LOCKTEST_TEST_ID="$(test_id "$name")" LOCKTEST_RUNTIME="$runtime" \

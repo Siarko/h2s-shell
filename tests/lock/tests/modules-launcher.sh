@@ -52,6 +52,13 @@ else:
     print(modules[0][sys.argv[2]] if modules else "absent")' "$1" "$2"
 }
 module_state_is() { [ "$(module_field "$1" state)" = "$2" ]; }
+# The state of every module the shell lists, in its order ("explicit: loaded, alpha: …")
+module_states() {
+    shell_ipc modules list | python3 -I -c '
+import json, sys
+print(", ".join("%s: %s" % (module["directory"].rsplit("/", 1)[-1], module["state"]) for module in json.load(sys.stdin)["modules"]))'
+}
+module_states_are() { [ "$(module_states)" = "$1" ]; }
 safe_mode_of_shell() { process_env "$SHELL_PID" H2S_SHELL_SAFE_MODE; }
 
 # ---- (1) discovery ----
@@ -81,7 +88,11 @@ wait_for_new_shell "$second" 10 || abort "no new shell after the second kill"
 check "two quick deaths in a row: the next start is in safe mode" test "$(safe_mode_of_shell)" = 1
 check "… the shell knows it" test "$(module_field - safeMode)" = true
 check_within 15 "… no module loads" module_state_is alpha safe-mode
-check "… none of them" test "$(shell_ipc modules list | grep -o '"state":"loaded"' | wc -l)" = 0
+# (Every one, waited for: a module still pending when alpha has its state could load yet.
+# The second beta is still told apart as a duplicate: that is read before safe mode is)
+check_within 15 "… none of them: each is in safe-mode, the duplicate a duplicate" \
+    module_states_are "explicit: safe-mode, alpha: safe-mode, beta: safe-mode, beta-copy: duplicate, zeta: safe-mode"
+log "modules in safe mode: $(module_states)"
 check "… the launcher said so" grep -aq "starting it in safe mode (no modules)" "$RUN/h2s-shell-launcher.log"
 lock_by_ipc
 check_within 5 "in safe mode the lock locks" compositor_locked

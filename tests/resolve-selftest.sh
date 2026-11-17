@@ -162,8 +162,9 @@ echo "setpriv=$SETPRIV"
 echo "launcher=$LOCKTEST_LAUNCHER"
 echo "launcher_from=$LOCKTEST_LAUNCHER_FROM"
 echo "qs=$LOCKTEST_QS"
-# The lock bed's set from the system's tools, as run.sh has it made
-if [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+# The lock bed's set from the system's tools, as run.sh has it made (MAKE_ANYWAY: a caller
+# that asks for it where it is not for)
+if { [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; } || [ -n "${MAKE_ANYWAY:-}" ]; then
     make_system_tools "$4"
     echo "made=$4"
 fi
@@ -524,6 +525,15 @@ for asked in python xkbcli; do
     done
     has_line "$asked.env" "HOME=$made/home"
 done
+lacks_variable python.env PKG_CONFIG_PATH
+
+# Where the caller keeps pkg-config's files elsewhere (PKG_CONFIG_PATH), the scanner is told
+# too: it asks pkg-config for the core protocol
+resolve lock-system-pkg-config-path lock "$system_lock launcher" PKG_CONFIG_PATH="$work/pkgconfig-elsewhere"
+exits 0
+prints out "made=$made"
+has_line python.env "PKG_CONFIG_PATH=$work/pkgconfig-elsewhere"
+lacks_variable xkbcli.env PKG_CONFIG_PATH
 
 # Found, there being no nix
 resolve lock-no-nix lock "$system_lock launcher"
@@ -584,6 +594,20 @@ resolve lock-keymap-empty lock "base session system hyprland lockset wlr-randr p
 exits 2
 prints err "driver: xkbcli could not compile the us keymap (output above)"
 silent_on out "made="
+
+# The set is made for the lock need with the system's tools only: asked for with the unit
+# need, or with the pinned tools, it is refused and nothing is made
+resolve make-for-unit unit "base session system qs" MAKE_ANYWAY=1
+exits 2
+prints err "driver: make_system_tools is for the lock need with the system's tools"
+silent_on out "made="
+is "nothing was made" test ! -e "$made"
+
+resolve make-with-nix lock "base session nix launcher" MAKE_ANYWAY=1
+exits 2
+prints err "driver: make_system_tools is for the lock need with the system's tools"
+silent_on out "made="
+is "nothing was made" test ! -e "$made"
 
 # ---- The launcher of the lock need ---
 # The one named, before the h2s-shell on PATH

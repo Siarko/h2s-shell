@@ -16,6 +16,11 @@
 #                          sweeps after it — never a sibling test's
 #   LOCKTEST_RUNTIME       this test's private, short runtime dir (run.sh removes it)
 #
+# and of the caller's own environment only PATH, TMPDIR, USER, LOGNAME, TZ, LOCALE_ARCHIVE,
+# XDG_DATA_DIRS, and two settings for a test:
+#   LOCKTEST_QT_LOGGING    QT_LOGGING_RULES for the shell under test
+#   LOCKTEST_PROCESS_TIMEOUT  the cap on each process of the stack, in seconds
+#
 # run.sh starts this bash with no new privileges (setpriv --no-new-privs): everything
 # below inherits that, so no setuid program (pkexec, unix_chkpwd) gains anything.
 
@@ -72,6 +77,9 @@ export LIBSEAT_BACKEND=disabled-for-test
 export PYTHONDONTWRITEBYTECODE=1
 export LOCKTEST_RUN_ID LOCKTEST_TEST_ID
 export PATH=$TOOLS/bin:$PATH
+# run.sh hands over none of these (it starts the test with an empty environment and a list
+# of what to keep); unset here too, so that a variable added to that list by mistake still
+# does not reach the stack
 unset WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE HYPRLAND_CMD NOTIFY_SOCKET \
     SWAYSOCK XDG_SESSION_ID XDG_SESSION_TYPE XDG_CURRENT_DESKTOP LABWC_PID QS_CONFIG_PATH \
     QS_CONFIG_NAME DESKTOP_STARTUP_ID XDG_ACTIVATION_TOKEN WAYLAND_SOCKET PIPEWIRE_REMOTE \
