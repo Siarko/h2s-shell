@@ -867,6 +867,17 @@ Item {
                     checked: root._lockEdited
                     onToggled: root._lockEdited = !checked
                 }
+                // A provider's VPN picked here is not let through by the blocking
+                Text {
+                    readonly property var _kinds: root._lockEdited || VpnLockdown.always ? VpnManager.providerKindsAmong(root._vpnsEdited) : []
+                    visible: _kinds.length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: _kinds.join(" and ") + " cannot connect while traffic is blocked."
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.warning
+                }
                 Hint {
                     text: VpnManager.vpns.length === 0 ? "No VPN set up yet: System → Network → VPN."
                         : "The VPNs picked connect and disconnect with this network, while the shell runs. A VPN that fails leaves the network up."

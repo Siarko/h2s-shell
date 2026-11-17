@@ -401,6 +401,37 @@ TestCase {
         VpnManager.attend("vpt:one");
         assert(fake.calls[fake.calls.length - 1][0] === "attend" && _vpn("vpt:one").attention === null, "attention: its action reaches the provider");
 
+        // Connect or the action: one rule for the row and the card, and connect() keeps it
+        assert(VpnManager.canConnect(_vpn("vpt:one")) && !VpnManager.attendsInstead(_vpn("vpt:one"))
+               && VpnManager.primaryLabel(_vpn("vpt:one")) === "Connect", "primary: nothing needs the user — Connect");
+        assert(VpnManager.canConnect({ uuid: "u", type: "wireguard", state: "", active: false })
+               && VpnManager.primaryLabel({ uuid: "u", type: "wireguard", state: "activated", active: true }) === "Disconnect"
+               && !VpnManager.canConnect(null), "primary: NetworkManager's as before; no VPN — no Connect");
+        const callsBefore = fake.calls.length;
+        fake.setAttention("one", "Waiting for approval", "");
+        assert(!VpnManager.canConnect(_vpn("vpt:one")) && !VpnManager.attendsInstead(_vpn("vpt:one"))
+               && VpnManager.primaryLabel(_vpn("vpt:one")) === "", "primary: needing the user, no action — no button");
+        VpnManager.connect("vpt:one");
+        VpnManager._applyPlan({ connect: ["vpt:one"], disconnect: [] });
+        assertEqual(fake.calls.length, callsBefore, "primary: needing the user — connect refuses, whoever asks");
+        fake.setAttention("one", "Log in to continue", "Log in");
+        assert(!VpnManager.canConnect(_vpn("vpt:one")) && VpnManager.attendsInstead(_vpn("vpt:one"))
+               && VpnManager.primaryLabel(_vpn("vpt:one")) === "Log in", "primary: needing the user, an action — the action in place of Connect");
+        VpnManager.connect("vpt:one");
+        assertEqual(fake.calls.length, callsBefore, "primary: an action to offer — still no connect");
+        fake.clearAttention("one");
+        fake.setState("two", "activated");
+        fake.setAttention("two", "Key expires soon", "");
+        assert(VpnManager.primaryLabel(_vpn("vpt:two")) === "Disconnect" && !VpnManager.attendsInstead(_vpn("vpt:two")),
+               "primary: up and needing the user — still Disconnect");
+        fake.clearAttention("two");
+        fake.setState("two", "");
+
+        // The provider kinds among a network's VPNs: what the blocking does not let through
+        assertEqual(JSON.stringify(VpnManager.providerKindsAmong(["vpt:one", "2f0c8d0e-1111-4222-8333-944455556666", "vpt:two", "away:x", "vpt:a:b"])),
+                    JSON.stringify(["Fake VPN", "away"]), "kinds: each provider once, by its type name or, away, by its id; none for NetworkManager's");
+        assertEqual(VpnManager.providerKindsAmong([]).length + VpnManager.providerKindsAmong(undefined).length, 0, "kinds: none picked — none");
+
         // Slots
         assert(VpnManager.extrasFor(VpnManager.slots.row, _vpn("vpt:one")) === null, "slots: none offered — none");
         fake.withExtras = true;

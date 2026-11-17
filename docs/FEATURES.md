@@ -320,6 +320,12 @@ for it in their editors — the table `inet h2s_vpn_lockdown`, built by
 `scripts/h2s-vpn-lockdown` (root's, through pkexec; it takes checked settings, never rules),
 letting out only loopback, the VPNs' interfaces and servers, virtual interfaces, DNS, DHCP
 and IPv6 ND, and the local network when allowed; passed-on traffic only through a VPN.
+"The VPNs' interfaces" are NetworkManager's VPN profiles' and any named `tun*`, `tap*`,
+`ppp*`, `vpn*` or `wg*`; the virtual ones `docker*`, `br-*`, `veth*`, `virbr*`, `podman*`,
+`vnet*`, `lxc*`, `incus*`. A provider's VPN (Tailscale's `tailscale0`) is not let through
+unless its interface matches those names; its card says so while blocking, and a network
+editor that links one to a blocking network, or the VPN page with "always" on, says it
+cannot connect.
 "Password-free blocking" installs that script to /usr/local/libexec/h2s-vpn-lockdown with
 a polkit rule for this user (Install… / Remove…, its state on the page, the script and the
 rule shown in full; on NixOS a module to import); then no password is asked, and its

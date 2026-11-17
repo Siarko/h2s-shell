@@ -6,6 +6,9 @@
 #   partial    fewer suites than tests.qml registers, exit 0                  → must fail
 #   complete   every suite tests.qml registers, all passed, exit 0            → must pass
 #
+# and the suite count against a small root file whose suites are written with and without
+# arguments (`arguments`: each one must count).
+#
 #   flock /tmp/h2s-locktest.flock tests/run-unit-selftest.sh
 #
 # Each case starts the runner's private headless compositor (nothing shows); no shell runs.
@@ -14,9 +17,34 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/ut-self.XXXXXX") || exit 2
 trap 'rm -rf "$work"' EXIT
+# shellcheck source=count-suites.sh
+source "$REPO/tests/count-suites.sh"
 
-expected=$(grep -c -E '^[[:space:]]*property var _[A-Za-z0-9]+: [A-Za-z0-9]+Test \{\}' "$REPO/tests.qml")
+expected=$(count_suites "$REPO/tests.qml")
 [ "$expected" -gt 1 ] || { echo "cannot count the suites in tests.qml"; exit 2; }
+
+failures=0
+
+# A suite that takes arguments counts like one that takes none
+cat > "$work/arguments.qml" << 'QML'
+Item {
+    property var _plain: PlainTest {}
+    property var _spaced: SpacedTest { }
+    property var _ordered: OrderedTest { after: _plain; other: _spaced }
+    property var _open: OpenTest {
+        after: _ordered
+    }
+    property var notASuite: Helper {}
+    // property var _commented: CommentedTest {}
+}
+QML
+counted=$(count_suites "$work/arguments.qml")
+if [ "$counted" = 4 ]; then
+    echo "PASS arguments: 4 suites counted"
+else
+    echo "FAIL arguments: $counted suites counted, expected 4"
+    failures=$((failures + 1))
+fi
 
 # stand_in <name> <summaries> <how it ends>
 stand_in() {
@@ -31,7 +59,6 @@ stand_in crash 1 'kill -SEGV $$'
 stand_in partial $((expected - 1)) 'exit 0'
 stand_in complete "$expected" 'exit 0'
 
-failures=0
 verdict() {
     LOCKTEST_QS=$work/$1 "$REPO/tests/run-unit.sh" > "$work/$1.log" 2>&1
     local status=$?

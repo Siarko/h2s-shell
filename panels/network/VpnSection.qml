@@ -65,7 +65,7 @@ Column {
             readonly property bool isActive: modelData.state === "activated"
             readonly property bool isChanging: modelData.state === "activating" || modelData.state === "deactivating"
             // A provider's lasting "needs the user" ({ reason, action }), else null
-            readonly property var attention: modelData.attention ?? null
+            readonly property var attention: VpnManager.attentionOf(modelData)
             readonly property string lockdownNote: VpnLockdown.noteFor(modelData)
 
             width: root.width
@@ -127,14 +127,12 @@ Column {
                     }
 
                     SmallButton {
-                        // Needing the user and off: its action in place of Connect
-                        readonly property bool _attends: _vpn.attention !== null && _vpn.attention.action !== "" && !_vpn.modelData.active
-                        label: _attends ? _vpn.attention.action
-                            : _vpn.modelData.state === "activating" ? "Connecting…"
-                            : _vpn.modelData.state === "deactivating" ? "Disconnecting…"
-                            : _vpn.isActive ? "Disconnect" : "Connect"
+                        // Needing the user and off: its action in place of Connect, or no
+                        // button when it has none (VpnManager.primaryLabel)
+                        readonly property bool _attends: VpnManager.attendsInstead(_vpn.modelData)
+                        label: VpnManager.primaryLabel(_vpn.modelData)
                         kind: _vpn.isActive ? "delete" : "save"
-                        visible: _attends || _vpn.attention === null || _vpn.modelData.active
+                        visible: label !== ""
                         // Not while an operation runs: for NetworkManager's, while any
                         // connecting runs — a second click before the list says
                         // "activating" would bring the tunnel down and up again

@@ -664,7 +664,8 @@ privileges), so the suites' windows never show on the real screen; it finds labw
 Quickshell as the lock test bed does (`tests/lock/resolve.sh`) and fails on any `FAIL`, a
 `TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
 summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`
-checks that verdict against stand-in Quickshells. Most run their assertions in `Component.onCompleted`, on pure
+checks that verdict against stand-in Quickshells, and the suite count (`tests/count-suites.sh`:
+a suite written with arguments counts too). Most run their assertions in `Component.onCompleted`, on pure
 functions (the `*Rules` and geometry singletons, parsers). A suite that throws counts as
 failed, not as missing.
 

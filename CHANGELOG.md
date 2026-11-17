@@ -349,6 +349,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Only through the VPN: Tailscale's `tailscale*` interfaces are no longer let out as virtual
+  interfaces (a tailnet reaches the internet through exit nodes and subnet routers). The
+  script is version 4: the VPN page offers to install it again, and installing it while
+  blocking loads the new rules at once.
+- Settings → Network: a network's editor says when a provider's VPN picked under "Connect a
+  VPN with it" cannot connect because traffic is blocked there (or always); the VPN page
+  says it under "Block traffic outside a VPN, always" when a network brings one up.
 - Module test runner: each asynchronous suite has its own time limit (`TestCase.timeLimitMs`,
   20 s by default, capped at 60 s), instead of one 20 s deadline shared by every module suite
   running side by side.
@@ -408,6 +415,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- VPNs: a provider's VPN that needs the user and offers no action to take (waiting for
+  approval, say) showed Connect on its card in Settings, though not in the popup; neither
+  offers it now, and connecting it is refused whoever asks.
+- Unit test runner: a suite registered with arguments (`ModuleRegistriesTest { after: … }`)
+  is counted, so the run fails when it does not report.
 - Text on the bar (BarText) is always plain text: a track title, a window name or a module's
   device name holding markup showed it rendered as rich text (Qt's AutoText); it now shows the
   characters as they are.

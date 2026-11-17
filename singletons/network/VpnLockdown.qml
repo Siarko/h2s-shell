@@ -196,6 +196,13 @@ Singleton {
             root.checked = true;
             if (changed)
                 root.installedAsks = false;
+            // A new copy installed while blocking: its rules loaded in place of the old copy's
+            if (root._applyAfterInstall && changed && root.helperState === "ready") {
+                root._applyAfterInstall = false;
+                root.apply();
+                return;
+            }
+            root._applyAfterInstall = false;
             root._schedule();
         }
     }
@@ -466,6 +473,8 @@ Singleton {
     // script, which anyone may read). NixOS keeps /etc itself: its module is shown instead.
     readonly property string polkitRule: NetworkRules.lockdownPolkitRule(user, ['"' + installedPath + '"'])
     property string installFailure: ""
+    // Installed while the blocking is on: switched on again once the new copy is seen
+    property bool _applyAfterInstall: false
 
     function install(): void {
         installFailure = "";
@@ -474,7 +483,10 @@ Singleton {
             + 'printf "%s" "$3" > "$2/polkit.rules"; chmod 0644 "$2/polkit.rules"; '
             // polkit's rules folder kept as it is (root's to read on Arch: 0750 root:polkitd)
             + '[ -d "$(dirname "$4")" ] || install -d -m 0750 "$(dirname "$4")"; install -m 0644 -o root -g root "$2/polkit.rules" "$4"',
-            "sh", scriptPath, installFolder, polkitRule, polkitRulePath], result => root._installed(result, "Installing the blocking script"));
+            "sh", scriptPath, installFolder, polkitRule, polkitRulePath], result => {
+                root._applyAfterInstall = result.ok && root.wanted && root._status.startsWith("on");
+                root._installed(result, "Installing the blocking script");
+            });
     }
 
     function uninstall(): void {

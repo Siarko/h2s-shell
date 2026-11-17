@@ -213,7 +213,7 @@ Item {
                     // A VPN provider's (VpnManager; components/VpnProvider.qml): connected
                     // through it, no NetworkManager editor, no delete — its extras and page
                     readonly property bool _provided: modelData.type === "provider"
-                    readonly property var _attention: modelData.attention ?? null
+                    readonly property var _attention: VpnManager.attentionOf(modelData)
                     // The page states the limit whenever blocking is on, connected or not
                     readonly property string _lockdownNote: VpnLockdown.noteFor(modelData, true)
                     // Its own page: an entry of the settings window's list to go to, else one
@@ -247,8 +247,8 @@ Item {
                     external: _provided
                     busy: VpnManager.busyFor(modelData)
                     need: VpnManager.needFor(modelData)
-                    // Needing the user and off: its action in place of Connect
-                    canUse: _attention === null || _attention.action === ""
+                    // Needing the user: no Connect, its action (if any) beside the notice
+                    canUse: VpnManager.canConnect(modelData)
                     notice: [_attention?.reason ?? "", _lockdownNote].filter(line => line !== "").join("\n")
                     noticeAction: _attention?.action ?? ""
                     onToggleRequested: root._open = open ? "" : modelData.uuid
@@ -331,6 +331,18 @@ Item {
                 need: "auth"
                 checked: VpnLockdown.always
                 onToggled: Profiles.setGlobal("system.vpnLockdownAlways", !checked)
+            }
+            // A provider's VPN set to come up with a network is not let through by it
+            Text {
+                readonly property var _kinds: VpnLockdown.always
+                    ? VpnManager.providerKindsAmong(Object.values(VpnManager.withNetworks).reduce((all, ids) => all.concat(ids ?? []), [])) : []
+                visible: _kinds.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: _kinds.join(" and ") + " cannot come up with a network while traffic is blocked."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
             }
             SwitchRow {
                 label: "Allow the local network"

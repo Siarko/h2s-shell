@@ -42,7 +42,7 @@ IFS=$(printf ' \t\nx')
 IFS=${IFS%x}
 umask 022
 
-VERSION=3
+VERSION=4
 TABLE=h2s_vpn_lockdown
 STATE=/run/h2s-vpn-lockdown.state
 MOST_INTERFACES=32
@@ -158,7 +158,7 @@ ruleset() {
     if [ "$interfaces" != "-" ]; then
         vpn_names="$(printf '%s' "$interfaces" | tr ',' ' ') $vpn_names"
     fi
-    virtual_names="docker* br-* veth* virbr* podman* vnet* lxc* incus* tailscale*"
+    virtual_names="docker* br-* veth* virbr* podman* vnet* lxc* incus*"
     servers4="" servers6=""
     if [ "$addresses" != "-" ]; then
         old_ifs=$IFS

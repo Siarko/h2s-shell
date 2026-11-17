@@ -22,9 +22,9 @@ to be moved into the module's repository (they are in the session scratch direct
 - NetworkManager shows `tailscale0` as an external `tun` device; its UUID is not a
   stable identity.
 - DNS here: with MagicDNS on, `/etc/resolv.conf` holds only Tailscale's resolver.
-- The shell's kill switch today lets traffic INTO `tailscale0` out, but drops
-  tailscaled's own packets on the physical link: with blocking on, Tailscale cannot
-  connect. tailscaled marks its sockets (`0x80000/0xff0000`; observed in the ip rules).
+- The shell's kill switch drops traffic into `tailscale0` and tailscaled's own packets
+  on the physical link: with blocking on, Tailscale cannot connect. tailscaled marks its
+  sockets (`0x80000/0xff0000`; observed in the ip rules).
 
 ## 2. Scope
 
@@ -283,27 +283,36 @@ other work is touching. Until then a module copies the look or imports
 ### The kill switch does not support provider VPNs (§8)
 
 `VpnLockdown`'s interfaces and servers come from NetworkManager's VPNs only
-(`nmInterfaceNames`, `nmDetails`); `scripts/h2s-vpn-lockdown` is unchanged. While blocking
-is on or about to be (`VpnLockdown.blocking`: always, or on the network up), the VPN page
-states it on every provider VPN's card, connected or not (`VpnLockdown.noteFor(vpn,
-true)`); the popup's row says it only while that VPN is up or connecting. One sentence
-(`lockdownNote`, else the shell's: "<type> is not let through by the blocking of traffic
-outside a VPN: it cannot reach its servers or its peers, so it may not connect or carry
-traffic.").
+(`nmInterfaceNames`, `nmDetails`); `scripts/h2s-vpn-lockdown` is given nothing of a
+provider's. While blocking is on or about to be (`VpnLockdown.blocking`: always, or on the
+network up), the VPN page states it on every provider VPN's card, connected or not
+(`VpnLockdown.noteFor(vpn, true)`); the popup's row says it only while that VPN is up or
+connecting. One sentence (`lockdownNote`, else the shell's: "<type> is not let through by
+the blocking of traffic outside a VPN: it cannot reach its servers or its peers, so it may
+not connect or carry traffic."). Where a provider VPN is linked to a network that blocks,
+the choice says so in one line (`VpnManager.providerKindsAmong`): the network editor under
+"Block traffic outside a VPN here" when a provider VPN is picked in "Connect a VPN with it"
+(and blocking is on there, or always), and the VPN page under "always" when any network
+brings a provider VPN up.
 
-What the script does to such traffic today (version 3, read from its `ruleset`): output to
-`tailscale*` interfaces is accepted (`virtual_names`), so packets into the tunnel pass the
-filter — but the daemon's own packets (WireGuard to peers, DERP relays, the coordination
-server) leave on the physical link and are dropped, except DNS (port 53, any address),
-replies to connections that came in, peers on the local network when "Allow the local
-network" is on, and traffic routed into another VPN's interface (`wg*`, `tun*`…, accepted)
-— a NetworkManager full-tunnel VPN that is up can carry Tailscale only when its default route
-is in the main table (OpenVPN-style): tailscaled's own packets carry fwmark 0x80000 and are
-routed by the main table (ip rule priority 5210), so with a NetworkManager WireGuard full
-tunnel that uses its own policy table they leave on the physical link and are dropped (from
-reading, untested). So with blocking on and
-no other VPN up, Tailscale cannot connect, and a running one stops carrying traffic beyond
-the local network.
+What the script lets out (version 4, read from its `ruleset`): loopback; the interfaces it
+is given (NetworkManager's VPN profiles') and every interface named `tun*`, `tap*`, `ppp*`,
+`vpn*` or `wg*`; the virtual interfaces `docker*`, `br-*`, `veth*`, `virbr*`, `podman*`,
+`vnet*`, `lxc*` and `incus*`; the VPN servers' addresses; DNS (port 53, any address); DHCP
+and IPv6 neighbour discovery; replies to connections that came in; the local network when
+"Allow the local network" is on. So a provider tunnel gets through only when its interface
+happens to match one of those names (one set up as `wg0` or `tun0`, say). Tailscale's
+`tailscale0` matches none of them: it is no local interface (it reaches the internet
+through an exit node or a subnet router), so packets into it are dropped. The daemon's own
+packets (WireGuard to peers, DERP relays, the coordination server) leave on the physical
+link and are dropped as well, except DNS, replies, peers on the local network when that is
+allowed, and traffic routed into another VPN's interface — a NetworkManager full-tunnel VPN
+that is up can carry Tailscale only when its default route is in the main table
+(OpenVPN-style): tailscaled's own packets carry fwmark 0x80000 and are routed by the main
+table (ip rule priority 5210), so with a NetworkManager WireGuard full tunnel that uses its
+own policy table they leave on the physical link and are dropped (from reading, untested).
+So with blocking on and no other VPN up, Tailscale cannot connect, and a running one carries
+nothing but what "Allow the local network" lets out by address.
 
 ### What a provider must guarantee
 

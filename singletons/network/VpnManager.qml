@@ -356,6 +356,24 @@ Singleton {
         return parts !== null && parts.provider !== "" ? parts.provider + " · " + parts.entry + " (not available)" : id;
     }
 
+    // The kinds of the provider VPNs among `ids` ("Tailscale"; a provider not here by its
+    // id), each once: those the blocking of traffic outside a VPN does not let through
+    // (VpnLockdown; docs/plans/tailscale.md §8), for the views to say so where a VPN is
+    // linked to a network that blocks
+    function providerKindsAmong(ids): var {
+        const kinds = [];
+        for (const id of ids ?? []) {
+            const parts = NetworkRules.vpnIdParts(id);
+            if (parts === null || parts.provider === "")
+                continue;
+            const vpn = vpns.find(entry => entry.uuid === id);
+            const kind = vpn !== undefined ? typeName(vpn) : parts.provider;
+            if (!kinds.includes(kind))
+                kinds.push(kind);
+        }
+        return kinds;
+    }
+
     // The last provider failure turned into a notification ({ title, body }), for the tests
     property var lastProviderNotice: null
 
@@ -410,6 +428,38 @@ Singleton {
     // the user's doing (a button), so it takes no request
     function attend(id: string): void {
         _callProvider(id, "attend", "Attending to");
+    }
+
+    // ── Connect or the provider's action ── the core never connects an entry that needs the
+    // user (components/VpnProvider.qml): the popup's row and the VPN page's card ask here what
+    // to offer, and connect() refuses such an entry whoever asks.
+
+    // What needs the user ({ reason, action }: a provider's attention), else null
+    function attentionOf(vpn) {
+        return vpn?.attention ?? null;
+    }
+
+    // Connect may be offered and done: nothing needs the user first
+    function canConnect(vpn): bool {
+        return vpn !== null && vpn !== undefined && attentionOf(vpn) === null;
+    }
+
+    // Needing the user and off, with an action to offer: that action in place of Connect
+    function attendsInstead(vpn): bool {
+        const attention = attentionOf(vpn);
+        return attention !== null && (attention.action ?? "") !== "" && !vpn.active;
+    }
+
+    // The label of the row's one button: the attention's action, the state's, Disconnect or
+    // Connect; "" for none (needing the user with no action to offer, and off)
+    function primaryLabel(vpn): string {
+        if (attendsInstead(vpn))
+            return attentionOf(vpn).action;
+        if (!vpn?.active && !canConnect(vpn))
+            return "";
+        return vpn.state === "activating" ? "Connecting…"
+            : vpn.state === "deactivating" ? "Disconnecting…"
+            : vpn.state === "activated" ? "Disconnect" : "Connect";
     }
 
     // ── A VPN with a network ── wanted while a network it is linked to is up (NetworkRules
@@ -621,12 +671,23 @@ Singleton {
         NetworkProfiles.importFile(path, type);
     }
 
-    // By id: a provider's ("<provider>:<entry>") through its provider; anything else is
-    // NetworkManager's UUID, as before providers. An id with a colon that is no provider
-    // VPN here does nothing. `request` { origin: "user" | "network" } says who asked
+    // By id (NetworkRules.vpnIdParts): a provider's ("<provider>:<entry>") through its
+    // provider; anything else is NetworkManager's UUID, as before providers. An id that is
+    // neither, or a provider VPN not here, does nothing; nor does connecting a VPN that needs
+    // the user (canConnect). `request` { origin: "user" | "network" } says who asked
     // (default the user — a button); a provider gets it as connect's second argument.
     function connect(uuid: string, request): void {
-        if (uuid.indexOf(":") >= 0) {
+        const parts = NetworkRules.vpnIdParts(uuid);
+        if (parts === null) {
+            console.warn("VpnManager: connect " + uuid + ": not a VPN id");
+            return;
+        }
+        const vpn = vpns.find(entry => entry.uuid === uuid);
+        if (vpn !== undefined && !canConnect(vpn)) {
+            console.warn("VpnManager: connect " + uuid + ": it needs the user first");
+            return;
+        }
+        if (parts.provider !== "") {
             _callProvider(uuid, "connect", "Connecting", _request(request));
             return;
         }
@@ -634,7 +695,12 @@ Singleton {
     }
 
     function disconnect(uuid: string, request): void {
-        if (uuid.indexOf(":") >= 0) {
+        const parts = NetworkRules.vpnIdParts(uuid);
+        if (parts === null) {
+            console.warn("VpnManager: disconnect " + uuid + ": not a VPN id");
+            return;
+        }
+        if (parts.provider !== "") {
             _callProvider(uuid, "disconnect", "Disconnecting", _request(request));
             return;
         }

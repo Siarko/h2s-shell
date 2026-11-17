@@ -21,10 +21,12 @@ REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 HEADLESS_NAME=run-unit.sh
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
+# shellcheck source=count-suites.sh
+source "$REPO/tests/count-suites.sh"
 
 headless_setup
 headless_run "$REPO/tests.qml" "${1:-}"
-# Every suite tests.qml registers (`property var _name: SomethingTest {}`) must report
-expected=$(grep -c -E '^[[:space:]]*property var _[A-Za-z0-9]+: [A-Za-z0-9]+Test \{\}' "$REPO/tests.qml")
+# Every suite tests.qml registers (`property var _name: SomethingTest {…}`) must report
+expected=$(count_suites "$REPO/tests.qml")
 headless_verdict "Unit suites" "$expected" "in tests.qml"
 exit $?
