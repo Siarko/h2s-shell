@@ -1,685 +1,737 @@
-# Module API: the next versions (1.4 → 2.0)
+# Module API: the next versions
 
 Status: a plan, for the owner to approve. Nothing here is built.
 
-Leads came from `notes/reviews/architecture-2026-11-16.md` (sections 3, 8.6, 8.8, 8.9 and 9).
-Every item below was checked again in the code. References are to the shell at
-`plan-architecture` (`953493e`+) and to the Tailscale module at `dd5ebdb`
-(`/home/h2s/src/h2s-shell-tailscale-wt`, written `ts:` below; `TC` is
-`ts:module/TailscaleClient.qml` and `TR` is `ts:module/TailscaleRules.qml`).
+It covers tracker steps 3 (API extension), 4 (UI anchors) and 5 (a module's public API), and
+says what step 6 (the Tailscale migration) then removes. The owner's decisions in
+`notes/tracker.md` ("Decisions") are binding; this plan follows them.
 
-**The rule this plan serves (the owner's).** The shell and the module have the same author. A
-module never works around the API. When a module needs something the shell should give, the API
-grows. When this plan is done, the Tailscale module has no workaround left. The next module
-author will not need new ones for the same kinds of needs.
+References: the shell at `50129d9`, the Tailscale module (`h2s-shell-tailscale`, files under
+its `module/`) at `13468e9`. `TC` is the module's `TailscaleClient.qml`, `TR` its
+`TailscaleRules.qml`. "Verified" means read in the code at those commits; "assumed" is
+marked. The lists are in §9.
 
 ---
 
-## 1. Inventory
+## 1. What the module works around today
 
-"Same need in the shell" names other shell code that solves the same problem by hand. That
-code moves onto the new API too. "Not API" means a module-side change, with the reason.
+Every row is a place where the module does by hand what the API should give. When this plan
+and step 6 are done, none is left. "Shell too" names core code with the same need; it moves
+onto the same new piece.
 
-### 1a. Running commands
+### Running commands
 
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 1 | Its own process factory with a watchdog, `abandon()` and output chunks: `TC:480-490`, `TC:1946-2028` | `CommandAction` has no time limit, no cancel, no streamed output, no separate stdout/stderr text | `ModuleHost` hand-rolls 4 Process blocks with deadline Timers: `singletons/ModuleHost.qml:535-547, 840-870, 872-895, 902-933`; lock screen probes `singletons/Lockscreen.qml:874, 918, 940` (5.3: they re-implement `CommandQuery`); `api/Api.qml:107` (`_opener`) | **`CommandRunner`** (§2.1) |
-| 2 | Wraps every command in coreutils `timeout -k` by hand: `TC:495-503`, `TR:2225` (`timed`) | Nothing in the API stops a hung command | `Lockscreen.qml:922` (`timeout 2 hyprctl` inside a string) | `CommandRunner` `timeoutMs` (§2.1) |
-| 3 | A long-lived stream (`curl … watch-ipn-bus`) declared as a bare `Process`, restarted with a backoff: `TC:765-793`, `TC:2030-2039` | No streamed run in the API | `singletons/network/NetworkEvents.qml` (`nmcli monitor`), `singletons/lock/LogindMonitor.qml` | `CommandRunner` with `timeoutMs: 0` and `onLine` (§2.1). The backoff stays the module's: it is a policy |
-| 4 | Generation tokens so late answers are dropped: `TC:292, 361-364`; in every sub-client (`ts:module/CertClient.qml:38-40`, `LockClient.qml:51-55`, `ServeClient.qml:62-64`, `TaildropClient.qml:201-208`) | A `CommandAction` callback fires even after the owner stopped | `ModuleHost` `_storeDirectoryKnown` / `_guardKnown` guards (`ModuleHost.qml:524-528, 569-571`) | `CommandRunner`: no callback after `cancel()`, after `cancelAll()` or once the runner is destroyed (§2.1) |
-| 5 | The elevated login runs `[pkexecPath, …]` itself (`TC:1840-1866`) | `PrivilegedAction` cannot stream output, and the login URL must be read while `tailscale login` waits | — | **`PrivilegedAction.start()`** with streamed output (§2.2) |
-| 6 | It keeps two `PrivilegedAction`s, `_admin` and `_adminSpare` (`TC:1462-1464, 1937-1943`) | A `PrivilegedAction` queue stays blocked while an abandoned root process runs to its time limit | — | `start()` handle `cancel()` leaves the queue at once (§2.2) |
-| 7 | Maps pkexec's codes again and reports 127 itself (`TR:2114`, `TC:1520-1535`, `TC:1868-1875`) | It ran pkexec outside the API (#5) | `Authentication.reportDenied` is the shell's way | Goes away with #5 (§2.2) |
-| 8 | Sets `PrivilegedAction.elevate` to its own resolved pkexec (`TC:410-411`) | `elevate` is a public property (API 1.0, "a module's suites put a stand-in here") | — | The shell picks pkexec. In test mode it picks the stand-in. `elevate` stops being writable in 2.0 (§2.2, §2.11) |
-| 9 | Finds tailscale, timeout, pkexec and curl by hand. It also judges whether the user could replace them (root-owned or Nix store): `TC:367-428`, `TR:2176` (`toolsProbe`) | `PrivilegedAction` checks only "absolute and executable" (`api/PrivilegedAction.qml:174-183`). A user-writable program would run as root | `ModuleHost._checkPrograms` finds names on PATH but returns no path and no verdict (`ModuleHost.qml:786-799`) | **`module.programs`** with a trust verdict. `PrivilegedAction` refuses untrusted programs (§2.3) |
-| 10 | Runs `systemctl` and `xdg-open` by name, unchecked (`TC:1619-1630`, `TC:1656-1695`; review 8.11) | No path resolution in the API | — | `module.programs` (§2.3), and `Api.openUrl` in test mode (§2.10) |
+| # | The module today | Shell too | Answer |
+|---|---|---|---|
+| 1 | Its own process factory with a watchdog, `abandon()` and output chunks (`TC` `_spawn`, `_processComponent`) | `ModuleHost.qml`: four `Process` blocks with deadline timers; `Lockscreen.qml`: three probes; `Api._opener` | Command runner (§3.1) |
+| 2 | Wraps every command in coreutils `timeout -k` (`TC` `_timedArgv`, `TR` `timed`) | `Lockscreen.qml` (`timeout 2 hyprctl`) | Runner `timeoutMs` |
+| 3 | A long-lived stream (`curl … watch-ipn-bus`) as a bare `Process` (`TC` `_stream`) | `NetworkEvents.qml`, `lock/LogindMonitor.qml` | Runner with `timeoutMs: 0` and `onStdout`. The restart backoff stays the module's |
+| 4 | Generation tokens so late answers are dropped (`TC` `_alive`, and in `CertClient`, `LockClient`, `ServeClient`, `TaildropClient`) | `ModuleHost` `_storeDirectoryKnown`, `_guardKnown` | Runner: no callback after `cancel()` or destruction |
+| 5 | The elevated login runs `[pkexecPath, …]` itself, to read the login link while it waits (`TC` near `_opProcess = _spawn([pkexecPath]…`) | — | Privileged start, streamed (§3.4) |
+| 6 | Two `PrivilegedAction`s, `_admin` and `_adminSpare` (`TC` `_freeAdmin`) | — | A cancelled run leaves the queue at once (§3.4) |
+| 7 | Maps pkexec's 126/127 again (`TR` `pkexecOutcome`) | — | Goes with #5 |
+| 8 | Sets `PrivilegedAction.elevate` to its own pkexec (`TC` `_admin.elevate = …`) | — | The shell picks pkexec; in test mode the stand-in (§3.3, §3.4) |
+| 9 | Finds tailscale, timeout, pkexec, curl and judges whether the user could replace them (`TC` `_resolveTools`, `TR` `toolsProbe`) | `ModuleHost._checkPrograms` finds names, returns no path and no verdict | Program lookup with trust (§3.2) |
+| 10 | Runs `systemctl` and `xdg-open` by name | — | Program lookup; `Api.openUrl` |
 
-### 1b. Test seams
+### Test seams
 
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 11 | Reads `H2S_TAILSCALE_TOOLS` and `H2S_TEST_MODULES` to pick stand-ins (`TC:300-317`). With the seam set, no trust check runs, so pkexec could run `$seam/tailscale` | Only an env variable can tell it that it runs under tests | Lock screen: `H2S_LOCK_TOOLS` and friends (`Lockscreen.qml:122-150`, review 5.4) | **Test mode** set by the shell, plus manifest `testPrograms` (§2.10) |
-| 12 | IPC calls count as "the user" (no prompt guard) when the tools seam is in use (`ts:module/Main.qml:316-322`) | Same as #11 | — | `Api.testMode`, read-only and set only by the shell (§2.10) |
-| 13 | Opens links with the seam's `xdg-open`, not with `Api.openUrl` (`TC:1656-1695`) | `Api.openUrl` would open a real browser in a test | — | In test mode `Api.openUrl` records the call and opens nothing (§2.10) |
-| 14 | Directory seams from the environment: `H2S_TAILSCALE_FORWARDING_DIR` (`TC:1191-1195`), `H2S_TAILSCALE_CERT_DIR` (`ts:module/CertClient.qml:17-25`), `H2S_TAILSCALE_DOWNLOAD_DIR` (`ts:module/TaildropClient.qml:536-545`) | The real places are found by hand (#21-#24), so tests must redirect each one | — | Come from `Api.system` and `module.dataDirectory`, which tests can set (§2.7, §2.10) |
-| 15 | Its suite reaches the host: `module.host.widgetEntries`, `module.host.setEnabled` (`ts:module/tests/TailscaleModuleTest.qml:87, 101, 111`) | Turning the module off and on is part of what it tests | `tests-modules.qml:22` | **`ModuleTestKit`** in `qs.tests` (§2.10), so `host` can close (§2.11) |
-
-### 1c. Structure: main, popup, pages
-
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 16 | A module singleton holds the live client (`ts:module/Tailscale.qml:13-16`). Main sets it and clears it (`Main.qml:333, 337-340`). The popup, widget, page, row and card read it (`TailscalePopup.qml:21`, `TailscaleWidget.qml:22`, `TailscalePage.qml:24`, `TailscaleRow.qml:15`, `TailscaleCard.qml:19`) | Pages, popups and widgets cannot reach what the main owns | — | **`module.main`** (§2.4) |
-| 17 | Adds an undocumented `client` property to its `VpnProvider` so slot contributions find the client (`Main.qml:23-24`) | Same as #16 | — | `module.main` (§2.4) |
-| 18 | The popup learns its widget's preset through a singleton: the widget writes `Tailscale.popupPreset` (`TailscaleWidget.qml:36`) and the popup reads it (`TailscalePopup.qml:31-35`) | A popup panel is not told which widget opened it | `panels/Popup.qml:110-116` already carries `contentData` (the tray menu uses it); `components/PopupWidget.qml:31` passes `null` | **`opener`** given to the panel (§2.5) |
-| 19 | Declares `availableHeight` and relies on the popup setting it (`TailscalePopup.qml:39-43`) | It is set by `panels/Popup.qml:578-585`. That code also sets `fitsShownHeight` and `popupAnimating`. None of the three is documented API | `NetworkPanel.qml:18`, `MusicPanel.qml:12` | Document the panel inputs (§2.5) |
-| 20 | "Send file…" in the popup sets a timed request and opens the page. The page's Taildrop section opens its `FileDialog` (`TaildropClient.qml:145-156`, `TaildropSection.qml:362-412`) | A dialog owned by the popup's window dies when the popup closes | `panels/settings/WallpaperSettings.qml:283-290`, `NetworkVpnSettings.qml:70` (they work because they live in the settings window) | **`Api.chooseFiles`** (§2.9) |
-
-### 1d. Helpers and system facts
-
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 21 | Runs `id -u; id -un` (`TC:444-453`) | No user identity in the API | — | **`Api.system.userName` / `uid`** (§2.7) |
-| 22 | Runs `cat /proc/sys/kernel/hostname` (`TC:431-441`) | No host name in the API | — | `Api.system.hostName` (§2.7) |
-| 23 | Runs `ip -o addr show scope global` for the LAN subnets (`TC:457-470`) | No local addresses in the API | `singletons/network/IpManager.qml:12-15` has one address per kind, as text. `Nmcli.qml:207` parses `IP4.ADDRESS` lists | **`Api.localNetworks`** (§2.8) |
-| 24 | Reads `HOME`, `XDG_CONFIG_HOME` and `XDG_DATA_HOME` with `Quickshell.env`, and parses `user-dirs.dirs` with `cat` (`TaildropSection.qml:395, 401`, `TaildropClient.qml:536-555`, `CertClient.qml:24`) | No user directories in the API | `NetworkVpnSettings.qml:73` (`Quickshell.env("HOME")`) | `Api.system.home`, `downloadDirectory`, … (§2.7) |
-| 25 | Builds its own folder under the shell's data name: `$XDG_DATA_HOME/h2s-shell/tailscale/certs` (`ts:module/CertRules.qml:34-38`) | No per-module data directory. The store holds JSON only | — | **`module.dataDirectory`** (§2.7) |
-| 26 | Reads `/proc/sys/net/ipv4/ip_forward` and IPv6 forwarding with `sh -c cat` (`TC:1191-1215`) | No such fact in the API | — | `Api.system.readIpForwarding()` (§2.7). Any module that shares a network needs it |
-| 27 | Copies `Format.bytes` and `Format.ago` (`TR:2598-2631`, "the shell's Format is a core singleton modules may not import") | No formatting in the API | `singletons/Format.qml` | **`Api.format`** (§2.6) |
-| 28 | Parses IPv4, IPv6 and CIDR, and tests overlap (`TR:2633-2766`). It also hides addresses in text (`TR:2143`, `withoutAddresses`) | No address helpers in the API | `singletons/network/NetworkRules.qml:19-45, 182-210` (`isIpv4`, `isCidr4`, `inSubnet4`), a second partial copy | **`Api.address`**, backed by one core `AddressRules` (§2.6) |
-| 29 | A 5 s clock writes `now`, which re-derives the whole state (`TC:172, 2100-2105`; review 8.5) | No shared slow clock | `singletons/Time.qml` (1 s) | **`Api.minuteNow`** (§2.6). The one-shot timers for grace periods are the module's (8.5) |
-| 30 | Escapes markup in notification bodies (`TaildropClient.qml:355-360`). It also strips a leading "-" (`Main.qml:49-54`) | The shell reads the body as markup. The "-" fix is obsolete: `Notifier.command` puts `--` before the texts (`singletons/Notifier.qml:24-26`) | — | `notify(…, { format: "plain" })` (§2.6). The module drops the "-" strip now (not API) |
-| 31 | Logs once per change of outcome (`TC:516-528`, `TR:898` `logChange`) | No module logger. Polling a daemon would flood the log | `components/Logger.qml` (gated by `general.debug`, no dedupe) | **`module.log`** (§2.6) |
-
-### 1e. Network facts
-
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 32 | Treats an empty `Api.networks` as "not read yet" and does nothing (`ts:module/NetworkExitClient.qml:91-96`) | Empty is ambiguous: no networks, or not read yet | — | **`Api.networksReady`** (§2.8) |
-| 33 | — (a shell bug the module inherits) `Api.networks` can list a hotspot for a moment: `listRead` turns true before the Wi-Fi `mode` is read (`api/Api.qml:61-63`, `ModuleRules.qml:1261-1280`; review 3.10) | — | — | Hold Wi-Fi rows back until their details are read (§2.8) |
-| 34 | Shows "Another VPN is also on" beside any other VPN, even a split one (`TailscalePage.qml:486-487`). `twoVpnsNote` assumes the other VPN wants all traffic and sets DNS (`TR:2582-2595`) | `Api.vpnsUp` and `otherVpnsUp` give names only | `NetworkRules.qml:139` (`neverDefault`) and `:604-618` (`allowedIps`) are read for the editor only | `vpnsUp` rows get `fullTunnel`, `setsDns` and `routes` (§2.8) |
-| 35 | Keeps an exit node per network in its store, keyed by `Api.networks` ids (`NetworkExitClient.qml:31-33, 59-62`). Its editor is on the module's own page (`ts:module/NetworkExitTable.qml`) | No per-network place in the shell. The shell keeps its own table, `system.vpnWithNetworks` | `system.vpnWithNetworks` (`VpnManager.qml:474-475`) | A **`network.profile.card` slot**. The data stays in the store (§2.8; owner question Q4) |
-
-### 1f. UI, terminal, reach
-
-| # | What the module does today | Why | Same need in the shell | Answer |
-|---|---|---|---|---|
-| 36 | Offers "Copy ssh command" (`ts:module/DeviceRow.qml:107-109`) | No way to start a terminal, and no terminal setting | — | **`Api.openTerminal`** and a `general.terminal` setting (§2.9) |
-| 37 | Uses 13 `qs.components` types. Only `VpnProvider` is specified: `PopupWidget`, `BarRow`, `BarText` (`TailscaleWidget.qml`), `SmallButton` (11 files), `InputField` (5), `Dropdown` (3), `Pill` (2), `ToggleSwitch`, `Checkbox`, `DeleteButton` (4), `PointerArea` (2), `PrivilegedMark` (6) | `qs.components` is allowed but not versioned (review 3.1) | `api/Api.qml:7` reads `qs.singletons.network` names (review 3.1) | **Wrap them in `qs.api`**, pinned by a test (§2.11) |
-| 38 | — (shell side) `ModuleHandle.host` is public (`api/ModuleHandle.qml:27`). `Api.module(id)` hands out other modules' handles (`api/Api.qml:68-70`) | — | — | Close both (§2.11) |
-
-### 1g. Module-side items (not API)
-
-| # | What | Why it is not an API matter |
+| # | The module today | Answer |
 |---|---|---|
-| 39 | Sub-clients call `client._spawn`, `_runChange`, `_runLocked`, `_finish`, `_opProcess` (review 8.6; for example `ServeClient.qml:85-90`, `NetworkExitClient.qml:150`) | The operation lock, "plain first, then pkexec on Access denied" and "prepare under the lock" are Tailscale logic. Once #1 and #5 land, the module builds its own `TailscaleRunner` on `CommandRunner` and `PrivilegedAction.start` |
-| 40 | `_isObject`, `_get`, `_string` and `_number` are copied in five Rules files (`TR:138-171`, `TaildropRules.qml:35-53`, `ServeRules.qml:43`, `LockRules.qml:17`, `NetworkExitRules.qml:23`) | Defensive JSON reading is module-internal. One module helper file is enough |
-| 41 | `jsonFeed`, a streaming parser behind a newline splitter (`TR:1797`) | With `onLine` from the runner, one `JSON.parse` per line may be enough if the bus sends one object per line (unverified). Either way it is module code |
-| 42 | Taildrop preferences live in `module.store` (`TaildropClient.qml:45-89`) | `mod.<id>.*` settings with `global: true` and `module.setValue` already cover them. The module declares them (review 8.12) |
-| 43 | Checks for older shells: `Main.qml:331`, `TailscaleWidget.qml:25`, `TailscalePopup.qml:33`, `TailscaleWidgetSettings.qml:21` | Dead once the manifest asks for the new minor |
+| 11 | Reads `H2S_TAILSCALE_TOOLS` and the runner's `H2S_TEST_MODULES` to pick stand-ins; with the seam set no trust check runs (`TC` `_start`) | Test mode, manifest `testPrograms` (§3.3) |
+| 12 | IPC calls count as "the user" when the tools seam is set (`Main.qml` `_ipcOrigin`) | `Api.testMode` |
+| 13 | Opens links with the seam's `xdg-open` instead of `Api.openUrl` | `Api.openUrl` records in test mode |
+| 14 | Directory seams `H2S_TAILSCALE_FORWARDING_DIR`, `_CERT_DIR`, `_DOWNLOAD_DIR` | `Api.system`, `module.dataDirectory`, set by the test kit (§3.7) |
+| 15 | Its suite reaches the host: `module.host.widgetEntries`, `module.host.setEnabled` (`tests/TailscaleModuleTest.qml`) | `ModuleTestKit` (§3.3) |
 
-Checked and found to need nothing: IPC (`IpcHandler` from `Quickshell.Io`, `<id>` targets),
-`Api.copy`, `Api.openSettings`, `module.openSettings`, `setFact`, own settings, `module.store`
-as data (`lastTailnet`, `exitByNetwork`), `module.resumed()`, `shown` on pages and sections.
+### Structure
+
+| # | The module today | Answer |
+|---|---|---|
+| 16 | A singleton holds the live client (`Tailscale.qml`); Main sets and clears it; popup, widget, page, row and card read it | `module.main` (§3.5) |
+| 17 | An extra `client` property on its `VpnProvider`, so slot contributions find the client | `module.main` |
+| 18 | The widget writes `Tailscale.popupPreset`; the popup reads it | Popup `opener` (§3.5) |
+| 19 | Relies on `availableHeight` being set by `panels/Popup.qml`; not documented | Panel inputs documented and tested (§3.5) |
+| 20 | "Send file…" in the popup sets a timed request and opens the settings page, whose section opens the `FileDialog` | `Api.chooseFiles` (§3.9) |
+| 21 | The exit node per network is edited in a table on the module's own page (`NetworkExitTable.qml`) | An anchor on the saved network's card (§4.7) |
+
+### Helpers and facts
+
+| # | The module today | Shell too | Answer |
+|---|---|---|---|
+| 22 | Runs `id -u; id -un`, `cat /proc/sys/kernel/hostname` | — | `Api.system` (§3.7) |
+| 23 | Reads `HOME`, `XDG_*` with `Quickshell.env`; parses `user-dirs.dirs` | `NetworkVpnSettings.qml` (`Quickshell.env("HOME")`) | `Api.system` |
+| 24 | Builds its own folder under the shell's data name (`CertRules.certDir`) | — | `module.dataDirectory` |
+| 25 | Reads IPv4 and IPv6 forwarding with `sh -c cat` | — | `Api.system.readIpForwarding()` |
+| 26 | Runs `ip -o addr show scope global` for the LAN subnets (`TC` `_readLan`) | `IpManager.qml`, `Nmcli.qml` | `Api.localNetworks` (§3.8) |
+| 27 | Copies `Format.bytes` and `Format.ago` (`TR`) | `singletons/Format.qml` | `Api.format` (§3.6) |
+| 28 | Parses IPv4, IPv6, CIDR, overlap; hides addresses in text (`TR`) | `NetworkRules.qml` (`isIpv4`, `isCidr4`, `inSubnet4`): a second partial copy | `Api.address` on one core `AddressRules` |
+| 29 | A 5 s clock re-derives the whole state | `singletons/Time.qml` (1 s) | `Api.minuteNow`; grace periods become the module's one-shot timers |
+| 30 | Escapes markup in notification bodies; strips a leading "-" | `Notifier.command` already puts `--` first | `notify(…, { format: "plain" })`; the strip is dropped |
+| 31 | Logs once per change of outcome (`TC` `_logOutcome`) | `components/Logger.qml` (no dedupe) | `module.log` |
+| 32 | Treats an empty `Api.networks` as "not read yet" (`NetworkExitClient.qml`) | — | `Api.networksReady` (§3.8) |
+| 33 | "Another VPN is also on" beside any other VPN, even a split one | `NetworkRules` reads `neverDefault` and `allowedIps` for the editor only | `vpnsUp` rows gain `fullTunnel`, `setsDns`, `routes` |
+| 34 | Checks for older shells (`typeof module?.presetValue === "function"` and alike) | — | Dead once the manifest asks for the new minor |
+
+Shell-side defects found on the way, fixed in the same slices: `Api.networks` can list a
+hotspot for a moment (`listRead` turns true before the Wi-Fi mode is read); the polkit
+prompt shows polkit's message with no `textFormat` (`polkit/AuthPrompt.qml`), against the
+plain-text rule; `ModuleHandle.host` and `Api.module(id)` hand a module the host and other
+modules (§5.4).
+
+Module-internal, not API: the operation lock and "plain first, then elevated" (the module
+builds its own runner object on the command runner); the JSON readers copied in five Rules
+files; `jsonFeed` (needed: `watch-ipn-bus` prints indented JSON); Taildrop preferences
+moving from the store to `mod.tailscale.*` settings; the manual "for now" exit-node
+override (module state that wins over the per-network choice).
 
 ---
 
-## 2. API design
+## 2. Rules for everything below
 
-Common rules for everything below:
-- **Callbacks, not promises.** The API already uses `done(result)` everywhere.
-- **Results are plain frozen objects.** Errors are fields, never exceptions. Bad input gives a
-  result with `error` set; it never throws.
-- **Module unload.** Every object a module makes from `qs.api` lives under its main or its
-  views. When the module goes off, the host destroys them, and they stop: no callback runs
-  after that.
-- **Shell reload.** Quickshell rebuilds everything. Plain processes started under the runner's
-  `timeout` wrapper end by themselves at their limit. Root processes end at their `timeout`
-  inside pkexec.
-- **Session locked** (`Lockscreen.locked`; new read-only `Api.sessionLocked`). Plain runs
-  continue: a VPN must still follow the networks. Nothing that asks the user for anything
-  starts: no password prompt, no dialog, no terminal. Those return `blocked: "locked"`.
-- **Trust model** (review 3.3; to be written in ARCHITECTURE's Modules section). Modules run in
-  the shell's process. That process also runs the lock screen's PAM prompt and the polkit
-  agent. QML has no sandbox. A module can import `Quickshell.Io` and run anything. So the
-  guards below catch mistakes, not malice. They make the right way the easy way, and they keep
-  test stand-ins away from real pkexec.
+- **Callbacks, not promises;** results are plain frozen objects; errors are fields, never
+  exceptions. Bad input gives a result with `error` set.
+- **Decisions are pure functions** in `*Rules.qml` with unit cases; the new singletons only
+  do I/O.
+- **Module off.** Every object a module makes from `qs.api` lives under its main or its
+  views. The host destroys them; no callback runs after that.
+- **Session locked** (new read-only `Api.sessionLocked`). Plain runs continue (a VPN must
+  follow the networks). Nothing that asks the user starts: no password prompt, no dialog.
+  Those return `blocked: "locked"`.
+- **Trust.** A module runs in the shell's process, which also holds the lock screen's
+  password prompt and the polkit agent; QML has no sandbox. Every guard below stops
+  mistakes, not a hostile module. Step 8 writes this down for users.
 
-### 2.1 `CommandRunner` (1.4): plain commands
+---
 
-**Decision: a new core type, with the old helpers rebuilt on it.**
-- A new core type, `singletons/io/CommandRunner.qml`. The lock screen and `ModuleHost` may use
-  it, and it knows nothing of modules.
-- `api/CommandRunner.qml` is `Io.CommandRunner {}`, as `CommandAction` is today.
-- `CommandAction` and `CommandQuery` keep their contracts and become thin wrappers on it.
+## 3. Step 3: the API extension
 
-Why not extend them:
-- `CommandQuery` *is* a `Process` (`singletons/io/CommandQuery.qml:5`), so every Process
-  property is its surface.
-- `CommandAction` is a one-at-a-time queue with positional arguments.
-- Handles, cancel and parallel runs are a different model. Grafted onto either, the 1.0
-  semantics would change.
+### 3.1 Command runner
 
-Surface:
+A new core type `singletons/io/CommandRunner.qml`, with `api/CommandRunner.qml` as its
+`qs.api` name. `CommandAction` and `CommandQuery` keep their contracts and are rebuilt on
+it. `ModuleHost` and the lock screen use the core type, never `qs.api`.
 
 ```
 CommandRunner {
-    property var environment: ({})      // added to every run's environment
-    property int maxParallel: 8         // more runs wait in order (a guard against loops)
-    readonly property int running       // runs started and not ended
-    readonly property int waiting
-    function start(argv, options) → RunHandle
-    function cancelAll()                // every run: as RunHandle.cancel(); no callbacks after
+    property var environment: ({})   // added to every run
+    property int maxParallel: 8      // more runs wait, in order
+    readonly property int running
+    function start(argv, options) → handle { running, cancel() }
+    function cancelAll()
 }
-
-options = {
-    timeoutMs:   30000     // 0: no limit (a stream). The limit is enforced twice: coreutils
-                           // `timeout -k <killAfter> <s>` around the command (resolved by the
-                           // shell, trusted), so it ends even if the shell dies; and a watchdog
-                           // in the runner, for when timeout(1) is missing
-    killAfterMs: 3000      // TERM, then KILL this long after
-    environment: {}        // merged over the runner's (the way to pass a secret)
-    workingDirectory: ""   // absolute, or "" (the shell's)
-    stdin: ""              // written once at start (Process.stdinEnabled + write())
-    onStdout: text => …    // raw chunks as they come (SplitParser splitMarker "")
-    onStderr: text => …
-    onLine:   (line, stream) => …   // or lines ("stdout" | "stderr"); not with onStdout/onStderr
-    keepOutput: true       // collect stdout/stderr for done (capped: maxOutputBytes)
-    maxOutputBytes: 1048576
-    done: result => …
-}
-
-result = { ok, code, stdout, stderr, timedOut, cancelled, failedToStart, truncated, durationMs }
-RunHandle = { id, running (bool, read at call time), cancel() }
+options = { timeoutMs: 30000 (0: no limit), killAfterMs: 3000, environment, workingDirectory,
+            stdin, onStdout, onStderr, onLine (line, stream), keepOutput: true,
+            maxOutputBytes: 1048576, done }
+result  = { ok, code, stdout, stderr, timedOut, cancelled, failedToStart, truncated, durationMs }
 ```
 
-Semantics:
-- `argv` must be a non-empty array of strings. `argv[0]` is an absolute path or a name.
-  `sh -c` is allowed as before: pass values as `$1…`, never pasted into the script.
-- `done` runs exactly once. The exceptions are cancelled runs (below) and a runner destroyed
-  first. `ok` is code 0 with no time-out.
-- `timedOut`: the code is 124 and the run took at least `timeoutMs`. A command that itself
-  exits 124 sooner is not a time-out. Document this, as `PrivilegedAction` does for 126/127.
-- `failedToStart`: Quickshell emits no `exited` when the program cannot start; `running` just
-  turns false. The module copes with this in `TC:1999-2009`. Seen in that code; not checked in
-  Quickshell's source.
-- `cancel()`, while waiting: the run is dropped. While running: TERM to the `timeout` wrapper
-  (it passes the signal on), then KILL after `killAfterMs`, using `Process.signal(int)`, which
-  0.3.2 has (checked in `quickshell-io.qmltypes`). `done` is called once with
-  `cancelled: true`. Callbacks for chunks or lines stop at once.
-- Destroyed (module off, view gone): every run is cancelled and no callback runs. The runner
-  signals its processes itself in `Component.onDestruction`. Whether a destroyed `Process`
-  kills its child is unverified, so we do not rely on it.
-- Order: runs start in call order up to `maxParallel`. There is no global lock. A module that
-  needs "one change at a time" keeps its own lock (#39).
+- `argv` is a non-empty array of strings; the runner never uses a shell itself.
+- The time limit is enforced twice: coreutils `timeout -k` around the command (found and
+  trusted by the shell, so the run ends even if the shell dies), and a watchdog in the
+  runner for when `timeout` is missing.
+- `done` runs exactly once, except after the runner is destroyed. `cancel()`: TERM, then
+  KILL after `killAfterMs`; `done` gets `cancelled: true`; chunk and line callbacks stop at
+  once.
+- `timedOut`: code 124 and the run took at least `timeoutMs`.
+- `failedToStart`: Quickshell emits no `exited` then; `running` just turns false (assumed
+  from the module's working code).
 
-Security:
-- Nothing new: a module can already run anything through `Quickshell.Io`.
-- Output is capped, so a chatty process cannot fill memory.
-- The runner never uses a shell itself.
+Test: `tests/CommandRunnerTest.qml` with `sh -c` scripts: time-out, cancel waiting and
+running, KILL after a TERM trap, separate stderr, lines split across chunks, the output
+cap, a program that cannot start, no callback after destroy, `maxParallel` order. The
+`CommandAction` and `CommandQuery` suites stay as they are.
 
-Tests:
-- A new `tests/CommandRunnerTest.qml`, using `sh -c` scripts.
-- Cases: time-out (code and `timedOut`), cancel while waiting and while running, KILL after a
-  TERM trap, separate stderr, lines split across chunks, the output cap, a program that cannot
-  start, no callbacks after destroy, `maxParallel` order.
-- The `CommandAction` and `CommandQuery` suites stay as they are.
+### 3.2 Program lookup with trust
 
-Replaces in the module: `_spawn`, `_processComponent`, `_timedArgv`, `_watchdogMs`, `_alive`
-and the generation checks, the bare `_stream` Process, and `_misc` (#1-#4). In the shell: the
-4 `ModuleHost` Process blocks with their deadline Timers, and the 3 `Lockscreen` probes.
-
-### 2.2 `PrivilegedAction.start()` (1.4): root, streamed, cancellable
-
-**Decision: extend `PrivilegedAction`; do not add a second type.**
-- It is the one gate to pkexec. It holds the denial report (`Authentication.reportDenied`),
-  the `notFound` check and the queue.
-- Two types would split them.
-- `run(command, what, done, environment)` stays as it is.
+Manifest: `requires.programs` as today, plus `optionalPrograms` (a missing one does not
+stop the module). On the handle:
 
 ```
-PrivilegedAction {
-    readonly property bool available        // the shell found trusted pkexec and timeout
-    readonly property string unavailableReason
-    function start(argv, options) → RunHandle
-}
-options = {
-    what: "Connecting Tailscale",  // shown in failure notices; required
-    timeoutMs: 120000,             // required, 1 s … 1 h: pkexec <timeout> -k 5 <s> <argv…>
-    onStdout, onStderr, onLine,    // as CommandRunner
-    notifyFailures: true,
-    done: result => …
-}
-result = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, cancelled,
-           blocked ("" | "locked" | "untrusted" | "no-user-action"), error }
-```
-
-Semantics:
-- **Queue.** One password prompt at a time, shell-wide (today the queue is per instance). A
-  run leaves the queue when it ends or when it is cancelled, even if its root process still
-  runs. That removes the need for `_adminSpare` (#6).
-- **Time limit.** The shell puts its own trusted `timeout` inside pkexec. The limit starts
-  after the password is accepted. A run that is still prompting is the agent's to end.
-- **`cancel()`.**
-  - While queued: dropped.
-  - While the prompt shows: the shell signals pkexec, which still runs with the user's real
-    uid at that point (unverified). If the shell's own agent shows the prompt, it closes it.
-    The result is `cancelled` and `dismissed`.
-  - After the program started as root: the user cannot signal it. The run stops waiting and
-    the root process ends at its `timeout`. `done` gets `cancelled: true`.
-  - Docs must say: "cancel stops waiting; a root process ends at its time limit".
-- **Refusals before pkexec runs:**
-  - `blocked: "untrusted"`: `argv[0]` must have a trusted verdict (§2.3). This is a tightening:
-    today any executable absolute path passes. See §3.
-  - `blocked: "locked"`.
-  - `blocked: "no-user-action"`: only if the owner takes Q5.
-  - `notFound`: kept.
-- **The click rule (Q5).** The shell stamps the time of the last pointer press, tap or key
-  press in a shell window (popup, settings, bar). `start()` and `run()` refuse when the last
-  stamp is more than 10 s old. Nothing in the API can then ask for a password without a user's
-  action. IPC calls and timers get `blocked`. It guards against mistakes only: a module could
-  still run pkexec through `Quickshell.Io` (see the trust model).
-- **Environment.** pkexec clears it. As today, pass values as arguments, never secrets.
-
-Tests:
-- Extend the `PrivilegedAction` cases in a shell suite, with a stand-in pkexec that prints and
-  sleeps.
-- Cases: streaming, cancel while queued, cancel after "authorised", a second run not blocked
-  by a cancelled one, `timeoutMs` in the argv, all three `blocked` reasons, 127 reported once.
-
-Replaces in the module: the elevated login's own spawn (`TC:1840-1866`), `_adminSpare` and
-`_freeAdmin`, its own 127 mapping, `elevationProblem` (`TC:143-145`; it reads `available`
-instead), and setting `elevate` (#5-#8).
-
-### 2.3 `module.programs` (1.4): finding and trusting programs
-
-Manifest, new optional fields:
-- `"optionalPrograms": ["tailscale", "curl", "systemctl", "openssl"]`: looked up like
-  `programs`. A missing one does not stop the module.
-- `"testPrograms": "tools/stand-in"`: a directory inside the module, used only in test mode
-  (§2.10).
-
-Handle:
-
-```
-module.programs     // frozen { name: { path: "/abs/…" | "", trusted: bool, reason: "" } }
-                    // for `programs` + `optionalPrograms`; {} until first resolved
+module.programs        // frozen { name: { path: "/abs/…" | "", trusted: bool, reason } }
 module.programsReady
-module.recheckPrograms()   // look again (installed since): at most every 2 s
+module.recheckPrograms()   // look again; at most every 2 s; also run on resumed()
 ```
 
-How it works:
-- The host's program check (`ModuleHost.qml:786-799`) is extended to print the path, the real
-  path and `stat` lines.
-- The verdict comes from rules moved out of the module into `ModuleRules`. `TR:2165-2215`
-  (`_statTrusted`, `toolsProbe`) are written and tested already.
-- Trusted means: in the Nix store, or owned by root and writable by no one else. This holds
-  for the program, its real file and both directories.
-- Run once at load, again on `recheckPrograms()`, and on `resumed()`.
+- The host's program check (`ModuleHost._checkPrograms`) also prints the path, the real
+  path and their owners and modes. The verdict is a pure rule in `ModuleRules`, moved from
+  the module (`TR` `toolsProbe`, `_statTrusted`) with its cases.
+- **Trusted** means: in the Nix store, or the file, its real file and both their
+  directories are owned by root and writable by no one else. That holds on NixOS
+  (`/run/current-system/sw/bin` leads into the store) and on Arch (`/usr/bin`).
+- A read that fails gives `trusted: false`, never true.
 
-Security:
-- `PrivilegedAction` takes `argv[0]`'s verdict from the same resolver. It refuses an
-  untrusted path.
-- The shell resolves pkexec and timeout itself; a module never names them.
+Test: verdict cases in `ModuleRulesTest`; a fixture module with a missing optional program
+and a user-owned one.
 
-Tests: `ModuleRulesTest` gets the verdict cases (ported from the module's suite). A fixture
-module declares an optional program that is missing and one that is user-owned.
+### 3.3 Test mode
 
-Replaces in the module: `_resolveTools` and `toolsProbe` (`TC:367-428`, `TR:2176`), and the
-unchecked `systemctl` and `xdg-open` (#9, #10).
-
-### 2.4 `module.main` (1.5): what the main owns
-
-```
-module.main     // the object made from the manifest's `main` while the module is active;
-                // null while off, before it is made, or with no main
-```
-
-Semantics:
-- It is a notifying property. The host sets it on the handle right after `createObject` and
-  clears it before `destroy()`.
-- Views read what they need through it: `module.main?.client`. Each binding must allow null:
-  on disable, the main goes in the same pass that removes the views.
-- It is the module's own. Once `Api.module` closes (§2.11), other modules cannot reach it.
-
-Why not a separate "shared object" on the handle: the main already owns everything that acts,
-under the lifetime contract. A second object would need its own lifetime rules.
-
-Tests: `ModuleRegistriesTest` with the `good` fixture. It checks that `main` is set before
-its widgets complete, is null when the module is off, and is a new object when it is on again.
-
-Replaces in the module: `Tailscale.qml` (the singleton) and the extra `client` on
-`VpnProvider` (#16, #17).
-
-### 2.5 Popup panels: `opener` and the panel inputs (1.5)
-
-Today a module's panel gets only `module` (`panels/Popup.qml:556`). It will also get these,
-each only when its root declares the property:
-
-| Property | Type | Value |
-|---|---|---|
-| `opener` | object, frozen | `{ widgetType, preset, edge ("top"/"bottom"/"left"/"right"), byTouch }`: the bar widget that opened it. `preset` is that bar entry's preset name, or "" |
-| `availableHeight` | real | the most height the popup gives the panel before the panel must scroll (`popup.availableContentHeight`); kept current |
-| `fitsShownHeight` | bool, declared by the panel | when true, the panel is sized to the height shown while the popup animates |
-| `popupAnimating` | bool | true while the popup moves or resizes; kept current |
-
-How:
-- `PopupWidget.togglePopup` passes `{ widgetType, preset }` as `contentData`
-  (`components/PopupWidget.qml:31, 39`), reading `preset` when the widget has one.
-- `Popup` hands it on as `opener`.
-- The table goes into `ModuleRules` beside `slotTable`, so docs and tests read one list.
-
-Tests:
-- `ModuleRegistriesTest`: a fixture with two bar entries on different presets. Each one's popup
-  sees its own `opener.preset`.
-- A panel that declares none of these gets no warning.
-
-Replaces in the module: `Tailscale.popupPreset` and the reliance on an undocumented
-`availableHeight` (#18, #19).
-
-### 2.6 Helpers (1.6): format, address, clock, plain notifications, log
-
-```
-Api.format.bytes(n)          // "742 MB", "15.6 GB", "1.2 TB" (core Format gains TB)
-Api.format.rate(n)           // "3.4 MB/s"
-Api.format.ago(ms, nowMs)    // milliseconds (core Format.ago is seconds: the API converts)
-
-Api.address.isIpv4(t) / isIpv6(t) / isIp(t)
-Api.address.parseCidr(t)     // → { family: 4|6, address, bits, network ("a.b.c.0/24") } | null
-Api.address.contains(cidr, ip)
-Api.address.overlap(a, b)
-Api.address.redact(text)     // IPv4/IPv6 addresses and prefixes → "[address]"
-
-Api.minuteNow                // Date.now() ms, updated on each minute boundary (one shared timer)
-
-module.notify(summary, { body, format: "plain", … })   // also Api.notify: "plain" escapes
-                             // &, <, > and drops control characters in summary and body
-module.log(level, text, key) // "info" | "warn" | "debug" (debug only with general.debug);
-                             // prefixed "[<id>]"; with `key`: logged only when the text for
-                             // that key changed (once per change)
-```
-
-Where they live:
-- One pure core singleton, `singletons/AddressRules.qml`, with a suite.
-- `NetworkRules.isIpv4`, `isCidr4`, `inSubnet4` and the rest delegate to it, so there is one
-  implementation.
-- Its source is the module's tested code (`TR:2633-2766`, `TR:2143`) with its test cases.
-- `Api.format` and `Api.address` are frozen objects of functions.
-
-Lifetime: pure functions. `minuteNow` keeps ticking while locked; it is cheap.
-
-Tests:
-- `AddressRulesTest` (ported cases plus NetworkRules' current cases).
-- `FormatTest` gains TB and the milliseconds `ago`.
-- `NotifierTest` gains a case for plain format.
-- `module.log` dedupe gets a case in `ModulesTest`.
-
-Replaces in the module: `bytes`, `ago`, the address code and `withoutAddresses`, the 5 s
-`_clock` (with one-shot timers, 8.5), its markup escaping, and `_logOutcome`/`logChange`
-(#27-#31).
-
-### 2.7 System facts and the data directory (1.6)
-
-```
-Api.system: {
-  ready,                       // true once the first read is done
-  userName, uid,               // id -un / -u, read once by the core (a valid Unix name or "")
-  hostName,                    // /proc/sys/kernel/hostname (FileView, no process); re-read on
-                               // resume and on refresh()
-  home, configHome, dataHome, runtimeDirectory,   // the XDG values, absolute
-  downloadDirectory,           // XDG_DOWNLOAD_DIR from user-dirs.dirs (read, never sourced),
-                               // else ~/Downloads
-  isNixOS,
-  readIpForwarding() → { ipv4: bool|null, ipv6: bool|null }   // synchronous (KernelFile)
-  refresh()
-}
-module.dataDirectory           // "<dataHome>/h2s-shell/module-data/<id>", made 700 by the host
-                               // before the main is created (as the stores' directory is today)
-```
-
-Notes:
-- **Not under `modules/<id>`.** M4 installs modules there, and a sync would wipe the data.
-- **Migration.** The module's certificates live at `…/h2s-shell/tailscale/certs` today. The
-  module looks there once and moves them. Or it says where they were. This is module work.
-- **Lifetime.** The shell's, read-only. Values are the same while locked.
-- **Security.** All of it is already readable by any process of the user. The address list in
-  §2.8 is the most sensitive: modules see the same as `ip addr`.
-
-Tests: `SystemFactsTest`, with a fake user-dirs file and fake /proc files passed in as paths.
-In test mode, `ModuleTestKit.setSystem({ … })` (§2.10).
-
-Replaces in the module: `_readIdentity`, `_readSystemHostname`, the `Quickshell.env` reads,
-the `user-dirs.dirs` parsing, the cert folder logic, the forwarding reads, and their three
-`H2S_TAILSCALE_*_DIR` seams (#14, #21, #22, #24-#26).
-
-### 2.8 Network facts (1.7)
-
-```
-Api.networksReady      // true once profiles AND their Wi-Fi details are read
-Api.networks           // as 1.3; a Wi-Fi row appears only once its details are read (no
-                       // hotspot window); `networksChanged` (QML's own signal) fires only when
-                       // the content changes (already true; now documented)
-Api.localNetworks      // frozen [{ device, kind ("wifi"|"ethernet"|"other"), family (4|6),
-                       // address ("192.168.1.5/24"), network ("192.168.1.0/24") }], global
-                       // scope; no VPN, tun, WireGuard or provider devices
-Api.localNetworksReady
-Api.vpnsUp             // rows gain: fullTunnel (true | false | null unknown),
-                       // setsDns (true | false | null), routes ([CIDR], ≤ 64; [] unknown)
-```
-
-Sources:
-- `localNetworks` comes from NetworkManager's device details (`Nmcli.qml:207` already parses
-  `IP4.ADDRESS` lists). Whether unmanaged devices such as `tailscale0` show up there with
-  addresses is unverified. The rule "drop VPN, tun and WireGuard types, and devices a provider
-  names" covers both answers.
-- `fullTunnel` for NetworkManager VPNs: `ipv4.never-default` and `ipv6.never-default` are
-  "no", and for WireGuard some peer's `allowed-ips` holds `0.0.0.0/0` or `::/0`. The parsing
-  exists (`NetworkRules.qml:139, 604-618`). It must be read for active VPNs (the
-  `VpnManager.details` read, `VpnManager.qml:37-50`).
-- `setsDns`: the connection has DNS servers.
-- For providers, `VpnProvider` entries may set the same three fields. They are optional,
-  copied through, and null when absent.
-- `otherVpnsUp` in the VPN slots' context stays a list of names. It gains a sibling,
-  `otherVpns`, which holds the `vpnsUp` rows.
-
-**Per-network slot (Q4).** A new slot, `network.profile.card`: on a saved network's card in
-Settings → System → Network, while it is open. Its context is
-`{ slot, networkId, name, kind, active }`. A module shows its per-network choice where the
-user edits that network.
-- The data stays in `module.store`, keyed by `networkId`. It is data, not a profile setting.
-  `system.vpnWithNetworks` stays the shell's.
-- Once `networksReady` is true, a module may drop ids no longer listed. Like the shell, it
-  should not prune without the user's word (review 4.4).
-
-Tests:
-- `ModuleRulesTest`: `apiNetworks` with details missing, `apiVpnsUp` with the new fields, and
-  `apiLocalNetworks`.
-- `ModuleRegistriesTest`: the new slot.
-
-Replaces in the module: the "empty means not read" guard, `_readLan` (`ip -o addr`), and the
-"Another VPN" guess (#23, #32-#34). The network card can host the exit-node choice (#35).
-
-### 2.9 Terminal and file chooser (1.8)
-
-```
-Api.openTerminal(argv, { title, workingDirectory }) → { ok, blocked, error }
-setting general.terminal     // string, "" = automatic: xdg-terminal-exec, then $TERMINAL,
-                             // then foot, kitty, alacritty, wezterm (the first on PATH)
-
-Api.chooseFiles({ mode: "open" | "openMany" | "folder" | "save", title, folder,
-                  nameFilters }, done)   // done(paths: [absolute paths]) or done(null)
-```
-
-Terminal:
-- `argv` is an array, with no shell and no control characters. The terminal is started
-  detached and runs `argv` as its command: `-e` for the known terminals, `--` for
-  xdg-terminal-exec.
-- Refused while locked, and when no terminal is found (`error` says to set
-  `general.terminal`).
-- Security: a terminal shows the user what runs. It adds no power, since modules can already
-  run commands.
-- Tests: `TerminalRulesTest` for the argv per terminal.
-
-File chooser:
-- The shell hosts it in a long-lived object, not in the caller's window. A popup can call it
-  and close. One chooser at a time: a second call gets `done(null)` with a log line.
-- Refused while locked.
-- Paths come back as absolute paths, never URLs.
-
-Feasibility of the file chooser is unverified, so start with a spike. The shell runs with
-`UseQApplication` (`shell.qml:1`), so `FileDialog` may open as its own top-level window. If
-it can only draw inside a parent window, the fallback is a small `FloatingWindow` that the
-shell opens to host it.
-
-Replaces in the module: "Copy ssh command" becomes "Open SSH" (the copy can stay), and the
-popup's timed request to the page (#20, #36).
-
-### 2.10 Test mode and `ModuleTestKit` (1.4, with §2.3)
-
-Test mode, `ModuleHost.testMode`:
-- Set in-process by `tests-modules.qml`.
-- The lock bed sets it through the shell's single test-seam place. That place honours its
-  variable only together with the bed's own marker, and logs loudly when set (review 5.4).
-  The bed is the only path that comes from the environment.
+One switch, set only by the shell's test entry points: `tests-modules.qml` sets it in
+process; the lock bed sets it through the single test-seam reader that
+`notes/plans/architecture-cleanup.md` §3 plans (its `Api.testBed` is this plan's
+`Api.testMode`: one name, `testMode`). A stray environment variable alone never turns it
+on.
 
 In test mode:
-- `module.programs` resolve from the manifest's `testPrograms` directory: `trusted: true`,
-  `reason: "test stand-in"`.
-- `PrivilegedAction` uses `<testPrograms>/pkexec`, which must exist, and never the real
-  pkexec. **Stand-ins and real pkexec never meet.** This is the rule that fixes 8.9.
-- `Api.openUrl`, `Api.openTerminal` and `Api.chooseFiles` record the call and open nothing.
-  `chooseFiles` answers from `ModuleTestKit.chooserAnswer`.
-- `module.dataDirectory` is under a temporary directory the runner made.
-- `Api.testMode` is true, read-only. A module may use it for things like "an IPC call counts
-  as the user".
+- `module.programs` come from the manifest's `testPrograms` directory (inside the module),
+  with `trusted: true, reason: "test stand-in"`.
+- Privileged runs use `<testPrograms>/pkexec`, which must exist. **Stand-ins never meet the
+  real pkexec.**
+- `Api.openUrl` and `Api.chooseFiles` record the call and open nothing.
+- `module.dataDirectory` and `Api.system` come from the test kit.
+- `Api.testMode` is true (read-only).
 
-`qs.tests` gains `ModuleTestKit`. It exists only in tests, because the running shell has no
-`qs.tests`:
-- `setEnabled(id, on)`, `status(id)`, `widgetEntries`, `slotEntries(name)`
-- `setSystem(facts)`, `setNow(ms)` (drives `Api.minuteNow`)
-- `opened` (recorded openUrl, terminal and chooser calls), `chooserAnswer`
+`qs.tests` gains `ModuleTestKit` (tests only; the running shell has no `qs.tests`):
+`setEnabled(id, on)`, `status(id)`, `widgetEntries`, `anchorEntries(path)`,
+`setSystem(facts)`, `setNow(ms)`, `opened`, `chooserAnswer`.
 
-A module's own unit suites still build their objects with explicit properties (the module's
-`toolsDir`, `fixedNow`, `environment`). Those are not environment hooks and stay.
+Test (`ModulesTest`): a fixture's stand-in is used only in test mode; with test mode off
+`testPrograms` is ignored; a privileged run in test mode never calls a pkexec found on
+`PATH` (one is put there that fails the suite if run).
 
-Tests: `ModulesTest` checks:
-- a fixture's stand-in is used only in test mode;
-- with test mode off, a `testPrograms` entry is ignored;
-- a privileged run in test mode never calls the real pkexec, by putting a pkexec on PATH that
-  fails the suite if it runs.
+### 3.4 Privileged start, and the prompt's "who and what for"
 
-Replaces in the module: `H2S_TAILSCALE_TOOLS` and `H2S_TEST_MODULES` (`TC:300-317`), the
-seam's `xdg-open`, `_ipcOrigin` keyed on `toolsMode`, the three directory seams, and the
-test's `module.host` use (#11-#15).
+**The surface is on the handle**, so the shell knows which module asks without being told:
 
-### 2.11 Stable UI types, and closing the handle's reach (1.9 → 2.0)
+```
+module.privileged.available          // trusted pkexec and timeout found
+module.privileged.unavailableReason
+module.privileged.start(argv, options) → handle { running, cancel() }
 
-**UI types: wrap them in `qs.api` and pin them with a test.**
-- Each type gets a file under `api/`: `VpnProvider`, `PopupWidget`, `BarRow`, `BarText`,
-  `SmallButton`, `InputField`, `Dropdown`, `Pill`, `ToggleSwitch`, `Checkbox`, `DeleteButton`,
-  `PointerArea`, `PrivilegedMark`. Each file is `Base {}`, as `SettingEditor` is.
-- They keep the core names, so a module changes one import line. It must drop
-  `import qs.components`: the same name from two imports is ambiguous.
-- A table `ModuleRules.apiComponents` lists each type's documented properties and signals.
-  `tests/ApiComponentsTest.qml` builds each type and checks that the list still holds.
-- A wrapper still inherits every property of its base. The test pins what is documented, and
-  the docs say "only the listed properties are API".
-- Why wrap rather than only list:
-  - the module's imports then say what is API;
-  - the import check can then warn on `qs.components`;
-  - a core rename stays inside the wrapper.
-- Add a comment in each wrapped core file: "API through api/X.qml" (as review 3.4 asks for
-  `panels/settings`).
+options = { what (required), timeoutMs (required, 1 s … 1 h), onStdout, onStderr, onLine,
+            notifyFailures: true, done }
+result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, cancelled,
+            blocked ("" | "locked" | "untrusted" | "no-purpose"), error }
+```
 
-The import check in 2.0:
-- `qs.components` leaves the allowlist. It stays a warning, by the owner's §7 decision.
-- `Quickshell.Io` stays allowed for `IpcHandler`. Q8 asks whether to warn on `Process` in a
-  module file.
+- **One queue for the whole shell** (`singletons/PrivilegedRuns.qml`): one password prompt
+  at a time. A run leaves the queue when it ends or is cancelled, even if its root process
+  still runs.
+- **Time limit.** The shell puts its own trusted `timeout` inside pkexec. `cancel()` after
+  the program started as root stops waiting; the root process ends at its limit.
+- **No time window** after a click (the owner's decision). That nothing prompts without the
+  user's click stays a development rule, checked in review and by the module's tests; what
+  the user gets instead is a prompt that says who asks and why.
+- **Refused before pkexec runs:**
+  - `untrusted`: `argv[0]` has no trusted verdict (§3.2), or is a shell or `env` (then the
+    real program would be an argument nobody checked).
+  - `locked`; `no-purpose` (`what` empty after cleaning); `notFound` as today.
+- **Root helpers.** By the rule above, nothing under a module's own directory in the user's
+  data home ever runs as root. No module has a root helper today; where a packaged helper
+  is looked up is designed when the first one needs it.
 
-Closing reach:
-- `ModuleHandle.host`: in 1.9, rename it to `_host` and keep `host` as a deprecated alias.
-  The first read warns once in the module's status. In 2.0, remove the alias. QML cannot make
-  a property truly private, so this is a convention plus a warning.
-- `Api.module(id)`: in 1.9, add `Api.moduleStatus(id)`, a frozen
-  `{ id, name, version, state, active }`. `Api.module(id)` keeps working but warns. In 2.0,
-  remove it (Q3).
-- `PrivilegedAction.elevate`: in 2.0, a read-only report of what the shell uses. Suites use
-  test mode instead.
+**The prompt** (`polkit/AuthPrompt.qml`, when the shell's agent answers). Under the shell's
+own title it shows three labelled lines, then polkit's own message as today:
+
+```
+Module    Tailscale (tailscale)
+For       Connect Tailscale
+Command   /usr/bin/tailscale up --accept-routes
+```
+
+- **Where the text comes from.** `Module`: the manifest's `name` and the module's id, taken
+  by the shell from the handle the run was started on. `For`: the run's `what`. `Command`:
+  the `argv` the shell passes to pkexec, joined with shell quoting.
+- **Plain and capped.** A pure rule `PolkitRules.announcement(run)` drops control
+  characters, folds white space to one line and caps the name at 40, `what` at 80 and the
+  command at 240 characters (cut with "…"). All four texts are `Text.PlainText`; polkit's
+  message becomes plain text too.
+- **Not spoofable as the shell.** A module's words only ever fill the values of these
+  lines. The title, the labels and the frame are the shell's; the first line always starts
+  with "Module"; a module id cannot be a word for the shell (`ModuleRules.reservedIds`
+  holds `shell`, `system`, `polkit`, `h2s-shell` and the like: verified). One line each, so
+  a text cannot fake a second line.
+- **Which request is announced.** The agent's flow carries only `message`, `actionId` and
+  `cookie` (verified in Quickshell's polkit types): no command line, no caller. So
+  `PolkitRules.announces(flow, run)` matches the run at the head of the queue when the
+  action is pkexec's (`org.freedesktop.policykit.exec`) and the message names `argv[0]`
+  (assumed: pkexec's message holds the program's path in every locale). Anything else shows
+  as today, with no module lines: a request the shell did not start is never dressed up.
+- **Another agent answers** (`Authentication.state` is `other`): the shell cannot change
+  its prompt. See Q2.
+
+The old `PrivilegedAction` type keeps working unchanged until the closing slice (§7); its
+runs go through the same queue and are announced as "Module (not named)".
+
+Test: `PolkitRulesTest` (announcement cleaning and caps, matching, a hostile name and
+`what`); a shell suite with a stand-in pkexec that prints and sleeps: streaming, cancel
+while queued and after start, a second run not blocked by a cancelled one, the time limit
+in the argv, every `blocked` reason, 127 reported once; `LockViewTest`-style view test for
+the prompt's three lines.
+
+### 3.5 Shared module object, and what a popup panel is given
+
+```
+module.main    // the object made from the manifest's `main` while the module is active;
+               // null while off or with no main; notifies
+```
+
+The host sets it right after creating the main and clears it before destroying it. Views
+read through it (`module.main?.client`) and must allow null.
+
+A module's popup panel gets, each only when its root declares the property:
+
+| Property | Value |
+|---|---|
+| `opener` | frozen `{ widgetType, preset, edge, byTouch }`: the bar widget that opened it |
+| `availableHeight` | the most height before the panel must scroll; kept current |
+| `fitsShownHeight` | declared true by the panel: it is sized to the height shown while the popup animates |
+| `popupAnimating` | true while the popup moves or resizes |
+
+`PopupWidget.togglePopup` passes `{ widgetType, preset }` as `contentData`
+(`panels/Popup.qml` already carries it); the last three are set today and only get
+documented and tested.
+
+Test (`ModuleRegistriesTest`): `main` is set before the module's widgets complete, null
+when off, a new object when on again; two bar entries on different presets each see their
+own `opener.preset`.
+
+### 3.6 Helpers
+
+```
+Api.format.bytes(n) / rate(n) / ago(ms, nowMs)
+Api.address.isIpv4 / isIpv6 / isIp / parseCidr / contains / overlap / redact
+Api.minuteNow                               // ms, updated on each minute boundary
+module.notify(summary, { body, format: "plain" })   // also Api.notify
+module.log(level, text, key)                // "[<id>]" prefix; with `key`: only when the
+                                            // text for that key changed
+```
+
+One pure core singleton `singletons/AddressRules.qml` (from the module's tested code, with
+its cases); `NetworkRules` delegates to it. `format: "plain"` escapes `&`, `<`, `>` and
+drops control characters.
+
+Test: `AddressRulesTest`, `FormatTest` (TB, `ago` in milliseconds), `NotifierTest` (plain),
+`ModulesTest` (log dedupe).
+
+### 3.7 System facts and the data directory
+
+```
+Api.system = { ready, userName, uid, hostName, home, configHome, dataHome, runtimeDirectory,
+               downloadDirectory, isNixOS, readIpForwarding() → { ipv4, ipv6 }, refresh() }
+module.dataDirectory     // "<dataHome>/h2s-shell/module-data/<id>", made 700 by the host
+```
+
+- `downloadDirectory` is `XDG_DOWNLOAD_DIR` from `user-dirs.dirs` (read, never sourced),
+  else `~/Downloads`. `readIpForwarding` gives `null` for a value it could not read.
+- The data directory is apart from `modules/<id>`, which installing and removing a module
+  (step 8) owns. Moving the module's certificates there is module work.
+
+Test: `SystemFactsTest` with fake files passed in as paths.
+
+### 3.8 Network facts
+
+```
+Api.networksReady      // profiles and their Wi-Fi details are read
+Api.networks           // a Wi-Fi row appears only once its details are read (no hotspot)
+Api.localNetworks      // frozen [{ device, kind, family, address, network }], global scope,
+                       // no VPN, tun, WireGuard or provider devices
+Api.localNetworksReady
+Api.vpnsUp             // rows gain fullTunnel, setsDns (true | false | null), routes
+```
+
+`VpnProvider` entries may set the same three fields; absent is `null` (unknown, never
+"false"). The VPN anchors' context gains `otherVpns` (the rows) beside `otherVpnsUp`.
+
+Test: `ModuleRulesTest` (`apiNetworks` with details missing, `apiVpnsUp`, `apiLocalNetworks`).
+
+### 3.9 File chooser
+
+```
+Api.chooseFiles({ mode: "open" | "openMany" | "folder" | "save", title, folder, nameFilters }, done)
+```
+
+Hosted by the shell, not the caller's window, so a popup can call it and close. One at a
+time; refused while locked; absolute paths, never URLs. Starts with a spike: whether a
+`FileDialog` opens as its own window in the shell is unverified. If not, a small shell
+window hosts it.
+
+### 3.10 Cut from the earlier draft
+
+- A terminal call and a terminal setting: the owner decided a global "default programs"
+  setting later. "Copy ssh command" stays.
+- The 10 s click window for privileged runs.
+- API 2.0: with "a minor may tighten", removals ship in a minor (§6).
 
 ---
 
-## 3. Versioning
+## 4. Step 4: UI anchors
 
-| Version | Adds | Tightens |
+### 4.1 Blocks
+
+Views are built from five shared blocks. Each has an `anchor` name; that is all a view's
+author writes.
+
+| Block | File (new, `components/`) | What it is | Placements |
+|---|---|---|---|
+| Settings page | `SettingsPage.qml` | a page's root: scrolling, margins, heading | append |
+| Section | `SettingsSection.qml` | a titled group on a page | before, after, append |
+| Card | `SettingsCard.qml` | a framed item that opens (a saved network, a VPN) | before, after, append (built while open) |
+| Row | `SettingsRow.qml` | one line: a label with a control or a value | before, after |
+| Popup section | `PopupSection.qml` | a group in a popup panel; the panel's root is one too | before, after, append |
+
+**How consistent the views are today** (verified by reading `panels/`):
+- 26 settings pages with four kinds of root: `Flickable` (14), `ShapeSettings` (5),
+  `ColumnLayout` (4, scrolled by the window), `Item` (3: network pages with an editor
+  laid over them). There is no page block.
+- Sections are a `SectionTitle` followed by loose siblings, and only on the network pages
+  (30 uses of `SectionTitle`/`Heading` in all); other pages mark sections with a comment or
+  a `Label`. There is no section block.
+- Cards exist as `NetworkProfileCard` and `NetworkDeviceCard`. Rows exist as `SwitchRow`,
+  `DetailRow`, `SettingEditor`, `SettingInputRow`, and many hand-made `RowLayout`s.
+- 9 popup panels, each a bare `Item` with a `Column`; only the network popup has parts in
+  files of their own (`panels/network/VpnSection.qml` and others). There is no popup
+  section block.
+
+**What is refactored first.** Not everything. A view gets blocks when it gets its first
+anchor. This round converts only what today's slots and the first consumer need: the
+General page, the network and notifications popups, the VPN, Wi-Fi and Ethernet pages.
+`NetworkProfileCard` becomes a `SettingsCard`. Other views follow when a module needs them
+or when step 7 touches them; until then they have no anchors, and the table says so.
+
+### 4.2 Naming
+
+```
+<surface>.<view>[.<block>]…
+```
+
+- `surface`: `settings` or `popup`. The bar has no anchors.
+- `view`: the settings page's id (`SettingsWindow.pages`: `general`, `network_vpn`, …) or
+  the popup's key (`WidgetRegistry`: `network`, `notifications`, …). These ids are public
+  already (`Api.openSettings`).
+- `block`: the block's `anchor` name, `[a-z][a-zA-Z0-9]*`, written in the code. It says
+  what the block holds (`saved`, `vpns`, `connections`), never where it is (`top`,
+  `bottom`) and never the title's words, so a new title or a translation changes nothing.
+- A block repeated per item is named by its kind: `card`, `row`. All instances share one
+  path; the item is in the element's `context` (`context.networkId`).
+- Unique among siblings. A block with no `anchor` is not addressable and adds no level.
+
+Examples, from today's views:
+
+| Path | Block | Placement a module would use |
 |---|---|---|
-| 1.4 | `CommandRunner`; `PrivilegedAction.start()`, `available`, `unavailableReason`; `module.programs`, `programsReady`, `recheckPrograms()`; manifest `optionalPrograms`, `testPrograms`; test mode, `Api.testMode`, `ModuleTestKit`; `Api.sessionLocked` | Privileged runs refuse untrusted `argv[0]`, and refuse while locked (rule below) |
-| 1.5 | `module.main`; popup `opener`; documented `availableHeight`, `fitsShownHeight`, `popupAnimating` | — |
-| 1.6 | `Api.format`, `Api.address`, `Api.minuteNow`, `Api.system`, `module.dataDirectory`, notify `format: "plain"`, `module.log` | — |
-| 1.7 | `Api.networksReady`, `Api.localNetworks`, `localNetworksReady`, `vpnsUp` tunnel fields, `VpnProvider` entry fields, `otherVpns` in the VPN context, slot `network.profile.card` | `Api.networks` holds Wi-Fi rows back until read (a fix: it matches the docs) |
-| 1.8 | `Api.openTerminal`, setting `general.terminal`, `Api.chooseFiles` | — |
-| 1.9 | The UI types in `qs.api`, `ApiComponentsTest`; `Api.moduleStatus`; `_host`; deprecation warnings for `qs.components`, `host` and `Api.module` | The click rule for privileged runs, if Q5 is yes |
-| 2.0 | — | Remove `Api.module` (or make it read-only), remove `host`, `qs.components` out of the allowlist, `elevate` read-only; maybe notify defaults to plain (Q9) |
+| `settings.general` | the General page | append: today's slot `settings.general.bottom` |
+| `popup.network.connections` | the VPN, Ethernet and Wi-Fi parts of the network popup | append: today's `network.popup.sections` |
+| `popup.network.connections.vpn.row` | each VPN's row in the popup | after: today's `network.vpn.row` |
+| `popup.notifications.list` | the notification list | before: today's `notifications.popup.top` |
+| `settings.network_vpn.vpns.card` | each VPN's card | append: today's `network.vpn.card` |
+| `settings.network_wifi.saved.card` | each saved Wi-Fi network's card | append: the exit node for this network |
+| `settings.network_ethernet.profiles.card` | each wired profile's card | append: the same |
 
-What forces 2.0: removing `Api.module` or `host`, and taking `qs.components` off the
-allowlist. 1.0 promised all three. Everything else is additive.
+### 4.3 How a path is derived and stays stable
 
-A version gate for every slice:
-- Add a test that reads the newest `- 1.x:` line under `### Module API` in `CHANGELOG.md` and
-  compares it with `ModuleRules.apiVersion` (review 3.9).
-- `ModuleRulesTest.qml:23` stops hard-coding "1.3".
+- The window gives a page's root its base (`settings.<page id>`), the popup gives a panel's
+  root `popup.<key>`. A block's path is its nearest enclosing block's path plus its own
+  `anchor`; it finds that block by walking up `parent` when it is completed.
+- So a path changes only when a block is renamed or moved under another block. Reordering
+  blocks, changing titles or wrapping them in layouts changes nothing.
+- The list of anchors is a table, `ModuleRules.anchorTable`:
+  `{ path, kind, placements, context, scope, since, where }`. `Api.anchors` is its frozen
+  copy; the documentation's list is generated from it. Only paths in the table take
+  content: naming a block does not publish it.
+- Views built by a module are not anchors in this round.
 
-**Open owner decision: may a minor version tighten behaviour?** Options:
+### 4.4 Registration and building, within the Repeater rules
 
-| Option | Rule | Consequences |
+- A block whose path is in the table holds one small host per placement that has content.
+  The host is today's `ModuleSlot` machinery, kept as it is: a `Repeater` on a
+  `ScriptModel` keyed by `ModuleRules.contributionKey`, each element in a
+  `ModuleContribution` guard. It is created only when the module host lists content for
+  that path and placement, so a block nobody targets costs one string.
+- `before` and `after` hosts sit inside the block's own item, above and below its content.
+  The parent layout sees one item, so a block works in a `Column`, a layout, or as a
+  `Repeater`'s delegate. A hidden block hides its `before` and `after` content with it.
+- Both Repeater rules hold as they do for `ModuleSlot` today (verified: it sits in
+  `NetworkPanel.qml`, built by `panels/Popup.qml` outside the window's incubation, and in
+  the VPN cards' delegates): popup content is still created through `Qt.callLater`, and no
+  host binds a live array.
+- Blocks also report themselves to a plain core singleton, `singletons/Anchors.qml`
+  (`live`: path → count). Nothing in the running shell decides by it; the pin test and
+  `modules list` read it.
+
+**An element** is what a slot contribution is today: built in its own guard; its root may
+declare `module`, `context` and `shown`. `context` is `{ anchor, placement, … }` plus what
+the table documents for that path. `scope: "own-provider"` (the VPN row and card) builds a
+module's element only on the items of its own VPN provider, as the VPN slots do today.
+
+Manifest:
+
+```
+"anchors": [{ "at": "settings.network_wifi.saved.card", "place": "append", "component": "ExitNodeRow.qml" }]
+```
+
+### 4.5 Missing anchors, and order
+
+- **A path this shell does not offer**, or a placement that path does not take: an error in
+  the module's status ("anchors: `x` is not a place this shell offers"), shown in
+  Settings → Modules and `modules list`. The rest of the module loads. Today an unknown slot
+  is only a warning.
+- **An anchor removed by a later shell**: the same error, and the shell's API floor (§6)
+  says which version the module must be written for.
+- **A path in the table that no view builds any more** is a shell defect; the pin test
+  (§4.6) catches it before release. At run time such content shows nowhere; `modules list`
+  names table paths that were never live in a view that has been opened.
+- **Several modules on one path and placement**: by module id, alphabetically; within a
+  module, manifest order; top to bottom. Stable across installs (today the order is the
+  search path's; assumed from `ModuleRules.merge`).
+
+### 4.6 The test that pins the list
+
+`tests/AnchorsTest.qml`:
+1. builds every converted settings page and popup panel with the fixture module off,
+   collects `Anchors.live`, and compares it with the table: every table path is live, and
+   every live path that is not in the table is listed in the test as "named, not published";
+2. checks every path against the naming rule, and that no table path is under
+   `lockscreen`, the screensaver or `singletons/lock` (extends `tests/lock-closure.sh`:
+   none of the five blocks may be built on the lock screen's path);
+3. with the fixture module on: one element per placement of each kind appears, in order,
+   with the documented context; an unknown path gives a status error.
+
+Repeated blocks (cards, rows) need an item to be live; the test feeds the page stand-in
+data (`tests/FakeVpnProvider.qml` exists for the VPN ones).
+
+### 4.7 Today's slots, and the first consumer
+
+| Slot (`ModuleRules.slotTable`) | Becomes |
+|---|---|
+| `network.popup.sections` | `popup.network.connections`, append |
+| `notifications.popup.top` | `popup.notifications.list`, before |
+| `settings.general.bottom` | `settings.general`, append |
+| `network.vpn.row` | `popup.network.connections.vpn.row`, after, own-provider |
+| `network.vpn.card` | `settings.network_vpn.vpns.card`, append, own-provider |
+| `network.vpn.page` | removed: a provider's page is its `settingsPage` (API 1.2); the module does not use the slot |
+
+During the migration a manifest's `slots` entries are read as these anchors, with a
+warning. `components/ModuleSlot.qml`, `Api.slots` and the `slots` field go in the closing
+slice (§7).
+
+**First consumer: the exit node per network.** The saved network's card, opened, already
+holds that network's own choices, each applied at once (connect automatically, priority:
+`NetworkProfileCard.qml`). The module appends one row there, on
+`settings.network_wifi.saved.card` and `settings.network_ethernet.profiles.card`, with
+context `{ networkId (the profile's UUID, as in Api.networks), name, kind, active, open }`.
+The choice stays in `module.store`, keyed by `networkId`, and applies at once like its
+neighbours. Hotspots and VPNs have other paths, so the row never shows there.
+`NetworkExitTable.qml` on the module's page goes.
+
+---
+
+## 5. Step 5: a module's public API, basic version
+
+### 5.1 Declaring and using
+
+```
+// the provider's module.json
+"exports": { "version": "1.0" }
+// its main
+readonly property QtObject exports: QtObject { … }     // what other modules may use
+
+// the dependent's module.json
+"uses": { "tailscale": "1.0" }
+// in its files
+module.uses.tailscale        // the provider's `exports` object, and nothing else of it
+```
+
+- The version is "major.minor", checked like the shell's: same major, the provider's minor
+  at least the one asked for. What a provider's minor may change is the provider's rule.
+- A dependent gets the `exports` object only. It is a plain `QtObject`, which has no way up
+  to the main (no `parent` in QML).
+- A module with `exports` in the manifest and no such property on its main: an error in its
+  status; dependents count it as missing.
+- Basic version: required dependencies only. Optional ones later.
+
+### 5.2 Load order
+
+A pure rule, `ModuleRules.dependencyPlan(manifests, states)`, gives the order and the
+reasons. A dependent's main is created after its providers' and destroyed before them.
+
+### 5.3 Missing, incompatible, reload
+
+- A new state `missing-module` (beside `missing-program`), with the reason in the status:
+  "needs module tailscale 1.0: not installed" / "turned off" / "failed" / "has 0.9".
+- A cycle: every module in it is `failed`, naming the cycle.
+- **A provider turned off or reloaded**: its dependents go first (`missing-module`), then
+  the provider; turned on again, the provider first, then they come back. So
+  `module.uses.x` never changes under a live main, and is never null while the dependent
+  runs.
+- A shell reload rebuilds everything in the same order.
+
+Test: `ModuleRulesTest` (order, cycle, each reason, version check); `ModulesTest` with two
+fixture modules (provider off and on, the dependent follows; the object given is the
+`exports` object).
+
+### 5.4 Reach closed
+
+- `Api.module(id)` goes. `Api.moduleStatus(id)` gives a frozen
+  `{ id, name, version, state, active }`.
+- `ModuleHandle.host` becomes internal (`_host`). QML cannot hide a property, so this is a
+  name, a status error on use, and the test kit (§3.3) for what suites needed it for.
+- The import check (`ModuleRules.allowedImports`) reports `qs.singletons*` and another
+  module's directory as an error in the status, not a warning. The module still loads (the
+  owner's earlier decision: the check never refuses).
+- `qs.components` stays allowed in this round (Q5).
+
+---
+
+## 6. Versioning
+
+**A minor may tighten** (the owner's decision, for now). What it means here:
+
+- Every slice bumps the minor once and adds one `- 1.x:` line under `### Module API` in
+  `CHANGELOG.md`. What a slice refuses or removes is named in that line after
+  "Tightened:".
+- There is no 2.0 in this plan.
+- **The manifest check gains a floor.** `ModuleRules.apiFloor` is the oldest API version
+  whose modules still run unchanged on this shell. A slice that removes or refuses
+  something a module could rely on raises it to its own version. `apiCompatibility` then
+  answers: same major, `apiFloor` ≤ the module's `api` ≤ the shell's. Below the floor the
+  module is `incompatible`, with the reason "written for module API 1.3; this shell needs
+  1.18 or newer (the module needs updating)". So a tightening is never silent.
+- **During this plan the floor moves once.** Slices in steps 3–5 only add: the old ways
+  (`PrivilegedAction`, `elevate`, `slots`, `Api.module`, `host`) keep working, with a
+  warning in the module's status. New calls are strict from their first version. One
+  closing slice after step 6 removes the old ways and raises the floor. `master` therefore
+  always runs the released module.
+- A test compares the newest `- 1.x:` line in `CHANGELOG.md` with `ModuleRules.apiVersion`
+  (`ModuleRulesTest.qml` stops hard-coding "1.3").
+- When someone else uses the shell, the rule is tightened (the owner's decision); the
+  floor stays as the mechanism.
+
+---
+
+## 7. Slices
+
+Every slice: one change with its test; `tests/run-unit.sh` green, and `tests/run-modules.sh`
+on the released module green; the `Api.qml` header, `ModuleRules.apiVersion` and one
+CHANGELOG line updated together. The numbers assume this order; a slice merged out of
+order takes the next free minor.
+
+### Step 3
+
+| Slice | API | Files | Verified by |
+|---|---|---|---|
+| A0 Version gate and floor | — | `ModuleRules.qml` (`apiFloor`, `apiCompatibility`), `tests/ModuleRulesTest.qml` | rule cases; CHANGELOG ↔ `apiVersion` test |
+| A1 Command runner | 1.4 | `singletons/io/CommandRunner.qml`, `api/CommandRunner.qml`, `io/CommandAction.qml`, `io/CommandQuery.qml`, `api/Api.qml` (`_opener`) | `CommandRunnerTest`; old suites unchanged |
+| A1b Host on the runner | — | `ModuleHost.qml` (four blocks) | `ModulesTest`; lock bed `modules`, `modules-hung` |
+| A2 Program lookup with trust | 1.5 | `ModuleRules.qml`, `ModuleHost.qml`, `api/ModuleHandle.qml`, a fixture | verdict cases; fixture |
+| A3 Test mode | 1.6 | `ModuleHost.qml`, `Modules.qml`, `api/Api.qml`, `tests-modules.qml`, `tests/ModuleTestKit.qml` | `ModulesTest` (three cases in §3.3) |
+| A4 Privileged start | 1.7 | `singletons/PrivilegedRuns.qml`, `PolkitRules.qml`, `api/ModuleHandle.qml`, `api/PrivilegedAction.qml` (onto the queue) | stand-in pkexec suite |
+| A5 The prompt says who and what for | — (user-visible: CHANGELOG "Unreleased") | `polkit/AuthPrompt.qml`, `PolkitRules.qml`, `Authentication.qml` | `PolkitRulesTest`; view test; by hand on both systems, once |
+| B1 Shared module object, popup inputs | 1.8 | `ModuleHost.qml`, `api/ModuleHandle.qml`, `components/PopupWidget.qml`, `panels/Popup.qml` | `ModuleRegistriesTest` |
+| C1 Helpers | 1.9 | `singletons/AddressRules.qml`, `network/NetworkRules.qml`, `Format.qml`, `Notifier.qml`, `api/Api.qml`, `api/ModuleHandle.qml` | `AddressRulesTest`, `FormatTest`, `NotifierTest`, `ModulesTest` |
+| C2 System facts, data directory | 1.10 | `singletons/SystemFacts.qml`, `ModuleHost.qml`, `api/Api.qml`, `api/ModuleHandle.qml`, test kit | `SystemFactsTest` |
+| D1 Network facts | 1.11 | `ModuleRules.qml` (`apiNetworks`, `apiVpnsUp`, `apiLocalNetworks`), `api/Api.qml`, `network/VpnManager.qml`, `components/VpnProvider.qml` | `ModuleRulesTest` |
+| E1 File chooser (spike first) | 1.12 | `singletons/FileChooser.qml`, `api/Api.qml`, test kit | recorded calls in test mode; by hand |
+
+### Step 4
+
+| Slice | API | Files | Verified by |
+|---|---|---|---|
+| U1 Blocks, table, manifest field; the General page | 1.13 | the five block files, `components/AnchorContent.qml` (from `ModuleSlot`), `singletons/Anchors.qml`, `ModuleRules.qml` (`anchorTable`, manifest `anchors`, slot aliases, order), `ModuleHost.qml`, `api/Api.qml`, `SettingsWindow.qml`, `GeneralSettings.qml`, `api/` names for the blocks | `AnchorsTest`; `ModuleRegistriesTest` slot cases still pass through the aliases |
+| U2 Popups | 1.14 | `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; by hand: both popups unchanged to the eye |
+| U3 Network pages and cards | 1.15 | `NetworkVpnSettings.qml`, `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, `NetworkProfileCard.qml`, `network/VpnManager.qml` (`extrasFor`) | `AnchorsTest`, `VpnProvidersTest`; by hand |
+
+### Step 5
+
+| Slice | API | Files | Verified by |
+|---|---|---|---|
+| P1 `exports` and `uses` | 1.16 | `ModuleRules.qml` (`dependencyPlan`, state), `ModuleHost.qml`, `api/ModuleHandle.qml`, two fixtures | `ModuleRulesTest`, `ModulesTest` |
+| P2 Reach warnings, `moduleStatus` | 1.17 | `api/Api.qml`, `api/ModuleHandle.qml`, `ModuleRules.qml` (import check) | `ModuleRulesTest`, `ModulesTest` |
+
+### Step 6: the module, then the closing slice
+
+Each module slice raises its manifest `api` and removes one group of §1:
+
+| Slice | Removes (rows of §1) | Needs |
 |---|---|---|
-| A | Never. Anything that refuses what a 1.x module could do waits for 2.0 | Simple and honest. The pkexec trust check and the locked refusal wait. Until then a user-writable program can be run as root through the API |
-| B | Only to close a security hole, or to match what the docs already promise. It goes under "Tightened" in the CHANGELOG | Follows the 1.2 precedent (`openUrl`, "a tightening, taken as a fix"). The trust check, the locked refusal and the hotspot fix can ship in 1.4/1.7. "Security hole" needs judgement each time |
-| C | Warn for one minor, then enforce in the next. The warning goes in the module's status and the log | A module author sees it coming, and nothing breaks silently. Every tightening takes two releases. The click rule fits here |
-| D | Freely until install-from-repository (M4) ships, then A, B or C | Fits today (one author, one module). It needs a date or a stage written down, or it drifts |
+| M1 Runner | 1–4 | A1 |
+| M2 Programs and test mode | 9–15 | A2, A3, C2 |
+| M3 Privileged | 5–8 | A4, M2 |
+| M4 Main and popup | 16–19 | B1 |
+| M5 Helpers and facts | 22–33 | C1, C2, D1 |
+| M6 Anchors: its row and card; the exit node per network on the network cards | 21, the `slots` field | U3 |
+| M7 "Send file…" from the popup | 20 | E1 |
+| M8 The manual "for now" override | — (module state) | M6 |
+
+**Z, the closing slice (core, 1.18, floor 1.18):** removes the `PrivilegedAction` type and
+`elevate`, the `slots` field, `Api.slots`, `components/ModuleSlot.qml`, `network.vpn.page`,
+`Api.module`, `host`; row 34 of §1 goes in the module with its `api: "1.18"`.
+
+### What can run in parallel
+
+- Chains that must stay in order: A0 → A1 → A2 → A3 → A4 → A5; U1 → U2 → U3; P1 → P2.
+- Parallel to the A chain: B1, C1, the whole U chain (it lives in `components/` and
+  `panels/`).
+- C2 after A3 (test kit); D1 after C1 (`NetworkRules` delegates to `AddressRules`); E1
+  after A3.
+- Everything touches `ModuleRules.qml`, `api/Api.qml`'s header and the CHANGELOG. To keep
+  that from colliding, the pure split of `ModuleRules.qml` into five files
+  (`architecture-cleanup.md` §2.1) goes first, and each slice adds its version line last,
+  at merge.
+- Module slices M1–M8 touch only the module's repository and run beside the core slices
+  that do not block them.
 
 ---
 
-## 4. Order of work
-
-Each slice:
-- leaves the shell and the module working, with all suites green (`tests/run-unit.sh` and
-  `tests/run-modules.sh` on the module);
-- bumps the minor once, with one CHANGELOG `### Module API` line;
-- does the core change first, then the module's migration, which also raises its manifest
-  `api`.
-
-| # | Slice | Core | Module | Size | Needs |
-|---|---|---|---|---|---|
-| 0 | Version gate | The CHANGELOG/`apiVersion` test (review 3.9); comments at `Nmcli.profiles` and `VpnManager.activeVpns` (review 3.1); trust model text in ARCHITECTURE (review 3.3) | — | S | — |
-| 1 | Runner (1.4a) | `Io.CommandRunner` + `api/CommandRunner`; rebuild `CommandAction` and `CommandQuery` on it; move `ModuleHost`'s 4 blocks and `Api._opener` onto it; `CommandRunnerTest` | Extract `TailscaleRunner` (module-internal, review 8.6) on `CommandRunner`; drop `_spawn`, `_processComponent`, `_timedArgv`, `_watchdogMs`, generation checks, the bare stream Process; sub-clients use the runner's public calls | L | 0 |
-| 2 | Programs and test mode (1.4b) | `optionalPrograms`, `testPrograms`, `module.programs` with verdicts (rules moved from `TR`); `ModuleHost.testMode`; `Api.testMode`; test-mode `openUrl`; `ModuleTestKit` (enable, status, entries, opened) | Drop `_resolveTools`, `toolsProbe`, `H2S_TAILSCALE_TOOLS`, `H2S_TEST_MODULES`, the seam's `xdg-open`, `_ipcOrigin` on `toolsMode`; the suite uses `ModuleTestKit` instead of `module.host` | M | 1 |
-| 3 | Privileged runs (1.4c, released together as 1.4) | `PrivilegedAction.start()`, `available`, shell-wide prompt queue, cancel, trusted `timeout` inside pkexec, `blocked` (untrusted, locked: subject to the §3 decision), test-mode pkexec | Login onto `start()`; drop `_adminSpare`, `_freeAdmin`, the 127 mapping, `elevationProblem`, setting `elevate` | M | 1, 2 |
-| 4 | Main and popup (1.5) | `module.main`; `opener` through `PopupWidget`/`Popup`; panel inputs documented and tested | Delete `Tailscale.qml`; views use `module.main?.client`; drop `provider.client` and `popupPreset` | S | 0 (may go before 3) |
-| 5 | Helpers and system (1.6) | `AddressRules` (NetworkRules delegates); `Api.format`, `Api.address`, `Api.minuteNow`, `Api.system`, `module.dataDirectory`, notify plain, `module.log`; `ModuleTestKit.setSystem` / `setNow` | Drop the copies (`bytes`, `ago`, addresses, `withoutAddresses`), `_readIdentity`, `_readSystemHostname`, env reads, user-dirs parsing, the three dir seams; move certs; the 5 s clock becomes one-shot timers + `minuteNow` (8.5); the logger | M | 2 |
-| 6 | Network facts (1.7) | `networksReady`, hold Wi-Fi rows back, `localNetworks`, `vpnsUp` tunnel fields, provider entry fields, slot `network.profile.card` | Drop the empty-list guard and `_readLan`; the "Another VPN" hint only for `fullTunnel`; its entry reports `fullTunnel` while an exit node is used; exit node per network on the network card (if Q4 yes) | M | 0 |
-| 7 | Terminal and chooser (1.8) | Spike on the file chooser first (S); then `Api.chooseFiles`, `Api.openTerminal`, `general.terminal` | "Send file…" picks files from the popup; the page's request flag goes; "Open SSH" on device rows | M | 2 (test mode records) |
-| 8 | UI types (1.9) | The `api/` wrappers, `ModuleRules.apiComponents`, `ApiComponentsTest`, `Api.moduleStatus`, `_host` + deprecation warnings | Import only `qs.api` and `Quickshell*` | M | 0 |
-| 9 | 2.0 | Remove `Api.module`, `host`, `qs.components` from the allowlist, `elevate` read-only, the tightenings deferred by the §3 rule | Manifest `api: "2.0"` | S | 8, owner's §3 decision |
-
-The module's other review items (8.1-8.5, 8.7, 8.10-8.13) are module work. Slices 1 and 4
-unblock its structural refactor (8.6, 8.7), so they come first. 8.1-8.5 can run in parallel
-with slices 2-3.
-
----
-
-## 5. Open questions for the owner
+## 8. Open questions for the owner
 
 | # | Question | Choices | Recommendation |
 |---|---|---|---|
-| Q1 | May a minor version tighten behaviour? (§3) | A never / B security and documented promises only / C warn one minor, then enforce / D freely until M4 | **B + C**: security holes and broken promises as fixes right away (trust check, locked refusal, hotspot window); everything else warns for one minor first |
-| Q2 | `qs.components`: wrap in `qs.api`, or list and pin in place? | Wrap + pin test / list + pin test, import stays | **Wrap**: the imports then show what is API, and core renames stay internal |
-| Q3 | `Api.module(id)` in 2.0 | Remove / read-only status | **Remove**, after `Api.moduleStatus` in 1.9; no module uses it today |
-| Q4 | An exit node per network (and future per-network choices) | (a) slot `network.profile.card` + data in the module's store / (b) a shell-kept per-network settings table for modules / (c) nothing: keep it on the module's page | **(a)**: UI where the user edits the network, no new storage model. A per-network choice is data keyed by a UUID, not a profile setting |
-| Q5 | Privileged runs need a user action in a shell window within 10 s | Yes / no (convention only, as today) | **Yes**: cheap, and it turns "never prompt without a click" from a comment into a check (mistakes, not malice) |
-| Q6 | Where module data lives | `~/.local/share/h2s-shell/module-data/<id>` / inside the store directory | **`module-data/<id>`**: apart from `modules/<id>`, which M4's sync owns |
-| Q7 | Terminal setting | Free command prefix / pick from known terminals + "custom" | **A string, "" = automatic** (xdg-terminal-exec, `$TERMINAL`, a known list); known terminals get their `-e` form, others `-e` |
-| Q8 | In 2.0, warn on `Process`, `Quickshell.env` and `execDetached` in module files | Warn / say nothing | **Warn** (text check like the import check): it points authors to the runner and to `Api.system` |
-| Q9 | In 2.0, notifications from modules are plain text unless `format: "markup"` | Yes / keep markup default | **Yes**: every module text so far needed escaping; markup by default is the trap |
-| Q10 | If the file chooser cannot outlive the popup, a small shell window hosts it | Accept / drop `chooseFiles` | **Accept**: "Send file…" from the popup is a daily action |
+| Q1 | Where the per-network exit node sits | (a) the saved network's card, opened; (b) the connection editor ("Edit connection") | **(a).** The card's own choices apply at once, as the module's will. The editor has Save, "Save and reconnect" and a 20 s undo; a module's row there needs a contract for joining a form (`changed`, `apply()`, `reset()`), and the editor's save has an open defect (tracker step 7). (b) can follow as a second anchor once that contract exists |
+| Q2 | A module's privileged run when another polkit agent answers, so the shell's prompt cannot say who asks | (a) run, and show a shell notification "Module X asks for the administrator's password: …" just before; (b) run, say nothing; (c) refuse | **(a).** The decision is kept as far as the shell can; nothing breaks for people who keep their own agent |
+| Q3 | Where the prompt's "what for" comes from | (a) the text given with each run, cleaned and capped (§3.4); (b) a fixed list of purposes in the manifest, a run names one | **(a).** The module has dozens of commands, each with its own words today; the command line is shown beside it either way. (b) can be added if modules from others arrive |
+| Q4 | Is the file chooser part of this round? Step 3's list does not name it; without it workaround 20 stays | in (slice E1) / later | **In, as the last slice**, after its spike. If the spike fails, the small shell window |
+| Q5 | The other `qs.components` types a module uses (`PopupWidget`, `SmallButton`, `Dropdown`, …: 13) are allowed but not versioned | wrap them in `qs.api` and pin them with a test now / after step 6 / leave | **After step 6**, as its own slice. The five blocks get `qs.api` names in U1 because anchors make them API; the rest is not a workaround and would widen this round |
+| Q6 | Order of several modules' elements on one anchor | by module id / search-path order (today) / a manifest `order` number | **By module id**: the same on every machine, nothing to configure |
 
-## Feasibility notes (Quickshell 0.3.2)
+---
 
-- **Checked** in `quickshell-io.qmltypes`. `Process` has `signal(int)`, `stdinEnabled` +
-  `write()`, `environment`, `clearEnvironment`, `workingDirectory`, `started` and `exited`.
-  `SplitParser` with `splitMarker: ""` gives raw chunks, as `singletons/io/CommandAction.qml:48-51`
-  and `TC:1956-1968` use it. `FileView` reads /proc without a process
-  (`singletons/io/KernelFile.qml`).
-- **Seen in working code, not checked in Quickshell's source.** A program that cannot start
-  gives no `exited`, only `running` turning false (`TC:1999-2009`). Processes created from a
-  `Component` per run work in the running shell (the module does it today).
-- **Unverified:**
-  - whether a destroyed `Process` kills its child (the runner signals explicitly);
-  - closing stdin after `write()` (no method is listed);
-  - signalling pkexec while its prompt shows;
-  - whether NetworkManager reports `tailscale0`'s addresses;
-  - whether `FileDialog` opens as a top-level window under `UseQApplication`;
-  - whether coreutils `timeout` signals the whole group. Its docs say it does unless
-    `--foreground` is given.
-- **What QML cannot isolate.** Any property is readable, so `_host` is a convention. A module
-  can still use `Quickshell.Io` directly. Every guard in this plan stops mistakes, not a
-  hostile module (the owner's trust decision, `notes/plans/modules.md` §7).
+## 9. Verified, assumed, hard
+
+**Verified in the code.**
+- Every module reference in §1 (the module's QML is unchanged since the earlier read; only
+  its `CLAUDE.md` differs).
+- `ModuleHost.qml` has four `Process` blocks with their own deadlines; `Lockscreen.qml`
+  three probes; `api/PrivilegedAction.qml` checks only "absolute and executable" and
+  queues per instance; nothing in the core uses that type.
+- `apiCompatibility` checks major and minor only; `tests/ModuleRulesTest.qml` hard-codes
+  "1.3".
+- The slot table has six names; the module uses `network.vpn.row` and `network.vpn.card`.
+  `ModuleSlot` is used in `NetworkPanel.qml`, `NotificationPanel.qml` and
+  `GeneralSettings.qml`.
+- The survey in §4.1; `NetworkProfileCard`'s controls apply at once; the connection editor
+  saves on a button.
+- Quickshell's polkit flow exposes `message`, `actionId`, `cookie`, identities and the
+  conversation; no command line. `AuthPrompt.qml` sets no `textFormat` on those texts.
+- `Process` has `signal(int)`, `stdinEnabled` and `write()`, `environment`,
+  `workingDirectory` (Quickshell 0.3.2's types).
+
+**Assumed.**
+- A program that cannot start gives no `exited` (seen in the module's working code).
+- pkexec's message names the program's path in every locale; a program with its own polkit
+  action file would not match and would show without the module lines.
+- Signalling pkexec while its prompt shows ends it; a destroyed `Process` may not kill its
+  child (the runner signals explicitly).
+- NetworkManager may or may not report `tailscale0`'s addresses; the filter covers both.
+- A block can find its enclosing block by walking `parent` at completion, also inside a
+  `Loader` and a `Repeater` delegate. U1 starts by checking it in `QuickshellPinTest`.
+- Whether `FileDialog` opens as its own window in the shell.
+
+**What the current code makes hard.**
+- **No shared blocks exist.** Anchors need them first; converting all 26 pages and 9 popups
+  at once would be a large visual-risk change, so the plan converts view by view and the
+  anchor list starts short.
+- **The prompt cannot identify its caller.** The flow has no command line or process id;
+  matching rests on the queue's head and pkexec's message (the assumption above). With
+  another agent the shell cannot show anything in the prompt (Q2).
+- **"Connection's options" has two homes** with different save models (Q1).
+- **The VPN slots are filtered per provider** and built through `VpnManager.extrasFor`, not
+  `ModuleSlot`; U3 keeps that as the anchor's `scope`.
+- **`ModuleRules.qml` is one 1667-line file** that nearly every slice edits; the planned
+  split should go first.
+- **QML cannot hide anything.** `host`, `module.main` and `exports` are reachable by a
+  module that tries; the plan closes them by name, status errors and review.
+- **The core breaks its own rule:** `network/VpnLockdown.qml` runs `pkexec sh <script>`
+  from the shell's tree (tracker, "Found while writing the development rules"). It is not
+  a module run and stays outside this plan, but the prompt will show it without module
+  lines, as a plain pkexec request.
