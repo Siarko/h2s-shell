@@ -1,8 +1,7 @@
 # Module API: the next versions
 
-Status: a plan, for the owner's final approval. Every question asked is answered (§8) but
-one: which comes first, announcing the shell to module authors or the first built-in
-feature split out into a module (§10). No slice here depends on it. Nothing here is built.
+Status: a plan, for the owner's final approval. Every question asked is answered (§8).
+Nothing here is built.
 
 ## At a glance
 
@@ -1348,15 +1347,15 @@ Recorded, not designed (the owner, 2026-11-17; also in the tracker's "Later"):
   own public styles that a theme can set, and publishes it through a public API, so that
   libraries of extra elements can exist. (Building its own elements for itself is allowed
   now, §4.9.)
-- **Ready for outside authors**, and **the built-in features divided** between the shell
-  and modules: tracker steps, not slices of this plan (§10, §11).
+- **Ready for outside authors**, **the built-in features divided** between the shell
+  and modules, and **the announcement to module authors**, in that order: tracker steps,
+  not slices of this plan (§10, §11).
 
 ---
 
 ## 8. The owner's answers
 
-All of 2026-11-17. One point is open: the order of "announce to authors" and "the first
-split-out" (§10).
+All of 2026-11-17. Nothing is open.
 
 | What | The owner's answer | Where |
 |---|---|---|
@@ -1388,7 +1387,7 @@ split-out" (§10).
 | Shipped modules | Use only the public API, like anyone's module: one class of modules | §10 |
 | What stays in the shell | The services, or abstractions for reaching them; the lock screen, password prompts and privileged runs. A module builds on them and adds the whole feature | §10 |
 | Trust | No isolation: "the shell must work and modules need access to its functions". The user must know what they install: a module that is not the project's is announced as such, and is then not the project's responsibility | §10 |
-| Which comes first: announcing to authors, or the first split-out | Open: not answered yet | §10 |
+| Which comes first: announcing to authors, or the first split-out | The first built-in feature is split out into a module on the public API first, as the proof that the API is enough; only then is the shell announced as open to module authors | §10 |
 
 ---
 
@@ -1511,8 +1510,11 @@ The owner's answers of 2026-11-17. Not slices: where the round's work is to fit.
   from the project is announced as such, with a plain statement and a confirmation when a
   module that is not shipped is first enabled, and shown when a user's copy replaces a
   shipped one. It is then not the project's responsibility.
-- **Open, the one point:** whether the shell is announced to module authors before or
-  after the first feature is split out. Both are tracker steps; their order is not fixed.
+- **The order after this round** (the owner's decision): the author guide, a module
+  template and a module's tests runnable without a checkout of the shell; then the
+  built-in features are divided, one first, as the proof that the API is enough; only
+  then is the shell announced as open to module authors, and from that release a removal
+  needs a major version (§6). All tracker steps.
 
 What this round must not close off is listed in §11.
 

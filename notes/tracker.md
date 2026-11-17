@@ -103,7 +103,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
    (splits, hubs, test hooks, the module's read/clock performance, the network editor's save
    that can lose the kill-switch choice). Runs alongside 3–6 where slices do not collide — open
-8. Modules closed for now (see Decisions: a state of today, ended by step 13) — open
+8. Modules closed for now (see Decisions: a state of today, ended by step 15) — open
    - [ ] the trust model written down honestly: no isolation; review covers the project's
          own modules only; for any other module the password prompt's text is the only
          protection
@@ -127,8 +127,8 @@ test queue; review what carries risk, look at one-line fixes yourself.
           backlog)
     - [ ] a module template
     - [ ] a module's tests runnable without a checkout of the shell
-    - [ ] the public versioning rule in force and written down (removals only with a major
-          version, after a release listed as deprecated)
+    - [ ] the public versioning rule written down (removals only with a major version,
+          after a release listed as deprecated); in force from step 15
     - [ ] the trust text, and the confirmation when a module that is not shipped is first
           enabled
     - [ ] Settings → Modules shows where a module comes from, and when a user's copy
@@ -139,9 +139,12 @@ test queue; review what carries risk, look at one-line fixes yourself.
     - [ ] one feature first, as the proof of the API; shipped with the shell, on the public
           API only
     - [ ] the rest, feature by feature
+15. Announce the shell as open to module authors, after the first feature of step 14 is
+    split out — open
+    - [ ] the release that says so; from it a removal from the module API needs a major
+          version
 
-The order of 13 and 14 is not decided (see Open points). What steps 3–6 must leave possible
-for both is in [plans/api-next.md](plans/api-next.md), §11 "Doors to keep open".
+What steps 3–6 must leave possible for 13–15 is in [plans/api-next.md](plans/api-next.md), §11 "Doors to keep open".
 
 Later:
 - pttd (dictation) as its own module in its own repository (was TODO 11.24); until then
@@ -196,6 +199,7 @@ All by the owner, 2026-11-17.
 - Module API, versioning for authors: "a minor may remove things" ends at the first release announced as open to module authors. From then a removal comes only with a major version, after being listed as deprecated for at least one release, and is announced in `CHANGELOG.md`'s "Module API" section and the author guide. Merging the closing slice only after the module is released is a one-off for the one module of today.
 - Shipped modules use only the public API, like anyone's module: one class of modules. Every feature split out proves the API.
 - The shell provides the services, or abstractions for reaching them; a module builds on them and adds the whole feature (popups, elements, widgets, settings pages). Every built-in feature is to be gone through and divided this way. The lock screen, password prompts and privileged runs stay in the framework.
+- Order after the API round (2026-11-17): the author guide, a module template and a module's tests runnable without a checkout of the shell; then the built-in features are divided, one first, as the proof that the API is enough; only then is the shell announced as open to module authors, and from that release a removal needs a major version.
 - Trust: no isolation ("the shell must work and modules need access to its functions"); running modules in a process of their own is not a later question. The user must know what they install: a module that does not come from the project is announced as such (a plain statement and a confirmation when a module that is not shipped is first enabled; shown when a user's copy replaces a shipped one), and is then not the project's responsibility.
 
 ## Backlog / later
@@ -245,9 +249,6 @@ Found during the test split (2026-11-17):
 
 ## Open points
 
-- One decision is pending: which comes first, step 13 (announce the shell to module
-  authors) or the first feature split out (step 14). The owner has not answered yet;
-  nothing in steps 3–6 depends on it.
-- The plans in `plans/` (`api-next.md`,
+- None of the owner's decisions are pending. The plans in `plans/` (`api-next.md`,
   `architecture-cleanup.md`, `documentation.md`) are drafts written before the decisions
   of 2026-11-17; step 1 revises them, and the owner approves them before implementation.
