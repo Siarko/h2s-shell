@@ -13,7 +13,10 @@ Development moves to the Arch machine; runs that need `nix` go over SSH to the N
 machine. How sessions work is in [workflow.md](workflow.md).
 
 State on 2026-11-17, end of the session on the Arch machine. One topic at a time from here
-(the owner): finish the test split first, then the API plan's implementation.
+(the owner): finish the test split first, then the API plan's implementation. The next
+topic is the rest of the test split — system detection behind a seam,
+`tests/run-system.sh`, `install.sh` under stand-ins, `tests/run-all.sh` — then the API
+plan's implementation.
 
 - [ ] **Test split** ([plans/test-split.md](plans/test-split.md)). Merged: runners run named
       suites; the unit and module suites run without `nix`. Waiting, unmerged:
@@ -233,21 +236,15 @@ Found during the test split (2026-11-17):
 - [ ] `polkit/AuthPrompt.qml` sets no `textFormat` on polkit's texts (plain-text rule)
 - [ ] `tests/ModulesTest.qml` (start guard, lines 268-301) asserts within a 300 ms timer:
       fails under load on a slow machine (3 checks, seen on the NixOS machine)
-- [ ] Lock scenario `modules-launcher`: with the shell's programs missing from `PATH`
-      (through `tests/lock/launcher.sh`) modules can stay `pending` after a supervisor
-      restart — looks like a shell defect; `modules-discovery` once saw the supervisor
-      silent for 44 s under load
+- [ ] Lock scenario `modules-discovery` once saw the supervisor silent for 44 s under load
+      (not looked at)
 - [ ] `tests/lock/tools.nix`: the comment ties the pin to one machine's system
-- [ ] **Urgent** — the supervisor in `scripts/launch.sh` (`wait_for_shell`, around line
-      504) can spin after the shell is killed: `wait_for: No record of process <pid>`
-      printed 6.3 million times in 10 s (a 1.3 GB log), and the shell never restarted. Seen
-      once in five runs of the lock scenario `modules-launcher` on the NixOS machine (bash
-      5.3.9); the guard for a lost exit status (127) does not catch it
 - [ ] The module repository's `tests/lock-bed/run.sh` header still advises wrapping the run
       in `flock` (harmless, stale)
 - [ ] Lock scenario `restart-crash-locked`, the check "Quickshell said it would not
-      restart": failed once in a whole run of the bed on the Arch machine (Quickshell 0.3.2),
-      passed three times alone. A SIGSEGV 0.2 s after the shell started: Quickshell's crash
+      restart": failed twice in whole runs of the bed on the Arch machine (Quickshell 0.3.2),
+      passed three times alone; belongs with the upstream notes (`notes/upstream/`). A
+      SIGSEGV 0.2 s after the shell started: Quickshell's crash
       handler printed "Quickshell has been restarted", then `Launching config: ""` and
       "Could not open config file", exit 255 — not its "crashed within 10 seconds of
       launching. Not restarting". The launcher started a new shell either way and the screen

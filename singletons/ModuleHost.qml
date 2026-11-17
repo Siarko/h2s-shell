@@ -428,9 +428,7 @@ Scope {
             }
         }
         if (asked.length === 0) {
-            // No run follows whose answer would apply what was just settled: applied here (a
-            // module that is only its module.json stayed pending for good when nothing else —
-            // the start guard, the settings — answered after its manifest)
+            // No run follows whose answer would apply what was just settled: applied here
             if (settledAtOnce)
                 _applyGuarded();
             return;

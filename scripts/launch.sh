@@ -506,7 +506,7 @@ process_stopped() {
 # Waits until the shell process ends — not when it only stops (SIGSTOP while debugging,
 # SIGTTIN/SIGTTOU from a terminal): with job control on, `wait` returns at a stop, and the
 # stopped shell was taken for a dead one, killed and replaced. `wait` also returns when a
-# trapped signal arrives. So whenever it returns with the process still there, the loop
+# trapped signal arrives. So whenever it returns with the shell still its child, the loop
 # pauses (0.1 s, doubling up to 1 s: a stopped shell is polled once a second; back to 0.1 s
 # after a wait that lasted) and waits again — whatever `wait` said, no turn of this loop is
 # without an end or a pause.
@@ -518,6 +518,7 @@ process_stopped() {
 # and the shell is never started again. On a stopped child it spins too, silently.
 wait_for_shell() {
     local pause_ms=100 stopped="" asked
+    local lost="the shell's exit status was lost (bash kept no record of it): taken for a crash"
     while :; do
         asked=$SECONDS
         wait "$child"
@@ -526,18 +527,32 @@ wait_for_shell() {
         # bash kept no record of it: it has ended, its status is lost: taken for a crash
         # (restarted — the safe side for a lock screen)
         if [ "$status" = 127 ]; then
-            say "the shell's exit status was lost (bash kept no record of it): taken for a crash"
+            say "$lost"
             status=255
             return 0
         fi
-        kill -0 "$child" 2> /dev/null || return 0
+        # Still this script's child (a zombie too)? Not by its pid alone: once the child is
+        # reaped, another process may carry the number
+        if [ "$(process_parent "$child")" != "$$" ]; then
+            # A status above 128 may be a trapped signal's (SIGHUP: 129), which interrupted
+            # `wait` just as the shell ended: bash kept the shell's own status, asked for here
+            if [ "$status" -gt 128 ]; then
+                wait "$child"
+                status=$?
+                if [ "$status" = 127 ]; then
+                    say "$lost"
+                    status=255
+                fi
+            fi
+            return 0
+        fi
         if process_stopped "$child"; then
             [ -n "$stopped" ] || say "the shell (pid $child) is stopped: left alone until it runs on or ends"
             stopped=1
         else
             stopped=""
         fi
-        sleep "$(ms_to_seconds "$pause_ms")"
+        sleep "$(ms_to_seconds "$pause_ms" {lock_fd}>&-)" {lock_fd}>&-
         pause_ms=$((pause_ms * 2))
         [ "$pause_ms" -le 1000 ] || pause_ms=1000
     done

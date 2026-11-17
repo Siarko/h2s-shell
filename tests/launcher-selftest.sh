@@ -8,12 +8,16 @@
 # The case it is here for: bash's `wait -f` reads the record of a child killed by a signal
 # after freeing it (bash 5.3, jobs.c, wait_for_single_pid), and when that memory reads as
 # "alive" it never returns — it prints "wait_for: No record of process" without end, and
-# the shell is never started again. With glibc's malloc that is one bash process in a few
-# hundred; GLIBC_TUNABLES (no thread cache, freed memory filled with 0x7f) makes it most of
-# them — which ones depends on what else the heap holds, so the case runs a row of
-# supervisors that differ in the length of one environment variable. A bash that does not
-# use glibc's malloc cannot be provoked like this: the script says which it found, and the
-# case is then only that a killed shell is started again.
+# the shell is never started again. Whether it does depends on what the heap holds:
+# GLIBC_TUNABLES (no thread cache, freed memory filled with 0x7f) makes it likelier with
+# glibc's malloc, and the "killed" case runs a row of supervisors that differ in the length
+# of one environment variable.
+#
+# What the run shows, and says: a probe tells whether this bash has the defect at all; a
+# row of control supervisors — a copy of launch.sh with `wait -f` put back — tells whether
+# the "killed" case can see it on this machine (how many of them spun). Where none did, the
+# "killed" case is only that a killed shell is started again, and the "stopped" case is the
+# one that fails on `wait -f`: there it spins on every machine.
 #
 #   tests/launcher-selftest.sh
 #
@@ -63,13 +67,21 @@ for name in bash env dirname readlink id date stat mv flock awk sed timeout slee
     ln -s "$real" "$work/bin/$name"
 done
 # The shell: notes its pid in its supervisor's directory, then does what the file `mode`
-# there says — "run" (it sleeps) or "exit <status>"
+# there says — "run" (it sleeps), "exit <status>", or "hangup-and-die" (once: it sends its
+# supervisor SIGHUP and is killed at the same moment; the next one runs). It sleeps for a
+# minute, more than any case takes: one that clean_up missed (its launcher killed before it
+# wrote its pid) does not stay for long.
 {
     echo "#!$bash_path"
     echo 'echo $$ >> "$LAUNCHER_SELFTEST_DIR/starts"'
     echo 'read -r what status < "$LAUNCHER_SELFTEST_DIR/mode"'
     echo '[ "$what" = exit ] && exit "$status"'
-    echo "exec '$work/bin/sleep' 600"
+    echo 'if [ "$what" = hangup-and-die ]; then'
+    echo '    echo run > "$LAUNCHER_SELFTEST_DIR/mode"'
+    echo '    kill -HUP "$PPID"'
+    echo '    kill -KILL $$'
+    echo 'fi'
+    echo "exec '$work/bin/sleep' 60"
 } > "$work/bin/qs"
 chmod +x "$work/bin/qs"
 
@@ -82,18 +94,29 @@ elif type -P perl > /dev/null; then
 fi
 [ -S "$socket" ] || { echo "launcher-selftest.sh: cannot make a socket file (python3 or perl makes it)" >&2; exit 2; }
 
-# ---- Can this bash be provoked? `wait -f` on a killed child, with the tunables ---
+# ---- Has this bash the defect? `wait -f` on a killed child, with the tunables ---
 printf 'set -m\n%s 5 &\nchild=$!\n(%s 0.05; kill -KILL $child) &\nwait -f $child\n' "$work/bin/sleep" "$work/bin/sleep" > "$work/probe.sh"
 env -i "GLIBC_TUNABLES=$tunables" "$work/bin/timeout" 1 "$bash_path" "$work/probe.sh" 2>&1 | head -n 5 > "$work/probe.out"
 if grep -q 'No record of process' "$work/probe.out"; then
-    echo "bash ${BASH_VERSION}: its wait -f never returns after a killed child, with $tunables — the supervisors run with them"
+    echo "bash ${BASH_VERSION}: a probe's wait -f did not return after a killed child (with $tunables)"
 else
-    echo "NOTE: bash ${BASH_VERSION}: its wait -f could not be provoked (not glibc's malloc, or a bash without the defect):"
-    echo "      the first case is only that a killed shell is started again"
+    echo "bash ${BASH_VERSION}: a probe's wait -f returned after a killed child (with $tunables):"
+    echo "    not glibc's malloc, a bash without the defect, or a heap that hid it"
+fi
+
+# ---- The control: launch.sh with `wait -f` put back, to see what the "killed" case can catch
+mkdir -p "$work/control/scripts"
+control_script=$work/control/scripts/launch.sh
+sed 's/^        wait "\$child"$/        wait -f "$child"/' "$REPO/scripts/launch.sh" > "$control_script"
+if [ "$(grep -c '^        wait -f "\$child"$' "$control_script")" != 1 ] \
+    || [ "$(diff "$REPO/scripts/launch.sh" "$control_script" | grep -c '^[<>]')" != 2 ]; then
+    # (Counted as a failure, and the cases still run: they say what the launcher does)
+    failed "the control supervisor cannot be made: the line \`wait \"\$child\"\` of wait_for_shell is not in scripts/launch.sh once"
+    control_script=""
 fi
 
 # ---- Supervisors -------------------------------------------------------------------------
-# start_launcher <name> [<padding>]: a supervisor with a directory of its own ($work/<name>:
+# start_launcher <name> [<padding>] [<script>]: a supervisor with a directory of its own ($work/<name>:
 # its runtime dir `run`, its shell's `starts` and `mode`, its output `output`), and what the
 # helpers below then speak of. Its output is a file of at most 2 MB: a supervisor that
 # prints without end is killed by that limit (SIGXFSZ), not left to fill the disk.
@@ -110,7 +133,7 @@ start_launcher() {
             "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
             "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=0.1" "LAUNCHER_SELFTEST=$work" \
             "LAUNCHER_SELFTEST_DIR=$at" "LAUNCHER_SELFTEST_PADDING=${2:-}" "GLIBC_TUNABLES=$tunables" \
-            "$bash_path" "$REPO/scripts/launch.sh" > "$at/output" 2>&1 < /dev/null
+            "$bash_path" "${3:-$REPO/scripts/launch.sh}" > "$at/output" 2>&1 < /dev/null
     ) &
     launcher=$!
     # (Not a job of this script's: bash would report each one killed below)
@@ -130,15 +153,31 @@ up() { wait_until 10 started 1 || { echo "launcher-selftest.sh: the launcher did
 
 # ---- (1) A killed shell is started again, and the launcher says little ---
 layouts=16
+# start_row <name> [<script>]: $layouts supervisors, $work/<name>1 …, each with another
+# heap layout, and each one's shell killed once it runs
+start_row() {
+    local layout
+    for layout in $(seq 1 "$layouts"); do
+        start_launcher "$1$layout" "$(printf '%*s' "$layout" '' | tr ' ' x)" "${2:-}"
+        echo "$launcher" >> "$work/$1.launchers"
+    done
+    for layout in $(seq 1 "$layouts"); do
+        at=$work/$1$layout
+        up
+        signal KILL "$(shell_pid)"
+    done
+}
+# end_row <name>: its supervisors and their shells, killed
+end_row() {
+    local layout
+    for layout in $(seq 1 "$layouts"); do
+        signal KILL "$(sed -n "${layout}p" "$work/$1.launchers")"
+        at=$work/$1$layout
+        signal KILL "$(shell_pid)"
+    done
+}
 echo "== killed ($layouts supervisors, each with another heap layout)"
-for layout in $(seq 1 "$layouts"); do
-    start_launcher "layout$layout" "$(printf '%*s' "$layout" '' | tr ' ' x)"
-done
-for layout in $(seq 1 "$layouts"); do
-    at=$work/layout$layout
-    up
-    signal KILL "$(shell_pid)"
-done
+start_row layout
 restarted=0 lost=0 lines=0
 for layout in $(seq 1 "$layouts"); do
     at=$work/layout$layout
@@ -150,11 +189,36 @@ done
 is "a killed shell is started again, its status known ($restarted of $layouts)" test "$restarted" = "$layouts"
 is "bash never lost the child (\"No record of process\": $lost of $layouts)" test "$lost" = 0
 is "the launcher's output stayed small (at most $lines lines)" test "$lines" -le 20
-for layout in $(seq 1 "$layouts"); do
-    signal KILL "$(sed -n "${layout}p" "$work/launchers")"
-    at=$work/layout$layout
-    signal KILL "$(shell_pid)"
+end_row layout
+
+# The control row (names as long as the row's above: the same environment, but for the
+# script's path): which of them spin is what the checks above could have caught
+[ -z "$control_script" ] || start_row contrl "$control_script"
+settled() { started 2 || said "No record of process"; }
+spun=0 unsettled=0
+deadline=$((SECONDS + 5))
+for layout in $([ -z "$control_script" ] || seq 1 "$layouts"); do
+    at=$work/contrl$layout
+    remaining=$((deadline - SECONDS))
+    wait_until "$((remaining > 0 ? remaining : 0))" settled
+    if said "No record of process"; then
+        spun=$((spun + 1))
+    elif ! started 2; then
+        unsettled=$((unsettled + 1))
+    fi
 done
+[ -z "$control_script" ] || end_row contrl
+if [ -z "$control_script" ]; then
+    echo "    NOTE control: none was run: what the checks above can catch on this machine is not known"
+elif [ "$spun" -gt 0 ]; then
+    echo "    control: with wait -f put back, $spun of $layouts supervisors spun (\"No record of process\"):"
+    echo "             the checks above catch bash's defect on this machine"
+else
+    echo "    NOTE control: with wait -f put back, none of $layouts supervisors spun ($unsettled did not restart in time):"
+    echo "             the checks above could NOT detect bash's defect on this machine — they show only"
+    echo "             that a killed shell is started again. The \"stopped\" case below stands for it:"
+    echo "             it fails on wait -f on every machine"
+fi
 
 # ---- (2) A stopped shell is left alone, without the supervisor spinning ---
 echo "== stopped"
@@ -177,15 +241,24 @@ signal KILL "$stopped"
 within 5 "killed after it ran on: started again" started 2
 within 3 "… with its status known" said "the shell exited (status 137)"
 
-# ---- (3) A shell that quits is not started again ---
+# ---- (3) SIGHUP that interrupts the wait just as the shell is killed: the shell's status counts
+echo "== hangup as the shell dies"
+before=$(starts)
+echo hangup-and-die > "$at/mode"
+signal KILL "$(shell_pid)"
+within 5 "the shell after the one that hung up and died is started" started $((before + 2))
+is "… the supervisor took the killed shell's status, not the signal's" test "$(said_times 'the shell exited (status 137)')" = 3
+is "… and did not take it for stopped on purpose" test "$(said_times 'the shell was stopped')" = 0
+
+# ---- (4) A shell that quits is not started again ---
 echo "== quit"
 echo "exit 0" > "$at/mode"
 signal KILL "$(shell_pid)"
 within 5 "a shell that quits (status 0) ends the supervisor" gone "$launcher"
 is "… which said so" said "the shell quit (status 0)"
-is "… after starting it that once" test "$(starts)" = 3
+is "… after starting it that once" test "$(starts)" = 5
 
-# ---- (4) SIGTERM to the supervisor stops the shell ---
+# ---- (5) SIGTERM to the supervisor stops the shell ---
 echo "== told to stop"
 start_launcher told
 up

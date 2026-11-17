@@ -922,3 +922,14 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       widget. All in the module repository's CHANGELOG (Unreleased, 0.6.0).
 - [x] The Tailscale page's "Tailnet" field showed an e-mail address for a personal
       tailnet — fixed: `TailscaleRules.tailnetName` skips e-mail-like names.
+
+## Found during the test split (2026-11-17)
+
+- [x] **The supervisor spun after the shell was killed** (`scripts/launch.sh`,
+      `wait_for_shell`): `wait_for: No record of process <pid>` without end, the shell never
+      started again. Cause: bash 5.3's `wait -f` reads a freed record for a child killed by
+      a signal and spins inside bash. Fixed: plain `wait` and a paused loop;
+      `tests/launcher-selftest.sh`.
+- [x] **Modules stayed `pending` after a supervisor restart** (lock scenario
+      `modules-launcher`). Cause: a module with no files to check was settled but never
+      applied. Fixed in `singletons/ModuleHost.qml`.
