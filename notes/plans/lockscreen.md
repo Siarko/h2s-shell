@@ -786,9 +786,12 @@ Ordering guarantees within one step:
       supervises the shell of this session: not starting a second one" (exit 1). Without
       `flock` it says so and goes on unguarded. (Per user, as the marker is: two compositor
       sessions of one user are not supported.)
-    - It waits for the shell to END (`wait -f`, bash ≥ 5.1; older bash polls a stopped
-      child): a stopped shell (SIGSTOP, SIGTTIN/SIGTTOU) is left alone — `wait` used to
-      return at the stop and the stopped shell was killed and replaced. When bash has
+    - It waits for the shell to END (plain `wait`, again after a pause whenever it returns
+      with the process still there: a stopped child is polled once a second; not `wait -f`,
+      which in bash 5.3 can print "wait_for: No record of process" for ever after a killed
+      child — `tests/launcher-selftest.sh`): a stopped shell (SIGSTOP, SIGTTIN/SIGTTOU) is
+      left alone — `wait` used to return at the stop and the stopped shell was killed and
+      replaced. When bash has
       already reaped the shell and kept no record (`wait` 127, seen with bash 5.3 in about one
       run in four of a test), the shell has ended and its status is lost: taken for a crash
       (restarted) — the loop used to spin there and never restart it.
