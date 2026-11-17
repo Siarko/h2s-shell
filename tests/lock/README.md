@@ -203,7 +203,9 @@ answers as fprintd would in the mode in `fprintd/mode` — `enrolled`, `none`, `
 was reached"), `vanished` (the reader gone between the two calls), `multiline` (an error of
 two lines);
 `fprintd_mode <mode>` changes it during a test — and notes each call in `fprintd/log`.
-`methods-script.sh` runs the script alone against the same stand-in (no stack).
+`methods-script.sh` runs the script alone against the same stand-in (no stack), and as
+both kinds of system on every machine: `H2S_LOCK_SYSTEM=nixos|other` is the script's seam
+for which system it is on, honoured only together with `H2S_LOCK_SYSTEM_PAM_DIR`.
 
 **The password fallback** (used when the methods script fails or names no password, and for
 the next attempt after a password config that cannot be used) is chosen by the shell from

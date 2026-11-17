@@ -28,6 +28,34 @@
 # It finishes within about four seconds whatever fprintd does (the shell gives it five):
 # D-Bus activation of fprintd can block for much longer around suspend and resume.
 #
+# `--fallback-facts` asks something else: what the shell's own password fallback depends
+# on (LockIoRules.fallbackFacts), one word per line that holds — "readable" (the
+# system-wide h2s-shell-password), "nixos". The shell asks here so that which system this
+# is gets decided in one place.
+#
+# H2S_LOCK_SYSTEM_PAM_DIR: the test bed's seam for where system-wide configs are looked
+# for (the shell's password fallback honours it too, singletons/Lockscreen.qml).
+system_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
+
+# Which system this is: NixOS (/etc/NIXOS) or any other. H2S_LOCK_SYSTEM=nixos|other is
+# the test bed's seam for it, so that both answers are tested on every machine. It counts
+# only together with H2S_LOCK_SYSTEM_PAM_DIR: against the real /etc/pam.d the machine is
+# always asked. It grants nothing either way: both answers name real PAM stacks (the
+# worst a wrong one does is a config that cannot be started, which never unlocks), and
+# whoever can set the shell's environment can already run anything as the user.
+nixos=0
+case "${H2S_LOCK_SYSTEM_PAM_DIR:+${H2S_LOCK_SYSTEM:-}}" in
+    nixos) nixos=1 ;;
+    other) ;;
+    *) [ -e /etc/NIXOS ] && nixos=1 ;;
+esac
+
+if [ "${1:-}" = --fallback-facts ]; then
+    [ -r "$system_dir/h2s-shell-password" ] && echo readable
+    [ "$nixos" = 1 ] && echo nixos
+    exit 0
+fi
+
 # H2S_LOCK_AUTH_METHODS, when set, names an executable that answers instead of this
 # script, in the same format. The lock test bed (tests/lock/) uses it to run the real
 # shell against PAM stacks of its own rather than the system's. It lives here, in the
@@ -40,15 +68,10 @@ fi
 set -u
 
 shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
-# H2S_LOCK_SYSTEM_PAM_DIR: the test bed's seam for where system-wide configs are looked
-# for (the shell's password fallback honours it too, singletons/Lockscreen.qml)
-system_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
 # H2S_LOCK_TOOLS: the test bed's seam for a stand-in gdbus (as for the logind monitor)
 gdbus=gdbus
 [ -n "${H2S_LOCK_TOOLS:-}" ] && gdbus=$H2S_LOCK_TOOLS/gdbus
 user=$(id -un)
-nixos=0
-[ -e /etc/NIXOS ] && nixos=1
 failed=0
 
 # Says why a question could not be answered, and makes the exit status non-zero

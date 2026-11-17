@@ -936,13 +936,13 @@ Singleton {
     }
 
     // ---- What the password fallback depends on ----
-    // One word per line for what holds: the system-wide password config readable, NixOS
+    // One word per line for what holds: the system-wide password config readable, NixOS.
+    // The methods script answers, so that it and the fallback tell the system the same way
     Process {
         id: _fallbackProbe
         signal answered(var lines)
         property var _lines: []
-        command: ["sh", "-c", "test -r \"$1/h2s-shell-password\" && echo readable; test -e /etc/NIXOS && echo nixos; exit 0",
-            "sh", root._systemPamDirectory]
+        command: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh", "--fallback-facts"]
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: line => _fallbackProbe._lines = _fallbackProbe._lines.concat([line])

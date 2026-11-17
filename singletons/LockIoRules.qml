@@ -90,8 +90,8 @@ Singleton {
         return { directory: String(facts?.shellDirectory ?? "") + "/pam", config: "password" };
     }
 
-    // The driver's probe (a `test -r` and a `test -e /etc/NIXOS`, one word per line that
-    // holds) → the facts passwordFallback takes. `lines` may be array-like: an array passed
+    // The driver's probe (scripts/lock-auth-methods.sh --fallback-facts: one word per line
+    // that holds) → the facts passwordFallback takes. `lines` may be array-like: an array passed
     // through a QML signal's `var` argument arrives as a list wrapper Array.isArray rejects
     function fallbackFacts(lines) {
         const list = lines !== null && typeof lines === "object" && typeof lines.length === "number"

@@ -651,8 +651,7 @@ Ordering guarantees within one step:
   chooses the password config — `LockIoRules.passwordFallback({ shellDirectory,
   systemDirectory, systemConfigReadable, nixos })`: `<system dir>/h2s-shell-password` when
   readable, else on NixOS `<system dir>/login`, else the shipped `pam/password`. The driver
-  passes the shipped one to `initial()`, probes the two facts (`test -r`, `test -e
-  /etc/NIXOS`) at start and at every lock, and sends a `settings` event when the answer
+  passes the shipped one to `initial()`, asks the methods script for the two facts (`--fallback-facts`) at start and at every lock, and sends a `settings` event when the answer
   differs. The system directory is `/etc/pam.d`, or `H2S_LOCK_SYSTEM_PAM_DIR` (the test bed's
   seam; the methods script honours it too).
 - **Reload.** Quickshell reloads the shell when a file of it changes, or on
