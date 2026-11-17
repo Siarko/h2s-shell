@@ -2,7 +2,7 @@ pragma Singleton
 
 import Quickshell
 
-// A notification body's markup, made safe to show (docs/TODO.md 11.17).
+// A notification body's markup, made safe to show.
 //
 // The notification spec lets a body carry <b>, <i>, <u>, <a href> and <img src alt>, and
 // the server says it supports them. Shown as Qt rich text unfiltered, a body could bring

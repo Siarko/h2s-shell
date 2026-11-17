@@ -9,7 +9,7 @@ import qs.singletons
 // inherited from the theme it extends or that theme's palette, or built in — and a picker.
 // Changes go into the theme's draft, not its file (ThemeRules, "Drafts"): Save writes
 // them, Cancel throws them away; previewing shows them on the shell meanwhile
-// (docs/plans/themes.md, stage 6).
+// (notes/plans/themes.md, stage 6).
 Flickable {
     id: root
 

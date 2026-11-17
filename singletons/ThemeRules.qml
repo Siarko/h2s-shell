@@ -6,7 +6,7 @@ import QtQuick
 // Pure functions behind Theme: resolving a theme file's `extends` chain and layering the
 // result over the built-in theme. No I/O — the caller passes a function that reads a theme
 // by name — so tests/ThemeTest.qml exercises them with made-up themes.
-// See docs/plans/themes.md.
+// See notes/plans/themes.md.
 //
 // A theme file:
 //   {
@@ -574,7 +574,7 @@ Singleton {
         return name;
     }
 
-    // Moves the bar geometry from profiles into themes, once (docs/plans/themes.md, stage
+    // Moves the bar geometry from profiles into themes, once (notes/plans/themes.md, stage
     // 3), so the bar looks the same in every profile afterwards. Each profile that sets
     // any `bar.layout.*` gets a theme named after it holding those values, extending the
     // theme of the nearest profile before it that got one ("default" for the first), and

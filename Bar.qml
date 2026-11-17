@@ -6,7 +6,7 @@ import qs.components
 import qs.panels
 import qs.singletons
 
-// The bar along one screen edge (the bar.edge setting, docs/plans/bar-position.md):
+// The bar along one screen edge (the bar.edge setting, notes/plans/bar-position.md):
 // across the top or bottom, or down a side, its widgets then stacked down it
 PanelWindow {
     id: bar

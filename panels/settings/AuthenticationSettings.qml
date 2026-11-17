@@ -6,7 +6,7 @@ import qs.singletons
 
 // System → Authentication: whether the shell is the session's polkit agent — the prompt
 // for an administrator's password when a program needs one (Authentication,
-// docs/plans/polkit.md) — and what answers such requests now.
+// notes/plans/polkit.md) — and what answers such requests now.
 Flickable {
     id: root
 

@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.singletons.network
 
-// The VPN provider seam (docs/plans/tailscale.md §3): the pure rules in NetworkRules, and
+// The VPN provider seam (notes/plans/tailscale.md §3): the pure rules in NetworkRules, and
 // VpnManager's registry driven with the stand-in provider (FakeVpnProvider.qml). Nothing
 // here reaches NetworkManager: only provider ids ("fake:…") are connected, and the unit
 // runner gives nmcli no bus. Asynchronous for the parts that need the event loop: a

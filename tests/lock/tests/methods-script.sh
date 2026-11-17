@@ -5,7 +5,7 @@
 # (H2S_LOCK_SYSTEM_PAM_DIR), the user's config folder a private one (XDG_CONFIG_HOME). The
 # system bus address leads nowhere (lib.sh), so nothing here can reach the real fprintd.
 #
-# The contract (docs/plans/lockscreen.md, section 7): exit 0 is an answer, also "not
+# The contract (notes/plans/lockscreen.md, section 7): exit 0 is an answer, also "not
 # here"; non-zero when a question could not be answered — within the shell's 5 s, with the
 # lines it could answer printed first.
 

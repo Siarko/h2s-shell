@@ -10,7 +10,7 @@ import qs.singletons.network
 // whether it is up, its server; connect, disconnect, edit, delete; and, while up, its
 // interface, address, speed and the data it moved. "New WireGuard" opens the editor on a
 // fresh profile; "Import…" makes a profile from a VPN's file (a WireGuard .conf, an OpenVPN .ovpn, another plugin's), and the plugins missing are
-// named with what they are for (docs/plans/network.md, VPN). By UUID (VpnManager). A VPN
+// named with what they are for (notes/plans/network.md, VPN). By UUID (VpnManager). A VPN
 // provider's entries (the Tailscale module's) get the same card, connected through the
 // provider, with its extras and a link to its own page instead of the editor and delete.
 Item {

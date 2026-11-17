@@ -19,7 +19,7 @@
 # (no fprintd, no reader, no finger enrolled, no key registered): the shell then does not
 # ask again at every wake of the prompt. Non-zero when a question could not be answered
 # (fprintd timed out, gave an error or an answer that cannot be read, no system bus):
-# the shell then goes on with what it knew and asks again later (docs/plans/lockscreen.md,
+# the shell then goes on with what it knew and asks again later (notes/plans/lockscreen.md,
 # section 7, "Asking the script again"). The lines that could be answered are printed
 # first even then; the shell does not use them after a failure (it takes its password
 # fallback, chosen the same way as the password line here), but they show what was known.
@@ -75,7 +75,7 @@ config() {
 # NixOS without the module's h2s-shell-password: "login", as the shell's own password
 # fallback does (LockIoRules.passwordFallback) — they must agree. login waits for a
 # fingerprint first when fprintd is on. The shipped pam/password would most likely work
-# there too (its pam_unix does reach /run/wrappers/bin/unix_chkpwd: see docs/plans/
+# there too (its pam_unix does reach /run/wrappers/bin/unix_chkpwd: see notes/plans/
 # lockscreen.md, Stage 5), but that is not confirmed with a real password yet.
 if [ "$nixos" = 1 ] && [ ! -r "$system_dir/h2s-shell-password" ]; then
     printf 'password\t%s\tlogin\n' "$system_dir"

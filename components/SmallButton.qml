@@ -5,7 +5,7 @@ import qs.singletons
 // the confirm colour), "saveChange" (confirms a change to something that exists: the
 // second confirm colour), "cancel", "delete" (destructive: red under the pointer, as
 // DeleteButton) — so each kind can be
-// styled on its own (docs/plans/themes-stage7.md). `checked` shows a toggle that is on
+// styled on its own (notes/plans/themes-stage7.md). `checked` shows a toggle that is on
 // (filled with the accent), e.g. a scan running. As tall as its label needs, never less
 // than 24 px, so a larger font in a theme grows it rather than spilling out.
 Rectangle {

@@ -5,7 +5,7 @@ import Quickshell.Wayland
 // A transparent layer over a screen that catches taps outside a popup opened by touch —
 // holes where the popup and the bar are, so taps there reach them. Replaces Hyprland's
 // focus grab, which an on-screen keyboard's panel (another program's window) always broke,
-// and which handed the keyboard round by the mouse cursor (docs/plans/touch.md).
+// and which handed the keyboard round by the mouse cursor (notes/plans/touch.md).
 //
 // No keyboard interactivity, and on the "top" layer: an on-screen keyboard (layer
 // "overlay") lies above it, so typing on it never reaches here; and with the mouse cursor

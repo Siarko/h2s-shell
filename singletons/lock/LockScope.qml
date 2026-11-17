@@ -7,7 +7,7 @@ import qs.singletons
 // ended (after that step's effects ran), so destruction is the cleanup: every
 // conversation's PAM helper and a script still running are killed with it, and nothing of
 // one lock can reach the next — the old long-lived LockAuth needed a hand-kept reset list
-// for that, and missed entries in it (docs/plans/lockscreen.md, section 1).
+// for that, and missed entries in it (notes/plans/lockscreen.md, section 1).
 //
 // Whatever a dying adapter still reports carries ids of the lock that ended, which the
 // rules ignore; `retired` silences it anyway, so the log stays readable.

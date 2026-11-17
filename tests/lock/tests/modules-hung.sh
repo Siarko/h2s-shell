@@ -1,4 +1,4 @@
-# A module whose files hang on read (docs/plans/modules.md §3, "What is known at the first
+# A module whose files hang on read (notes/plans/modules.md §3, "What is known at the first
 # frame"): the shell reads no module file on its GUI thread — module.json, qmldir and the
 # texts for the import check come out of the host's file check, a process under a deadline —
 # and nothing the lock screen needs waits for the module host (Profiles reads ModuleLists,

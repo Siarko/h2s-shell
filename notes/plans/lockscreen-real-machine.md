@@ -18,7 +18,7 @@ hs() { H2S_SHELL_DIR=$HOME/src/h2s-shell h2s-shell "$@"; }
 (`h2s-shell` alone would address the packaged copy, not the checkout that runs.)
 
 The "log" column lists lines `hs --lock-log` must show for the step, in order (shortened:
-`…` stands for the rest of the line). Background: `docs/plans/lockscreen.md`, section 7.
+`…` stands for the rest of the line). Background: `notes/plans/lockscreen.md`, section 7.
 
 ## 0. Ways out — read before locking anything
 
@@ -64,7 +64,7 @@ only hides the prompt again. A prompt that will not take the password is 0.2.
 
 ## 3. What stays open on purpose
 
-- **Quickshell's own bugs** (`docs/upstream/quickshell-session-lock-unlock-notify.md`, a
+- **Quickshell's own bugs** (`notes/upstream/quickshell-session-lock-unlock-notify.md`, a
   draft, not filed): the unlock notify (fixed upstream after 0.3.2), `kill(-1)` after a
   failed fork, `unlock_and_destroy` before `locked`, and `qs ipc` exiting 0 on a dropped
   call.

@@ -235,7 +235,7 @@ the storage to real `JsonObject` structures, with profiles keyed by name instead
 positional arrays.
 
 
-**Largely fixed (2026-10-29)** by shell profiles (docs/plans/global-profiles.md): every
+**Largely fixed (2026-10-29)** by shell profiles (notes/plans/global-profiles.md): every
 setting is read through `Profiles.value(key)`, so the hand-parsing of settings across the
 shell is gone, and the bar's parallel `leftProfiles`/… arrays became one list per section.
 What remains as JSON strings inside the config: `profiles`, `globals`, `widgetPresets`
@@ -670,7 +670,7 @@ as in-flight when the fetch starts, not when it finishes.
 ### 43. Live arrays still bound straight to `Repeater.model` — **confirmed**
 
 Found 2026-10-28 while starting the widget registry. The rule in
-[ARCHITECTURE.md](ARCHITECTURE.md#the-repeater-crash) is broken in these places, each
+[ARCHITECTURE.md](../docs/ARCHITECTURE.md#the-repeater-crash) is broken in these places, each
 binding a recomputed array directly:
 
 - `Bar.qml:170`, `:194`, `:219` — the three bar sections (`_leftModel` etc.). Fixed with

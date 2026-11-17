@@ -2,8 +2,8 @@
 
 Status: **stage 0 done 2026-11-01; paused 2026-11-06** — the open questions, explained, are in
 [selectors-questions.md](selectors-questions.md), for the user to think over before stage 1. The language itself is
-documented, as it is decided and built, in [../STYLES.md](../STYLES.md) — keep the two
-apart: this file is the plan and the progress, STYLES.md is the reference for whoever
+documented, as it is decided and built, in [styles.md](styles.md) — keep the two
+apart: this file is the plan and the progress, styles.md is the reference for whoever
 writes a stylesheet.
 
 
@@ -129,7 +129,7 @@ Each verified on the host before the next.
    bar, tray submenus, tooltips, `FloatingList` in a popup's `overlayHost`, toasts in the
    HUD, the notification card on the lock screen, the power menu). The result: a registry
    (data) of types with their properties, value types, states and parts — what the
-   inspector, the validator and the settings read — and its description in STYLES.md.
+   inspector, the validator and the settings read — and its description in styles.md.
 2. **Assigning.** Shared components first (properties on our own components), then
    windows and panels (a small marker object where there is no component of ours).
 3. **Inspector, read-only.** A window: pick mode (a transparent layer on every shell

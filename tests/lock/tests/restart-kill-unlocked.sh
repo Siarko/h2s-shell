@@ -31,7 +31,7 @@ check_within 10 "the password unlocks" compositor_unlocked
 
 # Stopped on purpose while unlocked: not started again
 # (once the marker says so: within 250 ms of an unlock it still says "locked", and a shell
-# that stops then is started again and locks — fail closed, docs/plans/lockscreen.md, section 7)
+# that stops then is started again and locks — fail closed, notes/plans/lockscreen.md, section 7)
 check_within 3 "the marker says unlocked" marker_file_is unlocked
 old_shell=$SHELL_PID
 signal_shell TERM

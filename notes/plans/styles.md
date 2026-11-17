@@ -1,7 +1,7 @@
 # Stylesheets: the shell's CSS variant
 
 The reference for writing a stylesheet for the shell. **Draft: the language is being
-designed** ([plans/selectors.md](plans/selectors.md), TODO 11.6) — nothing here is
+designed** ([selectors.md](selectors.md), TODO 11.6) — nothing here is
 implemented yet. Keep this file in step with the code: every syntax, selector, property or
 at-rule the compiler accepts is listed here, and nothing that it does not.
 

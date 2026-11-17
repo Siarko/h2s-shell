@@ -4,7 +4,7 @@ import Quickshell.Io
 import Quickshell.Services.Pam
 
 // One PAM conversation against the shell's shipped config (pam/password, or the config
-// named by H2S_PAM_PROBE_CONFIG) — the real-machine check of docs/plans/lockscreen.md,
+// named by H2S_PAM_PROBE_CONFIG) — the real-machine check of notes/plans/lockscreen.md,
 // section 8. NOT run by any suite: it authenticates against the real account. Start it
 // only through pam-probe.sh (README.md here), which reads the password without echo and
 // hands it over through a private FIFO: never an argument, never the environment, never

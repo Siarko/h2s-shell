@@ -59,6 +59,7 @@ stdenvNoCC.mkDerivation {
     root = ../.;
     fileset = lib.fileset.difference ../. (lib.fileset.unions (map lib.fileset.maybeMissing [
       ../docs
+      ../notes
       ../site
       ../nix
       ../flake.nix

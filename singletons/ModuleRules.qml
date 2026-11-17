@@ -3,7 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// The module system's decisions (docs/plans/modules.md) — pure, so tests/ModuleRulesTest.qml
+// The module system's decisions (notes/plans/modules.md) — pure, so tests/ModuleRulesTest.qml
 // checks them without a module on disk: reading and checking a manifest, whether its API
 // version fits the shell's, the namespaces a module's contributions must stay in, the import
 // check (a warning, by the owner's decision), which of two modules with one id wins, the
@@ -78,7 +78,7 @@ Singleton {
     // Kept here, not in api/, so that the host (qs.singletons) never imports qs.api: qs.api
     // imports qs.singletons, and the two importing each other would be a cycle. Adding to
     // the API (a slot, a function, a manifest field) bumps the minor; changing or removing
-    // anything bumps the major. docs/plans/modules.md, "Module API 1.0", is the surface.
+    // anything bumps the major. notes/plans/modules.md, "Module API 1.0", is the surface.
     readonly property string apiVersion: "1.3"
 
     // ---- The slots the core offers (API 1.0; the VPN ones since 1.1) ----
@@ -89,7 +89,7 @@ Singleton {
     // changes) and the module's handle as `module`. Adding a slot bumps the API's minor.
     //
     // NEVER a slot on the lock screen, the screensaver or anything under singletons/lock:
-    // nothing foreign is drawn or run there (docs/plans/modules.md §4, item 1).
+    // nothing foreign is drawn or run there (notes/plans/modules.md §4, item 1).
     // tests/ModuleRegistriesTest.qml checks that no file there names ModuleSlot.
     readonly property var slotTable: [
         { name: "network.popup.sections", since: "1.0",
@@ -101,7 +101,7 @@ Singleton {
         { name: "settings.general.bottom", since: "1.0",
           where: "Settings → Behaviour → General, at the end of the page",
           context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" },
-        // The VPN provider seam's three (docs/plans/tailscale.md §3; VpnManager.extrasFor and
+        // The VPN provider seam's three (notes/plans/tailscale.md §3; VpnManager.extrasFor and
         // pageOf ask here first): one contribution per provider, the one of the module whose
         // id is the provider's providerId — a module's provider uses its module id
         // (`VpnProvider { providerId: module.moduleId }`). A provider that is no module's keeps

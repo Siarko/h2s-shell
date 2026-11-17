@@ -6,7 +6,7 @@ import qs.singletons
 import qs.singletons.io as Io
 import qs.singletons.network
 
-// The module API (docs/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3): with qs.components, everything a
+// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
 //   Api.version            "1.3" — this shell's module API, "major.minor". A module's manifest
@@ -45,7 +45,7 @@ import qs.singletons.network
 //
 // From qs.components (API 1.1): VpnProvider, the base type of a VPN provider — a module's uses
 // its module id as `providerId`, and its three VPN slots (network.vpn.row, .card, .page) are
-// manifest `slots` contributions like any other (Api.slots; docs/plans/tailscale.md §3).
+// manifest `slots` contributions like any other (Api.slots; notes/plans/tailscale.md §3).
 Singleton {
     id: root
 

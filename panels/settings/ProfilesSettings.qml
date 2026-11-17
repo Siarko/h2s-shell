@@ -6,7 +6,7 @@ import qs.singletons
 
 // The profile list: what is active and why, each profile's conditions, order, enable
 // switch, name, and deletion. Their values are edited on the Performance page. See
-// docs/plans/adaptive-polling.md.
+// notes/plans/adaptive-polling.md.
 Flickable {
     id: root
 

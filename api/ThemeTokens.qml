@@ -5,7 +5,7 @@ import qs.singletons
 // one read-only and following the theme in use (a profile switch, a theme edited live). The
 // groups (capsule, popup, row, …) are deep frozen copies of the theme's values (curve() too): reading
 // `Api.theme.row.radius` works, writing does nothing. Part of the module API 1.0 — a token
-// added is a minor bump; the names are the core Theme's, so docs/STYLES.md describes them.
+// added is a minor bump; the names are the core Theme's (singletons/Theme.qml).
 QtObject {
     // ---- Colours ----
     readonly property color barBackground: Theme.barBackground

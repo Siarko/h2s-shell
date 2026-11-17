@@ -3,7 +3,7 @@ import qs.singletons.network
 
 // A VPN provider: VPNs that are not NetworkManager's — the first is the Tailscale module —
 // listed, shown and switched by the shell beside NetworkManager's (VpnManager). The
-// contract, as built, is in docs/plans/tailscale.md §3; this comment is its short form.
+// contract, as built, is in notes/plans/tailscale.md §3; this comment is its short form.
 //
 // A provider extends this type and declares it inside the module's own objects:
 //

@@ -1,8 +1,7 @@
 # Architecture
 
 Technical reference for the H2S Quickshell desktop shell. For what the shell does from
-a user's point of view see [FEATURES.md](FEATURES.md); for the known problems and the
-cleanup backlog see [CLEANUP.md](CLEANUP.md).
+a user's point of view see [FEATURES.md](FEATURES.md).
 
 ## Runtime model
 
@@ -80,7 +79,7 @@ shell.qml                 process root — one Bar, one Hud, one ScreensaverSurf
 
 The intended rule is **state and I/O live in singletons; QML under `widgets/`,
 `panels/` and `hud/` only renders it and calls singleton methods**. Widgets are meant
-to be thin. Most are; the large panels are where that rule has eroded (see CLEANUP.md).
+to be thin. Most are; the large panels are where that rule has eroded.
 
 ### Per-screen instantiation
 
@@ -153,14 +152,13 @@ editor read; with no provider registered they are NetworkManager's lists themsel
 kill switch (`VpnLockdown`) reads `nmDetails`/`nmInterfaceNames` only — it does not support
 provider VPNs, and says so on their cards (and rows, while up) while blocking. Providers fill the slots named in
 `VpnManager.slots` (`network.vpn.row`, `.card`, `.page`) through `VpnManager.extrasFor`.
-The contract in full: [plans/tailscale.md](plans/tailscale.md) §3; the stand-in provider
+The contract is in `components/VpnProvider.qml`; the stand-in provider
 for tests is `tests/FakeVpnProvider.qml` (by hand: `H2S_FAKE_VPN_PROVIDER=1`, IPC target
 `fakevpn`).
 
 ### Config and profiles
 
-Settings live in **shell profiles**; the design is in
-[plans/global-profiles.md](plans/global-profiles.md).
+Settings live in **shell profiles**.
 
 - `singletons/SettingsSchema.qml` lists every setting: key (`media.visualizerStyle`,
   `bar.left`, `widgets.music.popupMode`, …), label, type, default, settings page group,
@@ -329,7 +327,7 @@ deliberately shows as blank.
 
 Sources poll with `singletons/polling/PollTimer.qml`, their interval bound to a
 `Profiles.value("polling.<category>.interval")` setting (0 = paused, see
-docs/plans/adaptive-polling.md), and keep their graph history with `History.append`.
+"Config and profiles"), and keep their graph history with `History.append`.
 
 Sources read procfs and sysfs through `singletons/io/KernelFile.qml`, a `FileView` read
 synchronously on every poll — no `cat` subprocess, and values read in one tick come from
@@ -344,17 +342,15 @@ sources — per card.
 ### Promises
 
 `singletons/Promises.qml` is a hand-rolled promise implementation (`create`, `resolved`,
-`rejected`, `allSettled`, `await`), used by `singletons/network/Fetch.qml` and the Google
+`rejected`, `allSettled`), used by `singletons/network/Fetch.qml` and the Google
 Calendar client. It predates and substitutes for native async/await in this QML runtime.
-
-`Promises.await()` busy-waits on `while (waiting) {}` and will hard-freeze the entire
-shell if given a promise that is not already settled. See CLEANUP.md #1 — this is the
-most serious known defect in the project.
+There is no blocking `await`: QML is single-threaded, so waiting in a loop for a promise
+would freeze the whole shell. Chain with `then`.
 
 ### Lock screen
 
-Four layers, so that what decides can be tested without what does (plan and contract:
-`docs/plans/lockscreen.md`, section 7):
+Four layers, so that what decides can be tested without what does (the rules and the
+launcher agree on the contract described under "Recovery" below):
 
 - **Rules** — `singletons/LockRules.qml`, pure: `initial(settings)` and
   `step(state, event, now) → { state, effects }` on plain objects that are replaced, never
@@ -375,7 +371,7 @@ Four layers, so that what decides can be tested without what does (plan and cont
   facts). There is no unlock and no dispatch function: the state, queue and surface
   registry live in a closure (`_build()`), not in properties. Same-process QML is still no
   security boundary (it can emit its child objects' signals, or run `loginctl
-  unlock-session`) — plan section 7, "What other QML in the shell can reach". It also owns
+  unlock-session`). It also owns
   idle (two `IdleMonitor`s, each made anew by `singletons/lock/IdleWatch.qml` whenever its
   settings change — a live one whose timeout changes can stop reporting idle, a Quickshell
   0.3.2 bug), the screensaver and its commands,
@@ -416,19 +412,18 @@ compositor's `locked` a protocol error, and Quickshell sends one whenever
 `WlSessionLock.locked` is set false before `secure`. So the rules emit `unlockCompositor`
 only for a session the compositor confirmed: an unlock decided while locking (a password,
 logind's Unlock) is pending until `compositorLocked`, and a slow confirmation is
-only reported — the lock is never set again or given up (plan, section 7).
+only reported — the lock is never set again or given up.
 
 **The Quickshell bug worked around**: Quickshell 0.3.2 never emits `lockStateChanged`
 when a `WlSessionLock` unlocks (`src/wayland/session_lock.cpp`), so a binding to its
 `locked` stays true after the first unlock — the old lock screen worked once per shell.
-(Fixed in Quickshell's master after 0.3.2, in no release yet; the analysis, with two more
-issues found on the way, is in `docs/upstream/quickshell-session-lock-unlock-notify.md`.)
+(Fixed in Quickshell's master after 0.3.2, in no release yet.)
 The driver never binds or watches `locked`: it sets it in the `lockCompositor` /
 `unlockCompositor` effects, reads it back only right after setting it true (to catch a
 refused lock), and takes the compositor's word from `secureStateChanged`, tagged with the
 session of the last `lockCompositor`.
 
-**Recovery** (plan section 7, "Reload" and "Restart"; never comes up unlocked over a locked
+**Recovery** (a reload or a restart never comes up unlocked over a locked
 session):
 
 - *A reload while locked* keeps the lock. Quickshell hands a reloaded singleton's children
@@ -465,7 +460,7 @@ session):
   and logind's PrepareForSleep reaches no monitor. The launcher's `ipc` retries such calls
   (3 s); the new logind monitor asks logind's `PreparingForSleep` once it listens; the old
   generation's sleep inhibitor lingers 3 s after its holder vanished, so logind waits while
-  the new generation locks (plan section 7, "The reload window": what remains).
+  the new generation locks.
 - *The compositor will not give the lock back* (Hyprland without
   `misc:allow_session_lock_restore`): Hyprland refuses a new lock while a dead client's lock
   stands, and kills the client that asks. So under Hyprland the shell first asks `hyprctl`
@@ -490,13 +485,13 @@ launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
 
 ### Modules
 
-Integrations as separate packages; the design, its state and the module API's reference
-(the facade, the slot table, the handle, the lifetime rules) are in
-[plans/modules.md](plans/modules.md). What exists (M0–M2): the rules, the host, discovery,
+Integrations as separate packages. The module API's reference
+(the facade, the slot table, the handle, the lifetime rules) is the header of `api/Api.qml`;
+the manifest schema is in `singletons/ModuleRules.qml`. What exists: the rules, the host, discovery,
 the `qs.api` facade, the registries taking modules' contributions, and slots.
 
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleRules.qml`'s
-  header and the plan's §3), a `qmldir` for its singletons, and QML loaded by `file://` URL —
+  header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
   never imported statically (a broken one would fail the whole config). Every file the
   manifest names must be a regular file inside the directory (a link out of it, a FIFO, a
   file over 1 MiB: the entry is dropped, or the module fails for its main).
@@ -595,7 +590,7 @@ while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 
 ### Logging
 
-The lock screen logs on its own terms (plan section 7, "Log every step"): every step of a
+The lock screen logs on its own terms: every step of a
 lock, one line each, `[Lockscreen]`, always on, never typed text; Quickshell keeps them in
 `$XDG_RUNTIME_DIR/quickshell/by-id/<instance>/log.qslog` (`qs log`, stamped to the
 second), the supervisor in `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`, and

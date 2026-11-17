@@ -896,7 +896,7 @@ Singleton {
     }
 
     // ── VPN providers ── a VPN supplied by an object rather than NetworkManager (the
-    // contract: components/VpnProvider.qml; docs/plans/tailscale.md §3). Its entries are
+    // contract: components/VpnProvider.qml; notes/plans/tailscale.md §3). Its entries are
     // addressed as "<providerId>:<entryId>" — NetworkManager's UUIDs are hexadecimal digits
     // and dashes, so the colon keeps the two apart for good.
 
@@ -1143,7 +1143,7 @@ Singleton {
         return true;
     }
 
-    // ── Only through the VPN (a kill switch) ── docs/plans/network.md, VPN stage 7
+    // ── Only through the VPN (a kill switch) ── notes/plans/network.md, VPN stage 7
 
     // Whether the blocking should be on: always, or while a network it is set for is up
     function lockdownWanted(profiles, always, networks) {

@@ -1,4 +1,4 @@
-# The regression behind the rework (docs/plans/lockscreen.md §1): lock, unlock with the
+# The regression behind the rework (notes/plans/lockscreen.md §1): lock, unlock with the
 # password, lock again, unlock with the password again. The second unlock must work as
 # the first did.
 #

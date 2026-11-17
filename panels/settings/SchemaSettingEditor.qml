@@ -10,7 +10,7 @@ import qs.singletons
 // a list of fields for a list of texts. It says where the shown value comes from — set here, inherited from
 // the profiles above, overridden right now by a later active profile, or global — and
 // offers to drop this profile's own value. The pin makes the setting global: the same in
-// every profile, whichever is being edited (docs/plans/global-profiles.md).
+// every profile, whichever is being edited (notes/plans/global-profiles.md).
 Item {
     id: root
 

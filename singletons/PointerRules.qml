@@ -6,7 +6,7 @@ import QtQuick
 // How the shell tells a finger from a pointer. Pure functions, so tests/PointerRulesTest.qml
 // checks them; tests/PointerInputTest.qml checks the events Qt really sends.
 //
-// Measured on the Framework 12 (docs/plans/touch.md, stage 0): Qt turns a tap into a mouse
+// Measured on the Framework 12 (notes/plans/touch.md, stage 0): Qt turns a tap into a mouse
 // press marked as synthesised, and a touch screen reports a press as hover — over while
 // the finger is down — so hover from it means nothing. A stylus is a real pointer: it
 // hovers when held above the screen, and its taps are ordinary mouse presses. The device a

@@ -6,7 +6,7 @@ import qs.singletons
 // Polling rates, graph and power settings, edited in the profile picked in the settings
 // window; values that profile does not set are shown as inherited from the profiles
 // above it, and a value a later active profile overrides right now is marked. See
-// docs/plans/adaptive-polling.md.
+// notes/plans/adaptive-polling.md.
 Flickable {
     id: root
 

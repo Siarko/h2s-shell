@@ -10,7 +10,7 @@ import QtQuick
 // Only one agent can answer per session, so it is a setting (`system.polkitAgent`), decided
 // at the first start: another agent running → off; none → the shell tries, and keeps it
 // on if it registered (PolkitRules). Notifications say when no agent answers or two
-// collide. docs/plans/polkit.md has the reasoning.
+// collide. notes/plans/polkit.md has the reasoning.
 //
 // Whether an agent answers can be seen only by trying: polkit tells no one which agent
 // holds the session, and logs nothing. So with the setting off and no known agent's

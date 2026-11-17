@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 
 // The lock's rules (singletons/LockRules.qml), by the behaviours of the plan's Stage 1
-// (docs/plans/lockscreen.md, sections 4 and 7). Each numbered part below is one of them;
+// (notes/plans/lockscreen.md, sections 4 and 7). Each numbered part below is one of them;
 // the seeded sweep at the end checks the invariants over thousands of generated sequences,
 // and a liveness oracle checks from sampled states that the owner can still get in.
 //

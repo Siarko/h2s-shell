@@ -2,7 +2,7 @@
 
 Part of [selectors.md](selectors.md). **Paused 2026-11-06 at the user's request**: they want to
 think these over before stage 1. The words used here are defined in the glossary of
-[../STYLES.md](../STYLES.md#glossary).
+[styles.md](styles.md#glossary).
 
 ## Established facts
 

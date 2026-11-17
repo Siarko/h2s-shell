@@ -7,7 +7,7 @@ import QtQuick
 import qs.components
 
 // The config file. Settings are not here: they live in the profiles (see Profiles and
-// SettingsSchema, docs/plans/global-profiles.md). What is left is data that is not a
+// SettingsSchema, notes/plans/global-profiles.md). What is left is data that is not a
 // preference — the Google account and its tokens, remembered per-app volumes — plus the
 // widget preset library and the profiles themselves.
 //
@@ -24,14 +24,14 @@ Singleton {
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
     // library a bar entry points into. "" until migrated from the old widgetProfiles.
     property alias widgetPresets: _adapter.widgetPresets
-    // Profiles (docs/plans/global-profiles.md) as a JSON array. "" means the config
+    // Profiles (notes/plans/global-profiles.md) as a JSON array. "" means the config
     // predates profiles and Profiles seeds it; "[]" means the user deleted them all.
     property alias profiles: _adapter.profiles
     // Settings the user pinned as global, { key: value } as JSON: the same in every
-    // profile (docs/plans/global-profiles.md)
+    // profile (notes/plans/global-profiles.md)
     property alias globals: _adapter.globals
     // Settings already copied from their old place in this file into the profiles, once
-    // each (docs/plans/global-profiles.md)
+    // each (notes/plans/global-profiles.md)
     property alias migratedKeys: _adapter.migratedKeys
     // The ids of the modules turned off in Settings → Modules (ModuleHost): a module is on
     // unless listed here. Global, not per profile: which code runs in the shell is not a

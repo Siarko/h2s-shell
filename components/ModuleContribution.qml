@@ -1,7 +1,7 @@
 import QtQuick
 import qs.singletons
 
-// One file of a module built inside a guard (docs/plans/modules.md, "Module API 1.0"): the
+// One file of a module built inside a guard (notes/plans/modules.md, "Module API 1.0"): the
 // file is compiled first, and one that does not compile shows nothing — its error goes to the
 // module's status (ModuleHost.reportError), nothing else is touched. Built, its root object
 // gets the module's handle as `module` and `context` (when it declares them) before its

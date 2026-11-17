@@ -9,7 +9,7 @@ import Quickshell
 // on the lock screen's path — Lockscreen reads its settings through Profiles → SettingsSchema
 // — constructs the module host or waits for it: before the modules have answered these are
 // empty (a module's settings take no part, its facts are unknown), and they fill in after the
-// first frame. docs/plans/modules.md §3, "What is known at the first frame".
+// first frame. notes/plans/modules.md §3, "What is known at the first frame".
 Singleton {
     // Modules.widgetEntries, .settingEntries, .factTypes, .factValues (ModuleHost's)
     property var widgetEntries: []

@@ -17,16 +17,16 @@ Read these before making structural changes:
   contract, how to add a widget, testing.
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
-- **[docs/CLEANUP.md](docs/CLEANUP.md)** — the known-problems backlog, prioritised, with
+- **[notes/cleanup.md](notes/cleanup.md)** — the known-problems backlog, prioritised, with
   file:line references. Check this before "fixing" something — it may already be filed,
   with the analysis done.
 - **[docs/TODO.md](docs/TODO.md)** — the cleanup checklist derived from it, in the agreed
   order, with the current progress. Start here when resuming cleanup work.
-- **[docs/TODO-DONE.md](docs/TODO-DONE.md)** — the done items of TODO.md, numbers kept, with
+- **[notes/done.md](notes/done.md)** — the done items of TODO.md, numbers kept, with
   their notes; look an item number up here when it is not in TODO.md.
-- **[docs/STYLES.md](docs/STYLES.md)** — the shell's CSS variant for themes: selectors,
+- **[notes/plans/styles.md](notes/plans/styles.md)** — the shell's CSS variant for themes: selectors,
   cascade, properties, at-rules. Keep it in step with what the compiler accepts.
-- **[docs/quickshell-integration.md](docs/quickshell-integration.md)** — the `pttd`
+- **[notes/pttd-protocol.md](notes/pttd-protocol.md)** — the `pttd`
   dictation daemon's socket protocol.
 
 ## Running

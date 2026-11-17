@@ -266,7 +266,7 @@ on `account`, the fingerprint config independent of the global switch), the meth
 `XDG_SESSION_ID`. Report the Quickshell bug upstream.
 
 **Stage 6 — the real machine, once.** Prepared, not performed: the checklist is
-**`docs/plans/lockscreen-real-machine.md`** — the ways out first, then deployment
+**`notes/plans/lockscreen-real-machine.md`** — the ways out first, then deployment
 checks, then the tests cheapest first, each with what must happen, the log lines to match
 and what it proves; any failure: `scripts/lock-log.sh` and stop. Before it, from the
 review of Stage 4: the reload at unlock removed, the reload window narrowed, one
@@ -1335,7 +1335,7 @@ definition wins over the module's), but would stop following the module.
 
 ### Upstream
 
-`docs/upstream/quickshell-session-lock-unlock-notify.md` (a draft, not filed): the unlock
+`notes/upstream/quickshell-session-lock-unlock-notify.md` (a draft, not filed): the unlock
 notify (reproduced in the test compositor; fixed in Quickshell master by 18c95fae after
 v0.3.2, unreleased), a failed `fork()` in `PamContext.start()` ending in `kill(-1, SIGKILL)`
 (unfixed), `locked = false` before `secure` sending `unlock_and_destroy` (unfixed), and —
@@ -1354,5 +1354,5 @@ section 4; not part of this work).
 - Write the marker's pending "unlocked" on destruction when the unlock was already flushed.
 - CapsLockLed: a read arriving while a stale probe runs briefly shows the old answer.
 - The screensaver drops when a profile changes its timeout while it shows.
-- The three upstream Quickshell issues and the `qs ipc` exit-status one (`docs/upstream/`) are drafted, not filed.
+- The three upstream Quickshell issues and the `qs ipc` exit-status one (`notes/upstream/`) are drafted, not filed.
 - Whether to drop the `login` fallback on NixOS, once `tests/manual/pam-probe.sh` (checklist 2.17) settles it.

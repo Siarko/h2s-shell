@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import qs.singletons
 
-// Pins the Quickshell behaviour the module system rests on (docs/plans/modules.md §2). None of
+// Pins the Quickshell behaviour the module system rests on (notes/plans/modules.md §2). None of
 // it is a documented promise of Quickshell's; it was found in its source and tried. A module is
 // a directory outside the scanned tree, with a qmldir of its own, whose files are loaded by
 // file:// URL (singletons/ModuleHost.qml). The fixture tests/fixtures/qs-pin is such a

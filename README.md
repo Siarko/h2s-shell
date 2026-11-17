@@ -86,7 +86,7 @@ settings, and stays as its supervisor: a shell that dies (a crash, a kill) is st
 again, and one that died while the screen was locked locks again at once. For that the
 lock screen needs one line in `hyprland.lua`'s `misc` settings,
 `allow_session_lock_restore = true` (without it Hyprland refuses to let a restarted lock
-screen take the lock back; see `docs/plans/lockscreen.md`, section 7, "Recovery").
+screen take the lock back).
 `h2s-shell --restart` stops the shell (and its supervisor) and starts it again, detached;
 there is one supervisor per session (a second start waits briefly, then gives up). If the
 lock screen misbehaves, `h2s-shell --lock-log` (or `scripts/lock-log.sh`, also from a text

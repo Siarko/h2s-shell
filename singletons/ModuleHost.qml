@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.components
 
-// The module host (docs/plans/modules.md): given the module directories, it reads NOTHING on
+// The module host (notes/plans/modules.md): given the module directories, it reads NOTHING on
 // the GUI thread before its check — each module.json and qmldir, and then the text of every
 // file the module names (for the import check and the properties a root object declares), come
 // out of one process, the file check (ModuleRules.fileCheckScript: resolved inside the module's

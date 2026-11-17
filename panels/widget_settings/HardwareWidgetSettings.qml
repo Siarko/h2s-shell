@@ -6,7 +6,7 @@ import qs.panels.settings
 
 // Settings of a hardware widget. The capsule on the bar — its sources and their labels —
 // belongs to the widget's preset; the popup is a setting of the shell profile being
-// edited (docs/plans/global-profiles.md).
+// edited (notes/plans/global-profiles.md).
 Item {
     id: root
     property string presetName: ""

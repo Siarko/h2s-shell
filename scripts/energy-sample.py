@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One sample for the battery popup's use per app (docs/plans/battery-popup.md, stage 3).
+"""One sample for the battery popup's use per app (notes/plans/battery-popup.md, stage 3).
 
 Prints JSON: {"busy": ticks, "total": ticks, "processes": [[pid, app, cpu ticks,
 gpu cycles], ...]} — the CPU time and GPU cycles each process has used so far, and the

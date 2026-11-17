@@ -8,7 +8,7 @@ import qs.singletons.network
 
 // What System → Network → Overview shows and changes: NetworkManager's devices with their
 // details, the radios, networking itself, the hostname, a global DNS and the connectivity
-// check (docs/plans/network.md). Read only while a page shows it (watch/unwatch), and again
+// check (notes/plans/network.md). Read only while a page shows it (watch/unwatch), and again
 // when NetworkEvents reports a change. Changes go through CommandAction, one after another;
 // one refused for want of rights goes to Authentication (the polkit prompt), another
 // failure to a notification.

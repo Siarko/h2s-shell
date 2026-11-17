@@ -6,7 +6,7 @@ import qs.components
 import qs.singletons
 import qs.singletons.network
 
-// The core's registries with modules in them (docs/plans/modules.md, M2), on the shell's own
+// The core's registries with modules in them (notes/plans/modules.md, M2), on the shell's own
 // host (Modules.host) — so after ModulesTest, whose host loads the same fixtures (`after`):
 // with no module every registry is the core's list itself; the `good` fixture loaded, its
 // widget, popup, presets, settings, popup-mode entry, facts, settings page, handle and slot

@@ -26,7 +26,7 @@ FloatingWindow {
     // The pages, in the sidebar's order. Each has an id — how the window, the rest of the
     // shell (Shell.openSettings) and IPC (openPage) name it — and a label, free to change
     // or repeat across tabs. The window has two tabs: Behaviour, whose pages edit a
-    // profile, and Appearance, whose pages edit a theme (docs/plans/themes.md, stage 6;
+    // profile, and Appearance, whose pages edit a theme (notes/plans/themes.md, stage 6;
     // TODO 10.10). `draftGroups`: the theme groups a page edits through a draft, for its ✎;
     // `separatorBefore`: a line above it in the sidebar.
     readonly property var corePages: [
@@ -57,10 +57,10 @@ FloatingWindow {
         { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves", "wallpaper"] },
         { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] },
         // System: this computer's settings, kept by the system or at least never per profile
-        // (docs/plans/polkit.md, TODO 11.36)
+        // (notes/plans/polkit.md, TODO 11.36)
         { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp },
         // A group: its pages show under it while one is open (SettingsPageList); clicking
-        // it opens the first (docs/plans/network.md)
+        // it opens the first (notes/plans/network.md)
         { id: "network", label: "Network", tab: "system", group: true },
         { id: "network_overview", label: "Overview", tab: "system", parent: "network", component: networkOverviewComp },
         // `shown`: only while it has something to show — a kind of device the computer has
@@ -186,7 +186,7 @@ FloatingWindow {
             editedTheme = theme;
     }
 
-    // The profile every page edits (docs/plans/global-profiles.md), by name so it
+    // The profile every page edits (notes/plans/global-profiles.md), by name so it
     // survives reordering; Full, else the first
     property string editedName: "Full"
     readonly property int editIndex: {
@@ -599,7 +599,7 @@ FloatingWindow {
 
     // Text fields under touch, as in a browser: a tap off a field takes its focus, so an
     // on-screen keyboard can hide. An ordinary window keeps the keyboard; Qt 6.12 stops
-    // asking for text only when told after a focus change (docs/plans/touch.md) — Qt 6.11
+    // asking for text only when told after a focus change (notes/plans/touch.md) — Qt 6.11
     // cannot, there the keyboard stays until the window loses the focus.
     TouchTextFocus {}
     readonly property Item _focusItem: contentItem.Window.activeFocusItem

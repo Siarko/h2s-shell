@@ -198,7 +198,7 @@ check_within() {
 #                                    as a hyprctl that hangs)
 # --modules <list>                   H2S_SHELL_MODULE_PATH for the launcher: colon-separated, each a module
 #                                    directory or a directory of modules (the launcher's discovery,
-#                                    docs/plans/modules.md; tests/fixtures/modules holds the fixtures)
+#                                    notes/plans/modules.md; tests/fixtures/modules holds the fixtures)
 # --shell-env NAME=value            one more variable in the launcher's (so the shell's) environment
 #                                    (a test seam such as H2S_SHELL_TEST_MODULE_CHECK_PATH); repeatable
 # --data-dirs <list>                 the data dirs the launcher searches for modules (<dir>/h2s-shell/modules/*;

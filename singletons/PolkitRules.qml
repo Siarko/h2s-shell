@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // The polkit agent's decisions — pure, so tests/PolkitRulesTest.qml checks them without
-// polkit. Authentication holds the live state; docs/plans/polkit.md has the reasoning.
+// polkit. Authentication holds the live state; notes/plans/polkit.md has the reasoning.
 Singleton {
     id: root
 

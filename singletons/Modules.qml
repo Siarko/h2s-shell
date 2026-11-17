@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import QtCore
 
-// The shell's modules (docs/plans/modules.md): one ModuleHost fed from the environment the
+// The shell's modules (notes/plans/modules.md): one ModuleHost fed from the environment the
 // launcher builds — H2S_SHELL_MODULES, the canonical module directories in search order, and
 // H2S_SHELL_SAFE_MODE=1 after the shell died quickly twice (scripts/launch.sh) — loaded as
 // soon as this singleton exists (load() only starts processes: nothing is read here). shell.qml
@@ -53,7 +53,7 @@ Singleton {
     }
 
     // For a core place that takes one Component (or one URL) per module instead of a
-    // ModuleSlot — the VPN slots after the merge (docs/plans/modules.md, "Module API 1.0")
+    // ModuleSlot — the VPN slots after the merge (notes/plans/modules.md, "Module API 1.0")
     function slotComponent(slot, id) {
         return _host.slotComponent(slot, id);
     }

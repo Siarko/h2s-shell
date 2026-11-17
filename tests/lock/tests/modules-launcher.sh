@@ -1,4 +1,4 @@
-# The launcher's side of modules (scripts/launch.sh, docs/plans/modules.md):
+# The launcher's side of modules (scripts/launch.sh, notes/plans/modules.md):
 #
 # (1) Discovery: H2S_SHELL_MODULES as the shell gets it — H2S_SHELL_MODULE_PATH's entries
 #     first, then $XDG_DATA_HOME/h2s-shell/modules/*, then each data dir's

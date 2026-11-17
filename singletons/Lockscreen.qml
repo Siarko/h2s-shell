@@ -8,7 +8,7 @@ import qs.singletons
 import qs.singletons.lock
 import qs.screensaver
 
-// The lock screen's driver, and the one owner of its state (docs/plans/lockscreen.md,
+// The lock screen's driver, and the one owner of its state (notes/plans/lockscreen.md,
 // sections 3 and 7). LockRules decides everything; this holds the one current state,
 // feeds events in, one at a time, and carries the effects out through the adapters in
 // singletons/lock/ (PAM, the methods script, logind, the sleep inhibitor) and the
@@ -98,7 +98,7 @@ Singleton {
         _api?.input(surface, { type: "submit", text: text });
     }
 
-    // ---- Settings (docs/plans/global-profiles.md) ----
+    // ---- Settings (notes/plans/global-profiles.md) ----
 
     readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
     readonly property int screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout") ?? 300
@@ -559,7 +559,7 @@ Singleton {
                 log("error", "the compositor refused to let this shell take back the lock it had (" + why + "): the session "
                     + "stays locked, with no prompt of this shell's (Hyprland: misc:allow_session_lock_restore is off). Asking "
                     + "again every few seconds to a minute; to get the prompt back, switch it on — from a TTY: hyprctl -i 0 eval "
-                    + "'hl.config({ misc = { allow_session_lock_restore = true } })' — see docs/plans/lockscreen.md, section 7, "
+                    + "'hl.config({ misc = { allow_session_lock_restore = true } })' — see notes/plans/lockscreen.md, section 7, "
                     + "\"Recovery\"");
             }
             log("warning", "taking the lock back again in " + Math.round(restoreDelay / 1000) + " s");

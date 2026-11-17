@@ -12,7 +12,7 @@ section to the new version and date.
 
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
-(`Api.version`, docs/plans/modules.md "Module API 1.0").
+(`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.3: `Api.networks` — the saved Wi-Fi and Ethernet networks (no hotspots, VPNs or bridge
   ports) as frozen `{ id (profile UUID), name, kind, active }`, active first — and
   `Api.vpnsUp` — the VPNs up now as frozen `{ name, type, provider }`; both read-only, a new
@@ -677,7 +677,7 @@ tab. Major because the bar's geometry is migrated out of the profiles into theme
   widths — by kind: bar cells, workspace pills, popups, rows, list items, dropdowns,
   buttons (general, save, cancel, delete, icon), pills, fields, notification cards and
   toasts, the volume OSD, the message pill, tooltips, the settings window, calendar days,
-  checkboxes, the lock screen (docs/plans/themes-stage7.md). New: borders along the
+  checkboxes, the lock screen (notes/plans/themes-stage7.md). New: borders along the
   bar's edge facing the desktop (following it if the bar moves to another edge), around
   popups — one line down their curved ears, sides and bottom, open where they join the
   bar, so it carries on from the bar's — and around bar cells, toasts, the volume OSD and
@@ -903,7 +903,7 @@ began in February 2026 as a single Hyprland bar.
   is created after its window.
 - The shell freezing while the calendar loaded, token refresh, all-day events, Wi-Fi
   names containing colons, notification action buttons, and many smaller issues — see
-  the git history and `docs/TODO.md`.
+  the git history.
 
 ### Security
 - The Google client secret no longer appears on a process command line.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # The lock screen's files and every file they build, transitively — then those of them that
 # name anything of the module system (ModuleSlot, ModuleContribution, Modules.): printed as
-# "LOCK:<file>", nothing when clean (docs/plans/modules.md §4 item 1; ModuleRegistriesTest).
+# "LOCK:<file>", nothing when clean (notes/plans/modules.md §4 item 1; ModuleRegistriesTest).
 #
 #   tests/lock-closure.sh <shell tree>
 #

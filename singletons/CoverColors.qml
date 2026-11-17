@@ -2,8 +2,8 @@ pragma Singleton
 
 import Quickshell
 
-// The few colours a cover is made of, for the music visualiser around it (docs/TODO.md
-// 11.3). The music panel samples the cover's pixels; palette() is a pure function the test
+// The few colours a cover is made of, for the music visualiser around it.
+// The music panel samples the cover's pixels; palette() is a pure function the test
 // suite checks; recall() and remember() keep what was found, for a panel opened again.
 //
 // Pixels are grouped by hue (12 groups of 30°), each counting by how colourful it is —

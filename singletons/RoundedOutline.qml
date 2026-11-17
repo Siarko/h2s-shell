@@ -3,7 +3,7 @@ pragma Singleton
 import Quickshell
 
 // Points on the outline of a rounded square — from square corners to a circle — for
-// drawing around one (the music visualiser around the cover, docs/TODO.md 11.3).
+// drawing around one (the music visualiser around the cover).
 // Pure functions: no I/O, so the test suite checks them.
 Singleton {
     id: root

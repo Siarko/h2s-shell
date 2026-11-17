@@ -5,7 +5,7 @@ import Quickshell.Io
 import Quickshell.Services.UPower
 import QtQuick
 
-// Use per app over time, estimated (EnergyRules; docs/plans/battery-popup.md, stage 3). On
+// Use per app over time, estimated (EnergyRules; notes/plans/battery-popup.md, stage 3). On
 // battery only, every 30 s: a sample of what each process has used
 // (scripts/energy-sample.py) and the battery's power; the interval's energy, split between
 // the system and the apps, goes into the current five-minute bucket. The battery popup

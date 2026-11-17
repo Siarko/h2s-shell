@@ -16,7 +16,7 @@ import qs.api
 QtObject {
     id: root
 
-    // The modules (docs/plans/modules.md), first: their manifests are read and the ones
+    // The modules (notes/plans/modules.md), first: their manifests are read and the ones
     // that can run are started before the bars are built. Modules is core code and catches
     // its own failures (no modules then); no module file is ever imported statically.
     property var _modules: Modules

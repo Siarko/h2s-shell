@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // The settings a profile can override, with their types and defaults. The defaults
-// together are the read-only system profile (see docs/plans/adaptive-polling.md): what
+// together are the read-only system profile (see notes/plans/adaptive-polling.md): what
 // applies to a key that no active profile sets.
 //
 // Entry fields:
@@ -217,7 +217,7 @@ Singleton {
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
 
         // ── Bar ──
-        // The screen edge the bar stands at (docs/plans/bar-position.md)
+        // The screen edge the bar stands at (notes/plans/bar-position.md)
         { key: "bar.edge", label: "Position", group: "barPosition", type: "enum", default: "top",
           options: [
               { value: "top", label: "Top" },
@@ -301,7 +301,7 @@ Singleton {
         { key: "system.vpnLockdownServers", label: "Other VPN servers", group: "network",
           type: "stringList", default: [], global: true },
 
-        // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; docs/plans/wallpapers.md)
+        // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; notes/plans/wallpapers.md)
         { key: "wallpaper.enabled", label: "Draw the wallpaper", group: "wallpaper",
           type: "bool", default: false,
           hint: "Off: the shell draws none, and another program (hyprpaper, swww) can." },

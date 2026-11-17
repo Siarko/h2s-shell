@@ -2,7 +2,7 @@ pragma Singleton
 
 import Quickshell
 
-// The bar's geometry at any screen edge (docs/plans/bar-position.md). The theme's bar
+// The bar's geometry at any screen edge (notes/plans/bar-position.md). The theme's bar
 // tokens are relative to the bar's edge: `topOffset` is the gap to the screen's edge, the
 // left and right margins and paddings are the bar's start and end, the `Top*` corners are
 // the ones at the screen's edge and the `Bottom*` ones face the desktop. These turn them

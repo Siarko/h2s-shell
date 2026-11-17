@@ -1,6 +1,6 @@
-# TODO — done
+# Done
 
-The items of [TODO.md](TODO.md) that are done, with their numbers, their notes and how
+The items of the old TODO list (now [tracker.md](tracker.md)) that are done, with their numbers, their notes and how
 they were verified — kept for the decisions and the analysis behind them, which the
 commits and the docs refer to by number. Stages 1–10 as they stood when closed, then the
 done items of stage 11 in number order. User-visible changes are in
@@ -70,7 +70,7 @@ read from the log.
    ✅ Create, edit and delete all confirmed on the host 2026-10-28.
 
 Tick 1.1's box once these pass. If something fails, the analysis behind the change is in
-[CLEANUP.md](CLEANUP.md) findings #1 and #39.
+[cleanup.md](cleanup.md) findings #1 and #39.
 
 ---
 
@@ -686,7 +686,7 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
       to the bar; the theme's bar geometry (topOffset, reservedSpace… become per-edge).
       Likely an `edge` setting (theme or profile? to decide) with top as today. Needs an
       analysis and a plan, with the user, before any work.
-      Plan: docs/plans/bar-position.md (setting per profile, tokens relative to the edge,
+      Plan: notes/plans/bar-position.md (setting per profile, tokens relative to the edge,
       HUD left alone). **Stage A, the bottom edge: done (2026-11-01).** Stage B, a
       vertical bar at the left or right: done (2026-11-01). Left for other items: the
       HUD placed relative to the bar's edge (it may collide with a side bar), and the

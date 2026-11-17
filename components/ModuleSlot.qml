@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import qs.singletons
 
-// A place in a core panel where modules may put content (docs/plans/modules.md, "Module API
+// A place in a core panel where modules may put content (notes/plans/modules.md, "Module API
 // 1.0"; the names the core offers and each one's context: ModuleRules.slotTable — never on the
 // lock screen):
 //

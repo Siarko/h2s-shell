@@ -74,7 +74,7 @@ The problems are:
   the primary action), use it in both views, and test it in `VpnProvidersTest`.
 
 1.4 **"A VPN with a network" conflicts with the kill switch for provider VPNs.**
-- By decision, the blocking lets no provider VPN through (`docs/plans/tailscale.md` §8).
+- By decision, the blocking lets no provider VPN through (`notes/plans/tailscale.md` §8).
   `singletons/network/VpnLockdown.qml:99-103` feeds the script only NetworkManager's
   interfaces and servers.
 - But `vpnWithNetworkPlan` (`NetworkRules.qml:727`) still brings a provider VPN up on a
@@ -120,7 +120,7 @@ The problems are:
 2.4 **API minor versions tighten behaviour.**
 - 1.2 made `openUrl` refuse `file:` URLs without the flag.
 - What to do: decide whether a minor version may tighten, and write the rule down in
-  `docs/plans/modules.md`.
+  `notes/plans/modules.md`.
 
 2.5 **The supervisor retries forever while locked** (`scripts/launch.sh:613-622`, every 60
 s).
@@ -191,7 +191,7 @@ s).
 902`).
 - What to do: use `CommandQuery` / `CommandAction` where they fit (see 9.1 for what they lack).
 
-3.8 **The plan contradicts itself:** `docs/plans/modules.md:442` (discovery order) against
+3.8 **The plan contradicts itself:** `notes/plans/modules.md:442` (discovery order) against
 `:470` ("the Nix one wins"). Settle it.
 
 3.9 **Nothing ties the CHANGELOG's `### Module API` entry to the API version.**
@@ -204,7 +204,7 @@ s).
 - `listRead` turns true before the Wi-Fi details (`mode`) are read
   (`ModuleRules.qml:1261-1280`, `NetworkProfiles.qml:58-75`). In that window a hotspot counts
   as a joined network.
-- The docs promise "no hotspots" (`Api.qml:65-70`, `docs/plans/modules.md:232`).
+- The docs promise "no hotspots" (`Api.qml:65-70`, `notes/plans/modules.md:232`).
 - What to do: hold back Wi-Fi rows until their details are read, or document the window. Add
   a `ready` flag too (see 9.12).
 
@@ -320,7 +320,7 @@ hook (8.9).
 6.1 **Two trackers.**
 - `docs/TODO.md` and `docs/CLEANUP.md` were not touched across the whole range. TODO's status
   still reads 2026-11-12, "next: 11.34".
-- Meanwhile `docs/plans/next-steps.md` keeps its own order and backlog, and has since gained
+- Meanwhile `notes/plans/next-steps.md` keeps its own order and backlog, and has since gained
   "3. Texts and languages" and backlog items.
 - What to do: keep one tracker. Either fold next-steps into TODO.md (CLAUDE.md says to start
   there), or make CLAUDE.md point at next-steps. The owner decides; until then keep both in

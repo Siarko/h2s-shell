@@ -5,7 +5,7 @@
 # does NOT give up while the screen was locked (giving up would leave the owner at the
 # compositor's dead-lock screen with no shell at all): it goes on trying, slowly. No hot
 # loop, and the compositor stays locked throughout — never unlocked. The owner's way back is
-# then a TTY (docs/plans/lockscreen.md, section 7, "Recovery"), or the setting switched on.
+# then a TTY (notes/plans/lockscreen.md, section 7, "Recovery"), or the setting switched on.
 #
 # The launcher's pauses are shortened (first 0.1 s, slow 1 s instead of 1 s and 60 s:
 # H2S_LAUNCHER_TEST_TIMINGS); the schedule is the same.

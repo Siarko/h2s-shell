@@ -8,7 +8,7 @@ import qs.singletons
 // use for their animation roles, alongside Qt's own curves. Shared by every theme and
 // profile. A curve is edited as a draft — the graph, the numbers and the preview follow
 // it — and written on Save. Assigning curves to roles comes with the Animations page
-// (docs/plans/themes.md, stages 5 and 6).
+// (notes/plans/themes.md, stages 5 and 6).
 Flickable {
     id: root
 

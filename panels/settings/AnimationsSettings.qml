@@ -9,7 +9,7 @@ import qs.singletons
 // where each value comes from, Reset and Undo, and a preview playing it. Curves come from
 // the library (Curves page) or Qt. Changes go into the theme's draft (ThemeRules,
 // "Drafts"). The profile's animation speed and reduced motion apply on top, not here
-// (docs/plans/themes.md, stage 6).
+// (notes/plans/themes.md, stage 6).
 Flickable {
     id: root
 

@@ -9,7 +9,7 @@ import qs.panels.network
 // System → Network → Wi-Fi: the radio, the network in use, and the saved networks —
 // connect, autoconnect, which is preferred, the password, forget — this computer's
 // hotspots (on, off, their password and devices, a new one), and joining a network that
-// hides its name (docs/plans/network.md). "Find networks" slides in the networks in
+// hides its name (notes/plans/network.md). "Find networks" slides in the networks in
 // range from the right — the network popup's own list (WifiNetworkList), so connecting
 // works the same in both. Profiles by UUID (NetworkProfiles); the networks in range from
 // WifiManager.

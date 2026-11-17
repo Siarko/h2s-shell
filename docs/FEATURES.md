@@ -135,7 +135,7 @@ ask for one).
 
 A client for `pttd`, an external dictation daemon driven by Whisper. The shell is
 *only* a client — audio capture and keyboard emulation stay in the daemon. The protocol
-is documented in [quickshell-integration.md](quickshell-integration.md).
+is pttd's own; the shell talks to it over its Unix socket.
 
 Wake mode and dictation are two independent switches. The bar widget reflects both: an
 accent outline means wake is on and the microphone is listening for the start phrase;
@@ -173,7 +173,7 @@ JPEG in `~/.cache/h2s_shell/wallpapers`, named by the image, its modification ti
 size, the screen's pixels and the fit — so a larger screen never gets a smaller copy; the
 oldest copies go past 300 MB. The nearest workspaces' images are decoded ahead, so a switch
 shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
-`singletons/Wallpapers.qml`; plan: `docs/plans/wallpapers.md`.
+`singletons/Wallpapers.qml`.
 
 ## Screensaver and lock screen
 
@@ -181,7 +181,7 @@ Two independent stages, both driven by Wayland idle notifications:
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. Commands can be configured to
-  run when it activates and deactivates (not yet wired up — see CLEANUP.md #12). A
+  run when it activates and deactivates. A
   profile switch that changes the screensaver's timeout while it shows takes it down (and
   starts the idle count again): a known limit.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
@@ -239,7 +239,7 @@ Two independent stages, both driven by Wayland idle notifications:
   written in its folder while locked does not reload it (the edit takes effect at the next
   file change after the unlock). A reload asked for while locked keeps the lock (a new
   authentication is needed); a lid closed while the shell reloads still locks before sleep
-  as long as the lock is up within a few seconds (plan section 7, "The reload window").
+  as long as the lock is up within a few seconds.
   A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
   `h2s-shell --restart` — is started again by the launcher (`h2s-shell`, which stays as its
   supervisor, one per session; 5 quick restarts in 2 minutes, then once a minute for as long
@@ -249,7 +249,7 @@ Two independent stages, both driven by Wayland idle notifications:
   fingerprint conversation holding the reader) is killed. Under Hyprland this needs
   `misc:allow_session_lock_restore = true` in the Hyprland config; without it Hyprland
   keeps its "lockscreen app died" screen, the shell says `compositor-locked` and waits for
-  the setting (see `docs/plans/lockscreen.md`, section 7, "Recovery").
+  the setting.
 - **Other ways out** — logind's Unlock for the shell's session (`loginctl
   unlock-session`, from another console), and the compositor ending the lock. There is no
   unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a
@@ -263,12 +263,12 @@ Two independent stages, both driven by Wayland idle notifications:
 - **The log** — every authentication event leaves a `[Lockscreen]` line in the shell's
   log (what was asked, started, answered, refused, why a lock ended), never what was
   typed: what to read when unlocking fails on the real machine.
-- Design and tests: `docs/ARCHITECTURE.md` ("Lock screen"), `docs/plans/lockscreen.md`,
+- Design and tests: `docs/ARCHITECTURE.md` ("Lock screen"),
   `tests/LockRulesTest.qml`, and the end-to-end test bed `tests/lock/`.
 
 ## Network settings
 
-Settings → System → Network unfolds into its pages (docs/plans/network.md). **Overview**
+Settings → System → Network unfolds into its pages. **Overview**
 (`singletons/network/NetworkOverview.qml`): online or not (NetworkManager's connectivity),
 the Wi-Fi, mobile broadband, airplane-mode and networking switches, each device with its
 hardware, MAC, speed, Wi-Fi signal and channel, addresses, gateway, DNS, search domains and
@@ -345,7 +345,7 @@ account be picked, shows PAM's messages and asks again after a wrong password. O
 agent can answer per session, so `system.polkitAgent` is decided at the first start (off
 when a known agent runs, on when the shell registers) and changed in Settings → System →
 Authentication, which also shows what answers now. Notifications say when no agent answers
-or another one cannot register beside the shell's. Plan: `docs/plans/polkit.md`.
+or another one cannot register beside the shell's.
 
 polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader first in
 it, so PAM asks for the password only after the reader gives up (30 s, or three fingers
@@ -402,7 +402,7 @@ inherited from the theme it extends or its palette, built in — with Reset and 
 Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also across
 restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
 changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
-`~/.config/h2s_shell/themes/`; see [plans/themes.md](plans/themes.md).
+`~/.config/h2s_shell/themes/`.
 
 ### Profiles
 

@@ -7,7 +7,7 @@ import qs.singletons
 // `sections` (ShapeSections), with the draft's Save and Cancel. Changes go into the
 // theme's draft (ThemeRules, "Drafts"); previewing shows them on the shell as they are
 // made. The Popups, Controls, Notifications and Other pages are this, with their own
-// sections (docs/plans/themes-stage7.md).
+// sections (notes/plans/themes-stage7.md).
 Flickable {
     id: root
 

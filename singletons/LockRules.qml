@@ -6,7 +6,7 @@ import QtQuick
 // The lock screen's decisions — pure, so tests/LockRulesTest.qml checks every rule without
 // a compositor, PAM or logind. This file is the specification of the lock; the driver
 // (Lockscreen) owns the one live state, feeds events in and carries the effects out.
-// docs/plans/lockscreen.md, section 7, is the contract between the two.
+// notes/plans/lockscreen.md, section 7, is the contract between the two.
 //
 //   initial(settings)        → state
 //   step(state, event, now)  → { state, effects, ignored }
