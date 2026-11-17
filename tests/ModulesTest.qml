@@ -243,7 +243,8 @@ TestCase {
 
             // A FIFO as a module's main, and as a widget of another: never opened (opening one
             // blocks the GUI thread until something writes to it)
-            _sh("rm -rf \"$1\"; mkdir -p \"$1/fifo-main\" \"$1/fifo-widget\" && "
+            _sh("rm -rf \"$1\"; mkdir -p \"$1/fifo-main\" \"$1/fifo-widget\" \"$1/manifest-only\" && "
+                + "printf '{\"id\":\"manifest-only\",\"name\":\"M\",\"version\":\"1\",\"api\":\"1.0\"}' > \"$1/manifest-only/module.json\" && "
                 + "printf '{\"id\":\"fifo-main\",\"name\":\"F\",\"version\":\"1\",\"api\":\"1.0\",\"main\":\"Main.qml\"}' > \"$1/fifo-main/module.json\" && "
                 + "printf '{\"id\":\"fifo-widget\",\"name\":\"F\",\"version\":\"1\",\"api\":\"1.0\",\"widgets\":[{\"type\":\"fifo-widget\",\"name\":\"F\",\"widget\":\"W.qml\"}]}' > \"$1/fifo-widget/module.json\" && "
                 + "mkfifo \"$1/fifo-main/Main.qml\" \"$1/fifo-widget/W.qml\" && printf '123:8 1\\n' > \"$1/starts\"", [_scratch], code => suite._made = code);
@@ -260,6 +261,13 @@ TestCase {
             assertEqual(fifoWidget?.state, "loaded", "a FIFO as a widget: the module loads");
             assert(_has(fifoWidget?.errors, "widget fifo-widget: W.qml is not a regular file (dropped)"), "… without that widget: " + fifoWidget?.errors.join("; "));
             assertEqual(host.widgetEntries.length, 0, "… which is in no list");
+
+            // Nothing but a manifest: there is no file to check, so the manifests' answer is
+            // the last thing such a module waits for (no guard, no store directory here)
+            host.load([_scratch + "/manifest-only"], {});
+        });
+        _then("the module that is only its manifest settles", _settled, () => {
+            assertEqual(host.statuses[0]?.state, "loaded", "a module that is only its module.json loads");
 
             // The start guard, with a counter file of the test's and an identity it gives:
             // process 123 relaunched once after a crash already (8), now again (9)

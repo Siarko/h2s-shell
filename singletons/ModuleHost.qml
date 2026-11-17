@@ -412,20 +412,29 @@ Scope {
             for (const file of ["module.json", "qmldir"])
                 asked.push({ record: record, file: file, stage: "manifest", cap: ModuleRules.maxManifestBytes });
         }
+        let settledAtOnce = false;
         if (asked.length === 0) {
             for (const record of _records) {
                 if (record.filesChecked)
                     continue;
                 const files = ModuleRules.filesToCheck(record.manifest, record.qmldirText);
                 // Nothing to check: settled at once
-                if (files.length === 0)
+                if (files.length === 0) {
                     _filesAnswered(record, {}, {});
+                    settledAtOnce = true;
+                }
                 for (const entry of files)
                     asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleRules.maxFileBytes });
             }
         }
-        if (asked.length === 0)
+        if (asked.length === 0) {
+            // No run follows whose answer would apply what was just settled: applied here (a
+            // module that is only its module.json stayed pending for good when nothing else —
+            // the start guard, the settings — answered after its manifest)
+            if (settledAtOnce)
+                _applyGuarded();
             return;
+        }
         _fileCheck.asked = asked;
         _fileCheck.lines = [];
         _fileCheck.environment = checkEnvironment ?? {};

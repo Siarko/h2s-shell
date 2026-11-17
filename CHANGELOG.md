@@ -417,6 +417,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Modules: a module that is only its `module.json` (no main, no widgets, no pages) could
+  stay "pending" for good after a start.
 - After the shell was killed, the launcher now and then never started it again and filled
   its log instead (a defect in bash's `wait -f`); while the shell was stopped, the launcher
   kept a processor busy.
