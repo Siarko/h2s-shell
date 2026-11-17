@@ -12,15 +12,47 @@ State on 2026-11-17: everything is merged to `master` (core) and `main` (module
 Development moves to the Arch machine; runs that need `nix` go over SSH to the NixOS
 machine. How sessions work is in [workflow.md](workflow.md).
 
-- [ ] The test split comes first (the owner, 2026-11-17): a general set that runs on both
-      systems, then a set per system. Plan and slices: [plans/test-split.md](plans/test-split.md).
-      Done: the unit and module suites run without `nix`. Next: the lock bed with the
-      system's tools, then the sets per system.
-- [ ] The API plan ([plans/api-next.md](plans/api-next.md)) is being revised with the
-      owner; implementation waits for the owner's approval.
+State on 2026-11-17, end of the session on the Arch machine. One topic at a time from here
+(the owner): finish the test split first, then the API plan's implementation.
 
-On the Arch machine the working trees for agents sit beside the live checkouts; runs that
-need `nix` go over SSH to working trees on the NixOS machine.
+- [ ] **Test split** ([plans/test-split.md](plans/test-split.md)). Merged: runners run named
+      suites; the unit and module suites run without `nix`. Waiting, unmerged:
+  - core branch `test-split-lock` (working tree `h2s-shell-wt-lock`): `51eef3c` fixes the
+    lock scenario `modules` that fails on `master` (fixtures counted, not "14") — small,
+    merge after a look; `21626a1` the lock bed with the system's tools — **not reviewed**,
+    never run on Arch (needs the packages `python-pywayland` and `wlr-randr` there, and
+    `/usr/bin` first on `PATH`); first Arch runs with a scrubbed environment, `harness` first.
+  - module branch `test-split` (working tree `h2s-shell-tailscale-wt`): `d005946` (own
+    harness removed, reviewed: merge), `655b385` (deterministic `connect-before-read`) and
+    the follow-up commits an agent was finishing (review fixes, the stand-in's `pause` race
+    behind the `slow-up-disconnect` flake, fixed waits → conditions, the machine-wide
+    `pgrep "sleep 5"` in `tools/test.sh`) — check the branch's log, review, merge.
+  - then: speed (below), system detection behind a seam, `tests/run-system.sh`,
+    `install.sh` under stand-ins, `tests/run-all.sh`.
+- [ ] **Test speed** (measured 2026-11-17): the waiting is the machine-wide flock, not the
+      tests. To do as one small slice: only `tests/lock/run.sh` takes the lock, itself;
+      cache the resolved nix tool path in `tests/lock/resolve.sh` (keyed by `tools.nix`'s
+      hash); wait for the compositor's exit instead of the fixed 0.3 s in
+      `tests/headless.sh`; correct "about 15 minutes" (it is 4–5) here and in `CLAUDE.md`.
+      Until then: on Arch no flock for unit, module and self-test runs; iterate on Arch with
+      named suites; the NixOS machine only for the final pass and the lock bed.
+- [ ] **API plan** ([plans/api-next.md](plans/api-next.md)) is final on branch
+      `plan-api-next` (`036d35e`, working tree `h2s-shell-wt-plans`; it also carries the
+      owner's decisions of the day in this file's Decisions — merge it). Open: one more
+      decision to fold in (below), a short review of what changed since the independent
+      review (buttons, icons, the password queue, the slice list), then the owner's
+      approval. First slices: the `ModuleRules.qml` split, the file chooser trial, the
+      bordered buttons.
+- Decided after the plan's last commit (the owner, 2026-11-17), to fold into it: modules are
+  **not** kept from building their own elements. They use the public elements wherever
+  that is possible and makes sense, and the theme's colours always; building something the
+  API does not offer is fine. So importing the shell's internal elements stays the thing
+  to avoid, but "only public elements" is not a rule and not an error.
+
+How to run a session cheaply (the owner asked; this session used most of its budget): one
+topic at a time; collect the owner's answers and hand them to an agent in one go; a fresh
+agent with a narrow brief instead of resuming one with a long history; no agent waits on a
+test queue; review what carries risk, look at one-line fixes yourself.
 
 ## Order of work
 
@@ -155,8 +187,12 @@ Found during the test split (2026-11-17):
       D-Bus address (`[NetworkEvents] nmcli monitor exited, restarting`) and try `notify-send`:
       against "tests never touch a real daemon"; a stand-in or a switch-off is needed
 - [ ] `polkit/AuthPrompt.qml` sets no `textFormat` on polkit's texts (plain-text rule)
-- [ ] The module's live suites use fixed `waitMs(…)` waits as synchronisation in places
-      (`TailscaleLiveTest`, scenario `running`)
+- [ ] `tests/ModulesTest.qml` (start guard, lines 268-301) asserts within a 300 ms timer:
+      fails under load on a slow machine (3 checks, seen on the NixOS machine)
+- [ ] Lock scenario `modules-launcher`: with the shell's programs missing from `PATH`
+      (through `tests/lock/launcher.sh`) modules can stay `pending` after a supervisor
+      restart — looks like a shell defect; `modules-discovery` once saw the supervisor
+      silent for 44 s under load
 - [ ] `tests/lock/tools.nix`: the comment ties the pin to one machine's system
 
 ## Open points
