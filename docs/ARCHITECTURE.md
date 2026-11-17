@@ -491,10 +491,10 @@ launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
 
 Integrations as separate packages. The module API's reference
 (the facade, the slot table, the handle, the lifetime rules) is the header of `api/Api.qml`;
-the manifest schema is in `singletons/ModuleRules.qml`. What exists: the rules, the host, discovery,
+the manifest schema is in `singletons/ModuleManifestRules.qml`. What exists: the rules, the host, discovery,
 the `qs.api` facade, the registries taking modules' contributions, and slots.
 
-- A **module** is a directory with a `module.json` (the schema: `singletons/ModuleRules.qml`'s
+- A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
   header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
   never imported statically (a broken one would fail the whole config). Every file the
   manifest names must be a regular file inside the directory (a link out of it, a FIFO, a
@@ -521,7 +521,7 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   `coreEntries`, then modules' — files as `file://` URLs, each entry naming its `module`),
   `WidgetPresets.defaults`, `SettingsSchema.entries` (popup-mode entries follow the registry),
   `ProfileRules.factTypes` and `Profiles.facts`, `SettingsWindow.pages` (`corePages`, then
-  `ModuleRules.mergeSettingsPages`). With no module each is the core's list itself (the
+  `ModuleMergeRules.mergeSettingsPages`). With no module each is the core's list itself (the
   suites check it). Everything is reactive: a module turned off leaves its bar entries in
   place showing nothing, closes its popup, takes its pages, settings, facts and slot content.
   The core builds a module's objects by URL and gives each the module's handle as `module`

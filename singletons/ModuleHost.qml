@@ -6,7 +6,7 @@ import qs.components
 // The module host (notes/plans/modules.md): given the module directories, it reads NOTHING on
 // the GUI thread before its check — each module.json and qmldir, and then the text of every
 // file the module names (for the import check and the properties a root object declares), come
-// out of one process, the file check (ModuleRules.fileCheckScript: resolved inside the module's
+// out of one process, the file check (ModuleFileRules.fileCheckScript: resolved inside the module's
 // directory, a regular file, not too large), under checkTimeoutMs; a module whose files did
 // not answer in time is failed, with the reason, and the shell goes on. It checks the manifest
 // with ModuleRules, counts the start (the start guard, below), checks the programs the modules require
@@ -48,13 +48,13 @@ Scope {
 
     // The start guard's counter file ("" — the suites' default — no guard): before loading,
     // the host counts Quickshell's relaunches of this process after a crash in it
-    // (ModuleRules.startGuardScript); cleared after guardClearMs; ModuleRules.guardLimit
+    // (ModuleFileRules.startGuardScript); cleared after guardClearMs; ModuleFileRules.guardLimit
     // relaunches in a row → safe mode
     property string guardFile: ""
     // The identity the guard counts under ("<pid>:<crash>"; "" — the process's own): the
     // suites' seam
     property string guardIdentity: ""
-    property int guardClearMs: ModuleRules.guardClearMs
+    property int guardClearMs: ModuleFileRules.guardClearMs
     // How long the file and program checks may take before what they did not answer counts
     // as failed (a hung directory on PATH must not leave a module pending for good)
     property int checkTimeoutMs: 5000
@@ -71,11 +71,11 @@ Scope {
     // that were not absolute paths
     property var directories: []
     property var ignoredEntries: []
-    // One status per directory, in search order (ModuleRules.statusOf):
+    // One status per directory, in search order (ModuleMergeRules.statusOf):
     // { id, name, version, api, description, directory, state, enabled, errors, warnings,
     //   missingPrograms, setupHints, shadowedBy }
     property var statuses: []
-    // The loaded modules' contributions, merged (ModuleRules.merge): what the core's
+    // The loaded modules' contributions, merged (ModuleMergeRules.merge): what the core's
     // registries read. Every file an absolute file:// URL; every entry has `module`.
     property var widgetEntries: []
     property var settingsPages: []
@@ -131,7 +131,7 @@ Scope {
             _askedSafeMode = options?.safeMode === true;
             safeMode = _askedSafeMode;
             safeModeReason = _askedSafeMode ? (options?.safeModeReason ?? "asked for (H2S_SHELL_SAFE_MODE=1)") : "";
-            const parsed = ModuleRules.moduleDirectories(directoryList);
+            const parsed = ModuleFileRules.moduleDirectories(directoryList);
             directories = parsed.directories;
             ignoredEntries = parsed.ignored;
             // Nothing is read here: each module is pending until the file check (a process,
@@ -194,7 +194,7 @@ Scope {
 
     // The contributions to one slot: [{ module, slot, component }]
     function slotContributions(name) {
-        return ModuleRules.slotContributions(slots, name);
+        return ModuleMergeRules.slotContributions(slots, name);
     }
 
     // The object created from a loaded module's main, or null
@@ -203,10 +203,10 @@ Scope {
         return record?.state === "loaded" ? record.main ?? null : null;
     }
 
-    // The checked manifest (ModuleRules.parseManifest, less what the file check dropped)
+    // The checked manifest (ModuleManifestRules.parseManifest, less what the file check dropped)
     // read from a directory, or null
     function manifestOf(directory) {
-        return _records.find(record => record.directory === ModuleRules.canonicalPath(directory))?.manifest ?? null;
+        return _records.find(record => record.directory === ModuleFileRules.canonicalPath(directory))?.manifest ?? null;
     }
 
     // The module's handle (api/ModuleHandle.qml: what the module API gives a module of
@@ -231,7 +231,7 @@ Scope {
     // The handle of the module whose directory holds `url` (a file of the module:
     // Qt.resolvedUrl(".") in any of its files), or null
     function handleAt(url) {
-        const index = ModuleRules.directoryIndexOf(directories, url);
+        const index = ModuleFileRules.directoryIndexOf(directories, url);
         if (index < 0)
             return null;
         const record = _records.find(entry => entry.directory === directories[index]);
@@ -281,7 +281,7 @@ Scope {
     // module file at `url` declares — what a Loader may be given without a warning (an
     // object made by createObject ignores the others quietly). {} for a file of no module.
     function initialProperties(url, wanted) {
-        const index = ModuleRules.directoryIndexOf(directories, url);
+        const index = ModuleFileRules.directoryIndexOf(directories, url);
         if (index < 0)
             return {};
         const record = _records.find(entry => entry.directory === directories[index]);
@@ -291,8 +291,8 @@ Scope {
         } catch (error) {
             return {};
         }
-        const relative = ModuleRules.canonicalPath(path).slice(directories[index].length + 1);
-        return ModuleRules.initialProperties(record?.rootProperties[relative], wanted);
+        const relative = ModuleFileRules.canonicalPath(path).slice(directories[index].length + 1);
+        return ModuleSourceRules.initialProperties(record?.rootProperties[relative], wanted);
     }
 
     // The URL of a module's contribution to a slot ("" for none): its first, by manifest
@@ -364,7 +364,7 @@ Scope {
     function _manifestAnswered(record, answers, texts) {
         record.manifestRead = true;
         const read = answers["module.json"] === "ok";
-        const manifest = ModuleRules.parseManifest(read ? texts["module.json"] : null);
+        const manifest = ModuleManifestRules.parseManifest(read ? texts["module.json"] : null);
         if (!read)
             manifest.errors = ["module.json cannot be read: " + (answers["module.json"] ?? "it could not be read within " + checkTimeoutMs / 1000 + " s")];
         record.manifest = manifest;
@@ -378,7 +378,7 @@ Scope {
             record.errors.push(compatibility.reason);
             return;
         }
-        record.warnings.push(...ModuleRules.unknownSlotWarnings(manifest));
+        record.warnings.push(...ModuleMergeRules.unknownSlotWarnings(manifest));
         const qmldir = answers["qmldir"];
         if (qmldir === "ok") {
             record.qmldirText = texts["qmldir"] ?? "";
@@ -417,14 +417,14 @@ Scope {
             for (const record of _records) {
                 if (record.filesChecked)
                     continue;
-                const files = ModuleRules.filesToCheck(record.manifest, record.qmldirText);
+                const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
                 // Nothing to check: settled at once
                 if (files.length === 0) {
                     _filesAnswered(record, {}, {});
                     settledAtOnce = true;
                 }
                 for (const entry of files)
-                    asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleRules.maxFileBytes });
+                    asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleFileRules.maxFileBytes });
             }
         }
         if (asked.length === 0) {
@@ -436,7 +436,7 @@ Scope {
         _fileCheck.asked = asked;
         _fileCheck.lines = [];
         _fileCheck.environment = checkEnvironment ?? {};
-        _fileCheck.command = ["sh", "-c", ModuleRules.fileCheckScript, "sh"]
+        _fileCheck.command = ["sh", "-c", ModuleFileRules.fileCheckScript, "sh"]
             .concat(...asked.map(entry => [String(entry.cap), entry.record.directory, entry.file]));
         _fileCheck.running = true;
         _fileCheckDeadline.restart();
@@ -444,8 +444,8 @@ Scope {
 
     // The check answered (or ran out of time: what it did not answer counts as failed)
     function _fileCheckDone(asked, lines) {
-        const answers = ModuleRules.parseFileCheck(lines);
-        const texts = ModuleRules.fileTexts(lines);
+        const answers = ModuleFileRules.parseFileCheck(lines);
+        const texts = ModuleFileRules.fileTexts(lines);
         const byRecord = new Map();
         asked.forEach((entry, index) => {
             if (!_records.includes(entry.record))
@@ -472,7 +472,7 @@ Scope {
             }
         }
         if (manifests) {
-            const order = ModuleRules.precedence(_records.map(record => ({ directory: record.directory, id: record.manifest.id })));
+            const order = ModuleMergeRules.precedence(_records.map(record => ({ directory: record.directory, id: record.manifest.id })));
             _records.forEach((record, index) => record.shadowedBy = order[index].shadowedBy);
             // Reassigned so that what reads them in a binding (handleAt: Api.moduleAt in a
             // module's singleton) sees the ids now known
@@ -484,15 +484,15 @@ Scope {
     // Drops the entries whose files failed, then takes the rest's texts (from the check) for
     // the import check and the properties their root objects declare
     function _filesAnswered(record, bad, texts) {
-        const checked = ModuleRules.withoutBadFiles(record.manifest, bad, record.qmldirText);
+        const checked = ModuleFileRules.withoutBadFiles(record.manifest, bad, record.qmldirText);
         record.manifest = Object.assign(checked.manifest);
         record.errors.push(...checked.errors);
         record.mainFileError = checked.fatal;
         record.filesChecked = true;
         if (checked.fatal !== "")
             return;
-        const files = ModuleRules.manifestFiles(record.manifest);
-        for (const listed of ModuleRules.qmldirFiles(record.qmldirText)) {
+        const files = ModuleFileRules.manifestFiles(record.manifest);
+        for (const listed of ModuleFileRules.qmldirFiles(record.qmldirText)) {
             if (!files.includes(listed))
                 files.push(listed);
         }
@@ -502,13 +502,13 @@ Scope {
                 record.errors.push(name + " cannot be read");
                 continue;
             }
-            record.rootProperties[name] = ModuleRules.rootProperties(text);
+            record.rootProperties[name] = ModuleSourceRules.rootProperties(text);
             // Only the files the core builds and hands `module` (main, the entries' components);
             // a singleton finding its handle with Api.moduleAt in a readonly property is fine
-            const moduleWarning = ModuleRules.manifestFiles(record.manifest).includes(name) ? ModuleRules.modulePropertyWarning(name, text) : "";
+            const moduleWarning = ModuleFileRules.manifestFiles(record.manifest).includes(name) ? ModuleSourceRules.modulePropertyWarning(name, text) : "";
             if (moduleWarning !== "")
                 record.warnings.push(moduleWarning);
-            record.warnings.push(...ModuleRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
+            record.warnings.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
         }
     }
 
@@ -568,7 +568,7 @@ Scope {
         if (_guardCheck.running)
             return;
         _guardCheck.output = "";
-        _guardCheck.command = ["sh", "-c", ModuleRules.startGuardScript, "sh", guardFile, guardIdentity];
+        _guardCheck.command = ["sh", "-c", ModuleFileRules.startGuardScript, "sh", guardFile, guardIdentity];
         _guardCheck.running = true;
         _guardDeadline.restart();
     }
@@ -577,7 +577,7 @@ Scope {
         if (_guardKnown)
             return;
         _guardKnown = true;
-        const decision = ModuleRules.startGuard(output);
+        const decision = ModuleFileRules.startGuard(output);
         guard = { count: decision.count, identity: decision.identity, reason: decision.reason };
         if (decision.safeMode && !_askedSafeMode) {
             safeMode = true;
@@ -595,7 +595,7 @@ Scope {
     function _clearGuard() {
         if (guardFile === "" || guard === null || guard.count === 0 || guard.identity === "")
             return;
-        Quickshell.execDetached(["sh", "-c", ModuleRules.guardClearScript, "sh", guardFile, guard.identity]);
+        Quickshell.execDetached(["sh", "-c", ModuleFileRules.guardClearScript, "sh", guardFile, guard.identity]);
         guard = Object.assign({}, guard, { count: 0, cleared: true });
     }
 
@@ -624,7 +624,7 @@ Scope {
                 missingPrograms: programs.filter(program => _programs.get(program) === false),
                 mainError: ""
             };
-            let state = ModuleRules.stateOf(facts);
+            let state = ModuleMergeRules.stateOf(facts);
             if (state === "loaded") {
                 _setActive(manifest.id, true);
                 if (!record.main && record.mainError === "" && manifest.main !== "")
@@ -659,7 +659,7 @@ Scope {
     }
 
     function _createMain(record) {
-        const url = ModuleRules.fileUrl(record.directory, record.manifest.main);
+        const url = ModuleFileRules.fileUrl(record.directory, record.manifest.main);
         let component = null;
         try {
             component = Qt.createComponent(url, Component.PreferSynchronous);
@@ -720,7 +720,7 @@ Scope {
             if (record.state === "safe-mode" && safeModeReason !== "")
                 errors.push(safeModeReason);
             errors.push(...record.runtimeErrors);
-            if (ModuleRules.contributes(record.state))
+            if (ModuleMergeRules.contributes(record.state))
                 loaded.push({ id: record.manifest.id, directory: record.directory, manifest: record.manifest });
             // One line per change of state, in the shell's log
             if (logStates && record.state !== record.loggedState && record.state !== "pending" && record.state !== "") {
@@ -732,13 +732,13 @@ Scope {
                 else
                     console.warn(what + ": " + errors.join("; "));
             }
-            return ModuleRules.statusOf({
+            return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: record.warnings,
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
             });
         });
-        const merged = ModuleRules.merge(loaded);
+        const merged = ModuleMergeRules.merge(loaded);
         // Assigned only when they changed, so that the registries (and the bars, the settings
         // window) are not rebuilt for a status line
         if (JSON.stringify(merged.widgetEntries) !== JSON.stringify(widgetEntries))

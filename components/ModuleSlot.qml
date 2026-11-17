@@ -38,7 +38,7 @@ Item {
         return built;
     }
 
-    readonly property var _model: contributions.map(entry => Object.assign({ key: ModuleRules.contributionKey(entry) }, entry))
+    readonly property var _model: contributions.map(entry => Object.assign({ key: ModuleMergeRules.contributionKey(entry) }, entry))
     readonly property var _context: Object.assign({}, context ?? {}, { slot: name })
 
     visible: count > 0

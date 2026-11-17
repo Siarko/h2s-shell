@@ -71,10 +71,10 @@ FloatingWindow {
         { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp }
     ]
 
-    // Every page: the core's, with the loaded modules' put in (ModuleRules.mergeSettingsPages:
+    // Every page: the core's, with the loaded modules' put in (ModuleMergeRules.mergeSettingsPages:
     // under a core group, under Modules, or at the end of their tab). A module's page has a
     // `url` instead of a `component`, and is shown in the core's frame (_modulePageComp).
-    readonly property var _mergedPages: ModuleRules.mergeSettingsPages(corePages, Modules.settingsPages)
+    readonly property var _mergedPages: ModuleMergeRules.mergeSettingsPages(corePages, Modules.settingsPages)
     readonly property var pages: _mergedPages.pages
     on_MergedPagesChanged: {
         for (const problem of _mergedPages.problems)

@@ -34,7 +34,7 @@ Singleton {
     })
 
     // The core's, plus each loaded module widget's presetDefaults (its manifest)
-    readonly property var defaults: ModuleRules.mergePresetDefaults(coreDefaults, WidgetRegistry.entries.filter(entry => entry.module))
+    readonly property var defaults: ModuleMergeRules.mergePresetDefaults(coreDefaults, WidgetRegistry.entries.filter(entry => entry.module))
 
     function names(type) {
         return Object.keys(all[type] ?? {});

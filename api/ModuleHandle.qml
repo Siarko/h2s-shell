@@ -51,7 +51,7 @@ QtObject {
 
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)
     function url(relative) {
-        return directory === "" ? "" : ModuleRules.fileUrl(directory, String(relative ?? ""));
+        return directory === "" ? "" : ModuleFileRules.fileUrl(directory, String(relative ?? ""));
     }
 
     // ---- Settings (its own: mod.<id>.*, declared in its manifest) ----
@@ -122,7 +122,7 @@ QtObject {
             delete merged[keyName];
         else
             merged[keyName] = newValue;
-        const problem = ModuleRules.presetDefaultsProblem(merged);
+        const problem = ModuleManifestRules.presetDefaultsProblem(merged);
         if (problem !== "")
             return problem;
         WidgetPresets.set(String(type), name, keyName, newValue);

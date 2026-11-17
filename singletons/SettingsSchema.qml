@@ -87,7 +87,7 @@ Singleton {
     // each naming its `module`), which go with their module when it is turned off — a
     // profile's values for them are kept, unused, and apply again when it is back
     readonly property var coreEntries: _baseEntries.concat(_popupModeEntries)
-    readonly property var entries: ModuleRules.mergeSettingEntries(coreEntries, _modulePopupModeEntries.concat(ModuleLists.settingEntries))
+    readonly property var entries: ModuleMergeRules.mergeSettingEntries(coreEntries, _modulePopupModeEntries.concat(ModuleLists.settingEntries))
 
     readonly property var _baseEntries: [
         // ── General ──

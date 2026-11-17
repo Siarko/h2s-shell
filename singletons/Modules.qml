@@ -14,7 +14,7 @@ import QtCore
 // which this feeds — never this singleton; the settings window's pages, ModuleSlot and the VPN
 // slots read it here.
 //
-// The start guard (ModuleHost.guardFile, ModuleRules.startGuardScript):
+// The start guard (ModuleHost.guardFile, ModuleFileRules.startGuardScript):
 // $XDG_RUNTIME_DIR/h2s-shell-module-starts counts Quickshell's relaunches of this process after
 // a crash — what the launcher cannot see — before any module loads; a start that lives 30 s
 // (the launcher's quick-death window; H2S_SHELL_TEST_MODULE_GUARD_MS shortens it) sets it

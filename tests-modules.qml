@@ -58,7 +58,7 @@ QtObject {
             if (tests.length === 0)
                 _fail("module " + label + " lists no test suites (\"tests\" in its module.json)");
             for (const test of tests)
-                runnable.push({ module: status.id, url: ModuleRules.fileUrl(status.directory, test), file: test });
+                runnable.push({ module: status.id, url: ModuleFileRules.fileUrl(status.directory, test), file: test });
         }
         if (selected.length > 0) {
             runnable = runnable.filter(entry => selected.includes(suiteNameOf(entry.file)));

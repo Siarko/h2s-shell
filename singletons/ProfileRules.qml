@@ -32,7 +32,7 @@ Singleton {
     ]
     // The core's, then the loaded modules' (Modules.factTypes: <id>.*; types bool, number,
     // percent, string, enum), which go with their module
-    readonly property var factTypes: ModuleRules.mergeFactTypes(coreFactTypes, ModuleLists.factTypes)
+    readonly property var factTypes: ModuleMergeRules.mergeFactTypes(coreFactTypes, ModuleLists.factTypes)
 
     function factType(fact) {
         return factTypes.find(type => type.fact === fact) ?? null;

@@ -28,8 +28,8 @@ TestCase {
     }
 
     function run() {
-        const first = _create(ModuleRules.fileUrl(directory, "First.qml"));
-        const second = _create(ModuleRules.fileUrl(directory, "Second.qml"));
+        const first = _create(ModuleFileRules.fileUrl(directory, "First.qml"));
+        const second = _create(ModuleFileRules.fileUrl(directory, "Second.qml"));
         if (!first.object || !second.object) {
             fail("a file loaded by file:// URL from a directory outside the tree did not load: "
                  + (first.component.errorString() + second.component.errorString()).trim()
@@ -51,17 +51,17 @@ TestCase {
                "(b) … ModuleRules too, from both files");
 
         // (c) A broken file is contained: an Error status, not a failed config
-        const broken = Qt.createComponent(ModuleRules.fileUrl(directory, "Broken.qml"), Component.PreferSynchronous);
+        const broken = Qt.createComponent(ModuleFileRules.fileUrl(directory, "Broken.qml"), Component.PreferSynchronous);
         assertEqual(broken.status, Component.Error,
                     "(c) a file with a syntax error loads as a Component in Error — if not, one broken module could take the shell (and its lock screen) down");
         assert(broken.errorString().includes("Broken.qml"), "(c) … whose error names the file: " + broken.errorString().trim());
 
         // (d) Two spellings of one directory give two sets of singletons ("a//b" does; "a/./b"
         // does not; a symlink does): the host's canonical paths avoid it
-        const spelled = _create(ModuleRules.fileUrl(directory + "/./x/..//", "First.qml"));
+        const spelled = _create(ModuleFileRules.fileUrl(directory + "/./x/..//", "First.qml"));
         assert(spelled.object !== null && spelled.object.pin === first.object.pin,
-               "(d) a directory given in another spelling still reaches the same singleton through the host's canonical paths (ModuleRules.fileUrl) — if not, a module given twice would run with two states");
-        assertEqual(ModuleRules.fileUrl(directory + "//", "First.qml"), ModuleRules.fileUrl(directory, "First.qml"),
+               "(d) a directory given in another spelling still reaches the same singleton through the host's canonical paths (ModuleFileRules.fileUrl) — if not, a module given twice would run with two states");
+        assertEqual(ModuleFileRules.fileUrl(directory + "//", "First.qml"), ModuleFileRules.fileUrl(directory, "First.qml"),
                     "(d) the host spells one file one way");
         // The trap itself, for the log only (whether Quickshell normalises a repeated "/"
         // changes nothing for the host)
