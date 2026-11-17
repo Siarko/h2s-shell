@@ -541,7 +541,6 @@ TestCase {
             const afterInstall = lockFacts({ passwordFree: true, askedAtStart: true, rulesVersion: rules.lockdownStatusReply(["on 1 - -"]).rules });
             assertEqual(rules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: installed, the status says old rules — switched on again");
             assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { busy: true })), "wait", "lockdown upgrade: busy — waits");
-            assertEqual(rules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: busy no more — still switched on again (nothing used up)");
             assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { rulesVersion: 4 })), "keep", "lockdown upgrade: the new rules on — kept");
             assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { refused: "on 1 - -" })), "refused",
                         "lockdown: a refusal still standing — not switched by itself");
@@ -551,6 +550,10 @@ TestCase {
                    && rules.lockdownNextStep(lockFacts({ wanted: false })) === "off" && rules.lockdownNextStep(lockFacts({ wanted: false, refused: "off" })) === "keep"
                    && rules.lockdownNextStep(lockFacts({ wanted: false, status: "off" })) === "idle",
                    "lockdown: not ready, no nftables, not wanted while on (refused before), off");
+            assertEqual(rules.lockdownNextStep(lockFacts({ status: "off", rulesVersion: 0 })), "on", "lockdown: wanted and off, a password needed — switched on");
+            assertEqual(rules.lockdownNextStep(lockFacts({ status: "on 0 - -", rulesVersion: 4, refused: "on 1 - -" })), "refused",
+                        "lockdown: changed arguments refused before, a password needed — not asked again");
+            assertEqual(rules.lockdownNextStep(lockFacts({ wanted: false, refused: "off", force: true })), "off", "lockdown: Apply again while not wanted, off refused before — switched off");
             const rule = rules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);
             assert(rule.indexOf('subject.user == "h2s" && subject.local && subject.active') > 0
                    && rule.indexOf('action.lookup("program") == "/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"') > 0

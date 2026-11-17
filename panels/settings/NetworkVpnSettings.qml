@@ -386,7 +386,8 @@ Item {
             }
             // Rules an older script loaded, kept until applied again (VpnLockdown.staleRules)
             Text {
-                visible: VpnLockdown.wanted && VpnLockdown.staleRules && VpnLockdown.state === "on"
+                // Password-free, they are switched on again by themselves: nothing to say
+                visible: VpnLockdown.wanted && VpnLockdown.staleRules && VpnLockdown.state === "on" && !VpnLockdown.passwordFree
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: "These rules are from an older script. Apply them again."

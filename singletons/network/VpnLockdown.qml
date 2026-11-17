@@ -139,7 +139,8 @@ Singleton {
     // The status the script last reported, or the one remembered for this boot
     property string _status: ""
     // The version of the script that switched the loaded rules on (0 unknown: from before
-    // version 4); rules older than the shell's copy are switched on again
+    // version 4); rules older than the shell's copy are switched on again by themselves only
+    // when the script is password-free, otherwise kept until the user asks (staleRules)
     property int _rulesVersion: 0
     // A refused or failed switch (its status, or "off"): not tried again by itself until
     // something changes, or "Apply again"
