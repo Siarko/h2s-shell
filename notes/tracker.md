@@ -163,6 +163,8 @@ All by the owner, 2026-11-17.
 - Exit node per network: it sits on the saved network's opened card.
 - Module API, variants are meanings, not looks: a button is `primary` (the primary colour; performs the action), `secondary` (plain; an in-between step, opens something) or `confirmation.<tone>` (asks first; `confirmation.danger`, `confirmation.primary`). Nothing dangerous acts on a first click. A module may put any of the three among a network card's buttons. The same approach for all public elements.
 - Module API, a module's icon: a glyph of the icon font, an SVG file or an image file; the module chooses.
+- Module API, buttons (replaces the three kinds in the line above): a button's kind is `primary`, `secondary`, `warning` or `danger`, and more may come; asking first is a separate thing that goes with any kind. A danger button may act on the first click. A module's "Cancel" is `secondary`; no kind of its own.
+- Pills: three sizes, `s`, `m`, `l`, standard, set by the theme and offered through the API.
 
 ## Backlog / later
 

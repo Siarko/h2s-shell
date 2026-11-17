@@ -628,7 +628,7 @@ orders elements, so a later rule changes one function.
 3. with the fixture module on: one element per published placement of each path appears,
    in the order of §4.1, with the documented context; an unknown path gives a status error;
    a mark set and cleared shows and goes on a closed card (§4.10); with U7, a button in
-   each role on an `actions` region, and an element that is not the button refused (§4.8).
+   each kind on an `actions` region, and an element that is not the button refused (§4.8).
 
 The suites run with no D-Bus (verified: `tests/headless.sh`), so building a network page
 reads nothing real. Repeated blocks need an item to be live: the VPN page gets
@@ -686,7 +686,7 @@ the card's path:
 | Region | Holds | `prepend` | `append` | An element must be |
 |---|---|---|---|---|
 | `<card>.settings` | the opened column | above "Connect automatically" | under the page's own rows | anything; `SettingsRow` or `ExpandingRow` is what fits |
-| `<card>.actions` | the secondary buttons | under the primary button, above "Settings…" | under "Edit connection…", above "Forget" / "Delete" | the public `SmallButton` (§4.9), in any of its roles |
+| `<card>.actions` | the secondary buttons | under the primary button, above "Settings…" | under "Edit connection…", above "Forget" / "Delete" | the public `SmallButton` (§4.9), of any kind |
 
 The table (§4.2) publishes only what a module uses: `append` on the saved networks'
 `settings`, `prepend` on the VPN cards' (where today's slot stands).
@@ -702,13 +702,16 @@ The table (§4.2) publishes only what a module uses: `append` on the saved netwo
   module does not change them.
 
 **The `actions` region** (the owner's decisions: the shell's button, always above
-"Forget" / "Delete", any role).
+"Forget" / "Delete", any kind).
 
 - "Forget" stays last whatever a module adds. The region right-aligns each button at its
   own width, as the card's are; it gives a button at most a third of the card's width, and
   a longer label is cut (the internal button gains eliding). The size is `normal`.
-- Every role is allowed: nothing dangerous acts on a first click (§4.9), so a module's
-  `confirmation.danger` button asks first exactly as "Forget" under it does.
+- Every kind is allowed, with or without asking first (the owner's decision). What
+  follows from it, for the owner to rule on when this place is built (C1): a module's
+  `danger` button that acts on the first click may stand directly above the shell's
+  "Forget", which asks first. The earlier ground for "any kind" was that nothing dangerous
+  acts on one click; a `danger` button without `confirm` does (§4.9).
 - **Why a button is required there and nothing else is.** The stack sits in the card's
   header beside the name; anything but a button breaks the header of every card.
   `settings` is a full-width column where today's VPN card content (detail rows,
@@ -734,55 +737,89 @@ its internals freely; a public element keeps its own properties. Modules are mea
 as many of them as they can, and at the end of the migration a module imports nothing from
 `qs.components`.
 
-**A module picks a meaning, not a look** (the owner's decision). Three small enumerated
+**A module picks a meaning, not a look** (the owner's decision). Two small enumerated
 properties, the same words on every element that has them:
 
 | Property | Says | Values |
 |---|---|---|
-| `role` | what the element is for | per element (a button's: below) |
-| `tone` | what kind of thing it is about | `primary`, `danger`, `warning`, `success`; an element takes the ones it has |
-| `size` | how large | `normal`, `small`, `tiny` |
+| `kind` | what the element is about | `primary`, `secondary`, `warning`, `danger`, `success`; an element takes the ones it has |
+| `size` | how large | `xs`, `s`, `m` (the default), `l`; an element takes the ones it has |
 
-Never a colour, a radius or a number of pixels. A theme decides how a role and a tone
-look.
+Never a colour, a radius or a number of pixels. A theme decides how a kind and a size
+look. Both lists are open: the shell may add a value in a later minor. A value an element
+does not know shows as that element's default (below), so a module written for a newer
+shell still shows a working control on an older one.
 
-**The button.** One public element, `SmallButton`, in three roles:
+**The button.** One public element, `SmallButton`.
 
-| Role | Is for | Looks (today's internal look) |
+```
+SmallButton {
+    label; available; checked; tooltip
+    kind: "secondary"          // "primary" | "secondary" | "warning" | "danger"
+    size: "m"                  // "xs" | "s" | "m"
+    confirm: false             // true: asks first
+    confirmLabel               // the question; default: the label and "?"
+    cancelTip                  // the tooltip of the "×" that takes the question back
+    asking                     // the first click was made
+    signal clicked()           // do it
+    signal asked()             // the first click of a button that asks
+}
+```
+
+- **The kind and asking first are two things** (the owner's decision). `kind` says what
+  the button is about; `confirm` says that the first click only turns it into the
+  question, with a "×" that cancels, and the second click acts. Any kind can ask. A
+  boolean, not more kinds: a kind added later can ask without a second value being
+  invented for it, and a module switches asking on or off without changing what the
+  button is.
+- `clicked()` means "do it" either way: the click, or with `confirm` the second click. A
+  module adds or drops `confirm` without touching its handler.
+- **A `danger` button without `confirm` acts on the first click.** That is the module's
+  "Disconnect". What loses something takes `confirm`.
+
+| Kind | Is for | Looks |
 |---|---|---|
-| `primary` | performs the action | the confirm colour (`kind: "save"`) |
-| `secondary` (the default) | an in-between step, opens something | plain (`kind: "normal"`) |
-| `confirmation` with a `tone` | asks first: the first click turns it into the question, with a "×" that cancels; the second click acts | `components/DeleteButton.qml`; `tone: "danger"` (the default) asks in red as today, `tone: "primary"` in the confirm colour (new inside) |
+| `primary` | performs the action | the confirm colour (`Theme.confirm`, `Theme.confirmHover` under the pointer); today's internal `kind: "save"` |
+| `secondary` (the default) | an in-between step, opens something; also "Cancel" | plain (`Theme.surface`, `Theme.surfaceHover`); today's `normal` |
+| `warning` | goes on, but the user should think | new inside the shell, made as `danger` is: plain at rest, filled with `Theme.warning` under the pointer, the label in `Theme.textPrimary` then. Its shape is a new theme group, `warningButton` (radius), beside `deleteButton` |
+| `danger` | stops or removes something | today's `delete` (verified: `components/SmallButton.qml`): plain at rest, exactly like `secondary`; filled with `Theme.error` under the pointer or a finger, the label in `Theme.textPrimary` then. Whether it should show red at rest is Q1 in §8 |
 
-- In writing it is "confirmation.danger"; in QML it is two properties,
-  `role: "confirmation"; tone: "danger"`. Two, because each is then checked against its
-  own short list, a binding can change one without building a string, and "primary.danger"
-  cannot be written by accident; and `tone` is the same property the other elements have.
-- **Nothing dangerous acts on a first click** (the owner's decision). So the internal
-  one-click red button (`kind: "delete"`) has no public form.
-- `clicked()` means "do it" in every role: the click for `primary` and `secondary`, the
-  second click for `confirmation`. A module changes a button's role without touching its
-  handler. `asked()` is the first click of a `confirmation`.
-- Properties: `label`, `available`, `checked` (a toggle that is on), `tooltip`, `role`,
-  `tone`, `size`; for `confirmation` also `confirmLabel`, `cancelTip`, `asking`.
+With `confirm`, the question is shown in the kind's colour: `danger` in `Theme.error` as
+`DeleteButton` does today, `primary` in the confirm colour, `warning` in `Theme.warning`,
+`secondary` in the plain text colour. Only the first exists inside today; F1a adds the
+others to `DeleteButton`.
 
-Today's five internal looks, mapped:
+Today's internal looks, mapped:
 
-| Internal `kind` | Public | Note |
+| Internal | Public | Note |
 |---|---|---|
-| `normal` | `secondary` | |
-| `save` | `primary` | |
-| `delete` (red under the pointer, one click) | none; `confirmation.danger` asks | the module's "Disconnect" uses it: Q1 in §8 |
-| `cancel` (its own shape from the theme) | does not fit the three roles | the module uses it twice: Q2 in §8 |
-| `saveChange` (a second confirm colour, the calendar's "save an existing event") | not offered | no module uses it; it stays internal until one does |
+| `kind: "normal"` | `secondary` | |
+| `kind: "save"` | `primary` | |
+| `kind: "delete"` | `danger` | |
+| `DeleteButton` | `danger` with `confirm` | |
+| `kind: "cancel"` | `secondary` | the same colours as `normal` (verified); only its shape is its own theme group ("Buttons that cancel", `Theme.cancelButton`). A theme that shapes that group differently does not reach a module's "Cancel". Whether the shell keeps the group is theme work, outside this plan |
+| `kind: "saveChange"` | not offered | the calendar's "save an existing event"; no module uses it; stays internal |
+
+**Sizes.** One vocabulary, `xs`, `s`, `m`, `l`, standing for the theme's own steps:
+
+| Element | Offers | Stands for |
+|---|---|---|
+| `SmallButton`, `Dropdown`, `InputField` | `xs`, `s`, `m` | the theme's type sizes `fontSizeXSmall`, `fontSizeSmall`, `fontSizeBody` (what the module passes as `fontSize` today) |
+| `Pill` | `s`, `m`, `l` | three heights in the theme's `pill` group (slice T1) |
+
+The shell's own pills are 22 px by default and 24, 26 or 30 px where a view says so
+(verified: 7 with the default, 10 with 24, 10 with 26, one with 30). T1 gives the `pill`
+group three heights, `minHeight` (kept: `s`, 22), `mediumHeight` (`m`, 26) and
+`largeHeight` (`l`, 30), editable in the theme editor, and moves every pill of the shell
+onto one of them. Four heights into three: the 24 px ones are Q2 in §8.
 
 **How an element is made.**
 
 - **A control is a wrapper, not a subtype.** `api/SmallButton.qml` is an `Item` holding the
   internal component; a subtype would hand a module `color`, `radius`, `font` and every
   internal property. Values are forwarded with `property alias` where the name and the
-  values are the same, with a binding through a pure mapping where they are not (`role`
-  and `tone` → `kind`; `size` → the theme's type size); signals are passed on signal to
+  values are the same, with a binding through a pure mapping where they are not (the public
+  `kind` → the internal one; `size` → the theme's step); signals are passed on signal to
   signal.
 - **It stands in a layout as the internal one did.** The wrapper's implicit size is the
   inner item's, the inner item fills the wrapper (so `Layout.fillWidth` on a field
@@ -797,7 +834,7 @@ Today's five internal looks, mapped:
 - **A base type is a subtype:** `PopupWidget`, `BarText`, `BarRow`, `PointerArea`,
   `VpnProvider`. The bar, the pointer and `VpnManager` need the object itself. Their
   public properties are pinned by name; what else they inherit is not promised.
-- **An unknown value** (`role: "primry"`) shows as the default, and the element prints one
+- **An unknown value** (`kind: "primry"`) shows as the default (`secondary`, `m`), and the element prints one
   console warning per element type and value. An element cannot know which module built
   it, so the warning is not in a module's status. `PrivilegedMark` is the exception to
   "the default": an unknown `need` shows the lock, never nothing.
@@ -812,7 +849,7 @@ Today's five internal looks, mapped:
   labels and hints) and `SettingsPageList` (a module's page label). F1–F3 fix each with
   its element.
 - **Pinned** by `tests/ApiElementsTest.qml`, for every element: its public property and
-  signal names; each role, tone and size reaching the internal value it stands for (read
+  signal names; each kind and size reaching the internal value it stands for (read
   from the inner item, so a wrong mapping fails); the element in a `RowLayout` and a
   `ColumnLayout` with the internal one's geometry, stretched and hidden; a label
   "<b>x</b>" shown as written. A change to that list is an API version change.
@@ -820,12 +857,12 @@ Today's five internal looks, mapped:
 **The starting set**: what the Tailscale module uses from `qs.components` (13 types:
 verified), what `qs.api` offers already (6), and what the anchors need (3 new).
 
-| Public element | Inside | Public properties and signals | Role, tone, size |
+| Public element | Inside | Public properties and signals | Kind, size |
 |---|---|---|---|
-| `SmallButton` | `components/SmallButton.qml`, `DeleteButton.qml` | above | `role`, `tone`, `size` |
+| `SmallButton` | `components/SmallButton.qml`, `DeleteButton.qml` | above | `kind`, `size`, `confirm` |
 | `Dropdown` | `components/Dropdown.qml` | `options`, `value`, `placeholder`, `picked(value)` | `size` |
 | `InputField` | `components/InputField.qml` | `text`, `placeholder`, `problem`, `password`, `revealed`, `accepted()`, `textEdited()`, `editingFinished()`, `revealToggled()` | `size`. `problem` stays a state (the value is wrong now). The internal `outlined` and `fieldColor` are looks for where a field stands; no module uses them; not offered |
-| `Pill` | `components/Pill.qml` | `label`, `picked`, `tooltip`, `clicked()` | Q3 in §8 (its height) |
+| `Pill` | `components/Pill.qml` | `label`, `picked`, `tooltip`, `clicked()` | `size`: `s`, `m`, `l` |
 | `Checkbox` | `components/Checkbox.qml` | `label`, `checked`, `toggled()` | — |
 | `ToggleSwitch` | `components/ToggleSwitch.qml` | `checked`, `enabled`, `toggled()` | —. The larger switch the shell's popups use is not offered until a module needs one |
 | `PrivilegedMark` | `components/PrivilegedMark.qml` | `need` | `need` is polkit's answer, a meaning already: "", `yes` (nothing shown), `auth` (the lock), `no` (not allowed) |
@@ -835,16 +872,18 @@ verified), what `qs.api` offers already (6), and what the anchors need (3 new).
 | `ExpandingRow` (new) | `components/ExpandingRow.qml` | `label`, `hint`, `open`; its child is the content | — |
 | `Heading`, `SectionTitle` | `panels/settings/` | `text` | the two are the two levels |
 | `Hint` | `panels/settings/Hint.qml` | `text` | — (the muted line) |
-| `Notice` (new) | a line as the card's notice line | `text` | `tone`: `warning` (the default), `danger`, `success`. The module writes 32 warning lines and 3 success lines by hand today (verified) |
+| `Notice` (new) | a line as the card's notice line | `text` | `kind`: `warning` (the default), `danger`, `success`. The module writes 32 warning lines and 3 success lines by hand today (verified) |
 | `SettingEditor` | `panels/settings/SchemaSettingEditor.qml` | `key`, `editIndex` | — |
 | `PopupWidget`, `BarText`, `BarRow` | `components/` (base types) | what a bar widget sets today, pinned by name | — |
 | `PointerArea` | `components/PointerArea.qml` (base type) | `lit`, `centred`, `reach`, and a `MouseArea`'s own | — |
 | `VpnProvider` | `components/VpnProvider.qml` (base type) | its documented contract (API 1.1), without `rowExtras`, `cardExtras`, `pageUrl` | — |
 
 - The names are the internal ones wherever the meaning is the same, so most of the
-  migration is a change of import. What a module must rewrite (M10): `kind` → `role` /
-  `tone`; `fontSize` → `size`; `DeleteButton { … onConfirmed }` →
-  `SmallButton { role: "confirmation"; … onClicked }` and `askingStarted` → `asked`; a
+  migration is a change of import. What a module must rewrite (M10): the values of `kind`
+  (`save` → `primary`, `delete` → `danger`, `cancel` and `normal` → `secondary`);
+  `fontSize` → `size`; a pill's `minimumHeight` → `size`; `DeleteButton { … onConfirmed }` →
+  `SmallButton { kind: "danger"; confirm: true; … onClicked }` and `askingStarted` →
+  `asked`; a
   hand-made warning `Text` → `Notice`. None is `Row` or `Button`: with `import QtQuick`
   beside `import qs.api` those would silently replace QtQuick's `Row` (and Controls'
   `Button`) in a module's file.
@@ -858,7 +897,7 @@ verified), what `qs.api` offers already (6), and what the anchors need (3 new).
 - The six that `qs.api` offers already stay subtypes until the closing slice, which makes
   them wrappers (a tightening: a module could set an internal property on them today).
 
-**How the set grows.** A module that needs an element, a property, a role or a tone the
+**How the set grows.** A module that needs an element, a property, a kind or a size the
 set lacks stops and has it added: one per slice, a minor version, its line in
 `ApiElementsTest`. Nothing is added ahead of a module that needs it.
 
@@ -1062,7 +1101,9 @@ minor.
 | U1a The host and the page block, on a fixture view | 1.13 (the manifest's `anchors`) | `components/AnchorBlock.qml`, `AnchorContent.qml` (from `ModuleSlot`), `SettingsPage.qml`, `singletons/Anchors.qml`, `ModuleHost.qml`, `api/Api.qml` (`anchors`), `tests/lock-closure.sh` | `AnchorsTest` (new) on a fixture page; the walk up `parent` in `QuickshellPinTest` |
 | U1b The General page | 1.14 | `SettingsWindow.qml`, `GeneralSettings.qml`, the first table row | `AnchorsTest`; the page's rows at the same places before and after; the slot case through its alias |
 | U2 Popups | 1.15 | `components/PopupSection.qml`, `PopupRow.qml`, `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; the popups' parts at the same places before and after; by hand once |
-| F1 Public elements: the pattern, and the button | 1.16 | `api/SmallButton.qml` (wrapper: `role`, `tone`, `size`, the mark), `components/SmallButton.qml` (eliding), `DeleteButton.qml` (a `primary` tone, plain text), `tests/ApiElementsTest.qml` | `ApiElementsTest` (new) |
+| T1 Pills in three sizes | — (user-visible: the theme editor gains two heights) | `singletons/ThemeBuiltin.qml`, `ThemeRules.qml` (the `pill` group), `components/Pill.qml` (`size`), the 21 places that set `minimumHeight` | `ThemeTest`: the three heights; a pill of each size has its height; a source check that no file sets a pill's height as a number |
+| F1a The button inside: `warning`, asking in every kind's colour | — (user-visible: the theme gains "Buttons that warn") | `components/SmallButton.qml` (`warning`, eliding), `DeleteButton.qml` (the question's colour by kind, plain text), `ThemeBuiltin.qml`, `ThemeRules.qml` (`warningButton`) | `ThemeTest`; a view test: each kind's colours at rest, under the pointer and asking |
+| F1b Public elements: the pattern, and the button | 1.16 | `api/SmallButton.qml` (wrapper: `kind`, `size`, `confirm`, the mark), `tests/ApiElementsTest.qml` | `ApiElementsTest` (new) |
 | F2 Public elements: the controls | 1.17 | `api/Dropdown.qml`, `InputField.qml`, `Pill.qml`, `Checkbox.qml`, `ToggleSwitch.qml`, `PrivilegedMark.qml`; plain text in the four internal ones that lack it | `ApiElementsTest` |
 | F3 Public elements: rows and texts | 1.18 | `components/SettingsRow.qml`, `ExpandingRow.qml`, `api/SettingsRow.qml`, `ExpandingRow.qml`, `Notice.qml`; plain text in `SwitchRow`, `Heading`, `Hint`, `SectionTitle`, `SchemaSettingEditor`, `SettingsPageList` | `ApiElementsTest`; the `Component` child through the wrapper, in `QuickshellPinTest` |
 | F4 Public elements: the base types; `qs.components` deprecated | 1.19 | `api/PopupWidget.qml`, `BarText.qml`, `BarRow.qml`, `PointerArea.qml`, `VpnProvider.qml`, `ModuleRules` (import check) | `ApiElementsTest`; `ModuleRulesTest`; `VpnProvidersTest` with a provider made from `qs.api` |
@@ -1072,7 +1113,7 @@ minor.
 | U5 The Wi-Fi and Ethernet pages | 1.21 | `NetworkWifiSettings.qml`, `NetworkEthernetSettings.qml`, table rows | `AnchorsTest`; by hand once |
 | U6a A module's icon | 1.22 | `ModuleRules` (manifest `icon`), `ModuleHost.qml` (the file check), `components/ModuleIcon.qml` | `ModuleRulesTest` (each kind, each refusal); a fixture per kind and one whose file cannot be drawn: the letter and the status error |
 | U6b The mark on a closed card | 1.23 | `ModuleRules` (`cardMarks`, the table's card rows), `ModuleHost.qml`, `api/ModuleHandle.qml` (`setMark`, `clearMark`), `components/SettingsCard.qml` | `ModuleRulesTest` (order, three, the cap, a module off); `AnchorsTest` |
-| U7 The card's button place (pending, C1: default when a module needs it) | next free | `components/SettingsCard.qml` (`actions`), `AnchorContent.qml` (`takes`), table rows | `AnchorsTest`: a button in each role, a non-button refused; the geometry test of U4b with a button added |
+| U7 The card's button place (pending, C1: default when a module needs it) | next free | `components/SettingsCard.qml` (`actions`), `AnchorContent.qml` (`takes`), table rows | `AnchorsTest`: a button of each kind, a non-button refused; the geometry test of U4b with a button added |
 
 ### Step 5
 
@@ -1096,7 +1137,7 @@ Each module slice raises its manifest `api` and removes one group of §1:
 | M7 The exit node per network on the network cards, with the mark | 21 | F3, U5, U6b, M6 |
 | M8 "Send file…" from the popup; both Taildrop dialogs through the chooser | 20 | E1 |
 | M9 The manual "for now" override | — (module state) | M7 |
-| M10 Public elements only: every `import qs.components` goes (17 files, 13 types), with the renames of §4.9 | — (the import) | F1–F4, the answers to Q1–Q3 |
+| M10 Public elements only: every `import qs.components` goes (17 files, 13 types), with the renames of §4.9 | — (the import) | T1, F1–F4 |
 | M11 The last: row 34 of §1, its suite expects no `deprecations`, `api` at the last additive version | 34 | all above |
 
 M10 is one change per group of files (the popup, the page's sections, the widget), each
@@ -1120,7 +1161,7 @@ compares the anchors and the public elements listed in `docs/` with `anchorTable
 ### What can run in parallel
 
 - S0 first. Chains that must stay in order: A0 → A1 → A2 → A2b → A3 → A4 → A5;
-  A3 and C1 → A6; U0 → U1a → U1b → U2; F1 → F2, F3, F4 (these three in any order);
+  A3 and C1 → A6; U0 → U1a → U1b → U2; F1a → F1b → F2, F3, F4 (these three in any order); T1 → F2;
   U1a → U4a → U4b → U4c → U5 → U6b; U6a any time after S0; P1 → P2.
 - Parallel to the A chain: B1, C1, the U chain and the F chain. The F chain touches only
   `api/`, two new files in `components/` and the texts of a few internal ones, so it runs
@@ -1156,8 +1197,10 @@ Answered 2026-11-17:
 | The file chooser | In this round, a minimal version | §3.9 |
 | Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) | §4.1 |
 | The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. Modules use only those, and as many as they can | §4.9 |
-| Variants | A module picks a meaning, not a look, on every element. A button is `primary` (performs the action), `secondary` (an in-between step, opens something) or `confirmation.<tone>` (asks first; `confirmation.danger`, `confirmation.primary`). Nothing dangerous acts on a first click | §4.9 |
-| A module's button on a card | The shell's button, in any of the three roles, always above "Forget" / "Delete" | §4.8 |
+| Variants | A module picks a meaning, not a look, on every element. A button's kind is `primary`, `secondary`, `warning` or `danger`; more may come. Asking first is separate and goes with any kind | §4.9 |
+| "Cancel" | No kind of its own: a module's "Cancel" is `secondary` | §4.9 |
+| Pills | Three sizes, `s`, `m`, `l`, standard, set by the theme, offered through the API | §4.9 |
+| A module's button on a card | The shell's button, of any kind, always above "Forget" / "Delete" | §4.8 |
 | An element that opens | The shell's `ExpandingRow` | §4.9 |
 | A closed card | Shows the module's icon when the module has something set for that network; the detail is on the opened card | §4.10 |
 | A module's icon | A glyph of the icon font, an SVG file or an image file; the module chooses | §4.10 |
@@ -1175,54 +1218,41 @@ only the place named.
 | C4 | A module's privileged run for which no password was asked | a log line | a notification every time | §3.4 |
 | C5 | A very long command in the prompt | all of it, in a box that scrolls | its beginning and its end | §3.4 |
 
-**Still open: three elements the three roles do not settle.** Each is written to be read
-on its own.
+**Still open: two looks.** Each is written to be read on its own.
 
-**Q1. A module's "Disconnect" button.**
+**Q1. What a `danger` button looks like before the pointer is on it.**
 
-- *Today.* In the network popup the shell's own "Disconnect" (under the connected Wi-Fi)
-  is a plain-looking button that turns red under the pointer and disconnects on the first
-  click. The Tailscale module's "Disconnect" in its popup, and one button on its page, use
-  the same look.
-- *What changed.* By your decision a module has no red button that acts at once: red means
-  `confirmation.danger`, which asks first.
-- *Example.* Tailscale is connected; the user opens its popup and clicks "Disconnect".
-- *Options.* (a) `secondary`: it disconnects at once, looks plain, never red. The shell's
-  own "Disconnect" next to it in the network popup stays red-on-hover, so the two differ
-  slightly. (b) `confirmation.danger`: the button turns into "Disconnect?" with a "×", and
-  a second click disconnects. Safe, but two clicks for something undone with one. (c) As
-  (a), and the shell's own "Disconnect" and "Turn off hotspot" also become plain, so
-  everything that only stops a connection looks the same and red is kept for what loses
-  something.
-- *Recommendation:* **(c)**; if the shell's own buttons should not change now, (a).
+- *Today.* The shell's "Disconnect" in the network popup is such a button. At rest it is
+  grey with grey-white text, exactly like an ordinary button next to it. Only under the
+  mouse pointer, or while a finger presses it, does it fill with red.
+- *Why it is a question.* You said "a button that has the danger colour". With a mouse
+  today's look works: the red appears as the pointer arrives. On a touch screen there is
+  no pointer: the button looks ordinary until the moment it is pressed. The new `warning`
+  kind is made the same way and has the same weakness.
+- *Example.* The Tailscale popup on a tablet: "Disconnect" (danger) beside "Settings…"
+  (secondary). Today the two look the same.
+- *Options.* (a) As today: plain at rest, red when pointed at. Nothing changes in the
+  shell. (b) The label is red at rest (orange for `warning`), the fill comes under the
+  pointer as today. The kind is visible before touching, without a red block on the
+  screen; the shell's own "Disconnect" and "Turn off hotspot" change with it. (c) Filled
+  red at rest. Loud; several in one popup would dominate it.
+- *The plan as written:* (a), today's look. *Recommendation:* **(b)**, as a change inside
+  slice F1a.
 
-**Q2. "Cancel" buttons.**
+**Q2. The shell's 24-pixel pills.**
 
-- *Today.* Where the shell has a form with "Save" and "Cancel" (a calendar event, the
-  calendar's account), "Cancel" has a look of its own that a theme can shape separately
-  from a plain button. The module uses that look twice: "Cancel" under its row in the network popup
-  (while a login waits), and one on its page.
-- *What changed.* The three roles have no place for it: "Cancel" performs nothing
-  (`primary`), opens nothing (`secondary`) and does not ask (`confirmation`).
-- *Options.* (a) A fourth role, `cancel`: "backs out, nothing happens". A module's
-  "Cancel" then always looks like the shell's, in every theme. (b) No fourth role: a
-  module's "Cancel" is `secondary`. Simpler, but in a theme that shapes "Cancel"
-  differently the module's would not match the shell's.
-- *Recommendation:* **(a)**: the look exists in the shell and in themes, and it names a
-  meaning, not a colour.
-
-**Q3. How tall a module's pill is.**
-
-- *Today.* A pill is the small rounded choice button (one of several, the picked one
-  filled). The shell itself makes pills 24, 26 or 30 pixels tall depending on the place,
-  each written as a number. The module asks for 26 on two pills in its widget's settings,
-  to match the shell's widget settings beside them.
-- *What changed.* A module no longer gives pixels.
-- *Options.* (a) One height for a module's pill, the theme's own; the module's two pills
-  become a little lower than the shell's next to them until the shell's are made the same.
-  (b) `size: "normal" | "large"`, with "large" being the 26 of the shell's widget
-  settings. (c) First give the shell's own pills named sizes, then offer those.
-- *Recommendation:* **(a)** now; (c) belongs to the theme work, not to this plan.
+- *Today.* A pill is the small rounded choice button. The shell's pills have four heights:
+  22 px where nothing is said (7 places), 24 px in the profile condition editor and the
+  widget settings pane (10), 26 px on the settings pages (10), 30 px in the battery
+  popup (1).
+- *What you decided.* Three sizes, `s`, `m`, `l`. So `s` is 22, `m` is 26, `l` is 30, and
+  the 24 px pills have to become one of them.
+- *Options.* (a) They become `s`: 2 px lower than today. The condition editor, which packs
+  many pills in a row, gets slightly denser. (b) They become `m`: 2 px taller; rows of
+  conditions wrap a little sooner. (c) `s` itself becomes 24, and the seven 22 px pills
+  grow by 2 px instead.
+- *Recommendation:* **(a)**. Either way the difference is 2 px in the built-in theme, and
+  a theme can then set the three heights itself.
 
 ---
 
@@ -1302,9 +1332,10 @@ on its own.
 - **A public control is one more `Item`** around the internal one (§4.9). The module has
   65 buttons; the cost is small but real, and layout properties a module sets must reach
   the wrapper, not the inside.
-- **Roles are fewer than today's looks.** Five internal button looks become three roles;
-  "cancel", the one-click red button and the pills' heights have no place yet (Q1–Q3),
-  and M10 cannot finish before they are answered.
+- **The public kinds are not the internal looks.** `warning` does not exist inside yet
+  (F1a), the internal `cancel` and `saveChange` have no public form, and asking first is a
+  second component inside (`DeleteButton`) behind one public button.
+- **Four pill heights become three** (T1): ten pills move by 2 px (Q2).
 - **The queue's rules rest on what the shell can see.** With its own agent it sees a
   request begin and end; with another it sees nothing, so there the rules are time limits
   (§3.4).
