@@ -755,7 +755,7 @@ shell still shows a working control on an older one.
 ```
 SmallButton {
     label; available; checked; tooltip
-    kind: "secondary"          // "primary" | "secondary" | "warning" | "danger"
+    kind: "secondary"          // "primary" | "secondary" | "danger" | "warning" | "success"
     size: "m"                  // "xs" | "s" | "m"
     confirm: false             // true: asks first
     confirmLabel               // the question; default: the label and "?"
@@ -777,17 +777,61 @@ SmallButton {
 - **A `danger` button without `confirm` acts on the first click.** That is the module's
   "Disconnect". What loses something takes `confirm`.
 
-| Kind | Is for | Looks |
-|---|---|---|
-| `primary` | performs the action | the confirm colour (`Theme.confirm`, `Theme.confirmHover` under the pointer); today's internal `kind: "save"` |
-| `secondary` (the default) | an in-between step, opens something; also "Cancel" | plain (`Theme.surface`, `Theme.surfaceHover`); today's `normal` |
-| `warning` | goes on, but the user should think | new inside the shell, made as `danger` is: plain at rest, filled with `Theme.warning` under the pointer, the label in `Theme.textPrimary` then. Its shape is a new theme group, `warningButton` (radius), beside `deleteButton` |
-| `danger` | stops or removes something | today's `delete` (verified: `components/SmallButton.qml`): plain at rest, exactly like `secondary`; filled with `Theme.error` under the pointer or a finger, the label in `Theme.textPrimary` then. Whether it should show red at rest is Q1 in §8 |
+**One word, five kinds** (the owner's decisions: "primary, secondary, warning, danger,
+maybe more", then a class of bordered buttons with a tone, `success` among them). Seen as
+a design system the button has four things that vary: how strongly it stands out (filled,
+plain, bordered), its tone (none, danger, warning, success), whether it asks first, its
+size. Only five combinations of the first two exist, so they get one word each, and
+"bordered" is how the three toned kinds look, not a word a module writes:
 
-With `confirm`, the question is shown in the kind's colour: `danger` in `Theme.error` as
-`DeleteButton` does today, `primary` in the confirm colour, `warning` in `Theme.warning`,
-`secondary` in the plain text colour. Only the first exists inside today; F1a adds the
-others to `DeleteButton`.
+| Kind | Is for | At rest | Under the pointer, or a pressing finger |
+|---|---|---|---|
+| `primary` | performs the action | filled with `Theme.confirm`; label `Theme.textPrimary`; no border | `Theme.confirmHover` |
+| `secondary` (the default) | an in-between step, opens something; also "Cancel" | `Theme.surface`; label `Theme.textSecondary`; no border | `Theme.surfaceHover` |
+| `danger` | stops or removes something | as `secondary`, with a border in `Theme.error` | filled with `Theme.error`; label `Theme.textPrimary` |
+| `warning` | goes on, but the user should think | as `secondary`, with a border in `Theme.warning` | filled with `Theme.warning`; label `Theme.textPrimary` |
+| `success` | a good outcome to take ("Approve", "Trust") | as `secondary`, with a border in `Theme.success` | filled with `Theme.success`; label `Theme.textPrimary` |
+
+- The first two are today's looks (verified: `components/SmallButton.qml`, `save` and
+  `normal`). `danger` is today's `delete` with the border added: the fill under the
+  pointer is what it does now; the border makes the kind visible before the pointer
+  arrives, and on a touch screen, where it never does.
+- **Tokens.** The colours above are all the theme's; none is new. The border is as wide as
+  `Theme.border.width`. The radius comes from the kind's theme group: `button`,
+  `saveButton`, `deleteButton` (verified), and two new ones, `warningButton` and
+  `successButton`, each a radius, editable in the theme editor as the others are.
+- **Not available** (`available: false`): the whole button at 0.35 opacity, border
+  included, as every button today; no fill under the pointer.
+- **With `confirm`**, at rest the button looks as its kind does. Asking, it is plain with
+  the question in the kind's colour and a border in it, the "×" attached: `danger` in
+  `Theme.error` (as `DeleteButton` asks today), `warning` in `Theme.warning`, `success` in
+  `Theme.success`, `primary` in `Theme.confirm`, `secondary` in `Theme.textPrimary` with
+  `Theme.outline`. This is the owner's "confirmation.danger", "confirmation.primary".
+- **The list is open.** A later kind is a new word; a later way to stand out (a filled
+  toned button) would be a second property with today's look as its default. Neither
+  breaks a module.
+
+Other shapes considered:
+
+| Shape | Why not |
+|---|---|
+| `variant: "bordered"; tone: "danger"` | two properties of which most pairs do not exist (filled danger, plain warning); the author types a look, and a theme that draws toned buttons another way makes the word untrue |
+| one dotted word, `"bordered.danger"` | the same look word, plus a string to take apart and to mistype |
+| `kind` with a switch `bordered` | a `primary` with a border and a `danger` without one become writable, and neither exists |
+
+**In the shell itself** the internal `delete` kind and `DeleteButton` take the bordered
+look in the same change (F1a), so the shell's and a module's buttons stay alike:
+
+- the one-click red buttons (5 places, verified): "Turn off hotspot" and the Wi-Fi
+  "Disconnect" in the network popup; "Disconnect" on each active VPN's row there; the
+  primary "Disconnect" of an active network card; "Disconnect" on a connected device's row
+  in the Bluetooth popup;
+- the buttons that ask first: 17 in 15 files (verified), among them "Forget" on the
+  cards and in the Wi-Fi popup, the deletes in the settings pages, and the "✕" on every
+  device's row in the Bluetooth popup. Two of the 17 ask before turning something on
+  ("Connect" on a card, "Turn on" for a hotspot): those become `primary` with `confirm`,
+  not `danger`.
+- Where a red border at rest may be too much is Q1 in §8.
 
 Today's internal looks, mapped:
 
@@ -795,8 +839,9 @@ Today's internal looks, mapped:
 |---|---|---|
 | `kind: "normal"` | `secondary` | |
 | `kind: "save"` | `primary` | |
-| `kind: "delete"` | `danger` | |
-| `DeleteButton` | `danger` with `confirm` | |
+| `kind: "delete"` | `danger` | gains the border |
+| `DeleteButton` | `danger` with `confirm` | gains the border |
+| — | `warning`, `success` | new inside the shell |
 | `kind: "cancel"` | `secondary` | the same colours as `normal` (verified); only its shape is its own theme group ("Buttons that cancel", `Theme.cancelButton`). A theme that shapes that group differently does not reach a module's "Cancel". Whether the shell keeps the group is theme work, outside this plan |
 | `kind: "saveChange"` | not offered | the calendar's "save an existing event"; no module uses it; stays internal |
 
@@ -811,7 +856,8 @@ The shell's own pills are 22 px by default and 24, 26 or 30 px where a view says
 (verified: 7 with the default, 10 with 24, 10 with 26, one with 30). T1 gives the `pill`
 group three heights, `minHeight` (kept: `s`, 22), `mediumHeight` (`m`, 26) and
 `largeHeight` (`l`, 30), editable in the theme editor, and moves every pill of the shell
-onto one of them. Four heights into three: the 24 px ones are Q2 in §8.
+onto one of them. Four heights into three: the ten 24 px pills become `s` (the owner's
+decision), 2 px lower, in the profile condition editor and the widget settings pane.
 
 **How an element is made.**
 
@@ -1101,8 +1147,8 @@ minor.
 | U1a The host and the page block, on a fixture view | 1.13 (the manifest's `anchors`) | `components/AnchorBlock.qml`, `AnchorContent.qml` (from `ModuleSlot`), `SettingsPage.qml`, `singletons/Anchors.qml`, `ModuleHost.qml`, `api/Api.qml` (`anchors`), `tests/lock-closure.sh` | `AnchorsTest` (new) on a fixture page; the walk up `parent` in `QuickshellPinTest` |
 | U1b The General page | 1.14 | `SettingsWindow.qml`, `GeneralSettings.qml`, the first table row | `AnchorsTest`; the page's rows at the same places before and after; the slot case through its alias |
 | U2 Popups | 1.15 | `components/PopupSection.qml`, `PopupRow.qml`, `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; the popups' parts at the same places before and after; by hand once |
-| T1 Pills in three sizes | — (user-visible: the theme editor gains two heights) | `singletons/ThemeBuiltin.qml`, `ThemeRules.qml` (the `pill` group), `components/Pill.qml` (`size`), the 21 places that set `minimumHeight` | `ThemeTest`: the three heights; a pill of each size has its height; a source check that no file sets a pill's height as a number |
-| F1a The button inside: `warning`, asking in every kind's colour | — (user-visible: the theme gains "Buttons that warn") | `components/SmallButton.qml` (`warning`, eliding), `DeleteButton.qml` (the question's colour by kind, plain text), `ThemeBuiltin.qml`, `ThemeRules.qml` (`warningButton`) | `ThemeTest`; a view test: each kind's colours at rest, under the pointer and asking |
+| T1 Pills in three sizes | — (user-visible: the theme editor gains two heights; the pills of the profile condition editor and the widget settings pane are 2 px lower) | `singletons/ThemeBuiltin.qml`, `ThemeRules.qml` (the `pill` group), `components/Pill.qml` (`size`), the 21 places that set `minimumHeight` | `ThemeTest`: the three heights; a pill of each size has its height; a source check that no file sets a pill's height as a number; the pills that were 22, 26 and 30 px keep their height, the ones that were 24 are 22 |
+| F1a The button inside: the bordered kinds, asking in every kind's colour | — (user-visible: the shell's disconnect and delete buttons gain a border; the theme gains "Buttons that warn" and "Buttons for a good outcome") | `components/SmallButton.qml` (`delete` bordered, `warning`, `success`, eliding), `DeleteButton.qml` (bordered; the question's colour by kind; plain text), `ThemeBuiltin.qml`, `ThemeRules.qml` (`warningButton`, `successButton`), the two places that ask before turning something on | `ThemeTest`; a view test: each kind's colours and border at rest, under the pointer, asking, and not available |
 | F1b Public elements: the pattern, and the button | 1.16 | `api/SmallButton.qml` (wrapper: `kind`, `size`, `confirm`, the mark), `tests/ApiElementsTest.qml` | `ApiElementsTest` (new) |
 | F2 Public elements: the controls | 1.17 | `api/Dropdown.qml`, `InputField.qml`, `Pill.qml`, `Checkbox.qml`, `ToggleSwitch.qml`, `PrivilegedMark.qml`; plain text in the four internal ones that lack it | `ApiElementsTest` |
 | F3 Public elements: rows and texts | 1.18 | `components/SettingsRow.qml`, `ExpandingRow.qml`, `api/SettingsRow.qml`, `ExpandingRow.qml`, `Notice.qml`; plain text in `SwitchRow`, `Heading`, `Hint`, `SectionTitle`, `SchemaSettingEditor`, `SettingsPageList` | `ApiElementsTest`; the `Component` child through the wrapper, in `QuickshellPinTest` |
@@ -1197,9 +1243,10 @@ Answered 2026-11-17:
 | The file chooser | In this round, a minimal version | §3.9 |
 | Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) | §4.1 |
 | The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. Modules use only those, and as many as they can | §4.9 |
-| Variants | A module picks a meaning, not a look, on every element. A button's kind is `primary`, `secondary`, `warning` or `danger`; more may come. Asking first is separate and goes with any kind | §4.9 |
+| Variants | A module picks a meaning, not a look, on every element. A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`; more may come. Asking first is separate and goes with any kind | §4.9 |
 | "Cancel" | No kind of its own: a module's "Cancel" is `secondary` | §4.9 |
-| Pills | Three sizes, `s`, `m`, `l`, standard, set by the theme, offered through the API | §4.9 |
+| Pills | Three sizes, `s`, `m`, `l`, standard, set by the theme, offered through the API. The shell's 24 px pills become `s` (22 px) | §4.9 |
+| Buttons with a tone | A class of bordered buttons, `danger`, `warning`, `success`: a border in the tone's colour at rest, the whole background in it under the pointer | §4.9 |
 | A module's button on a card | The shell's button, of any kind, always above "Forget" / "Delete" | §4.8 |
 | An element that opens | The shell's `ExpandingRow` | §4.9 |
 | A closed card | Shows the module's icon when the module has something set for that network; the detail is on the opened card | §4.10 |
@@ -1218,41 +1265,28 @@ only the place named.
 | C4 | A module's privileged run for which no password was asked | a log line | a notification every time | §3.4 |
 | C5 | A very long command in the prompt | all of it, in a box that scrolls | its beginning and its end | §3.4 |
 
-**Still open: two looks.** Each is written to be read on its own.
+**Still open: one place.** Written to be read on its own.
 
-**Q1. What a `danger` button looks like before the pointer is on it.**
+**Q1. The small "✕" on every row of the Bluetooth popup.**
 
-- *Today.* The shell's "Disconnect" in the network popup is such a button. At rest it is
-  grey with grey-white text, exactly like an ordinary button next to it. Only under the
-  mouse pointer, or while a finger presses it, does it fill with red.
-- *Why it is a question.* You said "a button that has the danger colour". With a mouse
-  today's look works: the red appears as the pointer arrives. On a touch screen there is
-  no pointer: the button looks ordinary until the moment it is pressed. The new `warning`
-  kind is made the same way and has the same weakness.
-- *Example.* The Tailscale popup on a tablet: "Disconnect" (danger) beside "Settings…"
-  (secondary). Today the two look the same.
-- *Options.* (a) As today: plain at rest, red when pointed at. Nothing changes in the
-  shell. (b) The label is red at rest (orange for `warning`), the fill comes under the
-  pointer as today. The kind is visible before touching, without a red block on the
-  screen; the shell's own "Disconnect" and "Turn off hotspot" change with it. (c) Filled
-  red at rest. Loud; several in one popup would dominate it.
-- *The plan as written:* (a), today's look. *Recommendation:* **(b)**, as a change inside
-  slice F1a.
-
-**Q2. The shell's 24-pixel pills.**
-
-- *Today.* A pill is the small rounded choice button. The shell's pills have four heights:
-  22 px where nothing is said (7 places), 24 px in the profile condition editor and the
-  widget settings pane (10), 26 px on the settings pages (10), 30 px in the battery
-  popup (1).
-- *What you decided.* Three sizes, `s`, `m`, `l`. So `s` is 22, `m` is 26, `l` is 30, and
-  the 24 px pills have to become one of them.
-- *Options.* (a) They become `s`: 2 px lower than today. The condition editor, which packs
-  many pills in a row, gets slightly denser. (b) They become `m`: 2 px taller; rows of
-  conditions wrap a little sooner. (c) `s` itself becomes 24, and the seven 22 px pills
-  grow by 2 px instead.
-- *Recommendation:* **(a)**. Either way the difference is 2 px in the built-in theme, and
-  a theme can then set the three heights itself.
+- *Today.* The Bluetooth popup lists the paired devices, one row each. At the end of every
+  row is a small grey "✕" that forgets the device; it asks first (it turns into the
+  question). A connected device's row also has "Disconnect". Today all of these are grey
+  until the pointer is on them.
+- *What changes.* By your decision a danger button has a red border at rest. Both buttons
+  are danger buttons. With six paired devices the popup would show a column of six
+  red-bordered "✕", plus a red-bordered "Disconnect" on each connected one.
+- *The same, smaller, elsewhere.* "Disconnect" on each connected VPN's row in the network
+  popup (rarely more than one or two); an opened, connected network card has "Disconnect"
+  and "Forget", two red borders, one above the other.
+- *Options.* (a) Everything takes the border; the Bluetooth popup gets its red column.
+  (b) Inside the shell, an icon-only button that repeats on every row of a list stays
+  without the border (grey at rest, red under the pointer, as today); every button with a
+  word on it takes the border. This quiet look is the shell's own and is not offered to
+  modules until one needs it. (c) As (b), and also the per-row "Disconnect" buttons in the
+  two popups stay without it.
+- *The plan as written:* (a). *Recommendation:* **(b)**: a border on a word says what the
+  button is; a column of red squares only makes noise.
 
 ---
 
@@ -1332,10 +1366,10 @@ only the place named.
 - **A public control is one more `Item`** around the internal one (§4.9). The module has
   65 buttons; the cost is small but real, and layout properties a module sets must reach
   the wrapper, not the inside.
-- **The public kinds are not the internal looks.** `warning` does not exist inside yet
-  (F1a), the internal `cancel` and `saveChange` have no public form, and asking first is a
+- **The public kinds are not the internal looks.** `warning` and `success` do not exist
+  inside yet, and the border is new on 20 of the shell's own buttons (F1a); the internal `cancel` and `saveChange` have no public form, and asking first is a
   second component inside (`DeleteButton`) behind one public button.
-- **Four pill heights become three** (T1): ten pills move by 2 px (Q2).
+- **Four pill heights become three** (T1): ten pills become 2 px lower.
 - **The queue's rules rest on what the shell can see.** With its own agent it sees a
   request begin and end; with another it sees nothing, so there the rules are time limits
   (§3.4).
