@@ -66,6 +66,7 @@ Flickable {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
                 text: root.title
+                textFormat: Text.PlainText
             }
         }
 

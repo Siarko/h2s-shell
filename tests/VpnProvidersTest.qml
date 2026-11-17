@@ -731,12 +731,18 @@ TestCase {
         { until: () => suite._texts(suite._section).includes("Tailnet only"), run: () => {
             assertEqual(suite._contextSets, 0, "extras: a re-read that changed another entry does not reassign this one's context");
             assert(suite._row("vpt:one") === suite._rowOne, "rows: the same row after a re-read");
+            // A provider's words are shown as they are, never read as markup
+            suite._fakeOne.setStatus("two", "a <b>b</b> <address>");
             // The list reorders: one up (first), two down
             suite._fakeOne.setState("two", "");
             suite._fakeOne.setState("one", "activated");
         } },
         { until: () => VpnManager.vpns.findIndex(vpn => vpn.uuid === "vpt:one") < VpnManager.vpns.findIndex(vpn => vpn.uuid === "vpt:two")
                        && suite._contextSets > 0, run: () => {
+            const markupStatus = suite._named(suite._row("vpt:two"), "vpnStatus");
+            assert(markupStatus !== null && markupStatus.text === "a <b>b</b> <address>" && markupStatus.textFormat === Text.PlainText
+                   && suite._named(suite._row("vpt:two"), "vpnName").textFormat === Text.PlainText,
+                   "row: a status that looks like markup shown verbatim, as plain text");
             const row = suite._row("vpt:one");
             assert(row === suite._rowOne && suite._extrasOf(row)?.item === suite._extrasOne.item,
                    "rows: the list reordered — the same row and the same extras (an open chooser is not torn down)");

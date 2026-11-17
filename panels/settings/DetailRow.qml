@@ -14,6 +14,7 @@ RowLayout {
         Layout.preferredWidth: 110
         Layout.alignment: Qt.AlignTop
         text: _detail.label
+        textFormat: Text.PlainText
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.textMuted
@@ -24,6 +25,7 @@ RowLayout {
         selectByMouse: true
         wrapMode: TextEdit.WrapAnywhere
         text: _detail.value
+        textFormat: Text.PlainText
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall
         color: Theme.textSecondary

@@ -24,6 +24,7 @@ Column {
 
         Text {
             text: VpnManager.activeGlyph
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeTitle
             color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
@@ -39,6 +40,7 @@ Column {
 
         Text {
             text: VpnManager.activeVpns.length > 0 ? VpnManager.activeVpns.map(vpn => vpn.name).join(", ") : "Off"
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
@@ -86,6 +88,7 @@ Column {
 
                     Text {
                         text: VpnManager.glyphOf(_vpn.modelData)
+                        textFormat: Text.PlainText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         color: _vpn.isActive ? Theme.accent : Theme.textMuted
@@ -103,6 +106,7 @@ Column {
                             objectName: "vpnName"
                             width: parent.width
                             text: _vpn.modelData.name
+                            textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: _vpn.isActive ? Theme.accent : Theme.textPrimary
@@ -114,6 +118,7 @@ Column {
                             width: parent.width
                             visible: text !== ""
                             text: _vpn.modelData.status ?? ""
+                            textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXSmall
                             color: Theme.textMuted
@@ -158,6 +163,8 @@ Column {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.row.horizontalPadding
                     wrapMode: Text.WordWrap
+                    // A provider's words, and through it a daemon's: never read as markup
+                    textFormat: Text.PlainText
                     text: _vpn.attention?.reason ?? ""
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
@@ -179,6 +186,7 @@ Column {
                 x: Theme.row.horizontalPadding
                 wrapMode: Text.WordWrap
                 text: _vpn.lockdownNote
+                textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.warning

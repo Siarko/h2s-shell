@@ -111,6 +111,7 @@ Rectangle {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         text: root.title
+                        textFormat: Text.PlainText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         font.bold: root.profile.active
@@ -120,6 +121,7 @@ Rectangle {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         text: root.subtitle
+                        textFormat: Text.PlainText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: root.profile.active ? Theme.success : Theme.textMuted
@@ -241,6 +243,8 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                // May carry a provider's words: never read as markup
+                textFormat: Text.PlainText
                 text: root.notice
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall

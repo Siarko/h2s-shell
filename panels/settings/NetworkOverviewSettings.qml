@@ -101,6 +101,7 @@ Flickable {
                         Text {
                             Layout.preferredWidth: 140
                             text: modelData.label
+                            textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: Theme.textPrimary
@@ -109,6 +110,7 @@ Flickable {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: modelData.text
+                            textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: modelData.good ? Theme.textSecondary : Theme.textMuted

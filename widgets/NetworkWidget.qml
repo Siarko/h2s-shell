@@ -59,6 +59,7 @@ PopupWidget {
         Text {
             visible: VpnManager.activeVpns.length > 0
             text: VpnManager.activeGlyph
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeHeading
             color: Theme.accent

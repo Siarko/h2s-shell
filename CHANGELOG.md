@@ -417,6 +417,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- VPNs: what a VPN provider reports (names, status lines, what needs the user, glyphs, the
+  card's details) is shown as plain text in the popup, the bar, the VPN and overview pages
+  and the network editor; text that looked like markup was read as rich text (Qt's
+  AutoText), so part of it could vanish or an image be loaded. Buttons, pills, tooltips and
+  detail rows show their text plainly too.
 - VPNs: a provider's VPN that needs the user and offers no action to take (waiting for
   approval, say) showed Connect on its card in Settings, though not in the popup; neither
   offers it now, and connecting it is refused whoever asks.

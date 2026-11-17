@@ -70,6 +70,7 @@ Rectangle {
         y: Theme.tooltip.verticalPadding
         width: Math.min(implicitWidth, root.maxWidth)
         text: root.text
+        textFormat: Text.PlainText
         // At spaces where there are some, anywhere in a long run without (an address)
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         font.family: Theme.fontFamily

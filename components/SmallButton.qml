@@ -48,6 +48,7 @@ Rectangle {
         id: _label
         anchors.centerIn: parent
         text: root.label
+        textFormat: Text.PlainText
         font.family: Theme.fontFamily
         font.pixelSize: root.fontSize
         color: root.kind === "delete" && root._hot ? Theme.textPrimary

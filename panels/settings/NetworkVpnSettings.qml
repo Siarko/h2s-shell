@@ -339,6 +339,7 @@ Item {
                 visible: _kinds.length > 0
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
                 // One kind known: by its name; else a plain sentence
                 text: _kinds.length === 1 && _kinds[0] !== "" ? _kinds[0] + " cannot come up with a network while traffic is blocked."
                     : "A VPN set to come up with a network cannot connect while traffic is blocked."
