@@ -11,7 +11,13 @@
 #     (bash, mkdir, dirname, grep, cat). No stand-in runs anything real;
 #   - no new privileges (setpriv): even a sudo reached by another way could not become root;
 #   - before anything runs: every privileged name must resolve to a stand-in written here,
-#     and install.sh must not name a program by its path — else the test stops, status 2.
+#     and install.sh is read for the ways around a PATH of stand-ins that reading can find
+#     (guard_lines below: a program named by its path, `command -p`, an assignment to
+#     PATH, `exec`, `eval`, `source` and `.`, a variable as the command, a command
+#     substitution in a here-document) — else the test stops, status 2. That reading is no
+#     proof: it refuses these forms, not every way a script could be written to reach a
+#     real program. What holds whatever install.sh says is the list above: the empty
+#     environment, the one-directory PATH, the private HOME, no new privileges.
 #
 # install.sh gives pacman the terminal (/dev/tty), so each run gets a terminal of its own
 # (script, util-linux); the test needs none.
@@ -29,6 +35,7 @@ need() { type -P "$1" > /dev/null || missing+=("$1 not found on PATH ($2)"); }
 need script "gives each run of install.sh a terminal of its own, as it hands pacman one"
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
+need awk "reads install.sh for ways around the stand-ins before it is run"
 for tool in bash mkdir dirname grep cat; do need "$tool" "install.sh uses it; linked into the private PATH"; done
 if [ ${#missing[@]} -gt 0 ]; then
     printf 'install-test.sh: %s\n' "${missing[@]}" >&2
@@ -119,12 +126,81 @@ safe_bin() {
 }
 
 # ---- Before anything runs --------------------------------------------------------------
-# install.sh reaches programs through PATH only: a path to one would go around the stand-ins
-if grep -nE '(^|[^[:alnum:]_./$"-])/(usr/|s?bin/|opt/|run/)[[:alnum:]_./-]*' "$INSTALL" | grep -vE '^1:#!/usr/bin/env bash$|^[0-9]+:[[:space:]]*#' | grep -q .; then
-    grep -nE '(^|[^[:alnum:]_./$"-])/(usr/|s?bin/|opt/|run/)[[:alnum:]_./-]*' "$INSTALL" | grep -vE '^1:#!/usr/bin/env bash$|^[0-9]+:[[:space:]]*#' >&2
-    setup_error "install.sh names a program by its path (above): the stand-ins could not stand in for it. Nothing was run"
-fi
-# The guard itself: a PATH where sudo is a link to a real program is refused
+# install.sh reaches programs through PATH only, and what reading it can show of a way
+# around the stand-ins is refused.
+# guard_lines <script>: the lines refused, as "<number>: <why>: <the line>". Whole-line
+# comments and the first line's `#!/usr/bin/env bash` are not read. The body of a
+# here-document is text, not commands: only a path and (unless its word is quoted) a command
+# substitution are looked for there. "The command" is a word at the start of a line or after
+# ; & | ( { ! or one of if, then, else, elif, do, while, until, time.
+guard_lines() {
+    awk '
+        function refuse(why) { printf "%d: %s: %s\n", NR, why, $0 }
+        BEGIN {
+            name = "(^|[^[:alnum:]_])"
+            command = "(^|[;&|({!]|(^|[[:space:]])(if|then|else|elif|do|while|until|time)[[:space:]])[[:space:]]*"
+        }
+        NR == 1 && $0 == "#!/usr/bin/env bash" { next }
+        delimiter != "" {
+            line = $0
+            if (strip) sub(/^\t+/, "", line)
+            if (line == delimiter) { delimiter = ""; next }
+            if ($0 ~ /(^|[^[:alnum:]_.\/$-])\/(usr\/|s?bin\/|opt\/|run\/)/) refuse("a program named by its path")
+            if (!quoted && $0 ~ /\$\(|(^|[^\\])`/) refuse("a command run from a here-document")
+            next
+        }
+        /^[[:space:]]*#/ { next }
+        $0 ~ /(^|[^[:alnum:]_.\/$-])\/(usr\/|s?bin\/|opt\/|run\/)/ { refuse("a program named by its path") }
+        $0 ~ name "command[[:space:]]+-[[:alnum:]]*p" { refuse("command -p: a PATH of its own") }
+        $0 ~ name "PATH\\+?=" { refuse("PATH is assigned") }
+        $0 ~ command "(exec|eval|source|\\.)([[:space:]]|$)" { refuse("exec, eval, source or .") }
+        $0 ~ command "\"?\\$[{[:alnum:]_]" { refuse("a variable as the command") }
+        /<<</ { refuse("a here-string"); next }
+        match($0, /<<-?[[:space:]]*["\047]?[A-Za-z_][A-Za-z0-9_]*["\047]?/) {
+            word = substr($0, RSTART, RLENGTH)
+            strip = word ~ /^<<-/
+            quoted = word ~ /["\047]/
+            gsub(/^<<-?[[:space:]]*["\047]?|["\047]$/, "", word)
+            delimiter = word
+        }
+        END { if (delimiter != "") printf "%d: a here-document without its end (%s): the rest was not read\n", NR, delimiter }
+    ' "$1"
+}
+# guard_install <script>: stops the test (status 2) when guard_lines refuses a line
+guard_install() {
+    local refused
+    refused=$(guard_lines "$1") || setup_error "could not read $1 for ways around the stand-ins. Nothing was run"
+    [ -z "$refused" ] && return 0
+    printf '%s\n' "$refused" >&2
+    setup_error "$(basename "$1") could reach a program around the stand-ins (above). Nothing was run"
+}
+guard_install "$INSTALL"
+# The guard itself: install.sh with one such line more stops it, status 2 — each line a
+# way that ran the real program when the guard did not know it, or one of the same kind
+guard_copies=0
+guard_stops_at() {
+    guard_copies=$((guard_copies + 1))
+    local copy=$work/guard-install-$guard_copies.sh
+    { cat "$INSTALL"; printf '%s\n' "$@"; } > "$copy"
+    (guard_install "$copy") 2> /dev/null
+    [ $? = 2 ]
+}
+check "the guard stops at a quoted path" guard_stops_at '"/usr/bin/true" x'
+check "the guard stops at a bare path" guard_stops_at 'x=1; /usr/bin/true x'
+check "the guard stops at command -p" guard_stops_at 'command -p true'
+check "the guard stops at a variable holding the directory" guard_stops_at 'p=$HOME; "$p/true" x'
+check "the guard stops at a variable as the whole command" guard_stops_at 'if $tool x; then :; fi'
+check "the guard stops at an assignment to PATH" guard_stops_at 'PATH=$HOME:$PATH'
+check "the guard stops at PATH set for one command" guard_stops_at 'x=1 PATH+=:$HOME true'
+check "the guard stops at exec" guard_stops_at 'true && exec true'
+check "the guard stops at eval" guard_stops_at 'eval "$line"'
+check "the guard stops at source" guard_stops_at 'source "$HOME/more.sh"'
+check "the guard stops at ." guard_stops_at '. "$HOME/more.sh"'
+check "the guard stops at a command substitution in a here-document" guard_stops_at 'cat << END' '$(true)' 'END'
+check "the guard stops at a path in a here-document" guard_stops_at "cat << 'END'" '/usr/bin/true' 'END'
+check "the guard stops at a here-document without its end" guard_stops_at 'cat << END' 'true'
+check "the guard stops at a here-string" guard_stops_at 'cat <<< "$HOME"'
+# … and a PATH where sudo is a link to a real program is refused
 make_bin "$work/guard/bin"
 safe_bin "$work/guard/bin" || setup_error "the private PATH is not safe as made; nothing was run"
 rm "$work/guard/bin/sudo"

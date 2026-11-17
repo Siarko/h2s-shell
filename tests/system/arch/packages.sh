@@ -2,7 +2,13 @@
 # Every package install.sh installs or names, and the font the HUD's hint names, exists in
 # the repositories this machine's pacman knows (`pacman -Si`: reads the sync database,
 # changes nothing). A name that pacman dropped or renamed fails here, not on a new machine.
+# Without a sync database (a machine never synced, one whose database was removed) no name
+# can be looked up: that is "cannot run", not every name failing.
 need pacman "asks the sync database for each package name"
+# (Read into a variable: under pipefail a `grep -q` that leaves early fails the pipeline.)
+listed=$(pacman -Sl 2> /dev/null | head -n 1)
+[ -n "$listed" ] \
+    || cannot_run "pacman's sync database is missing or empty (pacman -Sl lists no package): no name can be looked up"
 
 # The names in install.sh's `packages=( … )`, comments dropped
 mapfile -t installed < <(sed -n '/^packages=(/,/^)/p' "$REPO/install.sh" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)

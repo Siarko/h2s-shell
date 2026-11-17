@@ -79,7 +79,7 @@ Singleton {
     // writes it; elsewhere an administrator may), else on NixOS `login` (the shipped config
     // cannot work there: pam_unix cannot reach its helper), else the shipped pam/password.
     // `facts`: { shellDirectory, systemDirectory (default /etc/pam.d), systemConfigReadable,
-    // nixos } — what the driver found out (fallbackFacts).
+    // nixos } — what the driver found out (fallbackFacts, when it is known).
     function passwordFallback(facts) {
         const system = typeof facts?.systemDirectory === "string" && facts.systemDirectory !== ""
             ? facts.systemDirectory : "/etc/pam.d";
@@ -90,14 +90,47 @@ Singleton {
         return { directory: String(facts?.shellDirectory ?? "") + "/pam", config: "password" };
     }
 
-    // The driver's probe (scripts/lock-auth-methods.sh --fallback-facts: one word per line
-    // that holds) → the facts passwordFallback takes. `lines` may be array-like: an array passed
-    // through a QML signal's `var` argument arrives as a list wrapper Array.isArray rejects
-    function fallbackFacts(lines) {
+    // One run of the driver's probe → the facts passwordFallback takes, or "not known".
+    // The probe is scripts/lock-auth-methods.sh --fallback-facts, or the driver's direct
+    // question when the script gives no answer; both print one word per line for what
+    // holds ("readable", "nixos") and "answered" last. `run`: { started (it ran at all),
+    // exitCode, crashed (killed by a signal), lines }; `lines` may be array-like (an array
+    // passed through a QML signal's `var` argument arrives as a list wrapper Array.isArray
+    // rejects).
+    // → { known: true, systemConfigReadable, nixos }, or { known: false, reason }. Only a
+    // run that ended with status 0, said nothing but these words and said "answered" last
+    // is an answer: an empty or cut-off one would otherwise read as "not NixOS, no
+    // system-wide config", and on NixOS that fallback cannot unlock.
+    function fallbackFacts(run) {
+        const unknown = reason => ({ known: false, reason: reason });
+        if (run?.started !== true)
+            return unknown("it could not be started");
+        if (run.crashed === true)
+            return unknown("it was killed");
+        if (run.exitCode !== 0)
+            return unknown("it exited with status " + run.exitCode);
+        const lines = run.lines;
         const list = lines !== null && typeof lines === "object" && typeof lines.length === "number"
             ? Array.prototype.slice.call(lines) : [];
-        const words = list.map(line => String(line).trim());
-        return { systemConfigReadable: words.includes("readable"), nixos: words.includes("nixos") };
+        const words = list.map(line => String(line).trim()).filter(word => word !== "");
+        if (words.length === 0)
+            return unknown("it said nothing");
+        if (words[words.length - 1] !== "answered")
+            return unknown("its answer has no end");
+        const facts = words.slice(0, -1);
+        if (facts.some(word => word !== "readable" && word !== "nixos"))
+            return unknown("its answer cannot be read");
+        return { known: true, systemConfigReadable: facts.includes("readable"), nixos: facts.includes("nixos") };
+    }
+
+    // The test bed's seam for which system this is, as scripts/lock-auth-methods.sh reads
+    // it: H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR
+    // (against the real /etc/pam.d the machine itself is asked). → "nixos", "other", or ""
+    // (ask the machine)
+    function systemSeam(pamDirectory, system) {
+        if (typeof pamDirectory !== "string" || pamDirectory === "")
+            return "";
+        return system === "nixos" || system === "other" ? system : "";
     }
 
     // ---- Keys ----

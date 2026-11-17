@@ -4,7 +4,8 @@
 # unknown name, an empty set, a check that could not run: status 2), and its verdict. It
 # runs a copy of the runner beside made-up sets and made-up os-release files, so it runs
 # the same on every system and starts neither nix nor pacman. The real check files are
-# only read for syntax.
+# only read for syntax — but for Arch's package names, run against a stand-in pacman: a
+# machine without a sync database is NOT RUN, not a FAIL.
 #
 # Exit status: 0 when every check passed, 1 otherwise.
 set -uo pipefail
@@ -120,6 +121,42 @@ echo 'true' > "$work/tree/tests/system/arch/hollow.sh"
 run tree "$work/arch" hollow
 check "a check file that checks nothing: status 2, not a pass" status_is 2
 rm "$work/tree/tests/system/arch/hollow.sh"
+
+# Arch's package names (the real check file, this checkout's install.sh and Hud.qml)
+# against a stand-in pacman, first on PATH: it knows every name once `synced` is there,
+# but those in `dropped`
+mkdir -p "$work/pacman-tree/tests/system/arch" "$work/pacman-bin"
+cp "$REPO/tests/run-system.sh" "$work/pacman-tree/tests/"
+cp "$REPO/tests/system/arch/packages.sh" "$work/pacman-tree/tests/system/arch/"
+cp "$REPO/install.sh" "$REPO/Hud.qml" "$work/pacman-tree/"
+cat > "$work/pacman-bin/pacman" << STANDIN
+#!$(type -P bash)
+[ -f "$work/synced" ] || { echo "error: database not found" >&2; exit 1; }
+case "\$1" in
+    -Sl) echo "core bash 5.3-1" ;;
+    -Si) ! grep -qxF -- "\$3" "$work/dropped" ;;
+    *) exit 1 ;;
+esac
+STANDIN
+chmod +x "$work/pacman-bin/pacman"
+: > "$work/dropped"
+run_packages() {
+    OUTPUT=$(PATH="$work/pacman-bin:$PATH" H2S_OS_RELEASE="$work/arch" "$work/pacman-tree/tests/run-system.sh" packages 2>&1)
+    STATUS=$?
+}
+run_packages
+check "package names, no sync database: status 2" status_is 2
+check "package names, no sync database: NOT RUN, saying why" says "^  NOT RUN  packages — pacman's sync database is missing or empty"
+check "package names, no sync database: no name is a FAIL" silent_on "FAIL"
+check "package names, no sync database: nothing is a pass" no_pass
+: > "$work/synced"
+run_packages
+check "package names, every name known: status 0" status_is 0
+check "package names, every name known: names were looked up" says "PASS installed by install.sh: quickshell is in the repositories"
+echo quickshell > "$work/dropped"
+run_packages
+check "package names, one dropped from the repositories: status 1" status_is 1
+check "package names, one dropped: that name is the FAIL" says "FAIL installed by install.sh: quickshell is in the repositories"
 
 # The real sets: each system's directory holds a check, and every check file parses — on
 # this machine too, where only one of the sets runs

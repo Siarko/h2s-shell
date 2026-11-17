@@ -64,7 +64,23 @@ fi
 
 log=$(mktemp "${TMPDIR:-/tmp}/run-all.XXXXXX") || { echo "run-all.sh: cannot create a temp file" >&2; exit 2; }
 trap 'rm -f "$log"' EXIT
-trap 'echo; echo "run-all.sh: interrupted; the parts so far:"; printf "%s\n" "${summary[@]}"; exit 130' INT TERM
+# A part runs in the background, in a process group of its own, and is waited for: bash
+# runs a trap only once the foreground command has ended, which for a part running in the
+# foreground meant minutes after a SIGTERM. Interrupted, the part's whole group is ended
+# first (SIGTERM, so that it cleans up after itself; SIGKILL if it has not gone in 10 s).
+part_pid=""
+end_part() {
+    [ -n "$part_pid" ] || return 0
+    kill -TERM -- "-$part_pid" 2> /dev/null
+    local tries=0
+    while kill -0 -- "-$part_pid" 2> /dev/null && [ "$tries" -lt 100 ]; do
+        sleep 0.1
+        tries=$((tries + 1))
+    done
+    kill -KILL -- "-$part_pid" 2> /dev/null
+    part_pid=""
+}
+trap 'end_part; echo; echo "run-all.sh: interrupted; the parts so far:"; printf "%s\n" "${summary[@]}"; exit 130' INT TERM
 
 summary=()
 any_failed=0
@@ -85,9 +101,15 @@ for part in "${parts[@]}"; do
     echo
     echo "==== $name: $command"
     part_started=$SECONDS
+    # Job control only to give the part its group; the subshell hands on the part's status
+    set -m
     # shellcheck disable=SC2086  # the command's words
-    (cd "$REPO" && exec $command) 2>&1 < /dev/null | tee "$log"
-    status=${PIPESTATUS[0]}
+    ( (cd "$REPO" && exec $command) 2>&1 < /dev/null | tee "$log"; exit "${PIPESTATUS[0]}") &
+    part_pid=$!
+    set +m
+    wait "$part_pid"
+    status=$?
+    part_pid=""
     took="$((SECONDS - part_started)) s"
     case "$status" in
         0) summary+=("  PASS     $name ($took)") ;;

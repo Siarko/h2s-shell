@@ -94,15 +94,49 @@ TestCase {
                     "fallback: nothing known yet: the shipped one");
         assertEqual(fallbackOf({ shellDirectory: "/shell", systemDirectory: "", systemConfigReadable: true }),
                     JSON.stringify({ directory: "/etc/pam.d", config: "h2s-shell-password" }), "fallback: no system directory given: /etc/pam.d");
-        assertEqual(JSON.stringify(rules.fallbackFacts(["readable", "nixos"])), JSON.stringify({ systemConfigReadable: true, nixos: true }),
-                    "fallback facts: both");
-        assertEqual(JSON.stringify(rules.fallbackFacts(["nixos\n"])), JSON.stringify({ systemConfigReadable: false, nixos: true }),
-                    "fallback facts: NixOS only");
-        assertEqual(JSON.stringify(rules.fallbackFacts(null)), JSON.stringify({ systemConfigReadable: false, nixos: false }),
-                    "fallback facts: nothing");
-        assertEqual(JSON.stringify(rules.fallbackFacts({ length: 2, 0: "readable", 1: "nixos" })),
-                    JSON.stringify({ systemConfigReadable: true, nixos: true }),
+        // --- the fallback probe's answer: an answer only when it is whole ---
+        const factsOf = (lines, run) => JSON.stringify(rules.fallbackFacts(Object.assign({ started: true, exitCode: 0, crashed: false, lines: lines }, run ?? {})));
+        const known = (readable, nixos) => JSON.stringify({ known: true, systemConfigReadable: readable, nixos: nixos });
+        const unknown = reason => JSON.stringify({ known: false, reason: reason });
+        assertEqual(factsOf(["readable", "nixos", "answered"]), known(true, true), "fallback facts: both");
+        assertEqual(factsOf(["nixos\n", "answered"]), known(false, true), "fallback facts: NixOS only");
+        assertEqual(factsOf(["readable", "answered"]), known(true, false), "fallback facts: the system-wide config only");
+        assertEqual(factsOf(["answered"]), known(false, false), "fallback facts: neither holds — said, not assumed");
+        assertEqual(factsOf(["readable", "", "answered", ""]), known(true, false), "fallback facts: blank lines do not count");
+        assertEqual(factsOf({ length: 3, 0: "readable", 1: "nixos", 2: "answered" }), known(true, true),
                     "fallback facts: an array-like (what a QML signal's var argument delivers) is read too");
+        assertEqual(factsOf([]), unknown("it said nothing"), "fallback facts: an empty answer is not known");
+        assertEqual(factsOf(null), unknown("it said nothing"), "fallback facts: no lines at all is not known");
+        assertEqual(factsOf(["nixos"]), unknown("its answer has no end"), "fallback facts: the final word missing (NixOS) is not known");
+        assertEqual(factsOf(["readable", "nixos"]), unknown("its answer has no end"), "fallback facts: the final word missing (both) is not known");
+        assertEqual(factsOf(["answered", "nixos"]), unknown("its answer has no end"), "fallback facts: the final word must be last");
+        assertEqual(factsOf(["bash: line 3: syntax error", "answered"]), unknown("its answer cannot be read"), "fallback facts: garbage is not known");
+        assertEqual(factsOf(["NIXOS", "answered"]), unknown("its answer cannot be read"), "fallback facts: a word it does not know is not known");
+        assertEqual(factsOf(["readable", "nixos", "answered"], { exitCode: 126 }), unknown("it exited with status 126"),
+                    "fallback facts: a non-zero exit is not known, whatever it said");
+        assertEqual(factsOf(["readable", "answered"], { crashed: true }), unknown("it was killed"), "fallback facts: a killed run is not known");
+        assertEqual(factsOf([], { started: false, exitCode: -1 }), unknown("it could not be started"), "fallback facts: a run that could not be started is not known");
+        assertEqual(JSON.stringify(rules.fallbackFacts(undefined)), unknown("it could not be started"), "fallback facts: no run is not known");
+        // The direct question (the driver's own, when the script gives no answer) answers
+        // in the same words; what follows from its answers on each system
+        const fallbackFrom = lines => {
+            const facts = rules.fallbackFacts({ started: true, exitCode: 0, crashed: false, lines: lines });
+            return facts.known ? fallbackOf({ shellDirectory: "/shell", systemDirectory: "/etc/pam.d", systemConfigReadable: facts.systemConfigReadable, nixos: facts.nixos }) : "unknown";
+        };
+        assertEqual(fallbackFrom(["nixos", "answered"]), JSON.stringify({ directory: "/etc/pam.d", config: "login" }), "the direct answer on NixOS: login");
+        assertEqual(fallbackFrom(["readable", "nixos", "answered"]), JSON.stringify({ directory: "/etc/pam.d", config: "h2s-shell-password" }),
+                    "the direct answer on NixOS with the system-wide config: that one");
+        assertEqual(fallbackFrom(["answered"]), JSON.stringify({ directory: "/shell/pam", config: "password" }), "the direct answer elsewhere: the shipped one");
+        assertEqual(fallbackFrom(["readable", "answered"]), JSON.stringify({ directory: "/etc/pam.d", config: "h2s-shell-password" }),
+                    "the direct answer elsewhere with the system-wide config: that one");
+        assertEqual(fallbackFrom([]), "unknown", "the direct question without an answer: nothing follows");
+        // The test bed's seam for the system counts only with its own PAM directory
+        assertEqual(rules.systemSeam("/tmp/test-pam", "nixos"), "nixos", "system seam: nixos");
+        assertEqual(rules.systemSeam("/tmp/test-pam", "other"), "other", "system seam: other");
+        assertEqual(rules.systemSeam("/tmp/test-pam", "neither"), "", "system seam: a value it does not know: the machine is asked");
+        assertEqual(rules.systemSeam("/tmp/test-pam", null), "", "system seam: not set: the machine is asked");
+        assertEqual(rules.systemSeam("", "nixos"), "", "system seam: without the PAM directory seam it does not count");
+        assertEqual(rules.systemSeam(null, "nixos"), "", "system seam: … also when that is not set at all");
 
         // --- key names ---
         assertEqual(rules.keyName(Qt.Key_Return), "Enter", "Return is Enter");

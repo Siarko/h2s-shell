@@ -478,7 +478,7 @@ directory whose `gdbus` and `systemd-inhibit` stand in for the real ones — the
 and the methods script's),
 `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
 `/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack),
-`H2S_LOCK_SYSTEM=nixos|other` (which system the methods script takes itself to be on,
+`H2S_LOCK_SYSTEM=nixos|other` (which system the methods script — and the driver, where it asks the machine itself — takes itself to be on,
 counted only together with `H2S_LOCK_SYSTEM_PAM_DIR` — so both systems' answers are tested
 on every machine),
 `H2S_LOCK_TEST_RELOAD=1` (an IPC target `locktest` whose `reload(hard)` asks for
@@ -743,8 +743,12 @@ environment, a private home directory and a `PATH` of one directory that holds r
 stand-ins for `sudo`, `pacman`, `git`, `fc-list` and for the programs that could change a
 system, plus the five plain tools the script uses; no new privileges; a terminal of the
 run's own (`script`), since the script hands `pacman` the terminal. Before anything runs it
-checks that every privileged name on that `PATH` is one of its stand-ins and that
-`install.sh` names no program by its path, and stops with status 2 otherwise. It checks
+checks that every privileged name on that `PATH` is one of its stand-ins, and reads
+`install.sh` for ways around them, stopping with status 2 at any: a program named by its
+path, `command -p`, an assignment to `PATH`, `exec`, `eval`, `source` or `.`, a variable as
+the command, a command substitution in a here-document. That reading refuses these forms
+and proves nothing more; what holds whatever the script says is the empty environment, the
+one-directory `PATH`, the private home and no new privileges. It checks
 the packages asked for and how, where the shell is cloned, that nothing else runs as root,
 that a second run changes nothing, another Quickshell config left alone, and what happens
 when `pacman`, the clone or reading the config's origin fails. It runs on both systems.

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Checks tests/run-all.sh's own verdict against made-up parts (RUN_ALL_PARTS): that a part
 # which failed, could not be set up, was left out or was not reached is named as that and
-# never counted as passed, and the exit status. Then that every part of the real list
-# names a runner that is there. Starts none of the real parts.
+# never counted as passed, and the exit status; that a SIGTERM ends the part that is
+# running at once. Then that every part of the real list names a runner that is there.
+# Starts none of the real parts.
 #
 # Exit status: 0 when every check passed, 1 otherwise.
 set -uo pipefail
@@ -92,6 +93,48 @@ check "--quick: the verdict says so" says "^run-all.sh: passed, without the lock
 run "first|good" -- --fast
 check "a wrong option: status 2" status_is 2
 check "a wrong option: nothing runs" ran ""
+
+# Interrupted (SIGTERM) while a part runs: the part and what it started are ended at once,
+# not waited for — the stand-in would run for 30 s — and the status is 130
+printf '#!%s\necho $$ > "%s/slow.pid"\nsleep 30 &\necho $! > "%s/slow.child"\necho slow >> "%s/ran"\nwait\n' \
+    "$(type -P bash)" "$work" "$work" "$work" > "$work/slow"
+chmod +x "$work/slow"
+: > "$work/ran"
+printf '%s\n' "first|$work/slow" "second|$work/good" > "$work/parts"
+RUN_ALL_PARTS="$work/parts" "$REPO/tests/run-all.sh" > "$work/interrupted.out" 2>&1 &
+runner=$!
+# within <seconds> <command…>: true as soon as the command is, false after that long
+within() {
+    local tries=$(($1 * 20))
+    shift
+    while ! "$@"; do
+        tries=$((tries - 1))
+        [ "$tries" -gt 0 ] || return 1
+        sleep 0.05
+    done
+}
+gone() { ! kill -0 "$1" 2> /dev/null; }
+part_running() { grep -qx slow "$work/ran" && [ -s "$work/slow.child" ]; }
+if within 10 part_running; then
+    slow_pid=$(cat "$work/slow.pid")
+    slow_child=$(cat "$work/slow.child")
+    kill -TERM "$runner"
+    check "interrupted: the runner ends at once, not when the part would have" within 10 gone "$runner"
+    wait "$runner"
+    STATUS=$?
+    OUTPUT=$(cat "$work/interrupted.out")
+    check "interrupted: status 130" status_is 130
+    check "interrupted: the part is ended" within 5 gone "$slow_pid"
+    check "interrupted: what the part started is ended too" within 5 gone "$slow_child"
+    check "interrupted: says so" says "^run-all.sh: interrupted"
+    check "interrupted: the next part does not run" ran "slow "
+    check "interrupted: nothing is said to have passed" silent_on "PASS"
+    # Only what this test started, and only if the runner left it behind
+    kill "$slow_child" "$slow_pid" "$runner" 2> /dev/null
+else
+    check "interrupted: the stand-in part started" false
+    kill "$runner" 2> /dev/null
+fi
 
 # The real list: each part's runner is there and can be started, and the lock bed is the
 # part --quick leaves out

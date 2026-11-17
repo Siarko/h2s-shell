@@ -235,6 +235,12 @@ Found during the test split (2026-11-17):
       "Could not open config file", exit 255 — not its "crashed within 10 seconds of
       launching. Not restarting". The launcher started a new shell either way and the screen
       stayed locked; the check expects one of two ways Quickshell ends an early crash
+- [ ] `install.sh`, found by its test (2026-11-17): the font warning can be false under
+      `pipefail` when `fc-list` is still writing as `grep -q` leaves; no controlling
+      terminal or no `sudo` ends at the packages with bash's own error, unexplained; "ours"
+      is too loose (any origin containing the repository's name, so a fork reads as
+      "Already installed"); a target directory without `shell.qml` is left to `git clone`'s
+      own error
 
 ## Open points
 

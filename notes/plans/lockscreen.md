@@ -433,7 +433,7 @@ The driver's small pure helpers are `singletons/LockIoRules.qml` (tested in
 `tests/LockIoRulesTest.qml`): `serialQueue(handle, onError)` (one event at a time),
 `runStep(result, hooks)` (commit, then prepare / publish / each effect / finish, each guarded
 on its own: a view that fails to publish cannot keep `lockCompositor` from running),
-`passwordFallback(facts)` and `fallbackFacts(lines)` (below), `keyName`, `editField` (by code
+`passwordFallback(facts)`, `fallbackFacts(run)` and `systemSeam` (below), `keyName`, `editField` (by code
 point: never half a surrogate pair), `pointerMoved`, `capsLockFromLeds` (below),
 `detectionEvent`, `restartDelay`, and the recovery's `markerFacts`, `markerDecision`,
 `hyprlandLockFacts`, `lockSurelyRefused`.
@@ -652,7 +652,10 @@ Ordering guarantees within one step:
   systemDirectory, systemConfigReadable, nixos })`: `<system dir>/h2s-shell-password` when
   readable, else on NixOS `<system dir>/login`, else the shipped `pam/password`. The driver
   passes the shipped one to `initial()`, asks the methods script for the two facts (`--fallback-facts`) at start and at every lock, and sends a `settings` event when the answer
-  differs. The system directory is `/etc/pam.d`, or `H2S_LOCK_SYSTEM_PAM_DIR` (the test bed's
+  differs. Only a whole answer counts (`fallbackFacts`: exit status 0, the known words, "answered" last);
+  without one the driver asks the machine itself (`sh` and `test`, nothing of the script: the script
+  failing is when the fallback is needed), logs that once, and when that gives no answer either keeps
+  the fallback it has. A direct answer that comes after a newer request is dropped. Locking waits for none of it. The system directory is `/etc/pam.d`, or `H2S_LOCK_SYSTEM_PAM_DIR` (the test bed's
   seam; the methods script honours it too).
 - **Reload.** Quickshell reloads the shell when a file of it changes, or on
   `Quickshell.reload(hard)` (nothing in the shell calls it; the test bed's seam

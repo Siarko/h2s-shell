@@ -153,10 +153,10 @@ facts() {
 facts_are() { [ "$FACTS" = "$1" ]; }
 system=nixos
 facts
-check "fallback facts on NixOS with the system-wide password config" facts_are "readable nixos "
+check "fallback facts on NixOS with the system-wide password config" facts_are "readable nixos answered "
 system=other
 facts
-check "fallback facts elsewhere with it" facts_are "readable "
+check "fallback facts elsewhere with it" facts_are "readable answered "
 
 mv "$sys/h2s-shell-password" "$sys/h2s-shell-password.off"
 system=nixos
@@ -164,20 +164,20 @@ run_script
 check "no system-wide password config on NixOS: login (as the shell's fallback)" \
     has_line "password$tab$sys${tab}login"
 facts
-check "fallback facts on NixOS without it" facts_are "nixos "
+check "fallback facts on NixOS without it" facts_are "nixos answered "
 system=other
 run_script
 check "no system-wide password config elsewhere: the shipped one" \
     has_line "password$tab$LOCKTEST_SHELL/pam${tab}password"
 facts
-check "fallback facts elsewhere without it" facts_are ""
+check "fallback facts elsewhere without it" facts_are "answered "
 
 # The seam is the test bed's: a value it does not know, or the seam without the test's
 # own PAM directory, and the machine itself is asked. (The second reads the real
 # /etc/pam.d — whether one file is readable — and nothing else.)
-machine=""
+machine="answered "
 other_system=nixos
-[ -e /etc/NIXOS ] && { machine="nixos "; other_system=other; }
+[ -e /etc/NIXOS ] && { machine="nixos answered "; other_system=other; }
 system=neither
 facts
 check "an unknown H2S_LOCK_SYSTEM: the machine is asked" facts_are "$machine"
@@ -193,7 +193,7 @@ standin_facts() {
         timeout 20 "$script" --fallback-facts | tr '\n' ' '
 }
 check "fallback facts are the script's own even with H2S_LOCK_AUTH_METHODS set" \
-    test "$(standin_facts)" = "nixos "
+    test "$(standin_facts)" = "nixos answered "
 system=other
 mv "$sys/h2s-shell-password.off" "$sys/h2s-shell-password"
 

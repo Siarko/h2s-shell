@@ -478,21 +478,88 @@ Singleton {
         }
 
         // The password fallback is chosen from what is on this machine (LockIoRules
-        // .passwordFallback): asked at start and at every lock, handed to the rules
+        // .passwordFallback): asked at start and at every lock, handed to the rules. Locking
+        // never waits for it: until an answer the rules keep the fallback they have.
+        //
+        // The methods script is asked first, so that it and the fallback tell the system
+        // the same way. When it does not answer (it cannot be run, exits non-zero, says
+        // something else: LockIoRules.fallbackFacts), the machine is asked directly — the
+        // script failing is exactly when the fallback is needed, so the fallback must not
+        // depend on it. When that gives no answer either, the fallback stays as it is.
+        // `fallbackAsked` numbers the requests; `fallbackDirectFor` is the request the
+        // direct question is wanted for (0: none), so that a direct answer that comes
+        // after a newer request was made is dropped. `fallbackSource`: who answered last
+        // ("script" / "direct" / "none"), for a log line when that changes
+        let fallbackAsked = 0;
+        let fallbackDirectFor = 0;
+        let fallbackSource = "";
+
         function probeFallback() {
-            if (!_fallbackProbe.running)
-                _fallbackProbe.running = true;
+            if (_fallbackProbe.running)
+                return;
+            fallbackAsked += 1;
+            fallbackDirectFor = 0;
+            _fallbackProbe.running = true;
         }
 
-        _fallbackProbe.answered.connect(lines => {
-            const facts = LockIoRules.fallbackFacts(lines);
-            facts.shellDirectory = Quickshell.shellDir;
-            facts.systemDirectory = root._systemPamDirectory;
-            const fallback = LockIoRules.passwordFallback(facts);
+        function probeFallbackDirectly() {
+            // One still running was started for an older request: its answer is dropped
+            // and the question asked again (below)
+            if (_fallbackDirectProbe.running)
+                return;
+            _fallbackDirectProbe.generation = fallbackDirectFor;
+            _fallbackDirectProbe.running = true;
+        }
+
+        function fallbackAnsweredBy(source, reason) {
+            if (source === fallbackSource)
+                return;
+            fallbackSource = source;
+            if (source === "script")
+                log("info", "password fallback: the methods script answers again");
+            else if (source === "direct")
+                log("warning", "password fallback: no answer from the methods script (" + reason + "): the machine is asked directly");
+            else
+                log("error", "password fallback: the machine could not be asked either (" + reason + "): it stays as it is");
+        }
+
+        function applyFallbackFacts(facts) {
+            const fallback = LockIoRules.passwordFallback({
+                shellDirectory: Quickshell.shellDir,
+                systemDirectory: root._systemPamDirectory,
+                systemConfigReadable: facts.systemConfigReadable,
+                nixos: facts.nixos
+            });
             fallbackKnown = true;
             const current = state.settings.passwordFallback;
             if (!current || current.directory !== fallback.directory || current.config !== fallback.config)
                 dispatch({ type: "settings", values: { passwordFallback: fallback } });
+        }
+
+        _fallbackProbe.answered.connect(run => {
+            const facts = LockIoRules.fallbackFacts(run);
+            if (facts.known) {
+                fallbackAnsweredBy("script", "");
+                applyFallbackFacts(facts);
+                return;
+            }
+            fallbackAnsweredBy("direct", facts.reason);
+            fallbackDirectFor = fallbackAsked;
+            probeFallbackDirectly();
+        });
+
+        _fallbackDirectProbe.answered.connect((run, generation) => {
+            if (generation !== fallbackDirectFor) {
+                if (fallbackDirectFor !== 0)
+                    probeFallbackDirectly();
+                return;
+            }
+            fallbackDirectFor = 0;
+            const facts = LockIoRules.fallbackFacts(run);
+            if (facts.known)
+                applyFallbackFacts(facts);
+            else
+                fallbackAnsweredBy("none", facts.reason);
         });
 
         // ---- Recovery ----
@@ -936,23 +1003,78 @@ Singleton {
     }
 
     // ---- What the password fallback depends on ----
-    // One word per line for what holds: the system-wide password config readable, NixOS.
+    // Both answer one word per line for what holds — "readable" (the system-wide password
+    // config), "nixos" — and "answered" last; `answered` hands the whole run to
+    // LockIoRules.fallbackFacts ({ started, exitCode, crashed, lines }), also a run that
+    // could not be started (`running` then falls back to false without `exited`).
+
     // The methods script answers, so that it and the fallback tell the system the same way
     Process {
         id: _fallbackProbe
-        signal answered(var lines)
+        signal answered(var run)
         property var _lines: []
+        property bool _exited: false
+        property int _exitCode: -1
+        property bool _crashed: false
         command: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh", "--fallback-facts"]
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: line => _fallbackProbe._lines = _fallbackProbe._lines.concat([line])
         }
+        onExited: (exitCode, exitStatus) => {
+            _exited = true;
+            _exitCode = exitCode;
+            _crashed = exitStatus !== 0;
+        }
         onRunningChanged: {
             if (running)
                 return;
-            const lines = _lines;
+            const run = { started: _exited, exitCode: _exitCode, crashed: _crashed, lines: _lines };
             _lines = [];
-            answered(lines);
+            _exited = false;
+            _exitCode = -1;
+            _crashed = false;
+            answered(run);
+        }
+    }
+
+    // The same question without the script, for when the script gives no answer: nothing
+    // here but `sh` and `test`. The test bed's seam for the system (H2S_LOCK_SYSTEM, read
+    // as the script reads it: LockIoRules.systemSeam) is honoured here too, so that a test
+    // of this path gets the same answer on every machine. `generation`: the request it
+    // was started for
+    Process {
+        id: _fallbackDirectProbe
+        signal answered(var run, int generation)
+        property int generation: 0
+        property var _lines: []
+        property bool _exited: false
+        property int _exitCode: -1
+        property bool _crashed: false
+        command: ["sh", "-c",
+            "test -r \"$1/h2s-shell-password\" && echo readable\n"
+            + "case $2 in nixos) echo nixos ;; other) ;; *) test -e /etc/NIXOS && echo nixos ;; esac\n"
+            + "echo answered",
+            "sh", root._systemPamDirectory,
+            LockIoRules.systemSeam(Quickshell.env("H2S_LOCK_SYSTEM_PAM_DIR"), Quickshell.env("H2S_LOCK_SYSTEM"))]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => _fallbackDirectProbe._lines = _fallbackDirectProbe._lines.concat([line])
+        }
+        onExited: (exitCode, exitStatus) => {
+            _exited = true;
+            _exitCode = exitCode;
+            _crashed = exitStatus !== 0;
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            const run = { started: _exited, exitCode: _exitCode, crashed: _crashed, lines: _lines };
+            _lines = [];
+            _exited = false;
+            _exitCode = -1;
+            _crashed = false;
+            answered(run, generation);
         }
     }
 

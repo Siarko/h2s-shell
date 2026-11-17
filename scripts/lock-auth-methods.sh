@@ -30,8 +30,10 @@
 #
 # `--fallback-facts` asks something else: what the shell's own password fallback depends
 # on (LockIoRules.fallbackFacts), one word per line that holds — "readable" (the
-# system-wide h2s-shell-password), "nixos". The shell asks here so that which system this
-# is gets decided in one place.
+# system-wide h2s-shell-password), "nixos" — and always "answered" as the last line: the
+# shell takes an answer without it (nothing at all, a cut-off one) as no answer, never as
+# "neither holds". The shell asks here so that which system this is gets decided in one
+# place; when this gives no answer it asks the machine itself (singletons/Lockscreen.qml).
 #
 # H2S_LOCK_SYSTEM_PAM_DIR: the test bed's seam for where system-wide configs are looked
 # for (the shell's password fallback honours it too, singletons/Lockscreen.qml).
@@ -39,8 +41,8 @@ system_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
 
 # Which system this is: NixOS (/etc/NIXOS) or any other. H2S_LOCK_SYSTEM=nixos|other is
 # the test bed's seam for it, so that both answers are tested on every machine. It counts
-# only together with H2S_LOCK_SYSTEM_PAM_DIR: against the real /etc/pam.d the machine is
-# always asked. It grants nothing either way: both answers name real PAM stacks (the
+# only together with H2S_LOCK_SYSTEM_PAM_DIR: without H2S_LOCK_SYSTEM_PAM_DIR the machine
+# is always asked. It grants nothing either way: both answers name real PAM stacks (the
 # worst a wrong one does is a config that cannot be started, which never unlocks), and
 # whoever can set the shell's environment can already run anything as the user.
 nixos=0
@@ -53,6 +55,7 @@ esac
 if [ "${1:-}" = --fallback-facts ]; then
     [ -r "$system_dir/h2s-shell-password" ] && echo readable
     [ "$nixos" = 1 ] && echo nixos
+    echo answered
     exit 0
 fi
 
