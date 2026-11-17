@@ -233,8 +233,10 @@ Command   /usr/bin/tailscale up --accept-routes
   by the shell from the handle the run was started on. `For`: the run's `what`. `Command`:
   the `argv` the shell passes to pkexec, joined with shell quoting.
 - **Plain and capped.** A pure rule `PolkitRules.announcement(run)` drops control
-  characters, folds white space to one line and caps the name at 40, `what` at 80 and the
-  command at 240 characters (cut with "…"). All four texts are `Text.PlainText`; polkit's
+  characters, folds white space to one line and caps the name at 40, `what` at 40 and the
+  command at 240 characters (cut with "…"). `what` is a few words naming the action
+  ("Send a file", "Connect Tailscale"), never a sentence: `Module` and `For` together
+  must tell the user what is asked at a glance; the command is the detail under them. All four texts are `Text.PlainText`; polkit's
   message becomes plain text too.
 - **Not spoofable as the shell.** A module's words only ever fill the values of these
   lines. The title, the labels and the frame are the shell's; the first line always starts
@@ -338,10 +340,12 @@ Test: `ModuleRulesTest` (`apiNetworks` with details missing, `apiVpnsUp`, `apiLo
 ### 3.9 File chooser
 
 ```
-Api.chooseFiles({ mode: "open" | "openMany" | "folder" | "save", title, folder, nameFilters }, done)
+Api.chooseFiles({ mode: "open" | "openMany" | "folder", title }, done)
 ```
 
-Hosted by the shell, not the caller's window, so a popup can call it and close. One at a
+A minimal version in this round: `mode` is `"open"`, `"openMany"` or `"folder"`, with
+`title`; `save`, `folder` and `nameFilters` come when a module needs them. Hosted by the
+shell, not the caller's window, so a popup can call it and close. One at a
 time; refused while locked; absolute paths, never URLs. Starts with a spike: whether a
 `FileDialog` opens as its own window in the shell is unverified. If not, a small shell
 window hosts it.
@@ -481,6 +485,14 @@ Manifest:
 - **Several modules on one path and placement**: by module id, alphabetically; within a
   module, manifest order; top to bottom. Stable across installs (today the order is the
   search path's; assumed from `ModuleRules.merge`).
+- **A module may say where it stands among the others** (proposed, the owner confirms): an
+  anchor entry takes `"after": ["<module id>", …]` and `"before": […]`. They order this
+  module's element against those modules' elements on the same path and placement; a named
+  module that is not loaded or has nothing there is ignored. The order is a pure rule,
+  `ModuleRules.anchorOrder`: the id order, moved as little as the wishes need; wishes that
+  contradict each other (a cycle) are dropped for the modules in the cycle, with a warning
+  in their status. A module orders itself against modules only, never against the shell's
+  own content: that is what the path and the placement say.
 
 ### 4.6 The test that pins the list
 
@@ -711,16 +723,23 @@ Each module slice raises its manifest `api` and removes one group of §1:
 
 ---
 
-## 8. Open questions for the owner
+## 8. The owner's answers, and what is still open
+
+Answered 2026-11-17:
+
+| # | Question | Answer |
+|---|---|---|
+| Q1 | Where the per-network exit node sits | The saved network's card, opened (`…card.settings`). The connection editor can follow as a second anchor once a module's row can join a form |
+| Q2 | A module's privileged run when another polkit agent answers | Run, with a shell notification just before, naming the module and what for |
+| Q3 | Where the prompt's "what for" comes from | The text given with each run, kept short: a few words, capped at 40 characters, so "Module" and "For" say at a glance what is asked (§3.4) |
+| Q4 | The file chooser | In this round, a minimal version (§3.9) |
+
+Open:
 
 | # | Question | Choices | Recommendation |
 |---|---|---|---|
-| Q1 | Where the per-network exit node sits | (a) the saved network's card, opened; (b) the connection editor ("Edit connection") | **(a).** The card's own choices apply at once, as the module's will. The editor has Save, "Save and reconnect" and a 20 s undo; a module's row there needs a contract for joining a form (`changed`, `apply()`, `reset()`), and the editor's save has an open defect (tracker step 7). (b) can follow as a second anchor once that contract exists |
-| Q2 | A module's privileged run when another polkit agent answers, so the shell's prompt cannot say who asks | (a) run, and show a shell notification "Module X asks for the administrator's password: …" just before; (b) run, say nothing; (c) refuse | **(a).** The decision is kept as far as the shell can; nothing breaks for people who keep their own agent |
-| Q3 | Where the prompt's "what for" comes from | (a) the text given with each run, cleaned and capped (§3.4); (b) a fixed list of purposes in the manifest, a run names one | **(a).** The module has dozens of commands, each with its own words today; the command line is shown beside it either way. (b) can be added if modules from others arrive |
-| Q4 | Is the file chooser part of this round? Step 3's list does not name it; without it workaround 20 stays | in (slice E1) / later | **In, as the last slice**, after its spike. If the spike fails, the small shell window |
-| Q5 | The other `qs.components` types a module uses (`PopupWidget`, `SmallButton`, `Dropdown`, …: 13) are allowed but not versioned | wrap them in `qs.api` and pin them with a test now / after step 6 / leave | **After step 6**, as its own slice. The five blocks get `qs.api` names in U1, and `Button`, `Row` and `ExpandingRow` in U3 (§4.8), because anchors make them API; the rest is not a workaround and would widen this round |
-| Q6 | Order of several modules' elements on one anchor | by module id / search-path order (today) / a manifest `order` number | **By module id**: the same on every machine, nothing to configure |
+| Q5 | The shell's ready-made controls a module uses directly from `qs.components` (`PopupWidget`, `SmallButton`, `Dropdown`, …: 13). They are not part of the promised API: the shell can rename one or change its properties, and the module breaks with nothing saying so | make them API names in `qs.api`, their names and properties pinned by a test, a change to one being an API version change — now / after step 6 / never | **After step 6**, as its own slice. The five blocks get `qs.api` names in U1, and `Button`, `Row` and `ExpandingRow` in U3 (§4.8), because anchors make them API; the rest is not a workaround and would widen this round |
+| Q6 | Order of several modules' elements on one anchor | by module id, plus a module's own `after` / `before` naming other modules (§4.5) | **Both**: the id order as the default, the wishes on top |
 
 ---
 
