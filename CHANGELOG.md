@@ -417,6 +417,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- After the shell was killed, the launcher now and then never started it again and filled
+  its log instead (a defect in bash's `wait -f`); while the shell was stopped, the launcher
+  kept a processor busy.
 - VPNs: what a VPN provider reports (names, status lines, what needs the user, glyphs, the
   card's details) is shown as plain text in the popup, the bar, the VPN and overview pages
   and the network editor; text that looked like markup was read as rich text (Qt's

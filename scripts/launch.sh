@@ -494,18 +494,36 @@ become_supervisor() {
     echo $$ > "$lock_file"
 }
 
+# A process is stopped (SIGSTOP, SIGTSTP, a debugger): its state in /proc is T or t
+process_stopped() {
+    local stat=""
+    { IFS= read -r -d '' stat < "/proc/$1/stat"; } 2> /dev/null
+    stat=${stat##*) }
+    case "${stat%% *}" in T | t) return 0 ;; esac
+    return 1
+}
+
 # Waits until the shell process ends — not when it only stops (SIGSTOP while debugging,
-# SIGTTIN/SIGTTOU from a terminal): with job control on, a plain `wait` returns at a stop,
-# and the stopped shell was taken for a dead one, killed and replaced. `wait -f` (bash 5.1)
-# waits for the end; a trapped signal still interrupts it, and the loop waits again while
-# the process exists. Older bash: a stopped child is polled.
+# SIGTTIN/SIGTTOU from a terminal): with job control on, `wait` returns at a stop, and the
+# stopped shell was taken for a dead one, killed and replaced. `wait` also returns when a
+# trapped signal arrives. So whenever it returns with the process still there, the loop
+# pauses (0.1 s, doubling up to 1 s: a stopped shell is polled once a second; back to 0.1 s
+# after a wait that lasted) and waits again — whatever `wait` said, no turn of this loop is
+# without an end or a pause.
+#
+# Not `wait -f`, which bash has for this: bash 5.3 reads the child's record after freeing it
+# when the child was killed by a signal (jobs.c, wait_for_single_pid), and when the freed
+# memory happens to read as "alive" — one bash process in a few hundred with glibc's malloc
+# — it never returns: it prints "wait_for: No record of process" as fast as it can, for good,
+# and the shell is never started again. On a stopped child it spins too, silently.
 wait_for_shell() {
+    local pause_ms=100 stopped="" asked
     while :; do
-        if [ "$wait_ends" = 1 ]; then wait -f "$child"; else wait "$child"; fi
+        asked=$SECONDS
+        wait "$child"
         status=$?
-        # bash already reaped it and kept no record (seen with bash 5.3: "wait_for: No record
-        # of process", while `kill -0` still found the pid for a while — a busy loop that
-        # never restarted the shell). It has ended; its status is lost: taken for a crash
+        [ $((SECONDS - asked)) -lt 2 ] || pause_ms=100
+        # bash kept no record of it: it has ended, its status is lost: taken for a crash
         # (restarted — the safe side for a lock screen)
         if [ "$status" = 127 ]; then
             say "the shell's exit status was lost (bash kept no record of it): taken for a crash"
@@ -513,7 +531,15 @@ wait_for_shell() {
             return 0
         fi
         kill -0 "$child" 2> /dev/null || return 0
-        [ "$wait_ends" = 1 ] || sleep 1
+        if process_stopped "$child"; then
+            [ -n "$stopped" ] || say "the shell (pid $child) is stopped: left alone until it runs on or ends"
+            stopped=1
+        else
+            stopped=""
+        fi
+        sleep "$(ms_to_seconds "$pause_ms")"
+        pause_ms=$((pause_ms * 2))
+        [ "$pause_ms" -le 1000 ] || pause_ms=1000
     done
 }
 
@@ -534,10 +560,9 @@ supervise() {
     prepare_environment
     export H2S_SHELL_SUPERVISOR=$$
     local child="" stopping="" status=0 started delay_ms=$pause_first_ms slow="" lock_fd=""
-    local recent=() wait_ends=0
+    local recent=()
     # Deaths within 30 s of starting, in a row: from two on, the next start is in safe mode
     local quick_deaths=0
-    [ "${BASH_VERSINFO[0]}" -gt 5 ] || { [ "${BASH_VERSINFO[0]}" -eq 5 ] && [ "${BASH_VERSINFO[1]}" -ge 1 ]; } && wait_ends=1
     [ -f "$launcher_log" ] && [ "$(stat -c %s "$launcher_log" 2> /dev/null || echo 0)" -gt 524288 ] \
         && mv -f "$launcher_log" "$launcher_log.old" 2> /dev/null
     become_supervisor

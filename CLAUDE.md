@@ -50,6 +50,7 @@ tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL,
 tests/run-unit.sh FormatTest LockRulesTest   # only the named suites, and the suites they need
 tests/run-unit-selftest.sh # checks the runners' own verdict
 tests/resolve-selftest.sh  # checks where the runners take their tools from
+tests/launcher-selftest.sh # checks the supervisor in scripts/launch.sh against a stand-in shell
 tests/run-modules.sh <dir> # a module's suites, against this tree
 tests/run-modules.sh --suite GoodApiTest <dir>   # only the named ones (--suite once per suite)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
@@ -158,6 +159,7 @@ What differs between the two systems for development:
     package to have installed for development (`install.sh` does not install it).
   - `tests/resolve-selftest.sh` needs none of them but `setsid`, `timeout` and `flock`
     (util-linux; the lock test bed needs `flock` too).
+  - `tests/launcher-selftest.sh` needs `flock`, `timeout` and a `python3` or `perl`.
   - The lock test bed (`tests/lock/run.sh`) needs labwc, Hyprland with hyprctl, grim,
     wlr-randr, wl-copy and wl-paste, xkbcli, dbus-daemon, gdbus, `setpriv`, a `python3`
     that imports pywayland, and the Python bindings of its input protocols and its
