@@ -18,11 +18,13 @@ import qs.singletons.network
 //   - not installed: the shell's own copy, asking for the password at each switch; what
 //     was switched on, in which boot, is remembered in Config (root's to read back).
 // Switched again only when its arguments change (a VPN's interface or server, the local
-// network), or when the rules loaded come from a script older than the shell's copy (the
-// script records its VERSION with them; `status` reports it), a moment after the last
-// change. A refused password is not asked again by itself: the page offers "Apply again";
-// installing the script, so that none is needed, lifts the refusal. Started with the shell
-// (shell.qml).
+// network), a moment after the last change. Rules loaded by a script older than the
+// shell's copy (the script records its VERSION with them; `status` reports it) are switched
+// on again by themselves only when no password is needed; otherwise they stay, and the page
+// says so (staleRules) until the user applies them again or installs the script. A
+// refused password is not asked again by itself: the page offers "Apply again"; installing
+// the script, so that none is needed, lifts a refusal to switch on (never one to switch
+// off). Started with the shell (shell.qml).
 //
 // Per network, the blocking comes a moment after the network is up (and, without the
 // installed script, after the password): until then nothing is blocked. "Always" has no
@@ -237,11 +239,13 @@ Singleton {
     }
     onExpectedStatusChanged: _schedule()
     on_HostsChanged: _schedule()
-    // A password refused is no reason to hold back once none is needed (the script
-    // installed): its status is asked, and stale or changed rules switched on again
+    // A password refused for switching on is no reason to hold back once none is needed (the
+    // script installed): its status is asked, and stale or changed rules switched on again. A
+    // refused switch-off stays refused: installing never takes the blocking down by itself.
     onPasswordFreeChanged: {
         if (passwordFree) {
-            _refused = "";
+            if (_refused !== "off")
+                _refused = "";
             _askedAtStart = false;
         }
         _schedule();
@@ -377,11 +381,15 @@ Singleton {
         }
     }
 
+    // Rules loaded by a script older than the shell's copy: switched on again by themselves
+    // only when no password is needed; else kept, and said on the page until the user
+    // applies them again or installs the script
+    readonly property bool staleRules: checked && _status.startsWith("on") && _rulesVersion < scriptVersion
+
     // Whether what is loaded differs from what is wanted (the page offers "Apply again"):
-    // rules from a script older than the shell's copy included
+    // stale rules included
     readonly property bool mismatched: checked && state !== "asking" && state !== "working"
-        && (state === "failed" || wanted !== _status.startsWith("on")
-            || (wanted && _status.startsWith("on") && _rulesVersion < scriptVersion))
+        && (state === "failed" || wanted !== _status.startsWith("on") || (wanted && staleRules))
 
     // The servers by their names, each found through the system's resolver; those not
     // found keep their last addresses

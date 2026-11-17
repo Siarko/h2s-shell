@@ -384,6 +384,16 @@ Item {
                     onClicked: VpnLockdown.apply()
                 }
             }
+            // Rules an older script loaded, kept until applied again (VpnLockdown.staleRules)
+            Text {
+                visible: VpnLockdown.wanted && VpnLockdown.staleRules && VpnLockdown.state === "on"
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "These rules are from an older script. Apply them again."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
             // Servers of VPNs NetworkManager does not know (wg-quick's…): by address
             ColumnLayout {
                 Layout.fillWidth: true

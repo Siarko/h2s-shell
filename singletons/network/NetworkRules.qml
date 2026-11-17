@@ -1216,7 +1216,8 @@ Singleton {
     }
 
     // The rules loaded are the ones wanted: the same arguments, switched on by a script at
-    // least as new as the shell's copy (older rules are switched on again, as changed ones are)
+    // least as new as the shell's copy (older rules are switched on again by themselves only
+    // when no password is needed: lockdownNextStep)
     function lockdownCurrent(status, rulesVersion, expectedStatus, scriptVersion) {
         return status === expectedStatus && (rulesVersion ?? 0) >= (scriptVersion ?? 0);
     }
@@ -1228,7 +1229,8 @@ Singleton {
     //   "wait"    not ready, or busy: asked again when that ends (nothing is used up)
     //   "ask"     the installed script's status first (once, after it became password-free)
     //   "no-nft"  wanted, but nftables is missing
-    //   "keep"    nothing to switch
+    //   "keep"    nothing to switch (rules from an older script with the same arguments
+    //             included while a password would be needed: never asked for by itself)
     //   "refused" refused before for these very rules: said, not asked again by itself
     //   "on", "off" switch; "idle" off and not wanted
     function lockdownNextStep(facts) {
@@ -1240,6 +1242,10 @@ Singleton {
             if (!facts.nftFound)
                 return "no-nft";
             if (!facts.force && lockdownCurrent(facts.status, facts.rulesVersion, facts.expectedStatus, facts.scriptVersion))
+                return "keep";
+            // The same arguments, loaded by an older script: switched on again only without a
+            // password; with one they stay until the user asks ("Apply again", "Install again…")
+            if (!facts.force && !facts.passwordFree && facts.status === facts.expectedStatus)
                 return "keep";
             if (!facts.force && facts.refused === facts.expectedStatus + facts.hosts)
                 return "refused";

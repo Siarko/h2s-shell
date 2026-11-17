@@ -533,15 +533,18 @@ TestCase {
             const lockFacts = changes => Object.assign({ ready: true, busy: false, passwordFree: false, askedAtStart: false, force: false,
                 wanted: true, nftFound: true, status: "on 1 - -", rulesVersion: 0, expectedStatus: "on 1 - -", scriptVersion: 4,
                 refused: "", hosts: "" }, changes);
-            assertEqual(rules.lockdownNextStep(lockFacts({})), "on", "lockdown upgrade: the old rules at the start — switched on again");
-            assertEqual(rules.lockdownNextStep(lockFacts({ refused: "on 1 - -" })), "refused", "lockdown upgrade: that password refused — not asked again");
-            // Installed: password-free now, the refusal and the first status ask reset
+            assertEqual(rules.lockdownNextStep(lockFacts({})), "keep", "lockdown upgrade: the old rules at the start, a password needed — kept, nothing asked");
+            assertEqual(rules.lockdownNextStep(lockFacts({ force: true })), "on", "lockdown upgrade: Apply again — switched on again");
+            assertEqual(rules.lockdownNextStep(lockFacts({ expectedStatus: "on 0 - -" })), "on", "lockdown upgrade: the arguments changed — switched, as before");
+            // Installed: password-free now, the first status ask reset
             assertEqual(rules.lockdownNextStep(lockFacts({ passwordFree: true })), "ask", "lockdown upgrade: installed — its status asked first");
             const afterInstall = lockFacts({ passwordFree: true, askedAtStart: true, rulesVersion: rules.lockdownStatusReply(["on 1 - -"]).rules });
             assertEqual(rules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: installed, the status says old rules — switched on again");
             assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { busy: true })), "wait", "lockdown upgrade: busy — waits");
             assertEqual(rules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: busy no more — still switched on again (nothing used up)");
             assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { rulesVersion: 4 })), "keep", "lockdown upgrade: the new rules on — kept");
+            assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { refused: "on 1 - -" })), "refused",
+                        "lockdown: a refusal still standing — not switched by itself");
             assertEqual(rules.lockdownNextStep(lockFacts({ passwordFree: true, rulesVersion: 4, force: true })), "on",
                         "lockdown: Apply again before the first status ask — switches, not only asks");
             assert(rules.lockdownNextStep(lockFacts({ ready: false })) === "wait" && rules.lockdownNextStep(lockFacts({ nftFound: false })) === "no-nft"

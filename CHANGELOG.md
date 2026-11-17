@@ -352,8 +352,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Only through the VPN: Tailscale's `tailscale*` interfaces are no longer let out as virtual
   interfaces (a tailnet reaches the internet through exit nodes and subnet routers). The
   script is version 4 and records its version with the rules it loads: the VPN page offers
-  to install it again, and rules loaded by an older script are loaded again, without a
-  password once it is installed (with one, once, when it is not).
+  to install it again. Rules an older script loaded are loaded again by themselves only when
+  the installed script needs no password; otherwise they stay, the page says so, and "Apply
+  again" or "Install again…" loads them.
 - Settings → Network: a network's editor says when a provider's VPN picked under "Connect a
   VPN with it" cannot connect because traffic is blocked there (or always); the VPN page
   says it under "Block traffic outside a VPN, always" when a network brings one up.
