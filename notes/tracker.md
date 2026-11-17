@@ -12,17 +12,20 @@ State on 2026-11-17: everything is merged to `master` (core) and `main` (module
 Development moves to the Arch machine; runs that need `nix` go over SSH to the NixOS
 machine. How sessions work is in [workflow.md](workflow.md).
 
-- [ ] First on the Arch machine: set up the working trees there (one per repository for
-      the running shell, separate ones for agents), check that the general commands work,
-      and agree with the owner how the NixOS machine is reached for the `nix` runs.
-- [ ] Then step 0, workflow: start with 0(a), the test runners running one suite or one
-      scenario.
-- [ ] Step 1 (planning) can start in parallel with step 0: it writes plans only.
+- [ ] The test split comes first (the owner, 2026-11-17): a general set that runs on both
+      systems, then a set per system. Plan and slices: [plans/test-split.md](plans/test-split.md).
+      Done: the unit and module suites run without `nix`. Next: the lock bed with the
+      system's tools, then the sets per system.
+- [ ] The API plan ([plans/api-next.md](plans/api-next.md)) is being revised with the
+      owner; implementation waits for the owner's approval.
+
+On the Arch machine the working trees for agents sit beside the live checkouts; runs that
+need `nix` go over SSH to working trees on the NixOS machine.
 
 ## Order of work
 
 0. Workflow — open
-   - [ ] (a) the test runners can run one suite or one scenario
+   - [x] (a) the test runners can run one suite or one scenario
    - [ ] (b) each agent gets its own working trees and its own test bed, so runs go in
          parallel; a module is always tested against a pinned core tree nobody is editing
    - [x] (c) recurring defects written down as development rules in `CLAUDE.md` (both
@@ -39,7 +42,7 @@ machine. How sessions work is in [workflow.md](workflow.md).
          a minor may tighten
    - [ ] analysis + plan: PAM configuration from the shell (polkit and lock screen, NixOS
          and Arch)
-   - [ ] plan: the test split (general + per system)
+   - [x] plan: the test split (general + per system): [plans/test-split.md](plans/test-split.md)
    - [ ] plan: installing, updating and removing modules, with the Settings → Modules page
    - [ ] revise [plans/documentation.md](plans/documentation.md) and
          [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
@@ -75,7 +78,12 @@ machine. How sessions work is in [workflow.md](workflow.md).
    - [ ] lock supervisor limit (3 restarts while locked, then stay locked, tell the user)
    - [ ] lock-before-sleep conflict detection
    - [ ] screensaver and lock screen working together checked
-10. Test split implemented — open
+10. Test split implemented — moved to the front by the owner, in progress
+    - [x] the unit and module suites run without `nix` (tools from the system)
+    - [ ] the lock bed with the system's tools; the whole lock bed on Arch
+    - [ ] system detection behind a seam (`methods-script` runs both branches everywhere)
+    - [ ] `tests/run-system.sh` and the first checks per system; `install.sh` under stand-ins
+    - [ ] `tests/run-all.sh`
 11. PAM configuration from the shell — open
 12. Documentation for users and developers per [plans/documentation.md](plans/documentation.md);
     the architecture and API chapters after 3–7 — open
@@ -141,6 +149,15 @@ From next-steps (2026-11-15):
 
 Found while writing the development rules (2026-11-17):
 - [ ] `singletons/network/VpnLockdown.qml` without the installed script: a network coming up asks for the password by itself, and runs the shell tree's own `scripts/h2s-vpn-lockdown` as root (user-writable in a checkout) — against two development rules
+
+Found during the test split (2026-11-17):
+- [ ] Module runs in the headless compositor start the `nmcli` on `PATH` against a dead
+      D-Bus address (`[NetworkEvents] nmcli monitor exited, restarting`) and try `notify-send`:
+      against "tests never touch a real daemon"; a stand-in or a switch-off is needed
+- [ ] `polkit/AuthPrompt.qml` sets no `textFormat` on polkit's texts (plain-text rule)
+- [ ] The module's live suites use fixed `waitMs(…)` waits as synchronisation in places
+      (`TailscaleLiveTest`, scenario `running`)
+- [ ] `tests/lock/tools.nix`: the comment ties the pin to one machine's system
 
 ## Open points
 
