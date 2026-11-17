@@ -1,7 +1,8 @@
 # Module API: the next versions
 
-Status: a plan, for the owner's final approval. Every question asked is answered (§8).
-Nothing here is built.
+Status: a plan, for the owner's final approval. Every question asked is answered (§8) but
+one: which comes first, announcing the shell to module authors or the first built-in
+feature split out into a module (§10). No slice here depends on it. Nothing here is built.
 
 ## At a glance
 
@@ -9,9 +10,10 @@ Nothing here is built.
 - run commands, also as administrator, through the shell (time limits, live output);
 - put its own rows, buttons and opening parts at named places in the shell's settings
   pages, popups and network cards: before, after, at the start or at the end of a part;
-- build its screens only from the shell's public elements, choosing a kind (primary,
-  secondary, danger, warning, success) and a size, never a colour, so the shell can
-  change its insides without breaking modules;
+- build its screens from the shell's public elements, choosing a kind (primary,
+  secondary, danger, warning, success) and a size, and from elements of its own, made of
+  QtQuick with the theme's colours and type sizes; never from the shell's internal
+  components, so the shell can change its insides without breaking modules;
 - show its icon on a closed network card; open a file chooser; offer an API to other
   modules.
 
@@ -25,8 +27,8 @@ Nothing here is built.
 - the exit node of a network on that network's opened card, the Tailscale icon on the
   closed one; the table on the Tailscale page goes.
 
-**Order of work**: 47 small changes, each with its test. (1) Running things and facts,
-16. (2) Places, public elements, the new looks, the icon, 17. (3) A module's API for other
+**Order of work**: 48 small changes, each with its test. (1) Running things and facts,
+16. (2) Places, public elements, the new looks, the icon, 18. (3) A module's API for other
 modules, 2. (4) The Tailscale module moves onto all of it, 11, then one change removes
 the old ways.
 
@@ -134,8 +136,12 @@ override (module state that wins over the per-network choice).
   follow the networks). Nothing that asks the user starts: no password prompt, no dialog.
   Those return `blocked: "locked"`.
 - **Trust.** A module runs in the shell's process, which also holds the lock screen's
-  password prompt and the polkit agent; QML has no sandbox. Every guard below stops
-  mistakes, not a hostile module. Step 8 writes this down for users.
+  password prompt and the polkit agent; QML has no sandbox, and no isolation is planned
+  (the owner's decision, §10). Every guard below stops mistakes, not a hostile module.
+  Wherever this plan names review as the guard, that is for the project's own modules.
+  An outside module has no review: there the password prompt's text (Module,
+  Authorization, the command) is the only protection, and the user is told that the
+  module does not come from the project (§10). Step 8 writes this down for users.
 
 ---
 
@@ -262,13 +268,15 @@ result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, ca
 - **Time limit.** The shell puts its own trusted `timeout` inside pkexec. `cancel()` after
   the program started as root stops waiting; the root process ends at its limit.
 - **No time window** after a click (the owner's decision). That nothing prompts without the
-  user's click stays a development rule, checked in review and by the module's tests; what
-  the user gets instead is a prompt that says who asks and what for.
+  user's click stays a development rule, checked in review and by the module's tests for
+  the project's own modules. An outside module has no review; for it, and for every
+  module, what the user gets is a prompt that says who asks and what for.
 - **Refused before pkexec runs:**
   - `untrusted`: `argv[0]` has no trusted verdict (§3.2), or is a shell or `env` (then the
     real program would be an argument nobody checked). What is left open, said honestly:
     only `argv[0]` is judged, so a trusted interpreter given a script from the module's
-    own directory passes. Review catches it; the rule does not.
+    own directory passes. Review catches it in the project's own modules; the rule does
+    not, and for an outside module nothing does but the command shown in the prompt.
   - `unprintable`: a word of `argv` holds a control or format character (Unicode Cc, Cf:
     a newline, a right-to-left override). Such a command could not be shown as it is.
   - `locked`; `no-purpose` (`what` empty after cleaning); `notFound` as today.
@@ -463,7 +471,8 @@ stays until it is solved.
 - A terminal call and a terminal setting: the owner decided a global "default programs"
   setting later. "Copy ssh command" stays.
 - A time window after a click for privileged runs.
-- API 2.0: with "a minor may tighten", removals ship in a minor (§6).
+- API 2.0: until the first release announced as open to module authors, removals ship
+  in a minor (§6).
 
 ---
 
@@ -767,21 +776,23 @@ VPN cards' (where today's slot stands), and `append` on every published card's `
 
 ### 4.9 Public elements
 
-A module builds its views from **public elements**: types in `qs.api`, made for the API,
-that use the shell's internal components inside (the owner's decision). The shell changes
-its internals freely; a public element keeps its own properties. Modules are meant to use
-as many of them as they can, and at the end of the migration a module imports nothing from
+**Public elements** are types in `qs.api`, made for the API, that use the shell's
+internal components inside (the owner's decision). The shell changes its internals
+freely; a public element keeps its own properties. Where a public element exists and
+fits, a module uses it; what the set does not offer, a module builds itself ("A module's
+own elements", below). At the end of the migration a module imports nothing from
 `qs.components`.
 
-**A module picks a meaning, not a look** (the owner's decision). Two small enumerated
-properties, the same words on every element that has them:
+**On a public element a module picks a meaning, not a look** (the owner's decision). Two
+small enumerated properties, the same words on every element that has them:
 
 | Property | Says | Values |
 |---|---|---|
 | `kind` | what the element is about | `primary`, `secondary`, `warning`, `danger`, `success`; an element takes the ones it has |
 | `size` | how large | `xs`, `s`, `m` (the default), `l`; an element takes the ones it has |
 
-Never a colour, a radius or a number of pixels. A theme decides how a kind and a size
+Never a colour, a radius or a number of pixels: that holds for the public elements'
+properties, not for a module's own elements (below). A theme decides how a kind and a size
 look. Both lists are open: the shell may add a value in a later minor. A value an element
 does not know shows as that element's default (below), so a module written for a newer
 shell still shows a working control on an older one.
@@ -981,18 +992,50 @@ verified), what `qs.api` offers already (6), and what the anchors need (3 new).
 - The six that `qs.api` offers already stay subtypes until the closing slice, which makes
   them wrappers (a tightening: a module could set an internal property on them today).
 
-**How the set grows.** A module that needs an element, a property, a kind or a size the
-set lacks stops and has it added: one per slice, a minor version, its line in
-`ApiElementsTest`. Nothing is added ahead of a module that needs it.
+**A module's own elements** (the owner's decision; it replaces "only from public
+elements").
 
-**Keeping modules off the internals.** QML cannot stop an import. The import check
+- A module may build any element of its own from QtQuick (`Item`, `Rectangle`, `Text`,
+  the layouts, `Shape`), in its own files.
+- Such an element takes every colour and every type size from the theme's public tokens
+  (`Api.theme`), never a literal, so it follows the theme in use as the shell's own
+  elements do. A token `Api.theme` lacks is asked for (a token added is a minor version).
+- Where a public element exists and fits, the module uses it. A "should": nothing checks
+  it, and nothing checks the tokens either.
+- "A meaning, never a raw colour or size" is a rule for the public elements' properties.
+  A module's own element has whatever properties its author gives it.
+- The one thing detected is importing the shell's internal components ("Keeping modules
+  off the internals", below).
+- The rules for any view hold in a module's own element too, and are the module's to
+  keep: text from outside is plain text on one line; hover comes from the public
+  `PointerArea`'s `lit`; no live array on a `Repeater`.
+- **The token names are pinned** by `tests/ApiThemeTokensTest.qml` (slice T0): the names
+  `Api.theme` offers (`api/ThemeTokens.qml`: colours, type sizes, the groups) equal a list
+  written in the test, and each colour and type size is the core theme's value of the
+  same name. Today no test pins the list (verified: only `SettingsPagesTest` names the
+  file, to compile it), though a module's own elements rest on nothing else. A change to
+  the list is an API version change, as for the elements.
+- Not this: a module publishing its elements to other modules, with styles a theme can
+  set (§7, "Later"), and a module's own theme tokens (§11).
+
+**How the set grows.** A module that needs an element, a property, a kind or a size the
+set lacks asks for it when it is of general use (another module, or the shell itself,
+would use the same), and builds its own otherwise. What is added: one per slice, a minor
+version, its line in `ApiElementsTest`. Nothing is added ahead of a module that needs it.
+
+**Keeping modules off the internals.** The shell's internal components (`qs.components`,
+`qs.singletons`, the files under `panels/`) may change in any release; that is the reason
+a module must not import them, and the import is the one thing about a module's views
+that is detected. QML cannot stop an import. The import check
 (`ModuleRules.allowedImports`) lists `import qs.components` among the module's
 `deprecations` (§6) from the slice that completes the set (F4), and as an error from the
-closing slice, when `qs.components` leaves the allowed list. The module still loads (the
+closing slice, when `qs.components` leaves the allowed list; `qs.singletons` and a
+directory outside the module's own are errors from P2 (§5.4). The module still loads (the
 owner's earlier decision: the check never refuses); the error shows in Settings → Modules
 and `modules list`, and `tests/run-modules.sh` fails a module that has it. The check
 reads import lines only: a file that builds a core component through
-`Qt.createComponent` is not seen by it, only in review.
+`Qt.createComponent` is not seen by it, only in review, which the project's own modules
+get and an outside module does not.
 
 ### 4.10 A module's icon, and the mark on a closed card
 
@@ -1113,7 +1156,8 @@ fixture modules (provider off and on, the dependent follows; the object given is
 
 ## 6. Versioning
 
-**A minor may tighten** (the owner's decision, for now). What it means here:
+**A minor may remove things until the first release announced as open to module
+authors** (the owner's decisions). Until then, what it means here:
 
 - Every slice that changes the API bumps the minor once and adds one `- 1.x:` line under
   `### Module API` in `CHANGELOG.md`. What a slice refuses or removes is named in that
@@ -1141,8 +1185,20 @@ fixture modules (provider off and on, the dependent follows; the object given is
   "the released module's suites are green" red.
 - A test compares the newest `- 1.x:` line in `CHANGELOG.md` with `ModuleRules.apiVersion`
   (`ModuleRulesTest.qml` stops hard-coding "1.3").
-- When someone else uses the shell, the rule is tightened (the owner's decision); the
-  floor stays as the mechanism.
+- **From the first release announced as open to module authors** (the owner's answer),
+  "a minor may remove" ends:
+  - a removal comes only with a major version;
+  - and only after the thing was listed as deprecated (`deprecations`) for at least one
+    release;
+  - removals are announced in `CHANGELOG.md`'s "Module API" section and in the author
+    guide.
+
+  A minor then only adds. The floor stays as the mechanism and no longer moves within a
+  major.
+- **The closing slice's sequencing is a one-off.** "Merges after the module is released"
+  (§7, Z) works because there is one module today and the shell and it are released by
+  the same hand. With other authors nobody can wait for every module: the release in
+  which a thing is listed as deprecated is what gives them the time.
 
 ---
 
@@ -1185,6 +1241,7 @@ minor.
 | U1a The host and the page block, on a fixture view | 1.13 (the manifest's `anchors`) | `components/AnchorBlock.qml`, `AnchorContent.qml` (from `ModuleSlot`), `SettingsPage.qml`, `singletons/Anchors.qml`, `ModuleHost.qml`, `api/Api.qml` (`anchors`), `tests/lock-closure.sh` | `AnchorsTest` (new) on a fixture page; the walk up `parent` in `QuickshellPinTest` |
 | U1b The General page | 1.14 | `SettingsWindow.qml`, `GeneralSettings.qml`, the first table row | `AnchorsTest`; the page's rows at the same places before and after; the slot case through its alias |
 | U2 Popups | 1.15 | `components/PopupSection.qml`, `PopupRow.qml`, `panels/Popup.qml`, `NetworkPanel.qml`, `panels/network/VpnSection.qml`, `NotificationPanel.qml` | `AnchorsTest`; the popups' parts at the same places before and after; by hand once |
+| T0 The theme's token names pinned | — (no change to the API: a test) | `tests/ApiThemeTokensTest.qml`, `tests.qml` | the names of `Api.theme` equal the test's list; each colour and type size equals the core theme's of the same name; a token removed or renamed fails |
 | T1 Pills in three sizes | — (user-visible: the theme editor gains two heights; the pills of the profile condition editor and the widget settings pane are 2 px lower) | `singletons/ThemeBuiltin.qml`, `ThemeRules.qml` (the `pill` group), `components/Pill.qml` (`size`), the 21 places that set `minimumHeight` | `ThemeTest`: the three heights; a pill of each size has its height; a source check that no file sets a pill's height as a number; the pills that were 22, 26 and 30 px keep their height, the ones that were 24 are 22 |
 | F1a The button inside: the bordered kinds, asking in every kind's colour | — (user-visible: the shell's disconnect and delete buttons gain a border; the theme gains "Buttons that warn" and "Buttons for a good outcome") | `components/SmallButton.qml` (`delete` bordered, `warning`, `success`, eliding), `DeleteButton.qml` (bordered; the question's colour by kind; plain text), `ThemeBuiltin.qml`, `ThemeRules.qml` (`warningButton`, `successButton`), the two places that ask before turning something on | `ThemeTest`; a view test: each kind's colours and border at rest, under the pointer, asking, and not available |
 | F1b Public elements: the pattern, and the button | 1.16 | `api/SmallButton.qml` (wrapper: `kind`, `size`, `confirm`, the mark), `tests/ApiElementsTest.qml` | `ApiElementsTest` (new) |
@@ -1221,7 +1278,7 @@ Each module slice raises its manifest `api` and removes one group of §1:
 | M7 The exit node per network on the network cards, with the mark | 21 | F3, U5, U7b, M6 |
 | M8 "Send file…" from the popup; both Taildrop dialogs through the chooser | 20 | E1 |
 | M9 The manual "for now" override | — (module state) | M7 |
-| M10 Public elements only: every `import qs.components` goes (17 files, 13 types), with the renames of §4.9 | — (the import) | T1, F1–F4 |
+| M10 Off the shell's internals: every `import qs.components` goes (17 files, 13 types), onto the public elements with the renames of §4.9; what no public element fits stays the module's own element, on `Api.theme`'s tokens | — (the import) | T0, T1, F1–F4 |
 | M11 The last: row 34 of §1, its suite expects no `deprecations`, `api` at the last additive version | 34 | all above |
 
 M10 is one change per group of files (the popup, the page's sections, the widget), each
@@ -1229,7 +1286,7 @@ with the module's UI suites green; the list of `deprecations` in the module's st
 counts down to none.
 
 **Z, the closing slice (core; 1.27; the floor becomes 1.26, P2's version).**
-It merges after M11 is released. M11's module declares 1.26 and uses none of the old
+It merges after M11 is released (a one-off for the one module of today, §6). M11's module declares 1.26 and uses none of the old
 ways, so it runs on the shell before Z and after it; a module still written for less is
 `incompatible` after Z, with the reason. (The floor cannot be Z's own version: a module
 cannot ask for a version the shell does not have yet, `apiCompatibility`.) Z removes the
@@ -1244,13 +1301,13 @@ compares the anchors and the public elements listed in `docs/` with `anchorTable
 
 ### Size, and what can run in parallel
 
-47 slices. S is a day or less of work with its test, M a few days, L about a week or a
+48 slices. S is a day or less of work with its test, M a few days, L about a week or a
 slice whose review needs care.
 
 | Step | Slices | S | M | L |
 |---|---|---|---|---|
 | 3 | 16 | A0, A2b, B1, A6, D1, E0 | S0, A1b, A2, A3, A5, C1, C2, E1 | A1, A4 |
-| 4 | 17 | U1b, T1, F4, U6, U7b | U0, U2, F1a, F1b, F2, F3, U4a, U4c, U5, U7a | U1a, U4b |
+| 4 | 18 | U1b, T0, T1, F4, U6, U7b | U0, U2, F1a, F1b, F2, F3, U4a, U4c, U5, U7a | U1a, U4b |
 | 5 | 2 | P2 | — | P1 |
 | 6 | 12 | M4, M6, M8, M9, M11 | M2, M3, M5, M7, Z | M1, M10 |
 
@@ -1259,6 +1316,7 @@ slice whose review needs care.
 - C1 → D1; A3 → C2; E0, then with A3 → E1; B1 alone.
 - U0 → U1a → U1b → U2; U1a → U4a → U4b → U4c → U5 → U6 → U7b; U7a before U7b.
 - F1a → F1b → F2, F3, F4 (these three in any order); T1 → F2; F1b → U6.
+- T0 needs nothing and may go first; before M10.
 - P1 → P2, after A3. Z last, after M11 is released.
 
 **Lanes for independent agents.** Each lane is one agent at a time; lanes do not edit the
@@ -1269,7 +1327,7 @@ same files, except as named below.
 | Commands and administrator runs | A0, A1, A1b, A2, A2b, A3, A4, A5, A6 | `singletons/io/`, `ModuleHost.qml`, `polkit/` |
 | Facts and helpers | B1, C1, D1, C2, E0, E1 | new singletons, `api/Api.qml`, `network/` |
 | Places | U0, U1a, U1b, U2, U4a, U4b, U4c, U5, U6, U7b | `components/` (the blocks), `panels/` |
-| Elements and looks | T1, F1a, F1b, F2, F3, F4, U7a | `api/`, `components/SmallButton.qml`, `DeleteButton.qml`, `Pill.qml`, the theme |
+| Elements and looks | T0, T1, F1a, F1b, F2, F3, F4, U7a | `api/`, `components/SmallButton.qml`, `DeleteButton.qml`, `Pill.qml`, the theme |
 | Dependencies | P1, P2 | `ModuleRules`, `ModuleHost.qml` |
 | The module | M1–M11 | the module's repository; each after the core slices it needs |
 
@@ -1286,22 +1344,27 @@ Recorded, not designed (the owner, 2026-11-17; also in the tracker's "Later"):
 - **The order of modules:** the order in which modules are loaded, and the order of
   different modules' elements in one place. Two separate things. Until then both are by
   module id (loading also follows `uses`, §5.2).
-- **Modules' own elements:** a module defines an element of its own, with its own public
-  styles that a theme can set, and publishes it through a public API, so that libraries of
-  extra elements can exist.
+- **Modules' own elements, published:** a module defines an element of its own, with its
+  own public styles that a theme can set, and publishes it through a public API, so that
+  libraries of extra elements can exist. (Building its own elements for itself is allowed
+  now, §4.9.)
+- **Ready for outside authors**, and **the built-in features divided** between the shell
+  and modules: tracker steps, not slices of this plan (§10, §11).
 
 ---
 
 ## 8. The owner's answers
 
-All of 2026-11-17. Nothing is open.
+All of 2026-11-17. One point is open: the order of "announce to authors" and "the first
+split-out" (§10).
 
 | What | The owner's answer | Where |
 |---|---|---|
 | Where the per-network exit node sits | The saved network's card, opened. The connection editor can follow as a second anchor once a module's row can join a form | §4.7 |
 | Placements | `before`, `after` (outside the block), `prepend`, `append` (inside, first and last) | §4.1 |
-| The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. Modules use only those, and as many as they can | §4.9 |
-| Variants | A module picks a meaning, not a look, on every element. A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`; more may come. Asking first is separate and goes with any kind | §4.9 |
+| The shell's controls in modules | Not a promise on the internals: a layer of public elements made for the API, which use the internal ones inside. A module uses them where they exist and fit | §4.9 |
+| A module's own elements | Allowed: built from QtQuick, every colour and type size from the theme's tokens. Importing the shell's internal components is the thing to avoid, and the only thing detected. (Replaces "only from public elements") | §4.9 |
+| Variants | A module picks a meaning, not a look, on every public element. A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`; more may come. Asking first is separate and goes with any kind | §4.9 |
 | Buttons with a tone | A class of bordered buttons, `danger`, `warning`, `success`: a border in the tone's colour at rest, the whole background in it under the pointer. Every such button in the shell takes it, the per-row ones in the popups included | §4.9 |
 | "Cancel" | No kind of its own: a module's "Cancel" is `secondary` | §4.9 |
 | Pills | Three sizes, `s`, `m`, `l`, standard, set by the theme, offered through the API. The shell's 24 px pills become `s` (22 px) | §4.9 |
@@ -1317,7 +1380,15 @@ All of 2026-11-17. Nothing is open.
 | A privileged run for which no password is asked | Nothing on screen; one log line naming the module | §3.4 |
 | The file chooser | In this round, a minimal version | §3.9 |
 | The order of modules (loading, and elements in one place) | Both wanted, both later; for now by module id | §7, "Later" |
-| Modules' own elements, element libraries | Later | §7, "Later" |
+| A module's elements published to other modules, element libraries | Later | §7, "Later" |
+| Who writes modules | Today the owner; later other users. Until then the shell and its module system are built up so that they can do so without problems | §10, §11 |
+| Review as a guard | Holds for the project's own modules. An outside module has none; there the prompt's text is the only protection | §2 |
+| Removing things from the API | In a minor until the first release announced as open to module authors; from then only with a major version, after at least one release listed as deprecated, announced in the CHANGELOG's "Module API" section and the author guide | §6 |
+| Where the shell is going | A fairly small framework that defines the structure and the way of working; built-in features are split out into modules, some shipped with the shell | §10 |
+| Shipped modules | Use only the public API, like anyone's module: one class of modules | §10 |
+| What stays in the shell | The services, or abstractions for reaching them; the lock screen, password prompts and privileged runs. A module builds on them and adds the whole feature | §10 |
+| Trust | No isolation: "the shell must work and modules need access to its functions". The user must know what they install: a module that is not the project's is announced as such, and is then not the project's responsibility | §10 |
+| Which comes first: announcing to authors, or the first split-out | Open: not answered yet | §10 |
 
 ---
 
@@ -1410,8 +1481,76 @@ All of 2026-11-17. Nothing is open.
   slice S0. That does not end the meeting of parallel slices in the version line, the
   `Api.qml` header and the CHANGELOG, which stay a merge-time edit.
 - **QML cannot hide anything.** `host`, `module.main` and `exports` are reachable by a
-  module that tries; the plan closes them by name, status errors and review.
+  module that tries; the plan closes them by name, status errors and review. Review is
+  for the project's own modules: for an outside module they are not closed (§2).
 - **The core breaks its own rule:** `network/VpnLockdown.qml` runs `pkexec sh <script>`
   from the shell's tree (tracker, "Found while writing the development rules"). It is not
   a module run and stays outside this plan, but the prompt will show it without module
   lines, as a plain pkexec request.
+
+---
+
+## 10. Direction
+
+The owner's answers of 2026-11-17. Not slices: where the round's work is to fit.
+
+- **The shell becomes a fairly small framework** that defines the structure and the way
+  of working. Built-in features are split out into modules; some ship with the shell.
+- **One class of modules.** A shipped module uses only the public API, like anyone's.
+  Every feature split out proves the API.
+- **The shell provides the services, or abstractions for reaching them;** a module builds
+  on them and adds the whole feature: popups, elements, widgets, settings pages. Every
+  built-in feature will be gone through and divided this way. The lock screen, password
+  prompts and privileged runs stay in the framework.
+- **Other authors.** Today every module is the owner's; later other users write modules.
+  Until then the shell and its module system are built up so that they can do so without
+  problems (tracker, "Ready for outside authors").
+- **Trust: no isolation.** "Isolation makes no sense: the shell must work and modules
+  need access to its functions." Running modules in a process of their own is not a later
+  question. Instead the user must know what they install: a module that does not come
+  from the project is announced as such, with a plain statement and a confirmation when a
+  module that is not shipped is first enabled, and shown when a user's copy replaces a
+  shipped one. It is then not the project's responsibility.
+- **Open, the one point:** whether the shell is announced to module authors before or
+  after the first feature is split out. Both are tracker steps; their order is not fixed.
+
+What this round must not close off is listed in §11.
+
+## 11. Doors to keep open
+
+Nothing here is built in this round. A slice that touches one of these keeps it possible.
+
+- **A place for shipped modules outside the tree Quickshell scans.** Modules are found by
+  `scripts/launch.sh` (`module_roots`: the user's data home, then each
+  `<data dir>/h2s-shell/modules`). On NixOS `nix/package.nix` copies the whole tree to
+  `$out/share/h2s-shell`, so a `modules/` directory inside the repository would land on a
+  system search root and inside the scanned tree at once. To verify before a place is
+  chosen: whether Quickshell then registers the modules' files as shell types, and where
+  Arch's `install.sh` puts the tree (not read for this).
+- **Where a module comes from, and visible shadowing.** A module's status gets a "where
+  from" field (shipped, the system's, the user's). Today the first on the search path
+  wins and the user's root is first (verified: `ModuleRules.precedence`,
+  `module_roots`): the losing copy is listed as `duplicate`, but nothing on the winning
+  one says that it replaces a shipped module. That is to be shown, with the statement of
+  §10.
+- **The import check as a function of the module,** not one global list
+  (`ModuleRules.allowedImports` today), so that what a module may import can depend on
+  the module without a second mechanism.
+- **Core code keeps using core types, never `qs.api`** (as §3.1 says for the runner), so
+  the public layer stays a layer and a feature can move out from under it.
+- **A reserved prefix for anchors owned by modules.** A feature split out would own the
+  places others attach to; the names `settings` and `popup` stay the shell's, and no
+  published path takes a first part a module could later need (§4.2).
+- **The gaps a split-out feature would meet,** each an API extension of its own when the
+  first feature needs it:
+  - system state beyond the network: Bluetooth, audio, the battery, the notification
+    list, the compositor;
+  - popups, windows and on-screen displays that stand alone, not opened by a bar widget;
+  - the settings keys of a moved feature (today's keys are the core's; a module's are
+    `mod.<id>.*`), with their migration;
+  - IPC names: a module's targets are `<id>` or `<id>.<name>` (`api/ModuleHandle.qml`'s
+    comment; whether anything enforces it is to verify), so a moved feature's target
+    would change name or need an alias;
+  - a module offering places to other modules (§4.3: a module's views are not anchors in
+    this round);
+  - a module's own theme tokens.

@@ -72,7 +72,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
 1. Planning, no code — open
    - [ ] revise [plans/api-next.md](plans/api-next.md): UI anchors and their naming
          convention, a module's public API, the password prompt's "who and what for",
-         a minor may tighten
+         the versioning rule, a module's own elements, other authors, the direction
    - [ ] analysis + plan: PAM configuration from the shell (polkit and lock screen, NixOS
          and Arch)
    - [x] plan: the test split (general + per system): [plans/test-split.md](plans/test-split.md)
@@ -103,8 +103,10 @@ test queue; review what carries risk, look at one-line fixes yourself.
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
    (splits, hubs, test hooks, the module's read/clock performance, the network editor's save
    that can lose the kill-switch choice). Runs alongside 3–6 where slices do not collide — open
-8. Modules closed for now (see Decisions) — open
-   - [ ] the trust model written down honestly
+8. Modules closed for now (see Decisions: a state of today, ended by step 13) — open
+   - [ ] the trust model written down honestly: no isolation; review covers the project's
+         own modules only; for any other module the password prompt's text is the only
+         protection
    - [ ] Settings → Modules: enable, disable, reload, install, update, remove from a repository
    - [ ] the safe-mode banner
 9. Lock — open
@@ -120,6 +122,26 @@ test queue; review what carries risk, look at one-line fixes yourself.
 11. PAM configuration from the shell — open
 12. Documentation for users and developers per [plans/documentation.md](plans/documentation.md);
     the architecture and API chapters after 3–7 — open
+13. Ready for outside authors — open
+    - [ ] the author guide and the API reference in `docs/` (was "M5 author guide" in the
+          backlog)
+    - [ ] a module template
+    - [ ] a module's tests runnable without a checkout of the shell
+    - [ ] the public versioning rule in force and written down (removals only with a major
+          version, after a release listed as deprecated)
+    - [ ] the trust text, and the confirmation when a module that is not shipped is first
+          enabled
+    - [ ] Settings → Modules shows where a module comes from, and when a user's copy
+          replaces a shipped one
+14. Divide the built-in features: abstraction in the shell, feature in a module — open
+    - [ ] go through every built-in feature: what is the service or the abstraction (stays),
+          what is the feature (moves)
+    - [ ] one feature first, as the proof of the API; shipped with the shell, on the public
+          API only
+    - [ ] the rest, feature by feature
+
+The order of 13 and 14 is not decided (see Open points). What steps 3–6 must leave possible
+for both is in [plans/api-next.md](plans/api-next.md), §11 "Doors to keep open".
 
 Later:
 - pttd (dictation) as its own module in its own repository (was TODO 11.24); until then
@@ -130,11 +152,9 @@ Later:
 - documentation as a site with per-system tabs
 - module order: the order in which modules are loaded, and the order of different modules'
   elements in one place (two separate things; until then both by module id)
-- modules' own elements: a module defines an element with its own public styles, settable
-  by a theme, and publishes it through a public API, so that libraries of extra elements
-  can exist
-- the shell as a minimal framework; built-in features moved into modules, some shipped
-  with the shell
+- modules' own elements, published: a module defines an element with its own public
+  styles, settable by a theme, and publishes it through a public API, so that libraries of
+  extra elements can exist (building its own elements for itself is allowed now)
 
 ## Decisions
 
@@ -148,17 +168,17 @@ All by the owner, 2026-11-17.
 - Tests: one general set independent of the system, plus a set per system (NixOS, Arch). A developer runs the general set and their system's.
 - PAM: the order of password and fingerprint is the system's PAM stack, not the prompt's. Wanted: configuring PAM rules from the shell; needs its own analysis and plan.
 - Documentation: English only; Markdown with "NixOS" and "Arch" subsections wherever the systems differ (a site with tabs maybe later); pages for system-only features where it makes sense; never one system without the other; nothing refers to or relies on the developers' own environments (user names, home paths, machines); screenshots are the owner's; docs verified for consistency at each major release, not on every change; `docs/` never links into `notes/`.
-- Module API: a minor version may tighten behaviour for now (nobody else uses the shell yet); the rule is tightened when needed.
+- Module API: a minor version may tighten behaviour for now (nobody else uses the shell yet); the rule is tightened when needed. (Temporary: it ends at the first release announced as open to module authors, see "Module API, versioning for authors" below.)
 - Module API, UI anchors: views are built from shared blocks (settings page, section, card, row, popup section) that register under a path derived from where they stand; a module names a path, a placement (before, after, appended inside) and its element. Addressable: settings pages and popup content; not the bar (the user places widgets there). One naming convention for anchors; the list of anchors pinned by a test and documented. Today's slots move onto anchors.
 - Module API: a module may publish its own versioned API object for other modules (declared in the manifest; a dependent module gets only that object). Basic version in this round. Reaching into another module or the host goes away.
 - Privileged runs by a module: no time window; the password prompt says which module asks and what for, next to the actual command.
 - Exit node (Tailscale): a manual choice "for now" that overrides the per-network setting, and a per-network choice in that connection's options (through an anchor).
 - No terminal setting of its own: a global "default programs" setting later.
-- Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
+- (Temporary, see "Module authors" and "Trust" below.) Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
 - Coding is done by strong models only; no weaker models for mechanical moves.
 - Module API, placements: `before`, `after` (outside the block), `prepend`, `append` (inside, first and last).
-- Module API, public elements: modules build their views only from public elements made for the API (in `qs.api`), which use the shell's internal components inside; the internals stay free to change, the public elements keep compatibility. Modules should use as many standard elements as they can. In this round.
-- Module API, variants are meanings, not looks, on every public element; never raw colours or sizes. A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`, and more may come; asking first is a separate thing that goes with any kind; a danger button may act on the first click. A module's "Cancel" is `secondary`; no kind of its own.
+- (Replaced as to "only", see "a module's own elements" below.) Module API, public elements: modules build their views only from public elements made for the API (in `qs.api`), which use the shell's internal components inside; the internals stay free to change, the public elements keep compatibility. Modules should use as many standard elements as they can. In this round.
+- Module API, variants are meanings, not looks, on every public element; never raw colours or sizes (on a public element's properties; a module's own elements are free, see below). A button's kind is `primary`, `secondary`, `danger`, `warning` or `success`, and more may come; asking first is a separate thing that goes with any kind; a danger button may act on the first click. A module's "Cancel" is `secondary`; no kind of its own.
 - Buttons with a tone (`danger`, `warning`, `success`) are bordered: at rest a border in the tone's colour, under the pointer or a pressing finger the whole background in it. Every such button in the shell takes this look, the small "✕" on each row of the Bluetooth popup and the per-row "Disconnect" buttons included.
 - Pills: three sizes, `s`, `m`, `l`, standard, set by the theme and offered through the API. The shell's 24 px pills become `s` (22 px).
 - Module API, network cards: the place for a module's button on a card is built in this round; the button is the shell's, of any kind, always above "Forget" / "Delete" (a module that wants caution makes it ask first). An element that opens is the shell's `ExpandingRow`. A closed card shows the module's icon when the module has something set for that network; the detail is on the opened card.
@@ -171,6 +191,12 @@ All by the owner, 2026-11-17.
 - Module API, a module's own elements: modules are not kept from building their own elements. They use the public elements wherever that is possible and makes sense, and the theme's colours always; building something the API does not offer is fine. Importing the shell's internal elements stays the thing to avoid. (Replaces "only from public elements" above: that is not a rule and not an error.)
 - Module authors: that every module is the owner's is true today, not an assumption to build on. Other people are expected to write modules later; until then the shell and its module system are built up to the point where they can do so without problems.
 - Direction: the shell itself becomes a fairly small framework that defines the structure and the way of working; parts of what is built in today can then be split out into modules. Such modules need not live in repositories of their own: some ship together with the shell.
+- Module API, a module's own elements, in detail: built from QtQuick; every colour and type size from the theme's public tokens (`Api.theme`), never a literal; a public element is used where one exists and fits (a "should", not checked); a module asks for a new public element when it is of general use and builds its own otherwise. Only importing the shell's internal components is detected: listed as deprecated, then an error in the module's status. "The module API is ours" covers capabilities (running things, system state, privileges, places in the shell's views), not looks. The token names are pinned by a test.
+- Review as a guard is for the project's own modules. An outside module has no review; there the password prompt's text (Module, Authorization, the command) is the only protection.
+- Module API, versioning for authors: "a minor may remove things" ends at the first release announced as open to module authors. From then a removal comes only with a major version, after being listed as deprecated for at least one release, and is announced in `CHANGELOG.md`'s "Module API" section and the author guide. Merging the closing slice only after the module is released is a one-off for the one module of today.
+- Shipped modules use only the public API, like anyone's module: one class of modules. Every feature split out proves the API.
+- The shell provides the services, or abstractions for reaching them; a module builds on them and adds the whole feature (popups, elements, widgets, settings pages). Every built-in feature is to be gone through and divided this way. The lock screen, password prompts and privileged runs stay in the framework.
+- Trust: no isolation ("the shell must work and modules need access to its functions"); running modules in a process of their own is not a later question. The user must know what they install: a module that does not come from the project is announced as such (a plain statement and a confirmation when a module that is not shipped is first enabled; shown when a user's copy replaces a shipped one), and is then not the project's responsibility.
 
 ## Backlog / later
 
@@ -200,7 +226,6 @@ From next-steps (2026-11-15):
 - [ ] Tailscale module: warn when an accepted subnet route covers the local network the
       computer is on (replies to LAN peers then leave through the tunnel and LAN connections
       to this computer fail); seen with "Use routes from other devices" on
-- [ ] M5 author guide for modules (with step 12)
 
 Found while writing the development rules (2026-11-17):
 - [ ] `singletons/network/VpnLockdown.qml` without the installed script: a network coming up asks for the password by itself, and runs the shell tree's own `scripts/h2s-vpn-lockdown` as root (user-writable in a checkout) — against two development rules
@@ -220,6 +245,9 @@ Found during the test split (2026-11-17):
 
 ## Open points
 
-- None of the owner's decisions are pending. The plans in `plans/` (`api-next.md`,
+- One decision is pending: which comes first, step 13 (announce the shell to module
+  authors) or the first feature split out (step 14). The owner has not answered yet;
+  nothing in steps 3–6 depends on it.
+- The plans in `plans/` (`api-next.md`,
   `architecture-cleanup.md`, `documentation.md`) are drafts written before the decisions
   of 2026-11-17; step 1 revises them, and the owner approves them before implementation.

@@ -179,7 +179,9 @@ new kind.
   write.** — Otherwise any user process can become root at the next prompt.
 - **The module API is ours.** If it lacks something, stop and extend it (minor version, a
   `### Module API` line in `CHANGELOG.md`, the reference in `api/Api.qml`) — never build a
-  substitute in a module. — Workarounds in modules became the real API.
+  substitute in a module. It covers capabilities (running things, system state,
+  privileges, places in the shell's views), not looks: a module may build its own elements
+  from the theme's tokens. — Workarounds in modules became the real API.
 - **Nothing relies on one developer's environment;** NixOS and Arch are treated together. —
   Code and docs that worked on one machine only.
 - **Docs and comments describe the code as it is,** never how or when it was built.
