@@ -183,8 +183,13 @@ setup_error() {
 # caller that already wrapped the run in `flock /tmp/h2s-locktest.flock …` handed that open
 # file on, lock and all: it is found among this process's open files and used, so the run
 # does not wait for its own caller. (`flock -o`, which closes the file before it starts the
-# command, would have the run wait for its caller for ever: not with -o.) The tests are
-# started without the file: what outlived a run could otherwise keep the next one waiting.
+# command, would have the run wait for its caller for ever: not with -o.) Only this bash
+# has the file: the tests, and the programs of the set-up that run code from elsewhere or
+# can stay behind (the launcher asked for its Quickshell, nix, the tools' generators), are
+# started without it — what outlived a run could otherwise keep the next one waiting.
+# `{lock_fd}<&-` on a command closes it for that command alone.
+# The file is made readable for everybody, whatever the umask: it is one file for all the
+# users of a machine, and one made 0600 would end every other user's run right here.
 # LOCKTEST_LOCK_FILE names another file — for tests/resolve-selftest.sh, which checks this
 # without waiting for a real run.
 LOCK_FILE=${LOCKTEST_LOCK_FILE:-/tmp/h2s-locktest.flock}
@@ -192,7 +197,9 @@ lock_fd=""
 take_lock() {
     local link
     type -P flock > /dev/null || setup_error "flock not found on PATH (util-linux: one run of the lock test bed at a time)"
-    [ -e "$LOCK_FILE" ] || : 2> /dev/null >> "$LOCK_FILE"
+    [ -e "$LOCK_FILE" ] || (umask 022 && : >> "$LOCK_FILE") 2> /dev/null
+    # (One of ours from before, made with a tight umask; another user's cannot be changed)
+    [ -O "$LOCK_FILE" ] && chmod a+r "$LOCK_FILE" 2> /dev/null
     for link in /proc/$$/fd/*; do
         [ "$link" -ef "$LOCK_FILE" ] && { lock_fd=${link##*/}; break; }
     done
@@ -220,12 +227,12 @@ temp_base=${TMPDIR:-/tmp}
 # ---- Tools, the launcher and its Quickshell (resolve.sh, shared with tests/run-unit.sh) ----
 # Resolved once here and handed to every test in its environment
 LOCKTEST_NEED=lock
-source "$LOCKTEST_DIR/resolve.sh"
+source "$LOCKTEST_DIR/resolve.sh" {lock_fd}<&-
 
 # PAM modules must belong to the libpam the process loads: taken from Quickshell's
 quickshell_binary=$(dirname "$LOCKTEST_QS")/.quickshell-wrapped
 [ -e "$quickshell_binary" ] || quickshell_binary=$LOCKTEST_QS
-libpam=$(ldd "$quickshell_binary" 2> /dev/null | sed -n 's/.*libpam\.so\.0 => \([^ ]*\).*/\1/p' | head -n 1)
+libpam=$(ldd "$quickshell_binary" 2> /dev/null {lock_fd}<&- | sed -n 's/.*libpam\.so\.0 => \([^ ]*\).*/\1/p' | head -n 1)
 LOCKTEST_PAM_MODULES=${LOCKTEST_PAM_MODULES:-$(dirname "${libpam:-/nonexistent/lib/x}")/security}
 [ -e "$LOCKTEST_PAM_MODULES/pam_exec.so" ] \
     || setup_error "no pam_exec.so beside Quickshell's libpam ($LOCKTEST_PAM_MODULES; set LOCKTEST_PAM_MODULES)"
@@ -271,7 +278,7 @@ LOCKTEST_RUN_ID=$(basename "$ARTIFACTS")-$$
 # With the system's tools, the set tools.nix would have built is made here, for this run:
 # links to the programs found on PATH, the protocol bindings and the keymaps (resolve.sh)
 if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
-    make_system_tools "$ARTIFACTS/tools"
+    make_system_tools "$ARTIFACTS/tools" {lock_fd}<&-
     LOCKTEST_TOOLS=$ARTIFACTS/tools
 fi
 
@@ -315,7 +322,7 @@ done
 marked_inhibitors() {
     local variable=$1 value=$2 pid
     [ -n "$variable" ] && [ -n "$value" ] || return 0
-    for pid in $(systemd-inhibit --list --no-pager --no-legend 2> /dev/null \
+    for pid in $(systemd-inhibit --list --no-pager --no-legend 2> /dev/null {lock_fd}<&- \
         | awk '{ for (i = 1; i + 2 <= NF; i++) if ($i ~ /^[0-9]+$/ && $(i + 2) ~ /^[0-9]+$/) { print $(i + 2); break } }'); do
         { tr "\0" "\n" < "/proc/$pid/environ"; } 2> /dev/null \
             | grep -qxF -- "$variable=$value" && echo "$pid"
@@ -357,6 +364,11 @@ classify() {
 # entry for each; it stores no core for a process whose limit is 0.)
 ulimit -c 0 2> /dev/null
 
+# A variable of this run's own that no test is handed: harness.sh checks that the shell
+# under test lacks it, which shows the tests' environment is the list in start_test and not
+# the caller's — also where the caller has none of the session's variables to look for
+export LOCKTEST_CANARY=1
+
 started=$SECONDS
 declare -A results=()
 declare -A test_started=()
@@ -391,6 +403,7 @@ start_test() {
     # two settings a caller may give a test (lib.sh reads them). No display, no bus, no seat,
     # no agent socket, no toolkit setting of the session: lib.sh then sets the test's own,
     # and still unsets the session's variables by name, should this list ever grow.
+    # LOCKTEST_CANARY (below) is not named: harness.sh fails when the shell has it.
     # Everything of the test runs with no new privileges: setuid programs (pkexec,
     # unix_chkpwd) cannot gain any, so nothing the shell starts can reach polkit or the
     # real password database
@@ -410,7 +423,7 @@ start_test() {
     pid=$!
     RUNNING[$pid]=$name
     if serial_output; then
-        tail -n +1 -f --pid="$pid" "$ARTIFACTS/$name/test.log" 2> /dev/null &
+        tail -n +1 -f --pid="$pid" "$ARTIFACTS/$name/test.log" 2> /dev/null {lock_fd}<&- &
         TAIL[$name]=$!
     else
         echo "-- $name started ($launched/$total, ${#RUNNING[@]} running)"

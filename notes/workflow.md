@@ -74,7 +74,9 @@ Agents clean up only their own temporary files.
 - Only the lock bed needs the machine to itself (its tests depend on timing):
   `tests/lock/run.sh` takes `/tmp/h2s-locktest.flock` itself for the length of a run, and
   says so while it waits for another run. The unit, module and self-test runners take no
-  lock and run side by side.
+  lock and run side by side. They do take the processor, and the lock bed's scenarios
+  depend on timing: a lock-bed failure seen while other runners were going on a small
+  machine is run again alone before it is believed.
 - All of them run in an invisible compositor. They use the processor, nothing shows.
 - Every runner takes its tools from the pinned `tests/lock/tools.nix` where there is a
   `nix` command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` chooses); the first

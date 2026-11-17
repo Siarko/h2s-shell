@@ -51,7 +51,13 @@ for monitor in json.load(sys.stdin):
     if monitor["name"] == sys.argv[1]:
         print(monitor["scale"], round(monitor["width"] / monitor["scale"]), round(monitor["height"] / monitor["scale"]))' "$1"
 }
-scaled() { [ "$(output_scale WAYLAND-1 | cut -d' ' -f1)" != "$1" ]; }
+# scaled <scale before>: the output has another scale now. A read that gave nothing (a
+# hyprctl that failed) is not a change
+scaled() {
+    local now
+    now=$(output_scale WAYLAND-1 | cut -d' ' -f1)
+    [ -n "$now" ] && [ "$now" != "$1" ]
+}
 # An output's size in pixels, as Hyprland has it now ("300 260"); nothing when it is not there
 output_pixels() {
     hyprctl -j monitors | python3 -I -c '

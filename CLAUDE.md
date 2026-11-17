@@ -74,6 +74,8 @@ starts as many at once as the machine keeps on schedule. `tests/lock/run.sh` tak
 for that itself (`/tmp/h2s-locktest.flock`, for the length of the run) and says so when it
 waits for another run; wrapping it in `flock` on that file still works. The unit, module and
 self-test runners take no lock: they share nothing but the processor, and run side by side.
+The processor is what the lock bed's timing depends on, though: a lock-bed failure seen
+while other runners were going on a small machine is run again alone before it is believed.
 
 A running shell reloads itself when a file changes, but that reload is not enough after
 editing a singleton: it has been seen to rebuild the panels while keeping the old

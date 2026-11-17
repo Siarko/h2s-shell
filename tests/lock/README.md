@@ -29,9 +29,17 @@ at once as the machine keeps on schedule; a second run beside it would have both
 no fault of the shell. So `run.sh` takes a lock itself — `flock` on
 `/tmp/h2s-locktest.flock`, held from its start to its end — and while another run has it,
 prints one line and waits. A caller that wraps the run in `flock /tmp/h2s-locktest.flock …`
-hands its lock on, and the run does not wait for it (not with `flock -o`, which keeps the
-lock from the command). The tests' own processes do not hold it. The unit, module and
-self-test runners take no lock.
+hands its lock on, and the run does not wait for it. That holds only when the run gets the
+wrapper's open file: with `flock -o`, or a wrapper between `flock` and `run.sh` that closes
+the descriptors it was given, the run waits for its own caller for ever. Two runs started
+under one outer `flock` both find its lock and do not exclude each other. If the lock file
+is removed while a run holds it, the next run makes and locks a new file and runs beside
+the first: do not remove it. The file is readable for everybody, so that the users of one
+machine share it. Only `run.sh` itself holds the lock — not the tests' processes, nor the
+programs of its set-up — so nothing a run leaves behind keeps the next one waiting. The
+unit, module and self-test runners take no lock; they do take the processor, so a failure
+of this bed seen while they were running on a small machine is run again alone before it
+is believed.
 
 Ctrl-C (or SIGTERM/SIGHUP) stops the running tests and their stacks, sweeps, removes the
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.

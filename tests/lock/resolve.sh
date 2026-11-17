@@ -21,7 +21,8 @@
 # evaluate tools.nix again (seconds, at every runner's start): a file in
 # ${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/, named after a hash of what the build is
 # made from — tools.nix, every file it names (tools_inputs, below) and the system. The
-# remembered path is taken only while it is still there and holds what this caller needs;
+# remembered path is taken only while it is still there and holds what this caller needs,
+# from a file and a directory that belong to the user;
 # otherwise nix is asked as before and the file rewritten. H2S_TEST_TOOLS_CACHE=0 asks nix
 # whatever is remembered (and rewrites the file). Without a cache directory that can be
 # written, or without sha256sum, nix is asked every time.
@@ -159,9 +160,13 @@ pinned_parts() {
         printf '%s\n' bin/labwc bin/setpriv
     fi
 }
-# remembered_tools <file>: the path in it, when it is still a tool set this caller can use
+# remembered_tools <file>: the path in it, when it is still a tool set this caller can use.
+# Only a file of the user's own in a directory of the user's own: the runner executes
+# programs from the path it names, and with the cache in a directory others can write,
+# another user could have put the file there
 remembered_tools() {
     local path part
+    [ -O "$1" ] && [ -O "${1%/*}" ] || return 1
     { IFS= read -r path < "$1"; } 2> /dev/null || return 1
     [[ "$path" == /* ]] && [ -d "$path" ] || return 1
     while IFS= read -r part; do

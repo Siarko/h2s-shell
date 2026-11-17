@@ -17,7 +17,9 @@
 #
 # Nothing here is shared with another run but the processor — every run has its own
 # compositor, runtime dir and home — so these runners take no lock and run side by side
-# (the lock test bed, whose tests depend on timing, takes one: tests/lock/run.sh).
+# (the lock test bed, whose tests depend on timing, takes one: tests/lock/run.sh). The
+# processor they do share with it: a lock-bed failure seen while these were running on a
+# small machine is run again alone before it is believed.
 #
 #   headless_setup                         the private dirs and the compositor (exit 2 on failure)
 #   headless_run <root.qml> <copy> [VAR=value…]
@@ -94,6 +96,10 @@ setup_error() {
 
 headless_setup() {
     [ "$(id -u)" != 0 ] || setup_error "do not run as root"
+    # No core files, for this runner and everything it starts: a Quickshell that crashes
+    # under test would leave some 15 MB outside the run's directories, and the self-test's
+    # stand-in ends itself with SIGSEGV at every run (tests/lock/run.sh does the same)
+    ulimit -c 0 2> /dev/null
     # shellcheck disable=SC2034  # read by resolve.sh
     temp_base=${TMPDIR:-/tmp}
     # shellcheck source=lock/resolve.sh

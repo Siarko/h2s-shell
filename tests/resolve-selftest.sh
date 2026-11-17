@@ -9,10 +9,13 @@
 # stand-ins of python3, pkg-config and xkbcli), and the launcher taken when there is no
 # h2s-shell command — the test bed's launcher.sh, the real one, checked on its own too.
 # With nix, the store path remembered from an earlier run: taken without asking nix while
-# the tree's inputs are unchanged and the path still holds what is needed, not otherwise.
+# the tree's inputs are unchanged and the path still holds what is needed, not otherwise —
+# and not from a directory that is not the user's.
 # And the lock tests/lock/run.sh takes for the machine (on a lock file of this script's own,
 # in a run that ends at its first set-up check): it waits for another run and says so, does
-# not wait for a caller that holds the lock for it, and ends at once when interrupted.
+# not wait for a caller that holds the lock for it, and ends at once when interrupted; the
+# file it makes can be read by everybody; and, in a whole run of one stand-in test, neither
+# the programs of the set-up nor the test have the lock's open file.
 #
 #   tests/resolve-selftest.sh
 #
@@ -25,7 +28,9 @@ set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/resolve-self.XXXXXX") || exit 2
-trap 'rm -rf "$work"' EXIT
+# (planted: the one file a case puts outside $work, while it is there)
+planted=""
+trap 'rm -rf "$work"; [ -n "$planted" ] && rm -f "$planted"' EXIT
 bash_path=$(type -P bash)
 failures=0
 
@@ -801,6 +806,40 @@ resolve cache-system unit "$nix_path" XDG_CACHE_HOME="$work/cache-system" H2S_TE
 exits 0
 prints out "$system_tools_line"
 is "nothing is remembered" test ! -e "$work/cache-system"
+
+# The remembered file lies in a directory that is not the user's — the cache pointed at a
+# place others can write, where anybody could have put it: not taken, nix is asked. Such a
+# directory is found, not made (that would take another user): a temp directory of the
+# system's, with the file under the name of a tree no other run has (a line of this run's
+# own in tools.nix). A file that is another user's in a directory of one's own cannot be
+# made without being that user: that half of the rule has no case.
+echo "# $$ $RANDOM $RANDOM" >> "$lock_directory/tools.nix"
+resolve cache-own unit "$nix_path" XDG_CACHE_HOME="$work/cache-own"
+exits 0
+called nix
+resolve cache-own-hit unit "$nix_path" XDG_CACHE_HOME="$work/cache-own"
+exits 0
+not_called nix
+shared=""
+for directory in /tmp /var/tmp /dev/shm; do
+    [ -d "$directory" ] && [ -w "$directory" ] && [ ! -O "$directory" ] && { shared=$directory; break; }
+done
+remembered_file=$(basename "$work/cache-own"/h2s-shell-tests/tools-nix-*)
+if [ -n "$shared" ] && [ ! -e "$shared/$remembered_file" ]; then
+    mkdir -p "$work/cache-shared"
+    ln -s "$shared" "$work/cache-shared/h2s-shell-tests"
+    planted=$shared/$remembered_file
+    cp "$work/cache-own/h2s-shell-tests/$remembered_file" "$planted"
+    resolve cache-foreign-directory unit "$nix_path" XDG_CACHE_HOME="$work/cache-shared"
+    exits 0
+    called nix
+    prints out "$nix_tools_line"
+    rm -f "$planted"
+    planted=""
+else
+    echo "SKIP cache-foreign-directory: no directory here that can be written and is another user's (/tmp, /var/tmp, /dev/shm)"
+fi
+cp "$REPO/tests/lock/tools.nix" "$lock_directory/tools.nix"
 lock_directory=$REPO/tests/lock
 
 # ---- The lock bed's lock for the machine (tests/lock/run.sh) ---
@@ -876,6 +915,71 @@ exits 130
 if [ $((SECONDS - interrupted_at)) -le 5 ]; then pass "ended at once"; else failed "took $((SECONDS - interrupted_at)) s to end"; fi
 kill "$holder_pid" 2> /dev/null
 wait "$holder_pid" 2> /dev/null
+is "the lock is free again" flock -n "$bed_lock" true
+
+# The lock file is one for all the users of a machine: readable by everybody, whatever the
+# umask of the run that makes it — and one of the user's own from before is made so
+readable_by_all() { [ "$(stat -c %A "$1" | cut -c 5,8)" = rr ]; }
+bed_lock=$work/tight/bed.flock
+mkdir -p "$work/tight"
+bed bed-lock-umask "$bash_path" -c 'umask 077; exec "$@"' _ timeout 20
+bed_ends
+exits 2
+prints err "$refusal"
+is "the lock file it made can be read by everybody" readable_by_all "$bed_lock"
+chmod 600 "$bed_lock"
+bed bed-lock-tight timeout 20
+bed_ends
+exits 2
+is "a lock file of its own that was 0600 can be read by everybody" readable_by_all "$bed_lock"
+bed_lock=$work/bed.flock
+
+# Only run.sh itself has the lock's open file. A whole run this time, of one test that
+# starts nothing, with stand-ins for everything: each stand-in on the way — the launcher
+# asked for its Quickshell, python3 (asked about pywayland, and the scanner), ldd,
+# systemd-inhibit, the tail that shows the test's log — and the test itself write down
+# whether they have an open file on the lock (none may: what stays behind would keep the
+# next run waiting) and whether the lock is held meanwhile (it is: closing the file for a
+# child must not give the lock up).
+cat > "$work/watch.sh" << WATCH
+state=free
+for link in /proc/\$\$/fd/*; do [ "\$link" -ef '$bed_lock' ] && state=held; done
+lock=locked
+if exec 9< '$bed_lock'; then '$work/bed/flock' -n 9 && lock=unlocked; exec 9<&-; fi
+echo "\$watch_name \$state \$lock" >> '$work/lock.seen'
+WATCH
+watching=("watch_name=\$(basename \"\$0\")" "source '$work/watch.sh'")
+stand_in watch/h2s-shell "${watching[@]}" 'exec "$H2S_SHELL_DIR/scripts/launch.sh"'
+stand_in watch/python3 "${watching[@]}" "exec '$work/python/python3' \"\$@\""
+stand_in watch/tail "${watching[@]}" "exec '$work/base/tail' \"\$@\""
+stand_in watch/ldd "${watching[@]}" "exit 0"
+stand_in watch/systemd-inhibit "${watching[@]}" "exit 0"
+mkdir -p "$work/bed-tests" "$work/bed-home" "$work/pam-modules" "$work/bed-run"
+touch "$work/pam-modules/pam_exec.so"
+{
+    echo "watch_name=test"
+    echo "source '$work/watch.sh'"
+    echo 'pass "the test ran"'
+} > "$work/bed-tests/lock-descriptor.sh"
+# What run.sh and lib.sh call beyond the set-up
+link_real bed-run basename seq tr date stat awk sed ls
+case_name=bed-lock-descriptor
+bed_path="$work/watch"
+for part in $system_lock qs bed bed-run; do bed_path+=":$work/$part"; done
+env -i PATH="$bed_path" HOME="$work/bed-home" TMPDIR="$work/temp" LOCKTEST_LOCK_FILE="$bed_lock" \
+    LOCKTEST_PAM_MODULES="$work/pam-modules" LOCKTEST_EXTRA_TESTS="$work/bed-tests" \
+    timeout 120 "$REPO/tests/lock/run.sh" -j 1 lock-descriptor > "$work/$case_name.out" 2> "$work/$case_name.err" < /dev/null
+status=$?
+exits 0
+prints out "  PASS  lock-descriptor"
+for name in h2s-shell python3 ldd systemd-inhibit tail test; do
+    has_line lock.seen "$name free locked"
+done
+if grep -q -v -E ' free locked$' "$work/lock.seen" 2> /dev/null; then
+    failed "a program of the run had the lock's file, or the lock was not held: $(grep -v -E ' free locked$' "$work/lock.seen" | sort -u | tr '\n' ';')"
+else
+    pass "no program of the run had the lock's file, and the lock was held throughout"
+fi
 is "the lock is free again" flock -n "$bed_lock" true
 
 # ---- A caller that does not say what it needs ---

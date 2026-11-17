@@ -25,6 +25,13 @@ for variable in SSH_AUTH_SOCK XDG_SEAT XDG_VTNR KITTY_LISTEN_ON QT_QPA_PLATFORMT
         pass "the shell's environment has no $variable of the caller's"
     fi
 done
+# The five above prove nothing where the caller has none of them (a timer, an empty
+# environment). This one every run has: run.sh exports it and does not hand it on
+if shell_has_variable LOCKTEST_CANARY; then
+    fail "the shell's environment has no LOCKTEST_CANARY of run.sh's"
+else
+    pass "the shell's environment has no LOCKTEST_CANARY of run.sh's"
+fi
 # setuid programs (pkexec, unix_chkpwd) gain nothing in it: no polkit dialog, no real
 # password check, whatever the shell starts
 check "shell runs with no new privileges" grep -qx 'NoNewPrivs:[[:space:]]*1' "/proc/$SHELL_PID/status"

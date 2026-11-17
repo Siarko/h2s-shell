@@ -17,26 +17,22 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
 
 - [ ] **Test split** ([plans/test-split.md](plans/test-split.md)). Merged: runners run named
       suites; the unit and module suites run without `nix`. Waiting, unmerged:
-  - core branch `test-split-lock` (working tree `h2s-shell-wt-lock`): `51eef3c` fixes the
-    lock scenario `modules` that fails on `master` (fixtures counted, not "14") — small,
-    merge after a look; `21626a1` the lock bed with the system's tools — **not reviewed**,
-    never run on Arch (needs the packages `python-pywayland` and `wlr-randr` there, and
-    `/usr/bin` first on `PATH`); first Arch runs with a scrubbed environment, `harness` first.
+  - core branch `test-split-lock` (working tree `h2s-shell-wt-lock`): the lock bed runs on
+    Arch with the system's tools, without `nix` (needs the packages `python-pywayland` and
+    `wlr-randr` there, and `/usr/bin` first on `PATH`); 61/61 on both machines. Also on it: the fix of the lock scenario
+    `modules` that fails on `master` (fixtures counted, not "14"), the tests' scrubbed
+    environment, the fixes from the review of those commits. Merge after the owner's look.
   - module branch `test-split` (working tree `h2s-shell-tailscale-wt`): `655b385` (deterministic `connect-before-read`) and
     four follow-ups, finished and passing on both machines, **not reviewed**: `f3d0a48`
     (review fixes), `4900484` (the stand-in's `pause` race behind the `slow-up-disconnect`
     flake; cause only partly confirmed, its new check is probabilistic), `3e713ad` (fixed
     waits → conditions), `a5fdaa4` (`tools/test.sh` no longer looks for `sleep 5`
     machine-wide). A short review, then merge. `d005946` is merged.
-  - then: speed (below), system detection behind a seam, `tests/run-system.sh`,
+  - then: system detection behind a seam, `tests/run-system.sh`,
     `install.sh` under stand-ins, `tests/run-all.sh`.
-- [ ] **Test speed** (measured 2026-11-17): the waiting is the machine-wide flock, not the
-      tests. To do as one small slice: only `tests/lock/run.sh` takes the lock, itself;
-      cache the resolved nix tool path in `tests/lock/resolve.sh` (keyed by `tools.nix`'s
-      hash); wait for the compositor's exit instead of the fixed 0.3 s in
-      `tests/headless.sh`; correct "about 15 minutes" (it is 4–5) here and in `CLAUDE.md`.
-      Until then: on Arch no flock for unit, module and self-test runs; iterate on Arch with
-      named suites; the NixOS machine only for the final pass and the lock bed.
+- [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
+      nix tool lookup is remembered; the whole lock bed takes about three minutes on either
+      machine.
 - [ ] **API plan**: approved by the owner on 2026-11-17.
       [plans/api-next.md](plans/api-next.md) is the index with the slice list (48 slices);
       one file per area is under `plans/api-next/`. A brief for a slice names the index and
@@ -242,6 +238,20 @@ Found during the test split (2026-11-17):
       restart — looks like a shell defect; `modules-discovery` once saw the supervisor
       silent for 44 s under load
 - [ ] `tests/lock/tools.nix`: the comment ties the pin to one machine's system
+- [ ] **Urgent** — the supervisor in `scripts/launch.sh` (`wait_for_shell`, around line
+      504) can spin after the shell is killed: `wait_for: No record of process <pid>`
+      printed 6.3 million times in 10 s (a 1.3 GB log), and the shell never restarted. Seen
+      once in five runs of the lock scenario `modules-launcher` on the NixOS machine (bash
+      5.3.9); the guard for a lost exit status (127) does not catch it
+- [ ] The module repository's `tests/lock-bed/run.sh` header still advises wrapping the run
+      in `flock` (harmless, stale)
+- [ ] Lock scenario `restart-crash-locked`, the check "Quickshell said it would not
+      restart": failed once in a whole run of the bed on the Arch machine (Quickshell 0.3.2),
+      passed three times alone. A SIGSEGV 0.2 s after the shell started: Quickshell's crash
+      handler printed "Quickshell has been restarted", then `Launching config: ""` and
+      "Could not open config file", exit 255 — not its "crashed within 10 seconds of
+      launching. Not restarting". The launcher started a new shell either way and the screen
+      stayed locked; the check expects one of two ways Quickshell ends an early crash
 
 ## Open points
 
