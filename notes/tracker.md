@@ -133,6 +133,8 @@ Later:
 - modules' own elements: a module defines an element with its own public styles, settable
   by a theme, and publishes it through a public API, so that libraries of extra elements
   can exist
+- the shell as a minimal framework; built-in features moved into modules, some shipped
+  with the shell
 
 ## Decisions
 
@@ -166,6 +168,9 @@ All by the owner, 2026-11-17.
 - Privileged runs: a prompt open or waiting when the screen locks is cancelled as if dismissed, and the user clicks again after unlocking. Only the password question is one at a time, so a long action does not hold up the others; with another polkit agent it is strictly one action at a time. A run for which no password is asked shows nothing; one log line names the module.
 - File chooser for modules: a minimal version in this round.
 - Exit node per network: it sits on the saved network's opened card.
+- Module API, a module's own elements: modules are not kept from building their own elements. They use the public elements wherever that is possible and makes sense, and the theme's colours always; building something the API does not offer is fine. Importing the shell's internal elements stays the thing to avoid. (Replaces "only from public elements" above: that is not a rule and not an error.)
+- Module authors: that every module is the owner's is true today, not an assumption to build on. Other people are expected to write modules later; until then the shell and its module system are built up to the point where they can do so without problems.
+- Direction: the shell itself becomes a fairly small framework that defines the structure and the way of working; parts of what is built in today can then be split out into modules. Such modules need not live in repositories of their own: some ship together with the shell.
 
 ## Backlog / later
 
