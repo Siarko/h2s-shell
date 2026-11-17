@@ -8,7 +8,7 @@ need pacman "asks the sync database for each package name"
 tools=(
     "quickshell|runs the suites and the shell under test"
     "labwc|the headless compositor the suites' windows open in"
-    "util-linux|setpriv, setsid, flock: the test processes' isolation and the bed's lock"
+    "util-linux|setpriv, setsid, flock, script: the test processes' isolation, the bed's lock, a terminal for install.sh"
     "coreutils|timeout: ends a compositor or a Quickshell that hangs"
     "hyprland|the compositor the lock screen is tested in"
     "grim|screenshots of the lock screen"

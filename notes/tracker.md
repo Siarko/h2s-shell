@@ -13,34 +13,20 @@ Development moves to the Arch machine; runs that need `nix` go over SSH to the N
 machine. How sessions work is in [workflow.md](workflow.md).
 
 State on 2026-11-17, end of the session on the Arch machine. One topic at a time from here
-(the owner): finish the test split first, then the API plan's implementation. The next
-topic is the rest of the test split — system detection behind a seam,
-`tests/run-system.sh`, `install.sh` under stand-ins, `tests/run-all.sh` — then the API
-plan's implementation.
+(the owner). The test split is done; the next topic is the API plan's implementation
+(index [plans/api-next.md](plans/api-next.md)): first the theme token test, the
+`ModuleRules.qml` split, the file chooser trial, then the bordered buttons.
 
-- [ ] **Test split** ([plans/test-split.md](plans/test-split.md)). Merged: runners run named
-      suites; the unit and module suites run without `nix`. Waiting, unmerged:
-  - core branch `test-split-lock` (working tree `h2s-shell-wt-lock`): the lock bed runs on
-    Arch with the system's tools, without `nix` (needs the packages `python-pywayland` and
-    `wlr-randr` there, and `/usr/bin` first on `PATH`); 61/61 on both machines. Also on it: the fix of the lock scenario
-    `modules` that fails on `master` (fixtures counted, not "14"), the tests' scrubbed
-    environment, the fixes from the review of those commits. Merge after the owner's look.
-  - module branch `test-split` (working tree `h2s-shell-tailscale-wt`): `655b385` (deterministic `connect-before-read`) and
-    four follow-ups, finished and passing on both machines, **not reviewed**: `f3d0a48`
-    (review fixes), `4900484` (the stand-in's `pause` race behind the `slow-up-disconnect`
-    flake; cause only partly confirmed, its new check is probabilistic), `3e713ad` (fixed
-    waits → conditions), `a5fdaa4` (`tools/test.sh` no longer looks for `sleep 5`
-    machine-wide). A short review, then merge. `d005946` is merged.
-  - then: system detection behind a seam, `tests/run-system.sh`,
-    `install.sh` under stand-ins, `tests/run-all.sh`.
+- [x] **Test split** ([plans/test-split.md](plans/test-split.md)): done — a general set
+      that runs on NixOS and on Arch, a set per system (`tests/run-system.sh`), and one
+      command before committing (`tests/run-all.sh`). Notes in [done.md](done.md).
 - [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
       nix tool lookup is remembered; the whole lock bed takes about three minutes on either
       machine.
 - [ ] **API plan**: approved by the owner on 2026-11-17.
       [plans/api-next.md](plans/api-next.md) is the index with the slice list (48 slices);
       one file per area is under `plans/api-next/`. A brief for a slice names the index and
-      the slice's area file, nothing more. Implementation starts after the test split is
-      closed; first slices: the theme token test, the `ModuleRules.qml` split, the file
+      the slice's area file, nothing more. Implementation is next; first slices: the theme token test, the `ModuleRules.qml` split, the file
       chooser trial, then the bordered buttons. Not yet done: a short independent review
       of what changed after the last one (button kinds, icons, the password queue, a
       module's own elements) — fold it into the review of the first slices of each area.
@@ -108,12 +94,12 @@ test queue; review what carries risk, look at one-line fixes yourself.
    - [ ] lock supervisor limit (3 restarts while locked, then stay locked, tell the user)
    - [ ] lock-before-sleep conflict detection
    - [ ] screensaver and lock screen working together checked
-10. Test split implemented — moved to the front by the owner, in progress
+10. Test split implemented — done (2026-11-17)
     - [x] the unit and module suites run without `nix` (tools from the system)
-    - [ ] the lock bed with the system's tools; the whole lock bed on Arch
-    - [ ] system detection behind a seam (`methods-script` runs both branches everywhere)
-    - [ ] `tests/run-system.sh` and the first checks per system; `install.sh` under stand-ins
-    - [ ] `tests/run-all.sh`
+    - [x] the lock bed with the system's tools; the whole lock bed on Arch
+    - [x] system detection behind a seam (`methods-script` runs both branches everywhere)
+    - [x] `tests/run-system.sh` and the first checks per system; `install.sh` under stand-ins
+    - [x] `tests/run-all.sh`
 11. PAM configuration from the shell — open
 12. Documentation for users and developers per [plans/documentation.md](plans/documentation.md);
     the architecture and API chapters after 3–7 — open
@@ -203,7 +189,7 @@ From the old TODO (numbers kept, see done.md for the rest):
 - [ ] 11.34 A command button bar widget: label and/or icon, a command per click (left, right, middle, maybe long press), run detached
 - [ ] 11.31 Popups clear of the on-screen keyboard: done for a bar at the top; left: a bar at the bottom, popups by a bar at a side, the settings window (`panels/Popup.qml`)
 - [ ] 11.32 "Settings saved" toast seen with nothing changed (the NixOS machine, 2026-11-08) — reproduce first
-- [ ] 11.23 Installing: `install.sh` untested on Arch; on a first run `Config` chmods `config.json` before it exists (one warning); publishing (AUR, docs for others) later
+- [ ] 11.23 Installing: `install.sh` is tested under stand-ins (`tests/install-test.sh`), never yet run for real on a clean Arch; on a first run `Config` chmods `config.json` before it exists (one warning; a first start in an empty home as a lock-bed check is not written); publishing (AUR, docs for others) later
 - [ ] 11.20 Animation editor; animations as data assigned to named element slots
 - [ ] 11.5 Bar shape and anchoring ("dynamic island") — needs working out with the owner first
 - [ ] 11.7 Themes stage 8, matugen: a template mapping its palette to the colour tokens, a "wallpaper" theme reading it (`colorsFrom` exists), docs

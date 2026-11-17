@@ -46,21 +46,33 @@ There is no build step:
 
 ```
 quickshell                 # reads shell.qml from the current directory
-tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
-tests/run-unit.sh FormatTest LockRulesTest   # only the named suites, and the suites they need
-tests/run-unit-selftest.sh # checks the runners' own verdict
-tests/resolve-selftest.sh  # checks where the runners take their tools from
-tests/launcher-selftest.sh # checks the supervisor in scripts/launch.sh against a stand-in shell
-tests/run-modules.sh <dir> # a module's suites, against this tree
-tests/run-modules.sh --suite GoodApiTest <dir>   # only the named ones (--suite once per suite)
+tests/run-unit.sh FormatTest LockRulesTest   # while iterating: the suites the change touches
+tests/lock/run.sh relock fallback            # … the lock scenarios it touches
+tests/run-all.sh           # before committing: everything, about four minutes
+tests/run-all.sh --quick   # the same without the lock bed, under a minute
+```
+
+**While iterating** run the named suites or scenarios the change touches (a suite is named
+by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lock/tests/`
+without `.sh`; a wrong name is an error, nothing runs). **Before committing** run
+`tests/run-all.sh`: the general set and this system's set, quick parts first. It stops at
+the first part that fails (`--keep-going` goes on) and ends with a summary that names every
+part as PASS, FAIL or NOT RUN with the reason — read it: a part that could not be set up is
+not a pass. The parts behind it, each of which runs alone too:
+
+```
+tests/run-unit.sh          # the unit suites (tests.qml)
+tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name> for some)
+tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
+tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
+tests/run-unit-selftest.sh, tests/resolve-selftest.sh, tests/launcher-selftest.sh,
+tests/run-system-selftest.sh, tests/run-all-selftest.sh   # the runners' own verdicts
 ```
 
 Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
 two suites open a small window, and the runner puts them in a private headless compositor
-(nothing shows on your screen). While iterating, name the suites the change touches (a suite
-is named by its file in `tests/` without `.qml`; a wrong name is an error, nothing runs);
-run them all before committing. `--log <file>`, before the names, also saves the output.
+(nothing shows on your screen). `--log <file>`, before the names, also saves the output.
 
 Every runner takes its tools — that compositor (labwc), and for the lock test bed Hyprland
 and the rest of its set — from the pinned `tests/lock/tools.nix` where there is a `nix`

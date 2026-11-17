@@ -923,6 +923,33 @@ Its open items moved to stage 11 on 2026-10-31, renumbered in the agreed order:
 - [x] The Tailscale page's "Tailnet" field showed an e-mail address for a personal
       tailnet — fixed: `TailscaleRules.tailnetName` skips e-mail-like names.
 
+## Test split — tracker step 10 (done 2026-11-17)
+
+Plan: [plans/test-split.md](plans/test-split.md). Verified on the NixOS machine (tools
+from `nix`) and on the Arch machine (tools from the system).
+
+- [x] **The runners take named suites; the unit and module suites run without `nix`**
+      (`tests/lock/resolve.sh`: one source of tools for a run, nix or the system;
+      `tests/resolve-selftest.sh`).
+- [x] **The lock bed with the system's tools**, the whole bed on Arch; it takes the
+      machine-wide lock itself and scrubs its own environment.
+- [x] **System detection behind a seam**: `scripts/lock-auth-methods.sh` decides which
+      system it is on in one place (`H2S_LOCK_SYSTEM=nixos|other`, counted only together
+      with `H2S_LOCK_SYSTEM_PAM_DIR`), and answers the shell's fallback probe too
+      (`--fallback-facts`), so the script and `Lockscreen.qml` cannot disagree. The lock
+      scenario `methods-script` runs both systems' answers on every machine, with the same
+      checks.
+- [x] **`tests/run-system.sh`**: a set per system under `tests/system/` (NixOS: the flake's
+      package and its launcher, the layout; Arch: the package names of `install.sh`, the
+      test tools' packages), the system read from `os-release`; an unknown system or the
+      other system's check is status 2. `tests/run-system-selftest.sh`.
+- [x] **`install.sh` under stand-ins** (`tests/install-test.sh`, the first half of 11.23):
+      a private `PATH` and home, no new privileges; `install.sh` itself needed no change.
+      The second half (a first start in an empty home) stays in the backlog.
+- [x] **`tests/run-all.sh`**: the general set and this system's set in one command, the
+      summary naming what passed, failed and was not run; `--quick` without the lock bed.
+      `tests/run-all-selftest.sh`.
+
 ## Found during the test split (2026-11-17)
 
 - [x] **The supervisor spun after the shell was killed** (`scripts/launch.sh`,

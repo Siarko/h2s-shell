@@ -57,21 +57,31 @@ Agents clean up only their own temporary files.
 
 ## Tests
 
-| What | Command | Needs |
+Before committing: `tests/run-all.sh` (about four minutes; `--quick` leaves the lock bed
+out, under a minute, and says so). Its summary names every part as PASS, FAIL or NOT RUN
+with the reason; a report quotes it. While iterating: the named suites or scenarios the
+change touches, with the runner of that part.
+
+| Part of `tests/run-all.sh` | Command | Needs |
 |---|---|---|
 | Core unit suites | `tests/run-unit.sh [--log <file>] [suites…]` | Quickshell, labwc, util-linux, coreutils — labwc from `nix` where there is one, else from `PATH` |
-| Runner self-test | `tests/run-unit-selftest.sh` | as the unit suites |
-| Tool lookup self-test | `tests/resolve-selftest.sh` | bash, coreutils, findutils, `setsid` and `flock` (util-linux); no `nix`, no labwc |
-| Supervisor self-test | `tests/launcher-selftest.sh` | bash, coreutils, `flock` (util-linux), a `python3` or `perl`; no `nix`, no labwc, no Quickshell |
+| Module suites, on the fixture | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | as the unit suites |
+| `install.sh` under stand-ins | `tests/install-test.sh` | bash, coreutils, grep, `script` and `setpriv` (util-linux); no `pacman`, no `nix` |
+| This system's set | `tests/run-system.sh [checks…]` | NixOS: `nix`; Arch: `pacman` (read only) |
 | Lock screen, end to end | `tests/lock/run.sh [tests…]` | the lock bed's tools (`tests/lock/README.md`, "Tools") — from `nix` where there is one, else from `PATH`; a launcher (`h2s-shell`, else the bed's own); about three minutes for all |
+| The runners' own verdicts | `tests/run-unit-selftest.sh`, `tests/resolve-selftest.sh`, `tests/launcher-selftest.sh`, `tests/run-system-selftest.sh`, `tests/run-all-selftest.sh` | bash, coreutils, util-linux; the first as the unit suites, the launcher's a `python3` or `perl`; no `nix` |
+
+Not part of it (the module repository's own):
+
+| What | Command | Needs |
+|---|---|---|
 | Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites: it only hands the module to the core tree's `tests/run-modules.sh` (a core tree without it: status 2) |
-| A module's suites, from the core | `tests/run-modules.sh [--log <file>] [--suite <name>]… <module dir>…` | as the unit suites |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | as the lock screen's |
 
 - A suite is named by its file without `.qml` (`tests/run-unit.sh FormatTest LockRulesTest`),
   a lock test by its file without `.sh`. A name that does not exist is an error (status 2)
-  and nothing runs. While iterating, run the suites the change touches; before committing,
-  everything.
+  and nothing runs. A check of `tests/run-system.sh` is named by its file in
+  `tests/system/<system>/` without `.sh`; the other system's check is an error too.
 - Only the lock bed needs the machine to itself (its tests depend on timing):
   `tests/lock/run.sh` takes `/tmp/h2s-locktest.flock` itself for the length of a run, and
   says so while it waits for another run. The unit, module and self-test runners take no

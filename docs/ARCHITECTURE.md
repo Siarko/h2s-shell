@@ -655,6 +655,23 @@ if-chain.
 
 ## Testing
 
+`tests/run-all.sh` runs everything there is to run before a commit, the quick parts first:
+the runners' own self-tests, `install.sh` under stand-ins, the unit suites, a module's
+suites on the fixture module, the checks of the system the machine runs, and the lock
+screen end to end — about four minutes, nearly all of it the lock test bed; `--quick`
+leaves that out. It stops at the first part that fails (`--keep-going` goes on) and ends
+with a summary naming every part as PASS, FAIL or NOT RUN with the reason: a missing tool
+(named with its use), a system without a set, a part left out or not reached. A part that
+did not run is never counted as passed; the exit status is 0 only when every part ran and
+passed, 1 when one failed, 2 when one could not be set up. `tests/run-all-selftest.sh`
+checks that verdict against made-up parts. Each part runs alone too, and takes names for
+a part of it; the rest of this section describes them.
+
+The tests are in two kinds of set. The **general** set gives the same verdict on every
+system: the unit and module suites, the lock test bed, `tests/install-test.sh` and the
+self-tests. A **system** set holds what is true of one system only ("The system sets",
+below).
+
 `tests/` holds a minimal harness (`TestCase.qml` with `assert`/`assertEqual`/`fail`) and
 the suites `tests.qml` lists. `tests/run-unit.sh` (and `tests/run-modules.sh`, for modules'
 own suites — see [Modules](#modules); both share `tests/headless.sh`) runs them in a private headless labwc
@@ -716,9 +733,50 @@ compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
 PAM directory the password fallback is chosen from is the test's own,
 `H2S_LOCK_SYSTEM_PAM_DIR`), logind's signals, the sleep inhibitor and fprintd through
 stand-ins (`H2S_LOCK_TOOLS`; the real methods script runs against the fprintd one in
-`methods-script.sh` and `methods-fprintd.sh`). `tests/lock/run.sh`
+`methods-script.sh` and `methods-fprintd.sh`; the first runs it as NixOS and as any other
+system on every machine, `H2S_LOCK_SYSTEM`). `tests/lock/run.sh`
 runs it, several tests at a time, each in a stack of its own (`-j N`; `-j 1` one after
 another); nothing appears on screen and the real session cannot be reached. See its README.
+
+`tests/install-test.sh` runs `install.sh` without letting it change anything: an empty
+environment, a private home directory and a `PATH` of one directory that holds recording
+stand-ins for `sudo`, `pacman`, `git`, `fc-list` and for the programs that could change a
+system, plus the five plain tools the script uses; no new privileges; a terminal of the
+run's own (`script`), since the script hands `pacman` the terminal. Before anything runs it
+checks that every privileged name on that `PATH` is one of its stand-ins and that
+`install.sh` names no program by its path, and stops with status 2 otherwise. It checks
+the packages asked for and how, where the shell is cloned, that nothing else runs as root,
+that a second run changes nothing, another Quickshell config left alone, and what happens
+when `pacman`, the clone or reading the config's origin fails. It runs on both systems.
+
+### The system sets
+
+`tests/run-system.sh` runs the checks of the system the machine runs, read from
+`/etc/os-release` (`ID=nixos`; `ID=arch`, or `arch` among `ID_LIKE`): the files in
+`tests/system/nixos/` or `tests/system/arch/`, each a short list of
+`check <description> <command…>` lines. `tests/run-system.sh <check>…` runs the named
+ones. On another system, for a name that is not in this system's set (the other system's
+included) or for an empty set it ends with status 2 and says which system it found — a set
+that did not run is never printed as a pass; a check that lacks its tool is NOT RUN, with
+the tool and its use. The checks only read: nothing is installed, nothing runs as root.
+`tests/run-system-selftest.sh` checks the runner against made-up sets and `os-release`
+files, on either system.
+
+#### NixOS
+
+- `package`: the flake's package builds (`nix`, into the store; no link, no lock file
+  written); its version is `singletons/Version.qml`'s; `tests/lock`, `notes` and `docs`
+  are not in it; its `h2s-shell` command runs the checkout `H2S_SHELL_DIR` names with the
+  arguments given, and every program the shell calls is on the `PATH` it sets.
+- `layout`: the files the shell's code reads on NixOS are where it looks for them.
+
+#### Arch
+
+- `packages`: every package `install.sh` installs, and every one it or the HUD names to
+  the user, is in the repositories (`pacman -Si`).
+- `test-tools`: the packages the test tools come from (the list under "Where the test
+  tools come from", Arch) are in the repositories; one that is not installed is noted
+  with its use.
 
 `tests/manual/` holds checks no suite runs because they touch the real system — the one
 there runs a single PAM conversation with the real password against the shipped
@@ -784,7 +842,26 @@ runs.
 #### Arch
 
 Without `nix`, the tools are development dependencies to have installed; `install.sh`
-does not install them. There is no `h2s-shell` command, so the unit and module suites run
+does not install them. The packages, each with what the tests use it for
+(`tests/system/arch/test-tools.sh` checks the names):
+
+| Package | Used for |
+|---|---|
+| `quickshell` | runs the suites and the shell under test |
+| `labwc` | the headless compositor the suites' windows open in |
+| `util-linux` | `setpriv`, `setsid`, `flock`, `script`: the test processes' isolation, the bed's lock, a terminal for `install.sh` |
+| `coreutils` | `timeout`: ends a compositor or a Quickshell that hangs |
+| `hyprland` | the compositor the lock screen is tested in |
+| `grim` | screenshots of the lock screen |
+| `wlr-randr` | sets the headless output's size |
+| `wl-clipboard` | `wl-copy`, `wl-paste`: the primary selection of the paste test |
+| `libxkbcommon` | `xkbcli`: tells the virtual keyboard which keys type a character |
+| `dbus`, `glib2` | `dbus-daemon`, `gdbus`: a private session bus for the notification tests |
+| `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with |
+| `pkgconf`, `wayland`, `wayland-protocols` | finding the protocol files those bindings are made from |
+
+The first four are enough for everything but the lock test bed. The bed takes the first
+`python3` on `PATH`; it has to be one that imports pywayland. There is no `h2s-shell` command, so the unit and module suites run
 the `qs` on `PATH`, and the lock test bed starts the shell through `tests/lock/launcher.sh`.
 With `nix` installed, the pinned tools are used as on NixOS.
 
