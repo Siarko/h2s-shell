@@ -25,6 +25,8 @@ from `docs/` or the README:
 - **[notes/tracker.md](notes/tracker.md)** — the one tracker for the shell and its
   modules: what is next, the order of work, the owner's decisions. **Start here when
   resuming work.**
+- **[notes/workflow.md](notes/workflow.md)** — how sessions work: roles, briefing agents, what
+  must not be touched, tests, deploying, git.
 - **[notes/done.md](notes/done.md)** — done items, numbers kept ("TODO 11.22" in a commit
   or comment), with their notes.
 - **[notes/cleanup.md](notes/cleanup.md)** — findings from a full read, with severities;
@@ -104,7 +106,8 @@ ticks, cells respond to clicks, and popups toggle.
   user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves
   them to a new section, bumps the number and tags `v<number>`. `tests/VersionTest.qml`
   checks the two agree.
-- **Only commit when explicitly asked.** Never commit proactively after making changes.
+- **Commit on a work branch only**, as `notes/workflow.md` describes; merging to `master`
+  and pushing follow review and are the owner's call.
 
 ## Environment
 

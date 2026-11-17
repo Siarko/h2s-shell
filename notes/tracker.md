@@ -7,7 +7,17 @@ machine".
 
 ## Now
 
-- [ ] Step 0, workflow: start with 0(a), the test runners running one suite or one scenario.
+State on 2026-11-17: everything is merged to `master` (core) and `main` (module
+`h2s-shell-tailscale`, version 0.6.0, module API 1.3) and runs on the NixOS machine.
+Development moves to the Arch machine; runs that need `nix` go over SSH to the NixOS
+machine. How sessions work is in [workflow.md](workflow.md).
+
+- [ ] First on the Arch machine: set up the working trees there (one per repository for
+      the running shell, separate ones for agents), check that the general commands work,
+      and agree with the owner how the NixOS machine is reached for the `nix` runs.
+- [ ] Then step 0, workflow: start with 0(a), the test runners running one suite or one
+      scenario.
+- [ ] Step 1 (planning) can start in parallel with step 0: it writes plans only.
 
 ## Order of work
 
@@ -22,7 +32,7 @@ machine".
          (`module/LockClient.qml`)
    - [ ] (e) a small read-only check against the real Tailscale daemon at deploy: state,
          device list, no repeated log lines
-   - [ ] (f) decide where development runs (see Open points)
+   - [x] (f) development runs on the Arch machine; `nix` runs go to the NixOS machine
 1. Planning, no code — open
    - [ ] revise [plans/api-next.md](plans/api-next.md): UI anchors and their naming
          convention, a module's public API, the password prompt's "who and what for",
@@ -131,4 +141,6 @@ Found while writing the development rules (2026-11-17):
 
 ## Open points
 
-- Where development runs: the owner offers the Arch machine (much faster) as the main development machine, with NixOS-only tests run remotely on the NixOS machine. Not decided.
+- None of the owner's decisions are pending. The plans in `plans/` (`api-next.md`,
+  `architecture-cleanup.md`, `documentation.md`) are drafts written before the decisions
+  of 2026-11-17; step 1 revises them, and the owner approves them before implementation.
