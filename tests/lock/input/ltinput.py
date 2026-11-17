@@ -10,8 +10,8 @@ this client must be running before the lock client binds its seat.
 
 Usage: ltinput.py <protocol-dir> <keymap-file> <fifo>
 
-<protocol-dir> holds the generated `ltproto` bindings (tools.nix builds them). The keyboard
-sends <keymap-file> (an XKB keymap, tools.nix compiles a few) and works out from it, with
+<protocol-dir> holds the generated `ltproto` bindings (the tool set's share/). The keyboard
+sends <keymap-file> (an XKB keymap, the tool set holds a few) and works out from it, with
 `xkbcli how-to-type`, which key and which modifiers type a character or a keysym — so a test
 can type with any layout, and a character the layout cannot type directly is fatal: the
 client ends with an error before anything of the command is typed, so a typed password is
@@ -82,7 +82,7 @@ class Layout:
         self.path = path
         self.xkbcli = shutil.which("xkbcli")
         if not self.xkbcli:
-            fatal("xkbcli is not on PATH (tools.nix provides it)")
+            fatal("xkbcli is not on PATH (the tool set provides it)")
         self.cache = {}
 
     def _ask(self, argument, keysym):

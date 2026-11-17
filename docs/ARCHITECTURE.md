@@ -744,16 +744,65 @@ Versions are printed, not checked. A missing tool is a set-up error: status 2, e
 missing tool named with its use, nothing run. `tests/resolve-selftest.sh` checks the lookup
 against stand-in programs; it needs neither `nix` nor labwc.
 
-The lock test bed takes its tools from `nix` only: without it, or with
-`H2S_TEST_TOOLS=system`, `tests/lock/run.sh` ends with status 2 and says so.
+The lock test bed (`tests/lock/run.sh`) takes a larger set from the same source: labwc,
+Hyprland and `hyprctl`, grim, wlr-randr, `wl-copy` and `wl-paste`, `xkbcli`, `dbus-daemon`,
+`gdbus`, `setpriv`, a `python3` that imports pywayland, the Python bindings of the virtual
+keyboard, virtual pointer and xdg-shell protocols, and three keymaps. `tests/lock/tools.nix`
+builds all of it. From the system the programs are those on `PATH`, and the bindings and
+keymaps are made at the start of each run, in the run's own directory, by the commands
+`tools.nix` runs: pywayland's scanner over `wayland.xml`, `xdg-shell.xml` (found with
+`pkg-config`) and the two wlroots protocol files kept in `tests/lock/protocols/`, and
+`xkbcli compile-keymap`. `setsid` and `timeout` are the ones on `PATH` either way.
+
+The bed starts the shell through a launcher, as it is started for real:
+`LOCKTEST_LAUNCHER` when set, else the `h2s-shell` on `PATH`, else its own
+`tests/lock/launcher.sh`, which runs the `scripts/launch.sh` of the checkout
+`H2S_SHELL_DIR` names with the arguments it is given — what the packaged launcher does
+with that variable set. A run through it says so in its first lines and in its summary:
+the supervisor, the restart and `ipc` under test are `scripts/launch.sh` either way, but
+what the package adds (its Quickshell and the shell's programs first on `PATH`) is not
+tested by such a run.
+
+```
+tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4, Hyprland 0.57.2
+launcher: …/tests/lock/launcher.sh (the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH)
+quickshell: /usr/bin/qs 0.3.2 (asked of the launcher …/tests/lock/launcher.sh)
+```
+
+The PAM modules of the test stacks (`pam_exec`, `pam_deny`, `pam_permit`, `pam_stress`)
+are the ones beside the libpam Quickshell links, on both systems.
 
 #### NixOS
 
-`nix` builds the pinned tools. The launcher is the package's `h2s-shell`, so the suites run
-the Quickshell the installed shell runs.
+`nix` builds the pinned tools, for the unit suites and the lock test bed alike. The
+launcher is the package's `h2s-shell`, so the tests run the Quickshell the installed shell
+runs.
 
 #### Arch
 
-Without `nix`, labwc has to be installed: a development dependency, which `install.sh`
-does not install. There is no `h2s-shell` command, so the suites run the `qs` on `PATH`.
+Without `nix`, the tools are development dependencies to have installed; `install.sh`
+does not install them. There is no `h2s-shell` command, so the unit and module suites run
+the `qs` on `PATH`, and the lock test bed starts the shell through `tests/lock/launcher.sh`.
 With `nix` installed, the pinned tools are used as on NixOS.
+
+For the unit and module suites: `labwc` (the headless compositor); `util-linux` and
+`coreutils` are part of every system.
+
+For the lock test bed, beside those:
+
+| Package | What the test bed uses it for |
+|---|---|
+| `hyprland` | the compositor the lock screen is tested in, and `hyprctl` |
+| `grim` | screenshots of the lock screen |
+| `wlr-randr` | sets the headless output's size |
+| `wl-clipboard` | `wl-copy` and `wl-paste`: the primary selection of the paste test |
+| `libxkbcommon` | `xkbcli`: compiles the keymaps, tells the virtual keyboard which keys type a character |
+| `dbus`, `glib2` | `dbus-daemon` and `gdbus`: a private session bus for the notification tests |
+| `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner that generates their protocol bindings |
+| `pkgconf` | `pkg-config`: finds the protocol files the bindings are generated from |
+| `wayland`, `wayland-protocols` | those files: `wayland.xml`, `xdg-shell.xml` |
+| `pam` | the modules of the test stacks |
+
+The `python3` taken is the first on `PATH`; where a Python version manager puts its own
+first, that one has no pywayland, and the run says so — start the run with the system's
+directory first on `PATH`.

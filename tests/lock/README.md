@@ -39,10 +39,11 @@ first (`LONG_TESTS` in `run.sh`), and the tests in `SERIAL` — those whose subj
 timing a loaded machine cannot keep, each with its reason — run alone after the others.
 `-j 1` is the old way: one after another, the output as it comes.
 
-It needs `nix` (for the tools: `resolve.sh` does not take the lock bed's from the system,
-and ends the run with status 2 where there is no `nix` or with `H2S_TEST_TOOLS=system`), the `h2s-shell` launcher on PATH (the NixOS module puts
-it there; `LOCKTEST_LAUNCHER` names another). Nothing privileged: no root, no seat, no
-GPU device, no real input device.
+It needs its tools ("Tools", below): the pinned set `nix` builds where there is a `nix`
+command, else the system's, from `PATH`. And a launcher: `LOCKTEST_LAUNCHER`, else the
+`h2s-shell` on `PATH`, else the test bed's own `launcher.sh`. The first lines of a run say
+what was taken; a missing tool ends it with status 2, named with its use. Nothing
+privileged: no root, no seat, no GPU device, no real input device.
 
 ## What runs
 
@@ -60,8 +61,8 @@ labwc        headless (wlroots' headless backend): only gives the nested composi
    ├─ input/ltwindow.py  (stack_start --window) a solid magenta window: the desktop the
    │                     lock must hide
    ├─ dbus-daemon        (stack_start --session-bus) a private session bus, no activation
-   └─ the launcher       `H2S_SHELL_DIR=<the run's copy> h2s-shell`, a plain start: the
-      │                  copy's scripts/launch.sh, which stays as the shell's supervisor
+   └─ the launcher       `H2S_SHELL_DIR=<the run's copy> h2s-shell` (or launcher.sh), a plain
+      │                  start: the copy's scripts/launch.sh, which stays as the shell's supervisor
       └─ the shell       its child, in a process group of its own; started again by the
                          launcher when it dies (SUPERVISOR_PID / SHELL_PID in lib.sh)
 ```
@@ -71,7 +72,9 @@ child).
 
 `lib.sh` holds the helpers, `tests/*.sh` the tests, `pam/` the test PAM stacks and the
 scripts they run (templates: `@...@` is filled in per run), `tools.nix` the pinned tools,
-`run.sh` the runner.
+`resolve.sh` the lookup of the tools, the launcher and Quickshell, `protocols/` the two
+protocol files the input bindings are generated from, `launcher.sh` the launcher for a
+machine without an `h2s-shell` command, `run.sh` the runner.
 
 ## Isolation, and why each measure is there
 
@@ -94,8 +97,7 @@ here may reach it.
   (before the sweep). The real list is only read, and an inhibitor is told to be the
   run's by its PID carrying the run's marker — not by its name, which the real shell's
   inhibitor shares.
-- **No new privileges** for every process of a test (`setpriv --no-new-privs`, from
-  `tools.nix`): the variables above are ignored by setuid programs, so `pkexec` (which
+- **No new privileges** for every process of a test (`setpriv --no-new-privs`): the variables above are ignored by setuid programs, so `pkexec` (which
   the shell runs on some clicks, and `VpnLockdown.qml` at start when its helper is
   installed) would otherwise reach the real polkit and put a password dialog on the real
   screen. With no-new-privs setuid has no effect: `pkexec` and the system's `unix_chkpwd`
@@ -311,7 +313,7 @@ shell's `locktest reload <hard>` IPC: `shell_ipc locktest reload false` asks for
 `Quickshell.reload()`), `--hyprland-debug` (Hyprland's debug log in `hyprland.log`: what it
 did with the lock and its surfaces), `--keymap us|us-intl|us-compose` (the layout the
 virtual keyboard sends: plain US, US international with dead keys and AltGr, US with a
-Compose key on the right Alt — tools.nix compiles them; the keyboard works out which key and
+Compose key on the right Alt — compiled with the tool set; the keyboard works out which key and
 modifiers type each character from the keymap itself, with `xkbcli how-to-type`, and a
 character no key gives directly is fatal), `--settings '<json>'` (the shell's settings, as
 the shell stores them: `write_settings` writes a config.json whose one profile sets these
@@ -329,7 +331,10 @@ started again — `wait_for_new_shell <old pid> <seconds>` waits for the new one
 go (SIGUSR1: it is not started again), each only after checking the pid is the run's shell
 or launcher (`assert_shell_process`, `assert_supervisor_process`: the run's marker, the
 binary or the copy's launch.sh, the private runtime dir) — a wrong pid could be a process
-of the real session. `start_launcher` starts a launcher (and shell) again, as `stack_start`
+of the real session. `supervisor_environment <pid>` reads the launcher's environment into
+`environment`, for a test that starts another launcher as the first was started
+(`--restart`), and refuses one that does not name the private runtime dir: `--restart`
+stops the shells it finds there. `start_launcher` starts a launcher (and shell) again, as `stack_start`
 did. `start_lock_watch <name>` / `stop_lock_watch` poll `hyprctl -j locked` every 50 ms
 across a gap, `lock_watch_never_unlocked` says no poll saw it unlocked. `marker_file_is
 <locked|unlocked>` reads the lock marker on disk; `protocol_errors` / `no_protocol_errors`
@@ -394,17 +399,71 @@ not keep it.
 
 ## Tools
 
-`tools.nix` builds, from one pinned nixpkgs, labwc, Hyprland and hyprctl, grim, setpriv,
-a Python with pywayland, the Python bindings of the virtual keyboard/pointer and xdg-shell
-protocols, xkbcli, dbus-daemon, gdbus, wl-copy/wl-paste (the primary selection a middle
-click would paste, set inside the nested compositor while locked: `paste.sh`), wlr-randr
-(labwc's output size), and the keymaps (`share/keymaps/`: us, us-intl, us-compose). `resolve.sh` finds them (and the launcher's Quickshell) for `run.sh`; for
-`tests/run-unit.sh` and `tests/run-modules.sh` it finds labwc and setpriv only, here or, on a machine without `nix`, on `PATH`. The pin is the nixos-unstable revision the owner's system takes Hyprland
-from, so the test bed runs the same Hyprland as the real session (the repo's flake pins
-nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves —
-`run.sh` prints a NOTE when the versions differ (both binaries asked `--version` only).
-It is fetched with `fetchTarball` and a hash, which needs no experimental Nix feature. Quickshell
-is not pinned here: the shell runs with the one its launcher provides.
+The set, in one layout (`LOCKTEST_TOOLS`): `bin/` — labwc, Hyprland and hyprctl, grim,
+setpriv, a Python with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy and wl-paste (the
+primary selection a middle click would paste, set inside the nested compositor while
+locked: `paste.sh`), wlr-randr (labwc's output size); `share/ltproto` — the Python bindings
+of the virtual keyboard, virtual pointer and xdg-shell protocols; `share/us.xkb` and
+`share/keymaps/` — the keymaps (us, us-intl, us-compose). `setsid` and `timeout` are always
+the ones on `PATH`.
+
+`resolve.sh` takes the whole set from one source for a run, never tool by tool (the tools
+depend on each other, and a mix of pinned and system parts is a configuration nobody
+tests):
+
+- **`nix`** — when a `nix` command exists, or with `H2S_TEST_TOOLS=nix`: `tools.nix` builds
+  the set from one pinned nixpkgs, so a run today and a run in a month use the same
+  compositor. The pin is the nixos-unstable revision the owner's system takes Hyprland
+  from, so the test bed runs the same Hyprland as the real session (the repo's flake pins
+  nixos-26.05, whose Hyprland is older); move it when the system's Hyprland moves — a run
+  prints a NOTE when the versions differ (both binaries asked `--version` only). It is
+  fetched with `fetchTarball` and a hash, which needs no experimental Nix feature.
+- **`system`** — without `nix`, or with `H2S_TEST_TOOLS=system`: every program is the one on
+  `PATH`, in whatever version is installed, and `run.sh` has the rest made for the run, in
+  its artifacts dir (`tools/`; `make_system_tools` in `resolve.sh`): `bin/` links to those
+  programs, the bindings come from pywayland's scanner (`python3 -m pywayland.scanner`, as
+  `tools.nix` runs it), the keymaps from `xkbcli compile-keymap` with the options
+  `tools.nix` gives it — both started with an empty environment and a home of the run's
+  own, since an XKB configuration in the user's home would change a keymap. It takes,
+  beside the programs above: `pkg-config` (the scanner asks it for the core protocol, and
+  `resolve.sh` for the two files below), `wayland.xml` where `pkg-config` says
+  `wayland-scanner` keeps its data, and `xdg-shell.xml` where it says `wayland-protocols` does. The
+  `python3` is the first on `PATH`, and it must be able to import `pywayland`: a `python3`
+  of the user's own before the system's (a version manager's) will not have it.
+
+The virtual keyboard and pointer protocols are installed by no package as XML (wlroots
+implements them from its source tree), so `protocols/` holds the two files, unchanged from
+wlroots (`protocol/virtual-keyboard-unstable-v1.xml`,
+`protocol/wlr-virtual-pointer-unstable-v1.xml`; each carries its copyright and its MIT
+licence text, which stay with it). Both sources generate from this one copy.
+
+The first lines of a run say what it took — versions are printed, not checked:
+
+```
+tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4, Hyprland 0.57.2
+launcher: …/tests/lock/launcher.sh (the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH)
+quickshell: /usr/bin/qs 0.3.2 (asked of the launcher …/tests/lock/launcher.sh)
+```
+
+What is missing ends the run with status 2 before any test: every missing tool at once,
+each with its use; nothing is skipped and no other source is tried.
+`tests/resolve-selftest.sh` checks all of this against stand-in programs.
+
+**The launcher**, in this order: `LOCKTEST_LAUNCHER`; the `h2s-shell` on `PATH`; the test
+bed's `launcher.sh`. The last is for a machine with no `h2s-shell` command, where the shell
+is started from a checkout by `scripts/launch.sh`: it does what the packaged launcher does
+when `H2S_SHELL_DIR` is set — runs that checkout's `scripts/launch.sh` with its arguments —
+and nothing else. So the supervisor, `--restart`, `ipc` and the module search a test meets
+are the copy's `scripts/launch.sh` either way. What the stand-in leaves out is what the
+package adds: its own Quickshell and the programs the shell calls, put first on `PATH`;
+with the stand-in they are the ones already on `PATH`. No test is about that, but none
+checks it then either, so a run through the stand-in says so in its second line and in a
+NOTE in its summary. Quickshell is never pinned: it is `LOCKTEST_QS`, else the one the
+launcher runs (asked of it, "The launcher probe", above).
+
+PAM modules are not in the set: they are the ones beside the libpam Quickshell links
+(`LOCKTEST_PAM_MODULES` names another directory) — `pam_exec`, `pam_deny`, `pam_permit`
+and `pam_stress`.
 
 ## What it cannot simulate
 

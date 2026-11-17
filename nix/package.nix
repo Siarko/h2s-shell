@@ -66,7 +66,7 @@ stdenvNoCC.mkDerivation {
       ../flake.lock
       ../.github
       ../.devcontainer
-      # The lock test bed: runs against a checkout, and needs nix and its own tools
+      # The lock test bed: runs against a checkout, with tools of its own
       ../tests/lock
       # A local `nix build` leaves this link; building from a checkout would copy it in
       ../result

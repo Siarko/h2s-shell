@@ -34,15 +34,17 @@ let
   python = pkgs.python3.withPackages (packages: [ packages.pywayland ]);
 
   # The virtual keyboard and pointer protocols are not installed by any package as XML
-  # (wlroots implements them from its own source tree), so they are taken from there
+  # (wlroots implements them from its own source tree), so the two files are kept in
+  # protocols/, as wlroots ships them — one copy, which a run with the system's tools
+  # generates its bindings from too (resolve.sh: make_system_tools, the same command)
   # (the scanner asks pkg-config where the core protocol lives, even when given its path)
   protocols = pkgs.runCommand "h2s-locktest-protocols"
     { nativeBuildInputs = [ python pkgs.pkg-config pkgs.wayland-scanner ]; } ''
     mkdir -p $out
     pywayland-scanner -o $out/ltproto -i \
       ${pkgs.wayland-scanner}/share/wayland/wayland.xml \
-      ${pkgs.wlroots.src}/protocol/virtual-keyboard-unstable-v1.xml \
-      ${pkgs.wlroots.src}/protocol/wlr-virtual-pointer-unstable-v1.xml \
+      ${./protocols/virtual-keyboard-unstable-v1.xml} \
+      ${./protocols/wlr-virtual-pointer-unstable-v1.xml} \
       ${pkgs.wayland-protocols}/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml
     touch $out/ltproto/__init__.py
   '';

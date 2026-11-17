@@ -60,11 +60,13 @@ check "the order: H2S_SHELL_MODULE_PATH, data home, data dirs; canonical; the sy
     test "$(process_env "$SHELL_PID" H2S_SHELL_MODULES)" = "$expected"
 check "the inherited list's stale module: not loaded" test "$(module_field old-alpha state)" = absent
 check "H2S_SHELL_MODULE_PATH is passed on unchanged" test "$(process_env "$SHELL_PID" H2S_SHELL_MODULE_PATH)" = "$WORK/dev/explicit"
-check "explicit: loaded" module_state_is explicit loaded
-check "alpha: loaded" module_state_is alpha loaded
-check "beta (data home): loaded" module_state_is beta loaded
+# (Modules arrive after the shell answers: their files are read by a process. Waited for,
+# here and after every start below)
+check_within 15 "explicit: loaded" module_state_is explicit loaded
+check_within 15 "alpha: loaded" module_state_is alpha loaded
+check_within 15 "beta (data home): loaded" module_state_is beta loaded
 check "beta-copy (data dirs, same id): reported as a duplicate" module_state_is beta-copy duplicate
-check "zeta: loaded" module_state_is zeta loaded
+check_within 15 "zeta: loaded" module_state_is zeta loaded
 check "the launcher logged what it found" grep -aq "modules: 5 (" "$RUN/h2s-shell-launcher.log"
 
 # ---- (2) safe mode ----
@@ -72,13 +74,13 @@ first=$SHELL_PID
 signal_shell KILL
 wait_for_new_shell "$first" 10 || abort "no new shell after the first kill"
 check "one quick death: not safe mode" test -z "$(safe_mode_of_shell)"
-check "… the modules load" module_state_is alpha loaded
+check_within 15 "… the modules load" module_state_is alpha loaded
 second=$SHELL_PID
 signal_shell KILL
 wait_for_new_shell "$second" 10 || abort "no new shell after the second kill"
 check "two quick deaths in a row: the next start is in safe mode" test "$(safe_mode_of_shell)" = 1
 check "… the shell knows it" test "$(module_field - safeMode)" = true
-check "… no module loads" module_state_is alpha safe-mode
+check_within 15 "… no module loads" module_state_is alpha safe-mode
 check "… none of them" test "$(shell_ipc modules list | grep -o '"state":"loaded"' | wc -l)" = 0
 check "… the launcher said so" grep -aq "starting it in safe mode (no modules)" "$RUN/h2s-shell-launcher.log"
 lock_by_ipc
@@ -101,6 +103,6 @@ log "the safe-mode shell has run for 32 s"
 signal_shell KILL
 wait_for_new_shell "$third" 10 || abort "no new shell after the third kill"
 check "a start that lived 30 s ended safe mode" test -z "$(safe_mode_of_shell)"
-check "… the modules load again" module_state_is alpha loaded
-check "… and the module installed meanwhile is found" module_state_is gamma loaded
+check_within 15 "… the modules load again" module_state_is alpha loaded
+check_within 15 "… and the module installed meanwhile is found" module_state_is gamma loaded
 check "the supervisor is still the first one" kill -0 "$SUPERVISOR_PID"

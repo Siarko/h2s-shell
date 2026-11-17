@@ -218,6 +218,13 @@ done
 ARTIFACTS=$(mktemp -d "$temp_base/h2s-locktest.XXXXXX") || setup_error "cannot create the artifacts dir"
 LOCKTEST_RUN_ID=$(basename "$ARTIFACTS")-$$
 
+# With the system's tools, the set tools.nix would have built is made here, for this run:
+# links to the programs found on PATH, the protocol bindings and the keymaps (resolve.sh)
+if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+    make_system_tools "$ARTIFACTS/tools"
+    LOCKTEST_TOOLS=$ARTIFACTS/tools
+fi
+
 # ---- The shell under test: a copy of the checkout, one per test -----------------------
 # Quickshell reloads the shell on any file written in its folder, and a reload while
 # locked unlocks. So the shell runs from a copy: whatever is written to the checkout
@@ -463,6 +470,11 @@ done
 if [ -n "$inhibitor_leak" ]; then
     echo "  FAIL  isolation: a process of the run held an inhibitor on the real logind:$inhibitor_leak"
     failed=1
+fi
+if [ "$LOCKTEST_LAUNCHER_FROM" = stand-in ]; then
+    # Every test started its shell through it. The supervisor, the restart and `ipc` it ran
+    # are the copy's scripts/launch.sh, as always; the packaged command itself was not there
+    echo "  NOTE  launcher: the test bed's stand-in (tests/lock/launcher.sh) in every test, there being no h2s-shell command here: what a packaged h2s-shell adds (the programs it puts on PATH, its Quickshell) was not tested"
 fi
 if [ "$(real_config_stamp)" != "$real_config_before" ]; then
     # A warning only: the real shell writes it too (remembered state); that the test

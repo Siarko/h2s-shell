@@ -4,9 +4,10 @@
 # run.sh hands over, in the environment:
 #   LOCKTEST_DIR           this directory
 #   LOCKTEST_SHELL         the copy of the checkout the shell under test runs from
-#   LOCKTEST_TOOLS         the store path tools.nix built (bin/, share/)
+#   LOCKTEST_TOOLS         the tool set (bin/, share/): the store path tools.nix built, or
+#                          the one run.sh made from the system's tools
 #   LOCKTEST_PAM_MODULES   the PAM module directory matching Quickshell's libpam
-#   LOCKTEST_LAUNCHER      the h2s-shell launcher
+#   LOCKTEST_LAUNCHER      the h2s-shell launcher (or the test bed's launcher.sh)
 #   LOCKTEST_QS            the qs the launcher runs the shell with
 #   LOCKTEST_ARTIFACTS     this test's directory for logs and screenshots
 #   LOCKTEST_RUN_ID        a marker every process of the run carries, for the final sweep
@@ -173,7 +174,7 @@ check_within() {
 #                                    gdbus is theirs)
 # --keymap <name>                   the layout the virtual keyboard sends: us (the
 #                                    default), us-intl (dead keys, AltGr), us-compose (a
-#                                    Compose key on the right Alt) — tools.nix compiles them
+#                                    Compose key on the right Alt) — compiled with the tool set
 # --settings <json>                  the shell starts with these settings ({ "key": value },
 #                                    SettingsSchema keys) in its one profile (write_settings)
 # --session-bus                      a private session bus (dbus-daemon, no service
@@ -236,7 +237,7 @@ stack_start() {
         esac
     done
     local keymap_file=$TOOLS/share/keymaps/$keymap.xkb
-    [ -f "$keymap_file" ] || abort "stack_start: no keymap $keymap (tools.nix: share/keymaps)"
+    [ -f "$keymap_file" ] || abort "stack_start: no keymap $keymap (the tool set's share/keymaps)"
     [ -z "$settings" ] || write_settings "$settings"
 
     # Hyprland 0.57 cannot run on the headless backend alone (no allocator); nested in a
@@ -293,13 +294,15 @@ EOF
     # that gains its first keyboard later loses the first key
     INPUT_FIFO=$WORK/input.fifo
     mkfifo "$INPUT_FIFO"
-    spawn "$WORK/input.log" python3 -I "$LOCKTEST_DIR/input/ltinput.py" \
+    # (-B: no bytecode beside the bindings — -I has Python ignore PYTHONDONTWRITEBYTECODE,
+    # and a tool set made for the run, unlike the store's, can be written to)
+    spawn "$WORK/input.log" python3 -I -B "$LOCKTEST_DIR/input/ltinput.py" \
         "$TOOLS/share" "$keymap_file" "$INPUT_FIFO"
     INPUT_PID=$SPAWNED_PID
     wait_until 10 grep -q ready "$WORK/input.log" || abort "the input client did not start (see input.log)"
 
     if [ "$window" = 1 ]; then
-        spawn "$WORK/window.log" python3 -I "$LOCKTEST_DIR/input/ltwindow.py" "$TOOLS/share"
+        spawn "$WORK/window.log" python3 -I -B "$LOCKTEST_DIR/input/ltwindow.py" "$TOOLS/share"
         wait_until 10 grep -q ready "$WORK/window.log" || abort "the stand-in window did not start (see window.log)"
     fi
 
@@ -767,6 +770,19 @@ assert_supervisor_process() {
     [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] \
         && tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" \
         || abort "pid $1 is not the launcher under test: not signalling it"
+}
+
+# supervisor_environment <pid>: the launcher's environment as it began, in `environment` —
+# what a test hands a second launcher (`env -i "${environment[@]}" … --restart`) so that it
+# runs as the first was started. Only when it names the private runtime dir: a launcher
+# started without one would look for the shells to stop in the real session's.
+supervisor_environment() {
+    local entry private=""
+    assert_supervisor_process "$1"
+    environment=()
+    { mapfile -d '' environment < "/proc/$1/environ"; } 2> /dev/null
+    for entry in "${environment[@]}"; do [ "$entry" = "XDG_RUNTIME_DIR=$RUN" ] && private=1; done
+    [ -n "$private" ] || abort "the launcher's environment (pid $1) could not be read, or does not name the private runtime dir: not starting another launcher with it"
 }
 
 # The supervisor lets the shell go: it no longer starts it again (what the launcher's own

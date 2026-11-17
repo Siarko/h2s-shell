@@ -6,7 +6,7 @@
 # setup_error to remove) and LOCKTEST_NEED, what it uses:
 #
 #   unit   labwc, setpriv, setsid, timeout
-#   lock   the whole of tools.nix, setsid, timeout, and a launcher
+#   lock   the lock test bed's whole set (below), setsid, timeout, and a launcher
 #
 # The tools come from one source for the whole run, never tool by tool (they depend on each
 # other, and a mix of pinned and system parts is a configuration nobody tests):
@@ -16,25 +16,40 @@
 #   (not set)               nix when a `nix` command exists, else system
 #
 # setsid and timeout are taken from PATH with either source (tools.nix does not hold them).
-# The lock need can only be met by nix: the protocol bindings and keymaps it uses are built
-# by tools.nix alone.
 #
-# Quickshell is never pinned here. In this order: LOCKTEST_QS; the one the launcher runs
-# (LOCKTEST_LAUNCHER, else h2s-shell on PATH), asked of the launcher; qs, then quickshell,
-# on PATH. A launcher that is there and does not answer is an error, not a reason to take
-# another Quickshell.
+# The lock bed's set is what tools.nix builds: bin/ (labwc, Hyprland, hyprctl, grim, python3
+# with pywayland, setpriv, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr) and
+# share/ (ltproto: the Python bindings of the input protocols; us.xkb and keymaps/: the
+# layouts the virtual keyboard sends). With the system source the programs are those on
+# PATH, and the caller has share/ made for the run, in a directory of the run's own, with
+# make_system_tools <directory> (below): the same set in the same layout, so the test bed
+# reads one LOCKTEST_TOOLS either way. Making it takes pywayland's scanner, pkg-config (the
+# scanner asks it where the core protocol is, and so does this file, for wayland.xml and
+# xdg-shell.xml) and the two protocol files in protocols/, which tools.nix reads too.
 #
-# Prints what it took, before any test:
+# The launcher (the lock need starts the shell through one, the unit need only asks it for
+# its Quickshell), in this order: LOCKTEST_LAUNCHER; h2s-shell on PATH; for the lock need,
+# the test bed's own launcher.sh — a stand-in for a machine without an h2s-shell command,
+# which does what the packaged one does with H2S_SHELL_DIR set (LOCKTEST_LAUNCHER_FROM says
+# which it was: given, path or stand-in).
 #
-#   tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4
-#   quickshell: /usr/bin/qs 0.3.2 (PATH)
+# Quickshell is never pinned here. In this order: LOCKTEST_QS; the one the launcher runs,
+# asked of the launcher; qs, then quickshell, on PATH. A launcher that is there and does not
+# answer is an error, not a reason to take another Quickshell.
+#
+# Prints what it took, before any test (the launcher line for the lock need only):
+#
+#   tools: system (PATH, not pinned) — labwc 0.9.1, setpriv 2.42.4, Hyprland 0.57.2
+#   launcher: /…/tests/lock/launcher.sh (the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH)
+#   quickshell: /usr/bin/qs 0.3.2 (asked of the launcher /…/tests/lock/launcher.sh)
 #
 # Versions are printed, not checked. What is missing is a set-up error naming every missing
 # tool at once, each with its use; nothing is skipped and nothing else is tried.
 #
 # Sets LOCKTEST_TOOL_SOURCE (nix or system), LOCKTEST_TOOLS (tools.nix's store path; empty
-# with system), LOCKTEST_LABWC, SETPRIV, LOCKTEST_LAUNCHER (empty when the unit need found
-# none), LOCKTEST_QS.
+# with system, until the caller has made the set), LOCKTEST_LABWC, SETPRIV,
+# LOCKTEST_LAUNCHER (empty when the unit need found none), LOCKTEST_LAUNCHER_FROM,
+# LOCKTEST_QS.
 
 # What the tests use each tool for: the text of a missing-tool error
 tool_use() {
@@ -50,6 +65,9 @@ tool_use() {
         dbus-daemon | gdbus) echo "a private session bus for the notification tests" ;;
         wl-copy | wl-paste) echo "the primary selection of the paste test" ;;
         wlr-randr) echo "sets the headless output's size" ;;
+        pkg-config) echo "finds the Wayland protocol files the input bindings are generated from" ;;
+        pywayland) echo "the Python module the virtual keyboard and pointer speak Wayland with, and its scanner" ;;
+        wayland.xml | xdg-shell.xml) echo "a protocol file the input bindings are generated from" ;;
         ltproto) echo "the Python bindings of the input protocols" ;;
         us.xkb | keymaps) echo "the layouts the virtual keyboard sends" ;;
         *) echo "used by the tests" ;;
@@ -84,9 +102,9 @@ case "${H2S_TEST_TOOLS:-}" in
     "") if type -P nix > /dev/null; then LOCKTEST_TOOL_SOURCE=nix; else LOCKTEST_TOOL_SOURCE=system; fi ;;
     *) setup_error "H2S_TEST_TOOLS must be nix or system, not '$H2S_TEST_TOOLS'" ;;
 esac
-if [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
-    setup_error "the lock test bed cannot take its tools from the system yet (its protocol bindings and keymaps are built by tests/lock/tools.nix only): it needs nix. The unit and module suites run without."
-fi
+
+# The programs of the lock bed's set, as tools.nix's bin/ names them
+lock_programs=(labwc Hyprland hyprctl grim python3 setpriv xkbcli dbus-daemon gdbus wl-copy wl-paste wlr-randr)
 
 # ---- Tools ----------------------------------------------------------------------------
 # Everything missing is collected and reported at once, below
@@ -103,8 +121,7 @@ if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     fi
     rm -f "$nix_log"
     if [ "$LOCKTEST_NEED" = lock ]; then
-        needed_tools=(bin/labwc bin/Hyprland bin/hyprctl bin/grim bin/python3 bin/setpriv bin/xkbcli bin/dbus-daemon
-            bin/gdbus bin/wl-copy bin/wl-paste bin/wlr-randr share/ltproto share/us.xkb share/keymaps)
+        needed_tools=("${lock_programs[@]/#/bin/}" share/ltproto share/us.xkb share/keymaps)
     else
         needed_tools=(bin/labwc bin/setpriv)
     fi
@@ -118,11 +135,80 @@ else
     LOCKTEST_TOOLS=""
     LOCKTEST_LABWC=$(type -P labwc)
     SETPRIV=$(type -P setpriv)
-    needed_tools=(labwc setpriv setsid timeout)
+    if [ "$LOCKTEST_NEED" = lock ]; then
+        needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
+    else
+        needed_tools=(labwc setpriv setsid timeout)
+    fi
 fi
 for tool in "${needed_tools[@]}"; do
     type -P "$tool" > /dev/null || missing+=("$tool not found on PATH ($(tool_use "$tool"))")
 done
+
+# The lock bed's set from the system: what its share/ is made from. Each is looked at only
+# when the program that says is there (one that is not is in the list already).
+# protocol_file <pkg-config package> <path below its pkgdatadir>: the file's path, if it is there
+protocol_file() {
+    local directory
+    directory=$(timeout 5 "$system_pkg_config" --variable=pkgdatadir "$1" 2> /dev/null < /dev/null) || return 1
+    [ -n "$directory" ] && [ -f "$directory/$2" ] && echo "$directory/$2"
+}
+if [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+    system_python=$(type -P python3)
+    system_pkg_config=$(type -P pkg-config)
+    system_xkbcli=$(type -P xkbcli)
+    # (Asked with nothing of the session but PATH; -I: nothing of the user's own packages)
+    if [ -n "$system_python" ] && type -P timeout > /dev/null \
+        && ! timeout 20 env -i PATH="$PATH" "$system_python" -I -c 'import pywayland.client, pywayland.scanner' > /dev/null 2>&1 < /dev/null; then
+        missing+=("pywayland cannot be imported by $system_python ($(tool_use pywayland))")
+    fi
+    if [ -n "$system_pkg_config" ] && type -P timeout > /dev/null; then
+        wayland_xml=$(protocol_file wayland-scanner wayland.xml) \
+            || missing+=("wayland.xml not found where pkg-config says wayland-scanner keeps it ($(tool_use wayland.xml))")
+        xdg_shell_xml=$(protocol_file wayland-protocols stable/xdg-shell/xdg-shell.xml) \
+            || missing+=("xdg-shell.xml not found where pkg-config says wayland-protocols keeps it ($(tool_use xdg-shell.xml))")
+    fi
+fi
+
+# make_system_tools <directory>: the lock bed's set from the system's tools, as tools.nix
+# lays it out (the caller then hands <directory> on as LOCKTEST_TOOLS). <directory> is new
+# and the run's own. bin/ links to the programs found on PATH above; share/ is generated
+# with them, by the commands tools.nix runs, with nothing of the user's (an XKB config in
+# the home directory would change the keymaps). A failure is a set-up error.
+make_system_tools() {
+    local directory=$1 tool log
+    [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ] \
+        || setup_error "make_system_tools is for the lock need with the system's tools"
+    mkdir -p "$directory/bin" "$directory/share/keymaps" "$directory/home" \
+        || setup_error "cannot create the tool set in $directory"
+    for tool in "${lock_programs[@]}"; do
+        ln -s "$(type -P "$tool")" "$directory/bin/$tool" || setup_error "cannot link $tool into $directory/bin"
+    done
+    log=$directory/generate.log
+    if ! env -i PATH="$PATH" ${PKG_CONFIG_PATH:+PKG_CONFIG_PATH="$PKG_CONFIG_PATH"} HOME="$directory/home" \
+        "$system_python" -I -B -m pywayland.scanner -o "$directory/share/ltproto" -i \
+        "$wayland_xml" "$LOCKTEST_DIR/protocols/virtual-keyboard-unstable-v1.xml" \
+        "$LOCKTEST_DIR/protocols/wlr-virtual-pointer-unstable-v1.xml" "$xdg_shell_xml" > "$log" 2>&1 < /dev/null \
+        || ! touch "$directory/share/ltproto/__init__.py" 2>> "$log"; then
+        cat "$log" >&2
+        setup_error "pywayland's scanner could not generate the input protocol bindings (output above)"
+    fi
+    # compile_keymap <name> <xkbcli options…>: share/keymaps/<name>.xkb
+    compile_keymap() {
+        local name=$1
+        shift
+        env -i HOME="$directory/home" "$system_xkbcli" compile-keymap --rules evdev --model pc105 "$@" \
+            > "$directory/share/keymaps/$name.xkb" 2> "$log" < /dev/null && [ -s "$directory/share/keymaps/$name.xkb" ] && return 0
+        cat "$log" >&2
+        setup_error "xkbcli could not compile the $name keymap (output above)"
+    }
+    # The layouts a test may type with: the same three, by the same options, as tools.nix
+    compile_keymap us --layout us
+    compile_keymap us-intl --layout us --variant intl
+    compile_keymap us-compose --layout us --options compose:ralt
+    cp "$directory/share/keymaps/us.xkb" "$directory/share/us.xkb" || setup_error "cannot write $directory/share/us.xkb"
+    rm -rf "$log" "$directory/home"
+}
 
 # ---- Quickshell: what can be said without starting anything ---------------------------
 quickshell_from=""
@@ -130,12 +216,26 @@ if [ -n "${LOCKTEST_QS:-}" ]; then
     { [ -f "$LOCKTEST_QS" ] && [ -x "$LOCKTEST_QS" ]; } || setup_error "LOCKTEST_QS ($LOCKTEST_QS) is not an executable file"
     quickshell_from="LOCKTEST_QS"
 fi
-LOCKTEST_LAUNCHER=${LOCKTEST_LAUNCHER:-$(type -P h2s-shell)}
-if [ -n "$LOCKTEST_LAUNCHER" ]; then
-    { [ -f "$LOCKTEST_LAUNCHER" ] && [ -x "$LOCKTEST_LAUNCHER" ]; } || setup_error "LOCKTEST_LAUNCHER ($LOCKTEST_LAUNCHER) is not an executable file"
+# The launcher: the one named, else the installed one, else — for the lock need, which
+# starts the shell through it — the test bed's stand-in
+LOCKTEST_LAUNCHER_FROM=""
+launcher_said=""
+if [ -n "${LOCKTEST_LAUNCHER:-}" ]; then
+    LOCKTEST_LAUNCHER_FROM=given
+    launcher_said="LOCKTEST_LAUNCHER"
+elif LOCKTEST_LAUNCHER=$(type -P h2s-shell); then
+    LOCKTEST_LAUNCHER_FROM=path
+    launcher_said="h2s-shell on PATH"
 elif [ "$LOCKTEST_NEED" = lock ]; then
-    # The shell is started the way it is for real: through the h2s-shell launcher
-    missing+=("h2s-shell not found on PATH (the launcher the shell under test is started through; LOCKTEST_LAUNCHER names another)")
+    LOCKTEST_LAUNCHER=$LOCKTEST_DIR/launcher.sh
+    LOCKTEST_LAUNCHER_FROM=stand-in
+    launcher_said="the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH"
+else
+    LOCKTEST_LAUNCHER=""
+fi
+if [ -n "$LOCKTEST_LAUNCHER" ]; then
+    case "$LOCKTEST_LAUNCHER_FROM" in given) launcher_name="LOCKTEST_LAUNCHER" ;; *) launcher_name="the launcher" ;; esac
+    { [ -f "$LOCKTEST_LAUNCHER" ] && [ -x "$LOCKTEST_LAUNCHER" ]; } || setup_error "$launcher_name ($LOCKTEST_LAUNCHER) is not an executable file"
 fi
 if [ -z "$quickshell_from" ] && [ -z "$LOCKTEST_LAUNCHER" ]; then
     LOCKTEST_QS=$(type -P qs || type -P quickshell)
@@ -153,12 +253,15 @@ fi
 if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     tools_line="tools: nix (tests/lock/tools.nix, pinned: $LOCKTEST_TOOLS)"
     pinned_hyprland=$(version_line "$LOCKTEST_TOOLS/bin/Hyprland")
+    hyprland_version=$(version_number "$pinned_hyprland")
 else
     tools_line="tools: system (PATH, not pinned)"
+    hyprland_version=$(tool_version "$(type -P Hyprland)")
 fi
 tools_line+=" — labwc $(tool_version "$LOCKTEST_LABWC"), setpriv $(tool_version "$SETPRIV")"
-[ "$LOCKTEST_NEED" = lock ] && tools_line+=", Hyprland $(version_number "$pinned_hyprland")"
+[ "$LOCKTEST_NEED" = lock ] && tools_line+=", Hyprland $hyprland_version"
 echo "$tools_line"
+[ "$LOCKTEST_NEED" = lock ] && echo "launcher: $LOCKTEST_LAUNCHER ($launcher_said)"
 
 # The pinned Hyprland is meant to be the system's: say so when it is not (the whole line
 # is compared: it names the commit too), and when that cannot be told

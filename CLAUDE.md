@@ -61,12 +61,13 @@ two suites open a small window, and the runner puts them in a private headless c
 is named by its file in `tests/` without `.qml`; a wrong name is an error, nothing runs);
 run them all before committing. `--log <file>`, before the names, also saves the output.
 
-The unit and module suites take that compositor (labwc) from the pinned
-`tests/lock/tools.nix` where there is a `nix` command, else from `PATH`
-(`H2S_TEST_TOOLS=nix` or `=system` says which), and say which in their first lines; a
-missing tool ends the run with status 2 and its name (`tests/lock/resolve.sh`;
-`LOCKTEST_QS` names another Quickshell). The lock test bed needs `nix`. When another run
-of either may be going on (two people or agents in one checkout), wrap them in
+Every runner takes its tools — that compositor (labwc), and for the lock test bed Hyprland
+and the rest of its set — from the pinned `tests/lock/tools.nix` where there is a `nix`
+command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` says which), and says which
+in its first lines; a missing tool ends the run with status 2 and its name
+(`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). The lock test bed starts
+the shell through a launcher: `LOCKTEST_LAUNCHER`, else `h2s-shell` on `PATH`, else its own
+`tests/lock/launcher.sh`. When another run of either may be going on (two people or agents in one checkout), wrap them in
 `flock /tmp/h2s-locktest.flock …`.
 
 A running shell reloads itself when a file changes, but that reload is not enough after
@@ -132,8 +133,10 @@ What differs between the two systems for development:
   launcher itself, else `qs` or `quickshell` on `PATH` (`tests/lock/resolve.sh`).
   - NixOS: the launcher is this flake's package (`nix/package.nix`).
   - Arch: `install.sh` installs Quickshell from pacman and puts no `h2s-shell` command on
-    `PATH`, so the unit and module suites run the `qs` on `PATH`. The lock test bed needs a
-    launcher (`LOCKTEST_LAUNCHER`).
+    `PATH`, so the unit and module suites run the `qs` on `PATH`. The lock test bed, which
+    starts the shell through a launcher, then takes its own `tests/lock/launcher.sh` (the
+    checkout's `scripts/launch.sh`, as the packaged launcher runs it with `H2S_SHELL_DIR`)
+    and says so in its output: what the package adds to `PATH` is not tested there.
 - **Test tools.** One source for a whole run (`tests/lock/resolve.sh`, used by
   `tests/headless.sh` and `tests/lock/run.sh`): the pinned build of `tests/lock/tools.nix`
   where there is a `nix` command, else the system's programs on `PATH`, un-pinned;
@@ -143,8 +146,14 @@ What differs between the two systems for development:
     (coreutils). NixOS: `nix` provides labwc and `setpriv`. Arch, without `nix`: labwc is a
     package to have installed for development (`install.sh` does not install it).
   - `tests/resolve-selftest.sh` needs none of them but `setsid` and `timeout`.
-  - The lock test bed takes its tools from `nix` only, on both systems; the test split
-    (tracker, steps 1 and 10) is to lift that.
+  - The lock test bed (`tests/lock/run.sh`) needs labwc, Hyprland with hyprctl, grim,
+    wlr-randr, wl-copy and wl-paste, xkbcli, dbus-daemon, gdbus, `setpriv`, a `python3`
+    that imports pywayland, and the Python bindings of its input protocols and its
+    keymaps. NixOS: `nix` builds all of it. Arch, without `nix`: the programs are packages
+    to have installed for development (`docs/ARCHITECTURE.md`, "Where the test tools come
+    from", names them), and the bindings and keymaps are made at the start of each run,
+    which also takes `pkg-config`, the `wayland` and `wayland-protocols` packages' protocol
+    files and the two kept in `tests/lock/protocols/`.
 - **Paths.** Scripts start with `#!/usr/bin/env bash`: NixOS has no `/bin/bash`.
   System files differ (NixOS: `/run/current-system/sw/bin`, `/etc/static`, a generated
   `/etc/pam.d`); code that reads them handles both systems.

@@ -29,7 +29,11 @@ parent=$(awk '{ print $4 }' "/proc/$hyprland/stat")
 tr '\0' ' ' < "/proc/$parent/cmdline" 2> /dev/null | grep -q "^timeout " || abort "pid $hyprland's parent is not the test's timeout: not killing it"
 [ "$(process_env "$hyprland" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] || abort "pid $hyprland does not carry the run's marker: not killing it"
 [ "$(process_env "$hyprland" XDG_RUNTIME_DIR)" = "$RUN" ] || abort "pid $hyprland is not in the private runtime dir: not killing it"
-[[ "$(readlink -f "/proc/$hyprland/exe")" == /nix/store/*hyprland* ]] || abort "pid $hyprland does not run Hyprland: not killing it"
+# … and runs the test bed's Hyprland: the program on the test's PATH, or the binary a
+# wrapper of that name starts (beside it, as nixpkgs wraps programs)
+hyprland_binary=$(readlink -f "$(type -P Hyprland)")
+[ -e "$(dirname "$hyprland_binary")/.Hyprland-wrapped" ] && hyprland_binary=$(readlink -f "$(dirname "$hyprland_binary")/.Hyprland-wrapped")
+[ "$(readlink -f "/proc/$hyprland/exe")" = "$hyprland_binary" ] || abort "pid $hyprland does not run the test bed's Hyprland ($hyprland_binary): not killing it"
 supervisor=$SUPERVISOR_PID
 kill -KILL "$hyprland"
 log "killed the nested Hyprland (pid $hyprland)"

@@ -28,8 +28,7 @@ check_within 5 "confirmed" state_is secure true
 # The launcher, run as the shell was started (the supervisor's environment, as it began)
 old_shell=$SHELL_PID
 old_supervisor=$SUPERVISOR_PID
-assert_supervisor_process "$old_supervisor"
-mapfile -d '' environment < "/proc/$old_supervisor/environ"
+supervisor_environment "$old_supervisor"
 start_lock_watch restart
 spawn "$WORK/restart.log" env -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
 check_within 15 "the old shell is stopped" test ! -e "/proc/$old_shell"

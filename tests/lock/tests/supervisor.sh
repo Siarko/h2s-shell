@@ -66,8 +66,7 @@ for pid in $("$LOCKTEST_QS" list --all 2> /dev/null | awk '/^ *Process ID:/ { pr
         || abort "qs list --all lists $pid, which is not of this run: not running --restart"
 done
 old_supervisor=$SUPERVISOR_PID
-assert_supervisor_process "$old_supervisor"
-mapfile -d '' environment < "/proc/$old_supervisor/environ"
+supervisor_environment "$old_supervisor"
 dying=$SHELL_PID
 ( while :; do instances >> "$WORK/instance-count"; sleep 0.1; done ) &
 counter=$!
