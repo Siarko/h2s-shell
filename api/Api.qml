@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.7" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.8" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -49,6 +49,8 @@ import qs.singletons.network
 // And these types (files beside this one):
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
 //                          building blocks, so a module's page looks like the core's
+//   CommandRunner (1.8) — running commands: any number at once, each with a time limit,
+//                          its output as it comes, one answer (below)
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
 //   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
 //                          (1.5), SettingsRow, ExpandingRow, Notice (1.6) — the public
@@ -139,6 +141,45 @@ import qs.singletons.network
 //                          (network.vpn.row, .card, .page) are manifest `slots`
 //                          contributions like any other (Api.slots).
 //
+// CommandRunner (1.8): runs commands for a module. It is written under the module's main
+// object or one of its views; when that is destroyed (the module turned off) its runs are
+// ended at once and nothing is called any more.
+//   environment            { NAME: value }, added to every run's environment
+//   running                how many runs are started and not answered yet
+//   start(argv, options)   starts one → a handle { running (bool), cancel() }.
+//                          `argv`: a non-empty list of strings, started as it is — no
+//                          shell reads it. options, all optional:
+//                            timeoutMs       30000; 0: no limit. Past it the command gets
+//                                            TERM, and KILL killAfterMs later
+//                            killAfterMs     3000
+//                            environment     { NAME: value } for this run, on top of the
+//                                            runner's: the way to hand over a secret
+//                            onStdout(text), onStderr(text)   output as it is read
+//                            onLine(line, stream)   whole lines, of "stdout" and "stderr"
+//                            keepOutput      true: the result holds both streams
+//                            maxOutputBytes  1048576: where each kept stream, and a single
+//                                            line, is cut (counted in characters)
+//                            done(result)    called once, after start() has returned
+//                          result, frozen: { ok (exit 0 and none of the rest), code (the
+//                          exit status; -1 without one), stdout, stderr, timedOut,
+//                          cancelled, failedToStart, truncated, durationMs, error }.
+//                          `failedToStart`: the program is not there or cannot run — where
+//                          the run has a limit that is read from `timeout`'s exit status,
+//                          126 or 127, so a command that exits with one of them itself
+//                          reads the same. `error`: "" — or why nothing was run (argv or an
+//                          option of the wrong kind); the result is the only place it shows
+//   cancel()               TERM, KILL after killAfterMs; no output is handed over from
+//                          that moment; done comes with `cancelled: true` when the process
+//                          is gone. A run that waits to be started is answered at once
+//   cancelAll()            cancel() for every run
+//                          The limit is kept by coreutils' `timeout` around the command,
+//                          taken from a system directory, never PATH — so a run ends even
+//                          when the shell is gone — and by the shell's own timer where
+//                          there is no `timeout`. What a command prints is text from
+//                          outside: show it as plain text, never put it on a command line
+//                          unquoted. A callback that throws is logged; the run goes on.
+//                          CommandAction and CommandQuery are run by it, without a limit.
+//
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any
 // release. A module that still imports it loads as before, and the import is listed in
@@ -187,9 +228,15 @@ Singleton {
             console.warn("[Modules] Api.openUrl refused " + JSON.stringify(text.slice(0, 200)) + ": " + problem);
             return false;
         }
-        _opener.run(["xdg-open", text], result => {
-            if (!result.ok)
-                console.warn("[Modules] xdg-open " + text + " failed:", result.error || result.code);
+        // No time limit: where xdg-open starts the program itself it lasts as long as it
+        _opener.start(["xdg-open", text], {
+            timeoutMs: 0,
+            maxOutputBytes: 4096,
+            done: result => {
+                if (!result.ok)
+                    console.warn("[Modules] xdg-open " + JSON.stringify(text.slice(0, 200)) + " failed:",
+                                 result.stderr.trim().slice(0, 300) || (result.failedToStart ? "it could not be started" : result.code));
+            }
         });
         return true;
     }
@@ -202,5 +249,5 @@ Singleton {
         Shell.openSettings(String(page ?? ""));
     }
 
-    property Io.CommandAction _opener: Io.CommandAction {}
+    property Io.CommandRunner _opener: Io.CommandRunner {}
 }

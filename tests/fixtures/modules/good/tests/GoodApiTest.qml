@@ -56,6 +56,9 @@ TestCase {
         onDone: lines => suite._queried = lines
     }
     property var _queried: null
+    property CommandRunner runner: CommandRunner {}
+    property var _ran: null
+    property var _ranLines: []
     property var _results: ({})
 
     // The store is read by a process (API 1.2): everything starts once it has answered
@@ -81,7 +84,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.7", "Api.version");
+        assertEqual(Api.version, "1.8", "Api.version");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");
@@ -171,6 +174,13 @@ TestCase {
         admin.run("not a list", "Nothing", result => suite._results.bad = result);
         query.command = ["sh", standIn, "queried"];
         query.request();
+        // API 1.8
+        runner.start(["sh", standIn, "one two", "three"], {
+            timeoutMs: 5000,
+            environment: { STAND_IN_EXIT: "5" },
+            onLine: (line, stream) => suite._ranLines.push(stream + ":" + line),
+            done: result => suite._ran = result
+        });
 
         _then("the commands answered", () => Object.keys(_results).length === 8 && _queried !== null, () => {
             assert(_results.plain.ok && JSON.stringify(_results.plain.lines) === "[\"a b\",\"c\"]", "CommandAction: its lines, arguments kept whole");
@@ -184,6 +194,12 @@ TestCase {
             assert(_results.relative.notFound && !_results.relative.refused, "PrivilegedAction: a relative path is notFound (an absolute path is required)");
             assert(!_results.root.notFound && _results.refused.notFound === false, "PrivilegedAction: notFound false when the program is there");
             assertEqual(JSON.stringify(_queried), "[\"queried\"]", "CommandQuery: its lines");
+        });
+        _then("the runner's command answered", () => _ran !== null, () => {
+            assertEqual(_ran.ok + " " + _ran.code + " " + _ran.timedOut + " " + _ran.failedToStart + " " + _ran.error, "false 5 false false ",
+                        "CommandRunner: the exit status (the run's environment passed), nothing else said");
+            assertEqual(_ran.stdout + "|" + _ranLines.join(), "one two\nthree\n|stdout:one two,stdout:three", "CommandRunner: its output, whole and line by line, arguments kept whole");
+            assertEqual(runner.running, 0, "CommandRunner: no run left");
         });
     }
 }

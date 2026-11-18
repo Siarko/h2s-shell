@@ -49,6 +49,7 @@ TestCase {
         "components/ExpandingRow.qml",
         "api/CommandAction.qml",
         "api/CommandQuery.qml",
+        "api/CommandRunner.qml",
         "api/PrivilegedAction.qml",
         "widgets/BatteryWidget.qml",
         "panels/widget_settings/BatteryWidgetSettings.qml",

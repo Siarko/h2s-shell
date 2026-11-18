@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.8: `CommandRunner` — `start(argv, options)` runs a command (a list of words, no shell)
+  and returns a handle (`running`, `cancel()`); any number at once, `cancelAll()`, `running`,
+  `environment`. Each run has a time limit (`timeoutMs`, 30 s unless given, 0 for none; kept
+  by coreutils' `timeout` from a system directory and by the shell's own timer; TERM, then
+  KILL after `killAfterMs`), its output as it comes (`onStdout`, `onStderr`, `onLine`) and
+  one answer, `done(result)`: `ok`, `code`, `stdout`, `stderr` (kept up to `maxOutputBytes`,
+  else `truncated`), `timedOut`, `cancelled`, `failedToStart`, `durationMs`, `error`. When
+  the runner is destroyed its runs are ended and nothing is called. `CommandAction` and
+  `CommandQuery` are run by it and keep what they promise; a `CommandAction` whose program
+  cannot start is now answered (`ok` false, `code` -1) instead of never.
 - 1.7: the base types, in `qs.api` — `PopupWidget`, `BarText`, `BarRow`, `PointerArea` and
   `VpnProvider`: the shell's own types, with the names a module may rely on pinned. With them
   `qs.api` has everything a module took from `qs.components`, and **`import qs.components` is

@@ -600,13 +600,44 @@ What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the 
 `main`, which the host destroys when the module is turned off, or binds to `module.active`
 (a singleton's timer: `running: module.active`) — a module's singletons outlive the main.
 A singleton finds its handle with `Api.moduleAt(Qt.resolvedUrl("."))`. Commands go through
-`CommandAction` / `CommandQuery` / `PrivilegedAction` (pkexec, by an absolute path checked first —
+`CommandRunner` (below), `CommandAction` / `CommandQuery` (one after another, or a query run
+again on request; both run by a `CommandRunner`, without a time limit) and
+`PrivilegedAction` (pkexec, by an absolute path checked first —
 `notFound` otherwise; 126 dismissed, quietly; 127 refused, said once). Wake-up: `module.resumed()`;
 a page or slot contribution that declares `property bool shown` does its expensive reading only
 while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 `module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
 
-- **Tests**: `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
+**The command runner** (`api/CommandRunner.qml`; inside it and in the shell's own code
+`singletons/io/CommandRunner.qml`): `start(argv, options)` starts a command — a list of
+words, never read by a shell — and returns a handle (`running`, `cancel()`); any number
+run at once. Each run has a time limit (30 s unless given; 0 for none), gets its output as
+it comes (`onStdout`, `onStderr`, `onLine` with whole lines) and is answered once, through
+`done`, with a frozen result: `ok`, `code`, `stdout`, `stderr` (each kept up to
+`maxOutputBytes`, `truncated` beyond), `timedOut`, `cancelled`, `failedToStart`,
+`durationMs`, and `error` when what was asked could not be run at all. The decisions are
+pure functions in `singletons/CommandRules.qml` (what may be run, the command line, a run's
+life as `step`, the cuts, the result); the runner starts processes and keeps timers.
+
+- The time limit is kept twice: the command is started inside coreutils' `timeout -k`,
+  which ends it even when the shell is gone, and the runner has a watchdog of its own,
+  the only limit where no `timeout` is found. `singletons/CommandTools.qml` looks for
+  `timeout` once, in system directories only and never on `PATH`; runs with a limit wait
+  for its answer.
+  - NixOS: `/run/current-system/sw/bin/timeout`.
+  - Arch: `/usr/bin/timeout`.
+- Past the limit, and on `cancel()`, the command gets TERM, and KILL `killAfterMs` later.
+  From a `cancel()` on no output is handed over; `done` comes when the process is gone.
+- A program that cannot start is `failedToStart`. Quickshell reports it as a process that
+  ends without an exit status; inside `timeout` it is that program's exit status 126 or 127.
+- When the runner is destroyed (a module turned off, the shell reloading) nothing is
+  called any more and its runs are ended at once: a destroyed `Process` takes its child
+  with it, which for a run with a limit is `timeout`, so the runner sends KILL to the
+  process group `timeout` leads.
+
+- **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
+  rules, and the runner against `sh -c` scripts),
+  `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
