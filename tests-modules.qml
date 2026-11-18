@@ -53,7 +53,8 @@ QtObject {
                 continue;
             }
             console.log("  module " + label + " " + status.version + ": loaded"
-                        + (status.warnings.length > 0 ? " (warnings: " + status.warnings.join("; ") + ")" : ""));
+                        + (status.warnings.length > 0 ? " (warnings: " + status.warnings.join("; ") + ")" : "")
+                        + (status.deprecations.length > 0 ? " (deprecated: " + status.deprecations.join("; ") + ")" : ""));
             const tests = host.manifestOf(status.directory)?.tests ?? [];
             if (tests.length === 0)
                 _fail("module " + label + " lists no test suites (\"tests\" in its module.json)");

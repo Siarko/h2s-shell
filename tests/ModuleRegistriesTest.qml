@@ -318,6 +318,13 @@ TestCase {
             const status = Modules.status("vpn-slots");
             assertEqual(status?.state, "loaded", "vpn-slots: loaded (api 1.1)");
             assertEqual(JSON.stringify(status?.warnings ?? null), "[]", "… no warning: its main extends VpnProvider from qs.components, its slots are offered");
+            assertEqual(JSON.stringify(status?.deprecations ?? null),
+                        JSON.stringify(["import qs.components (in Main.qml): use the elements of qs.api (goes with the shell's next tightening)"]),
+                        "… but that import is listed among its deprecations, and it loaded all the same");
+            assertEqual(JSON.stringify(Modules.host.describe().modules.find(module => module.id === "vpn-slots")?.deprecations ?? null), JSON.stringify(status.deprecations),
+                        "… as `modules list` prints them");
+            assertEqual(JSON.stringify(Modules.status("vpn-page")?.deprecations ?? null) + " " + Modules.status("vpn-page")?.state, "[] loaded",
+                        "vpn-page, whose provider extends VpnProvider from qs.api: loaded, nothing deprecated");
             const vpn = VpnManager.vpns.find(each => each.uuid === "vpn-slots:one") ?? null;
             assert(vpn !== null, "its provider's entry is among the VPNs");
             const row = VpnManager.extrasFor(VpnManager.slots.row, vpn);

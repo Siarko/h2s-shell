@@ -531,8 +531,10 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
   components they build, transitively: `tests/lock-closure.sh`).
 
-Writing a module, from the author's side (everything through `import qs.api` and
-`import qs.components`; nothing from `qs.singletons`):
+Writing a module, from the author's side (everything through `import qs.api`; nothing from
+`qs.singletons`, and `qs.components` — the shell's internal components, which may change
+in any release — only for a module not yet moved off it: the import still works and is
+listed among the module's `deprecations` in `qs ipc call modules list`):
 
 ```qml
 // module.json: "widgets": [{ "type": "example", "name": "Example", "widget": "Widget.qml",
@@ -545,7 +547,6 @@ Writing a module, from the author's side (everything through `import qs.api` and
 // Widget.qml — a bar cell; PopupWidget opens the popup the manifest names
 import QtQuick
 import qs.api
-import qs.components
 PopupWidget {
     widgetType: "example"
     property var module: null          // the handle, set before Component.onCompleted
@@ -588,7 +589,10 @@ for a file that imports both. Rows and texts: `SettingsRow` (a label, a hint und
 value, and its children as the controls on the right), `ExpandingRow` (a line that opens;
 its child is held as a `Component`, so nothing of it exists while the row is closed) and
 `Notice` (a small line of kind `warning`, `danger` or `success`); inside the first two are
-`components/SettingsRow.qml` and `components/ExpandingRow.qml`. Every element's properties and signals are pinned in
+`components/SettingsRow.qml` and `components/ExpandingRow.qml`. The base types —
+`PopupWidget`, `BarText`, `BarRow`, `PointerArea`, `VpnProvider` — are the shell's own
+types under their public names, not wrappers: the bar, the pointer and `VpnManager` need
+the object itself, and only the names listed in `api/Api.qml` are promised. Every element's properties and signals are pinned in
 `tests/ApiElementsTest.qml`, with what each kind and size is inside and how the element
 stands in a layout; a change there is a change of the API's version.
 

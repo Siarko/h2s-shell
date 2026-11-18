@@ -6,10 +6,10 @@ import qs.singletons
 import qs.singletons.io as Io
 import qs.singletons.network
 
-// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): with qs.components, everything a
+// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.6" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.7" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -53,6 +53,7 @@ import qs.singletons.network
 //   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
 //                          (1.5), SettingsRow, ExpandingRow, Notice (1.6) — the public
 //                          elements (below)
+//   PopupWidget, BarText, BarRow, PointerArea, VpnProvider (1.7) — the base types (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
 // Public elements (1.4): types made for the API, which hold the shell's internal component
@@ -115,9 +116,34 @@ import qs.singletons.network
 //                          a fontSize, other kinds): in a file that imports both, the
 //                          import written last gives the name.
 //
-// From qs.components (API 1.1): VpnProvider, the base type of a VPN provider — a module's uses
-// its module id as `providerId`, and its three VPN slots (network.vpn.row, .card, .page) are
-// manifest `slots` contributions like any other (Api.slots; notes/plans/tailscale.md §3).
+// Base types (1.7): what a module's own object extends where the shell needs the object
+// itself — the bar its widget, VpnManager a provider. Each is the shell's internal type,
+// not a wrapper: the names below are pinned (tests/ApiElementsTest.qml), what else the
+// type has is not promised.
+//   PopupWidget            a bar widget that opens the popup its manifest names:
+//                          widgetType, popup (set by the bar), popupOpen, interactive;
+//                          clicked, hover(status), scrolled(delta), scrollNotch(direction),
+//                          middleClicked; its children are the cell's content
+//   BarText                text on the bar, turned or stacked on a bar at a side: text,
+//                          font, color, alignment, elide, length, leadingGap
+//   BarRow                 items along the bar, a row or a column: vertical (read-only),
+//                          spacing
+//   PointerArea            the MouseArea of a module's own control: lit (its hover look,
+//                          a tap included), centred, reach, and a MouseArea's own
+//   VpnProvider            a VPN provider (the contract is API 1.1's, written in
+//                          components/VpnProvider.qml): providerId (the module's id),
+//                          kind, typeName, glyph, entries, ready, busy, canChange,
+//                          lockdownNote, settingsPage; connect(entryId, request),
+//                          disconnect(entryId, request), attend(entryId);
+//                          failed(entryId, what, reason). Its three VPN slots
+//                          (network.vpn.row, .card, .page) are manifest `slots`
+//                          contributions like any other (Api.slots).
+//
+// `import qs.components` is deprecated (1.7): with the base types here, qs.api has
+// everything a module took from the shell's internal components, which may change in any
+// release. A module that still imports it loads as before, and the import is listed in
+// its status (`deprecations`, in `modules list`); it becomes an error with the change
+// that raises the floor.
 Singleton {
     id: root
 

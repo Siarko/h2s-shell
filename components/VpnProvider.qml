@@ -7,7 +7,7 @@ import qs.singletons.network
 //
 // A provider extends this type and declares it inside the module's own objects:
 //
-//     import qs.components
+//     import qs.api
 //     VpnProvider {
 //         providerId: "tailscale"; typeName: "Tailscale"; glyph: "󰖂"
 //         entries: [{ id: "default", name: "Tailscale · example.ts.net", state: "activated",

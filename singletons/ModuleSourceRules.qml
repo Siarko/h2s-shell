@@ -13,6 +13,9 @@ Singleton {
     // decision): these modules, anything under the prefixes, and its own directory
     readonly property var allowedImports: ["Quickshell", "Quickshell.Io", "qs.api", "qs.components"]
     readonly property var allowedImportPrefixes: ["QtQuick", "QtQml"]
+    // Allowed imports that are an old way: the name → what a module uses instead. Listed
+    // among the module's `deprecations` (importDeprecations), never a warning.
+    readonly property var deprecatedImports: ({ "qs.components": "the elements of qs.api" })
 
     // ---- What a module file's root object declares ----
     //
@@ -219,5 +222,21 @@ Singleton {
             file + " imports " + (entry.directory ? "\"" + entry.name + "\"" : entry.name)
             + ", outside what modules may import (" + allowedImports.concat(allowedImportPrefixes.map(prefix => prefix + "*")).join(", ")
             + ", the module's own directory)");
+    }
+
+    // The deprecations for a module's files (`texts`: { file: text }): one line per
+    // deprecated import, saying where it is — the file, or how many files
+    // (ModuleRules.deprecation). In the order of `deprecatedImports`.
+    function importDeprecations(texts) {
+        const lines = [];
+        for (const name of Object.keys(deprecatedImports)) {
+            const files = Object.keys(texts ?? {}).filter(file =>
+                importsOf(texts[file]).some(entry => !entry.directory && entry.name === name));
+            if (files.length === 0)
+                continue;
+            lines.push(ModuleRules.deprecation("import " + name + " (in " + (files.length === 1 ? files[0] : files.length + " files") + ")",
+                deprecatedImports[name]));
+        }
+        return lines;
     }
 }

@@ -1,6 +1,5 @@
 import QtQuick
 import qs.api
-import qs.components
 
 // The fixture's bar widget: a cell with a popup (GoodPanel), its text from a preset
 // (WidgetPresets: the manifest's presetDefaults) and a setting of the module

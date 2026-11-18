@@ -336,6 +336,24 @@ TestCase {
         assert(Array.isArray(ModuleSourceRules.importWarnings("A.qml", "import ".repeat(100000))), "a huge garbage header: no throw");
         assert(!ModuleSourceRules.importAllowed({ name: "QtQuickX", directory: false }), "QtQuickX is not under QtQuick");
 
+        // --- an import that is an old way: allowed, listed among the deprecations ---
+        assert(ModuleSourceRules.importAllowed({ name: "qs.components", directory: false }) && !_has(warnings, "imports qs.components"),
+               "qs.components may still be imported: no warning");
+        assertEqual(JSON.stringify(ModuleSourceRules.importDeprecations({ "Main.qml": header, "Page.qml": "import QtQuick\nimport qs.api\nItem {}" })),
+                    JSON.stringify(["import qs.components (in Main.qml): use the elements of qs.api (goes with the shell's next tightening)"]),
+                    "… but is listed as deprecated, with the file that imports it and what to use");
+        assertEqual(JSON.stringify(ModuleSourceRules.importDeprecations({ "Main.qml": header, "Page.qml": "import qs.components as C\nItem {}",
+                                                                          "tests/T.qml": "import qs.components\nItem {}", "Other.qml": "import qs.api\nItem {}" })),
+                    JSON.stringify(["import qs.components (in 3 files): use the elements of qs.api (goes with the shell's next tightening)"]),
+                    "several files importing it: one line, saying how many");
+        assertEqual(ModuleSourceRules.importDeprecations({ "A.qml": "import QtQuick\nimport qs.api\nItem {}", "B.qml": "// import qs.components\nItem {\n}\nimport qs.components\n",
+                                                           "C.qml": "import \"qs.components\"\nItem {}", "D.qml": "import qs.componentsX\nItem {}" }).length, 0,
+                    "a module on qs.api alone: none — a comment, a line after the header, a directory of that name and a longer name are not the import");
+        assertEqual(ModuleSourceRules.importDeprecations(null).length + ModuleSourceRules.importDeprecations({}).length
+                    + ModuleSourceRules.importDeprecations({ "A.qml": null }).length, 0, "no files, no text: none, no throw");
+        assert(Object.keys(ModuleSourceRules.deprecatedImports).every(name => ModuleSourceRules.allowedImports.includes(name)),
+               "every deprecated import is still an allowed one: listed, not warned about");
+
         // --- precedence: the first id wins ---
         const order = ModuleMergeRules.precedence([{ directory: "/home/m/ts", id: "tailscale" }, { directory: "/sys/m/x", id: "" },
                                         { directory: "/sys/m/ts", id: "tailscale" }, { directory: "/sys/m/y", id: "" },

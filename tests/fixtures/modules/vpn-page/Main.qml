@@ -1,6 +1,5 @@
 import QtQuick
 import qs.api
-import qs.components
 
 // The fixture's main: a VPN provider (providerId = the module's id) that names its module's
 // settings page as its own (settingsPage) — the shape of the Tailscale module. It goes with

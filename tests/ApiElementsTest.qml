@@ -36,6 +36,17 @@ TestCase {
         "Notice": ["kind", "text"]
     })
 
+    // The base types: a module's object is the internal one itself, so only these names
+    // are promised of it — each must be there; what else it has is not pinned
+    readonly property var pinnedBase: ({
+        "PopupWidget": ["clicked", "hover", "interactive", "middleClicked", "popup", "popupOpen", "scrollNotch", "scrolled", "widgetType"],
+        "BarText": ["alignment", "color", "elide", "font", "leadingGap", "length", "text"],
+        "BarRow": ["spacing", "vertical"],
+        "PointerArea": ["centred", "lit", "reach"],
+        "VpnProvider": ["attend", "busy", "canChange", "connect", "disconnect", "entries", "failed", "glyph", "kind", "lockdownNote", "providerId", "ready",
+            "settingsPage", "typeName"]
+    })
+
     // A notice's kinds, and the theme's colour each is drawn in
     readonly property var noticeKinds: [
         { kind: "warning", inside: "warning" },
@@ -495,6 +506,35 @@ TestCase {
             SettingsRow { visible: false; label: "Hidden" }
         }
 
+        // --- the base types ---
+        Public.PopupWidget {
+            id: popupWidget
+            property int clicks: 0
+            x: 460; y: 480
+            width: 60; height: 24
+            widgetType: "apiElementsTest"
+            onClicked: clicks++
+            Public.BarRow {
+                id: barRow
+                anchors.centerIn: parent
+                spacing: 4
+                Public.BarText { id: barText; text: "<b>x</b>" }
+                Public.BarText { text: "y" }
+            }
+        }
+        Rectangle {
+            id: ownControl
+            x: 540; y: 480
+            width: 60; height: 24
+            color: ownArea.lit ? Theme.surfaceHover : Theme.surface
+            Public.PointerArea {
+                id: ownArea
+                property int clicks: 0
+                onClicked: clicks++
+            }
+        }
+        Public.VpnProvider { id: unregistered; autoRegister: false; providerId: "api-elements-test" }
+
         QT.TestCase {
             id: driver
             name: "ApiElementsDriver"
@@ -719,9 +759,42 @@ TestCase {
 
         _controls();
         _rows();
+        _baseTypes();
 
         _window.visible = false;
         finish();
+    }
+
+    // PopupWidget, BarText, BarRow, PointerArea, VpnProvider: subtypes, not wrappers
+    function _baseTypes() {
+        const made = { PopupWidget: popupWidget, BarText: barText, BarRow: barRow, PointerArea: ownArea, VpnProvider: unregistered };
+        const inside = { PopupWidget: PopupWidget, BarText: BarText, BarRow: BarRow, PointerArea: PointerArea, VpnProvider: VpnProvider };
+        for (const name in made) {
+            assertEqual(pinnedBase[name].filter(pinnedName => !(pinnedName in made[name])).join(" "), "", name + " has every name pinned for it");
+            assert(made[name] instanceof inside[name], "… and is the shell's own " + name + ", not a wrapper");
+        }
+        for (const name of ["rowExtras", "cardExtras", "pageUrl"])
+            assert(!pinnedBase.VpnProvider.includes(name), "a provider's " + name + " is not promised");
+
+        assert(!unregistered.registered && unregistered.kind === "vpn" && unregistered.canChange && unregistered.entries.length === 0,
+            "a provider's defaults: a VPN, may change, no entries");
+        assertEqual(popupWidget.widgetType + " " + popupWidget.popupOpen + " " + popupWidget.interactive, "apiElementsTest false true", "a widget keeps its type; no popup open, takes input");
+        assert(barRow.parent !== popupWidget && barText.parent === barRow, "a widget's children are its cell's content");
+        assert(_asWritten(_texts(barText)[0]), "a bar text with markup in it is shown as written");
+        assert(_until(() => barRow.width >= barText.width + 4 && barRow.vertical === BarLayout.vertical), "a bar row lays its texts out along the bar");
+
+        assert(_until(() => {
+            driver.mouseMove(away, 5, 5);
+            driver.mouseMove(ownControl, 5, 5);
+            return ownArea.lit;
+        }), "a module's own control is lit under the pointer");
+        assert(ownArea.centred && ownArea.width >= Theme.target.minSize && ownArea.height >= Theme.target.minSize, "its area is at least the theme's least target");
+        driver.mouseClick(ownControl, 5, 5);
+        assertEqual(ownArea.clicks, 1, "and takes the click");
+        driver.mouseClick(popupWidget, 5, 5);
+        assertEqual(popupWidget.clicks, 1, "a click on a widget's cell is clicked()");
+        driver.mouseMove(away, 5, 5);
+        assert(_until(() => !ownArea.lit), "the look goes when the pointer has left");
     }
 
     // The texts under `item` that say "<b>x</b>"

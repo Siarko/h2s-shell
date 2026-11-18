@@ -13,6 +13,11 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.7: the base types, in `qs.api` — `PopupWidget`, `BarText`, `BarRow`, `PointerArea` and
+  `VpnProvider`: the shell's own types, with the names a module may rely on pinned. With them
+  `qs.api` has everything a module took from `qs.components`, and **`import qs.components` is
+  deprecated**: a module that still imports it loads as before, and its status
+  (`modules list`, `deprecations`) lists the import with the number of files.
 - 1.6: rows and texts — `SettingsRow` (`label`, `hint`, `value`; its children are the
   controls on the right), `ExpandingRow` (`label`, `hint`, `open`; its child is what it opens,
   built only while open) and `Notice` (`text`; `kind` `warning` — the default —, `danger`,

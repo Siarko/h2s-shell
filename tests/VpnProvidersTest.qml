@@ -305,6 +305,17 @@ TestCase {
         assert(VpnManager.vpns === VpnManager.nmVpns && VpnManager.details === VpnManager.nmDetails,
                "registry: no provider — the VPNs and details are NetworkManager's, untouched");
 
+        // A provider made from the public type (qs.api's VpnProvider, module API 1.7)
+        const made = Qt.createQmlObject("import QtQuick\nimport qs.api\nVpnProvider {\n    property var calls: []\n"
+            + "    providerId: \"vpt-api\"; typeName: \"Api VPN\"; ready: true\n"
+            + "    entries: [{ id: \"one\", name: \"From the API\", state: \"\", attention: null, detail: {} }]\n"
+            + "    function connect(entryId, request) { calls = calls.concat([\"connect \" + entryId + \" \" + request.origin]); }\n}", suite, "ApiVpnProvider.qml");
+        assert(made.registered && VpnManager.providerOf("vpt-api:one") !== null, "registry: a provider made from qs.api registers itself");
+        assertEqual(_vpn("vpt-api:one")?.name + " / " + VpnManager.typeName(_vpn("vpt-api:one")), "From the API / Api VPN", "… its entry among the VPNs, with its type name");
+        VpnManager.connect("vpt-api:one", { origin: "user" });
+        assertEqual(made.calls.join(), "connect one user", "… and connect reaches its function");
+        made.destroy();
+
         const fake = _fake();
         _fakeOne = fake;
         assert(fake !== null && fake.registered, "registry: a provider registers itself");
@@ -609,6 +620,9 @@ TestCase {
 
     // The parts that need the event loop: each step waits for its condition (`until`)
     property var _steps: [
+        { until: () => suite._vpn("vpt-api:one") === null, run: () => {
+            assert(suite._vpn("vpt-api:one") === null && VpnManager.providerOf("vpt-api:one") === null, "destroyed: the provider made from qs.api left with its VPN");
+        } },
         { run: () => {
             assert(suite._vpn("vpt:one") !== null, "destroyed: the refused twin going away leaves the registered one");
             suite._fakeOne.slowMs = 20;

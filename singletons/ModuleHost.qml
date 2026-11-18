@@ -106,7 +106,7 @@ Scope {
     signal modulesChanged
 
     // Internal, per directory: { directory, manifest, compatible, errors (from the
-    // manifest, API and files), warnings, shadowedBy, qmldirText, filesChecked,
+    // manifest, API and files), warnings, deprecations, shadowedBy, qmldirText, filesChecked,
     // mainFileError, main, component, mainError, state, facts, runtimeErrors }
     property var _records: []
     // What the program check found: name → true / false; and the ones it did not answer
@@ -352,7 +352,7 @@ Scope {
     function _newRecord(directory) {
         return {
             directory: directory, manifest: { valid: false, errors: [], warnings: [] }, manifestRead: false,
-            compatible: false, errors: [], warnings: [],
+            compatible: false, errors: [], warnings: [], deprecations: [],
             shadowedBy: "", qmldirText: "", filesChecked: true, mainFileError: "",
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
             rootProperties: ({})
@@ -496,12 +496,14 @@ Scope {
             if (!files.includes(listed))
                 files.push(listed);
         }
+        const read = {};
         for (const name of files.concat(record.manifest.tests ?? [])) {
             const text = texts?.[name];
             if (typeof text !== "string") {
                 record.errors.push(name + " cannot be read");
                 continue;
             }
+            read[name] = text;
             record.rootProperties[name] = ModuleSourceRules.rootProperties(text);
             // Only the files the core builds and hands `module` (main, the entries' components);
             // a singleton finding its handle with Api.moduleAt in a readonly property is fine
@@ -510,6 +512,8 @@ Scope {
                 record.warnings.push(moduleWarning);
             record.warnings.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
         }
+        // The old ways its files still use: listed in its status, the module loads as before
+        record.deprecations = ModuleSourceRules.importDeprecations(read);
     }
 
     // ---- The stores' directory ----
@@ -735,6 +739,7 @@ Scope {
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: record.warnings,
+                deprecations: record.deprecations,
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
             });
         });
