@@ -3,7 +3,7 @@ import QtQuick
 import qs.singletons
 import qs.tests
 
-// Run with: tests/run-unit.sh (in a private headless compositor: two suites open a window)
+// Run with: tests/run-unit.sh (in a private headless compositor: three suites open a window)
 // Add new test suite components here as suites are created, one `property var _name:
 // SomethingTest {…}` each: tests/run-unit.sh reads the suites, and which suites a suite is
 // given, from these lines (tests/count-suites.sh). With suites named to the runner, the
@@ -45,6 +45,7 @@ QtObject {
     property var _lockRules: LockRulesTest {}
     property var _lockIoRules: LockIoRulesTest {}
     property var _pointerInput: PointerInputTest {}
+    property var _buttonKinds: ButtonKindsTest {}
     property var _lockView: LockViewTest {}
     property var _moduleRules: ModuleRulesTest {}
     property var _quickshellPin: QuickshellPinTest {}
@@ -52,7 +53,7 @@ QtObject {
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _lockView, _modules, _moduleRegistries, _vpnProviders]
+    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _lockView, _modules, _moduleRegistries, _vpnProviders]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed. A suite

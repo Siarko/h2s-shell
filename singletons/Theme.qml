@@ -482,6 +482,8 @@ Singleton {
     readonly property var saveButton: values.saveButton
     readonly property var cancelButton: values.cancelButton
     readonly property var deleteButton: values.deleteButton
+    readonly property var warningButton: values.warningButton
+    readonly property var successButton: values.successButton
     readonly property var iconButton: values.iconButton
     readonly property var pill: values.pill
     readonly property var field: values.field

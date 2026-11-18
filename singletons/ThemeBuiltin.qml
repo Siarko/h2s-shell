@@ -101,6 +101,8 @@ Singleton {
         "saveButton": { "radius": 6 },
         "cancelButton": { "radius": 6 },
         "deleteButton": { "radius": 6 },
+        "warningButton": { "radius": 6 },
+        "successButton": { "radius": 6 },
         "iconButton": { "radius": 4 },
         "pill": { "radius": 6, "horizontalPadding": 7, "minHeight": 22 },
         "field": { "radius": 6, "horizontalPadding": 8 },

@@ -16,7 +16,7 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
 (the owner). The test split is done; the next topic is the API plan's implementation
 (index [plans/api-next.md](plans/api-next.md)): the theme token test, the
 `ModuleRules.qml` split and the version gate are done on branch `api-batch-1` (below);
-next the file chooser trial, then the bordered buttons.
+the file chooser trial and the bordered buttons on branch `api-batch-2`.
 
 - [x] **Test split** ([plans/test-split.md](plans/test-split.md)): done — a general set
       that runs on NixOS and on Arch, a set per system (`tests/run-system.sh`), and one
@@ -24,6 +24,37 @@ next the file chooser trial, then the bordered buttons.
 - [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
       nix tool lookup is remembered; the whole lock bed takes about three minutes on either
       machine.
+- [ ] **API plan, second batch**: done on branch `api-batch-2` (not merged, not
+      reviewed): the file chooser trial (E0; the finding is in
+      [plans/api-next/facts.md](plans/api-next/facts.md) §3.9) and the bordered buttons
+      (F1a: `ThemeRules.buttonLook`, `SmallButton`, `DeleteButton`, the theme groups
+      `warningButton` and `successButton`, `tests/ButtonKindsTest.qml`). Run on the Arch
+      machine only; not run on the NixOS machine. Left open:
+  - **The file chooser (E1) waits for the owner's choice.** Qt's own dialog, the one this
+    machine and the test bed get, opens only with a visible window of the shell as its
+    parent (one transparent layer-shell pixel is enough), takes the keyboard, can be closed
+    by the shell — and returns one file, never several. The portal's dialog returns
+    several and needs no parent, but the shell cannot close it (a lock, a module turned
+    off), and a user gets it only where their Qt platform theme says so. The choice: one
+    file per call, the platform's dialog where there is one, or a chooser of the shell's
+    own. By hand, not done: Ctrl+click on two files in Qt's own dialog; "Open" in the
+    folder dialog with nothing chosen (from code it returned the first folder listed, not
+    the one shown).
+  - The module's "send files" and the core's two dialogs (VPN import, wallpaper) are plain
+    `FileDialog`s inside a settings window: they open, with whichever dialog the platform
+    theme gives; with Qt's own, "send files" sends one file per pick.
+  - **A question in the confirm colour is hard to read** on the built-in theme: "Connect"
+    on a network's card and "Turn on" for a hotspot now ask in `Theme.confirm` (dark green
+    on the surface), as the plan's §4.9 says for a `primary` that asks. For the owner's
+    eyes: keep, or another colour for that question (the plan names none).
+  - The Controls page's two new section titles ("Warning buttons", "Success buttons") and
+    the CHANGELOG line are this batch's wording, not the owner's.
+  - F1a touched three files its row does not name, as the wiring of a theme group needs:
+    `singletons/Theme.qml`, `panels/SettingsWindow.qml` (the page's draft groups),
+    `panels/settings/ControlsShapeSettings.qml`. The internal `saveChange` and `cancel`
+    kinds ask in `confirmSecondary` and as `normal`; the plan does not say, and nothing
+    uses them that way.
+  - Next in the elements lane: pills in three sizes (T1), the public button (F1b).
 - [ ] **API plan, first batch**: done on branch `api-batch-1` (three commits, not merged,
       not reviewed): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
       `ModuleRules.qml` split into five files (S0, a pure move), and the version gate (A0:

@@ -122,6 +122,7 @@ Rectangle {
                     // Asks first: the network in use would be left with nothing to share
                     DeleteButton {
                         visible: WifiManager.hotspotQuestion !== ""
+                        kind: "save"
                         label: "Turn on"
                         fontSize: Theme.fontSizeBody
                         confirmLabel: "No internet to share. Turn on?"

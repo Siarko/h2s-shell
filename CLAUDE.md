@@ -71,7 +71,7 @@ tests/run-system-selftest.sh, tests/run-all-selftest.sh   # the runners' own ver
 ```
 
 Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
-two suites open a small window, and the runner puts them in a private headless compositor
+three suites open a small window, and the runner puts them in a private headless compositor
 (nothing shows on your screen). `--log <file>`, before the names, also saves the output.
 
 Every runner takes its tools — that compositor (labwc), and for the lock test bed Hyprland
@@ -122,7 +122,11 @@ ticks, cells respond to clicks, and popups toggle.
 - **Deleting from a click goes through `components/DeleteButton.qml`**: the first click
   turns it into a red question ("Delete?") with a "×" attached that cancels, a second
   click deletes. No time-outs. The owner resets `asking` when the item it deletes
-  changes. Don't hand-roll another confirm.
+  changes. Don't hand-roll another confirm. A button that asks before something else
+  (turning a hotspot on) is the same component with its `kind` (`"save"`): the question
+  takes the kind's colour.
+- **How a button looks is `ThemeRules.buttonLook(kind, state)`**: `SmallButton` and
+  `DeleteButton` draw what it names. A new kind or state is added there, with its cases.
 - **A control's hover look comes from `components/PointerArea.qml`'s `lit`**, not a
   `MouseArea`'s `containsMouse` — so a tap shows too, and small controls get a larger
   target. Rows of a list that touch take `centred: false`. See "Conventions" in

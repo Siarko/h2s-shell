@@ -2,10 +2,15 @@ import QtQuick
 import qs.singletons
 
 // The one way the shell deletes something from a click: the first click asks — the button
-// turns red, reading `confirmLabel`, with a "×" attached that cancels — and only a second
-// click deletes (`confirmed`). Nothing times out: the question stays until it is answered.
-// The owner sets `asking = false` when what the button deletes changes (another item
-// selected), so a question never carries over to it.
+// turns into the question, `confirmLabel`, with a "×" attached that cancels — and only a
+// second click deletes (`confirmed`). Nothing times out: the question stays until it is
+// answered. The owner sets `asking = false` when what the button deletes changes (another
+// item selected), so a question never carries over to it.
+//
+// `kind` is SmallButton's: before the first click the button looks as that kind does
+// ("delete": a red border, red under the pointer). Asking, it is plain, with the question
+// and a border around both parts in the kind's colour (ThemeRules.buttonLook) — "save"
+// for a button that asks before turning something on.
 //
 //   DeleteButton {
 //       confirmLabel: "Delete everywhere?"
@@ -15,6 +20,7 @@ import qs.singletons
 Row {
     id: root
 
+    property string kind: "delete"
     property string label: "Delete"
     property string confirmLabel: "Delete?"
     property string cancelTip: "Cancel"
@@ -27,6 +33,9 @@ Row {
     // The first click, for owners that track which item is being asked about
     signal askingStarted
 
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking })
+    readonly property var _shape: Theme[_look.group]
+
     spacing: 0
 
     Rectangle {
@@ -36,21 +45,37 @@ Row {
         implicitHeight: Math.max(Theme.button.minHeight, _label.implicitHeight + 2 * Theme.button.verticalPadding)
         width: implicitWidth
         height: implicitHeight
-        radius: Theme.deleteButton.radius
+        radius: root._shape.radius
         // Square on the side the cancel button attaches to, so the two read as one control
         topRightRadius: root.asking ? 0 : radius
         bottomRightRadius: root.asking ? 0 : radius
         opacity: root.available ? 1 : 0.35
-        color: _area.lit && root.available ? Theme.surfaceHover : Theme.surface
+        // Above the cancel button, which the outline reaches over
+        z: 1
+        color: Theme[root._look.fill]
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
             id: _label
             anchors.centerIn: parent
             text: root.asking ? root.confirmLabel : root.label
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: root.fontSize
-            color: root.asking ? Theme.error : Theme.textSecondary
+            color: Theme[root._look.label]
+        }
+
+        // The border: around the button, and around the button and its cancel button
+        // while asking, as one control
+        Rectangle {
+            id: _outline
+            visible: root._look.border !== ""
+            width: parent.width + (root.asking ? _cancel.width : 0)
+            height: parent.height
+            radius: root._shape.radius
+            color: "transparent"
+            border.width: Theme.border.width
+            border.color: root._look.border !== "" ? Theme[root._look.border] : "transparent"
         }
 
         PointerArea {
@@ -72,10 +97,11 @@ Row {
 
     // Cancels the question, attached to the asking button
     Rectangle {
+        id: _cancel
         visible: root.asking
         width: _button.height
         height: _button.height
-        radius: Theme.deleteButton.radius
+        radius: root._shape.radius
         topLeftRadius: 0
         bottomLeftRadius: 0
         color: _cancelArea.lit ? Theme.surfaceHover : Theme.surface

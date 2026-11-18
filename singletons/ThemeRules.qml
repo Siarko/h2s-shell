@@ -39,9 +39,40 @@ Singleton {
 
     // The groups of radii, borders and spacing by kind of element (themes stage 7)
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
-        "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "iconButton", "pill", "field",
+        "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "warningButton",
+        "successButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
         "checkbox", "lock", "border", "target", "popupWidth"]
+
+    // How a button of `kind` looks (SmallButton, DeleteButton), as names: `group` is the
+    // theme's group its radius comes from, `fill`, `label` and `border` are colours of
+    // Theme; `border` is "" for a kind without one. `state`: `hot` (under the pointer or a
+    // pressing finger, and available), `checked` (a toggle that is on), `asking` (the first
+    // click of a button that asks was made).
+    //
+    // Three kinds have a tone and wear it as a border, filled with it while hot: "delete"
+    // (stops or removes), "warning" (goes on, but think), "success" (a good outcome).
+    // "save" and "saveChange" are filled; "normal", "cancel" and any other word are plain.
+    // Asking, every kind is plain, with its label and a border in the kind's colour.
+    function buttonLook(kind, state) {
+        const hot = state?.hot === true;
+        const tone = ({ "delete": "error", "warning": "warning", "success": "success" })[kind] ?? "";
+        const filled = ({ "save": "confirm", "saveChange": "confirmSecondary" })[kind] ?? "";
+        const group = ({ "save": "saveButton", "saveChange": "saveButton", "cancel": "cancelButton", "delete": "deleteButton",
+            "warning": "warningButton", "success": "successButton" })[kind] ?? "button";
+        const plain = hot ? "surfaceHover" : "surface";
+        if (state?.asking === true) {
+            const colour = tone !== "" ? tone : filled;
+            return { group: group, fill: plain, label: colour !== "" ? colour : "textPrimary", border: colour !== "" ? colour : "outline" };
+        }
+        if (tone !== "")
+            return { group: group, fill: hot ? tone : "surface", label: hot ? "textPrimary" : "textSecondary", border: tone };
+        if (filled !== "")
+            return { group: group, fill: hot ? filled + "Hover" : filled, label: "textPrimary", border: "" };
+        if (state?.checked === true)
+            return { group: group, fill: hot ? "accentHover" : "accent", label: "onAccent", border: "" };
+        return { group: group, fill: plain, label: "textSecondary", border: "" };
+    }
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
@@ -252,6 +283,8 @@ Singleton {
             saveButton: [radius("Buttons that save or confirm: Save, Connect", 20)],
             cancelButton: [radius("Buttons that cancel", 20)],
             deleteButton: [radius("Buttons that delete or disconnect, which ask first", 20)],
+            warningButton: [radius("Buttons that warn", 20)],
+            successButton: [radius("Buttons for a good outcome", 20)],
             iconButton: [radius("Small buttons with an icon: pin, reset, remove", 20)],
             pill: [radius("Choices: presets, options, days", 20),
                 { token: "horizontalPadding", label: "Padding", hint: "Between a pill's edge and its label", from: 0, to: 30, suffix: px },

@@ -3,11 +3,13 @@ import qs.singletons
 
 // A compact button with a label. `kind` is what it does — "normal", "save" (confirms:
 // the confirm colour), "saveChange" (confirms a change to something that exists: the
-// second confirm colour), "cancel", "delete" (destructive: red under the pointer, as
-// DeleteButton) — so each kind can be
-// styled on its own (notes/plans/themes-stage7.md). `checked` shows a toggle that is on
-// (filled with the accent), e.g. a scan running. As tall as its label needs, never less
-// than 24 px, so a larger font in a theme grows it rather than spilling out.
+// second confirm colour), "cancel", and three with a tone, worn as a border and filled
+// under the pointer: "delete" (stops or removes: red), "warning" (goes on, but think),
+// "success" (a good outcome) — so each kind can be styled on its own
+// (notes/plans/themes-stage7.md). The look of each is ThemeRules.buttonLook. `checked`
+// shows a toggle that is on (filled with the accent), e.g. a scan running. As tall as its
+// label needs, never less than 24 px, so a larger font in a theme grows it rather than
+// spilling out; made narrower than its label, the label ends in "…".
 Rectangle {
     id: root
 
@@ -21,15 +23,11 @@ Rectangle {
     readonly property bool hovered: _area.containsMouse
     signal clicked
 
-    readonly property bool _confirms: kind === "save" || kind === "saveChange"
-    readonly property bool _filled: _confirms || checked
     readonly property bool _hot: _area.lit && available
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _hot, checked: checked })
     // The theme's group for this kind of button: its own radius; padding and height are
     // the general button's
-    readonly property var _shape: kind === "save" || kind === "saveChange" ? Theme.saveButton
-        : kind === "cancel" ? Theme.cancelButton
-        : kind === "delete" ? Theme.deleteButton
-        : Theme.button
+    readonly property var _shape: Theme[_look.group]
 
     implicitWidth: _label.implicitWidth + 2 * Theme.button.horizontalPadding
     implicitHeight: Math.max(Theme.button.minHeight, _label.implicitHeight + 2 * Theme.button.verticalPadding)
@@ -37,24 +35,23 @@ Rectangle {
     height: implicitHeight
     radius: _shape.radius
     opacity: available ? 1 : 0.35
-    color: kind === "delete" ? (_hot ? Theme.error : Theme.surface)
-        : kind === "save" ? (_hot ? Theme.confirmHover : Theme.confirm)
-        : kind === "saveChange" ? (_hot ? Theme.confirmSecondaryHover : Theme.confirmSecondary)
-        : checked ? (_hot ? Theme.accentHover : Theme.accent)
-        : (_hot ? Theme.surfaceHover : Theme.surface)
+    color: Theme[_look.fill]
+    border.width: _look.border !== "" ? Theme.border.width : 0
+    border.color: _look.border !== "" ? Theme[_look.border] : "transparent"
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
     Text {
         id: _label
         anchors.centerIn: parent
+        // Its own width while the button has room for it: only a narrower button elides
+        width: root.width < root.implicitWidth ? Math.max(0, root.width - 2 * Theme.button.horizontalPadding) : implicitWidth
         text: root.label
         textFormat: Text.PlainText
+        elide: Text.ElideRight
+        maximumLineCount: 1
         font.family: Theme.fontFamily
         font.pixelSize: root.fontSize
-        color: root.kind === "delete" && root._hot ? Theme.textPrimary
-            : root._confirms ? Theme.textPrimary
-            : root._filled ? Theme.onAccent
-            : Theme.textSecondary
+        color: Theme[root._look.label]
     }
 
     PointerArea {

@@ -89,6 +89,47 @@ TestCase {
         for (const token of ThemeRules.barTokens)
             assert(token in Theme.builtin.bar, "the bar token " + token + " is built in");
         assertEqual(Theme.button.radius, Theme.builtin.button.radius, "a shape group reads as Theme.<group>.<token>");
+        assertEqual(Theme.warningButton.radius, Theme.builtin.warningButton.radius, "buttons that warn have a group of their own");
+        assertEqual(Theme.successButton.radius, Theme.builtin.successButton.radius, "and buttons for a good outcome");
+
+        // --- a button's look by kind and state ---
+        const look = (kind, state) => {
+            const found = ThemeRules.buttonLook(kind, state);
+            return found.group + " " + found.fill + " " + found.label + " " + (found.border === "" ? "-" : found.border);
+        };
+        const hot = { hot: true };
+        const asking = { asking: true };
+        assertEqual(look("normal", {}), "button surface textSecondary -", "a plain button: the surface, no border");
+        assertEqual(look("normal", hot), "button surfaceHover textSecondary -", "… lighter under the pointer");
+        assertEqual(look("cancel", {}), "cancelButton surface textSecondary -", "a cancel button: as plain, its own shape");
+        assertEqual(look("save", {}), "saveButton confirm textPrimary -", "a button that confirms: filled, no border");
+        assertEqual(look("save", hot), "saveButton confirmHover textPrimary -", "… its hover colour under the pointer");
+        assertEqual(look("saveChange", {}), "saveButton confirmSecondary textPrimary -", "confirming a change: the second confirm colour");
+        assertEqual(look("saveChange", hot), "saveButton confirmSecondaryHover textPrimary -", "… and its hover colour");
+        assertEqual(look("delete", {}), "deleteButton surface textSecondary error", "a button that stops or removes: plain with a red border");
+        assertEqual(look("delete", hot), "deleteButton error textPrimary error", "… filled red under the pointer");
+        assertEqual(look("warning", {}), "warningButton surface textSecondary warning", "a button that warns: a border in the warning colour");
+        assertEqual(look("warning", hot), "warningButton warning textPrimary warning", "… filled with it under the pointer");
+        assertEqual(look("success", {}), "successButton surface textSecondary success", "a good outcome: a border in the success colour");
+        assertEqual(look("success", hot), "successButton success textPrimary success", "… filled with it under the pointer");
+        assertEqual(look("normal", { checked: true }), "button accent onAccent -", "a toggle that is on: the accent");
+        assertEqual(look("normal", { checked: true, hot: true }), "button accentHover onAccent -", "… its hover colour under the pointer");
+        assertEqual(look("delete", { checked: true }), "deleteButton surface textSecondary error", "a kind with a tone keeps its look when checked");
+        assertEqual(look("primry", {}), "button surface textSecondary -", "a word that is no kind shows as a plain button");
+        assertEqual(look("delete", undefined), "deleteButton surface textSecondary error", "no state given: at rest");
+        assertEqual(look("delete", asking), "deleteButton surface error error", "asking, a delete: plain, the question and a border in red");
+        assertEqual(look("delete", { asking: true, hot: true }), "deleteButton surfaceHover error error", "… lighter under the pointer, never filled");
+        assertEqual(look("warning", asking), "warningButton surface warning warning", "asking, a warning: in the warning colour");
+        assertEqual(look("success", asking), "successButton surface success success", "asking, a good outcome: in the success colour");
+        assertEqual(look("save", asking), "saveButton surface confirm confirm", "asking before turning something on: in the confirm colour");
+        assertEqual(look("normal", asking), "button surface textPrimary outline", "asking, a plain button: bright text, the ordinary outline");
+        for (const kind of ["normal", "cancel", "save", "saveChange", "delete", "warning", "success"])
+            for (const state of [{}, hot, asking, { checked: true }, { checked: true, hot: true }, { asking: true, hot: true }]) {
+                const found = ThemeRules.buttonLook(kind, state);
+                assert(ThemeRules.shapeGroups.includes(found.group) && Theme[found.group].radius >= 0
+                    && [found.fill, found.label].concat(found.border === "" ? [] : [found.border]).every(name => Theme[name] !== undefined),
+                    "the look of " + kind + " " + JSON.stringify(state) + " names a shape group and colours the theme has");
+            }
         assertEqual(JSON.stringify(ThemeRules.barTokenInfo.map(entry => entry.token)), JSON.stringify(ThemeRules.barTokens),
             "the Bar shape page lists every geometry token, in order");
         for (const entry of ThemeRules.barTokenInfo)

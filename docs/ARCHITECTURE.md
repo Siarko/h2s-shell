@@ -710,7 +710,9 @@ scenarios declares more. Of the shell's own, `PointerInputTest.qml` is one async
 `PopupWidget`) in a small layer window and drives them with QtTest's `TestCase` used by
 hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check what a mouse and
 a finger do. It needs a Wayland session — `run-unit.sh` gives it its own. A stylus cannot
-be sent that way. `LockViewTest.qml` is another: the lock prompt and a notification card fed
+be sent that way. `ButtonKindsTest.qml` does the same for the buttons (`SmallButton`,
+`DeleteButton`): each kind's fill, label and border at rest, under the pointer, asking and
+not available. `LockViewTest.qml` is another: the lock prompt and a notification card fed
 views the way `Lockscreen` feeds them (answer hidden or shown, a long question in full, an
 error, the compositor's late notice, "Unlocking…", the passive methods' lines, Caps Lock,
 each notification detail as plain text). `VpnProvidersTest.qml` is a third: the VPN

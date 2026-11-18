@@ -176,6 +176,7 @@ Rectangle {
                             }
                             DeleteButton {
                                 visible: !root.profile.active && root.usable && root.canUse && root.useQuestion !== ""
+                                kind: "save"
                                 label: root.useLabel
                                 fontSize: Theme.fontSizeBody
                                 confirmLabel: root.useQuestion

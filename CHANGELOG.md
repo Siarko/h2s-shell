@@ -349,6 +349,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Buttons: the ones that stop or remove something — "Disconnect", "Turn off hotspot",
+  "Forget", "Delete", the "✕" on a Bluetooth device — have a red border, so they stand out
+  before the pointer is over them and on a touch screen; under the pointer they fill red.
+  A button that asks first shows its question with a border around it and its "×". The two
+  that ask before turning something on ("Connect" on a network's card, "Turn on" for a
+  hotspot) are green like other confirming buttons, and ask in that colour instead of red.
+  The theme gains two shapes, "Buttons that warn" and "Buttons for a good outcome"
+  (Appearance → Controls), for buttons in the warning and the success colour; nothing in
+  the shell uses those yet.
 - Modules: a module written for a module API older than the oldest this shell still runs
   unchanged (its floor, today 1.0) is listed as incompatible, with the version the shell
   needs. A module's status (`modules list`) gains `deprecations`: the old ways of the API it

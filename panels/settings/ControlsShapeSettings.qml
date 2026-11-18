@@ -9,6 +9,8 @@ ShapeSettings {
         { title: "Save buttons", group: "saveButton" },
         { title: "Cancel buttons", group: "cancelButton" },
         { title: "Delete buttons", group: "deleteButton" },
+        { title: "Warning buttons", group: "warningButton" },
+        { title: "Success buttons", group: "successButton" },
         { title: "Icon buttons", group: "iconButton" },
         { title: "Pills", group: "pill" },
         { title: "Text fields", group: "field" },
