@@ -654,3 +654,8 @@ For the owner, from the autonomous run (2026-11-18 on):
   the pointer a warning or success button has white text on `#e8a854` / `#44d47a` in the
   built-in theme, a contrast of about 2:1 (readable text wants 4.5:1). Options: dark text on
   those fills, or darker fills. Not changed; the look is the owner's.
+- **Plain notifications on one line** (C1, module API 1.12): `format: "plain"` turns line
+  breaks into spaces (the one-line rule for outside text). After M5 the Tailscale module's
+  "received several files" body, which lists one name per line today, reads
+  "a.txt b.txt". Alternative: keep line breaks in a plain body only. Caps chosen by the
+  agent: summary 200, body 1000 characters, a `module.log` line 1000.
