@@ -13,6 +13,15 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.4: public elements — types in `qs.api` made for modules, which hold the shell's internal
+  component inside and show only their own properties; a module picks a meaning (`kind`) and a
+  `size`, never a colour or a number of pixels, and a word an element does not know shows as
+  its default (logged once). The first is `SmallButton`: `label`, `available`, `checked`,
+  `tooltip`; `kind` `primary`, `secondary` (the default), `danger`, `warning`, `success`;
+  `size` `xs`, `s`, `m` (the default); `confirm` — the first click asks (`confirmLabel`, the
+  label and "?" unless given; `cancelTip`; `asking`; `asked()`), the second acts; `clicked()`
+  is "do it" either way. `qs.components` keeps its own `SmallButton`: a file that imports
+  both gets the one whose import is written last.
 - 1.3: `Api.networks` — the saved Wi-Fi and Ethernet networks (no hotspots, VPNs or bridge
   ports) as frozen `{ id (profile UUID), name, kind, active }`, active first — and
   `Api.vpnsUp` — the VPNs up now as frozen `{ name, type, provider }`; both read-only, a new

@@ -570,6 +570,20 @@ Text { property var module: null; property var context: null
        text: context?.wifiConnected ? "online" : "offline"; color: Api.theme.textMuted }
 ```
 
+**Public elements** are types in `qs.api` made for modules: each holds the shell's internal
+component inside and shows only its own properties, so the shell changes its insides
+without breaking a module. On one a module picks a meaning, never a look: `kind` (what the
+element is about) and `size` (`xs`, `s`, `m`, `l`; an element takes the ones it has); a
+theme decides how they look, and a word an element does not know shows as its default,
+logged once (`singletons/ApiElements.qml`; the words: `singletons/ApiElementRules.qml`).
+The button is `SmallButton` (`api/SmallButton.qml`): `kind` is `primary`, `secondary`,
+`danger`, `warning` or `success`, `size` is `xs`, `s` or `m`, and `confirm: true` makes the
+first click ask, the second act — `clicked()` is "do it" either way. `qs.components` has
+a `SmallButton` of its own: in a file that imports both, the import written last gives the
+name. Every element's properties and signals are pinned in `tests/ApiElementsTest.qml`,
+with what each kind and size is inside and how the element stands in a layout; a change
+there is a change of the API's version.
+
 What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the module's
 `main`, which the host destroys when the module is turned off, or binds to `module.active`
 (a singleton's timer: `running: module.active`) — a module's singletons outlive the main.

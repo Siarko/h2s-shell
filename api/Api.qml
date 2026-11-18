@@ -6,10 +6,10 @@ import qs.singletons
 import qs.singletons.io as Io
 import qs.singletons.network
 
-// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3): with qs.components, everything a
+// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.3" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.4" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -50,7 +50,34 @@ import qs.singletons.network
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
 //                          building blocks, so a module's page looks like the core's
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
+//   SmallButton            (1.4) the first public element (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
+//
+// Public elements (1.4): types made for the API, which hold the shell's internal component
+// inside and show only their own properties; the shell changes its insides freely. On one
+// a module picks a meaning, never a colour, a radius or a number of pixels: `kind` (what
+// the element is about) and `size` ("xs", "s", "m" — the default —, "l"; an element takes
+// the ones it has). Both lists are open: a word an element does not know shows as its
+// default and is logged once per element type and word. Every text is shown as written
+// (plain text). An element's properties and signals are pinned by tests/ApiElementsTest.qml;
+// a change to them is a version change.
+//   SmallButton            label, available, checked, tooltip;
+//                          kind: "primary" (performs the action) | "secondary" (the default:
+//                          a step in between, opens something, "Cancel") | "danger" (stops
+//                          or removes) | "warning" (goes on, but think) | "success" (a good
+//                          outcome to take); size: "xs" | "s" | "m";
+//                          confirm (false; true: the first click only turns the button into
+//                          the question, with a "×" that takes it back, the second acts),
+//                          confirmLabel (the question; the label and "?" unless given),
+//                          cancelTip (the "×"'s tooltip), asking (the first click was made;
+//                          set it false when what the button acts on changes);
+//                          clicked() — do it: the click, or with confirm the second one;
+//                          asked() — the first click of a button that asks. A danger button
+//                          without confirm acts on the first click. A button that asks
+//                          shows no `checked` and keeps its own width in a layout.
+//                          qs.components has a SmallButton too (other kinds, a fontSize):
+//                          in a file that imports both, the import written last gives the
+//                          name.
 //
 // From qs.components (API 1.1): VpnProvider, the base type of a VPN provider — a module's uses
 // its module id as `providerId`, and its three VPN slots (network.vpn.row, .card, .page) are

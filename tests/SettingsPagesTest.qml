@@ -30,6 +30,7 @@ TestCase {
         "api/Hint.qml",
         "api/DetailRow.qml",
         "api/SwitchRow.qml",
+        "api/SmallButton.qml",
         "api/CommandAction.qml",
         "api/CommandQuery.qml",
         "api/PrivilegedAction.qml",

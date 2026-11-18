@@ -81,7 +81,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.3", "Api.version");
+        assertEqual(Api.version, "1.4", "Api.version");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");

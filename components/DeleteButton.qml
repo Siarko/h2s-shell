@@ -26,6 +26,8 @@ Row {
     property string cancelTip: "Cancel"
     property bool available: true
     property int fontSize: Theme.fontSizeSmall
+    // Shown on hover when not empty, until the first click
+    property string tooltip: ""
     // Whether the first click has been made and the button waits for the second
     property bool asking: false
 
@@ -92,6 +94,12 @@ Row {
                     root.askingStarted();
                 }
             }
+        }
+
+        HoverTip {
+            target: parent
+            shown: root.tooltip !== "" && !root.asking && _area.containsMouse
+            text: root.tooltip
         }
     }
 
