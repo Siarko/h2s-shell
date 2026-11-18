@@ -106,6 +106,16 @@ TestCase {
         assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale down' as the super user"), run),
                "another run's command: not announced");
         assert(!rules.announces(flowFor("/usr/bin/timeout -k 3 30 /usr/bin/tailscale up"), run), "the bare command, no quote marks: not announced");
+        // A longer command holding quote marks of its own wraps the head's in them: the text
+        // between the message's first and last quote mark is that whole command
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/foo ` /usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user"), run),
+               "a quote mark and a space in front, inside the command: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/sh -c '/usr/bin/timeout -k 3 30 /usr/bin/tailscale up'' as the super user"), run),
+               "the head's line quoted inside a shell command: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up ' x' as the super user"), run),
+               "a quote mark and more after it, inside the command: not announced");
+        assert(rules.announces(flowFor("Authentication is needed to run `/usr/bin/echo 'a b'' as the super user"), { pkexecArgv: ["/usr/bin/echo", "'a b'"], announced: false }),
+               "the run's own command holding quote marks: matched");
         assert(!rules.announces({ actionId: "org.freedesktop.systemd1.manage-units", message: english }, run), "another action: not announced");
         assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/true' as the super user"), run),
                "a foreign pkexec request (another program): not announced");

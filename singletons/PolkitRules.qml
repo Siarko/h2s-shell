@@ -269,36 +269,30 @@ Singleton {
         return character !== "" && _quoteMarks.indexOf(character) >= 0;
     }
 
-    // The character before `at` and the one after `end` in `text`, whole (a surrogate pair
-    // is one), "" past either end
-    function _before(text, at) {
-        if (at <= 0)
-            return "";
-        const low = text.charCodeAt(at - 1);
-        return at >= 2 && low >= 0xdc00 && low <= 0xdfff ? text.slice(at - 2, at) : text.charAt(at - 1);
-    }
-    function _after(text, end) {
-        return end >= text.length ? "" : String.fromCodePoint(text.codePointAt(end));
-    }
-
-    // Whether the match [at, end) stands between quote marks: right beside them, or with one
-    // white space between (French puts « » apart from what they quote)
-    function _quoted(text, at, end) {
-        let before = _before(text, at);
-        if (/^\s$/.test(before))
-            before = _before(text, at - 1);
-        let after = _after(text, end);
-        if (/^\s$/.test(after))
-            after = _after(text, end + 1);
-        return _quoteMark(before) && _quoteMark(after);
+    // The text between the message's first quote mark and its last, "" without two. The
+    // fixed part of pkexec's message, in every translation polkit ships, holds no quote mark
+    // but the pair around the command, so this is the command as pkexec put it — whatever
+    // quote marks the command itself holds stay inside.
+    function _quotedPart(text) {
+        let first = -1, last = -1;
+        for (let i = 0; i < text.length; i++) {
+            if (_quoteMark(text.charAt(i))) {
+                if (first < 0)
+                    first = i;
+                last = i;
+            }
+        }
+        return first >= 0 && last > first ? text.slice(first + 1, last) : "";
     }
 
     // Whether a polkit request (`flow`: { actionId, message }) is the one of a run
     // (`run`: { pkexecArgv (as for announcement()), announced (one of its requests was
-    // announced already) }): pkexec's action, and the message quotes exactly the run's
-    // command as pkexec puts it — its `cmdline_short`, between quote marks of any language,
-    // nothing more on either side. A run is announced at most once; anything else is shown
-    // as polkit sent it, with no module lines.
+    // announced already) }): pkexec's action, and the text between the message's first and
+    // last quote mark (of any language; one white space inside each, as French and Occitan
+    // put it) is exactly the run's command as pkexec puts it — its `cmdline_short`. A
+    // command holding quote marks of its own cannot so wrap a shorter one. A run is
+    // announced at most once; anything else is shown as polkit sent it, with no module
+    // lines.
     //
     // A limit of polkit, not of this match: past 80 bytes the message keeps only the
     // command's first 38 and last 37 bytes, so another command with the same two ends gives
@@ -318,13 +312,7 @@ Singleton {
         // A character split by the cut may reach the message as U+FFFD, or not at all
         const pattern = short.text !== "" ? _literal(short.text)
             : _literal(short.head) + "�{0,3} \\.\\.\\. �{0,3}" + _literal(short.tail);
-        const search = new RegExp(pattern, "g");
-        for (let found = search.exec(message); found !== null; found = search.exec(message)) {
-            if (_quoted(message, found.index, found.index + found[0].length))
-                return true;
-            search.lastIndex = found.index + 1;
-        }
-        return false;
+        return new RegExp("^\\s?" + pattern + "\\s?$").test(_quotedPart(message));
     }
 
     // Whether the open request is closed because the session locked: a password is never

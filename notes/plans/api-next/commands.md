@@ -206,11 +206,13 @@ opened:
 - **Which request is announced.** The agent's flow carries only `message`, `actionId` and
   `cookie` (verified in Quickshell's polkit types): no command line, no caller. So
   `PolkitRules.announces(flow, run)` matches the run at the head of the queue when the
-  action is pkexec's (`org.freedesktop.policykit.exec`) and the message quotes exactly
-  the command the run handed to pkexec as pkexec puts it in its message (polkit 0.120 and
-  later: `$(cmdline_short)`, the words joined with spaces, past 80 bytes their first 38
-  bytes, " ... " and their last 37), between quote marks of some language, with nothing
-  more on either side. The decision is made once per request and kept: a new head never
+  action is pkexec's (`org.freedesktop.policykit.exec`) and the text between the
+  message's first and last quote mark (of any language, one space inside each allowed)
+  equals the command the run handed to pkexec as pkexec puts it in its message (polkit
+  0.120 and later: `$(cmdline_short)`, the words joined with spaces, past 80 bytes their
+  first 38 bytes, " ... " and their last 37). No translation polkit ships has another
+  quote mark in the message's fixed text, so a longer command holding quote marks of its
+  own cannot wrap the head's. The decision is made once per request and kept: a new head never
   re-dresses a request still open. A run is announced at most once: a request that
   arrives after the head's request ended is shown as today, with no module lines, and so
   is anything else. **A limit of polkit:** past 80 bytes another command with the same

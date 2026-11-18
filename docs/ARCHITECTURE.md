@@ -704,10 +704,12 @@ and a trusted `timeout` are found.
   named" and no Authorization line. The texts are one pure function,
   `PolkitRules.announcement`. Which request is a run's: the agent's flow names no caller
   and no command line, so `PolkitRules.announces` takes the run at the head of the queue
-  when the action is pkexec's (`org.freedesktop.policykit.exec`) and the message quotes
+  when the action is pkexec's (`org.freedesktop.policykit.exec`) and the text between the
+  message's first and last quote mark (of any language, one space inside each allowed) is
   exactly the run's command as pkexec puts it (polkit 0.120 and later: the words joined
-  with spaces, past 80 bytes only their first 38 bytes, " ... " and their last 37),
-  between quote marks of any language, nothing more on either side. The decision is made
+  with spaces, past 80 bytes only their first 38 bytes, " ... " and their last 37). The
+  fixed part of the message holds no other quote mark in any translation polkit ships, so
+  a longer command holding quote marks of its own does not match. The decision is made
   once per request and kept, so a request still open when the next run takes the head is
   not dressed as that run's. A run is announced at most once. **The lines are attached by
   pkexec's message, which is all polkit tells:** past 80 bytes another command with the
