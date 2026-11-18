@@ -69,6 +69,21 @@ TestCase {
         console.log("  INFO: a raw \"//\" spelling " + (raw.object && raw.object.pin !== first.object.pin
             ? "gives a second set of singletons (the trap is there)" : "shares the singletons (the trap is gone)"));
 
+        // (e) A child written inside an element whose default property is a Component —
+        // here through the alias of a public wrapper (api/ExpandingRow.qml) — is held as a
+        // Component, not built
+        const row = Qt.createQmlObject("import QtQuick\nimport qs.api\nExpandingRow {\n    id: row\n    property int built: 0\n"
+            + "    Item { Component.onCompleted: row.built++ }\n}", suite, "ExpandingRowPin.qml");
+        _held.push(row);
+        assertEqual(row.built, 0,
+                    "(e) a child given to a Component property through a wrapper's default alias is wrapped, not built — if not, what a closed ExpandingRow holds exists (and runs) while it is closed");
+        assert(row.content instanceof Component, "(e) … it is a Component");
+        row.open = true;
+        assertEqual(row.built, 1, "(e) … built when the row opens");
+        row.open = false;
+        row.open = true;
+        assertEqual(row.built, 2, "(e) … and anew each time");
+
         for (const object of _held)
             object.destroy();
         _held = [];

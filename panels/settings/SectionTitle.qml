@@ -7,6 +7,7 @@ import qs.singletons
 Text {
     Layout.topMargin: 16
     Layout.bottomMargin: 6
+    textFormat: Text.PlainText
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeBody
     font.bold: true

@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.5" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.6" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -51,7 +51,8 @@ import qs.singletons.network
 //                          building blocks, so a module's page looks like the core's
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
 //   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
-//                          (1.5) — the public elements (below)
+//                          (1.5), SettingsRow, ExpandingRow, Notice (1.6) — the public
+//                          elements (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
 // Public elements (1.4): types made for the API, which hold the shell's internal component
@@ -95,6 +96,21 @@ import qs.singletons.network
 //                          does not know shows the lock. Where a module sets `visible`
 //                          itself, an element with nothing to mark is empty and without
 //                          size, but a layout keeps its spacing around it.
+//   SettingsRow            (1.6) label, hint (a short line under the label), value (a
+//                          text on the right); its children, written inside it, are the
+//                          controls on the right, in a row (`controls` is where they go,
+//                          nothing to set). Fills the width a layout gives it.
+//   ExpandingRow           (1.6) label, hint, open (a click on its line flips it; the
+//                          owner may set it); its one child, written inside it, is what it
+//                          opens (`content`, a Component): built when the row opens,
+//                          destroyed when it closes, as wide as the row. Fills the width.
+//   Notice                 (1.6) text — a small line that wraps, as the line on a
+//                          network's card; kind: "warning" (the default) | "danger" |
+//                          "success". Fills the width.
+//                          The settings blocks above (SectionTitle, Heading, Hint,
+//                          SwitchRow, a SettingEditor's label, hint and unit) and a
+//                          module's page name in the settings window show their texts as
+//                          written from 1.6: markup in them is no longer read.
 //                          qs.components has types of these names too (other properties:
 //                          a fontSize, other kinds): in a file that imports both, the
 //                          import written last gives the name.

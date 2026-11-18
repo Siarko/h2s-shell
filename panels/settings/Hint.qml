@@ -6,6 +6,7 @@ import qs.singletons
 Text {
     Layout.fillWidth: true
     wrapMode: Text.WordWrap
+    textFormat: Text.PlainText
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeSmall
     color: Theme.textMuted

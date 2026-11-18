@@ -584,7 +584,11 @@ name. The other controls are `Dropdown`, `InputField` (each with `size` `xs`, `s
 `Pill` (`size` `s`, `m` or `l`: the theme's three pill heights), `Checkbox`, `ToggleSwitch`
 and `PrivilegedMark`, whose `need` is polkit's answer (`auth`, `no`, `yes` or none; one it
 does not know shows the lock); their names are `qs.components`' too, and the same holds
-for a file that imports both. Every element's properties and signals are pinned in
+for a file that imports both. Rows and texts: `SettingsRow` (a label, a hint under it, a
+value, and its children as the controls on the right), `ExpandingRow` (a line that opens;
+its child is held as a `Component`, so nothing of it exists while the row is closed) and
+`Notice` (a small line of kind `warning`, `danger` or `success`); inside the first two are
+`components/SettingsRow.qml` and `components/ExpandingRow.qml`. Every element's properties and signals are pinned in
 `tests/ApiElementsTest.qml`, with what each kind and size is inside and how the element
 stands in a layout; a change there is a change of the API's version.
 

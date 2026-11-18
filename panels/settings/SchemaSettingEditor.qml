@@ -155,6 +155,9 @@ Item {
 
             Text {
                 text: root.label !== "" ? root.label : (root.entry?.label ?? root.key)
+                // A module's manifest names its settings: never read as markup
+                textFormat: Text.PlainText
+                maximumLineCount: 1
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
@@ -266,6 +269,7 @@ Item {
             width: parent.width
             wrapMode: Text.WordWrap
             text: root.entry?.hint ?? ""
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textMuted
@@ -296,6 +300,7 @@ Item {
                 visible: (root.entry?.suffix ?? "") !== ""
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.entry?.suffix ?? ""
+                textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary

@@ -24,6 +24,10 @@ Singleton {
     readonly property var markNeeds: ({ "": "", yes: "yes", auth: "auth", no: "no" })
     readonly property string markNeedDefault: "auth"
 
+    // A public notice's kind → the colour of its line, by its name in Theme
+    readonly property var noticeKinds: ({ warning: "warning", danger: "error", success: "success" })
+    readonly property string noticeKindDefault: "warning"
+
     // `word` looked up in `table`, else `fallback`'s entry: { value, known }
     function pick(table, word, fallback) {
         const known = typeof word === "string" && Object.prototype.hasOwnProperty.call(table, word);
@@ -44,6 +48,10 @@ Singleton {
 
     function markNeed(need) {
         return pick(markNeeds, need, markNeedDefault);
+    }
+
+    function noticeKind(kind) {
+        return pick(noticeKinds, kind, noticeKindDefault);
     }
 
     // Whether a mark with this need shows anything: the lock, or "not allowed"

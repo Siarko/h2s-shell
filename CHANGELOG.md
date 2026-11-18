@@ -13,6 +13,12 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.6: rows and texts — `SettingsRow` (`label`, `hint`, `value`; its children are the
+  controls on the right), `ExpandingRow` (`label`, `hint`, `open`; its child is what it opens,
+  built only while open) and `Notice` (`text`; `kind` `warning` — the default —, `danger`,
+  `success`). `SectionTitle`, `Heading`, `Hint`, `SwitchRow`, a `SettingEditor`'s label, hint
+  and unit and a page's name in the settings window show their texts as written: markup in
+  them is no longer read, in the shell's own pages too.
 - 1.5: the public controls — `Dropdown` (`options`, `value`, `placeholder`, `picked(value)`;
   `size` `xs`, `s`, `m`), `InputField` (`text`, `placeholder`, `problem`, `password`,
   `revealed`, `accepted()`, `textEdited()`, `editingFinished()`, `revealToggled()`; `size`

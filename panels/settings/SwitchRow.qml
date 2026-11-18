@@ -25,6 +25,7 @@ RowLayout {
         Text {
             Layout.fillWidth: true
             text: _switchRow.label
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody
             color: Theme.textPrimary
@@ -34,6 +35,7 @@ RowLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: _switchRow.hint
+            textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.textMuted

@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.api as Public
 import qs.components
+import qs.panels.settings as Settings
 import qs.singletons
 
 // The public elements (qs.api), pinned. For each: its public property and signal names —
@@ -29,8 +30,18 @@ TestCase {
         "Pill": ["clicked", "label", "picked", "size", "tooltip"],
         "Checkbox": ["checked", "label", "toggled"],
         "ToggleSwitch": ["checked", "toggled"],
-        "PrivilegedMark": ["need"]
+        "PrivilegedMark": ["need"],
+        "SettingsRow": ["controls", "hint", "label", "value"],
+        "ExpandingRow": ["content", "hint", "label", "open"],
+        "Notice": ["kind", "text"]
     })
+
+    // A notice's kinds, and the theme's colour each is drawn in
+    readonly property var noticeKinds: [
+        { kind: "warning", inside: "warning" },
+        { kind: "danger", inside: "error" },
+        { kind: "success", inside: "success" }
+    ]
 
     // A public pill's sizes, and what each is inside
     readonly property var pillSizes: [
@@ -66,7 +77,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 700
-        implicitHeight: 700
+        implicitHeight: 1000
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -362,6 +373,128 @@ TestCase {
             PrivilegedMark { visible: false }
         }
 
+        // --- rows and texts ---
+        Column {
+            x: 460; y: 530
+            width: 230
+            spacing: 6
+
+            Public.SettingsRow {
+                id: settingsRow
+                width: parent.width
+                label: "<b>x</b>"
+                hint: "<b>x</b>"
+                value: "<b>x</b>"
+                Public.SmallButton {
+                    id: rowButton
+                    property int clicks: 0
+                    label: "Go"
+                    onClicked: clicks++
+                }
+                Public.ToggleSwitch { id: rowSwitch }
+            }
+            Public.SettingsRow { id: bareRow; width: parent.width }
+            Public.ExpandingRow {
+                id: expandingRow
+                property int built: 0
+                width: parent.width
+                label: "<b>x</b>"
+                hint: "<b>x</b>"
+                Rectangle {
+                    objectName: "opened"
+                    implicitHeight: 20
+                    color: "transparent"
+                    Component.onCompleted: expandingRow.built++
+                }
+            }
+            Public.Notice { id: notice; width: parent.width; text: "<b>x</b>" }
+            Public.Notice { id: mistypedNotice; width: parent.width; kind: "info"; text: "Typo" }
+            Public.Heading { id: heading; text: "<b>x</b>" }
+            Public.SectionTitle { id: sectionTitle; text: "<b>x</b>" }
+            Public.Hint { id: hint; width: parent.width; text: "<b>x</b>" }
+            Public.SwitchRow { id: switchRow; width: parent.width; label: "<b>x</b>"; hint: "<b>x</b>" }
+            Settings.SchemaSettingEditor { id: labelled; width: parent.width; key: "notifications.toastColumnSize"; editIndex: 0; label: "<b>x</b>" }
+            Settings.SchemaSettingEditor { id: suffixed; width: parent.width; key: "lockscreen.screensaverTimeout"; editIndex: 0 }
+            Settings.SettingsPageList {
+                id: pageList
+                width: parent.width
+                tab: "system"
+                selectedPage: "first"
+                pages: [{ id: "first", tab: "system", label: "<b>x</b>" }]
+            }
+        }
+
+        // The public rows and the internal ones, in the same layouts. The line a notice is
+        // drawn as is the one on a network's card (panels/settings/NetworkProfileCard.qml).
+        ColumnLayout {
+            id: publicRows
+            x: 10; y: 760
+            width: 300
+            spacing: 6
+            Public.SettingsRow {
+                label: "Row"; hint: "A line about it that is long enough to wrap onto a second line of the row"; value: "Value"
+                Public.SmallButton { label: "Go" }
+            }
+            Public.SettingsRow { visible: false; label: "Hidden" }
+            Public.ExpandingRow { label: "Closed"; hint: "A line"; Rectangle { implicitHeight: 20 } }
+            Public.ExpandingRow { label: "Open"; open: true; Rectangle { implicitHeight: 20 } }
+            Public.ExpandingRow { visible: false; label: "Hidden" }
+            Public.Notice { text: "A notice long enough to wrap onto a second line of the column it stands in, and on" }
+            Public.Notice { visible: false; text: "Hidden" }
+        }
+        ColumnLayout {
+            id: internalRows
+            x: 330; y: 760
+            width: 300
+            spacing: 6
+            SettingsRow {
+                label: "Row"; hint: "A line about it that is long enough to wrap onto a second line of the row"; value: "Value"
+                SmallButton { label: "Go" }
+            }
+            SettingsRow { visible: false; label: "Hidden" }
+            ExpandingRow { label: "Closed"; hint: "A line"; Rectangle { implicitHeight: 20 } }
+            ExpandingRow { label: "Open"; open: true; Rectangle { implicitHeight: 20 } }
+            ExpandingRow { visible: false; label: "Hidden" }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: "A notice long enough to wrap onto a second line of the column it stands in, and on"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
+            Text { visible: false; text: "Hidden" }
+        }
+        RowLayout {
+            id: publicRowsAcross
+            x: 10; y: 930
+            width: 680
+            spacing: 6
+            Public.SettingsRow { label: "Row"; value: "Value" }
+            Public.ExpandingRow { label: "Closed"; Rectangle { implicitHeight: 20 } }
+            Public.Notice { text: "A notice" }
+            Public.SettingsRow { visible: false; label: "Hidden" }
+        }
+        RowLayout {
+            id: internalRowsAcross
+            x: 10; y: 965
+            width: 680
+            spacing: 6
+            SettingsRow { label: "Row"; value: "Value" }
+            ExpandingRow { label: "Closed"; Rectangle { implicitHeight: 20 } }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: "A notice"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
+            SettingsRow { visible: false; label: "Hidden" }
+        }
+
         QT.TestCase {
             id: driver
             name: "ApiElementsDriver"
@@ -394,7 +527,7 @@ TestCase {
     function _texts(item) {
         let found = [];
         for (const child of Array.from(item.children)) {
-            if (child.toString().startsWith("QQuickText("))
+            if (/^QQuickText(_QML_\d+)?\(/.test(child.toString()))
                 found.push(child);
             found = found.concat(_texts(child));
         }
@@ -585,9 +718,115 @@ TestCase {
         assert(narrow.width === 80 && _inside(narrow).width === 80 && narrowLabel.truncated, "a button made narrower than its label keeps that width and cuts the label");
 
         _controls();
+        _rows();
 
         _window.visible = false;
         finish();
+    }
+
+    // The texts under `item` that say "<b>x</b>"
+    function _marked(item) {
+        return _texts(item).filter(text => text.text === "<b>x</b>");
+    }
+
+    // SettingsRow, ExpandingRow, Notice; and the texts of the settings blocks, as written
+    function _rows() {
+        const rules = ApiElementRules;
+
+        // --- the words ---
+        for (const entry of noticeKinds)
+            assertEqual(JSON.stringify(rules.noticeKind(entry.kind)), JSON.stringify({ value: entry.inside, known: true }), "a notice's kind " + entry.kind + " is the theme's " + entry.inside);
+        assertEqual(Object.keys(rules.noticeKinds).sort().join(" "), noticeKinds.map(entry => entry.kind).sort().join(" "), "and those are all a notice's kinds");
+        for (const word of ["info", "", "primary", "error", "toString", undefined, 3])
+            assertEqual(JSON.stringify(rules.noticeKind(word)), JSON.stringify({ value: "warning", known: false }), "a notice's kind " + JSON.stringify(word) + " is not one: the default, warning");
+
+        // --- the names ---
+        const across = _items(publicRowsAcross);
+        const types = ["SettingsRow", "ExpandingRow", "Notice"];
+        for (let i = 0; i < types.length; i++)
+            assertEqual(JSON.stringify(_names(across[i])), JSON.stringify(pinned[types[i]]), types[i] + "'s public properties and signals are the pinned ones");
+
+        // --- defaults ---
+        assertEqual([bareRow.label, bareRow.hint, bareRow.value, expandingRow.open, notice.kind].join("|"), "|||false|warning", "a row has no texts, a row that opens is closed, a notice warns");
+
+        // --- the row ---
+        const marked = _marked(_within(settingsRow));
+        assertEqual(marked.length, 3, "a row shows its label, its hint and its value");
+        assert(marked.every(text => root._asWritten(text)), "each with markup in it as written");
+        assertEqual(_texts(_within(bareRow)).filter(text => text.visible && text.text !== "").length, 0, "a row without texts shows none");
+        assert(_until(() => rowButton.width > 0 && rowButton.mapToItem(settingsRow, 0, 0).x > marked[0].mapToItem(settingsRow, 0, 0).x + marked[0].width - 1),
+            "its children are the controls, to the right of its label");
+        assert(rowSwitch.mapToItem(settingsRow, 0, 0).x >= rowButton.mapToItem(settingsRow, 0, 0).x + rowButton.width, "one after another");
+        assertEqual(Math.round(rowSwitch.mapToItem(settingsRow, 0, 0).x + rowSwitch.width), settingsRow.width, "the last at the row's right edge");
+        driver.mouseClick(rowButton, 5, 5);
+        assertEqual(rowButton.clicks, 1, "and take their clicks");
+        driver.mouseMove(away, 5, 5);
+
+        // --- the row that opens ---
+        const opening = _within(expandingRow);
+        const openMarked = _marked(opening);
+        assert(openMarked.length === 2 && openMarked.every(text => root._asWritten(text)), "a row that opens shows its label and its hint, as written");
+        const mark = _texts(opening).find(text => text.text === "▸" || text.text === "▾");
+        assertEqual(expandingRow.built + " " + mark.text, "0 ▸", "closed, nothing of its child exists, and its mark is the closed card's");
+        const closedHeight = expandingRow.implicitHeight;
+        driver.mouseClick(expandingRow, expandingRow.width / 2, 5);
+        assertEqual(expandingRow.open + " " + expandingRow.built + " " + mark.text, "true 1 ▾", "a click on its line opens it: the child is built, the mark is the opened card's");
+        const loader = _child(opening, "QQuickLoader");
+        assert(_until(() => loader.item && loader.item.width === expandingRow.width && expandingRow.implicitHeight === closedHeight + 6 + 20), "the child is as wide as the row, under the line");
+        assertEqual(loader.item.objectName, "opened", "… the element written inside the row");
+        driver.mouseClick(expandingRow, expandingRow.width / 2, 5);
+        assert(!expandingRow.open && loader.item === null && _until(() => expandingRow.implicitHeight === closedHeight), "a second click closes it: the child is gone, the row as tall as before");
+        expandingRow.open = true;
+        assertEqual(expandingRow.built, 2, "the owner opens it too, and the child is built anew");
+        expandingRow.open = false;
+        driver.mouseMove(away, 5, 5);
+
+        // --- the notice ---
+        const line = _texts(notice)[0];
+        assert(_asWritten(line), "a notice with markup in it is shown as written");
+        assertEqual(line.font.pixelSize + " " + line.wrapMode, Theme.fontSizeSmall + " " + Text.WordWrap, "small, wrapping");
+        for (const entry of noticeKinds) {
+            notice.kind = entry.kind;
+            assert(Qt.colorEqual(line.color, Theme[entry.inside]), "a " + entry.kind + " notice is drawn in the theme's " + entry.inside);
+        }
+        assert(!Qt.colorEqual(Theme.warning, Theme.error) && !Qt.colorEqual(Theme.warning, Theme.success) && !Qt.colorEqual(Theme.error, Theme.success), "the three colours differ in the theme");
+        notice.kind = "warning";
+        assert(Qt.colorEqual(_texts(mistypedNotice)[0].color, Theme.warning), "a kind that does not exist shows as warning");
+        assertEqual(ApiElements.warned.filter(key => key === "Notice.kind=info").length, 1, "… warned about once");
+        assert(!ApiElements.warned.some(key => /^Notice\.kind=(warning|danger|success)$/.test(key)), "a kind it knows is not warned about");
+
+        // --- the settings blocks' texts, as written ---
+        assert(_asWritten(heading), "a heading with markup in it is shown as written");
+        assert(_asWritten(sectionTitle), "a section's title");
+        assert(_asWritten(hint), "a hint");
+        const switchMarked = _marked(switchRow);
+        assert(switchMarked.length === 2 && switchMarked.every(text => root._asWritten(text)), "a switch row's label and hint");
+        assert(_marked(labelled).length === 1 && _asWritten(_marked(labelled)[0]), "a setting's label");
+        const settingHint = _texts(labelled).find(text => text.text === SettingsSchema.entry("notifications.toastColumnSize").hint);
+        assert(!!settingHint && settingHint.textFormat === Text.PlainText, "a setting's hint is plain text");
+        const settingSuffix = _texts(suffixed).find(text => text.text === SettingsSchema.entry("lockscreen.screensaverTimeout").suffix);
+        assert(!!settingSuffix && settingSuffix.textFormat === Text.PlainText, "and its unit");
+        assert(_until(() => root._marked(pageList).length === 1) && _asWritten(_marked(pageList)[0]), "a page's name in the settings window's list");
+
+        // --- in layouts, as the internal ones ---
+        const pairs = [
+            { name: "a ColumnLayout", mine: publicRows, theirs: internalRows, shown: [0, 2, 3, 5], names: ["SettingsRow", "", "closed ExpandingRow", "open ExpandingRow", "", "Notice"] },
+            { name: "a RowLayout", mine: publicRowsAcross, theirs: internalRowsAcross, shown: [0, 1, 2], names: types }
+        ];
+        for (const pair of pairs) {
+            const mine = _items(pair.mine);
+            const theirs = _items(pair.theirs);
+            const last = pair.shown[pair.shown.length - 1];
+            assert(_until(() => mine[last].width > 0 && theirs[last].width > 0 && pair.shown.every(i => root._geometry(mine[i]) === root._geometry(theirs[i]))), "in " + pair.name + " the layout is done");
+            for (const i of pair.shown) {
+                assertEqual(_geometry(mine[i]), _geometry(theirs[i]), "in " + pair.name + ", the " + pair.names[i] + " stands where the internal one does, as large");
+                assertEqual(_within(mine[i]).width, mine[i].width, "… and the one inside is as wide");
+            }
+            assertEqual(pair.mine.implicitWidth + " " + pair.mine.implicitHeight, pair.theirs.implicitWidth + " " + pair.theirs.implicitHeight,
+                "in " + pair.name + ", the hidden ones take no room: the layout wants the internal one's size");
+        }
+        assertEqual(_items(publicRows)[0].width + " " + _items(publicRows)[5].width, "300 300", "a row and a notice fill a column's width unasked");
+        assert(_items(publicRows)[5].height > _texts(_items(publicRowsAcross)[2])[0].height, "a notice too long for its width wraps");
     }
 
     // Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark

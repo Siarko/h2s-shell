@@ -177,6 +177,9 @@ Item {
                         // A name wider than the sidebar (a larger font) is cut
                         elide: Text.ElideRight
                         text: _delegate.modelData.label
+                        // A module names its page: never read as markup
+                        textFormat: Text.PlainText
+                        maximumLineCount: 1
                         font.family: Theme.fontFamily
                         font.pixelSize: _delegate._child ? Theme.fontSizeBody : Theme.fontSizeBodyLarge
                         color: _delegate.selected || _delegate._groupOpen ? Theme.textPrimary : Theme.textSecondary
