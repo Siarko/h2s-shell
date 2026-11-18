@@ -70,11 +70,14 @@ TestCase {
         assert(!production.includes("Quickshell.env"), "the production TestSeams reads nothing from the environment");
         assert(!production.includes("TestSeamRules"), "… and does not use the reader's rules");
 
-        // The values: what the reader says for an environment without any seam
+        // The values: what the reader says for an environment without any seam — and off for
+        // the two that are not read from a variable (module test mode is on in every test
+        // tree, tests/lock/seams/TestSeams.qml)
         const none = TestBed.TestSeamRules.read({});
+        const notRead = { active: false, moduleTestMode: false };
         for (const property of productionProperties) {
             const name = property.split(" ")[1];
-            const expected = name === "active" ? false : none[name];
+            const expected = name in notRead ? notRead[name] : none[name];
             assert(expected !== undefined, name + ": the reader has it");
             assertEqual(JSON.stringify(TestSeams[name]), JSON.stringify(expected), name + ": the production value is the reader's with no seam set");
         }

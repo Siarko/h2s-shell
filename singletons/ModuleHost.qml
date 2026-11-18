@@ -72,6 +72,10 @@ Scope {
     // The program look-up's environment: its PATH is the one searched instead of the shell's
     // (the suites' seam: a PATH that holds stand-in programs)
     property var programEnvironment: ({})
+    // Module test mode: set by Modules from TestSeams.moduleTestMode (true only in a test
+    // tree), or by a suite that builds a host. Told in describe(); the modules' API does not
+    // show it
+    property bool testMode: false
     property bool _storeDirectoryKnown: true
 
     // The canonical module directories given to load(), in search order, and the entries
@@ -351,7 +355,7 @@ Scope {
 
     // Everything `qs ipc call modules list` tells: plain data, no secrets
     function describe() {
-        return { api: apiVersion, safeMode: safeMode, safeModeReason: safeModeReason, hostError: hostError,
+        return { api: apiVersion, safeMode: safeMode, safeModeReason: safeModeReason, hostError: hostError, testMode: testMode,
                  checkingPrograms: checkingPrograms, checkingFiles: checkingFiles, startGuard: guard,
                  ignoredEntries: ignoredEntries, modules: statuses };
     }

@@ -27,6 +27,8 @@ Singleton {
     readonly property string moduleCheckPath: ""
     readonly property int moduleCheckMs: 0
     readonly property bool fakeVpnProvider: false
+    // Module test mode (ModuleHost.testMode): off
+    readonly property bool moduleTestMode: false
     // The names of the seams in force, and whether there is any
     readonly property var inForce: Object.freeze([])
     readonly property bool active: false

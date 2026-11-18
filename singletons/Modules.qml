@@ -137,6 +137,8 @@ Singleton {
                 _host.checkEnvironment = { PATH: TestSeams.moduleCheckPath + ":" + (Quickshell.env("PATH") ?? "") };
             if (TestSeams.moduleCheckMs > 0)
                 _host.checkTimeoutMs = TestSeams.moduleCheckMs;
+            // Module test mode: on in a test tree only (TestSeams)
+            _host.testMode = TestSeams.moduleTestMode;
             _host.load(typeof value === "string" ? value : "", {
                 safeMode: safe,
                 safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting twice in a row"

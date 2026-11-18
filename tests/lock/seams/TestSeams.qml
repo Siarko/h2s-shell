@@ -37,6 +37,9 @@ Singleton {
     readonly property string moduleCheckPath: _read.moduleCheckPath
     readonly property int moduleCheckMs: _read.moduleCheckMs
     readonly property bool fakeVpnProvider: _read.fakeVpnProvider
+    // Module test mode (ModuleHost.testMode): on in every test tree, whatever the
+    // environment holds — it is the tree, not a variable, that makes a run a test
+    readonly property bool moduleTestMode: true
     // The names of the seams in force, and whether there is any
     readonly property var inForce: _read.inForce
     readonly property bool active: inForce.length > 0

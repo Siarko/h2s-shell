@@ -76,6 +76,8 @@ check "link-escape: failed (its main links out of its directory: never opened)" 
 check "link-escape: said so" grep -q "leaves the module directory" <<< "$(module_field link-escape errors)"
 check "the start guard: a fresh process counts 0" test "$(shell_ipc modules list | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["startGuard"]["count"])')" = 0
 check "… in its file, under its identity (pid, no crash)" test "$(cat "$RUN/h2s-shell-module-starts" 2> /dev/null)" = "$SHELL_PID: 0"
+check "module test mode is on in the test tree (TestSeams.moduleTestMode)" \
+    test "$(shell_ipc modules list | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["testMode"])')" = True
 
 # The good fixture's widget in the bar (bar.left names it), drawn
 cell_rect() { shell_ipc shelltest cellRect good; }
