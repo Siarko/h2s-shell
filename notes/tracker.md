@@ -30,14 +30,19 @@ the file chooser trial and the bordered buttons on branch `api-batch-2`.
       (F1a: `ThemeRules.buttonLook`, `SmallButton`, `DeleteButton`, the theme groups
       `warningButton` and `successButton`, `tests/ButtonKindsTest.qml`). Run on the Arch
       machine only; not run on the NixOS machine. Left open:
-  - **The file chooser (E1) waits for the owner's choice.** Qt's own dialog, the one this
-    machine and the test bed get, opens only with a visible window of the shell as its
-    parent (one transparent layer-shell pixel is enough), takes the keyboard, can be closed
-    by the shell — and returns one file, never several. The portal's dialog returns
-    several and needs no parent, but the shell cannot close it (a lock, a module turned
-    off), and a user gets it only where their Qt platform theme says so. The choice: one
-    file per call, the platform's dialog where there is one, or a chooser of the shell's
-    own. By hand, not done: Ctrl+click on two files in Qt's own dialog; "Open" in the
+  - **The file chooser (E1): the system's standard dialog** (the owner, 2026-11-18; see
+    "Decisions"). No chooser of the shell's own, and sending files is not extended now.
+    What the trial found stands: Qt's own dialog, the one this machine and the test bed
+    get, opens only with a visible window of the shell as its parent (one transparent
+    layer-shell pixel is enough), takes the keyboard, can be closed by the shell — and
+    returns one file, never several. The portal's dialog returns several and needs no
+    parent, but the shell cannot close it (a lock, a module turned off), and a user gets
+    it only where their Qt platform theme says so. §3.9 of `plans/api-next/facts.md` is
+    brought in line when E1 is built (`openMany` and "a lock closes it" hold only for
+    one of the two dialogs). Still to confirm with the owner: whether "the system's
+    dialog" means whichever the platform theme gives, as the module does today (the
+    lead's reading), or Qt's own everywhere.
+    By hand, not done: Ctrl+click on two files in Qt's own dialog; "Open" in the
     folder dialog with nothing chosen (from code it returned the first folder listed, not
     the one shown).
   - The module's "send files" and the core's two dialogs (VPN import, wallpaper) are plain
@@ -251,6 +256,7 @@ All by the owner, 2026-11-17.
 - The shell provides the services, or abstractions for reaching them; a module builds on them and adds the whole feature (popups, elements, widgets, settings pages). Every built-in feature is to be gone through and divided this way. The lock screen, password prompts and privileged runs stay in the framework.
 - Order after the API round (2026-11-17): the author guide, a module template and a module's tests runnable without a checkout of the shell; then the built-in features are divided, one first, as the proof that the API is enough; only then is the shell announced as open to module authors, and from that release a removal needs a major version.
 - Trust: no isolation ("the shell must work and modules need access to its functions"); running modules in a process of their own is not a later question. The user must know what they install: a module that does not come from the project is announced as such (a plain statement and a confirmation when a module that is not shipped is first enabled; shown when a user's copy replaces a shipped one), and is then not the project's responsibility.
+- File chooser for modules (2026-11-18): the system's standard dialog is enough for now. No chooser of the shell's own in this round, and sending files is not extended. The better answer is wanted later: integration with file managers (backlog).
 
 ## Backlog / later
 
@@ -319,6 +325,12 @@ Found during the test split (2026-11-17):
       runnable): replace it in `_settingsChanged` while no password conversation runs.
       Neither probe has a time limit. The request numbering lives in the driver, untested:
       a rules function with unit cases when next touched.
+- [ ] Explore integration with file managers (the owner, 2026-11-18), instead of a richer
+      file dialog: the action lives in the file manager itself — "send with Tailscale" on
+      files chosen in Dolphin, the owner's file manager for now (a service menu is the
+      likely way). Dolphin is not the only one, and a file manager of the project's own
+      may be written; so explore what a module needs from the API to offer such an action
+      to any file manager, not Dolphin's format alone.
 
 ## Open points
 
