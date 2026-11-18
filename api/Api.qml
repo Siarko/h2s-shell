@@ -192,9 +192,11 @@ import qs.singletons.network
 // missing one does not stop it). The shell looks each up on PATH before the module loads.
 //   module.programs        frozen { <name>: { path, trusted, reason } } — `path` absolute,
 //                          "" when not found; `trusted`: only root can change what runs (the
-//                          real file in the Nix store, or root's and writable by no one
-//                          else, with every directory above it, above each link on the way
-//                          and above the path found); a read that failed is untrusted;
+//                          path walked as the kernel resolves it — every directory passed,
+//                          the directory holding each link met, and the real file root's
+//                          and writable by no one else; a Nix store that is root's and that
+//                          the user cannot write to counts as root's); a read that failed,
+//                          or a name with a line break or a tab, is untrusted;
 //                          `reason` says why, in a few words. A new object only when
 //                          something in it changed
 //   module.programsReady   every program it names has a verdict

@@ -53,9 +53,10 @@ QtObject {
     // Every program its manifest names (requires.programs, optionalPrograms), as the shell
     // found it on PATH and judged it (ModuleRules.programVerdict), frozen:
     //   { <name>: { path: the absolute path ("" — not found), trusted, reason } }
-    // `trusted`: only root can change what runs (the real file in the Nix store, or root's
-    // and writable by root alone, with every directory above it and above the path found).
-    // A read that failed is untrusted. A new object only when something in it changed.
+    // `trusted`: only root can change what runs (the path walked as the kernel resolves it:
+    // every directory passed, the directory of each link met and the real file root's and
+    // writable by root alone; a root-owned, daemon-run Nix store counts as root's). A read
+    // that failed is untrusted. A new object only when something in it changed.
     readonly property string _programsText: {
         const verdicts = host?.programVerdicts ?? {};
         const own = {};

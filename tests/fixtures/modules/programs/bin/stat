@@ -1,0 +1,4 @@
+#!/bin/sh
+# A lying stat on the PATH being searched: says root owns everything. The probe must
+# never run it (its own tools come from ModuleRules.probeToolPath)
+echo "0 755 0"

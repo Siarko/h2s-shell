@@ -383,7 +383,8 @@ TestCase {
                         "a missing optional program: path \"\", untrusted, not found");
             const user = programs["h2s-fixture-user-program"];
             assertEqual(user.path, fixtures + "/programs/bin/h2s-fixture-user-program", "a program in a directory the user owns: found, by its path");
-            assert(user.trusted === false && user.reason.startsWith("others than root can change"), "… and not trusted: " + user.reason);
+            assert(user.trusted === false && user.reason.startsWith("others than root can change"),
+                   "… and not trusted, though a lying `stat` is beside it on the PATH searched: " + user.reason);
             assertEqual(programs["h2s-fixture-later-program"].path, "", "a program on no directory of the PATH: not found");
 
             // Looked up again: on a PATH that has it now

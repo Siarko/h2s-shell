@@ -658,14 +658,19 @@ looks each up on `PATH` (an executable file; absolute entries only) and judges w
 finds; the module reads the result on its handle, `module.programs`: per name the path
 (`""` when not found), `trusted` and a `reason`. `module.recheckPrograms()` looks again (at
 most every 2 s); the host does so itself after the machine wakes. A program is trusted
-when only root can change what runs: its real file is in the Nix store, or it is root's
-and writable by no one else, and so is every directory above the path found, above each
-link on the way and above the real file. A read that fails is untrusted. The probe is
-`ModuleRules.programProbeScript`, the verdict `ModuleRules.programVerdict`; each change of
-a verdict is one line in the shell's log, with the path, the real file, its owner and mode.
-- NixOS: `/run/current-system/sw/bin` leads into the store; the setuid wrappers
-  (`/run/wrappers/bin`) are root's files. A program under `~/.nix-profile` is untrusted:
-  the link lives in a directory the user owns.
+when only root can change what runs: the path is walked component by component, as the
+kernel resolves it (as `namei -l` shows it), and every directory passed, the directory
+holding each link met and the real file must be root's and writable by no one else. The
+Nix store counts as root's as a whole only when `/nix/store` is root's and the user cannot
+write to it. A read that fails, two answers for one path, or a name holding a line break
+or a tab is untrusted. The probe is `ModuleRules.programProbeScript`, run by `/bin/sh` with
+the system's directories as its own `PATH` (`ModuleRules.probeToolPath`), never the `PATH`
+it judges; the verdict is `ModuleRules.programVerdict`. Each change of a verdict is one
+line in the shell's log, with the path, the real file, its owner and mode.
+- NixOS: `/run/current-system/sw/bin` leads into the store, which the daemon owns as root;
+  the setuid wrappers (`/run/wrappers/bin`) are root's files. A program under
+  `~/.nix-profile` is untrusted: the link lives in a directory the user owns. A single-user
+  Nix install's store is the user's, and is judged like any other directory.
 - Arch: root's `/usr/bin`. A program in `~/.local/bin` is untrusted.
 
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's

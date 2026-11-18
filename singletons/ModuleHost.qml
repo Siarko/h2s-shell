@@ -69,8 +69,8 @@ Scope {
     // Added to the file check's environment (the suites' and the lock bed's seam: a PATH whose
     // `head` hangs, as a mount that answers stat and then blocks on read would)
     property var checkEnvironment: ({})
-    // Added to the program look-up's environment (the suites' seam: a PATH that holds
-    // stand-in programs)
+    // The program look-up's environment: its PATH is the one searched instead of the shell's
+    // (the suites' seam: a PATH that holds stand-in programs)
     property var programEnvironment: ({})
     property bool _storeDirectoryKnown: true
 
@@ -848,8 +848,11 @@ Scope {
             return;
         const lines = [];
         _checkingPrograms = true;
-        _check(["sh", "-c", ModuleRules.programProbeScript, "sh", "first"].concat(names), {
-            environment: programEnvironment ?? {},
+        // The PATH searched is the shell's (or the suites' seam); the probe's own tools come
+        // from the system's directories, never from the PATH it judges
+        const searched = programEnvironment?.PATH ?? Quickshell.env("PATH") ?? "";
+        _check([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "first", String(searched)].concat(names), {
+            environment: { PATH: ModuleRules.probeToolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")
                     lines.push(line);

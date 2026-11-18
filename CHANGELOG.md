@@ -16,8 +16,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.9: a module's programs, judged — the manifest's new `optionalPrograms` (looked up like
   `requires.programs`; a missing one does not stop the module) and, on the handle,
   `programs` (per name the path found on PATH, `""` when none, `trusted` — only root can
-  change what runs: the real file in the Nix store, or root's and writable by no one else
-  with every directory above it, above each link on the way and above the path found — and
+  change what runs: the path walked as the kernel resolves it, every directory passed, the
+  directory holding each link met and the real file root's and writable by no one else; a
+  Nix store that is root's and the user cannot write to counts as root's — and
   a `reason`), `programsReady` and `recheckPrograms()` (at most every 2 s; also after the
   machine wakes). The command runner takes `timeout` and `setpriv` from PATH now, only
   trusted ones, instead of two fixed system directories.

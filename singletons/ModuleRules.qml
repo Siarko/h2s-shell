@@ -213,66 +213,79 @@ Singleton {
     // (CommandTools). The probe (programProbeScript) does the reading; everything here judges
     // what it printed.
     //
-    // TRUSTED means that nobody but root can change what runs: the program's real file is in
-    // the Nix store, or it is owned by root and writable by no one else — and so is every
-    // directory above the path found, above each link on the way to the real file, and above
-    // the real file (each judged where its name leads: `stat -L`), up to "/". A path in the
-    // Nix store is not looked above (the store is read-only; its own directory is not root's
-    // alone on every install). NixOS: /run/current-system/sw/bin leads into the store, the
-    // setuid wrappers are root's files under /run/wrappers; Arch: root's /usr/bin. Anything
-    // not read — a stat missing, a link that does not resolve — is untrusted, never trusted.
+    // TRUSTED means that nobody but root can change what runs. The path found is walked
+    // component by component, as the kernel resolves it (as `namei -l` shows it): every
+    // directory passed through, the directory that holds each link met on the way, and the
+    // real file at the end must be owned by root and writable by no one else. The Nix store
+    // counts as root's as a whole only where /nix/store itself is root's and the user cannot
+    // write to it (a multi-user install, run by the daemon); a store the user owns (a
+    // single-user install) is judged like any other path. NixOS: /run/current-system/sw/bin
+    // leads into the store, the setuid wrappers are root's files under /run/wrappers; Arch:
+    // root's /usr/bin. Anything not read — a stat missing, a link that does not resolve, a
+    // name holding a line break or a tab, two answers for one path — is untrusted.
     // A guard against mistakes (a program in a directory the user owns, handed on to run as
     // root), not against a process that can already write where it likes.
 
-    // Links followed from the path found to the real file; a longer chain is untrusted
+    // Links followed on the way to the real file; more is untrusted
     readonly property int maxLinkHops: 16
     // How often a module may ask for its programs to be looked up again (recheckDelay)
     readonly property int recheckMinMs: 2000
+    // The probe's own PATH, for `stat`, `readlink` and `id` (and /bin/sh runs it): the
+    // system's directories, never the PATH being judged — a `stat` the user put there could
+    // say anything. NixOS: /run/current-system/sw/bin; Arch: /usr/bin
+    readonly property string probeToolPath: "/run/current-system/sw/bin:/usr/bin:/bin"
+    readonly property string probeShell: "/bin/sh"
 
-    // `sh -c programProbeScript sh <"first" | "all"> <name>…`: each name on PATH (absolute
-    // entries only; an executable regular file), the first match or all of them. Per match,
-    // tab-separated lines:
-    //   cand <name> <path>             a match ("" after the name: none at all)
-    //   real <name> <readlink -f>      its real file (missing: it does not resolve)
-    //   hop  <name> <path>             each link on the way, made absolute, at most maxLinkHops
-    //   stat <name> <uid> <mode> <path>  every directory above the path, each hop and the
-    //                                  real file, and the real file itself (stat -L; octal
-    //                                  mode); nothing at or above a path under /nix/store/
+    // `/bin/sh -c programProbeScript sh <"first" | "all"> <the PATH to search> <name>…`, run
+    // with PATH=probeToolPath: each name on the PATH given (absolute entries only; an
+    // executable regular file), the first match or all of them. Tab-separated lines:
+    //   user <uid> <gid gid …>          once: who runs the probe
+    //   cand <name> <path>              a match ("" after the name: none at all)
+    //   stat <name> <uid> <mode> <gid> <path>   each directory passed through and the real
+    //                                   file (stat -L of the physical path; octal mode)
+    //   link <name> <path> <target>     each link met, at its physical path
+    //   bad  <name>                     a path or a link's target holds a line break or a tab
+    //   loop <name>                     more than maxLinkHops links
     readonly property string programProbeScript: [
-        "mode=$1; shift",
+        "mode=$1; searched=$2; shift 2",
         "set -f",
-        "say() { s=$(stat -L -c '%u %a' -- \"$2\") && printf 'stat\\t%s\\t%s\\t%s\\t%s\\n' \"$1\" \"${s% *}\" \"${s#* }\" \"$2\"; }",
-        "look() {",
-        "  n=$1; p=$2",
-        "  printf 'cand\\t%s\\t%s\\n' \"$n\" \"$p\"",
-        "  r=$(readlink -f -- \"$p\") && printf 'real\\t%s\\t%s\\n' \"$n\" \"$r\" || r=",
-        "  set -- \"$p\"",
-        "  h=$p; i=0",
-        "  while [ -L \"$h\" ] && [ \"$i\" -lt " + maxLinkHops + " ]; do",
-        "    t=$(readlink -- \"$h\") || break",
-        "    case $t in /*) h=$t ;; *) h=${h%/*}/$t ;; esac",
-        "    printf 'hop\\t%s\\t%s\\n' \"$n\" \"$h\"",
-        "    set -- \"$@\" \"$h\"",
-        "    i=$((i + 1))",
+        "tab=$(printf '\\t'); nl=$(printf '\\nx'); nl=${nl%x}",
+        "printf 'user\\t%s\\t%s\\n' \"$(id -u)\" \"$(id -G)\"",
+        "say() { s=$(stat -L -c '%u %a %g' -- \"$2\") && printf 'stat\\t%s\\t%s\\t%s\\n' \"$1\" \"$(printf '%s' \"$s\" | tr ' ' '\\t')\" \"$2\"; }",
+        "walk() {",
+        "  n=$1; rest=${2#/}; cur=/; hops=0",
+        "  say \"$n\" /",
+        "  while [ -n \"$rest\" ]; do",
+        "    c=${rest%%/*}",
+        "    case $rest in */*) rest=${rest#*/} ;; *) rest= ;; esac",
+        "    case $c in ''|.) continue ;; ..) cur=${cur%/*}; [ -n \"$cur\" ] || cur=/; continue ;; esac",
+        "    if [ \"$cur\" = / ]; then next=/$c; else next=$cur/$c; fi",
+        "    if [ -L \"$next\" ]; then",
+        "      hops=$((hops + 1))",
+        "      [ \"$hops\" -le " + maxLinkHops + " ] || { printf 'loop\\t%s\\n' \"$n\"; return; }",
+        "      t=$(readlink -- \"$next\") || return",
+        "      case $t in *\"$nl\"*|*\"$tab\"*|'') printf 'bad\\t%s\\n' \"$n\"; return ;; esac",
+        "      printf 'link\\t%s\\t%s\\t%s\\n' \"$n\" \"$next\" \"$t\"",
+        "      case $t in /*) cur=/; rest=${t#/}${rest:+/$rest} ;; *) rest=$t${rest:+/$rest} ;; esac",
+        "    else",
+        "      cur=$next",
+        "      say \"$n\" \"$cur\"",
+        "    fi",
         "  done",
-        "  [ -n \"$r\" ] && set -- \"$@\" \"$r\"",
-        "  for e; do",
-        "    case $e in /nix/store/*) continue ;; esac",
-        "    a=$e",
-        "    while [ \"$a\" != / ]; do",
-        "      a=${a%/*}; [ -n \"$a\" ] || a=/",
-        "      say \"$n\" \"$a\"",
-        "    done",
-        "  done",
-        "  case $r in ''|/nix/store/*) ;; *) say \"$n\" \"$r\" ;; esac",
         "}",
         "for n; do",
         "  hit=",
         "  IFS=:",
-        "  for d in $PATH; do",
+        "  for d in $searched; do",
         "    case $d in /*) ;; *) continue ;; esac",
         "    p=$d/$n",
-        "    if [ -f \"$p\" ] && [ -x \"$p\" ]; then hit=1; look \"$n\" \"$p\"; [ \"$mode\" = all ] || break; fi",
+        "    if [ -f \"$p\" ] && [ -x \"$p\" ]; then",
+        "      hit=1",
+        "      unset IFS",
+        "      case $p in *\"$nl\"*|*\"$tab\"*) printf 'cand\\t%s\\t-\\n' \"$n\"; printf 'bad\\t%s\\n' \"$n\" ;; *) printf 'cand\\t%s\\t%s\\n' \"$n\" \"$p\"; walk \"$n\" \"$p\" ;; esac",
+        "      IFS=:",
+        "      [ \"$mode\" = all ] && continue || break",
+        "    fi",
         "  done",
         "  unset IFS",
         "  [ -n \"$hit\" ] || printf 'cand\\t%s\\t\\n' \"$n\"",
@@ -284,42 +297,79 @@ Singleton {
         return typeof value === "string" && value.startsWith("/") && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value);
     }
 
-    // In the Nix store (and not leaving it by "..")
+    // Under the Nix store (and not leaving it by "..")
     function programInStore(path) {
         return typeof path === "string" && path.startsWith("/nix/store/") && !path.split("/").includes("..");
     }
 
-    // The directories above an absolute path, nearest first, up to "/" — the steps the probe
-    // takes (strip the last "/…"; "/" when nothing is left)
-    function programAncestors(path) {
-        const list = [];
-        if (!_probePath(path))
-            return list;
-        let above = path;
-        while (above !== "/") {
-            above = above.slice(0, above.lastIndexOf("/"));
-            if (above === "")
-                above = "/";
-            list.push(above);
-        }
-        return list;
-    }
-
     // One stat's verdict: owned by root, no write bit for the group or others
     function statTrusted(stat) {
-        const mode = stat?.mode;
-        const bits = typeof mode === "string" && /^[0-7]{1,5}$/.test(mode) ? parseInt(mode, 8) : -1;
+        const bits = _modeBits(stat?.mode);
         return stat?.uid === "0" && bits >= 0 && (bits & 0o022) === 0;
     }
 
-    // The probe's lines → { names: { <name>: [candidate…] }, answered: [names] }, a candidate
-    // { path, hops, real, stats: { <path>: { uid, mode } } }, in PATH order. `answered`: the
-    // names the probe got to (a "cand" line, found or not); it did not reach the others.
-    // Lines of names not asked for, and malformed ones, are skipped.
+    function _modeBits(mode) {
+        return typeof mode === "string" && /^[0-7]{1,5}$/.test(mode) ? parseInt(mode, 8) : -1;
+    }
+
+    // Whether the Nix store counts as root's as a whole: /nix/store root's, nobody else may
+    // write to it, and its group (nixbld on a multi-user install, which may) is not one of
+    // the user's (`user`: { uid, groups }; unknown groups: not)
+    function storeTrusted(stat, user) {
+        const bits = _modeBits(stat?.mode);
+        if (stat?.uid !== "0" || bits < 0 || (bits & 0o002) !== 0)
+            return false;
+        if ((bits & 0o020) === 0)
+            return true;
+        return Array.isArray(user?.groups) && user.groups.length > 0 && !user.groups.includes(stat.gid);
+    }
+
+    // The path walked as the kernel resolves it, from `links` ({ <physical path>: target }):
+    // → { ok, real, visited (every physical directory passed through, "/" first, then the
+    // real file), reason }. The same steps the probe takes.
+    function programWalk(path, links) {
+        if (!_probePath(path))
+            return { ok: false, real: "", visited: [], reason: "a path that could not be read" };
+        let rest = path.split("/");
+        let current = "/";
+        let hops = 0;
+        const visited = ["/"];
+        while (rest.length > 0) {
+            const part = rest.shift();
+            if (part === "" || part === ".")
+                continue;
+            if (part === "..") {
+                current = current.slice(0, current.lastIndexOf("/")) || "/";
+                continue;
+            }
+            const next = current === "/" ? "/" + part : current + "/" + part;
+            if (links && Object.prototype.hasOwnProperty.call(links, next)) {
+                hops++;
+                if (hops > maxLinkHops)
+                    return { ok: false, real: "", visited: visited, reason: "more than " + maxLinkHops + " links on the way to its real file" };
+                const target = links[next];
+                if (target.startsWith("/"))
+                    current = "/";
+                rest = target.split("/").concat(rest);
+                continue;
+            }
+            current = next;
+            visited.push(current);
+        }
+        return { ok: true, real: current, visited: visited, reason: "" };
+    }
+
+    // The probe's lines → { names: { <name>: [candidate…] }, answered: [names], user }, a
+    // candidate { path, links: { <path>: target }, stats: { <path>: { uid, mode, gid } },
+    // problem }, in PATH order; `user` { uid, groups } or null. `answered`: the names the
+    // probe got to (a "cand" line, found or not); it did not reach the others. Lines of
+    // names not asked for, and malformed ones, are skipped; a second, different answer for
+    // one path is a problem of the candidate.
     function programProbe(lines, names) {
         const found = Object.create(null);
         const last = Object.create(null);
         const answered = [];
+        let user = null;
         for (const name of Array.isArray(names) ? names : []) {
             if (typeof name === "string")
                 found[name] = [];
@@ -328,6 +378,10 @@ Singleton {
             if (typeof line !== "string")
                 continue;
             const parts = line.split("\t");
+            if (parts[0] === "user" && parts.length === 3 && user === null && /^\d+$/.test(parts[1])) {
+                user = { uid: parts[1], groups: parts[2].split(" ").filter(group => /^\d+$/.test(group)) };
+                continue;
+            }
             const name = parts[1];
             if (typeof name !== "string" || !(name in found))
                 continue;
@@ -337,7 +391,7 @@ Singleton {
                 last[name] = null;
                 if (parts[2] === "")
                     continue;
-                const candidate = { path: parts[2], hops: [], real: "", stats: Object.create(null) };
+                const candidate = { path: parts[2], links: Object.create(null), stats: Object.create(null), problem: "" };
                 found[name].push(candidate);
                 last[name] = candidate;
                 continue;
@@ -345,54 +399,53 @@ Singleton {
             const candidate = last[name];
             if (!candidate)
                 continue;
-            if (parts[0] === "hop" && parts.length === 3)
-                candidate.hops.push(parts[2]);
-            else if (parts[0] === "real" && parts.length === 3)
-                candidate.real = parts[2];
-            else if (parts[0] === "stat" && parts.length === 5 && _probePath(parts[4]))
-                candidate.stats[parts[4]] = { uid: parts[2], mode: parts[3] };
+            const conflict = (map, key, value) => {
+                if (key in map && JSON.stringify(map[key]) !== JSON.stringify(value))
+                    candidate.problem = "two answers for " + key;
+                map[key] = value;
+            };
+            if (parts[0] === "link" && parts.length === 4 && _probePath(parts[2]) && parts[3] !== "" && !/[\u0000-\u001f\u007f]/.test(parts[3]))
+                conflict(candidate.links, parts[2], parts[3]);
+            else if (parts[0] === "stat" && parts.length === 6 && _probePath(parts[5]))
+                conflict(candidate.stats, parts[5], { uid: parts[2], mode: parts[3], gid: parts[4] });
+            else if (parts[0] === "bad" && parts.length === 2)
+                candidate.problem = "a name on the way holds a line break or a tab";
+            else if (parts[0] === "loop" && parts.length === 2)
+                candidate.problem = "more than " + maxLinkHops + " links on the way to its real file";
         }
-        return { names: found, answered: answered };
+        return { names: found, answered: answered, user: user };
     }
 
     // One candidate's verdict → frozen { path, real, trusted, reason, owner, mode } (owner
-    // and mode: the real file's, "" in the store). Nothing found: path "".
-    function programVerdict(candidate) {
+    // and mode: the real file's). Nothing found: path "". `user`: the probe's.
+    function programVerdict(candidate, user) {
+        if (candidate && candidate.problem && !_probePath(candidate.path))
+            return Object.freeze({ path: "", real: "", trusted: false, reason: candidate.problem, owner: "", mode: "" });
         if (!candidate || !_probePath(candidate.path))
             return Object.freeze({ path: "", real: "", trusted: false, reason: "not found", owner: "", mode: "" });
-        const real = _probePath(candidate.real) ? candidate.real : "";
+        const walked = programWalk(candidate.path, candidate.links);
+        const real = walked.ok ? walked.real : "";
         const verdict = (trusted, reason) => {
             const stat = real !== "" ? candidate.stats?.[real] : undefined;
             return Object.freeze({ path: candidate.path, real: real, trusted: trusted, reason: reason,
                                    owner: stat?.uid ?? "", mode: stat?.mode ?? "" });
         };
-        const hops = Array.isArray(candidate.hops) ? candidate.hops : [];
-        if (hops.length >= maxLinkHops)
-            return verdict(false, "more than " + maxLinkHops + " links on the way to its real file");
-        if (real === "")
-            return verdict(false, "its real file could not be found");
-        const needed = [];
-        for (const entry of [candidate.path].concat(hops, [real])) {
-            if (!_probePath(entry))
-                return verdict(false, "a link on the way could not be read");
-            if (programInStore(entry))
+        if (candidate.problem)
+            return verdict(false, candidate.problem);
+        if (!walked.ok)
+            return verdict(false, walked.reason);
+        const storeStat = candidate.stats?.["/nix/store"];
+        const store = storeStat !== undefined && storeTrusted(storeStat, user);
+        for (const path of walked.visited) {
+            if (store && (path === "/nix/store" || programInStore(path)))
                 continue;
-            for (const directory of programAncestors(entry)) {
-                if (!needed.includes(directory))
-                    needed.push(directory);
-            }
-        }
-        const inStore = programInStore(real);
-        if (!inStore)
-            needed.push(real);
-        for (const path of needed) {
             const stat = candidate.stats?.[path];
             if (!stat)
                 return verdict(false, "could not be checked: " + path);
             if (!statTrusted(stat))
                 return verdict(false, "others than root can change " + path);
         }
-        return verdict(true, inStore ? "in the Nix store" : "root's, and only root can change it");
+        return verdict(true, store && programInStore(real) ? "in the Nix store" : "root's, and only root can change it");
     }
 
     // The probe's lines, run with "first" → { <name>: verdict } for each name it answered
@@ -400,14 +453,15 @@ Singleton {
         const probe = programProbe(lines, names);
         const verdicts = {};
         for (const name of probe.answered)
-            verdicts[name] = programVerdict(probe.names[name][0] ?? null);
+            verdicts[name] = programVerdict(probe.names[name][0] ?? null, probe.user);
         return verdicts;
     }
 
     // The probe's lines, run with "all" → the paths of the trusted matches of `name`, in
     // PATH order
     function trustedPrograms(lines, name) {
-        return (programProbe(lines, [name]).names[name] ?? []).map(candidate => programVerdict(candidate))
+        const probe = programProbe(lines, [name]);
+        return (probe.names[name] ?? []).map(candidate => programVerdict(candidate, probe.user))
             .filter(verdict => verdict.trusted).map(verdict => verdict.path);
     }
 

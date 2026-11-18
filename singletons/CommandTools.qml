@@ -50,7 +50,10 @@ Singleton {
     function _lookUp() {
         _lookup.lines = [];
         _lookup.question = _ask();
-        _lookup.command = ["sh", "-c", ModuleRules.programProbeScript, "sh", "all"].concat(CommandRules.wrapperTools.map(tool => tool.name));
+        // The shell's PATH is searched; the probe's own tools come from the system's
+        // directories (ModuleRules.probeToolPath), never from the PATH it judges
+        _lookup.command = [ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", Quickshell.env("PATH") ?? ""]
+            .concat(CommandRules.wrapperTools.map(tool => tool.name));
         _deadline.interval = lookupMs;
         _deadline.restart();
         _lookup.running = true;
@@ -104,6 +107,7 @@ Singleton {
     }
 
     property Process _lookup: Process {
+        environment: ({ PATH: ModuleRules.probeToolPath })
         property int question: 0
         property var lines: []
         stdout: SplitParser {
