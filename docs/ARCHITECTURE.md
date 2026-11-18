@@ -612,7 +612,7 @@ What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the 
 A singleton finds its handle with `Api.moduleAt(Qt.resolvedUrl("."))`. Commands go through
 `CommandRunner` (below), `CommandAction` / `CommandQuery` (one after another, or a query run
 again on request; both run by a `CommandRunner`, without a time limit) and
-`module.privileged.start` (one of its programs as root, below; the older `PrivilegedAction`
+`module.privileged.start` (a command as root, below; the older `PrivilegedAction`
 — pkexec, by an absolute path checked first, `notFound` otherwise; 126 dismissed, quietly;
 127 refused, said once — runs through the same queue). Wake-up: `module.resumed()`;
 a page or slot contribution that declares `property bool shown` does its expensive reading only
@@ -675,18 +675,20 @@ line in the shell's log, with the path, the real file, its owner and mode.
 - Arch: root's `/usr/bin`. A program in `~/.local/bin` is untrusted.
 
 **Running as administrator** (`module.privileged` on the handle; `singletons/PrivilegedRuns.qml`
-with its decisions in `singletons/PrivilegedRules.qml`): `start(argv, options)` runs one of
-the module's own programs as root through pkexec. The shell knows which module asks from
+with its decisions in `singletons/PrivilegedRules.qml`): `start(argv, options)` runs a command
+as root through pkexec; argv[0] is an absolute path, normally one of the module's programs. The shell knows which module asks from
 the handle; the run says what it does in a few words (`what`, required) and how long it may
 take (`timeoutMs`, required, 1 s to 1 h). `available` is true once a trusted, setuid pkexec
 and a trusted `timeout` are found.
-- **Refused before pkexec runs**, with `blocked` saying why: `untrusted` (argv[0] is not the
-  path of one of the module's programs that is trusted, or it is a shell, `env` or another
-  program that runs one named in its arguments — only argv[0] is judged, so a trusted
-  interpreter given a script passes), `unprintable` (a word holds a control or format
-  character: a line break, a right-to-left override), `no-purpose` (`what` empty once
-  cleaned), `locked`. A program not there is `notFound` (argv[0] `""`, or not an executable
-  file when the run's turn comes); options of the wrong kind give `error`.
+- **Refused before pkexec runs**, with `blocked` saying why: `unprintable` (a word holds a
+  control or format character: a line break, a right-to-left override), `no-purpose`
+  (`what` empty once cleaned), `locked`. A program not there is `notFound` (argv[0] `""` or
+  not an absolute path, or not an executable file when the run's turn comes); options of
+  the wrong kind give `error`. These checks catch mistakes and keep the prompt honest; they
+  do not stop a hostile module, which runs in the shell's process and could start pkexec
+  itself. What protects the user from a module that does not ship with the shell is the
+  prompt saying who asks, what for and the exact command, and the warning when it is first
+  enabled.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the

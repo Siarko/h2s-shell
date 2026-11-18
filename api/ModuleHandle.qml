@@ -107,7 +107,7 @@ QtObject {
     }
 
     // ---- Running as administrator (API 1.11) ----
-    // `privileged.start(argv, options)` runs one of its programs as root through pkexec, in
+    // `privileged.start(argv, options)` runs a command as root through pkexec, in
     // the shell's one queue (singletons/PrivilegedRuns.qml; Api.qml says what it does). The
     // shell knows the module by this handle: it is not told.
     readonly property QtObject privileged: QtObject {
@@ -124,22 +124,11 @@ QtObject {
         function start(argv, options) {
             if (root._privilegedKey === "")
                 root._privilegedKey = PrivilegedRuns.newOwnerKey();
-            // argv is read once, inside: the program looked up is the one that runs
+            // argv is read once, inside: the words judged are the ones that run
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: root.host?.testMode === true, tools: _tools, programAt: path => root._programAt(path)
+                testMode: root.host?.testMode === true, tools: _tools
             });
         }
-    }
-
-    // What its programs' verdicts say of a path: { declared (one of its programs is there),
-    // trusted, reason, real }
-    function _programAt(path) {
-        for (const name of _programNames) {
-            const verdict = _verdicts[name];
-            if (verdict && verdict.path !== "" && verdict.path === path)
-                return { declared: true, trusted: verdict.trusted === true, reason: String(verdict.reason ?? ""), real: String(verdict.real ?? "") };
-        }
-        return { declared: false, trusted: false, reason: "", real: "" };
     }
 
     // What PrivilegedRuns knows its runs by ("" until the first)

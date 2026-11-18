@@ -1,3 +1,4 @@
 #!/bin/sh
-# A stand-in named as a shell: a privileged run refuses it before anything runs
-exit 0
+# A stand-in named as a shell: a privileged run runs it like any other program (the command
+# is not parsed). Prints the words it was given
+echo "sh ran: $*"

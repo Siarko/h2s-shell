@@ -239,12 +239,13 @@ import qs.singletons.network
 //   module.privileged.available   a trusted pkexec, setuid root, and a trusted `timeout`
 //                          (coreutils) were found
 //   module.privileged.unavailableReason   why not, in a few words ("" when available)
-//   module.privileged.start(argv, options)   runs one of the module's programs as root
-//                          through pkexec → a handle { running (bool), cancel() }.
+//   module.privileged.start(argv, options)   runs a command as root through pkexec →
+//                          a handle { running (bool), cancel() }.
 //                          `argv`: a real array of strings (not a QML list, not an object
 //                          that looks like one), read once when start() is called — the
-//                          copy is what is judged and what runs; `argv[0]`: the path of one
-//                          of its programs, `module.programs[name].path`, judged trusted.
+//                          copy is what is judged and what runs; `argv[0]`: an absolute
+//                          path (root's PATH is never searched), normally one of its
+//                          programs, `module.programs[name].path`.
 //                          The options are read once too. options:
 //                            what            needed: a few words saying what the run does
 //                                            ("Send a file", "Connect"), never a sentence;
@@ -273,26 +274,12 @@ import qs.singletons.network
 //                          `dismissed`, 127 as `refused`. The words pkexec ran are the same
 //                          either way, so nothing tells them apart; the program is checked
 //                          to be there just before, which makes `timeout`'s 127 rare.
-//                          Refused before pkexec runs, nothing started:
-//                            blocked "untrusted"    argv[0] is not the absolute path of one of
-//                                            its programs, or that program is not trusted, or
-//                                            it — by its name or its real file's — is a
-//                                            shell, an interpreter (python, perl, ruby,
-//                                            node, lua, php, tclsh, awk, the dynamic loader),
-//                                            or a program that runs another named in its
-//                                            arguments (env, sudo, su, timeout, nice,
-//                                            setsid, setpriv, strace, gdb, chroot, unshare,
-//                                            nsenter, bwrap, xargs, find, flock, time,
-//                                            systemd-run, busybox, coreutils and their
-//                                            kind: PrivilegedRules.launchers). Where
-//                                            coreutils is one program that its tools link
-//                                            to (NixOS) the tool is judged by the name it
-//                                            is run by — `cp` passes, `env` does not — and
-//                                            `--coreutils-prog` as the first argument is
-//                                            refused. Not exhaustive, and only argv[0] is
-//                                            judged: a program that runs a command through
-//                                            an option of its own passes — the prompt's
-//                                            command line is all that shows it
+//                          Refused before pkexec runs, nothing started. These checks catch
+//                          mistakes and keep the prompt honest (it shows the command as it
+//                          is); they do not stop a hostile module, which runs in the shell's
+//                          process. What protects the user from a module that does not ship
+//                          with the shell is the prompt saying who asks, what for and the
+//                          exact command, and the warning when it is first enabled:
 //                            blocked "unprintable"  a word holds a control or format character
 //                                            or a line or paragraph separator (a line
 //                                            break, a right-to-left override, U+2028): the
@@ -301,8 +288,9 @@ import qs.singletons.network
 //                            blocked "locked"       the session is locked (dismissed too: the
 //                                            user clicks again once unlocked)
 //                            notFound        argv[0] is "" (the path of a program not
-//                                            found), or — checked when the run's turn comes —
-//                                            not an executable file
+//                                            found), or not an absolute path, or — checked
+//                                            when the run's turn comes — not an executable
+//                                            file
 //                            error           options of the wrong kind, timeoutMs missing or
 //                                            out of range, argv not an array of strings,
 //                                            not available (the reason)

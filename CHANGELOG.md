@@ -14,17 +14,15 @@ section to the new version and date.
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.11: running as administrator through the handle — `module.privileged.start(argv,
-  options)` runs one of the module's own trusted programs as root through pkexec, with
+  options)` runs a command (argv[0] an absolute path) as root through pkexec, with
   `what` (a few words saying what it does) and `timeoutMs` (1 s to 1 h) required, output as
   it comes and one frozen answer (`dismissed`, `refused`, `notFound`, `timedOut`,
   `cancelled`, `blocked`); `module.privileged.available` and `unavailableReason`. The
   shell's own `timeout` runs inside pkexec, so the command ends at its limit even when the
   shell cannot stop it. `argv` must be a real array of strings and is read once, as are
-  the options. Refused before pkexec runs: a program that is not one of the module's
-  trusted programs, or is a shell, `env`, an interpreter or another program that runs one
-  named in its arguments (`untrusted`), a word with a control, format or line separator
+  the options. Refused before pkexec runs: a word with a control, format or line separator
   character (`unprintable`), an empty `what` (`no-purpose`), the session locked
-  (`locked`). One queue for the whole shell, one password question at a time; runs waiting
+  (`locked`); argv[0] not an absolute path or not an executable file is `notFound`. One queue for the whole shell, one password question at a time; runs waiting
   when the session locks end dismissed; a module turned off loses its runs, quietly.
   `PrivilegedAction` runs through the same queue (a run still waiting at a lock answers
   `dismissed` with `blocked: "locked"`), and its default `elevate: ["pkexec"]` is the

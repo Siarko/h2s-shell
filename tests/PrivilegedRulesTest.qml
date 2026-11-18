@@ -53,9 +53,8 @@ TestCase {
                "options wrong: done kept (an answer is owed), the others not");
 
         // --- refusals before pkexec runs ---
-        const program = { declared: true, trusted: true, reason: "root's", real: "/usr/bin/tailscale" };
         const base = { argv: ["/usr/bin/tailscale", "up"], options: rules.options(good), active: true, locked: false,
-                       available: true, unavailableReason: "", program: program };
+                       available: true, unavailableReason: "" };
         const asked = changes => rules.refusal(Object.assign({}, base, changes));
         assertEqual(asked({}), null, "everything right: no refusal");
         assert(asked({ options: rules.options({ what: "x" }) }).error.startsWith("timeoutMs") && asked({ options: rules.options({ what: "x" }) }).blocked === "",
@@ -74,51 +73,23 @@ TestCase {
         assert(rtl.blocked === "unprintable" && rtl.error.startsWith("word 3"), "U+202E in a word: unprintable, which word said: " + JSON.stringify(rtl));
         assertEqual(asked({ available: false, unavailableReason: "no pkexec found" }).error, "no pkexec found", "not available: error, the reason");
         assertEqual(asked({ available: false, unavailableReason: "x" }).blocked, "", "… not blocked");
-        assertEqual(asked({ argv: ["tailscale", "up"] }).blocked, "untrusted", "argv[0] not absolute: untrusted");
-        assertEqual(asked({ program: { declared: false } }).blocked, "untrusted", "argv[0] not one of the module's programs: untrusted");
-        const untrusted = asked({ program: { declared: true, trusted: false, reason: "others than root can change /home/u/bin" } });
-        assert(untrusted.blocked === "untrusted" && untrusted.error.includes("/home/u/bin"), "a program found untrusted: untrusted, with why");
-        assertEqual(asked({ argv: ["/usr/bin/bash", "-c", "x"], program: Object.assign({}, program, { real: "/usr/bin/bash" }) }).blocked,
-                    "untrusted", "a shell: untrusted");
-        assertEqual(asked({ argv: ["/usr/bin/env", "tailscale"], program: Object.assign({}, program, { real: "/usr/bin/env" }) }).blocked,
-                    "untrusted", "env: untrusted");
-        assertEqual(asked({ argv: ["/usr/bin/runner", "x"], program: Object.assign({}, program, { real: "/usr/bin/busybox" }) }).blocked,
-                    "untrusted", "a link whose real file is busybox: untrusted");
-        assertEqual(asked({ argv: ["/nix/store/abc-pkexec/bin/pkexec", "x"], program: Object.assign({}, program, { real: "" }) }).blocked,
-                    "untrusted", "pkexec itself: untrusted");
-        const real = path => Object.assign({}, program, { real: path });
-        for (const path of ["/usr/bin/python3", "/usr/bin/python3.12", "/usr/bin/perl", "/usr/bin/perl5.38.2", "/usr/bin/ruby", "/usr/bin/node",
-                            "/usr/bin/lua5.4", "/usr/bin/luajit", "/usr/bin/php8.3", "/usr/bin/tclsh8.6", "/usr/bin/awk", "/usr/bin/gawk", "/usr/bin/mawk",
-                            "/usr/lib/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"])
-            assertEqual(asked({ argv: [path, "/home/u/script.py"], program: real(path) }).blocked, "untrusted", "an interpreter: untrusted (" + path + ")");
-        assertEqual(asked({ argv: ["/usr/bin/runner", "x"], program: real("/usr/bin/python3.12") }).blocked, "untrusted", "a link whose real file is an interpreter: untrusted");
-        for (const name of ["time", "prlimit", "setarch", "linux32", "linux64", "i386", "x86_64", "strace", "ltrace", "gdb", "bwrap", "capsh", "run0",
-                            "sudo", "doas", "su", "sg", "chroot", "unshare", "nsenter", "setsid", "setpriv", "nice", "ionice", "chrt", "taskset", "stdbuf",
-                            "nohup", "timeout", "flock", "xargs", "find", "dbus-run-session", "systemd-run", "busybox", "coreutils"])
-            assertEqual(asked({ argv: ["/usr/bin/" + name, "/bin/sh"], program: real("/usr/bin/" + name) }).blocked, "untrusted", "a launcher: untrusted (" + name + ")");
-        // NixOS: coreutils is one program, every tool a link to it; the tool is the name it is run by
-        const store = "/nix/store/abc-coreutils-9.5/bin/coreutils";
-        assertEqual(asked({ argv: ["/run/current-system/sw/bin/cp", "a", "b"], program: real(store) }), null, "NixOS: cp, a link to coreutils, passes");
-        assertEqual(asked({ argv: ["/run/current-system/sw/bin/chmod", "600", "/etc/x"], program: real(store) }), null, "… chmod too");
-        assertEqual(asked({ argv: ["/run/current-system/sw/bin/env", "/bin/sh"], program: real(store) }).blocked, "untrusted", "NixOS: env, a link to coreutils, is refused by its name");
-        assertEqual(asked({ argv: ["/run/current-system/sw/bin/timeout", "5", "/bin/sh"], program: real(store) }).blocked, "untrusted", "… timeout too");
-        assertEqual(asked({ argv: [store, "--coreutils-prog=env", "/bin/sh"], program: real(store) }).blocked, "untrusted", "coreutils itself: untrusted");
-        assertEqual(asked({ argv: ["/run/current-system/sw/bin/cp", "--coreutils-prog=env", "/bin/sh"], program: real(store) }).blocked, "untrusted",
-                    "a link to coreutils told --coreutils-prog=: untrusted");
-        assertEqual(asked({ argv: ["/usr/bin/mytool", "--coreutils-prog-shebang=env", "/bin/sh"], program: real(store) }).blocked, "untrusted",
-                    "… --coreutils-prog-shebang= too");
-        assertEqual(asked({ argv: ["/usr/bin/cp", "--coreutils-prog=env"], program: real("/usr/bin/cp") }), null,
-                    "Arch: cp is its own program; the word is only an argument to it");
-        assertEqual(asked({ argv: ["/usr/bin/tailscale", "up"], program: real("/usr/bin/tailscale") }), null, "an ordinary program passes");
-        assertEqual(asked({ argv: ["/usr/bin/python3-config"], program: real("/usr/bin/python3-config") }), null, "… a name that only begins like an interpreter's too");
+        const relative = asked({ argv: ["tailscale", "up"] });
+        assert(relative.notFound && relative.blocked === "" && relative.error.includes("absolute"),
+               "argv[0] not absolute (root's PATH is never searched): notFound: " + JSON.stringify(relative));
+        // The command is not parsed: whatever argv[0] is, an absolute path passes
+        for (const argv of [["/bin/sh", "-c", "id"], ["/usr/bin/env", "tailscale"], ["/usr/bin/python3", "-c", "x"],
+                            ["/usr/bin/timeout", "5", "/bin/sh"], ["/nix/store/abc-coreutils-9.5/bin/coreutils", "--coreutils-prog=env", "/bin/sh"],
+                            ["/home/u/.local/bin/tool"]])
+            assertEqual(asked({ argv: argv }), null, "an absolute argv[0] passes, whatever it is: " + argv[0]);
         // The order
         assertEqual(asked({ locked: true, options: rules.options({ timeoutMs: 1000 }) }).blocked, "locked", "locked before no-purpose");
         assertEqual(asked({ active: false, locked: true }).error, "the module is off", "module off before locked");
         assertEqual(asked({ options: rules.options({ timeoutMs: 1000 }), argv: ["/usr/bin/tailscale", "a\nb"] }).blocked, "no-purpose",
                     "no-purpose before unprintable");
-        assertEqual(asked({ argv: ["relative", "a\nb"], available: false }).blocked, "unprintable", "unprintable before availability and trust");
+        assertEqual(asked({ argv: ["/usr/bin/tailscale", "a\nb"], available: false }).blocked, "unprintable", "unprintable before availability");
+        assert(asked({ argv: ["relative"], active: false }).notFound, "a relative argv[0] (notFound) before the module off");
         assertEqual(rules.refusedResult(asked({ locked: true })).dismissed, true, "a run refused for the lock is dismissed too");
-        assertEqual(rules.refusedResult(asked({ program: { declared: false } })).dismissed, false, "… other refusals are not");
+        assertEqual(rules.refusedResult(asked({ options: rules.options({ timeoutMs: 1000 }) })).dismissed, false, "… other refusals are not");
 
         // --- the words handed to pkexec ---
         assertEqual(JSON.stringify(rules.pkexecArgv("/run/wrappers/bin/pkexec", "/usr/bin/timeout", 30000, 3000, ["/usr/bin/tailscale", "file", "cp", "--", "-x"])),

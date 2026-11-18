@@ -28,44 +28,11 @@ Singleton {
     readonly property int headStrictMs: 120000
     // `what` is kept to this many characters (the prompt cuts it shorter where it shows it)
     readonly property int whatMaxLength: 200
-    readonly property var blockedReasons: ["locked", "untrusted", "no-purpose", "unprintable"]
+    readonly property var blockedReasons: ["locked", "no-purpose", "unprintable"]
 
     // Where the shell looks for pkexec: NixOS's setuid wrappers first (the store's copy is
     // not setuid and cannot work), then the system's directories (Arch: /usr/bin)
     readonly property string pkexecSearchPath: "/run/wrappers/bin:" + ModuleRules.probeToolPath
-
-    // Programs that run another program named in their arguments, by its name in argv[0]:
-    // shells, env and its kind, what runs a command under other limits, ids, namespaces or
-    // a tracer, and the multi-call programs that hold them (busybox, toybox, coreutils). As
-    // argv[0] of a privileged run they would make the real program an argument that nobody
-    // judged, so such a run is `untrusted`. Not exhaustive, and only argv[0] is judged: a
-    // program that can run a command through an option of its own (sed's `e`, tar's
-    // --to-command) passes — review catches that in the project's own modules, the rule
-    // does not.
-    readonly property var launchers: [
-        "sh", "bash", "dash", "zsh", "fish", "ksh", "mksh", "oksh", "loksh", "pdksh", "ash", "yash",
-        "csh", "tcsh", "rc", "es", "nu", "elvish", "xonsh", "osh", "pwsh",
-        "busybox", "toybox", "coreutils",
-        "env", "sudo", "doas", "pkexec", "su", "sg", "newgrp", "runuser", "run0", "setpriv", "capsh",
-        "setsid", "nohup", "nice", "ionice", "chrt", "taskset", "numactl", "stdbuf", "unbuffer", "timeout",
-        "time", "prlimit", "setarch", "linux32", "linux64", "i386", "x86_64", "uname26",
-        "strace", "ltrace", "gdb", "lldb", "valgrind", "perf", "catchsegv",
-        "chroot", "unshare", "nsenter", "bwrap", "firejail", "runcon", "chpst", "cgexec",
-        "flock", "xargs", "find", "parallel", "watch", "script", "expect",
-        "dbus-run-session", "dbus-launch", "systemd-run", "systemd-nspawn", "machinectl",
-        "start-stop-daemon", "daemonize", "nix", "nix-shell"
-    ]
-    // Interpreters: refused as argv[0] outright. Nothing from a module's directory runs as
-    // root, so an interpreter as root has no use but running code nobody judged — a script
-    // named in its arguments, or code in them (python3 -c, perl -e, awk's system()).
-    readonly property var interpreters: ["node", "nodejs", "deno", "bun", "awk", "gawk", "mawk", "nawk", "busybox-awk",
-        "Rscript", "R", "irb", "jshell", "sbcl", "clisp", "racket", "ghci", "runghc", "dotnet", "java"]
-    // … with a version in the name (python3.12, perl5.38.2, lua5.4, php8.3); and the dynamic
-    // loader, which runs the program named after it (ld-linux-x86-64.so.2 /bin/sh)
-    readonly property var _interpreterPatterns: [
-        /^(python|pypy|perl|ruby|lua|luajit|php|tclsh|wish|jimsh|guile|julia)[0-9.]*(-[0-9.]+)?$/,
-        /^ld(-[^/]*)?\.so(\.[0-9]+)*$/
-    ]
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]
 
@@ -150,57 +117,23 @@ Singleton {
         return result;
     }
 
-    // The last part of a path
-    function baseName(path) {
-        return String(path ?? "").replace(/\/+$/, "").replace(/^.*\//, "");
-    }
-
-    // Whether a program's name (the last part of its path) is a launcher or an interpreter
-    function runsOthersByName(name) {
-        const base = baseName(name);
-        return base !== "" && (launchers.includes(base) || interpreters.includes(base)
-                               || _interpreterPatterns.some(pattern => pattern.test(base)));
-    }
-
-    // Whether a program, by its path, runs another named in its arguments (launchers,
-    // interpreters)
-    function launcher(path) {
-        return runsOthersByName(path);
-    }
-
-    // Whether a run's argv[0] would run another program than the one judged: → "" or why.
-    // `real`: its real file's path ("" unknown). Judged by the name argv[0] has — what a
-    // multi-call program goes by — and by its real file's name, except where the real file
-    // is coreutils: NixOS builds coreutils as one program that every tool (cp, chmod, env)
-    // is a link to, and it runs the tool its argv[0] names (judged already), or with a first
-    // argument `--coreutils-prog=<tool>` (or `--coreutils-prog-shebang=`) the one named
-    // there — which is refused. So `cp` passes there, and `env` does not.
-    function launcherProblem(argv, real) {
-        if (!Array.isArray(argv) || typeof argv[0] !== "string")
-            return "no program";
-        if (runsOthersByName(argv[0]))
-            return "a program that runs another named in its arguments (a shell, env, an interpreter and the like)";
-        const realName = baseName(real);
-        if (realName === "coreutils") {
-            if (argv.length > 1 && String(argv[1]).startsWith("--coreutils-prog"))
-                return "coreutils told by --coreutils-prog which of its tools to run";
-            return "";
-        }
-        if (realName !== "" && runsOthersByName(realName))
-            return "a link to a program that runs another named in its arguments (" + realName + ")";
-        return "";
-    }
-
-    // Why a run is refused before pkexec runs, or null when it may be queued. `request`:
+    // Why a run is refused before pkexec runs, or null when it may be queued. These checks
+    // catch a module's mistakes and keep the password prompt honest: it shows the command as
+    // it is (no word it could not show), with a purpose, and argv[0] is a path, never a name
+    // that root's PATH would resolve. They do not stop a hostile module: modules run in the
+    // shell's process and could start pkexec themselves. What protects the user from an
+    // outside module is the prompt saying who asks, what for and the exact command, and the
+    // warning when a module that does not ship with the shell is first enabled.
+    // `request`:
     //   argv (the caller's copy, CommandRules.argvSnapshot's `words`: what is judged here is
     //   what runs), options (options() of what was given), active (the module is on), locked (the
-    //   session), available and unavailableReason (module.privileged's), program — what the
-    //   module's handle knows of argv[0]: { declared (the path of one of its programs),
-    //   trusted, reason, real (its real path, "" unknown) }
+    //   session), available and unavailableReason (module.privileged's)
     // → { blocked ("" | a blockedReasons word), notFound (bool), error }. In this order: what
-    // was asked wrongly (error), a program that was not found (notFound: argv[0] is "", the
-    // path a missing program has), the module off, the session locked, no purpose, a word
-    // that cannot be shown, pkexec or timeout missing (error), argv[0] not trusted.
+    // was asked wrongly (error), a program that cannot be found (notFound: argv[0] is "", the
+    // path a missing program has, or not an absolute path), the module off, the session
+    // locked, no purpose, a word that cannot be shown, pkexec or timeout missing (error).
+    // Whether argv[0] is there and an executable file is looked at when the run's turn comes
+    // (the queue's "checking": notFound).
     function refusal(request) {
         const refuse = (blocked, error, notFound) => ({ blocked: blocked, notFound: notFound === true, error: error });
         const options = request?.options ?? { problem: "the options are not an object" };
@@ -213,6 +146,8 @@ Singleton {
             return refuse("", "the program was not found", true);
         if (problem !== "")
             return refuse("", problem);
+        if (!argv[0].startsWith("/"))
+            return refuse("", ModuleRules.show(argv[0].slice(0, 200)) + " is not an absolute path (a program's path, as module.programs has it)", true);
         if (request.active !== true)
             return refuse("", "the module is off");
         if (request.locked === true)
@@ -225,17 +160,6 @@ Singleton {
         }
         if (request.available !== true)
             return refuse("", String(request.unavailableReason || "running as administrator is not available"));
-        const program = request.program ?? {};
-        const shown = ModuleRules.show(argv[0].slice(0, 200));
-        if (!argv[0].startsWith("/"))
-            return refuse("untrusted", shown + " is not an absolute path (a program's path from module.programs)");
-        if (program.declared !== true)
-            return refuse("untrusted", shown + " is not one of the module's programs (requires.programs, optionalPrograms)");
-        if (program.trusted !== true)
-            return refuse("untrusted", shown + " is not trusted" + (program.reason ? ": " + program.reason : ""));
-        const runsOthers = launcherProblem(argv, program.real);
-        if (runsOthers !== "")
-            return refuse("untrusted", shown + " is " + runsOthers + ": what it runs nothing would judge");
         return null;
     }
 

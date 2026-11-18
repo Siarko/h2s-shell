@@ -115,10 +115,7 @@ TestCase {
         assert(_path("pkexec").endsWith("/tests/programs/pkexec"), "its pkexec is its stand-in: " + _path("pkexec"));
         ModuleTestKit.clearRecords();
         const talk = _path("talk");
-        _start("shell", [_path("sh"), "-c", "true"]);
-        _start("undeclared", ["/bin/true"]);
         _start("relative", ["talk", "lines", "1", "0"]);
-        _start("pkexec", [_path("pkexec"), talk]);
         _start("newline", [talk, "lines", "a\nb"]);
         _start("rtl", [talk, "lines", "report‮fdp.exe"]);
         _start("purpose", [talk, "lines", "1", "0"], { what: " ​\n " });
@@ -133,11 +130,11 @@ TestCase {
         ModuleTestKit.setSessionLocked(false);
         assert(Object.keys(_runs).every(name => !_runs[name].handle || _runs[name].handle.running === false),
                "a refused run is not running from the start");
-        _then("every refusal is answered", () => _done("shell", "undeclared", "relative", "pkexec", "newline", "rtl", "purpose", "absent",
+        _then("every refusal is answered", () => _done("relative", "newline", "rtl", "purpose", "absent",
                                                        "no limit", "too short", "too long", "locked"), () => {
             const blocked = name => _runs[name].result.blocked;
-            for (const name of ["shell", "undeclared", "relative", "pkexec"])
-                assertEqual(blocked(name), "untrusted", name + ": untrusted (" + _runs[name].result.error + ")");
+            const relative = _runs.relative.result;
+            assert(relative.notFound && relative.blocked === "" && !relative.ok, "argv[0] not an absolute path: notFound: " + JSON.stringify(relative));
             assertEqual(blocked("newline") + " " + blocked("rtl"), "unprintable unprintable", "a newline, U+202E in a word: unprintable");
             assertEqual(blocked("purpose"), "no-purpose", "what empty after cleaning: no-purpose");
             const locked = _runs.locked.result;
@@ -151,10 +148,25 @@ TestCase {
                 assert(!record.doneInside && record.lines.length === 0 && Object.isFrozen(record.result) && record.result.code === -1,
                        name + ": answered after start() returned, frozen, nothing ran");
             }
-            assertEqual(ModuleTestKit.notified.map(entry => entry.summary).join(", "), "absent failed",
-                        "refusals notify nothing — the locked one quietly — but the program not found");
-            _swapped();
+            assertEqual(ModuleTestKit.notified.map(entry => entry.summary).join(", "), "relative failed, absent failed",
+                        "refusals notify nothing — the locked one quietly — but a program not found");
+            _unparsed();
         });
+    }
+
+    // --- The command is not parsed: a program named as a shell, handed `-c`, runs like any
+    // other ---
+    function _unparsed() {
+        _runs = {};
+        const shell = _path("sh");
+        _start("shell", [shell, "-c", "echo hi"]);
+        _then("the shell's run is answered", () => _done("shell"), () => {
+            const result = _runs.shell.result;
+            const words = _pkexecWords(result);
+            assert(result.ok && result.blocked === "" && words[4] === shell, "it ran through pkexec: " + JSON.stringify(result));
+            assertEqual(result.stdout, "sh ran: -c echo hi", "… with its words as given");
+        });
+        _then("the queue is idle", () => _idle(), () => _swapped());
     }
 
     // The words the stand-in pkexec printed it was given, after "pkexec:"
@@ -162,19 +174,19 @@ TestCase {
         return result.stderr.split("\n").filter(line => line.startsWith("pkexec:")).map(line => line.slice(7));
     }
 
-    // --- argv read once: an accessor or a Proxy that shows a trusted program to the checks
-    // and /bin/sh at the start runs the trusted program, or nothing ---
+    // --- argv read once: an accessor or a Proxy that shows one program to the checks and
+    // another at the start runs the first, or nothing ---
     function _swapped() {
         _runs = {};
         const talk = _path("talk");
         const shell = _path("sh");
-        // Element 0 answers `talk` for its first `trusted` reads, then the shell: whichever
+        // Element 0 answers `talk` for its first `firstReads` reads, then the shell: whichever
         // read the start would take, it must be the one that was judged
-        for (let trusted = 1; trusted <= 12; trusted++) {
+        for (let firstReads = 1; firstReads <= 12; firstReads++) {
             const argv = ["x", "-c", "echo PWNED"];
             let reads = 0;
-            Object.defineProperty(argv, 0, { get() { return ++reads <= trusted ? talk : shell; }, enumerable: true });
-            _start("accessor " + trusted, argv);
+            Object.defineProperty(argv, 0, { get() { return ++reads <= firstReads ? talk : shell; }, enumerable: true });
+            _start("accessor " + firstReads, argv);
         }
         // A Proxy: element 0 and `length` change after their first read
         const asked = { word: 0, length: 0 };

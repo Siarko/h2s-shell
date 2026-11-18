@@ -68,11 +68,10 @@ Singleton {
 
     // A module's run (module.privileged.start). `handle`: the module's handle (moduleId,
     // active, notify(), _privilegedKey); `facts`: { testMode, tools (PrivilegedRules
-    // .availability), programAt(path) (what the handle knows of a path: PrivilegedRules
-    // .refusal's `program`) } → { running, cancel() }. `done` is called once, never inside
+    // .availability) } → { running, cancel() }. `done` is called once, never inside
     // this call, and never while the module is off (a run asked for then is not answered).
     // `argv` and `options` are read once, here (CommandRules.argvSnapshot, a real array
-    // only; PrivilegedRules.options): the program judged, the words shown and the words
+    // only; PrivilegedRules.options): the words judged, the words shown and the words
     // handed to pkexec are that one copy.
     function start(handle, argv, options, facts) {
         const parsed = PrivilegedRules.options(options);
@@ -101,13 +100,11 @@ Singleton {
             job.answered = true;
             return runHandle;
         }
-        const first = words !== null && typeof words[0] === "string" ? words[0] : "";
         const refused = parsed.problem === "" && words === null
             ? { blocked: "", notFound: false, error: snapshot.problem }
             : PrivilegedRules.refusal({
                 argv: words, options: parsed, active: handle.active === true, locked: locked,
-                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? "",
-                program: typeof facts?.programAt === "function" ? facts.programAt(first) : null
+                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? ""
             });
         if (refused) {
             if (refused.blocked !== "locked")

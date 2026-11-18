@@ -112,7 +112,7 @@ module.privileged.start(argv, options) → handle { running, cancel() }
 options = { what (required), timeoutMs (required, 1 s … 1 h), onStdout, onStderr, onLine,
             notifyFailures: true, done }
 result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, cancelled,
-            blocked ("" | "locked" | "untrusted" | "no-purpose" | "unprintable"), error }
+            blocked ("" | "locked" | "no-purpose" | "unprintable"), error }
 ```
 
 - **Where pkexec is.** NixOS: the setuid wrapper, `/run/wrappers/bin/pkexec` (the store's
@@ -141,15 +141,19 @@ result  = { ok, code, stdout, stderr, dismissed, refused, notFound, timedOut, ca
   user's click stays a development rule, checked in review and by the module's tests for
   the project's own modules. An outside module has no review; for it, and for every
   module, what the user gets is a prompt that says who asks and what for.
-- **Refused before pkexec runs:**
-  - `untrusted`: `argv[0]` has no trusted verdict (§3.2), or is a shell or `env` (then the
-    real program would be an argument nobody checked). What is left open, said honestly:
-    only `argv[0]` is judged, so a trusted interpreter given a script from the module's
-    own directory passes. Review catches it in the project's own modules; the rule does
-    not, and for an outside module nothing does but the command shown in the prompt.
+- **Refused before pkexec runs** (the owner's decision, 2026-11-18): the command is not
+  parsed. `argv[0]` need not be one of the module's programs, and no list of shells,
+  launchers or interpreters is kept: modules run in the shell's process with no sandbox
+  (§2), so a hostile module could start pkexec itself, and such a list is never complete.
+  The checks catch mistakes and keep the prompt honest; what protects the user from an
+  outside module is the prompt's who, what for and exact command (A5) and the warning when
+  it is first enabled.
+  - `notFound`: `argv[0]` is `""`, not an absolute path (root's `PATH` is never searched),
+    or not an executable file when the run's turn comes.
   - `unprintable`: a word of `argv` holds a control or format character (Unicode Cc, Cf:
-    a newline, a right-to-left override). Such a command could not be shown as it is.
-  - `locked`; `no-purpose` (`what` empty after cleaning); `notFound` as today.
+    a newline, a right-to-left override, U+2028–U+202E). Such a command could not be shown
+    as it is.
+  - `locked`; `no-purpose` (`what` empty after cleaning).
 - **The session locks:** the open prompt is closed and every waiting run ends as
   `dismissed`, quietly, with `blocked: "locked"`; the user clicks again after unlocking.
   The prompt is a window above everything (`polkit/AuthPrompt.qml`), and a password asked
