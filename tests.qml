@@ -46,6 +46,7 @@ QtObject {
     property var _lockIoRules: LockIoRulesTest {}
     property var _testSeamRules: TestSeamRulesTest {}
     property var _testSeamsShape: TestSeamsShapeTest {}
+    property var _lockscreenShape: LockscreenShapeTest {}
     property var _pointerInput: PointerInputTest {}
     property var _buttonKinds: ButtonKindsTest {}
     property var _pillSizes: PillSizesTest {}
