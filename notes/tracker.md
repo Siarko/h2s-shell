@@ -21,8 +21,58 @@ other public elements (fourth), the command runner and the module host on it (fi
 on `master` (below). The elements lane is done but for a module's icon (U7a). The first
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
-installed shell into a test tree (below). Module test mode (A3) is on `master` (below).
-Next in the commands lane: privileged start (A4).
+installed shell into a test tree (below). Module test mode (A3) and privileged start (A4)
+are on `master` (below). Next in the commands lane: the prompt says who and what for (A5).
+
+- [x] **API plan, A4 privileged start**: on `master` (2026-11-18; module API 1.11; reviewed
+      by a second agent on the diff, eight findings, all handled by a second author with
+      cases that fail before the fix; `tests/run-all.sh` passes on Arch, tools from `PATH`,
+      and on NixOS, tools from nix; the Tailscale module's suites pass against it).
+      `module.privileged` (`available`, `unavailableReason`, `start`) on the handle; one
+      shell-wide queue `singletons/PrivilegedRuns.qml`; pure rules in
+      `singletons/PrivilegedRules.qml` (not `PolkitRules.qml`, which only gained
+      `deniedNotice`); `PrivilegedAction` runs through the same queue; fixture
+      `tests/fixtures/modules/privileged` (suite `PrivilegedRunsTest`) is its own part of
+      `tests/run-all.sh`, not in `--quick`. Review findings fixed: argv (and options) read
+      once into a plain copy at the boundary — an accessor/Proxy argv got `/bin/sh` past
+      every refusal (high; also in `CommandRunner`'s test-mode guard and the legacy path);
+      launchers widened and **interpreters refused as argv[0] outright** (the lead's call,
+      stricter than §3.4, which let an interpreter with a script pass: nothing from a
+      module's directory runs as root, so an interpreter as root has no module use); on
+      NixOS the multi-call `coreutils` refuses only `--coreutils-prog`; U+2028/2029
+      unprintable; the legacy default `elevate: ["pkexec"]` takes the trusted setuid
+      pkexec outside test mode; the queue's clock is monotonic (`ElapsedTimer`). The two
+      points left open before:
+  - **pdeathsig and setuid:** pkexec gets `<pkexec> <trusted timeout> -k 3 <limit> <argv…>`;
+    nothing is wrapped around pkexec. `cancel()` sends TERM (ends pkexec while it asks);
+    once the command runs as root it ends at its own limit. Pinned by the fixture suite.
+    Quickshell 0.3.2's `~Process` kills and never waits (read in its source), so a reload
+    during a root run does not block; the `QProcess` leaks until the child exits.
+  - **The gate for modules below 1.10:** unchanged; the queue repeats the test-mode check
+    per run. `module.privileged` has no gate: in test mode only `<testPrograms>/pkexec`,
+    without one `available` is false.
+  Left open:
+  - **For A5:** with the agent `active` or `conflict`, any polkit request seen while the
+    head asks counts as the head's (also a foreign one, or one open at launch) until
+    `PolkitRules.announces`; a run whose pkexec has started is left to its prompt when the
+    session locks (only waiting runs end `locked`); the prompt's lines. With any other agent
+    state the head is held until the run exits, at most 2 minutes. A6 sends its
+    notification from the queue's launch step; `ModuleTestKit.setPolkitAgent` exists.
+  - `timeoutMs` starts when the command runs as root: a prompt left open is not bounded and
+    holds the queue (said in `Api.qml`). `timeout`'s own 125/126/127 read as failure,
+    dismissed, refused (said; the check just before launch makes 127 rare).
+  - The legacy `PrivilegedAction` has none of the refusals (until Z), and an explicit path
+    in `elevate` outside test mode runs as given. It is not yet listed in a module's
+    `deprecations` (needs a scan of where the type is used).
+  - The lock state is `Profiles.screenLocked`, not `Lockscreen.locked` (reading
+    `Lockscreen` would create it in the suites). pkexec is looked up once.
+  - Two small races: an answer made just before a module is turned off and on within one
+    event-loop turn is delivered; a request opening and closing within one turn is missed
+    (the head then releases by the 2 s rule).
+  - The non-test-mode legacy pkexec swap, the monotonic clock, the real pkexec, the NixOS
+    wrapper, pkexec on TERM and the real agent's flow were not exercised: suites run in
+    test mode on stand-ins only. The fixture's timing windows (1.5–4.5 s around the 2 s
+    release) may flake under heavy load.
 
 - [x] **API plan, A3 module test mode**: on `master` (2026-11-18; module API 1.10; reviewed
       by a second agent on the diff, three findings — a module could switch test mode on
@@ -55,7 +105,7 @@ Next in the commands lane: privileged start (A4).
   - `ModuleHandle.host` is still handed to modules (renamed in Z); nothing on it changes
     the mode.
   - Left for later slices: `ModuleTestKit` anchors, chooser, `setSystem`, `setNow`;
-    privileged runs through `<testPrograms>/pkexec` (A4).
+    privileged runs through `<testPrograms>/pkexec` (A4, done).
   - `/run/wrappers/bin/pkexec` as a link target was refused on Arch only because it does
     not exist there; not exercised on NixOS beyond the full run.
   - Seen once, not this change: unit suites failed with `TypeError: Cannot read property
@@ -117,7 +167,8 @@ Next in the commands lane: privileged start (A4).
       module API 1.8: `singletons/io/CommandRunner.qml`, `CommandRules`, `CommandTools`,
       `api/CommandRunner.qml`; `CommandAction`, `CommandQuery` and xdg-open run through
       it) and the module host's four checks on it (A1b). Left open:
-  - **For A4 (privileged start):** a run with a limit starts as
+  - **For A4 (privileged start), answered there (the trusted `timeout` inside pkexec):** a
+    run with a limit starts as
     `timeout -k … setpriv --pdeathsig KILL -- <command>`, so the command dies when
     `timeout` is killed. The kernel drops that request for a setuid program: a `pkexec`
     run is not protected by it and needs its own answer.
