@@ -629,10 +629,12 @@ in milliseconds — `singletons/Format.qml`), `Api.address` (IPv4, IPv6, network
 `parseCidr`, `contains`, `overlap`, `redact` — `singletons/AddressRules.qml`, the reader the
 shell's network settings use too), `Api.minuteNow` (the start of the current minute, for
 "5 min ago" without a clock of the module's own), `module.log(level, text, key)` (a line
-"[<id>] …"; with a key, written only when that key's text changed — a failure once, not
-once per attempt) and notifications with `format: "plain"` (`Notifier.prepared`: summary
-and body on one line, control characters dropped, capped, the body's `&`, `<`, `>` shown as
-written) for any text from outside.
+"[<id>] …"; with a key, written only when that key's level or text changed — a failure
+once, not once per attempt) and notifications with `format: "plain"` (`Notifier.prepared`:
+summary and body on one line, control and format characters dropped, capped, the body's
+`&`, `<`, `>` shown as written) for any text from outside. A module's notification never
+carries the shell's own category (`x-qs-shell`, the toast at the bottom of the screen:
+`ModuleRules.moduleNotifyOptions`).
 
 **The command runner** (`api/CommandRunner.qml`; inside it and in the shell's own code
 `singletons/io/CommandRunner.qml`): `start(argv, options)` starts a command — a list of

@@ -25,6 +25,8 @@
 #   module-selected   one of its two suites named: that one reports, alone    → must pass
 #   module-unknown    a name the module does not list: status 2, nothing run
 #   module-extra      (stand-in) more suites report than were selected        → must fail
+#   module-uncounted  (stand-in) a suite reports, but no line said how many   → must fail
+#                     would: with --suite and without
 #
 # the suite count against a small root file whose suites are written with and without
 # arguments (`arguments`: each one must count), the suites a suite is given, read from the
@@ -239,6 +241,14 @@ check module-unknown "no suite ran" reports_nothing module-unknown.log
 } > "$work/module-extra"
 chmod +x "$work/module-extra"
 verdict module-extra module-extra 1 --suite GoodStateTest "$good"
+{
+    echo "#!$(command -v bash)"
+    echo "echo '  INFO: --- good: GoodState: 5/5 passed ---'"
+} > "$work/module-uncounted"
+chmod +x "$work/module-uncounted"
+verdict module-uncounted module-uncounted 1 --suite GoodStateTest "$good"
+check module-uncounted "said so" grep -q "no MODULE-SUITES-EXPECTED line" "$work/module-uncounted.log"
+verdict module-uncounted-all module-uncounted 1 "$good"
 
 # unreadable: a tests.qml whose suites cannot be read reliably (the `unbalanced` file) ends
 # the runner with status 2 before anything is started, with and without a name. The runner

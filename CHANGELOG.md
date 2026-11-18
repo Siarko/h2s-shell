@@ -22,7 +22,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   `format: "plain"` for `Api.notify` and `module.notify` (summary and body on one line,
   control characters dropped, capped at 200 and 1000 characters, the body's `&`, `<`, `>`
   shown as written). `ModuleTestKit` gains `setNow(ms)` for `Api.minuteNow`, and
-  `notified` entries a `format`.
+  `notified` entries a `format`. `redact` keeps what is around an address (a port, a
+  label, brackets: `[address]:443`) and leaves names with `::` in code alone; `module.log`
+  writes the same text again at another level, and a debug line not written (debug off)
+  is not remembered for its key; format "plain" drops format characters too (a
+  right-to-left override, a zero-width joiner); a module's notification cannot take the
+  shell's own category `x-qs-shell` (dropped, as an option or a hint). The clock
+  `setNow` sets is reset before each suite and by `clearRecords()`, and
+  `tests/run-modules.sh` fails a run that never said how many suites it would run.
 - 1.11: running as administrator through the handle — `module.privileged.start(argv,
   options)` runs a command (argv[0] an absolute path) as root through pkexec, with
   `what` (a few words saying what it does) and `timeoutMs` (1 s to 1 h) required, output as
@@ -552,6 +559,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- The shell's own short messages at the bottom of the screen ("Copied: …") show their text
+  as written, never as formatting, and so do a notification's app name, link and buttons.
 - A pill or a button that asks shows a label with line breaks on one line, at its usual
   height, instead of growing taller.
 - A switch that cannot be used is dimmed, as an unavailable button is; and an unavailable

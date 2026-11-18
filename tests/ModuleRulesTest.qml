@@ -983,5 +983,15 @@ TestCase {
         for (const target of ["tablet", "locktest", "shelltest", "lockscreen", "settings", "modules", "profiles", "fakevpn",
                               "authentication", "wallpaper", "popups", "controls", "tray-menu"])
             assert(rules.reservedIds.includes(target), "reserved: " + target);
+
+        // A module's notification never takes the shell's own categories (its toast)
+        const shellLike = rules.moduleNotifyOptions({ category: "x-qs-shell", body: "b", hints: { category: " X-QS-shell", "x-other": 1 } });
+        assertEqual(JSON.stringify(shellLike), "{\"body\":\"b\",\"hints\":{\"x-other\":1}}", "moduleNotifyOptions: an x-qs- category dropped, as an option and as a hint");
+        const given = { category: "im.received", hints: { category: "transfer" } };
+        assertEqual(JSON.stringify(rules.moduleNotifyOptions(given)), JSON.stringify(given), "moduleNotifyOptions: another category kept");
+        const hinted = { hints: { category: "x-qs-shell" } };
+        rules.moduleNotifyOptions(hinted);
+        assertEqual(hinted.hints.category, "x-qs-shell", "moduleNotifyOptions: the module's own object untouched");
+        assertEqual(JSON.stringify(rules.moduleNotifyOptions(null)) + JSON.stringify(rules.moduleNotifyOptions("x")), "{}{}", "moduleNotifyOptions: not an object → {}");
     }
 }

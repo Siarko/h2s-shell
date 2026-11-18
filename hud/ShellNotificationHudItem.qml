@@ -102,7 +102,10 @@ Item {
                 rightMargin: 16
                 verticalCenter: parent.verticalCenter
             }
+            // A summary from anywhere: shown as written, never as markup
             text: root.currentNotif?.summary ?? ""
+            textFormat: Text.PlainText
+            maximumLineCount: 1
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBodyLarge
             color: Theme.textPrimary

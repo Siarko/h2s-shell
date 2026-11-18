@@ -68,6 +68,19 @@ TestCase {
                     "redact: IPv4, IPv6, prefixes gone; versions and times kept");
         assertEqual(rules.redact("ends with 10.0.0.1."), "ends with [address].", "redact: a full stop after an address stays");
         assertEqual(rules.redact("prefix fd7a:115c:a1e0:: and fd00::1: then"), "prefix [address] and [address]: then", "redact: an IPv6 ending in \"::\", and a colon after one");
+        // Neighbours of an address: a port, a label, hex letters glued on
+        assertEqual(rules.redact("connect to 192.168.1.5:443 failed"), "connect to [address]:443 failed", "redact: an IPv4 with a port, the port kept");
+        assertEqual(rules.redact("100.64.0.4:41641"), "[address]:41641", "redact: an IPv4 and port alone");
+        assertEqual(rules.redact("peer:10.0.0.1 down"), "peer:[address] down", "redact: a label and colon before an IPv4");
+        assertEqual(rules.redact("ID:10.0.0.1"), "ID:[address]", "redact: a hex-letter label before an IPv4");
+        assertEqual(rules.redact("Bad10.0.0.1"), "Bad[address]", "redact: hex letters glued before an IPv4");
+        assertEqual(rules.redact("dial [fd7a::1]:41641 refused"), "dial [[address]]:41641 refused", "redact: an IPv6 in brackets with a port");
+        assertEqual(rules.redact("peer:fd00::1 down, 10.0.0.0/8:x"), "peer:[address] down, [address]:x", "redact: a label before an IPv6; a prefix before a colon");
+        assertEqual(rules.redact("1.2.3.4.5 and 01.2.3.4"), "1.2.3.4.5 and 01.2.3.4", "redact: not addresses, neither in part");
+        // "::" in code is not an address
+        assertEqual(rules.redact("std::string and anyhow::Error"), "std::string and anyhow::Error", "redact: names with \"::\" stay");
+        assertEqual(rules.redact("Foo::bar, a :: b, cafe::beef_x"), "Foo::bar, a :: b, cafe::beef_x", "redact: hex letters glued to \"::\", a bare \"::\"");
+        assertEqual(rules.redact("from ::1 and ::ffff:10.0.0.1"), "from [address] and [address]", "redact: \"::1\" and a mapped IPv4");
         assertEqual(rules.redact("x".repeat(2500)).length, 2000, "redact: at most 2000 characters read");
         assertEqual(rules.redact(null) + rules.redact(42), "", "redact: not a text");
 

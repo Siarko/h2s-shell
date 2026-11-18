@@ -82,6 +82,8 @@ QtObject {
                 _fail(entry.module + ": " + entry.file + " does not compile: " + component.errorString().trim());
                 continue;
             }
+            // A clock a suite before set (ModuleTestKit.setNow) is not this suite's
+            ModuleTestKit.setNow(0);
             let suite = null;
             try {
                 suite = component.createObject(root);

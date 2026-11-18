@@ -1,5 +1,6 @@
 import QtQuick
 import qs.singletons
+import qs.hud
 
 // Notifier's pure parts: format "plain" (what it makes of a summary and a body) and the words
 // notify-send gets for it. Nothing is sent: send() is checked in module test mode, where it
@@ -7,11 +8,23 @@ import qs.singletons
 TestCase {
     suiteName: "Notifier"
 
+    property Component _shellToast: Component {
+        ShellNotificationHudItem {
+            screenWidth: 800
+            screenHeight: 600
+            screenModelData: ({ name: "test-screen" })
+        }
+    }
+
     function run() {
         // --- plainText: one line, no control characters, capped ---
         assertEqual(Notifier.plainText("a\nb\r\nc\td", 100), "a b c d", "plainText: line breaks and tabs become spaces");
         assertEqual(Notifier.plainText("a b c\u0085d", 100), "a b c d", "plainText: Unicode line and paragraph separators too");
         assertEqual(Notifier.plainText("be\u0007ll\u001b[31m\u007f\u009bx", 100), "bell[31mx", "plainText: other control characters dropped");
+        assertEqual(Notifier.plainText("evil\u202etxt.exe a\u200db\u2066c\u2069 \ufeffd", 100), "eviltxt.exe abc d", "plainText: format characters dropped (an override, a joiner, isolates, a BOM)");
+        assertEqual(Notifier.plainText("a\u2028b\u2029c", 100), "a b c", "plainText: line and paragraph separators become spaces");
+        assertEqual(Notifier.plainText("x\ud800y😀", 100), "xy😀", "plainText: a lone surrogate dropped, a pair kept");
+        assertEqual(Notifier.plainText("😀".repeat(3) + "\u202e", 3), "😀😀😀", "plainText: a dropped character does not count toward the cap");
         assertEqual(Notifier.plainText("x".repeat(10), 5), "xxxx…", "plainText: cut with …");
         assertEqual(Notifier.plainText("x".repeat(5), 5), "xxxxx", "plainText: at the cap, kept");
         assertEqual(Notifier.plainText("😀".repeat(6), 5), "😀😀😀😀…", "plainText: counted in characters, a pair never split");
@@ -43,5 +56,22 @@ TestCase {
         const dash = Notifier.prepared("-a evil", { body: "--action=x=y", format: "plain" });
         const dashArgv = Notifier.command(dash.summary, dash.options);
         assertEqual(JSON.stringify(dashArgv.slice(-3)), "[\"--\",\"-a evil\",\"--action=x=y\"]", "command: a text starting with \"-\" stays after \"--\"");
+
+        // --- the shell's own toast shows its summary as plain text ---
+        const toast = _shellToast.createObject(null);
+        const crafted = "<b>Copied</b><img src=\"http://example.invalid/\">";
+        toast.currentNotif = { summary: crafted };
+        const texts = [];
+        const collect = item => {
+            for (const child of item.children) {
+                if (child instanceof Text)
+                    texts.push(child);
+                collect(child);
+            }
+        };
+        collect(toast);
+        assert(texts.length > 0 && texts.every(text => text.textFormat === Text.PlainText), "shell toast: every text plain (" + texts.length + ")");
+        assert(texts.some(text => text.text === crafted), "shell toast: the summary as written");
+        toast.destroy();
     }
 }

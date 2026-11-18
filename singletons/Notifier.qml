@@ -46,40 +46,22 @@ Singleton {
     // shell's own server too, NotificationMarkup) and the summary as plain text. Text from
     // outside the shell — a module's, a command's output, a file's name — is sent with
     // format "plain": each text on one line (line breaks and tabs become spaces), other
-    // control characters dropped, cut with "…" at its cap; in the body "&", "<" and ">"
+    // control and format characters dropped, cut with "…" at its cap; in the body "&", "<" and ">"
     // become entities, so the daemon shows them as written. The summary is not escaped: the
     // spec has no markup there, and a daemon would show "&amp;".
     readonly property int plainSummaryCap: 200
     readonly property int plainBodyCap: 1000
 
-    // One text as plain sends it, before the body's escaping: one line, no control
-    // characters (C0, DEL, C1, U+2028/2029), at most `cap` characters. Not a string or a
-    // number: ""
+    // One text as plain sends it, before the body's escaping: one line (line breaks, tabs,
+    // U+2028/2029 as spaces), no control or format characters (PrivilegedRules.unprintableCode:
+    // C0, DEL, C1, a right-to-left override, a zero-width joiner), at most `cap` characters,
+    // counted by code point. Not a string or a number: ""
     function plainText(value, cap) {
         if (typeof value !== "string" && typeof value !== "number")
             return "";
-        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ")
-            .replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
-        const characters = _characters(folded);
-        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : folded;
-    }
-
-    // A text's characters, a surrogate pair kept whole (Array.from splits it here)
-    function _characters(text) {
-        const characters = [];
-        for (let i = 0; i < text.length; i++) {
-            const code = text.charCodeAt(i);
-            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-                const next = text.charCodeAt(i + 1);
-                if (next >= 0xdc00 && next <= 0xdfff) {
-                    characters.push(text.substr(i, 2));
-                    i++;
-                    continue;
-                }
-            }
-            characters.push(text[i]);
-        }
-        return characters;
+        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
+        const characters = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0)));
+        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : characters.join("");
     }
 
     // The summary and options as send() hands them on (pure): with format "plain" the

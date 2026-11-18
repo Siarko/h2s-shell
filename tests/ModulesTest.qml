@@ -123,7 +123,9 @@ TestCase {
             const goodHandle = host.handle("good");
             assert(goodHandle.log("info", "reading the state failed: no answer", "state"), "log: a key's first line is written");
             assert(!goodHandle.log("info", "reading the state failed: no answer", "state"), "log: the same text for the key again, not written");
-            assert(!goodHandle.log("warn", "reading the state failed: no\nanswer", "state"), "… also at another level, and with a line break where the space was");
+            assert(!goodHandle.log("info", "reading the state failed: no\nanswer", "state"), "… also with a line break where the space was");
+            assert(goodHandle.log("error", "reading the state failed: no answer", "state"), "log: the same text at another level, written");
+            assert(!goodHandle.log("error", "reading the state failed: no answer", "state"), "… and then not again");
             assert(goodHandle.log("info", "reading the state failed: refused", "state"), "log: the key's text changed, written");
             assert(goodHandle.log("info", "reading the state failed: no answer", "other"), "log: another key has its own memory");
             assert(goodHandle.log("info", "the state answers again", "state"), "log: the recovery, written");
@@ -134,12 +136,19 @@ TestCase {
             assertEqual(entry.level + "|" + entry.key + "|" + entry.write, "info|k|true", "logEntry: an unknown level is info; a changed text is written");
             assert(entry.line.startsWith("[good] a b[0mxx") && Array.from(entry.text).length === ModuleRules.logTextCap && entry.text.endsWith("…"),
                    "logEntry: \"[<id>]\", one line, control characters dropped, cut: " + entry.line.slice(0, 30));
-            assertEqual(ModuleRules.logEntry("good", "info", "same", "k", new Map([["k", "same"]])).write, false, "logEntry: the key's last text again → not written");
+            assertEqual(ModuleRules.logEntry("good", "info", "same", "k", new Map([["k", "info:same"]])).write, false, "logEntry: the key's last level and text again → not written");
+            assertEqual(ModuleRules.logEntry("good", "warn", "same", "k", new Map([["k", "info:same"]])).write, true, "logEntry: the same text at another level → written");
             assertEqual(ModuleRules.logEntry("good", "info", "same", "", new Map([["", "same"]])).write, true, "logEntry: no key → always written");
             assertEqual(ModuleRules.logEntry("good", "info", "same", "k", { k: "same" }).write, true, "logEntry: a memory that is not a Map → none");
             assertEqual(ModuleRules.logEntry("good", "info", { toString: () => "x" }).text, "", "logEntry: text that is not a string or number → empty");
+            // debug: written only with the debug setting on, and not remembered while it is off
+            assertEqual(ModuleRules.logEntry("good", "debug", "d", "k", new Map(), false).write, false, "logEntry: a debug line, debug off → not written");
+            assertEqual(ModuleRules.logEntry("good", "debug", "d", "k", new Map(), true).write, true, "logEntry: a debug line, debug on → written");
+            assert(Profiles.value("general.debug") !== true, "the test config has debug off");
+            assert(!goodHandle.log("debug", "a debug line", "debug-key"), "log: a debug line with debug off → false");
+            assert(!goodHandle._logWritten.has("debug-key"), "… and not remembered, so it is written once debug is on");
             for (let i = 0; i < ModuleRules.maxLogKeys + 5; i++)
-                goodHandle.log("debug", "line", "key" + i);
+                goodHandle.log("info", "line", "key" + i);
             assertEqual(goodHandle._logWritten.size, ModuleRules.maxLogKeys, "log: at most maxLogKeys keys remembered");
             assert(!goodHandle._logWritten.has("key0") && goodHandle._logWritten.has("key" + (ModuleRules.maxLogKeys + 4)), "… the oldest dropped first");
             assertEqual(ModuleRules.minuteStart(1731400012345) + "|" + ModuleRules.minuteStart(NaN) + "|" + ModuleRules.minuteStart("5"), "1731399960000|0|0",

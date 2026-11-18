@@ -74,6 +74,7 @@ TestCase {
 
     function _run() {
         const standIn = module.directory + "/tests/stand-in.sh";
+        assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "the runner reset the clock GoodState left set (ModuleTestKit.setNow)");
         // --- the handle ---
         assert(module !== null, "Api.moduleAt(Qt.resolvedUrl(\".\")) finds the module's handle from any of its files");
         assert(module === Api.module("good"), "… the same object as Api.module(id)");
@@ -139,6 +140,12 @@ TestCase {
         assertEqual(JSON.stringify(plain[0]?.command?.slice(-3)), JSON.stringify(["--", "File <b>received</b>", "a&amp;b &lt;i&gt;.txt c.txt"]),
                     "… and so to notify-send");
         ModuleTestKit.clearRecords();
+        // A module's notification never takes the shell's own toast (category x-qs-shell)
+        module.notify("Looks like the shell", { category: "x-qs-shell" });
+        Api.notify("So does this", { hints: { category: "x-qs-shell" } });
+        assert(ModuleTestKit.notified.length === 2 && !ModuleTestKit.notified.some(entry => entry.command.some(word => word.includes("x-qs-shell"))),
+               "notify: the category x-qs-shell dropped, as an option and as a hint");
+        ModuleTestKit.clearRecords();
 
         // --- helpers (API 1.12) ---
         assertEqual([Api.format.bytes(1610612736), Api.format.bytes(3 * 1099511627776), Api.format.rate(12.4 * 1024)].join(","), "1.5 GB,3.0 TB,12 KB/s",
@@ -157,6 +164,9 @@ TestCase {
         assertEqual(Api.minuteNow, 1731399960000, "ModuleTestKit.setNow: Api.minuteNow follows, at the minute's start");
         ModuleTestKit.setNow(0);
         assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "… setNow(0): the real clock again");
+        ModuleTestKit.setNow(1731400012345);
+        ModuleTestKit.clearRecords();
+        assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "… clearRecords(): the real clock again");
         assert(module.log("info", "good: logged once", "good-key") && !module.log("info", "good: logged once", "good-key"), "module.log: once per text for a key");
 
         // --- its widget's presets (API 1.3) ---

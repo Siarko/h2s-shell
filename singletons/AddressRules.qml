@@ -83,26 +83,71 @@ Singleton {
     }
 
     // A text with every IPv4 and IPv6 address in it (with a prefix: "10.0.0.0/8") replaced
-    // by "[address]" — for a line that may show on a shared screen or in a log. Version
-    // numbers and times stay ("1.104.4", "12:30"). Not a string: "". At most redactMaxLength
-    // characters are read.
+    // by "[address]" — for a line that may show on a shared screen or in a log. What is
+    // around an address stays: a port ("[address]:443", "[[address]]:41641"), a label
+    // ("peer:[address]"), a full stop or colon after it. Version numbers and times stay
+    // ("1.104.4", "12:30"), and so do names with "::" in code ("std::string", "Foo::bar"):
+    // an IPv6 address has no letter, digit or "_" glued on either side, and a bare "::" is
+    // not one. Not a string: "". At most redactMaxLength characters are read.
     function redact(text) {
         if (typeof text !== "string")
             return "";
-        const isAddress = candidate => {
-            const address = candidate.replace(/\/\d{1,3}$/, "");
-            return _parseIpv4(address) !== null || _parseIpv6(address) !== null;
-        };
-        return text.slice(0, redactMaxLength).replace(/[0-9A-Fa-f:.]{3,}(?:\/\d{1,3})?/g, match => {
-            if (isAddress(match))
-                return redacted;
-            // A full stop or colon after it is the sentence's ("… at 10.0.0.1.", "fd00::1:")
-            const tail = /[.:]+$/.exec(match)?.[0] ?? "";
-            return tail !== "" && isAddress(match.slice(0, -tail.length)) ? redacted + tail : match;
-        });
+        const source = text.slice(0, redactMaxLength);
+        return source.replace(/[0-9A-Fa-f:.]+(?:\/\d{1,3})?/g, (match, offset) => _redactRun(source, match, offset));
     }
 
     // ---- Inside ----
+
+    // One run of address characters in `source` at `offset`, with each address in it
+    // replaced. The run may hold more than an address ("Bad10.0.0.1", "D:10.0.0.1",
+    // "100.64.0.4:41641"): an address starts at the run's start, after a "." or ":", or where
+    // a hex letter meets a digit, and ends at the run's end or before a "." or ":". From each
+    // start the longest address whose neighbours allow it is taken.
+    function _redactRun(source, match, offset) {
+        const prefix = /\/\d{1,3}$/.exec(match)?.[0] ?? "";
+        const run = match.slice(0, match.length - prefix.length);
+        const isSeparator = character => character === "." || character === ":";
+        const isDigit = character => character >= "0" && character <= "9";
+        const isWordCharacter = character => /^[A-Za-z0-9_]$/.test(character);
+        const before = index => source.charAt(offset + index - 1);
+        const after = index => source.charAt(offset + index);
+        // The neighbours an address of `family` between `from` and `to` of the run may have
+        const fits = (family, from, to) => {
+            const left = before(from);
+            const right = after(to);
+            const rightNext = after(to + 1);
+            if (family === 4)
+                return !isDigit(left) && left !== "." && !isDigit(right) && !(right === "." && isDigit(rightNext));
+            return !isWordCharacter(left) && left !== "." && !isWordCharacter(right)
+                && !(right === "." && isWordCharacter(rightNext));
+        };
+        let result = "";
+        let copied = 0;
+        for (let start = 0; start < run.length; start++) {
+            const opens = start === 0 || isSeparator(run[start - 1])
+                || (isDigit(run[start]) && !isDigit(run[start - 1]) && !isSeparator(run[start - 1]));
+            if (!opens)
+                continue;
+            let found = -1;
+            for (let end = Math.min(run.length, start + 45); end > start; end--) {
+                if (end < run.length && !isSeparator(run[end]))
+                    continue;
+                const candidate = run.slice(start, end);
+                const family = _parseIpv4(candidate) !== null ? 4
+                    : candidate !== "::" && _parseIpv6(candidate) !== null ? 6 : 0;
+                if (family !== 0 && fits(family, start, end === run.length ? match.length : end)) {
+                    found = end;
+                    break;
+                }
+            }
+            if (found < 0)
+                continue;
+            result += run.slice(copied, start) + redacted;
+            copied = found === run.length ? match.length : found;
+            start = found - 1;
+        }
+        return copied === 0 ? match : result + match.slice(copied);
+    }
 
     // The bits of byte `index` a prefix of `bits` keeps, as a mask
     function _maskByte(bits, index) {

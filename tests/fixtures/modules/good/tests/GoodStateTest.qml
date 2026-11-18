@@ -13,5 +13,7 @@ TestCase {
         assert(GoodState.mainSawHandle, "the main had its handle, active, in its Component.onCompleted");
         assertEqual(GoodState.registrations.length, 1, "the main's registration is in");
         assert(GoodState.ticking, "the singleton's timer runs while the module is active");
+        // Left set on purpose: the runner resets it before the next suite (GoodApiTest checks)
+        ModuleTestKit.setNow(1731400012345);
     }
 }

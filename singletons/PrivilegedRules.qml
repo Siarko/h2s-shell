@@ -57,6 +57,27 @@ Singleton {
         return ranges.some(range => code >= range[0] && code <= range[1]);
     }
 
+    // A text's characters by code point, a surrogate pair kept whole (Array.from and
+    // for…of split one in this engine). Not a string: none
+    function characters(text) {
+        if (typeof text !== "string")
+            return [];
+        const result = [];
+        for (let i = 0; i < text.length; i++) {
+            const code = text.charCodeAt(i);
+            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+                const next = text.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    result.push(text.substr(i, 2));
+                    i++;
+                    continue;
+                }
+            }
+            result.push(text[i]);
+        }
+        return result;
+    }
+
     // Whether a text holds a control, format or separator character
     function unprintable(text) {
         for (const character of String(text))

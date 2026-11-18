@@ -215,6 +215,7 @@ Rectangle {
 
             Text {
                 text: notifCard._appName
+                textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 font.bold: true
@@ -278,6 +279,7 @@ Rectangle {
                     selectionColor: Theme.selection
                     selectedTextColor: Theme.selectedText
                     text: notifCard._summary
+                    textFormat: TextEdit.PlainText
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
                     font.bold: true
@@ -419,6 +421,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text: notifCard._pendingLink
+                textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
@@ -486,6 +489,7 @@ Rectangle {
                         id: _actionLabel
                         anchors.centerIn: parent
                         text: modelData.text
+                        textFormat: Text.PlainText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textPrimary

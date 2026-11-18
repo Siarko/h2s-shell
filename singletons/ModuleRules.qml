@@ -895,6 +895,25 @@ Singleton {
         return typeof ms === "number" && Number.isFinite(ms) ? Math.floor(ms / 60000) * 60000 : 0;
     }
 
+    // A module's notification options as the core sends them (pure): a category in the
+    // shell's own namespace ("x-qs-…", the shell's toast is "x-qs-shell"), given as the
+    // category or as a hint, is dropped — a module's notification never looks like the
+    // shell's. Everything else as given; not an object: {}
+    function moduleNotifyOptions(options) {
+        if (options === null || typeof options !== "object")
+            return {};
+        const isShells = value => typeof value === "string" && /^\s*x-qs-/i.test(value);
+        const result = Object.assign({}, options);
+        if (isShells(result.category))
+            delete result.category;
+        if (result.hints !== null && typeof result.hints === "object" && isShells(result.hints.category)) {
+            const hints = Object.assign({}, result.hints);
+            delete hints.category;
+            result.hints = hints;
+        }
+        return result;
+    }
+
     // module.log's levels; another word is "info"
     readonly property var logLevels: ["debug", "info", "warn", "error"]
     // A line's text is cut here (with "…"), a key here
@@ -905,18 +924,21 @@ Singleton {
 
     // One line of module.log(level, text, key) → { level (one of logLevels), text (on one
     // line: line breaks and tabs as spaces, other control characters dropped, cut at
-    // logTextCap), key (cut at logKeyCap; "" none), line ("[<id>] <text>"), write }.
-    // `written`: a Map of each key to the text it wrote last (anything else: none). With a key
-    // a line is written only when its text is not the one the key wrote last; without one,
-    // always.
-    function logEntry(moduleId, level, text, key, written) {
+    // logTextCap), key (cut at logKeyCap; "" none), line ("[<id>] <text>"), memo (what the
+    // key remembers once it is written: the level and the text), write }.
+    // `written`: a Map of each key to the memo it wrote last (anything else: none). With a
+    // key a line is written only when its level or text is not the one the key wrote last;
+    // without one, always. A debug line with `debugOn` false is never written (and so not
+    // remembered).
+    function logEntry(moduleId, level, text, key, written, debugOn) {
         const cleanLevel = logLevels.includes(level) ? level : "info";
         const cleanText = _logText(text, logTextCap);
         const cleanKey = _logText(key, logKeyCap);
-        const lastText = cleanKey !== "" && written instanceof Map ? written.get(cleanKey) : undefined;
+        const memo = cleanLevel + ":" + cleanText;
+        const lastMemo = cleanKey !== "" && written instanceof Map ? written.get(cleanKey) : undefined;
         return {
-            level: cleanLevel, text: cleanText, key: cleanKey, line: "[" + String(moduleId) + "] " + cleanText,
-            write: cleanKey === "" || lastText !== cleanText
+            level: cleanLevel, text: cleanText, key: cleanKey, line: "[" + String(moduleId) + "] " + cleanText, memo: memo,
+            write: (cleanLevel !== "debug" || debugOn === true) && (cleanKey === "" || lastMemo !== memo)
         };
     }
 
@@ -924,26 +946,8 @@ Singleton {
         if (typeof value !== "string" && typeof value !== "number")
             return "";
         const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
-        const characters = _characters(folded);
+        const characters = PrivilegedRules.characters(folded);
         return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : folded;
-    }
-
-    // A text's characters, a surrogate pair kept whole (Array.from splits it here)
-    function _characters(text) {
-        const characters = [];
-        for (let i = 0; i < text.length; i++) {
-            const code = text.charCodeAt(i);
-            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-                const next = text.charCodeAt(i + 1);
-                if (next >= 0xdc00 && next <= 0xdfff) {
-                    characters.push(text.substr(i, 2));
-                    i++;
-                    continue;
-                }
-            }
-            characters.push(text[i]);
-        }
-        return characters;
     }
 
     // An object of Qt's (a QtObject, an Item) rather than plain data

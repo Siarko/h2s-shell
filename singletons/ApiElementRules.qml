@@ -40,7 +40,7 @@ Singleton {
         if (typeof text !== "string" && typeof text !== "number")
             return "";
         const folded = String(text).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
-        const characters = Array.from(folded);
+        const characters = PrivilegedRules.characters(folded);
         return characters.length > textCap ? characters.slice(0, textCap - 1).join("") + "…" : folded;
     }
 

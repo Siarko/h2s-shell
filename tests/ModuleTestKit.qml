@@ -21,8 +21,8 @@ import qs.api
 //                          actions (the labels), format ("plain" or ""; 1.12), command
 //                          (notify-send's words) }] — summary and body as they would be sent
 //   setNow(ms)             (1.12) the shell's clock for Api.minuteNow (the start of that
-//                          minute); 0: the real clock again
-//   clearRecords()         empties `opened` and `notified`
+//                          minute); 0: the real clock again. Reset before each suite
+//   clearRecords()         empties `opened` and `notified`, and sets the real clock again
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
@@ -124,7 +124,10 @@ Singleton {
             PrivilegedRuns.testLocked = on === true;
     }
 
+    // The links and notifications recorded, and the clock setNow set
     function clearRecords() {
+        if (Modules.host.testMode)
+            Api._testNow = 0;
         Api._opened = [];
         Notifier.clearRecorded();
     }

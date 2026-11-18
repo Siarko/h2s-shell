@@ -817,7 +817,9 @@ TestCase {
         assertEqual(rules.oneLine("x".repeat(rules.textCap)), "x".repeat(rules.textCap), "… a text as long as the cap kept");
         const cut = rules.oneLine("x".repeat(rules.textCap + 1));
         assert(Array.from(cut).length === rules.textCap && cut.endsWith("…"), "… a longer one cut to the cap, \"…\" at the end");
-        assertEqual(Array.from(rules.oneLine("😀".repeat(100))).length, rules.textCap, "… counted in characters, never splitting one");
+        assertEqual(rules.oneLine("😀".repeat(100)), "😀".repeat(rules.textCap - 1) + "…", "… counted in characters, never splitting one");
+        assertEqual(rules.oneLine("x".repeat(rules.textCap - 2) + "😀😀"), "x".repeat(rules.textCap - 2) + "😀😀", "… an emoji at the cap kept whole");
+        assertEqual(rules.oneLine("x".repeat(rules.textCap - 2) + "😀😀z"), "x".repeat(rules.textCap - 2) + "😀…", "… an emoji at the cut kept whole");
         assertEqual(rules.oneLine(null) + rules.oneLine(undefined) + rules.oneLine({}) + rules.oneLine(3), "3", "… not a text: \"\"; a number as written");
         assertEqual(rules.textCap, 80, "the cap is 80 characters");
         assertEqual(Array.from(_child(_inside(longButton), "QQuickText").text).length, rules.textCap, "a button's long label is capped");

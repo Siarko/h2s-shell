@@ -32,11 +32,14 @@ import qs.singletons.network
 //                          (1.12) options.format "plain": the summary and body are plain
 //                          text — use it for any text from outside (a command's output, a
 //                          peer's or a file's name): each on one line (line breaks and tabs
-//                          become spaces), other control characters dropped, the summary cut
+//                          become spaces), other control and format characters (a
+//                          right-to-left override, a zero-width joiner) dropped, the summary cut
 //                          at 200 characters and the body at 1000 with "…"; "&", "<" and ">"
 //                          in the body shown as written, never read as markup. A text that
 //                          starts with "-" is safe either way. Without it the body is markup,
-//                          as the notification spec has it
+//                          as the notification spec has it. A category of the shell's own
+//                          ("x-qs-…", its toast's "x-qs-shell"), as an option or a hint, is
+//                          dropped: a module's notification never looks like the shell's
 //   Api.openUrl(url, options)  opens a link in the user's programs (xdg-open, no shell): only
 //                          http:, https:, mailto: — file: with { allowFile: true }; anything
 //                          else (no scheme, a bare path, another scheme) refused, logged, false
@@ -67,8 +70,11 @@ import qs.singletons.network
 //                                       (each argument a text or parseCidr's result; anything
 //                                       else, or two families: false)
 //                            redact(text)   every address in a text (with a prefix too)
-//                                       replaced by "[address]"; version numbers and times
-//                                       stay; the first 2000 characters read
+//                                       replaced by "[address]", what is around it kept
+//                                       ("[address]:443", "[[address]]:41641",
+//                                       "peer:[address]"); version numbers, times and names
+//                                       with "::" in code ("std::string") stay; the first
+//                                       2000 characters read
 //   Api.minuteNow          (1.12) the time, in milliseconds since 1970, at the start of the
 //                          current minute: changes once a minute, on the minute — bind to it
 //                          for "5 min ago" and grace periods instead of a clock of the
@@ -78,8 +84,9 @@ import qs.singletons.network
 //                          <text>": level "debug" (only with the shell's debug setting),
 //                          "info", "warn", "error" (another word: "info"); the text on one
 //                          line, cut at 1000 characters. With `key` written only when the
-//                          text differs from the one last written for that key; → true
-//                          when written
+//                          level or text differs from the one last written for that key;
+//                          → true when written (a debug line with the setting off is not,
+//                          and is not remembered)
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:
@@ -454,7 +461,7 @@ Singleton {
     }
 
     function notify(summary, options) {
-        Notifier.send(String(summary), options ?? {});
+        Notifier.send(String(summary), ModuleRules.moduleNotifyOptions(options));
     }
 
     // A link, given to xdg-open as one argument (no shell). Only with a scheme, and only

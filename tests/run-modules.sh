@@ -28,7 +28,8 @@
 # a suite must never meet the real one.
 #
 # Exit status as tests/run-unit.sh: 0 when every suite passed, 1 when a check FAILed, a
-# module did not load, a suite timed out or did not report, a TypeError / ReferenceError was
+# module did not load, a suite timed out or did not report, the runner never said how many
+# suites it would run, a TypeError / ReferenceError was
 # printed or Quickshell exited non-zero, 2 when the runner could not be set up (no module
 # directory given, one that does not exist or has no module.json, a missing tool) or a --suite name
 # is no suite of the modules given, all of them loaded (nothing runs then).
@@ -81,14 +82,19 @@ if [ -n "$unknown" ]; then
     exit 2
 fi
 # The runner says how many suites it is about to create (the ones the loaded modules list,
-# or the named ones), before it runs any: a crash after that is caught by the count
+# or the named ones), before it runs any: a crash after that is caught by the count. Without
+# that line nothing says how many should have reported, so the run fails.
 expected=$(sed -n 's/^.*MODULE-SUITES-EXPECTED: \([0-9][0-9]*\).*$/\1/p' "$HEADLESS_LOG" | tail -n 1)
 if [ ${#suites[@]} -gt 0 ]; then
-    headless_verdict "Module suites" "${expected:-1}" "selected" exactly
+    headless_verdict "Module suites" "${expected:-0}" "selected" exactly
 else
-    headless_verdict "Module suites" "${expected:-1}" "the modules list"
+    headless_verdict "Module suites" "${expected:-0}" "the modules list"
 fi
 verdict=$?
+if [ -z "$expected" ]; then
+    echo "  the runner never said how many suites it would run (no MODULE-SUITES-EXPECTED line): quickshell stopped before them"
+    verdict=1
+fi
 if [ -e "$work/run/h2s-pkexec-on-path-ran" ]; then
     echo "  a pkexec found on PATH was started (module test mode allows only a module's <testPrograms>/pkexec)"
     verdict=1
