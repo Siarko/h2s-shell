@@ -1,6 +1,17 @@
 # Test seams: a gate, or a test tree
 
-For the owner to decide. Analysis and a trial of 2026-11-18, against `cafd3ce`.
+**Status (2026-11-18):** the owner chose Option 2 (the test tree, no gate), kept the name
+`TestSeams` for the production file of constants, and accepted manual use through a test
+tree on the condition that test runs are well documented. Built on branch `test-seams`: O1
+(production `TestSeams` constants, the reader and `TestSeamRules` in `tests/lock/seams/`,
+`TestSeamsShapeTest`, the bed's swap check), O2 (`scripts/seams.sh` and its test version for
+`lock-auth-methods.sh` and `launch.sh`), O3 (`moduleTestMode` → `ModuleHost.testMode`, told
+in `modules list`), L1 (`LockscreenShapeTest`), O4 (the `locktest` IPC in the test seam
+file), O5 (`tests/test-tree.sh`, used by `run.sh` too; `TestTreeTest`; docs in
+`tests/lock/README.md` "The test tree" and `docs/ARCHITECTURE.md` "The test tree"). Open:
+A3 (module test mode's effects) and O6.
+
+Analysis and a trial of 2026-11-18, against `cafd3ce`.
 **Verified** = read in the code or seen in the trial; **assumed** = not tried.
 
 ## 1. The problem

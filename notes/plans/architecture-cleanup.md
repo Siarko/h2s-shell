@@ -596,8 +596,8 @@ Each slice leaves every suite green. Size: S (under half a day), M (a day or two
 | Id | Slice | Size | Depends | Guard | Kind |
 |---|---|---|---|---|---|
 | L1 | Lockscreen child-order test (§2.6) | S | — | unit (new) | test only |
-| S1 | `TestSeams` singleton + gate + marker in the runners; Modules, VpnManager stand-in and CapsLockLed read it; Notifier sink replaces `lastProviderNotice` | M | V1, decision 7.5 | unit; lock bed full run (every test sets the marker); `tests/device/*` by hand on the Framework | behaviour-changing (seams need the gate) |
-| S2 | Lockscreen and `lock-auth-methods.sh` read the gate; `locktest` by `TestSeams.reloadIpc`; L1's list updated | S | S1, L1 | lock bed full run | behaviour-changing (tests only) |
+| S1 | *Replaced by the test tree (`test-seams.md`, O1–O4).* `TestSeams` singleton + gate + marker in the runners; Modules, VpnManager stand-in and CapsLockLed read it; Notifier sink replaces `lastProviderNotice` | M | V1, decision 7.5 | unit; lock bed full run (every test sets the marker); `tests/device/*` by hand on the Framework | behaviour-changing (seams need the gate) |
+| S2 | *Replaced by the test tree (`test-seams.md`, O1–O4).* Lockscreen and `lock-auth-methods.sh` read the gate; `locktest` by `TestSeams.reloadIpc`; L1's list updated | S | S1, L1 | lock bed full run | behaviour-changing (tests only) |
 | S3 | `TestIpc.qml` gathers kind-A IPC (names unchanged) | S | — | `tests/device/*`, lock bed `modules` | pure move |
 | S4 | Module: seam behind `Api.testBed` (or the marker file) | S | S1, **[api-next]** `Api.testBed` | module suites, module lock bed | behaviour-changing |
 
@@ -661,7 +661,8 @@ release 3.0.0 under the project's rule.
 - → (a): turning a shell on should not reorder the system's PAM stack for every polkit
   agent.
 
-**7.5 Test-seam gate (§3).**
+**7.5 Test-seam gate (§3).** *Replaced by the test tree (`test-seams.md`, the owner's
+choice of 2026-11-18): the shell reads no seam; only a copy with the test seam files does.*
 - (a) The variable plus a marker file in the private runtime directory.
 - (b) The variable alone, with a loud log.
 - (c) Leave the seams as they are, logging only.
