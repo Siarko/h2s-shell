@@ -16,10 +16,47 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
 (the owner). The test split is done; the next topic is the API plan's implementation
 (index [plans/api-next.md](plans/api-next.md)): the theme token test, the
 `ModuleRules.qml` split and the version gate (first batch), the file chooser trial and
-the bordered buttons (second), pills in three sizes and the public button (third) are on
-`master` (below). None of it was reviewed by a second agent; run on the Arch machine
+the bordered buttons (second), pills in three sizes and the public button (third), the
+other public elements (fourth) are on `master` (below). The elements lane is done but
+for a module's icon (U7a). None of it was reviewed by a second agent; run on the Arch machine
 only, not on the NixOS machine.
 
+- [ ] **API plan, fourth batch**: on `master` (2026-11-18, not reviewed): the public
+      controls (F2, module API 1.5: `Dropdown`, `InputField`, `Pill`, `Checkbox`,
+      `ToggleSwitch`, `PrivilegedMark` under `api/`), rows and texts (F3, 1.6: the new
+      `components/SettingsRow.qml` and `ExpandingRow.qml`, `api/SettingsRow.qml`,
+      `ExpandingRow.qml`, `Notice.qml`; plain text in the shell's headings, hints, section
+      titles, schema editor and page list), the base types (F4, 1.7: `PopupWidget`,
+      `BarText`, `BarRow`, `PointerArea`, `VpnProvider` under `api/`;
+      `ModuleSourceRules.importDeprecations`, and `ModuleHost` passes a module's
+      deprecations into its status). `modules list` now shows for the Tailscale module
+      "import qs.components (in 17 files): use the elements of qs.api (goes with the
+      shell's next tightening)" — the agent's wording, not the owner's. Left open:
+  - **For the owner's eyes, when the module first uses them** (M7): the look of the
+    public `SettingsRow` and `ExpandingRow` is the agent's reading of a card's rows (value
+    right-aligned, at most 220 px; no hover look on the opening line; content not
+    indented). Nothing was looked at on a screen.
+  - **For the owner to decide before M10:** the public `Pill` has the small font at every
+    size, as the shell's pills; the module's pills have body-size text today and get
+    smaller text when it moves.
+  - **A defect in the module, to fix with M10:** in three places (`ServeSection.qml`
+    twice, `TailscalePopup.qml`) it sets a `PrivilegedMark`'s `visible` to
+    `need !== ""`, which shows the lock also for `need: "yes"` (no password asked). The
+    lead read this in the module's code. With the public mark, a module that sets
+    `visible` itself also keeps the layout's spacing around an empty mark; said in
+    `Api.qml`.
+  - The public `SettingsRow` has no anchor: the anchor blocks (U0, U1a) do not exist yet.
+    The places lane puts it on that base.
+  - `SettingsRow` and `ExpandingRow` each pin one name the plan does not list
+    (`controls`, `content`): a default property needs a name. For the base types the plan
+    gives no list of names; the ones pinned are in `pinnedBase` in `ApiElementsTest`,
+    checked as present, not as the full set.
+  - `InputField`'s typing signals are tested by emitting them from the inner input, not
+    by key presses.
+  - Every public control shares its name with a `qs.components` type; in a file that
+    imports both, the import written last wins. Ends with M10.
+  - `tests/run-modules.sh` does not fail on a deprecation (an error only from Z), and
+    `tests-modules.qml` prints a module's deprecations beside its warnings.
 - [ ] **API plan, third batch**: on `master` (2026-11-18, not reviewed): pills in three
       sizes (T1: the theme's `pill` group with 22, 26 and 30 px, `Pill.size`,
       `tests/PillSizesTest.qml`) and the public button (F1b, module API 1.4:
@@ -41,13 +78,12 @@ only, not on the NixOS machine.
   - `qs.api` and `qs.components` both have a `SmallButton`: the import written last
     wins (pinned by a test). Ends with F4 and M10.
   - "The mark" in F1b's row of the plan is not built: §4.9 does not describe it for a
-    button. To settle before F2.
+    button, and `PrivilegedMark` is a public element of its own (the lead's call; the
+    owner was told).
   - The tooltip of a button that asks is tested as a passed-on property only, not as
     shown under the pointer.
   - Seen, not touched: `Math.max(22, …)` for a pill's width in
     `panels/calendar/RecurrenceEditor.qml`.
-  - Next in the elements lane: the public controls (F2), rows and texts (F3), the base
-    types (F4).
 
 - [x] **Test split** ([plans/test-split.md](plans/test-split.md)): done — a general set
       that runs on NixOS and on Arch, a set per system (`tests/run-system.sh`), and one
