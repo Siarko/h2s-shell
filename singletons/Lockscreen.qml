@@ -1175,20 +1175,6 @@ Singleton {
         }
     }
 
-    // The lock test bed's seam for a reload while locked (tests/lock/tests/reload-*.sh):
-    // nothing in the shell calls Quickshell.reload(), and file changes do not reload while
-    // locked, so the test asks for one here. Inert unless H2S_LOCK_TEST_RELOAD=1. A reload
-    // grants nothing (it carries the lock over, or ends in a restart that locks again).
-    IpcHandler {
-        target: "locktest"
-        enabled: TestSeams.reloadIpc
-
-        function reload(hard: bool): string {
-            Qt.callLater(() => Quickshell.reload(hard));
-            return hard ? "hard reload" : "reload";
-        }
-    }
-
     // Caps Lock, from the keyboards' LEDs: the prompt's "Caps Lock is on". Last among the
     // children, so that the ones before keep their positions (a reload matches by position)
     CapsLockLed {

@@ -355,8 +355,8 @@ check_within 10 "the password unlocks" compositor_unlocked
 `stack_start` takes, beside the methods: `--no-lock-restore` (the nested Hyprland with
 `misc:allow_session_lock_restore` off, its default), `--no-hyprland-ipc` (the shell without
 `HYPRLAND_INSTANCE_SIGNATURE`: it cannot ask Hyprland about its lock), `--reload-seam` (the
-shell's `locktest reload <hard>` IPC: `shell_ipc locktest reload false` asks for
-`Quickshell.reload()`), `--hyprland-debug` (Hyprland's debug log in `hyprland.log`: what it
+test tree's `locktest reload <hard>` IPC, in `seams/TestSeams.qml`: `shell_ipc locktest
+reload false` asks for `Quickshell.reload()`), `--hyprland-debug` (Hyprland's debug log in `hyprland.log`: what it
 did with the lock and its surfaces), `--keymap us|us-intl|us-compose` (the layout the
 virtual keyboard sends: plain US, US international with dead keys and AltGr, US with a
 Compose key on the right Alt — compiled with the tool set; the keyboard works out which key and

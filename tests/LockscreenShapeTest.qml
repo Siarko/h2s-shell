@@ -44,7 +44,6 @@ TestCase {
         "Timer",
         "IdleWatch",
         "IpcHandler lockscreen",
-        "IpcHandler locktest",
         "CapsLockLed _capsLed",
         "PersistentProperties _helperSweepOnce",
         "Process _helperSweep"

@@ -1,6 +1,7 @@
 pragma Singleton
 
 import Quickshell
+import Quickshell.Io
 import QtQuick
 
 // The test tree's TestSeams: copied over singletons/TestSeams.qml (whose properties are
@@ -12,7 +13,7 @@ import QtQuick
 // read them here, by the same property names as the production file's — TestSeamsShapeTest
 // checks the two files agree. Read once, at the first use; when any is in force, one line
 // in the log names them (`[TestSeams] test bed: …`), and `qs ipc call modules list` and
-// the lock screen's `state` carry the list.
+// the lock screen's `state` carry the list. And the `locktest` IPC lives here, below.
 //
 // Used by the lock screen: it imports nothing of the module system, and nothing that
 // would wait.
@@ -49,5 +50,19 @@ Singleton {
             console.warn("[TestSeams] test bed: " + inForce.join(", "));
         if (_read.ignored.length > 0)
             console.warn("[TestSeams] set, but not used (a value the shell cannot use): " + _read.ignored.join(", "));
+    }
+
+    // A reload while locked, for the lock bed (tests/lock/tests/reload-*.sh): nothing in the
+    // shell calls Quickshell.reload(), and file changes do not reload while locked, so the
+    // test asks for one here. Only with H2S_LOCK_TEST_RELOAD=1 (stack_start --reload-seam).
+    // Built when the lock screen first reads a seam, which is at its start.
+    IpcHandler {
+        target: "locktest"
+        enabled: root.reloadIpc
+
+        function reload(hard: bool): string {
+            Qt.callLater(() => Quickshell.reload(hard));
+            return hard ? "hard reload" : "reload";
+        }
     }
 }
