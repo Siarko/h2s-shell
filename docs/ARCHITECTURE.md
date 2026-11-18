@@ -676,19 +676,21 @@ line in the shell's log, with the path, the real file, its owner and mode.
 
 **Running as administrator** (`module.privileged` on the handle; `singletons/PrivilegedRuns.qml`
 with its decisions in `singletons/PrivilegedRules.qml`): `start(argv, options)` runs a command
-as root through pkexec; argv[0] is an absolute path, normally one of the module's programs. The shell knows which module asks from
-the handle; the run says what it does in a few words (`what`, required) and how long it may
+as root through pkexec; argv[0] is an absolute path, normally one of the module's programs.
+`start()` does not check `trusted`: the module itself must pass only a program whose
+`module.programs[name].trusted` is true — a program in a place the user can write, run as
+root, lets any user process become root. The shell knows which module asks from the
+handle; the run says what it does in a few words (`what`, required) and how long it may
 take (`timeoutMs`, required, 1 s to 1 h). `available` is true once a trusted, setuid pkexec
 and a trusted `timeout` are found.
 - **Refused before pkexec runs**, with `blocked` saying why: `unprintable` (a word holds a
   control or format character: a line break, a right-to-left override), `no-purpose`
   (`what` empty once cleaned), `locked`. A program not there is `notFound` (argv[0] `""` or
   not an absolute path, or not an executable file when the run's turn comes); options of
-  the wrong kind give `error`. These checks catch mistakes and keep the prompt honest; they
-  do not stop a hostile module, which runs in the shell's process and could start pkexec
-  itself. What protects the user from a module that does not ship with the shell is the
-  prompt saying who asks, what for and the exact command, and the warning when it is first
-  enabled.
+  the wrong kind give `error`. These checks catch mistakes and keep the command printable
+  as it is; they do not stop a hostile module, which runs in the shell's process and could
+  start pkexec itself. Against a module that is not the project's, the user's protection is
+  the password prompt (polkit's own message) and knowing what they install.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the

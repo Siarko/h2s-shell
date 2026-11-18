@@ -160,7 +160,12 @@ TestCase {
         _runs = {};
         const shell = _path("sh");
         _start("shell", [shell, "-c", "echo hi"]);
-        _then("the shell's run is answered", () => _done("shell"), () => {
+        // Test mode: a pkexec among the words, other than the stand-in, is never run
+        _start("pkexec word", [_path("talk"), "lines", "/usr/bin/pkexec"]);
+        _then("the shell's run is answered", () => _done("shell", "pkexec word"), () => {
+            const stray = _runs["pkexec word"].result;
+            assert(!stray.ok && stray.error.includes("pkexec") && _pkexecWords(stray).length === 0 && _runs["pkexec word"].lines.length === 0,
+                   "a pkexec word in test mode: an error, nothing run: " + JSON.stringify(stray));
             const result = _runs.shell.result;
             const words = _pkexecWords(result);
             assert(result.ok && result.blocked === "" && words[4] === shell, "it ran through pkexec: " + JSON.stringify(result));

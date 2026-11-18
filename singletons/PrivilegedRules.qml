@@ -118,12 +118,13 @@ Singleton {
     }
 
     // Why a run is refused before pkexec runs, or null when it may be queued. These checks
-    // catch a module's mistakes and keep the password prompt honest: it shows the command as
-    // it is (no word it could not show), with a purpose, and argv[0] is a path, never a name
-    // that root's PATH would resolve. They do not stop a hostile module: modules run in the
-    // shell's process and could start pkexec themselves. What protects the user from an
-    // outside module is the prompt saying who asks, what for and the exact command, and the
-    // warning when a module that does not ship with the shell is first enabled.
+    // catch a module's mistakes and keep the command printable as it is (no word it could
+    // not show), with a purpose, and argv[0] a path, never a name that root's PATH would
+    // resolve. They do not stop a hostile module: modules run in the shell's process and
+    // could start pkexec themselves. Against a module that is not the project's, the user's
+    // protection is the password prompt and knowing what they install. Whether argv[0] is
+    // trusted (module.programs[name].trusted) is not checked: the module must pass only a
+    // trusted program.
     // `request`:
     //   argv (the caller's copy, CommandRules.argvSnapshot's `words`: what is judged here is
     //   what runs), options (options() of what was given), active (the module is on), locked (the

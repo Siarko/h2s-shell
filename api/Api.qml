@@ -245,7 +245,11 @@ import qs.singletons.network
 //                          that looks like one), read once when start() is called — the
 //                          copy is what is judged and what runs; `argv[0]`: an absolute
 //                          path (root's PATH is never searched), normally one of its
-//                          programs, `module.programs[name].path`.
+//                          programs, `module.programs[name].path`. start() does not check
+//                          `trusted`: the module itself must pass only a program whose
+//                          `module.programs[name].trusted` is true — a program in a place
+//                          the user can write, run as root, lets any user process become
+//                          root.
 //                          The options are read once too. options:
 //                            what            needed: a few words saying what the run does
 //                                            ("Send a file", "Connect"), never a sentence;
@@ -275,11 +279,11 @@ import qs.singletons.network
 //                          either way, so nothing tells them apart; the program is checked
 //                          to be there just before, which makes `timeout`'s 127 rare.
 //                          Refused before pkexec runs, nothing started. These checks catch
-//                          mistakes and keep the prompt honest (it shows the command as it
-//                          is); they do not stop a hostile module, which runs in the shell's
-//                          process. What protects the user from a module that does not ship
-//                          with the shell is the prompt saying who asks, what for and the
-//                          exact command, and the warning when it is first enabled:
+//                          mistakes and keep the command printable as it is; they do not
+//                          stop a hostile module, which runs in the shell's process. Against
+//                          a module that is not the project's, the user's protection is the
+//                          password prompt (polkit's own message) and knowing what they
+//                          install:
 //                            blocked "unprintable"  a word holds a control or format character
 //                                            or a line or paragraph separator (a line
 //                                            break, a right-to-left override, U+2028): the
