@@ -351,6 +351,13 @@ EOF
     [ -z "$shell_path" ] || LAUNCHER_ENV+=(PATH="$shell_path:$PATH")
     [ ${#extra_env[@]} -eq 0 ] || LAUNCHER_ENV+=("${extra_env[@]}")
     start_launcher
+    # The shell under test reads the seams set above only from the test seam file run.sh
+    # puts into its copy (tests/lock/README.md, "The test tree"); the checkout's own file
+    # is constants and reads none, so without the swap the shell would run with the real
+    # tools and the real /etc/pam.d. Its lock state names the seams in force: never none
+    # here (H2S_LOCK_SYSTEM_PAM_DIR and H2S_LOCK_LEDS_DIR are always set)
+    wait_until 10 _test_seams_in_force \
+        || abort "the shell under test reads no test seam: its copy lacks the test seam file (tests/lock/run.sh puts it there)"
     log "stack up: Hyprland $HYPRLAND_INSTANCE_SIGNATURE, shell pid $SHELL_PID, methods: ${fprintd:+the real script, fprintd stand-in: }${fprintd:-${methods_script:-$methods}}${tools:+, logind stand-ins}"
 }
 
@@ -902,6 +909,7 @@ launcher_ipc() {
 #   restoring            a lock the marker asked to take back, not yet confirmed
 #   restore_pending      the compositor refused to give that lock back (status "compositor-locked")
 #   carried_held         a reload now would carry a compositor lock over
+#   test_seams           the test seams in force in the shell, comma-separated (TestSeams.inForce)
 state_field() {
     shell_ipc lockscreen state | python3 -I -c '
 import json, sys
@@ -956,6 +964,7 @@ facts = {
     "restoring": lambda s: s["driver"]["restoring"],
     "restore_pending": lambda s: s["driver"]["restorePending"],
     "carried_held": lambda s: s["driver"]["carriedHeld"],
+    "test_seams": lambda s: ",".join(s["driver"]["testSeams"]),
 }
 name = sys.argv[1]
 if name in facts:
@@ -969,6 +978,7 @@ if value is None:
 print(str(value).lower() if isinstance(value, bool) else value)' "$1"
 }
 state_is() { [ "$(state_field "$1")" = "$2" ]; }
+_test_seams_in_force() { [ -n "$(state_field test_seams 2> /dev/null)" ]; }
 shell_status_is() { [ "$(shell_ipc lockscreen status)" = "$1" ]; }
 
 # The compositor's own word on the lock

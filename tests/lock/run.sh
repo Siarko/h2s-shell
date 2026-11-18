@@ -303,6 +303,11 @@ for entry in "$LOCKTEST_REPO"/* "$LOCKTEST_REPO"/.[!.]*; do
     case "$(basename "$entry")" in .git | result | result-*) continue ;; esac
     cp -a "$entry" "$shell_template/" || setup_error "cannot copy $entry into $shell_template"
 done
+# The test seam files in the production ones' place: the copy reads the seams the tests
+# set (tools, PAM directory, timings, …) from its environment; the checkout's own files
+# are constants and read none (tests/lock/README.md, "The test tree")
+cp "$LOCKTEST_DIR/seams/TestSeams.qml" "$LOCKTEST_DIR/seams/TestSeamRules.qml" "$shell_template/singletons/" \
+    || setup_error "cannot put the test seam files into $shell_template"
 rm -rf "$shell_template/tests/lock"
 [ -f "$shell_template/shell.qml" ] && [ -x "$shell_template/scripts/lock-auth-methods.sh" ] \
     || setup_error "the copy of the checkout lacks shell.qml or scripts/lock-auth-methods.sh"

@@ -3,15 +3,15 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// What the test seams say (TestSeams reads them; notes/plans/architecture-cleanup.md §3):
-// the environment variables by which the test beds change the shell's timings, tools,
-// directories and stand-ins. Pure — given the variables as { NAME: value }, it decides
-// which count and what each is. A seam that is not set, or set to something it cannot use,
-// is not in force and the shell does what it does without it.
+// What the test seams say (the test tree's TestSeams reads them; tests/lock/README.md,
+// "The test tree"): the environment variables by which the tests change the shell's
+// timings, tools, directories and stand-ins. Pure — given the variables as { NAME: value },
+// it decides which count and what each is. A seam that is not set, or set to something it
+// cannot use, is not in force and the shell does what it does without it: read({}) is what
+// the production singletons/TestSeams.qml holds as constants (TestSeamsShapeTest).
 //
-// Nothing here grants anything: whoever sets the shell's environment can already run
-// anything as the user. What the seams change is the test beds' business; each user of one
-// names it in its own comment.
+// Only a test tree has this file (copied into its singletons/); the installed shell and a
+// checkout never read a seam.
 Singleton {
     id: root
 

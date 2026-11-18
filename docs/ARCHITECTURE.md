@@ -472,8 +472,9 @@ session):
 Where state lives: the lock's state only in the driver (in `_build()`'s closure, never
 exposed — it holds the typed password between submit and PAM's prompt); the half-typed text
 only in the prompt's field; the I/O handles in the adapters; across a reload, two booleans
-in `_carried`; across a restart, the marker. The test bed's seams, inert
-unless set: `H2S_LOCK_AUTH_METHODS` (read by the methods script), `H2S_LOCK_TOOLS` (a
+in `_carried`; across a restart, the marker. The test bed's seams, read only in a test
+tree ("Testing", below; the shell's own `singletons/TestSeams.qml` holds constants):
+`H2S_LOCK_AUTH_METHODS` (read by the methods script), `H2S_LOCK_TOOLS` (a
 directory whose `gdbus` and `systemd-inhibit` stand in for the real ones — the shell's
 and the methods script's),
 `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
@@ -485,11 +486,10 @@ on every machine),
 `Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
 Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (JSON
 overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds) and the
-launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds). Inside the shell
-one singleton reads the seams, `singletons/TestSeams.qml` (the lock screen's above, the
-module host's `H2S_SHELL_TEST_MODULE_*` and `H2S_FAKE_VPN_PROVIDER`; the list and what each
-value says: `singletons/TestSeamRules.qml`, tested by `tests/TestSeamRulesTest.qml`, which
-also checks that no other file reads one). When any is in force it logs one line,
+launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds). Inside a test tree
+one singleton reads the seams, `TestSeams` (the lock screen's above, the module host's
+`H2S_SHELL_TEST_MODULE_*` and `H2S_FAKE_VPN_PROVIDER`; the list and what each value says:
+`tests/lock/seams/TestSeamRules.qml`, tested by `tests/TestSeamRulesTest.qml`). When any is in force it logs one line,
 `[TestSeams] test bed: <names>`, and `qs ipc call modules list` and the lock screen's
 `state` (its `driver` block) carry them as `testSeams`. The two scripts read theirs
 themselves.

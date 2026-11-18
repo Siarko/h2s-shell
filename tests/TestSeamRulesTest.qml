@@ -1,17 +1,16 @@
 import QtQuick
-import Quickshell
-import Quickshell.Io
-import qs.singletons
+import qs.tests.lock.seams as TestBed
 
-// The test seams (singletons/TestSeamRules.qml, read by TestSeams): what each variable
-// says, what is in force and what is ignored — and that TestSeams is their one reader: no
-// other QML file of the shell reads one from the environment.
+// The test seams (tests/lock/seams/TestSeamRules.qml, read by the test tree's TestSeams):
+// what each variable says, what is in force and what is ignored. That the production
+// TestSeams reads none of them, and that no file of the shell reads one itself:
+// TestSeamsShapeTest.
 TestCase {
     id: suite
     suiteName: "TestSeamRules"
-    asynchronous: true
 
-    function runAsync() {
+    function run() {
+        const TestSeamRules = TestBed.TestSeamRules;
         const read = TestSeamRules.read;
         const none = read({});
         assertEqual(none.inForce.length + none.ignored.length, 0, "nothing set: no seam in force, none ignored");
@@ -46,25 +45,5 @@ TestCase {
         assertEqual(read({ H2S_LOCK_TEST_TIMINGS: "[1]" }).timingsProblem, "not a JSON object", "timings that are a list: not an object");
         assertEqual(read({ H2S_LOCK_SYSTEM_PAM_DIR: "/p", H2S_LOCK_SYSTEM: "windows" }).lockSystem, "", "a system that is neither nixos nor other: none");
         assertEqual(read({ H2S_LOCK_TOOLS: 5 }).lockTools, "", "a value that is no text: not set");
-
-        // The one reader: no QML of the shell but TestSeams reads a seam from the environment
-        _grep.command = ["sh", "-c", "cd \"$1\" && shift && grep -rlE --include='*.qml' \"Quickshell\\.env\\(\\\"($(printf '%s|' \"$@\" | sed 's/|$//'))\\\"\" "
-                         + "--exclude-dir=tests --exclude-dir=.git . || true", "sh", Quickshell.shellDir].concat(TestSeamRules.names);
-        _grep.running = true;
-    }
-
-    property Process _grep: Process {
-        property string output: ""
-        property bool answered: false
-        stdout: SplitParser {
-            splitMarker: ""
-            onRead: data => suite._grep.output += data
-        }
-        onExited: (code, status) => {
-            const files = output.split("\n").filter(line => line !== "").sort();
-            suite.assertEqual(files.join(","), "", "no file reads a seam itself (TestSeams reads them through TestSeamRules.names)");
-            suite.assertEqual(code, 0, "… the search ran");
-            suite.finish();
-        }
     }
 }

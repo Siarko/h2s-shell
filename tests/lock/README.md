@@ -142,7 +142,9 @@ here may reach it.
   `restart-locked-retry` — write only their own.) In the copy, `pam/` is replaced by
   configs that only deny: the shipped `pam/password` (`pam_unix`, the real account) is one
   of the configs the shell's password fallback can be, and a typed test string must never
-  reach the real password check. Logs and screenshots go
+  reach the real password check. And the copy is a *test tree*: the test seam files take
+  the production ones' place, so that the copy — and only the copy — reads the seams below
+  from its environment ("The test tree"). Logs and screenshots go
   to the temp dir; Python is told not to write bytecode. A change to the real
   config.json is noted.
 - **The launcher probe is isolated too.** `run.sh` asks the launcher which `qs` it runs
@@ -296,6 +298,18 @@ test writes one: `caps_led 1|0|none` (`caps-keypad.sh`).
 **Timings**: `stack_start --timings '<json>'` hands the shell `LockRules.timings` overrides
 (`H2S_LOCK_TEST_TIMINGS`), so that what takes minutes — five rounds that time out — runs in
 seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own.
+
+## The test tree
+
+The installed shell and a checkout read none of the seams above: `singletons/TestSeams.qml`,
+through which the lock screen, the Caps Lock reader, the module host and the VPN manager
+get them, holds constants. `run.sh` copies `seams/TestSeams.qml` (the reader of the
+variables) and `seams/TestSeamRules.qml` (what each says) over it in the run's copy, and
+`stack_start` checks that the shell under test names the seams in force in its lock state
+(`state_field test_seams`), so a copy without the swap fails at once instead of running
+with the real tools and `/etc/pam.d`. `TestSeamsShapeTest` (a unit suite) checks that the
+two `TestSeams.qml` have the same properties and that no file of the shell reads a seam
+itself.
 
 ## Reading the shell's state
 
