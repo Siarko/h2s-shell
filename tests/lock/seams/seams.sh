@@ -1,0 +1,21 @@
+# shellcheck shell=bash
+# The test tree's seams.sh: copied over scripts/seams.sh (whose values are constants) when a
+# test tree is assembled (tests/lock/run.sh). It sets the same names, from the environment
+# the tests give the shell; a variable that is not set leaves the production value. Sourced
+# by scripts/lock-auth-methods.sh and scripts/launch.sh (tests/lock/README.md, "The test
+# tree"; TestSeamsShapeTest checks both files set the same names).
+
+# H2S_LOCK_SYSTEM_PAM_DIR: the test's own "system-wide" configs, so that the password
+# fallback is never the system's real PAM stack
+seam_system_pam_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
+# H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR (as the
+# shell counts it, LockIoRules.systemSeam): both systems' answers are tested on every machine
+seam_system=${H2S_LOCK_SYSTEM_PAM_DIR:+${H2S_LOCK_SYSTEM:-}}
+# H2S_LOCK_AUTH_METHODS: a script of the test's that lists its test PAM stacks
+seam_auth_methods=${H2S_LOCK_AUTH_METHODS:-}
+# H2S_LOCK_TOOLS: a directory whose gdbus stands in (a stand-in fprintd behind it)
+seam_gdbus=${H2S_LOCK_TOOLS:+$H2S_LOCK_TOOLS/gdbus}
+seam_gdbus=${seam_gdbus:-gdbus}
+# H2S_LAUNCHER_TEST_TIMINGS: the launcher's pauses, shortened ("first=0.1 slow=2 lockwait=3",
+# seconds), and "discoveryhang=S", a module search that takes S seconds
+seam_launcher_timings=${H2S_LAUNCHER_TEST_TIMINGS:-}

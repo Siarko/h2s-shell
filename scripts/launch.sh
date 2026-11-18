@@ -295,7 +295,7 @@ module_roots() {
 # canonical path is the working directory after a `cd -P`, in this throwaway process.
 find_modules() {
     local given=() candidates=() result=() entry dir path root seen=":" length=0 dropped=0
-    # Test seam (H2S_LAUNCHER_TEST_TIMINGS "discoveryhang=S"): a search that takes S seconds,
+    # Test seam (seam_launcher_timings "discoveryhang=S"): a search that takes S seconds,
     # as one stuck on a hung mount would
     [ -z "$discovery_hang_ms" ] || sleep "$(ms_to_seconds "$discovery_hang_ms")"
     IFS=: read -r -a given <<< "${H2S_SHELL_MODULE_PATH-}"
@@ -447,15 +447,18 @@ clean_up_after() {
 # The pauses, in milliseconds: the first after a quick death (doubling while the shell
 # keeps dying within 30 s of starting), and the slow retry of a shell that died while
 # locked and keeps dying; and how long a new launcher waits for an old one to end.
-# H2S_LAUNCHER_TEST_TIMINGS ("first=0.1 slow=2 lockwait=3", seconds) shortens them for the
-# lock test bed — inert unless set, and like the shell's test seams it grants nothing.
-# "discoveryhang=S" makes module discovery take S seconds, as on a hung mount (find_modules).
+# In a test tree the lock test bed shortens them ("first=0.1 slow=2 lockwait=3", seconds:
+# seam_launcher_timings, from scripts/seams.sh — empty, a constant, in the shell itself),
+# and "discoveryhang=S" makes module discovery take S seconds, as on a hung mount
+# (find_modules). A seams.sh that cannot be read leaves the launcher's own pauses: the
+# shell must still start.
+source "$(dirname "$(readlink -f "$0")")/seams.sh" || echo "launch.sh: cannot read seams.sh: the launcher's own pauses" >&2
 pause_first_ms=1000
 pause_slow_ms=60000
 lock_wait=15
 discovery_hang_ms=""
 seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
-for timing in ${H2S_LAUNCHER_TEST_TIMINGS:-}; do
+for timing in ${seam_launcher_timings:-}; do
     value=$(seconds_to_ms "${timing#*=}")
     [ -n "$value" ] || continue
     case "$timing" in

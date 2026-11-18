@@ -275,7 +275,7 @@ printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$keys"
 # a copy of the script beside a pam/u2f that names pam_u2f, as the real one does.
 rm -f "$sys/h2s-shell-u2f"
 mkdir -p "$WORK/script-shell/scripts" "$WORK/script-shell/pam"
-cp "$script" "$WORK/script-shell/scripts/"
+cp "$script" "$(dirname "$script")/seams.sh" "$WORK/script-shell/scripts/"
 echo "auth required /nowhere/pam_u2f.so cue" > "$WORK/script-shell/pam/u2f"
 script=$WORK/script-shell/scripts/lock-auth-methods.sh
 system=nixos

@@ -307,6 +307,7 @@ done
 # set (tools, PAM directory, timings, …) from its environment; the checkout's own files
 # are constants and read none (tests/lock/README.md, "The test tree")
 cp "$LOCKTEST_DIR/seams/TestSeams.qml" "$LOCKTEST_DIR/seams/TestSeamRules.qml" "$shell_template/singletons/" \
+    && cp "$LOCKTEST_DIR/seams/seams.sh" "$shell_template/scripts/seams.sh" \
     || setup_error "cannot put the test seam files into $shell_template"
 rm -rf "$shell_template/tests/lock"
 [ -f "$shell_template/shell.qml" ] && [ -x "$shell_template/scripts/lock-auth-methods.sh" ] \

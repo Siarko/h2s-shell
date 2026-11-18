@@ -104,8 +104,19 @@ else
     echo "    not glibc's malloc, a bash without the defect, or a heap that hid it"
 fi
 
+# ---- The launcher under test: a copy of scripts/launch.sh beside the test bed's seams.sh
+# (tests/lock/seams/), as in the lock bed's test tree: the checkout's own seams.sh is
+# constants, and the cases need the first pause shortened (H2S_LAUNCHER_TEST_TIMINGS)
+mkdir -p "$work/tree/scripts"
+cp "$REPO/scripts/launch.sh" "$work/tree/scripts/launch.sh" \
+    && cp "$REPO/tests/lock/seams/seams.sh" "$work/tree/scripts/seams.sh" \
+    || { echo "launcher-selftest.sh: cannot copy the launcher and the test seams.sh" >&2; exit 2; }
+launch_script=$work/tree/scripts/launch.sh
+
 # ---- The control: launch.sh with `wait -f` put back, to see what the "killed" case can catch
 mkdir -p "$work/control/scripts"
+cp "$REPO/tests/lock/seams/seams.sh" "$work/control/scripts/seams.sh" \
+    || { echo "launcher-selftest.sh: cannot copy the test seams.sh" >&2; exit 2; }
 control_script=$work/control/scripts/launch.sh
 sed 's/^        wait "\$child"$/        wait -f "$child"/' "$REPO/scripts/launch.sh" > "$control_script"
 if [ "$(grep -c '^        wait -f "\$child"$' "$control_script")" != 1 ] \
@@ -133,7 +144,7 @@ start_launcher() {
             "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
             "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=0.1" "LAUNCHER_SELFTEST=$work" \
             "LAUNCHER_SELFTEST_DIR=$at" "LAUNCHER_SELFTEST_PADDING=${2:-}" "GLIBC_TUNABLES=$tunables" \
-            "$bash_path" "${3:-$REPO/scripts/launch.sh}" > "$at/output" 2>&1 < /dev/null
+            "$bash_path" "${3:-$launch_script}" > "$at/output" 2>&1 < /dev/null
     ) &
     launcher=$!
     # (Not a job of this script's: bash would report each one killed below)

@@ -491,8 +491,8 @@ one singleton reads the seams, `TestSeams` (the lock screen's above, the module 
 `H2S_SHELL_TEST_MODULE_*` and `H2S_FAKE_VPN_PROVIDER`; the list and what each value says:
 `tests/lock/seams/TestSeamRules.qml`, tested by `tests/TestSeamRulesTest.qml`). When any is in force it logs one line,
 `[TestSeams] test bed: <names>`, and `qs ipc call modules list` and the lock screen's
-`state` (its `driver` block) carry them as `testSeams`. The two scripts read theirs
-themselves.
+`state` (its `driver` block) carry them as `testSeams`. The two scripts take theirs from
+`scripts/seams.sh` (constants), which a test tree replaces in the same way.
 
 ### Modules
 

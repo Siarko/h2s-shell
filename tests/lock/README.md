@@ -303,13 +303,15 @@ seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own.
 
 The installed shell and a checkout read none of the seams above: `singletons/TestSeams.qml`,
 through which the lock screen, the Caps Lock reader, the module host and the VPN manager
-get them, holds constants. `run.sh` copies `seams/TestSeams.qml` (the reader of the
-variables) and `seams/TestSeamRules.qml` (what each says) over it in the run's copy, and
+get them, holds constants, and so does `scripts/seams.sh`, which the methods script and the
+launcher source. `run.sh` copies `seams/TestSeams.qml` (the reader of the variables) and
+`seams/TestSeamRules.qml` (what each says) over the first in the run's copy, and
+`seams/seams.sh` over the second, and
 `stack_start` checks that the shell under test names the seams in force in its lock state
 (`state_field test_seams`), so a copy without the swap fails at once instead of running
 with the real tools and `/etc/pam.d`. `TestSeamsShapeTest` (a unit suite) checks that the
-two `TestSeams.qml` have the same properties and that no file of the shell reads a seam
-itself.
+two `TestSeams.qml` have the same properties, the two `seams.sh` the same variables, and
+that no file of the shell reads a seam itself.
 
 ## Reading the shell's state
 
