@@ -21,8 +21,45 @@ other public elements (fourth), the command runner and the module host on it (fi
 on `master` (below). The elements lane is done but for a module's icon (U7a). The first
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
-installed shell into a test tree (below). Next in the commands lane: test mode (A3), on
-the test tree's `moduleTestMode` (`plans/test-seams.md` §6).
+installed shell into a test tree (below). Module test mode (A3) is on `master` (below).
+Next in the commands lane: privileged start (A4).
+
+- [x] **API plan, A3 module test mode**: on `master` (2026-11-18; module API 1.10; reviewed
+      by a second agent on the diff, three findings — a module could switch test mode on
+      through `module.host`, a stand-in could be a link to the real pkexec, the guard read
+      only argv[0] — all fixed by a second author with cases; `tests/run-all.sh` passes on
+      Arch, tools from `PATH`, and on NixOS, tools from nix; the Tailscale module's suites
+      pass as on `master`). `ModuleHost.testMode` is fixed once by `setTestMode()` before
+      the first load naming a module directory (`tests-modules.qml`; `Modules` only when
+      `TestSeams.moduleTestMode`), read-only after. Manifest `testPrograms` (inside the
+      module, links resolved, setuid refused); `Api.openUrl` and `Notifier` record in test
+      mode; no pkexec but a `<testPrograms>/pkexec` anywhere in a module's command;
+      `ModuleTestKit` in `qs.tests`; `tests/run-modules.sh` puts a failing pkexec first on
+      `PATH`. Left open:
+  - **Transitional gate (the owner's decision):** a module below API 1.10 in test mode may
+    put its own stand-in, wherever it lies, into `PrivilegedAction.elevate` (the released
+    Tailscale module keeps its in `tools/stand-in/`); a system pkexec or a setuid file is
+    refused, a failed probe counts as real. Shown in the module's `deprecations`; removed
+    in slice Z (`plans/api-next/migration.md`). Which module called is read from
+    `new Error().stack` at `run()` — a heuristic; with no module frame the strict rule
+    applies. The module drops it by moving its stand-ins under `module/`, declaring
+    `testPrograms` and API 1.10, taking `elevate` from `module.programs.pkexec.path` and
+    dropping its `H2S_TEST_MODULES` / `H2S_TAILSCALE_TOOLS` reads (M2).
+  - In the lock bed `Notifier` records too, so the shell's own notifications are not sent
+    there.
+  - The guard looks at the program words of a command; a `pkexec` inside a script string,
+    `refuse: null`, or a raw `Process` gets past it. Mistakes, not a sandbox.
+  - A module may use another module's `<testPrograms>/pkexec`.
+  - A module in test mode without `testPrograms` keeps the normal PATH lookup (the lock
+    bed's fixtures rely on it).
+  - `ModuleHandle.host` is still handed to modules (renamed in Z); nothing on it changes
+    the mode.
+  - Left for later slices: `ModuleTestKit` anchors, chooser, `setSystem`, `setNow`;
+    privileged runs through `<testPrograms>/pkexec` (A4).
+  - `/run/wrappers/bin/pkexec` as a link target was refused on Arch only because it does
+    not exist there; not exercised on NixOS beyond the full run.
+  - Seen once, not this change: unit suites failed with `TypeError: Cannot read property
+    'windowShown' of null` from QtTest's `TestCase.qml`; passed alone and on rerun.
 
 - [x] **Test seams in a test tree** ([plans/test-seams.md](plans/test-seams.md)): on
       `master` (2026-11-18; the owner chose the test tree over the gate of
@@ -289,9 +326,9 @@ test queue; review what carries risk, look at one-line fixes yourself.
          `CLAUDE.md` done)
    - [ ] cut a minor release (today 2.0.0)
 3. API extension in the core, in small slices, per [plans/api-next.md](plans/api-next.md) — open
-   - [ ] command runner
-   - [ ] program lookup with trust
-   - [ ] test mode
+   - [x] command runner
+   - [x] program lookup with trust
+   - [x] test mode
    - [ ] privileged start
    - [ ] shared module object
    - [ ] helpers
