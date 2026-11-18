@@ -173,12 +173,8 @@ PanelWindow {
             width: Math.min(400, parent.width - 32)
             height: _column.implicitHeight + 48
 
-            Rectangle {
+            AuthCard {
                 anchors.fill: parent
-                radius: Theme.lock.cardRadius
-                color: Theme.overlay
-                border.color: Theme.glassBorder
-                border.width: Theme.border.width
             }
 
             ColumnLayout {

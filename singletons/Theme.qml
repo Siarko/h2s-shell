@@ -581,6 +581,8 @@ Singleton {
     readonly property color surfaceHoverClear: Qt.alpha(surfaceHover, 0)
     readonly property color surfaceSunken: Qt.alpha("black", 0.2)   // lists and containers set into a page
     readonly property color overlay: Qt.alpha("black", 0.65)        // a pill or card over arbitrary content
+    // overlay without its alpha: a card nothing behind may show through (the password prompt)
+    readonly property color overlayOpaque: Qt.alpha(overlay, 1)
     property color scrim: _colors.scrim
     ThemeColorBehavior on scrim {}
 

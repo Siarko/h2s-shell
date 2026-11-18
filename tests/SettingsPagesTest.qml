@@ -79,6 +79,7 @@ TestCase {
         "tests/FakeVpnProvider.qml",
         "tests/FakeVpnProviderPage.qml",
         "polkit/AuthPrompt.qml",
+        "polkit/AuthCard.qml",
         "components/ToggleSwitch.qml",
         "components/SeekBar.qml",
         "components/SmallButton.qml",

@@ -9,7 +9,8 @@ import qs.singletons
 // fed PolkitRules.announcement as the prompt feeds it): "Module" and "Authorization" one
 // line each, plain text; "Command" closed for every new request, opened by a click to the
 // command whole, in a box that scrolls; the click never takes the keyboard from the
-// password field. An old PrivilegedAction's run: "Not named", no Authorization line.
+// password field. An old PrivilegedAction's run: "Not named", no Authorization line. The
+// prompt's card (polkit/AuthCard.qml) is opaque: nothing behind it shows through.
 //
 // Opens a small window in a corner for a moment (run it through tests/run-unit.sh).
 TestCase {
@@ -51,6 +52,15 @@ TestCase {
             }
         }
 
+        // The prompt's card, small, under the lines
+        AuthCard {
+            id: card
+            x: 10
+            y: 330
+            width: 40
+            height: 20
+        }
+
         QT.TestCase {
             id: driver
             name: "AuthPromptViewDriver"
@@ -86,6 +96,9 @@ TestCase {
 
     function runAsync() {
         driver.wait(300); // the window shown
+        assertEqual(card.color.a, 1, "the prompt's card: its colour has no alpha");
+        assertEqual(card.opacity, 1, "… and the card is not faded");
+
         const module = _find(lines, "module");
         const authorization = _find(lines, "authorization");
         const area = _find(lines, "commandArea");
