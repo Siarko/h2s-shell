@@ -733,8 +733,17 @@ and a trusted `timeout` are found.
   pkexec's message, which is all polkit tells:** past 80 bytes another command with the
   same two ends — another program's too — gives the very same message and is dressed as
   the run's. They help the user see what a module asks; they are not a guard against
-  hostile code in the session. Any other request is shown as polkit sent it. With another
-  polkit agent the shell adds nothing to that agent's prompt.
+  hostile code in the session. Any other request is shown as polkit sent it.
+- **With another polkit agent** (`Authentication.state` `other`, `blocked`, `deciding` or
+  `none`: the shell's prompt does not answer, or that is not known yet) the shell adds
+  nothing to that agent's prompt, which names only the shell's `timeout`. Instead, when a
+  run's turn comes, just before its pkexec starts, the shell sends one notification from
+  the same announcement: summary "Module: <name>", body "Authorization: <what>" (an old
+  `PrivilegedAction` run: "Module: Not named", no body), as plain text
+  (`PrivilegedRules.launchNotice`). It says who runs what, not that a password is wanted:
+  the shell cannot know whether that agent asks. One per run started; none for a run
+  refused before pkexec, none while locked (nothing starts then), none with the shell's
+  own prompt.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the

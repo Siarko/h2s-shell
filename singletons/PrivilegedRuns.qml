@@ -12,8 +12,12 @@ import qs.singletons.io as Io
 //
 // - A run is looked at before pkexec is asked: its program must be there, an executable
 //   file (a missing one is `notFound`, never pkexec's "not authorised").
-// - One log line per run started, with the module's id and its `what`. Nothing else shows
-//   when polkit lets a run go without a password.
+// - One log line per run started, with the module's id and its `what`. With the shell's own
+//   prompt nothing else shows when polkit lets a run go without a password. With another
+//   agent, or none (Authentication.state other than "active" and "conflict"), the shell
+//   cannot dress that agent's prompt: one notification just before pkexec starts names the
+//   module and the purpose (PrivilegedRules.launchNotice), whether or not a password is
+//   then asked.
 // - Which request is the head's: with the shell's own prompt (Authentication.state
 //   "active" or "conflict") a request is the head's when PolkitRules.announces says so —
 //   pkexec's action, and its message quotes the command the head handed to pkexec as
@@ -256,6 +260,11 @@ Singleton {
             testAgent.closeForLock();
     }
 
+    // A run's entry in the queue's state, or null
+    function _queued(id) {
+        return _state.jobs.find(entry => entry.id === id) ?? null;
+    }
+
     function _agentState() {
         return (_testMode ? testAgent : Authentication).state;
     }
@@ -361,6 +370,12 @@ Singleton {
         });
         console.log("[Privileged] " + job.moduleId + " runs " + JSON.stringify(job.what.slice(0, 100))
                     + " (" + JSON.stringify(job.program.slice(0, 300)) + ")");
+        // With another agent, or none, the shell's prompt cannot say who asks: one
+        // notification, now, names the module and the purpose (PrivilegedRules.launchNotice).
+        // Which agent answers is the queue's, read when its program was checked
+        const notice = PrivilegedRules.launchNotice(job.announcement, _queued(job.id)?.shellAgent === true);
+        if (notice)
+            Notifier.send(notice.summary, notice.options);
         const legacy = job.kind === "legacy";
         // No time limit around pkexec: the module's limit is the `timeout` inside it
         // (PrivilegedRules.pkexecArgv); the old type has none, as before

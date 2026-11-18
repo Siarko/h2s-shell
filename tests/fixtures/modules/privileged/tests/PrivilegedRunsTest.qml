@@ -17,6 +17,10 @@ TestCase {
 
     readonly property var module: Api.moduleAt(Qt.resolvedUrl("."))
     property var _steps: []
+    // The old type, through the same queue (its stand-in pkexec set when it runs)
+    property PrivilegedAction legacy: PrivilegedAction {
+        notifyFailures: false
+    }
     property var _runs: ({})
 
     function _then(description, condition, action) {
@@ -61,7 +65,7 @@ TestCase {
     // and "started"), its stdout text, its done (and whether inside start())
     function _start(name, argv, extra) {
         const record = { lines: [], stdout: "", stderr: "", firstLineAt: 0, startedAt: 0, doneAt: 0, result: null, handle: null,
-                         inside: true, doneInside: false, linesAfterCancel: 0, cancelledAt: 0 };
+                         inside: true, doneInside: false, linesAfterCancel: 0, cancelledAt: 0, noticesAtOutput: -1 };
         _runs[name] = record;
         const options = Object.assign({
             what: name,
@@ -78,7 +82,12 @@ TestCase {
                 record.lines.push(line);
             },
             onStdout: text => record.stdout += text,
-            onStderr: text => record.stderr += text,
+            onStderr: text => {
+                // The stand-in pkexec prints its words on stderr first thing
+                if (record.noticesAtOutput < 0)
+                    record.noticesAtOutput = _notices().length;
+                record.stderr += text;
+            },
             done: result => {
                 record.doneInside = record.inside;
                 record.result = result;
@@ -530,6 +539,128 @@ TestCase {
             ModuleTestKit.setSessionLocked(false);
             _cancel("going");
         });
-        _then("everything is answered", () => _done("going") && _idle(), () => {});
+        _then("everything is answered", () => _done("going") && _idle(), () => _agents(["other", "blocked", "deciding", "none", "active", "conflict"]));
+    }
+
+    // The shell's notifications that say who runs what (sent just before pkexec starts when
+    // the shell's own prompt does not answer)
+    function _notices() {
+        return ModuleTestKit.notified.filter(entry => entry.summary.startsWith("Module: "));
+    }
+
+    // --- The notification when the shell's prompt does not answer: per agent state ---
+    function _agents(states) {
+        if (states.length === 0) {
+            _twoQueued();
+            return;
+        }
+        const state = states[0];
+        const name = "agent " + state;
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent(state);
+        _start(name, [_path("talk"), "lines", "1", "0"]);
+        _then("the run with the agent " + state + " is answered", () => _done(name) && _idle(), () => {
+            const record = _runs[name];
+            assert(record.result.ok, name + ": it ran: " + JSON.stringify(record.result));
+            const notices = _notices();
+            if (state === "active" || state === "conflict") {
+                assertEqual(notices.length, 0, name + ": the shell's prompt answers, no notification: " + JSON.stringify(ModuleTestKit.notified));
+            } else {
+                assertEqual(JSON.stringify(notices.map(entry => [entry.summary, entry.body, entry.format, entry.appName])),
+                            JSON.stringify([["Module: Privileged fixture (privileged)", "Authorization: " + name, "plain", "H2S Shell"]]),
+                            name + ": one notification, the shell's, who runs what, plain");
+                assertEqual(record.noticesAtOutput, 1, name + ": … recorded before the stand-in pkexec started");
+            }
+            _agents(states.slice(1));
+        });
+    }
+
+    // Two runs queued: one notification each, in turn, each before its own pkexec
+    function _twoQueued() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent("other");
+        const talk = _path("talk");
+        _start("one", [talk, "lines", "1", "0"]);
+        _start("two", [talk, "lines", "1", "0"]);
+        assertEqual(_notices().length, 0, "nothing sent while the runs are only queued");
+        _then("both have run", () => _done("one", "two") && _idle(), () => {
+            assertEqual(_notices().map(entry => entry.body).join(" | "), "Authorization: one | Authorization: two", "exactly one per run, in order");
+            assertEqual(_runs.one.noticesAtOutput + " " + _runs.two.noticesAtOutput, "1 2", "… each just before its own pkexec");
+            _refusedQuiet();
+        });
+    }
+
+    // A run refused before pkexec, or at its launch, sends none
+    function _refusedQuiet() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        const talk = _path("talk");
+        _start("relative", ["talk", "lines", "1", "0"]);
+        _start("newline", [talk, "lines", "a\nb"]);
+        _start("absent", [_path("absent"), "x"]);
+        _start("pkexec word", [talk, "lines", "/usr/bin/pkexec"]);
+        _then("the refused runs are answered", () => _done("relative", "newline", "absent", "pkexec word") && _idle(), () => {
+            assert(Object.keys(_runs).every(name => !_runs[name].result.ok), "all refused");
+            assertEqual(_notices().length, 0, "a refused run: no notification: " + JSON.stringify(ModuleTestKit.notified));
+            _lockedQuiet();
+        });
+    }
+
+    // Locked: the runs waiting never start, so none is announced
+    function _lockedQuiet() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        const talk = _path("talk");
+        _start("going", [talk, "sleep", "20"]);
+        _start("waiting", [talk, "lines", "1", "0"]);
+        _then("the first has started", () => _runs.going.startedAt > 0, () => {
+            assertEqual(_notices().length, 1, "the run going was announced");
+            ModuleTestKit.setSessionLocked(true);
+            _start("while locked", [talk, "lines", "1", "0"]);
+        });
+        _then("the waiting ones are answered", () => _done("waiting", "while locked"), () => {
+            assert(_runs.waiting.result.blocked === "locked" && _runs["while locked"].result.blocked === "locked", "both answered locked");
+            assertEqual(_notices().length, 1, "locked: no notification for a run that never started");
+            ModuleTestKit.setSessionLocked(false);
+            _cancel("going");
+        });
+        _then("the queue is idle", () => _done("going") && _idle(), () => {
+            assertEqual(_notices().length, 1, "unlocked: nothing was kept to start or announce");
+            _hostile();
+        });
+    }
+
+    // A hostile `what`: markup, a line break, an override, past the cap — arrives plain, on
+    // one line, cut whole at 40 characters
+    function _hostile() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        _start("hostile", [_path("talk"), "lines", "1", "0"], { what: "<b>Evil</b>\n& \u202e" + "😀".repeat(50) });
+        _then("the hostile run is answered", () => _done("hostile") && _idle(), () => {
+            const notice = _notices()[0];
+            assertEqual(notice?.body, "Authorization: &lt;b&gt;Evil&lt;/b&gt; &amp; " + "😀".repeat(25) + "…",
+                        "the what cleaned and capped by code point, then escaped for the body");
+            assertEqual(notice?.format, "plain", "… sent as plain text");
+            assertEqual(JSON.stringify(notice?.command.slice(-3)), JSON.stringify(["--", notice?.summary, notice?.body]), "… after \"--\" on notify-send's line");
+            _legacy();
+        });
+    }
+
+    // The old PrivilegedAction: its announcement names no module and no purpose
+    function _legacy() {
+        ModuleTestKit.clearRecords();
+        let answer = null;
+        legacy.elevate = [_path("pkexec")];
+        legacy.run([_path("talk"), "lines", "1", "0"], "Legacy thing", result => {
+            answer = result;
+        });
+        _then("the old run is answered", () => answer !== null && _idle(), () => {
+            assert(answer.ok, "it ran: " + JSON.stringify(answer));
+            assertEqual(JSON.stringify(_notices().map(entry => [entry.summary, entry.body, entry.format])),
+                        JSON.stringify([["Module: Not named", "", "plain"]]), "one notification, as its announcement gives it");
+            ModuleTestKit.setPolkitAgent("active");
+        });
     }
 }

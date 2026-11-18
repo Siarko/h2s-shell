@@ -314,6 +314,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   the module's command; polkit shortens a command past 80 bytes to its two ends, so another
   command with the same ends would get them too. Its texts are shown as plain text. When the screen locks, an open
   prompt is cancelled; click again after unlocking.
+- When another password agent answers (or none, or which one is not known yet), the shell
+  cannot add those lines to its prompt: a module's run as administrator is then announced
+  by a notification just before it starts, "Module: <name>" and "Authorization: <what>",
+  in plain text. It says who runs what, not that a password will be asked.
 - Settings: a System tab for this computer's settings, which apply at once in every
   profile; Authentication is its first page.
 - Wallpaper transitions, set in the theme (Appearance → Animations): a switch to a

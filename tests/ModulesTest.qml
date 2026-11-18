@@ -136,6 +136,8 @@ TestCase {
             assertEqual(entry.level + "|" + entry.key + "|" + entry.write, "info|k|true", "logEntry: an unknown level is info; a changed text is written");
             assert(entry.line.startsWith("[good] a b[0mxx") && Array.from(entry.text).length === ModuleRules.logTextCap && entry.text.endsWith("…"),
                    "logEntry: \"[<id>]\", one line, control characters dropped, cut: " + entry.line.slice(0, 30));
+            assertEqual(ModuleRules.logEntry("good", "info", "evil\u202etxt a\u200db \ufeffc\u2028d\u2029e\u2066f\u2069 😀").text, "eviltxt ab c d ef 😀",
+                        "logEntry: format characters dropped (an override, a joiner, a BOM, isolates), separators as spaces, an emoji kept");
             assertEqual(ModuleRules.logEntry("good", "info", "same", "k", new Map([["k", "info:same"]])).write, false, "logEntry: the key's last level and text again → not written");
             assertEqual(ModuleRules.logEntry("good", "warn", "same", "k", new Map([["k", "info:same"]])).write, true, "logEntry: the same text at another level → written");
             assertEqual(ModuleRules.logEntry("good", "info", "same", "", new Map([["", "same"]])).write, true, "logEntry: no key → always written");

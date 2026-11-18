@@ -355,7 +355,11 @@ names the module's command; another program's request shows polkit's message alo
 names a command longer than 80 bytes by its first and last few words only, so another
 command that starts and ends the same way would get the same lines: they say what a module
 asks, they do not guard against a program bent on fooling the user. Every text in the
-prompt is plain text. When the screen locks, an open prompt is cancelled: the program asks again when
+prompt is plain text. When another password agent answers instead of the shell (or none
+does), the shell cannot add these lines to that agent's prompt: just before a module's run
+starts, a notification names the module and what the run does ("Module: Tailscale",
+"Authorization: Send a file"). It does not mean a password will be asked; that is up to the
+other agent. When the screen locks, an open prompt is cancelled: the program asks again when
 the user tries again after unlocking.
 
 polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader first in

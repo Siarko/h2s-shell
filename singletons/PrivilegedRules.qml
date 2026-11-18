@@ -57,8 +57,8 @@ Singleton {
         return ranges.some(range => code >= range[0] && code <= range[1]);
     }
 
-    // A text's characters by code point, a surrogate pair kept whole (Array.from and
-    // for…of split one in this engine). Not a string: none
+    // A text's characters by code point, a surrogate pair kept whole (Array.from splits
+    // one in this engine). Not a string: none
     function characters(text) {
         if (typeof text !== "string")
             return [];
@@ -91,12 +91,10 @@ Singleton {
     function cleanWhat(value) {
         if (typeof value !== "string")
             return "";
-        let kept = "";
-        for (const character of value.replace(/\s+/g, " ")) {
-            if (!unprintableCode(character.codePointAt(0)))
-                kept += character;
-        }
-        return Array.from(kept.trim()).slice(0, whatMaxLength).join("").trim();
+        const kept = characters(value.replace(/\s+/g, " "))
+            .filter(character => !unprintableCode(character.codePointAt(0))).join("");
+        // By code point: an emoji counts once and is never cut in half
+        return characters(kept.trim()).slice(0, whatMaxLength).join("").trim();
     }
 
     // ---- What a run is asked with ----
@@ -254,6 +252,19 @@ Singleton {
     // the shell sees a request begin and end
     function shellAnswers(agentState) {
         return agentState === "active" || agentState === "conflict";
+    }
+
+    // The notification sent just before a run's pkexec starts, when the shell's own prompt
+    // does not answer (`shellAgent` false: another agent, none, or not known yet) and so
+    // cannot say who asks: who runs what, from the run's announcement
+    // (PolkitRules.announcement: "Module: …", "Authorization: …", "" for an old run), as
+    // plain text. Not whether a password is wanted: the shell cannot know if that agent will
+    // ask. → { summary, options } for Notifier.send, or null (the shell's prompt answers, or
+    // no announcement)
+    function launchNotice(announcement, shellAgent) {
+        if (shellAgent === true || typeof announcement?.summary !== "string" || announcement.summary === "")
+            return null;
+        return { summary: announcement.summary, options: { body: String(announcement.body ?? ""), format: "plain" } };
     }
 
     // ---- The old PrivilegedAction ----

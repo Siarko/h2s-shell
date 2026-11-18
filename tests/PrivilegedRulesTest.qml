@@ -21,7 +21,22 @@ TestCase {
         assertEqual(rules.cleanWhat("​‮ \n"), "", "what: nothing left");
         assertEqual(rules.cleanWhat(42) + rules.cleanWhat(null) + rules.cleanWhat(undefined), "", "what: not a string → \"\"");
         assertEqual(rules.cleanWhat("x".repeat(500)).length, rules.whatMaxLength, "what: capped");
+        assertEqual(rules.cleanWhat("Send 😀 a file"), "Send 😀 a file", "what: an emoji survives cleaning");
+        assertEqual(rules.cleanWhat("x".repeat(rules.whatMaxLength - 1) + "😀😀"), "x".repeat(rules.whatMaxLength - 1) + "😀",
+                    "what: an emoji at the cap counted as one character, never cut in half");
         assertEqual(rules.cleanWhat("Send\u2028a\u2029file"), "Send a file", "what: line and paragraph separators are white space, folded");
+
+        // --- The notification when the shell's prompt does not answer ---
+        const announced = PolkitRules.announcement({ moduleName: "Tailscale", moduleId: "tailscale", what: "Send a file", pkexecArgv: ["/usr/bin/true"] });
+        for (const agentState of ["other", "blocked", "deciding", "none"])
+            assertEqual(JSON.stringify(rules.launchNotice(announced, rules.shellAnswers(agentState))),
+                        JSON.stringify({ summary: "Module: Tailscale", options: { body: "Authorization: Send a file", format: "plain" } }),
+                        "launchNotice, agent " + agentState + ": who runs what, plain");
+        for (const agentState of ["active", "conflict"])
+            assertEqual(rules.launchNotice(announced, rules.shellAnswers(agentState)), null, "launchNotice, agent " + agentState + ": none, the shell's prompt says it");
+        assertEqual(JSON.stringify(rules.launchNotice(PolkitRules.announcement({ legacy: true, what: "x", pkexecArgv: [] }), false)),
+                    JSON.stringify({ summary: "Module: Not named", options: { body: "", format: "plain" } }), "launchNotice: an old run names no module and no purpose");
+        assertEqual(rules.launchNotice(null, false), null, "launchNotice: no announcement, none");
 
         // --- the options ---
         const good = { what: "Connect", timeoutMs: 30000 };

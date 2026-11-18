@@ -20,7 +20,10 @@ TestCase {
         assertEqual(rules.cleanValue(forty), forty, "40 characters: kept whole");
         const cut = rules.cleanValue("b".repeat(41));
         assertEqual(cut, "b".repeat(39) + "…", "41: cut with … at 40");
-        assertEqual(Array.from(rules.cleanValue("😀".repeat(50))).length, 40, "characters, not UTF-16 units, are counted");
+        assertEqual(rules.cleanValue("😀".repeat(50)), "😀".repeat(39) + "…", "characters, not UTF-16 units, are counted: an emoji never cut in half");
+        assertEqual(rules.cleanValue("x".repeat(38) + "😀😀z"), "x".repeat(38) + "😀…", "… an emoji at the cut kept whole");
+        assertEqual(rules.cleanValue("x".repeat(38) + "😀😀"), "x".repeat(38) + "😀😀", "… an emoji at the cap kept whole");
+        assertEqual(rules.cleanValue("Net 😀 tools"), "Net 😀 tools", "an emoji survives cleaning");
         assertEqual(rules.moduleLabel("Tailscale", "tailscale"), "Tailscale", "a name that reads as the id: alone");
         assertEqual(rules.moduleLabel("Net Tools 2", "nettools2"), "Net Tools 2", "… letters and digits compared, lower-cased");
         assertEqual(rules.moduleLabel("System update", "xmod"), "System update (xmod)", "a name that does not: the id in brackets");

@@ -923,7 +923,8 @@ Singleton {
     readonly property int maxLogKeys: 256
 
     // One line of module.log(level, text, key) → { level (one of logLevels), text (on one
-    // line: line breaks and tabs as spaces, other control characters dropped, cut at
+    // line: line breaks, tabs and U+2028/2029 as spaces, other control and format
+    // characters dropped (PrivilegedRules.unprintableCode), counted by code point, cut at
     // logTextCap), key (cut at logKeyCap; "" none), line ("[<id>] <text>"), memo (what the
     // key remembers once it is written: the level and the text), write }.
     // `written`: a Map of each key to the memo it wrote last (anything else: none). With a
@@ -945,9 +946,10 @@ Singleton {
     function _logText(value, cap) {
         if (typeof value !== "string" && typeof value !== "number")
             return "";
-        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
-        const characters = PrivilegedRules.characters(folded);
-        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : folded;
+        // As Notifier.plainText: a log line cannot be reordered or hidden by a format character
+        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
+        const characters = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0)));
+        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : characters.join("");
     }
 
     // An object of Qt's (a QtObject, an Item) rather than plain data

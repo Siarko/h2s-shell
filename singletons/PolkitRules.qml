@@ -96,12 +96,10 @@ Singleton {
     function cleanValue(value) {
         if (typeof value !== "string")
             return "";
-        let kept = "";
-        for (const character of value.replace(_blank, " ")) {
-            if (!PrivilegedRules.unprintableCode(character.codePointAt(0)))
-                kept += character;
-        }
-        const characters = Array.from(kept.replace(/ +/g, " ").trim());
+        const kept = PrivilegedRules.characters(value.replace(_blank, " "))
+            .filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0))).join("");
+        // By code point: an emoji counts once and is never cut in half
+        const characters = PrivilegedRules.characters(kept.replace(/ +/g, " ").trim());
         if (characters.length <= announcementCap)
             return characters.join("");
         return characters.slice(0, announcementCap - 1).join("").replace(/ +$/, "") + "…";

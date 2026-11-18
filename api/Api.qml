@@ -344,7 +344,8 @@ import qs.singletons.network
 //                          message names that command; past 80 bytes pkexec names only its
 //                          first 38 and last 37 bytes, so another command with the same ends
 //                          gets the same lines. Another agent's prompt shows polkit's message
-//                          alone:
+//                          alone; then the shell sends a notification just before pkexec
+//                          starts, "Module: <name>" and "Authorization: <what>". The refusals:
 //                            blocked "unprintable"  a word holds a control or format character
 //                                            or a line or paragraph separator (a line
 //                                            break, a right-to-left override, U+2028): the
