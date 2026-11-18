@@ -314,7 +314,7 @@ Flickable {
                         required property var modelData
                         label: modelData.label
                         fontSize: Theme.fontSizeBody
-                        minimumHeight: 26
+                        size: "m"
                         picked: modelData.value === root._values.wallpaper?.[_choice.token]
                         onClicked: if (!picked && root._editable) Theme.draftToken(root.themeName, "wallpaper", _choice.token, modelData.value)
                     }

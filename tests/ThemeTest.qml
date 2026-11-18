@@ -92,6 +92,17 @@ TestCase {
         assertEqual(Theme.warningButton.radius, Theme.builtin.warningButton.radius, "buttons that warn have a group of their own");
         assertEqual(Theme.successButton.radius, Theme.builtin.successButton.radius, "and buttons for a good outcome");
 
+        // --- a pill's height by size ---
+        assertEqual(JSON.stringify([Theme.builtin.pill.minHeight, Theme.builtin.pill.mediumHeight, Theme.builtin.pill.largeHeight]), "[22,26,30]",
+            "the pills' three built-in heights");
+        const pill = { minHeight: 10, mediumHeight: 20, largeHeight: 40 };
+        assertEqual(ThemeRules.pillHeight(pill, "s"), 10, "a small pill takes the theme's small height");
+        assertEqual(ThemeRules.pillHeight(pill, "m"), 20, "a medium one the medium height");
+        assertEqual(ThemeRules.pillHeight(pill, "l"), 40, "a large one the large height");
+        assertEqual(ThemeRules.pillHeight(pill, "xl"), 10, "a size that does not exist is small");
+        assertEqual(ThemeRules.pillHeight(pill, "toString"), 10, "… a word every object knows included");
+        assertEqual(ThemeRules.pillHeight(pill, undefined), 10, "and so is no size");
+
         // --- a button's look by kind and state ---
         const look = (kind, state) => {
             const found = ThemeRules.buttonLook(kind, state);

@@ -46,6 +46,7 @@ QtObject {
     property var _lockIoRules: LockIoRulesTest {}
     property var _pointerInput: PointerInputTest {}
     property var _buttonKinds: ButtonKindsTest {}
+    property var _pillSizes: PillSizesTest {}
     property var _lockView: LockViewTest {}
     property var _moduleRules: ModuleRulesTest {}
     property var _quickshellPin: QuickshellPinTest {}
@@ -53,7 +54,7 @@ QtObject {
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _lockView, _modules, _moduleRegistries, _vpnProviders]
+    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _lockView, _modules, _moduleRegistries, _vpnProviders]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed. A suite

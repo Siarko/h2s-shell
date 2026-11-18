@@ -669,7 +669,7 @@ Item {
                     label: modelData.label
                     picked: modelData.value === root.shownValue
                     fontSize: Theme.fontSizeBody
-                    minimumHeight: 26
+                    size: "m"
                     opacity: picked && root._dimmed ? 0.5 : 1
                     onClicked: root.edited(modelData.value)
                 }

@@ -44,6 +44,13 @@ Singleton {
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
         "checkbox", "lock", "border", "target", "popupWidth"]
 
+    // A pill's least height for its `size`, from the theme's `pill` group: "s", "m" or
+    // "l". Any other word is "s".
+    function pillHeight(pill, size) {
+        const token = size === "m" ? "mediumHeight" : size === "l" ? "largeHeight" : "minHeight";
+        return pill?.[token] ?? 0;
+    }
+
     // How a button of `kind` looks (SmallButton, DeleteButton), as names: `group` is the
     // theme's group its radius comes from, `fill`, `label` and `border` are colours of
     // Theme; `border` is "" for a kind without one. `state`: `hot` (under the pointer or a
@@ -288,7 +295,9 @@ Singleton {
             iconButton: [radius("Small buttons with an icon: pin, reset, remove", 20)],
             pill: [radius("Choices: presets, options, days", 20),
                 { token: "horizontalPadding", label: "Padding", hint: "Between a pill's edge and its label", from: 0, to: 30, suffix: px },
-                { token: "minHeight", label: "Height", hint: "A pill's least height", from: 14, to: 48, suffix: px }],
+                { token: "minHeight", label: "Height, small", hint: "A small pill's least height", from: 14, to: 48, suffix: px },
+                { token: "mediumHeight", label: "Height, medium", hint: "A medium pill's least height", from: 14, to: 48, suffix: px },
+                { token: "largeHeight", label: "Height, large", hint: "A large pill's least height", from: 14, to: 48, suffix: px }],
             field: [radius("Text fields", 20),
                 { token: "horizontalPadding", label: "Padding", hint: "Between a field's edge and its text", from: 0, to: 30, suffix: px }],
             checkbox: [radius("Check boxes", 10)],

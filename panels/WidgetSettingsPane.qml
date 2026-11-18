@@ -99,7 +99,7 @@ Item {
                         label: modelData === "" ? "None" : modelData
                         picked: modelData === root.currentPreset
                         fontSize: Theme.fontSizeBody
-                        minimumHeight: 24
+                        size: "s"
                         onClicked: {
                             if (!picked)
                                 root.presetAssigned(modelData)

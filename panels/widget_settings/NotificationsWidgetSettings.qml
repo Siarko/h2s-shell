@@ -80,7 +80,7 @@ Item {
                         label: modelData.label
                         picked: modelData.value === root._animation
                         fontSize: Theme.fontSizeBody
-                        minimumHeight: 26
+                        size: "m"
                         onClicked: WidgetPresets.set(root.widgetType, root.presetName, "animation", modelData.value)
                     }
                 }

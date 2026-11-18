@@ -77,7 +77,7 @@ Item {
                         label: modelData.label
                         picked: modelData.value === root._percentSide
                         fontSize: Theme.fontSizeBody
-                        minimumHeight: 26
+                        size: "m"
                         onClicked: WidgetPresets.set(root.widgetType, root.presetName, "percent", modelData.value)
                     }
                 }

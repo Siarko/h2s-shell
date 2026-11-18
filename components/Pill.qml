@@ -1,15 +1,18 @@
 import QtQuick
 import qs.singletons
 
-// One choice among several, outlined, filled with the accent when picked. As tall as its
-// label needs, never less than `minimumHeight`.
+// One choice among several, outlined, filled with the accent when picked. `size` is "s",
+// "m" or "l": the theme's three pill heights (ThemeRules.pillHeight). As tall as its
+// label needs, never less than its size's height.
 Rectangle {
     id: root
 
     property string label
     property bool picked: false
     property int fontSize: Theme.fontSizeSmall
-    property int minimumHeight: Theme.pill.minHeight
+    property string size: "s"
+    // The size's height. The shell's views set `size`, never this.
+    property int minimumHeight: ThemeRules.pillHeight(Theme.pill, size)
     // What the choice means, shown on hover ("" none)
     property string tooltip: ""
     signal clicked

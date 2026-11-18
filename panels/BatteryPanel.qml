@@ -197,7 +197,7 @@ Item {
                     label: modelData.label
                     picked: modelData.value === Profiles.currentPowerProfile
                     fontSize: Theme.fontSizeBody
-                    minimumHeight: 30
+                    size: "l"
                     onClicked: Profiles.setPowerProfile(modelData.value)
                 }
             }

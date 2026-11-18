@@ -349,6 +349,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Pills (the small choice buttons) come in three sizes, small, medium and large: 22, 26
+  and 30 px, each height set in Settings → Appearance → Controls → Pills. The pills of the
+  profile condition editor and of the widget settings pane's presets are 2 px lower (22
+  instead of 24).
 - Buttons: the ones that stop or remove something — "Disconnect", "Turn off hotspot",
   "Forget", "Delete", the "✕" on a Bluetooth device — have a red border, so they stand out
   before the pointer is over them and on a touch screen; under the pointer they fill red.

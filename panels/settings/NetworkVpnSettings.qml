@@ -160,7 +160,7 @@ Item {
                                 required property var modelData
                                 label: modelData.label
                                 fontSize: Theme.fontSizeBody
-                                minimumHeight: 26
+                                size: "m"
                                 picked: root._importType === modelData.value
                                 onClicked: root._importType = modelData.value
                             }

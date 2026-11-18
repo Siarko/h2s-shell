@@ -551,7 +551,7 @@ Flickable {
                                 required property var modelData
                                 label: modelData.label
                                 fontSize: Theme.fontSizeBody
-                                minimumHeight: 26
+                                size: "m"
                                 onClicked: root._open("wallpaper.pinned", modelData.slot)
                             }
                         }

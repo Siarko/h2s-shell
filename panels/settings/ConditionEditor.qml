@@ -55,7 +55,7 @@ Item {
             // The fact; clicking it opens the list of facts below
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 label: (root.factType?.label ?? ProfileRules.unknownFactLabel(root.leaf.fact)) + " ▾"
                 picked: root._pickingFact
                 onClicked: root._pickingFact = !root._pickingFact
@@ -64,7 +64,7 @@ Item {
             // bool
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 visible: root.factType?.type === "bool"
                 label: "yes"
                 picked: root.leaf.is === true
@@ -72,7 +72,7 @@ Item {
             }
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 visible: root.factType?.type === "bool"
                 label: "no"
                 picked: root.leaf.is === false
@@ -82,7 +82,7 @@ Item {
             // percent and number (a module's fact): below / above, and the number
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 visible: root._compared
                 label: "below"
                 picked: root.leaf.lt !== undefined
@@ -90,7 +90,7 @@ Item {
             }
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 visible: root._compared
                 label: "above"
                 picked: root.leaf.gt !== undefined
@@ -138,7 +138,7 @@ Item {
 
                 Pill {
                     fontSize: Theme.fontSizeBody
-                    minimumHeight: 24
+                    size: "s"
                     required property string modelData
                     label: modelData
                     picked: root.leaf.is === modelData
@@ -148,7 +148,7 @@ Item {
 
             Pill {
                 fontSize: Theme.fontSizeBody
-                minimumHeight: 24
+                size: "s"
                 label: "×"
                 onClicked: root.removed()
             }
@@ -168,7 +168,7 @@ Item {
 
                 Pill {
                     fontSize: Theme.fontSizeBody
-                    minimumHeight: 24
+                    size: "s"
                     required property var modelData
                     label: modelData.label
                     picked: modelData.fact === root.leaf.fact

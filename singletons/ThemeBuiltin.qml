@@ -104,7 +104,8 @@ Singleton {
         "warningButton": { "radius": 6 },
         "successButton": { "radius": 6 },
         "iconButton": { "radius": 4 },
-        "pill": { "radius": 6, "horizontalPadding": 7, "minHeight": 22 },
+        // A pill's least height by size: minHeight "s", mediumHeight "m", largeHeight "l"
+        "pill": { "radius": 6, "horizontalPadding": 7, "minHeight": 22, "mediumHeight": 26, "largeHeight": 30 },
         "field": { "radius": 6, "horizontalPadding": 8 },
         "notificationCard": { "radius": 8, "padding": 8, "controlRadius": 5 },  // in the panel
         "osdToast": { "radius": 8, "padding": 10, "width": 360, "screenGap": 16, "spacing": 8, "badgeWidth": 36, "borderWidth": 0 },

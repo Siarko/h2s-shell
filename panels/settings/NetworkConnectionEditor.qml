@@ -233,7 +233,7 @@ Item {
                     label: modelData.label
                     tooltip: modelData.hint ?? ""
                     fontSize: Theme.fontSizeBody
-                    minimumHeight: 26
+                    size: "m"
                     picked: modelData.value === _choice.value
                     onClicked: _choice.picked(modelData.value)
                 }
@@ -832,7 +832,7 @@ Item {
                             label: modelData.name
                             tooltip: VpnManager.typeName(modelData)
                             fontSize: Theme.fontSizeBody
-                            minimumHeight: 26
+                            size: "m"
                             picked: root._vpnsEdited.includes(modelData.uuid)
                             onClicked: root._vpnsEdited = picked
                                 ? root._vpnsEdited.filter(vpn => vpn !== modelData.uuid)
@@ -851,7 +851,7 @@ Item {
                             label: VpnManager.labelOf(modelData.id)
                             tooltip: "Not available now (its provider not loaded, signed out or not listing it): kept until you take it out"
                             fontSize: Theme.fontSizeBody
-                            minimumHeight: 26
+                            size: "m"
                             picked: root._vpnsEdited.includes(modelData.id)
                             onClicked: root._vpnsEdited = picked
                                 ? root._vpnsEdited.filter(vpn => vpn !== modelData.id)
