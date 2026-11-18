@@ -41,9 +41,10 @@ lane: the notification when the shell's prompt does not answer (A6).
       program's open request holds it at most 2 minutes from launch and never releases it.
       On lock the open request is cancelled (any, not only the shell's) and the prompt is
       not shown while locked. Left open:
-  - **To read once by hand (the owner, both machines):** pkexec's real message in the
-    shell's prompt. Everything ran on the test kit's agent; its message is built
-    independently of the code, from pkexec.c.
+  - **Read by hand on Arch (2026-11-18, polkit 128, English):** the shell's prompt showed
+    "Authentication is needed to run `/usr/bin/true' as the super user", as the matcher
+    expects (backtick, apostrophe). Still to read on NixOS. A run from a module through the
+    queue has not been seen on a real prompt.
   - **polkit's limit, documented:** past 80 bytes another command with the same first 38
     and last 37 bytes (another program's too) gets the same lines. Not fixable from the
     flow, which carries only message, action and cookie. Consistent with the trust
