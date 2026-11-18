@@ -122,6 +122,57 @@ If 1 or 2 fails, the same four with a small shell window as the dialog's parent.
 fails too, the slice stops and reports: the API is not built on a guess, and row 20 of §1
 stays until it is solved.
 
+**The spike's finding** (E0; Arch, Quickshell 0.3.2, Qt 6.12, Hyprland and the runners'
+headless labwc 0.20.3; not run on NixOS). A scratch shell of its own, the dialog made by the
+shell's root, opened by a click in a layer-shell window that then closes.
+
+Which dialog appears is decided by Qt's platform theme (`QT_QPA_PLATFORMTHEME`), not by the
+shell, and the three behave differently:
+
+| Platform theme | Dialog | Without a parent window | Several files | `reject()`, `close()` | Destroyed while open |
+|---|---|---|---|---|---|
+| none; `qt6ct` with its "standard dialogs" left at the default (this machine); the runners' compositor | Qt Quick's own, a window of the shell (`org.quickshell`), drawn in the Controls style, not the shell's theme | does not open: `open()` does nothing, `visible` stays false, no warning | no: its list has one current item; Shift+Down and Ctrl+A gave one file | the window goes at once | no crash; **the window stays** until the shell ends. Closed first, then destroyed: gone at once |
+| `xdgdesktopportal` | the portal's (here `xdg-desktop-portal-gtk`, a window of that process); `multiple`, `directory`, `current_folder` are sent | opens | offered by the portal (the option is sent; not picked by hand) | the dialog reports closed, **the window stays** until the shell ends | no crash; the window stays until the shell ends |
+| `gtk3` | GTK's, in the shell's process | opens | not tried | the window goes | not tried |
+
+`options: FileDialog.DontUseNativeDialog` (`FolderDialog` has it too) gives Qt Quick's own
+dialog under every theme (seen under `xdgdesktopportal`: no portal call).
+
+The four points, for Qt Quick's own dialog, which is the one this machine and the test bed
+have:
+
+1. **Fails without a parent, passes with one.** The parent is any visible window of the
+   shell: the dialog is made as a child of an item in it. A hidden window does not count. A
+   layer-shell window does, also one transparent pixel shown only while the dialog is open,
+   so no window of the settings is needed and nothing else shows. The dialog stays when the
+   popup closes. Under a layer-shell parent Hyprland tiles it; under a normal window it
+   floats.
+2. **Passes.** Hyprland: the dialog is the active window as soon as it is mapped (the
+   compositor's answer; no key was sent on the real session). labwc: a real Escape cancelled
+   it and a real Return accepted the chosen file (`wtype`, in the runners' compositor).
+3. **One file, one folder, a cancel: pass. Several files: fail.** `FileDialog.OpenFiles`
+   opens, and returns one file. `startDirectory` (`currentFolder`) is where it opens (seen
+   in the real window). A `FolderDialog` accepted with nothing chosen returns the first
+   folder in the list, not the folder it shows (`accept()` from code; the "Open" button was
+   not clicked by hand).
+4. **Passes, with a rule.** No crash in Hyprland or labwc. The dialog is closed before it
+   is destroyed, else its window stays.
+
+What follows for E1:
+
+- The shape that works everywhere tried: Qt Quick's own dialog (`DontUseNativeDialog`), a
+  one-pixel layer-shell window of the shell as its parent, `close()` before `destroy()`.
+  It is the only one the shell can close (a lock, a module turned off) and the only one a
+  test can drive.
+- That shape cannot return several files, which `openMany` promises and the module's
+  "send files" uses. The portal can, but its window cannot be closed by the shell, and it
+  is there only where the user's platform theme says so. **E1 waits for the owner's
+  choice:** one file per call (and `openMany` leaves the API, or returns one), the
+  platform's dialog where there is one (several files; a lock does not close it), or a
+  chooser of the shell's own.
+- Not tried by hand, for the owner: Ctrl+click and Shift+click on two files in Qt Quick's
+  own dialog (expected: one stays chosen); "Open" in the folder dialog with nothing chosen.
+
 ### 3.10 Not in this plan
 
 - A terminal call and a terminal setting: the owner decided a global "default programs"
@@ -144,7 +195,7 @@ The rows of this file's slices; the order, sizes and dependencies are in the ind
 | C1 Helpers | 1.9 | `singletons/AddressRules.qml`, `network/NetworkRules.qml`, `Format.qml`, `Notifier.qml`, `api/Api.qml`, `api/ModuleHandle.qml` | `AddressRulesTest`, `FormatTest`, `NotifierTest`, `ModulesTest` |
 | C2 System facts, data directory | 1.10 | `singletons/SystemFacts.qml`, `ModuleHost.qml`, `api/Api.qml`, `api/ModuleHandle.qml`, test kit | `SystemFactsTest` |
 | D1 Network facts | 1.11 | `ModuleRules.qml` (`apiNetworks`, `apiVpnsUp`, `apiLocalNetworks`), `api/Api.qml`, `network/VpnManager.qml`, `components/VpnProvider.qml` | `ModuleRulesTest` |
-| E0 File chooser: the spike | — | none kept; the finding goes into this plan | the four points of §3.9, on both systems |
+| E0 File chooser: the spike | — | none kept; the finding is in §3.9 | the four points of §3.9, on Arch; not run on NixOS |
 | E1 File chooser | 1.12 | `singletons/FileChooser.qml`, `ModuleHost.qml`, `api/ModuleHandle.qml`, test kit, `tests/lock-closure.sh` | recorded calls in test mode; closed with the module; by hand |
 
 ---
@@ -157,7 +208,25 @@ The part of the plan's §9 that is about this file.
 - The module's two dialogs (`TaildropSection.qml`): several files, from the home directory;
   a folder, from the current one. The core has a `FileDialog` on the VPN page.
 
+**Verified by running it** (the spike, §3.9; Arch only).
+- A `FileDialog` of the shell with no window as its parent does not open, silently, unless
+  the platform theme gives a native dialog. With a visible window of the shell as its
+  parent (a one-pixel layer-shell window is enough) it is a window of its own, stays when
+  the popup closes, and has the keyboard in Hyprland and in labwc.
+- Qt Quick's own dialog returns one file, never several; a folder; a cancel; it opens in
+  `currentFolder`.
+- Destroyed while open: no crash, the window stays; closed first, it goes. The portal's
+  window cannot be closed from the shell at all.
+
+**What the current code makes hard.**
+- **Several files and a dialog the shell can close do not come together** (§3.9): Qt Quick's
+  own dialog has the second, the portal's the first.
+- The module's "send files" dialog and the core's two (`NetworkVpnSettings.qml`,
+  `WallpaperSettings.qml`) are plain `FileDialog`s: which dialog a user gets, and whether
+  several files can be picked, depends on the platform theme today.
+
 **Assumed.**
 - NetworkManager may or may not report `tailscale0`'s addresses; the filter covers both.
-- Whether `FileDialog` opens as its own window in the shell (the spike, §3.9). The
-  module's dialogs have never been clicked on a real machine (tracker backlog).
+- The module's dialogs have never been clicked on a real machine (tracker backlog).
+- NixOS has the same three dialogs by platform theme as Arch (§3.9): the spike was not run
+  there.
