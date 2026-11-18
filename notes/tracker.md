@@ -20,8 +20,41 @@ the bordered buttons (second), pills in three sizes and the public button (third
 other public elements (fourth), the command runner and the module host on it (fifth) are
 on `master` (below). The elements lane is done but for a module's icon (U7a). The first
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
-fifth was reviewed and ran on both machines. Next in the commands lane: program lookup
-with trust (A2).
+fifth and sixth were reviewed and ran on both machines. Next in the commands lane: test
+mode (A3) — it waits on the owner's answer about gating the test seams (sixth batch,
+below).
+
+- [x] **API plan, sixth batch**: on `master` (2026-11-18; reviewed by a second agent on
+      the diff, four findings in the trust verdict, all fixed by the author with a failing
+      case each; `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS, tools
+      from nix): program lookup with trust (A2, module API 1.9: `module.programs`,
+      `optionalPrograms`, `ModuleRules.programProbeScript` / `programWalk` /
+      `programVerdict`; `CommandTools` takes the first trusted `timeout` / `setpriv` on
+      `PATH`, the fixed-directory stand-in is gone) and one reader for the test seams
+      (A2b, `TestSeams`, no API change). Left open:
+  - **For the owner, before A3:** the test seams (environment variables by which the
+    tests swap programs and paths for stand-ins) are read in one place now, but still
+    count in any session, as before. `architecture-cleanup.md` decision 7.5 (count them
+    only with `H2S_TEST_BED=1` plus a marker file) was never answered; A3's rule "a stray
+    environment variable never turns test mode on" needs that gate, and adding it changes
+    the lock bed.
+  - The verdict walks the path component by component (as `namei -l`), judging the
+    directory that holds each link; it is stricter than the plan's wording.
+  - A required program found but untrusted does not stop the module: it shows
+    `trusted: false`. Only a missing required program gives `missing-program`.
+  - A PATH entry the user chose that points straight into a root-owned Nix store
+    (nix-shell, direnv) is trusted: the user picks what runs, though nobody can change it.
+    The store counts as root's only when `/nix/store` is root's and not writable by the
+    user (a single-user install is judged path by path).
+  - The probe runs as `/bin/sh` with a fixed PATH (`/run/current-system/sw/bin:/usr/bin:/bin`,
+    `ModuleRules.probeToolPath`); the PATH judged is an argument. A system with its tools
+    elsewhere would find none.
+  - A recheck that does not answer in time keeps the old path but marks it untrusted, so a
+    slow wake does not unload the module. Relative and empty PATH entries are skipped.
+  - The NixOS cases (system profile into the store, `~/.nix-profile`, the `/run/wrappers`
+    setuid `pkexec`) are unit cases on made-up probe output; the real probe ran on both
+    machines only through the suites' fixtures.
+  - `ModuleHost.programEnvironment` (the lookup's PATH) is a property for the suites.
 
 - [x] **API plan, fifth batch**: on `master` (2026-11-18; reviewed by a second agent on
       the diff, two medium findings, both fixed by the author; `tests/run-all.sh` passes
@@ -29,9 +62,6 @@ with trust (A2).
       module API 1.8: `singletons/io/CommandRunner.qml`, `CommandRules`, `CommandTools`,
       `api/CommandRunner.qml`; `CommandAction`, `CommandQuery` and xdg-open run through
       it) and the module host's four checks on it (A1b). Left open:
-  - **For A2 (program lookup with trust):** `CommandTools` finds `timeout` and `setpriv`
-    in two fixed system directories (`/run/current-system/sw/bin`, `/usr/bin`), never on
-    `PATH`. It is a stand-in for A2's verdict and goes when A2 is built.
   - **For A4 (privileged start):** a run with a limit starts as
     `timeout -k … setpriv --pdeathsig KILL -- <command>`, so the command dies when
     `timeout` is killed. The kernel drops that request for a setuid program: a `pkexec`
