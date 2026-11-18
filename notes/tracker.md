@@ -330,7 +330,20 @@ Found during the test split (2026-11-17):
       files chosen in Dolphin, the owner's file manager for now (a service menu is the
       likely way). Dolphin is not the only one, and a file manager of the project's own
       may be written; so explore what a module needs from the API to offer such an action
-      to any file manager, not Dolphin's format alone.
+      to any file manager, not Dolphin's format alone. To look at first, no code of ours:
+      the KDE portal backend (`xdg-desktop-portal-kde`, `FileChooser=kde` in the user's
+      `hyprland-portals.conf`) makes Dolphin's dialog the file chooser of every program
+      that asks the portal.
+- [ ] A file chooser of the project's own as a portal backend (the owner, 2026-11-18;
+      with a file manager of the project's own, for one look across the system): a D-Bus
+      service that implements `org.freedesktop.impl.portal.FileChooser`, a `.portal` file
+      that announces it, and a line in the user's portal configuration that prefers it
+      (`~/.config/xdg-desktop-portal/<desktop>-portals.conf`; packages' files are under
+      `/usr/share/xdg-desktop-portal/`). Then every program that asks the portal gets it,
+      not the shell alone. A program reaches the portal only if its toolkit is told to:
+      Qt by the platform theme (`qt6ct`: "Standard dialogs"), which is the user's setting,
+      not the shell's. The shell cannot close another process's dialog on a lock — its own
+      backend could. NixOS and Arch differ in where the files go.
 
 ## Open points
 
