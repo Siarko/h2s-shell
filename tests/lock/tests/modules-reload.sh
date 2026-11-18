@@ -27,12 +27,15 @@ good=$(cd "$LOCKTEST_SHELL/tests/fixtures/modules/good" && pwd -P) || abort "no 
 stack_start --reload-seam --modules "$good" --shell-env H2S_SHELL_TEST_MODULE_CHECK_PATH="$standins" \
     --shell-env H2S_SHELL_TEST_MODULE_CHECK_MS=40000
 
-# The file check's processes, by a sentence only its script holds: "<pid> <name>" each —
-# `timeout`, whose arguments hold the script too, and the `sh` that runs it
+# The file check's processes, by a sentence only its script holds: "<pid> <program>" each —
+# `timeout`, whose arguments hold the script too, and the `sh` that runs it. The program is
+# the first word of the command line without its directory: the process's name is not
+# "timeout" where coreutils is one program for all its tools
 check_processes() {
-    local pid
+    local pid program
     for pid in $(test_pgrep -f "leaves the module directory through a link"); do
-        echo "$pid $(cat "/proc/$pid/comm" 2> /dev/null)"
+        program=$({ tr '\0' '\n' < "/proc/$pid/cmdline" | head -n 1; } 2> /dev/null)
+        echo "$pid ${program##*/}"
     done
 }
 parent_of() { awk '{ print $4 }' "/proc/$1/stat" 2> /dev/null; }

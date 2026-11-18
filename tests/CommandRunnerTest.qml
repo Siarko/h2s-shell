@@ -123,6 +123,10 @@ TestCase {
         return _runs[name].lines.some(entry => entry[0] === line);
     }
 
+    // Prints the program its parent was started as: the first word of its command line
+    // (not the process's name, which coreutils as one program for all its tools sets to
+    // the path it was called by, cut short)
+    readonly property string _parentProgram: "tr '\\0' '\\n' < /proc/$PPID/cmdline | head -n 1"
     // A script that tells it runs, shrugs TERM off, and goes on until it is killed
     readonly property string _stubborn: "trap '' TERM; echo \"$$\"; while :; do sleep 0.05; done"
     // Ends when the process is gone
@@ -142,9 +146,9 @@ TestCase {
         _start("exit", wrapping, ["sh", "-c", "printf 'a b\\n\\nc'; printf 'oops\\n' >&2; exit 3"]);
         _start("words", wrapping, ["sh", "-c", "printf '%s|%s|%s|%s' \"$1\" \"$2\" \"$RUNNER_ONLY\" \"$BOTH\"", "sh", "two words", "$HOME; `id`"],
                { environment: { BOTH: "run" } });
-        _start("parent", wrapping, ["sh", "-c", "cat /proc/$PPID/comm"]);
-        _start("parentNoLimit", wrapping, ["sh", "-c", "cat /proc/$PPID/comm"], { timeoutMs: 0 });
-        _start("parentNoSetpriv", halfWrapping, ["sh", "-c", "cat /proc/$PPID/comm"]);
+        _start("parent", wrapping, ["sh", "-c", _parentProgram]);
+        _start("parentNoLimit", wrapping, ["sh", "-c", _parentProgram], { timeoutMs: 0 });
+        _start("parentNoSetpriv", halfWrapping, ["sh", "-c", _parentProgram]);
         _start("notKept", wrapping, ["sh", "-c", "echo out; echo err >&2"], { keepOutput: false });
         _start("capped", wrapping, ["sh", "-c", "head -c 5000 /dev/zero | tr '\\0' x; echo; echo short"], { maxOutputBytes: 1000 });
         const blanks = ["\\n\\na\\n", "a\\n\\n\\nb", "\\n", "a\\n\\nb\\n\\n\\nc\\n"];
@@ -176,9 +180,9 @@ TestCase {
 
             assertEqual(_runs.words.result.stdout, "two words|$HOME; `id`|runner|run", "words kept whole, no shell reads them; the runner's environment, the run's on top");
             assert(_runs.words.result.ok, "exit 0: ok");
-            assertEqual(_runs.parent.result.stdout.trim(), "timeout", "a run with a limit is started inside timeout");
-            assert(_runs.parentNoLimit.result.ok && _runs.parentNoLimit.result.stdout.trim() !== "timeout", "one without a limit is not");
-            assert(_runs.parentNoSetpriv.result.ok && _runs.parentNoSetpriv.result.stdout.trim() !== "timeout",
+            assertEqual(_runs.parent.result.stdout, CommandTools.timeout, "a run with a limit is started inside timeout");
+            assert(_runs.parentNoLimit.result.ok && !_runs.parentNoLimit.result.stdout.endsWith("/timeout"), "one without a limit is not");
+            assert(_runs.parentNoSetpriv.result.ok && !_runs.parentNoSetpriv.result.stdout.endsWith("/timeout"),
                    "… nor one with a limit where setpriv is missing: it would outlive its timeout");
 
             assertEqual(_runs.notKept.result.stdout + "|" + _runs.notKept.result.stderr + "|" + _runs.notKept.lines.length, "||2", "keepOutput false: the answer holds none, the callbacks got it");
