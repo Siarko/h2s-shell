@@ -729,7 +729,9 @@ and a trusted `timeout` are found.
   `PolkitRules.announces` ties to it) was seen and no request is open any more, or 2 s
   with none. The agent shows one request at a time, so the run's own may wait behind
   another program's: while another request is open before the run's own was seen, the 2 s
-  do not run (they start again when it ends), at most 2 minutes. With another agent, which
+  do not run (they start again when it ends). Any other program's open request — before
+  the run's own or after it — holds the head at most 2 minutes from the run's start; only
+  the run's own open request holds it longer, while the user answers. With another agent, which
   the shell cannot see, until it ends, at most 2 minutes. Then the next may start though the first still runs. A
   run cancelled while it holds the head keeps it until its pkexec has exited, or 3 s
   (`killAfterMs`) have passed, so its request is never shown with the next run's. A module

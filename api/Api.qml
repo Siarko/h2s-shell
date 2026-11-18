@@ -317,7 +317,8 @@ import qs.singletons.network
 //                          run keeps the next waiting while its question can still come —
 //                          with the shell's own prompt until its own request was seen and no
 //                          request is open, or 2 s with none (not counted while another
-//                          program's request is open, at most 2 minutes); with another agent
+//                          program's request is open); another program's open request holds
+//                          it at most 2 minutes, its own as long as it is open; with another agent
 //                          until it ends, at most 2 minutes;
 //                          a cancelled one until it has exited, or 3 s. A long run does not
 //                          hold the others otherwise. The session locked: nothing starts,

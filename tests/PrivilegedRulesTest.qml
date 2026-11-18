@@ -198,10 +198,21 @@ TestCase {
                     "no request ending that was never seen opening: nothing, the 2 s unchanged");
         // Another program's request shown after its own: held until no request is open
         stepped = step(ownOpen, { type: "request", open: true, own: false, now: 3000 });
-        assertEqual(kinds(stepped) + " | " + phases(stepped.state) + " | " + rules.nextDeadline(stepped.state), " | 1=asking 2=waiting | 0",
+        assertEqual(kinds(stepped) + " | " + phases(stepped.state), " | 1=asking 2=waiting",
                     "its own replaced by another program's: not released");
-        stepped = step(stepped.state, { type: "request", open: false, own: false, now: 9000 });
-        assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "… released when that one ends too");
+        assertEqual(kinds(step(stepped.state, { type: "request", open: false, own: false, now: 9000 })) + " | "
+                    + phases(step(stepped.state, { type: "request", open: false, own: false, now: 9000 }).state),
+                    "check:2 | 1=running 2=checking", "… released when that one ends too");
+        // … but not past 2 minutes from the launch: another program's prompt left open does
+        // not stall every later run
+        assertEqual(rules.nextDeadline(stepped.state), 100 + rules.headStrictMs, "another program's request after its own: at most 2 minutes from the launch");
+        assertEqual(kinds(step(stepped.state, { type: "tick", now: 60000 })), "", "… a minute later still held");
+        const foreignAfterOwn = step(stepped.state, { type: "tick", now: 100 + rules.headStrictMs });
+        assertEqual(kinds(foreignAfterOwn) + " | " + phases(foreignAfterOwn.state), "check:2 | 1=running 2=checking",
+                    "… released after 2 minutes, that request still open");
+        stepped = step(step(ownOpen, { type: "request", open: true, own: false, now: 3000 }).state, { type: "request", open: true, own: true, now: 4000 });
+        assertEqual(kinds(step(stepped.state, { type: "tick", now: 200000 })) + " | " + rules.nextDeadline(stepped.state), " | 0",
+                    "its own open again after the other: held, no limit");
         // Another program's request in front, before its own was seen: its own may wait behind it
         stepped = step(asking, { type: "request", open: true, own: false, now: 500 });
         assertEqual(rules.nextDeadline(stepped.state), 100 + rules.headStrictMs, "another program's request open: the 2 s do not run, at most 2 minutes from the launch");

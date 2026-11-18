@@ -350,7 +350,8 @@ Singleton {
     //     own may wait behind another program's: while another request is open before its
     //     own was seen, the headQuietMs wait does not run (it starts again when that request
     //     ends), up to headStrictMs from the launch; once its own was seen, another request
-    //     shown after it keeps the head until that one ends too;
+    //     shown after it keeps the head until that one ends too, again up to headStrictMs
+    //     from the launch. Only its own open request holds it without a bound;
     //   - with another agent: when it ends, or after headStrictMs;
     //   - when it exits, or (ending) when it exits or killAfterMs has passed: so a
     //     cancelled run's request, still on its way, is never shown with the next run.
@@ -447,10 +448,15 @@ Singleton {
                 break;
             const open = event.open === true || event.own === true;
             if (head.requestSeen) {
-                // Its own seen: held while any request is open, let go when none is
+                // Its own seen: held while any request is open, let go when none is. Its own
+                // open request holds without a bound (the user is answering it); another
+                // one — or one it cannot be told from (the flow replaced) — at most
+                // headStrictMs from the launch, as before its own was seen
                 if (!open) {
                     head.phase = "running";
                     head.deadline = 0;
+                } else {
+                    head.deadline = event.own === true ? 0 : head.launchedAt + headStrictMs;
                 }
             } else if (event.own === true) {
                 head.requestSeen = true;
