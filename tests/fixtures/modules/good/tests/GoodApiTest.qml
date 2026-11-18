@@ -54,6 +54,9 @@ TestCase {
     property PrivilegedAction admin: PrivilegedAction {
         notifyFailures: false
     }
+    property PrivilegedAction outsider: PrivilegedAction {
+        notifyFailures: false
+    }
     property CommandQuery query: CommandQuery {
         onDone: lines => suite._queried = lines
     }
@@ -94,6 +97,13 @@ TestCase {
             Api.testMode = false;
         } catch (error) {}
         assert(Api.testMode, "… read-only");
+        // A module cannot switch it: not through what its handle reaches either
+        try {
+            module.host.testMode = false;
+        } catch (error) {}
+        assertEqual(module.host.setTestMode(false), false, "… setTestMode from a module: refused");
+        assert(Api.testMode && module.host.testMode, "… still on");
+        assertEqual(ModuleTestKit.status("good")?.deprecations.length, 0, "a 1.10 module: no test-mode gate in its deprecations");
         // Its programs (API 1.9): pkexec, from its testPrograms in test mode, never from PATH
         assertEqual(JSON.stringify(module.programs),
                     JSON.stringify({ pkexec: { path: module.directory + "/tests/programs/pkexec", trusted: true, reason: "test stand-in" } }),
@@ -203,6 +213,15 @@ TestCase {
         admin.run(["/bin/sh", standIn, "as root"], "Default pkexec", result => suite._results.defaultElevate = result);
         runner.start(["pkexec", "/bin/true"], { done: result => suite._results.runnerPkexec = result });
         action.run(["/usr/bin/pkexec", "/bin/true"], result => suite._results.actionPkexec = result);
+        // … nor handed on to another program: every word of the command is looked at
+        runner.start(["env", "pkexec", "/bin/true"], { done: result => suite._results.envPkexec = result });
+        runner.start(["timeout", "5", "pkexec", "/bin/true"], { done: result => suite._results.timeoutPkexec = result });
+        action.run(["setsid", "/run/wrappers/bin/pkexec", "/bin/true"], result => suite._results.setsidPkexec = result);
+        // A 1.10 module is under the strict rule: an elevating program that is not its
+        // <testPrograms>/pkexec is refused even when it is no real pkexec — the stand-in that
+        // the gate lets an older module use (tests/fixtures/modules/legacy-elevate) is not its
+        outsider.elevate = [String(Qt.resolvedUrl("../../../legacy-tools/pkexec")).replace(/^file:\/\//, "")];
+        outsider.run(["/bin/sh", standIn, "as root"], "Another elevating program", result => suite._results.outsider = result);
         admin.elevate = [module.programs.pkexec.path];
         admin.run(["/bin/sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
         admin.run(["/bin/sh", standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
@@ -222,13 +241,18 @@ TestCase {
             done: result => suite._ran = result
         });
 
-        _then("the commands answered", () => Object.keys(_results).length === 11 && _queried !== null, () => {
+        _then("the commands answered", () => Object.keys(_results).length === 15 && _queried !== null, () => {
             assert(!_results.defaultElevate.ok && _results.defaultElevate.error.startsWith("test mode:") && !_results.defaultElevate.refused,
                    "PrivilegedAction in test mode: the default pkexec refused, nothing run: " + JSON.stringify(_results.defaultElevate));
             assert(!_results.runnerPkexec.ok && _results.runnerPkexec.error.startsWith("test mode:"),
                    "CommandRunner in test mode: a pkexec on PATH refused: " + JSON.stringify(_results.runnerPkexec));
             assert(!_results.actionPkexec.ok && _results.actionPkexec.error.startsWith("test mode:"),
                    "CommandAction in test mode: /usr/bin/pkexec refused: " + JSON.stringify(_results.actionPkexec));
+            for (const name of ["envPkexec", "timeoutPkexec", "setsidPkexec"])
+                assert(!_results[name].ok && _results[name].error.startsWith("test mode:"),
+                       name + ": a pkexec handed to env, timeout or setsid refused: " + JSON.stringify(_results[name]));
+            assert(!_results.outsider.ok && _results.outsider.error.startsWith("test mode:") && _results.outsider.code === -1,
+                   "PrivilegedAction from a 1.10 module: an elevating program that is not its stand-in pkexec refused: " + JSON.stringify(_results.outsider));
             assert(_results.plain.ok && JSON.stringify(_results.plain.lines) === "[\"a b\",\"c\"]", "CommandAction: its lines, arguments kept whole");
             assertEqual(_results.code.code, 3, "CommandAction: the exit status (environment passed)");
             assert(_results.root.ok && _results.root.lines[0] === "as root", "PrivilegedAction: run through the elevating program");

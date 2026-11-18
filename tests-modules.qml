@@ -138,7 +138,7 @@ QtObject {
 
     Component.onCompleted: {
         const value = Quickshell.env("H2S_TEST_MODULES");
-        host.testMode = true;
+        host.setTestMode(true);
         host.load(typeof value === "string" ? value : "", {});
         if (host.directories.length === 0) {
             _fail("no module directory given (H2S_TEST_MODULES; run tests/run-modules.sh <dir>…)");

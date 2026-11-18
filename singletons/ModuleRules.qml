@@ -484,11 +484,12 @@ Singleton {
 
     // ---- Module test mode (API 1.10) ----
     //
-    // On only where the shell's test entry points set ModuleHost.testMode: tests-modules.qml
-    // in process, a test tree through TestSeams.moduleTestMode — never a variable alone. Then
-    // a module's programs come from its manifest's testPrograms, Api.openUrl and Notifier.send
-    // record the call instead of acting, and nothing a module starts reaches a pkexec that is
-    // not a module's stand-in.
+    // On only where the shell's test entry points set it (ModuleHost.setTestMode, once,
+    // before modules load): tests-modules.qml in process, a test tree through
+    // TestSeams.moduleTestMode — never a variable alone, never a module. Then a module's
+    // programs come from its manifest's testPrograms, Api.openUrl and Notifier.send record the
+    // call instead of acting, and nothing a module starts reaches a pkexec that is not a
+    // module's stand-in.
 
     readonly property string testStandInReason: "test stand-in"
 
@@ -515,12 +516,20 @@ Singleton {
             .map(directory => directory + "/pkexec");
     }
 
-    // `/bin/sh -c testProgramProbeScript sh <stand-ins' directory> <name>…`: one line per
-    // name, "ok<TAB><name>" when the directory holds it as an executable regular file, else
-    // "no<TAB><name>"
-    readonly property string testProgramProbeScript: "dir=$1; shift; for name; do "
-        + "if [ -f \"$dir/$name\" ] && [ -x \"$dir/$name\" ]; then printf 'ok\\t%s\\n' \"$name\"; "
-        + "else printf 'no\\t%s\\n' \"$name\"; fi; done"
+    // `/bin/sh -c testProgramProbeScript sh <module directory> <stand-ins' directory> <name>…`,
+    // run with PATH=probeToolPath: one line per name, "ok<TAB><name>" when the stand-in is
+    // an executable regular file, not setuid or setgid, and both it and the stand-ins'
+    // directory resolve, links followed, to a place inside the module's real directory (as
+    // the file check demands of its .qml files) — else "no<TAB><name>". A link out of the
+    // module (the directory, or a stand-in that leads to /usr/bin/pkexec) is no stand-in.
+    readonly property string testProgramProbeScript: "mod=$(realpath -e -- \"$1\" 2>/dev/null) || mod=; dir=$2; shift 2; "
+        + "real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=; "
+        + "case $real_dir in \"$mod\"/*) ;; *) real_dir= ;; esac; "
+        + "for name; do ok=no; "
+        + "if [ -n \"$mod\" ] && [ -n \"$real_dir\" ] && real=$(realpath -e -- \"$dir/$name\" 2>/dev/null); then "
+        + "case $real in \"$mod\"/*) "
+        + "if [ -f \"$real\" ] && [ -x \"$real\" ] && [ ! -u \"$real\" ] && [ ! -g \"$real\" ]; then ok=ok; fi ;; esac; fi; "
+        + "printf '%s\\t%s\\n' \"$ok\" \"$name\"; done"
 
     // The probe's lines → { <name>: frozen verdict } for each of `names` it answered, in the
     // shape of programVerdict: there → { path: "<directory>/<name>", real: the same,
@@ -544,25 +553,125 @@ Singleton {
     }
 
     // Of a command a module starts (its CommandRunner, CommandAction, CommandQuery,
-    // PrivilegedAction): "" when it may run, else why not. In test mode a program named
-    // pkexec runs only as one of `standIns` (testStandIns), so a module's suites never meet
-    // the real one. A guard against mistakes: a shell handed "pkexec" as a word is not read.
+    // PrivilegedAction): "" when it may run, else why not. In test mode every word of the
+    // command whose last path part is "pkexec" — the program, or one handed to `env`,
+    // `timeout`, `setsid` and the like — must be one of `standIns` (testStandIns, and a
+    // PrivilegedAction's own elevating program once checked), so a module's suites never meet
+    // the real one. A guard against mistakes: a shell handed "pkexec" inside a script is not read.
     function testRunProblem(argv, testMode, standIns) {
-        if (testMode !== true || !Array.isArray(argv) || typeof argv[0] !== "string")
+        if (testMode !== true || !Array.isArray(argv))
             return "";
-        if (argv[0].replace(/^.*\//, "") !== "pkexec" || (Array.isArray(standIns) && standIns.includes(argv[0])))
+        const allowed = Array.isArray(standIns) ? standIns : [];
+        const stray = argv.find(word => typeof word === "string" && word.replace(/^.*\//, "") === "pkexec" && !allowed.includes(word));
+        if (stray === undefined)
             return "";
-        return "test mode: pkexec is not run; a module's suites use its stand-in, <testPrograms>/pkexec";
+        return "test mode: pkexec is not run (" + show(stray.slice(0, 200)) + "); a module's suites use its stand-in, <testPrograms>/pkexec";
     }
 
-    // PrivilegedAction's elevating program in test mode: only a module's stand-in pkexec (one
-    // of `standIns`), whatever the module set — "" or why not. Off test mode: "" (as set)
-    function testElevateProblem(elevate, testMode, standIns) {
+    // ---- The test-mode gate for modules written for an API below 1.10 (removed by slice Z) ----
+    //
+    // REMOVED IN SLICE Z (notes/plans/api-next/migration.md): before 1.10 a module's suites
+    // put their own stand-in into PrivilegedAction's `elevate`, wherever it lay. For such a
+    // module the strict rule (only `<testPrograms>/pkexec`) is relaxed for `elevate` alone:
+    // any program there runs unless it is the real pkexec — its real path that of the
+    // system's pkexec, or a setuid or setgid file — and a check that fails or does not answer
+    // counts as real. Everything else (its plain commands) follows the strict rule. The gate
+    // is listed in the module's `deprecations` while test mode is on.
+
+    readonly property string testStrictApi: "1.10"
+
+    // Which pkexec rule a module's manifest API puts it under in test mode: "strict" from
+    // testStrictApi on, "legacy" below it (the gate); an API that is not "major.minor": strict
+    function testPkexecRule(api) {
+        const module = parseApi(api);
+        const strict = parseApi(testStrictApi);
+        if (!module)
+            return "strict";
+        return module.major > strict.major || (module.major === strict.major && module.minor >= strict.minor) ? "strict" : "legacy";
+    }
+
+    // The module directories (of `directories`, canonical) whose files are on a JavaScript
+    // stack (Error().stack: one "<function>@<url>:<line>" per line, innermost first), in that
+    // order, each once. The shell's own files (qs:@/…) are no module's
+    function stackDirectories(stack, directories) {
+        const found = [];
+        for (const line of typeof stack === "string" ? stack.slice(0, 65536).split("\n").slice(0, 200) : []) {
+            const at = line.indexOf("@");
+            if (at < 0)
+                continue;
+            const url = line.slice(at + 1).replace(/(:[0-9]+)+$/, "");
+            if (!url.startsWith("file:///"))
+                continue;
+            const index = ModuleFileRules.directoryIndexOf(directories, url);
+            if (index >= 0 && !found.includes(directories[index]))
+                found.push(directories[index]);
+        }
+        return found;
+    }
+
+    // The rule for a call, from the rules of the modules whose code is on its stack
+    // (testPkexecRule of each): "legacy" only when there is at least one and every one is;
+    // else "strict" — a call no module is seen making, or one a 1.10 module takes part in
+    function testCallRule(moduleRules) {
+        const list = Array.isArray(moduleRules) ? moduleRules : [];
+        return list.length > 0 && list.every(rule => rule === "legacy") ? "legacy" : "strict";
+    }
+
+    // PrivilegedAction's elevating program in test mode — "" or why not. Off test mode: ""
+    // (as set). "strict": only a module's stand-in pkexec (one of `standIns`). "legacy" (the
+    // gate): any absolute path, which the elevate probe then checks (testElevateProbeScript)
+    function testElevateProblem(elevate, testMode, standIns, rule) {
         if (testMode !== true)
             return "";
-        if (Array.isArray(elevate) && typeof elevate[0] === "string" && Array.isArray(standIns) && standIns.includes(elevate[0]))
+        const program = Array.isArray(elevate) && typeof elevate[0] === "string" ? elevate[0] : "";
+        if (rule === "legacy") {
+            if (program.startsWith("/") && !program.includes("\n"))
+                return "";
+            return "test mode: a privileged run needs the module's stand-in pkexec, by its absolute path, as its elevating program";
+        }
+        if (program !== "" && Array.isArray(standIns) && standIns.includes(program))
             return "";
         return "test mode: a privileged run needs the module's stand-in pkexec (<testPrograms>/pkexec) as its elevating program";
+    }
+
+    // Where the system's pkexec is (NixOS: the setuid wrapper and the system profile's; Arch:
+    // /usr/bin); the elevate probe also takes what `command -v pkexec` finds on
+    // testPkexecLookupPath
+    readonly property var systemPkexecPaths: ["/run/wrappers/bin/pkexec", "/run/current-system/sw/bin/pkexec", "/usr/bin/pkexec",
+        "/usr/sbin/pkexec", "/usr/local/bin/pkexec", "/bin/pkexec", "/sbin/pkexec"]
+    readonly property string testPkexecLookupPath: "/run/wrappers/bin:" + probeToolPath
+
+    // `/bin/sh -c testElevateProbeScript sh <program> <lookup PATH> <system pkexec path>…`, run
+    // with PATH=probeToolPath: one line — "stand-in" when the program's real path is an
+    // executable regular file that is neither setuid nor setgid nor the same file as any
+    // system pkexec (or the one found on the lookup PATH); "real" when it is one of those;
+    // "unknown" when it cannot be resolved or is no executable file
+    readonly property string testElevateProbeScript: "p=$1; lookup=$2; shift 2; "
+        + "r=$(realpath -e -- \"$p\" 2>/dev/null) || { echo unknown; exit 0; }; "
+        + "if [ -u \"$r\" ] || [ -g \"$r\" ]; then echo real; exit 0; fi; "
+        + "found=$(PATH=$lookup command -v pkexec 2>/dev/null) && set -- \"$@\" \"$found\"; "
+        + "for s; do if [ -e \"$s\" ] && { [ \"$r\" -ef \"$s\" ] || [ \"$r\" = \"$(realpath -e -- \"$s\" 2>/dev/null)\" ]; }; then echo real; exit 0; fi; done; "
+        + "if [ -f \"$r\" ] && [ -x \"$r\" ]; then echo stand-in; else echo unknown; fi"
+
+    // The elevate probe's answer → "" when the program may run as the module's stand-in, else
+    // why not. Only an answer that is exactly "stand-in" lets it run: a failed or cut-short
+    // probe, or anything else it printed, counts as the real pkexec
+    function testElevateVerdict(ok, lines) {
+        const answer = ok === true && Array.isArray(lines) && lines.length === 1 ? String(lines[0]) : "";
+        if (answer === "stand-in")
+            return "";
+        return answer === "real"
+            ? "test mode: the elevating program is the real pkexec (or a setuid file), not a stand-in; nothing runs"
+            : "test mode: the elevating program could not be checked, so it counts as the real pkexec; nothing runs";
+    }
+
+    // What a module's `deprecations` say of the gate: one line for a module under it in test
+    // mode, else nothing
+    function testGateDeprecations(testMode, api) {
+        if (testMode !== true || testPkexecRule(api) !== "legacy")
+            return [];
+        return ["module test mode: a pkexec stand-in outside testPrograms is still allowed for modules written for API below "
+                + testStrictApi + "; this will be removed — declare api " + testStrictApi + " and put the stand-in in <testPrograms>/pkexec"];
     }
 
     // ---- Api.openUrl ----

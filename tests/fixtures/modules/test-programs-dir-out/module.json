@@ -1,0 +1,9 @@
+{
+    "id": "test-programs-dir-out",
+    "name": "Test programs fixture, a directory link",
+    "version": "0.1.0",
+    "api": "1.10",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "h2s-fixture-standin"],
+    "testPrograms": "stand-ins"
+}

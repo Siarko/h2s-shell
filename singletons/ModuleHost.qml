@@ -74,12 +74,36 @@ Scope {
     // The program look-up's environment: its PATH is the one searched instead of the shell's
     // (the suites' seam: a PATH that holds stand-in programs)
     property var programEnvironment: ({})
-    // Module test mode (ModuleRules, "Module test mode"): set by Modules from
-    // TestSeams.moduleTestMode (true only in a test tree), by tests-modules.qml, or by a
-    // suite that builds a host — before load(). A module that names testPrograms then gets
-    // its programs from there (testProgramVerdicts), never from PATH. Told in describe() and
-    // to modules as Api.testMode
-    property bool testMode: false
+    // Module test mode (ModuleRules, "Module test mode"): fixed once, by setTestMode() before
+    // modules are loaded — Modules from TestSeams.moduleTestMode (true only in a test tree),
+    // tests-modules.qml, a suite that builds a host — and read-only from then on: the first
+    // load() that names a module directory fixes it as it is (off unless set). Modules reach
+    // this object (their handle's `host`), so the value is held where no property write
+    // reaches it, and nothing a module can call after the load changes it. A module that names testPrograms then gets its
+    // programs from there (testProgramVerdicts), never from PATH. Told in describe() and to
+    // modules as Api.testMode
+    readonly property bool testMode: {
+        _testModeRevision;
+        return _testModeLatch.value();
+    }
+    // The held value: a frozen object whose state only its own functions see
+    readonly property var _testModeLatch: {
+        let value = false;
+        let fixed = false;
+        return Object.freeze({
+            value: () => value,
+            // → true when this fixed it, false when it was fixed before
+            fix: on => {
+                if (fixed)
+                    return false;
+                value = on === true;
+                fixed = true;
+                return true;
+            }
+        });
+    }
+    // Only tells bindings to read testMode again: writing it changes nothing
+    property int _testModeRevision: 0
     property bool _storeDirectoryKnown: true
 
     // The canonical module directories given to load(), in search order, and the entries
@@ -107,11 +131,13 @@ Scope {
     // In test mode, per module that names testPrograms: { <id>: { <name>: verdict } }
     // (ModuleRules.testProgramVerdicts) — what its handle's `programs` show instead
     property var testProgramVerdicts: ({})
-    // In test mode, the stand-in pkexec of each module that names testPrograms
-    // (ModuleRules.testStandIns): the only pkexec a module's commands may start
+    // In test mode, the stand-in pkexec of each module that names testPrograms and pkexec
+    // among its programs (ModuleRules.testStandIns), once the look at its stand-ins found it
+    // there, inside the module: the only pkexec a module's commands may start
     readonly property var testStandIns: testMode
         ? ModuleRules.testStandIns(_records.filter(record => record.shadowedBy === "" && record.manifest.valid)
                                    .map(record => ({ directory: record.directory, testPrograms: record.manifest.testPrograms })))
+              .filter(path => Object.values(testProgramVerdicts).some(verdicts => verdicts.pkexec?.path === path))
         : []
     // Set when the host itself failed: it then holds no module
     property string hostError: ""
@@ -151,6 +177,27 @@ Scope {
 
     // ---- Public ----
 
+    // In test mode, the pkexec rule for a call whose JavaScript stack is `stack` (an
+    // Error().stack taken where a module's code called the API): "legacy" when only modules
+    // written for an API below 1.10 are on it (ModuleRules, the gate removed by slice Z), else
+    // "strict"
+    function testCallRule(stack) {
+        return ModuleRules.testCallRule(ModuleRules.stackDirectories(stack, directories)
+            .map(directory => ModuleRules.testPkexecRule(_records.find(record => record.directory === directory)?.manifest?.api)));
+    }
+
+    // Fixes module test mode (`testMode`): only once, and only before the first load() that
+    // names a module directory — the shell's test entry points call it, nothing later can.
+    // → true when this call fixed it
+    function setTestMode(on) {
+        const fixedNow = _testModeLatch.fix(on === true);
+        if (fixedNow)
+            _testModeRevision++;
+        else if ((on === true) !== testMode)
+            console.warn("[Modules] module test mode is fixed (" + testMode + "): setTestMode(" + (on === true) + ") refused");
+        return fixedNow;
+    }
+
     // (Re)loads from `directoryList` (an array, or a colon-separated string as in
     // H2S_SHELL_MODULES). `options`: { safeMode }. Never throws: a failure of the host
     // itself unloads everything and is kept in hostError.
@@ -162,6 +209,10 @@ Scope {
             safeMode = _askedSafeMode;
             safeModeReason = _askedSafeMode ? (options?.safeModeReason ?? "asked for (H2S_SHELL_SAFE_MODE=1)") : "";
             const parsed = ModuleFileRules.moduleDirectories(directoryList);
+            // Test mode is what it is now, for the host's life: from the first load that names
+            // a module directory on — before it, no module's code exists to change it
+            if (parsed.directories.length > 0 && _testModeLatch.fix(false))
+                _testModeRevision++;
             directories = parsed.directories;
             ignoredEntries = parsed.ignored;
             // Nothing is read here: each module is pending until the file check (a process,
@@ -829,7 +880,7 @@ Scope {
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: record.warnings,
-                deprecations: record.deprecations,
+                deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api)),
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
             });
         });
@@ -985,7 +1036,7 @@ Scope {
         const lines = [];
         _checkingTestPrograms = true;
         _testProgramsLooking = record;
-        _check([ModuleRules.probeShell, "-c", ModuleRules.testProgramProbeScript, "sh", directory].concat(names), {
+        _check([ModuleRules.probeShell, "-c", ModuleRules.testProgramProbeScript, "sh", record.directory, directory].concat(names), {
             environment: { PATH: ModuleRules.probeToolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")

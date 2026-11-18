@@ -124,7 +124,12 @@ cannot ask for a version the shell does not have yet, `apiCompatibility`.) Z rem
 `PrivilegedAction` type and `elevate`, the `slots` field, `Api.slots`,
 `components/ModuleSlot.qml`, `components/VpnExtras.qml` with `VpnProvider.rowExtras` /
 `cardExtras` (the stand-in in `VpnProvidersTest` becomes a fixture module),
-`network.vpn.page`, `Api.module`; renames `ModuleHandle.host`; takes `qs.components` off
+`network.vpn.page`, `Api.module`; the test-mode gate for modules below 1.10 (a stand-in
+pkexec that lies anywhere in `PrivilegedAction`'s `elevate`: `ModuleRules`, "The test-mode
+gate", `testPkexecRule`, `stackDirectories`, `testCallRule`, the elevate probe and
+`testGateDeprecations`; `ModuleHost.testCallRule`; `PrivilegedAction._checkedElevate`; the
+fixture `legacy-elevate` and `tests/fixtures/legacy-tools`) — every module is then under the
+strict rule; renames `ModuleHandle.host`; takes `qs.components` off
 the allowed imports (an error in the status); makes the six older `qs.api` types wrappers
 (§4.9); and rewrites "Modules" in `docs/ARCHITECTURE.md` for what is left. A test then
 compares the anchors and the public elements listed in `docs/` with `anchorTable` and

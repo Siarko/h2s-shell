@@ -1,0 +1,9 @@
+{
+    "id": "legacy-elevate",
+    "name": "Legacy elevate fixture",
+    "version": "0.1.0",
+    "api": "1.9",
+    "description": "A module written for API 1.9 whose suites put a stand-in pkexec of their own into PrivilegedAction's elevate (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "tests": ["tests/LegacyElevateTest.qml"]
+}

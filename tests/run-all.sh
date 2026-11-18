@@ -12,7 +12,8 @@
 #   tests/run-system-selftest.sh                        the system runner's own verdict
 #   tests/install-test.sh                               install.sh under stand-ins
 #   tests/run-unit.sh                                   the unit suites
-#   tests/run-modules.sh tests/fixtures/modules/good    a module's suites, on the fixture
+#   tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate
+#                                                       modules' suites, on the fixtures
 #   tests/resolve-selftest.sh                           where the runners take their tools
 #   tests/launcher-selftest.sh                          the supervisor in scripts/launch.sh
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
@@ -51,7 +52,7 @@ parts=(
     "system runner self-test|tests/run-system-selftest.sh"
     "install.sh under stand-ins|tests/install-test.sh"
     "unit suites|tests/run-unit.sh"
-    "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good"
+    "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate"
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"

@@ -33,6 +33,10 @@ import qs.singletons.io as Io
 // (its handle's `programs.pkexec.path` when it names pkexec): anything else — the default
 // "pkexec" included — is answered { ok: false, code: -1, error } and nothing runs
 // (ModuleRules.testElevateProblem), so a module's suites never meet the real pkexec.
+// A module written for an API below 1.10 (the run made from its code alone) may still name a
+// stand-in that lies anywhere, by its absolute path, until slice Z removes that: it runs
+// unless a check finds it is the real pkexec or a setuid file, and a check that fails
+// counts as real (ModuleRules, "The test-mode gate").
 QtObject {
     id: root
 
@@ -54,38 +58,67 @@ QtObject {
                 Notifier.send(label + " failed", { body: reason });
             done?.(answer);
         };
-        const testProblem = ModuleRules.testElevateProblem(elevate, Modules.host.testMode, Modules.host.testStandIns);
-        if (testProblem !== "") {
-            console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + testProblem);
+        const testRefused = problem => {
+            console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + problem);
             if (root.notifyFailures)
-                Notifier.send(label + " failed", { body: testProblem });
-            done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: testProblem });
+                Notifier.send(label + " failed", { body: problem });
+            done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: problem });
+        };
+        // Taken here, where the module's code called: whose rule this run is under
+        const rule = Modules.host.testMode ? Modules.host.testCallRule(new Error().stack) : "strict";
+        const elevating = Array.isArray(elevate) ? Array.from(elevate) : elevate;
+        const testProblem = ModuleRules.testElevateProblem(elevating, Modules.host.testMode, Modules.host.testStandIns, rule);
+        if (testProblem !== "") {
+            testRefused(testProblem);
             return;
         }
         if (!command[0].startsWith("/")) {
             notFound(command[0] + " is not an absolute path (pkexec needs one)");
             return;
         }
-        // The program first: an executable regular file (no shell sees the path: it is $1)
-        _probe.run(["sh", "-c", "[ -f \"$1\" ] && [ -x \"$1\" ]", "sh", command[0]], probe => {
-            if (!probe.ok) {
-                notFound(command[0] + " is not there, or not an executable file");
+        const runIt = () => {
+            // The program first: an executable regular file (no shell sees the path: it is $1)
+            _probe.run(["sh", "-c", "[ -f \"$1\" ] && [ -x \"$1\" ]", "sh", command[0]], probe => {
+                if (!probe.ok) {
+                    notFound(command[0] + " is not there, or not an executable file");
+                    return;
+                }
+                _action.run(elevating.concat(command), result => {
+                    const answer = Object.assign({}, result, { dismissed: result.code === 126, refused: result.code === 127, notFound: false });
+                    if (answer.refused)
+                        Authentication.reportDenied(label);
+                    else if (!answer.ok && !answer.dismissed && root.notifyFailures)
+                        Notifier.send(label + " failed", { body: result.error || ("Exit code " + result.code) });
+                    done?.(answer);
+                }, environment ?? {});
+            }, {});
+        };
+        if (!Modules.host.testMode || rule !== "legacy") {
+            runIt();
+            return;
+        }
+        // The gate (removed by slice Z): the elevating program checked first, never the real
+        // pkexec; only then may this object's runs start it
+        _probe.run([ModuleRules.probeShell, "-c", ModuleRules.testElevateProbeScript, "sh", elevating[0], ModuleRules.testPkexecLookupPath]
+                   .concat(ModuleRules.systemPkexecPaths), probe => {
+            const problem = ModuleRules.testElevateVerdict(probe.ok, probe.lines);
+            if (problem !== "") {
+                testRefused(problem);
                 return;
             }
-            _action.run(elevate.concat(command), result => {
-                const answer = Object.assign({}, result, { dismissed: result.code === 126, refused: result.code === 127, notFound: false });
-                if (answer.refused)
-                    Authentication.reportDenied(label);
-                else if (!answer.ok && !answer.dismissed && root.notifyFailures)
-                    Notifier.send(label + " failed", { body: result.error || ("Exit code " + result.code) });
-                done?.(answer);
-            }, environment ?? {});
-        }, {});
+            if (!root._checkedElevate.includes(elevating[0]))
+                root._checkedElevate = root._checkedElevate.concat([elevating[0]]);
+            runIt();
+        }, { PATH: ModuleRules.probeToolPath });
     }
+
+    // Test mode, the gate: the elevating programs the probe found to be stand-ins (REMOVED IN
+    // SLICE Z with the gate)
+    property var _checkedElevate: []
 
     property Io.CommandAction _action: Io.CommandAction {
         refuse: function (argv) {
-            return ModuleRules.testRunProblem(argv, Modules.host.testMode, Modules.host.testStandIns);
+            return ModuleRules.testRunProblem(argv, Modules.host.testMode, Modules.host.testStandIns.concat(root._checkedElevate));
         }
     }
     property Io.CommandAction _probe: Io.CommandAction {}

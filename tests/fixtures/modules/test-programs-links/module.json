@@ -1,0 +1,9 @@
+{
+    "id": "test-programs-links",
+    "name": "Test programs fixture, links",
+    "version": "0.1.0",
+    "api": "1.10",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "h2s-fixture-usr-pkexec", "h2s-fixture-link-out", "h2s-fixture-inner"],
+    "testPrograms": "stand-ins"
+}

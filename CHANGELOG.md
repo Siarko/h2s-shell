@@ -14,13 +14,17 @@ section to the new version and date.
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,
-  a test tree), never from a variable alone, and told by the new read-only `Api.testMode`.
+  a test tree), never from a variable alone and never by a module, and told by the new
+  read-only `Api.testMode`.
   The manifest's new `testPrograms` (a directory inside the module) is where a module's
   programs come from in test mode (`module.programs`: the file there, `trusted`, reason
-  "test stand-in"; a name it does not hold is not found, never taken from PATH); outside
-  test mode it is ignored. In test mode `Api.openUrl` and the notifications record the call
-  and open or send nothing, and no command a module starts runs a pkexec other than a
-  module's `<testPrograms>/pkexec` (`PrivilegedAction`'s `elevate` must be that stand-in).
+  "test stand-in"; a name it does not hold, or a link that leads out of the module, is not
+  found, never taken from PATH); outside test mode it is ignored. In test mode
+  `Api.openUrl` and the notifications record the call and open or send nothing, and no
+  command a module starts runs a pkexec other than a module's `<testPrograms>/pkexec`,
+  wherever in the command it stands (`PrivilegedAction`'s `elevate` must be that stand-in).
+  A module written for an API below 1.10 may still put its own stand-in, wherever it lies,
+  into `elevate` — never the real pkexec — until slice Z; its `deprecations` say so.
   `qs.tests` gains `ModuleTestKit` for a module's suites: `testMode`, `setEnabled`,
   `status`, `widgetEntries`, `opened`, `notified`, `clearRecords`.
   Tightened: in test mode a module's suite that ran a pkexec of its own choosing, or a

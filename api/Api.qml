@@ -213,19 +213,26 @@ import qs.singletons.network
 //
 // Module test mode (1.10): set only by the shell's test entry points — tests-modules.qml
 // (tests/run-modules.sh) in process, a test tree (the lock bed's copy) by its own test seam
-// file — never by a variable alone; Api.testMode tells it. Then:
+// file — never by a variable alone, and never by a module: it is fixed before modules load
+// and read-only after; Api.testMode tells it. Then:
 //   - a module whose manifest names `testPrograms` (a directory inside the module) gets
 //     every program it names from there: module.programs[name] is { path:
 //     "<directory>/<testPrograms>/<name>", trusted: true, reason: "test stand-in" }, or
-//     path "" when the directory has no such executable file — never a program on PATH.
-//     Without test mode `testPrograms` is ignored;
+//     path "" when the directory has no such executable file, or when it or the directory
+//     leads out of the module through a link — never a program on PATH. Without test mode
+//     `testPrograms` is ignored;
 //   - Api.openUrl and Notifier's notifications (Api.notify, module.notify) are recorded,
 //     not opened or sent; the module's suites read them from ModuleTestKit (qs.tests);
 //   - no command a module starts (CommandRunner, CommandAction, CommandQuery,
-//     PrivilegedAction) runs a pkexec other than a module's `<testPrograms>/pkexec`: it is
-//     answered with an error and nothing runs. PrivilegedAction's `elevate` must be that
-//     stand-in. A guard against mistakes, not a sandbox: a shell handed "pkexec" as a word
-//     is not read.
+//     PrivilegedAction) holds a pkexec — as the program or any later word, as handed to
+//     env, timeout or setsid — other than a module's `<testPrograms>/pkexec` (pkexec named
+//     among its programs): it is answered with an error and nothing runs.
+//     PrivilegedAction's `elevate` must be that stand-in. A guard against mistakes, not a
+//     sandbox: a shell handed "pkexec" inside a script is not read;
+//   - until slice Z, a module written for an API below 1.10 may put a stand-in that lies
+//     anywhere into PrivilegedAction's `elevate` (its absolute path): it runs unless a check
+//     finds the system's pkexec or a setuid file there, and a check that fails counts as
+//     that. Listed in the module's `deprecations`; it will be removed.
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

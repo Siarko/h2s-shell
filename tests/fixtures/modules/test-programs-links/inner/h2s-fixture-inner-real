@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stand-in reached through a link inside the module
+exit 0

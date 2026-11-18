@@ -688,15 +688,29 @@ line in the shell's log, with the path, the real file, its owner and mode.
   `tests/fixtures/modules/good` is the worked example of everything above.
 - **Module test mode** (`ModuleHost.testMode`, read by modules as `Api.testMode`): set only
   by the shell's test entry points — `tests-modules.qml` in process, a test tree through
-  `TestSeams.moduleTestMode` — never by a variable alone. A module whose manifest names
-  `testPrograms` (a directory inside the module) then gets every program it names from
-  there (`module.programs`: trusted, reason "test stand-in"; a name the directory does not
-  hold is not found, never taken from `PATH`); without test mode the field is ignored.
-  `Api.openUrl` and `Notifier.send` record the call (`Api._opened`, `Notifier.recorded`)
-  and open or send nothing. No command a module starts through the API (`CommandRunner`,
-  `CommandAction`, `CommandQuery`, `PrivilegedAction`) runs a pkexec other than a module's
-  `<testPrograms>/pkexec`, and `PrivilegedAction`'s `elevate` must be that stand-in
-  (`ModuleRules.testRunProblem`, `testElevateProblem`). `tests/run-modules.sh` puts a pkexec
+  `TestSeams.moduleTestMode` — never by a variable alone, and never by a module:
+  `ModuleHost.setTestMode` fixes it once, before the first load that names a module
+  directory, and it is read-only from then on (`Notifier.recordOnly` follows that value).
+  A module whose manifest names `testPrograms` (a directory inside the module) then gets
+  every program it names from there (`module.programs`: trusted, reason "test stand-in"; a
+  name the directory does not hold is not found, never taken from `PATH`); without test
+  mode the field is ignored. A stand-in counts only when it, and the directory, resolve
+  with links followed to a place inside the module's real directory, as its `.qml` files
+  must — a link out (to `/usr/bin/pkexec`, `/run/wrappers/bin/pkexec`, anything) is no
+  stand-in. `Api.openUrl` and `Notifier.send` record the call (`Api._opened`,
+  `Notifier.recorded`) and open or send nothing. No command a module starts through the API
+  (`CommandRunner`, `CommandAction`, `CommandQuery`, `PrivilegedAction`) holds a word whose
+  last path part is `pkexec` — the program, or one handed to `env`, `timeout`, `setsid` —
+  other than a module's `<testPrograms>/pkexec` (one its manifest names among its
+  programs), and `PrivilegedAction`'s `elevate` must be that stand-in
+  (`ModuleRules.testRunProblem`, `testElevateProblem`). A module written for an API below
+  1.10 may still put a stand-in that lies anywhere into `elevate`, until slice Z removes
+  that gate: it runs unless a check finds it is the system's pkexec (the same file as
+  `/run/wrappers/bin/pkexec`, `/usr/bin/pkexec` or what `command -v pkexec` finds on the
+  system's directories) or a setuid or setgid file, and a check that fails counts as the
+  real one. Which rule a run is under is read from the code that called it (the modules
+  whose files are on its JavaScript stack: the gate only when all are older ones), and the
+  gate is listed in the module's `deprecations`. `tests/run-modules.sh` puts a pkexec
   first on `PATH` that fails the run if anything starts it. A module's suites see test mode
   through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`, `widgetEntries`, `opened`,
   `notified`, `clearRecords`.

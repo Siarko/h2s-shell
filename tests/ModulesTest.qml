@@ -415,15 +415,16 @@ TestCase {
             host.programEnvironment = ({});
 
             // Module test mode (API 1.10): a module's testPrograms are its programs in test
-            // mode only. Off, they are ignored: its required program, a stand-in only, is missing
-            host.testMode = false;
+            // mode only. Off, they are ignored: its required program, a stand-in only, is missing.
+            // This host's test mode was fixed (off) by its first load
             host.load(_dirs(["test-programs"]), {});
         });
         _then("test-programs settles with test mode off", () => _settled() && _status("test-programs")?.state !== "pending", () => {
             const status = _expectState("test-programs", "missing-program");
             assertEqual(JSON.stringify(status?.missingPrograms), "[\"h2s-fixture-standin\"]", "test mode off: testPrograms ignored, its stand-in not found");
             assert(_has(status?.errors, "h2s-fixture-standin, which is not on PATH"), "… looked for on PATH: " + status?.errors.join("; "));
-            const programs = host.handle("test-programs").programs;
+            const handle = host.handle("test-programs");
+            const programs = handle.programs;
             assert(programs.sh.path !== "" && !programs.sh.path.startsWith(fixtures) && programs.sh.reason !== "test stand-in",
                    "… sh from PATH, judged as usual: " + JSON.stringify(programs.sh));
             assert(!String(programs.pkexec?.path).startsWith(fixtures), "… no stand-in pkexec: " + JSON.stringify(programs.pkexec));
@@ -431,10 +432,42 @@ TestCase {
             assertEqual(JSON.stringify(host.testProgramVerdicts), "{}", "… no stand-in verdicts");
             assertEqual(host.describe().testMode, false, "describe(): testMode false");
 
-            host.testMode = true;
-            host.load(_dirs(["test-programs"]), {});
+            // A module cannot switch test mode: what its handle hands it (`host`) refuses
+            const reached = handle.host;
+            assert(reached === host, "a module's handle reaches the host");
+            let threw = false;
+            try {
+                reached.testMode = true;
+            } catch (error) {
+                threw = true;
+            }
+            assert(threw && !host.testMode, "writing testMode through the handle: refused (read-only), still off");
+            assertEqual(reached.setTestMode(true), false, "setTestMode(true) after the load: refused");
+            assertEqual(reached._testModeLatch.fix(true), false, "… the held value's own fix(): refused too");
+            threw = false;
+            try {
+                reached._testModeLatch.fix = () => true;
+                reached._testModeLatch.value = () => true;
+            } catch (error) {
+                threw = true;
+            }
+            reached._testModeRevision++;
+            assert(!host.testMode && !host.describe().testMode && host.testStandIns.length === 0,
+                   "… its functions cannot be replaced, nudging the revision changes nothing: still off");
+            assertEqual(host.handle("test-programs").programs.pkexec?.reason === "test stand-in", false, "… its programs still from PATH");
+
+            // A host of its own, its test mode fixed on before its load (as tests-modules.qml)
+            host.unload();
+            suite._mainHost = host;
+            const testHost = _hostComponent.createObject(suite);
+            assertEqual(testHost.setTestMode(true), true, "setTestMode(true) before any load: fixed on");
+            assertEqual(testHost.setTestMode(false), false, "… once: a second call refused");
+            assert(testHost.testMode, "… still on");
+            suite.host = testHost;
+            host.load(_dirs(["test-programs", "test-programs-links", "test-programs-dir-out"]), {});
         });
-        _then("test-programs loads in test mode", () => _settled() && _status("test-programs")?.state === "loaded", () => {
+        _then("test-programs loads in test mode", () => _settled() && _status("test-programs")?.state === "loaded"
+              && _status("test-programs-links")?.state === "loaded" && _status("test-programs-dir-out")?.state === "loaded", () => {
             const directory = fixtures + "/test-programs/stand-ins";
             const status = _status("test-programs");
             assertEqual(status?.errors.length + " " + JSON.stringify(status?.missingPrograms), "0 []", "test mode: its required stand-in found, loaded: " + status?.errors.join("; "));
@@ -448,8 +481,23 @@ TestCase {
             assertEqual(JSON.stringify(programs.sh), JSON.stringify({ path: "", trusted: false, reason: "no stand-in" }),
                         "a program testPrograms does not hold: not found — never taken from PATH");
             assertEqual(programs["h2s-fixture-not-executable"].path, "", "a file there that is not executable: not found");
-            assertEqual(JSON.stringify(host.testStandIns), JSON.stringify([directory + "/pkexec"]), "testStandIns: its stand-in pkexec, the only one a module may start");
+            assertEqual(JSON.stringify(host.testStandIns), JSON.stringify([directory + "/pkexec"]),
+                        "testStandIns: its stand-in pkexec, the only one a module may start — no link out of a module among them");
             assertEqual(host.describe().testMode, true, "describe(): testMode true");
+            assertEqual(_status("test-programs")?.deprecations.length, 0, "a 1.10 module: no test-mode gate in its deprecations");
+
+            // Links: a stand-in, or the stand-ins' directory, that leads out of the module is
+            // no stand-in — whatever it leads to
+            const links = host.handle("test-programs-links").programs;
+            assertEqual(links.pkexec.path, "", "a pkexec that links to /run/wrappers/bin/pkexec: no stand-in: " + JSON.stringify(links.pkexec));
+            assertEqual(links["h2s-fixture-usr-pkexec"].path, "", "… one that links to /usr/bin/pkexec: none");
+            assertEqual(links["h2s-fixture-link-out"].path, "", "… one that links to an executable outside the module: none");
+            assertEqual(links["h2s-fixture-inner"].path, fixtures + "/test-programs-links/stand-ins/h2s-fixture-inner",
+                        "… a link to a file inside the module: a stand-in");
+            const dirOut = host.handle("test-programs-dir-out").programs;
+            assertEqual(dirOut.pkexec.path + dirOut["h2s-fixture-standin"].path, "",
+                        "a testPrograms directory that links out of the module: nothing in it is a stand-in, pkexec included");
+
             // A recheck in test mode looks at the stand-ins again, not at PATH
             host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };
             host.recheckPrograms("test-programs");
@@ -459,7 +507,9 @@ TestCase {
             assertEqual(host.handle("test-programs").programs.sh.path, "", "… still not from PATH");
             assertEqual(_status("test-programs")?.state, "loaded", "… loaded all along");
             host.unload();
-            host.testMode = false;
+            const testHost = host;
+            suite.host = suite._mainHost;
+            testHost.destroy();
             host.programEnvironment = ({});
 
             // A3: the stores' directory made private at the host's start; a store's file
@@ -514,6 +564,13 @@ TestCase {
     }
 
     property var _goodState: null
+    // The suite's own host while a second one, in test mode, is `host`
+    property var _mainHost: null
+    property Component _hostComponent: Component {
+        ModuleHost {
+            logStates: false
+        }
+    }
     property var _hungSince: 0
     property var _programsHandle: null
     property var _recheckedAt: 0

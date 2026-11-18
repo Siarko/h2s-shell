@@ -214,6 +214,13 @@ TestCase {
         assertEqual(rules.testRunProblem(["/bin/sh", "-c", "x"], true, standIns), "", "anything else runs");
         assertEqual(rules.testRunProblem(["pkexec-helper"], true, []), "", "… a name that only starts with pkexec too");
         assertEqual(rules.testRunProblem(null, true, standIns) + rules.testRunProblem([7], true, null), "", "not an argv: not this rule's to refuse (the runner does)");
+        // Every word, not only the program: a pkexec handed to another program is refused too
+        for (const argv of [["env", "pkexec", "true"], ["timeout", "5", "pkexec", "true"], ["setsid", "/run/wrappers/bin/pkexec", "true"],
+                            ["/bin/env", "A=1", "/usr/bin/pkexec", "x"], ["sh", "/m/a/bin/pkexec", "/m/b/bin/pkexec"]])
+            assert(rules.testRunProblem(argv, true, standIns).startsWith("test mode:"), "a pkexec anywhere in " + JSON.stringify(argv) + ": refused");
+        assertEqual(rules.testRunProblem(["timeout", "5", "/m/a/bin/pkexec", "/bin/true"], true, standIns), "", "… a module's stand-in anywhere: runs");
+        assertEqual(rules.testRunProblem(["env", "pkexec", "true"], false, []), "", "… off test mode: as asked (production unchanged)");
+        assertEqual(rules.testRunProblem(["sh", "-c", "pkexec true"], true, standIns), "", "… a word inside a script is not read (a guard against mistakes)");
 
         assertEqual(rules.testElevateProblem(["pkexec"], false, []), "", "elevate off test mode: as set");
         assert(rules.testElevateProblem(["pkexec"], true, standIns).startsWith("test mode:"), "elevate in test mode: the default refused");
@@ -221,6 +228,39 @@ TestCase {
         assert(rules.testElevateProblem(["/m/a/bin/pkexec"], true, []) !== "" && rules.testElevateProblem(null, true, standIns) !== "",
                "… no stand-ins known, or no elevate: refused");
         assertEqual(rules.testElevateProblem(["/m/a/bin/pkexec"], true, standIns), "", "… the stand-in: runs");
+
+        // The gate for modules written for an API below 1.10 (removed by slice Z)
+        assertEqual(rules.testPkexecRule("1.10") + " " + rules.testPkexecRule("1.11") + " " + rules.testPkexecRule("2.0"), "strict strict strict",
+                    "the pkexec rule: strict from 1.10 on");
+        assertEqual(rules.testPkexecRule("1.9") + " " + rules.testPkexecRule("1.0"), "legacy legacy", "… below it: the gate");
+        assertEqual(rules.testPkexecRule("x") + " " + rules.testPkexecRule(undefined), "strict strict", "… an API that is not major.minor: strict");
+        assertEqual(rules.testCallRule(["legacy"]) + " " + rules.testCallRule(["legacy", "legacy"]), "legacy legacy", "a call only older modules make: the gate");
+        assertEqual(rules.testCallRule([]) + " " + rules.testCallRule(["legacy", "strict"]) + " " + rules.testCallRule(null), "strict strict strict",
+                    "… none seen, or a 1.10 module taking part: strict");
+        const stack = "run@qs:@/qs/api/PrivilegedAction.qml:60\n"
+            + "send@file:///m/old/Client.qml:12\n"
+            + "@file:///m/old/tests/OldTest.qml:40:7\n"
+            + "helper@file:///m/new%20one/Helper.qml:3\n"
+            + "expression for onTriggered@qs:@/qs/tests-modules.qml:117\n"
+            + "garbage line\n"
+            + "x@file:///elsewhere/File.qml:1";
+        assertEqual(JSON.stringify(rules.stackDirectories(stack, ["/m/old", "/m/new one", "/m/unused"])), JSON.stringify(["/m/old", "/m/new one"]),
+                    "stackDirectories: the modules whose files are on the stack, innermost first, each once; the shell's files and others not");
+        assertEqual(JSON.stringify(rules.stackDirectories(null, ["/m/old"])) + JSON.stringify(rules.stackDirectories(stack, null)), "[][]", "… nothing given: nothing");
+        assertEqual(rules.testElevateProblem(["/anywhere/stand-in/pkexec"], true, [], "legacy"), "", "elevate under the gate: any absolute path, checked next");
+        assert(rules.testElevateProblem(["pkexec"], true, standIns, "legacy").startsWith("test mode:"), "… pkexec by name: refused");
+        assert(rules.testElevateProblem(null, true, standIns, "legacy") !== "" && rules.testElevateProblem(["relative/pkexec"], true, [], "legacy") !== "",
+               "… no elevate, or a relative path: refused");
+        assert(rules.testElevateProblem(["/anywhere/stand-in/pkexec"], true, standIns, "strict") !== "", "… the same path under the strict rule: refused");
+        assertEqual(rules.testElevateVerdict(true, ["stand-in"]), "", "the elevate probe: \"stand-in\" runs");
+        assert(rules.testElevateVerdict(true, ["real"]).includes("real pkexec"), "… \"real\": refused");
+        for (const [ok, lines] of [[true, ["unknown"]], [false, ["stand-in"]], [true, []], [true, ["stand-in", "stand-in"]], [true, ["stand-in "]], [true, null]])
+            assert(rules.testElevateVerdict(ok, lines).startsWith("test mode:"), "… anything else (" + ok + ", " + JSON.stringify(lines) + ") counts as real: refused");
+        assert(rules.systemPkexecPaths.includes("/run/wrappers/bin/pkexec") && rules.systemPkexecPaths.includes("/usr/bin/pkexec"),
+               "the system's pkexec: NixOS's wrapper and Arch's");
+        assertEqual(rules.testGateDeprecations(true, "1.9").length, 1, "the gate in a 1.9 module's deprecations, in test mode");
+        assert(rules.testGateDeprecations(true, "1.3")[0].includes("will be removed"), "… saying it will be removed");
+        assertEqual(rules.testGateDeprecations(false, "1.9").length + rules.testGateDeprecations(true, "1.10").length, 0, "… not off test mode, not for 1.10");
 
         assertEqual(rules.missingProgramText("x", "path", "", 0), "needs the program x, which is not on PATH", "missing: on PATH");
         assertEqual(rules.missingProgramText("x", "path", "", 5), "needs the program x, which is not on PATH (the look-up did not answer within 5 s)", "… timed out");

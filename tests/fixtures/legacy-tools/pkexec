@@ -1,0 +1,4 @@
+#!/bin/sh
+# A stand-in pkexec outside any module, as the released Tailscale module keeps its own
+# (module/../tools/stand-in): runs the command it is given (modules/legacy-elevate)
+exec "$@"
