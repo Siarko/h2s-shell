@@ -629,3 +629,10 @@ Found during the test split (2026-11-17):
 - None of the owner's decisions are pending. The plans in `plans/` (`api-next.md`,
   `architecture-cleanup.md`, `documentation.md`) are drafts written before the decisions
   of 2026-11-17; step 1 revises them, and the owner approves them before implementation.
+
+For the owner, from the autonomous run (2026-11-18 on):
+
+- **Hover contrast of warning and success buttons** (review of the elements batches): under
+  the pointer a warning or success button has white text on `#e8a854` / `#44d47a` in the
+  built-in theme, a contrast of about 2:1 (readable text wants 4.5:1). Options: dark text on
+  those fills, or darker fills. Not changed; the look is the owner's.
