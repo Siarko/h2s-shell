@@ -423,7 +423,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
    - [x] command runner
    - [x] program lookup with trust
    - [x] test mode
-   - [ ] privileged start
+   - [x] privileged start (A4), the prompt says who and what for (A5)
    - [ ] shared module object
    - [ ] helpers
    - [ ] system and network facts
@@ -573,7 +573,7 @@ Found during the test split (2026-11-17):
 - [ ] Module runs in the headless compositor start the `nmcli` on `PATH` against a dead
       D-Bus address (`[NetworkEvents] nmcli monitor exited, restarting`) and try `notify-send`:
       against "tests never touch a real daemon"; a stand-in or a switch-off is needed
-- [ ] `polkit/AuthPrompt.qml` sets no `textFormat` on polkit's texts (plain-text rule)
+- [x] `polkit/AuthPrompt.qml` sets no `textFormat` on polkit's texts (plain-text rule) — done with A5
 - [ ] `tests/ModulesTest.qml` (start guard, lines 268-301) asserts within a 300 ms timer:
       fails under load on a slow machine (3 checks, seen on the NixOS machine)
 - [ ] Lock scenario `modules-discovery` once saw the supervisor silent for 44 s under load
