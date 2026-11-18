@@ -153,6 +153,57 @@ TestCase {
             }
             assertEqual(ModuleTestKit.notified.map(entry => entry.summary).join(", "), "absent failed",
                         "refusals notify nothing — the locked one quietly — but the program not found");
+            _swapped();
+        });
+    }
+
+    // The words the stand-in pkexec printed it was given, after "pkexec:"
+    function _pkexecWords(result) {
+        return result.stderr.split("\n").filter(line => line.startsWith("pkexec:")).map(line => line.slice(7));
+    }
+
+    // --- argv read once: an accessor or a Proxy that shows a trusted program to the checks
+    // and /bin/sh at the start runs the trusted program, or nothing ---
+    function _swapped() {
+        _runs = {};
+        const talk = _path("talk");
+        const shell = _path("sh");
+        // Element 0 answers `talk` for its first `trusted` reads, then the shell: whichever
+        // read the start would take, it must be the one that was judged
+        for (let trusted = 1; trusted <= 12; trusted++) {
+            const argv = ["x", "-c", "echo PWNED"];
+            let reads = 0;
+            Object.defineProperty(argv, 0, { get() { return ++reads <= trusted ? talk : shell; }, enumerable: true });
+            _start("accessor " + trusted, argv);
+        }
+        // A Proxy: element 0 and `length` change after their first read
+        const asked = { word: 0, length: 0 };
+        _start("proxy", new Proxy([talk, "-c", "echo PWNED"], {
+            get(target, key) {
+                if (key === "0")
+                    return ++asked.word === 1 ? talk : shell;
+                if (key === "length")
+                    return ++asked.length === 1 ? 3 : 1;
+                return target[key];
+            }
+        }));
+        _start("array-like", { 0: talk, 1: "lines", 2: "1", 3: "0", length: 4 });
+        _start("string object", [new String(talk), "lines", "1", "0"]);
+        _then("the swapped runs are answered", () => _done("proxy", "array-like", "string object")
+              && Object.keys(_runs).filter(name => name.startsWith("accessor")).every(name => _done(name)), () => {
+            for (const name of Object.keys(_runs).filter(key => key.startsWith("accessor") || key === "proxy")) {
+                const result = _runs[name].result;
+                const words = _pkexecWords(result);
+                assert(!result.stdout.includes("PWNED") && result.ok && words[4] === talk && words.length === 7,
+                       name + ": the program judged is the one that ran, with the words read once"
+                       + (result.ok && words[4] === talk ? "" : ": " + JSON.stringify(result)));
+            }
+            assertEqual(asked.word + " " + asked.length, "1 1", "the Proxy: element 0 and length each read once");
+            for (const name of ["array-like", "string object"]) {
+                const result = _runs[name].result;
+                assert(!result.ok && result.blocked === "" && result.error !== "" && _pkexecWords(result).length === 0,
+                       name + ": refused as not an array of strings, nothing ran: " + JSON.stringify(result));
+            }
             _streaming();
         });
     }

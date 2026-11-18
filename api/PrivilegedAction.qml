@@ -47,19 +47,25 @@ import qs.singletons.io as Io
 QtObject {
     id: root
 
-    // What runs the command as root: pkexec (a module's suites put a stand-in here)
+    // What runs the command as root. "pkexec" by its name (the default) is the shell's
+    // trusted, setuid pkexec (PrivilegedRuns.pkexec), never one found first on PATH; none
+    // found: the run fails, not available. A path given here runs as given outside test mode
+    // (until slice Z). A module's suites put a stand-in here.
     property var elevate: ["pkexec"]
     // "<what> failed" notifications for a command that ran and failed
     property bool notifyFailures: true
     readonly property bool busy: _current !== null || _queue.length > 0 || _probe.busy
 
-    function run(command, what, done, environment) {
-        if (!Array.isArray(command) || command.length === 0 || command.some(part => typeof part !== "string")) {
+    function run(givenCommand, what, done, environment) {
+        // The command and the elevating words read once: what is checked is what runs
+        const snapshot = CommandRules.argvSnapshot(givenCommand, true);
+        if (snapshot.problem !== "") {
             done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: "not a command" });
             return;
         }
+        const command = snapshot.argv;
         const label = String(what ?? command[0]);
-        const testRefused = problem => {
+        const refuseRun = problem => {
             console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + problem);
             if (root.notifyFailures)
                 Notifier.send(label + " failed", { body: problem });
@@ -69,14 +75,20 @@ QtObject {
         // run it is (for the log)
         const stack = new Error().stack;
         const rule = Modules.host.testMode ? Modules.host.testCallRule(stack) : "strict";
-        const elevating = Array.isArray(elevate) ? Array.from(elevate) : elevate;
+        const givenElevate = elevate;
+        const elevateSnapshot = CommandRules.argvSnapshot(givenElevate, false);
+        const elevating = elevateSnapshot.argv ?? (Array.isArray(givenElevate) ? Array.from(givenElevate) : givenElevate);
         const testProblem = ModuleRules.testElevateProblem(elevating, Modules.host.testMode, Modules.host.testStandIns, rule);
         if (testProblem !== "") {
-            testRefused(testProblem);
+            refuseRun(testProblem);
+            return;
+        }
+        if (elevateSnapshot.problem !== "") {
+            refuseRun("elevate is not a list of words: " + elevateSnapshot.problem);
             return;
         }
         const request = { command: command, label: label, done: done ?? null, environment: environment ?? {}, elevating: elevating,
-                          moduleId: _moduleOf(stack) };
+                          systemPkexec: PrivilegedRules.legacySystemPkexec(elevating, Modules.host.testMode), moduleId: _moduleOf(stack) };
         if (!command[0].startsWith("/")) {
             _notFound(request, command[0] + " is not an absolute path (pkexec needs one)");
             return;
@@ -91,7 +103,7 @@ QtObject {
                    .concat(ModuleRules.systemPkexecPaths), probe => {
             const problem = ModuleRules.testElevateVerdict(probe.ok, probe.lines);
             if (problem !== "") {
-                testRefused(problem);
+                refuseRun(problem);
                 return;
             }
             if (!root._checkedElevate.includes(elevating[0]))
@@ -135,7 +147,7 @@ QtObject {
         if (_ownerKey === "")
             _ownerKey = PrivilegedRuns.newOwnerKey();
         PrivilegedRuns.startLegacy({
-            owner: _ownerKey, argv: request.elevating.concat(request.command), program: request.command[0],
+            owner: _ownerKey, argv: request.elevating.concat(request.command), systemPkexec: request.systemPkexec, program: request.command[0],
             environment: request.environment, testMode: Modules.host.testMode,
             standIns: Modules.host.testStandIns.concat(root._checkedElevate),
             moduleId: request.moduleId, what: request.label

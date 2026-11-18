@@ -241,13 +241,19 @@ import qs.singletons.network
 //   module.privileged.unavailableReason   why not, in a few words ("" when available)
 //   module.privileged.start(argv, options)   runs one of the module's programs as root
 //                          through pkexec → a handle { running (bool), cancel() }.
-//                          `argv[0]`: the path of one of its programs, `module.programs[name]
-//                          .path`, judged trusted. options:
+//                          `argv`: a real array of strings (not a QML list, not an object
+//                          that looks like one), read once when start() is called — the
+//                          copy is what is judged and what runs; `argv[0]`: the path of one
+//                          of its programs, `module.programs[name].path`, judged trusted.
+//                          The options are read once too. options:
 //                            what            needed: a few words saying what the run does
 //                                            ("Send a file", "Connect"), never a sentence;
 //                                            control and format characters dropped, white
 //                                            space folded, at most 200 characters
-//                            timeoutMs       needed: the run's time limit, 1000 to 3600000
+//                            timeoutMs       needed: the run's time limit, 1000 to 3600000.
+//                                            It starts when the command starts as root,
+//                                            after the password: a prompt left open is not
+//                                            bounded by it, and holds the queue meanwhile
 //                            onLine(line, stream), onStdout(text), onStderr(text)   as
 //                                            CommandRunner's: whole lines, as they come
 //                            notifyFailures  true: a run that ran and failed, timed out, or
@@ -261,17 +267,35 @@ import qs.singletons.network
 //                          the lock), refused (127: not authorised, or no agent answered —
 //                          the shell says so once), notFound, timedOut, cancelled, blocked,
 //                          error }. A command that itself exits 124, 126, 127 or 137 reads
-//                          as the shell's or pkexec's own (both pass its status through).
+//                          as the shell's or pkexec's own (both pass its status through),
+//                          and so does `timeout`'s own 125 (it failed), 126 (the command
+//                          could not be run) or 127 (not found once started): 126 reads as
+//                          `dismissed`, 127 as `refused`. The words pkexec ran are the same
+//                          either way, so nothing tells them apart; the program is checked
+//                          to be there just before, which makes `timeout`'s 127 rare.
 //                          Refused before pkexec runs, nothing started:
 //                            blocked "untrusted"    argv[0] is not the absolute path of one of
 //                                            its programs, or that program is not trusted, or
-//                                            it is a shell, env, or another program that
-//                                            runs one named in its arguments. Only argv[0]
-//                                            is judged: a trusted interpreter handed a
-//                                            script passes — the prompt's command line is
-//                                            all that shows it
+//                                            it — by its name or its real file's — is a
+//                                            shell, an interpreter (python, perl, ruby,
+//                                            node, lua, php, tclsh, awk, the dynamic loader),
+//                                            or a program that runs another named in its
+//                                            arguments (env, sudo, su, timeout, nice,
+//                                            setsid, setpriv, strace, gdb, chroot, unshare,
+//                                            nsenter, bwrap, xargs, find, flock, time,
+//                                            systemd-run, busybox, coreutils and their
+//                                            kind: PrivilegedRules.launchers). Where
+//                                            coreutils is one program that its tools link
+//                                            to (NixOS) the tool is judged by the name it
+//                                            is run by — `cp` passes, `env` does not — and
+//                                            `--coreutils-prog` as the first argument is
+//                                            refused. Not exhaustive, and only argv[0] is
+//                                            judged: a program that runs a command through
+//                                            an option of its own passes — the prompt's
+//                                            command line is all that shows it
 //                            blocked "unprintable"  a word holds a control or format character
-//                                            (a line break, a right-to-left override): the
+//                                            or a line or paragraph separator (a line
+//                                            break, a right-to-left override, U+2028): the
 //                                            command could not be shown as it is
 //                            blocked "no-purpose"   `what` empty once cleaned
 //                            blocked "locked"       the session is locked (dismissed too: the
@@ -280,8 +304,8 @@ import qs.singletons.network
 //                                            found), or — checked when the run's turn comes —
 //                                            not an executable file
 //                            error           options of the wrong kind, timeoutMs missing or
-//                                            out of range, argv not a list of words, not
-//                                            available (the reason)
+//                                            out of range, argv not an array of strings,
+//                                            not available (the reason)
 //                          The words pkexec gets: `<pkexec> <timeout> -k 3 <limit> <argv…>`.
 //                          The shell's own `timeout` runs inside pkexec, as root, and ends the
 //                          command at its limit (TERM, KILL 3 s later) even when the shell is
@@ -307,7 +331,13 @@ import qs.singletons.network
 //                          nothing else: without one `available` is false. The polkit agent
 //                          and the lock are then the test kit's (ModuleTestKit).
 //   PrivilegedAction keeps working and runs through the same queue: one run at a time per
-//                          object, no time limit, no `what` the prompt can show.
+//                          object, no time limit, no `what` the prompt can show. Its
+//                          command is read once. Its default `elevate: ["pkexec"]` (pkexec by
+//                          its bare name) is the shell's trusted, setuid pkexec, the one
+//                          `module.privileged` uses — never one found first on PATH; none
+//                          found: the run fails, not available. An `elevate` set to a path
+//                          outside test mode runs as given, unjudged — that ends in slice Z,
+//                          with the type.
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

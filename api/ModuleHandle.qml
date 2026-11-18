@@ -124,9 +124,9 @@ QtObject {
         function start(argv, options) {
             if (root._privilegedKey === "")
                 root._privilegedKey = PrivilegedRuns.newOwnerKey();
-            const first = Array.isArray(argv) && typeof argv[0] === "string" ? argv[0] : "";
+            // argv is read once, inside: the program looked up is the one that runs
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: root.host?.testMode === true, tools: _tools, program: root._programAt(first)
+                testMode: root.host?.testMode === true, tools: _tools, programAt: path => root._programAt(path)
             });
         }
     }

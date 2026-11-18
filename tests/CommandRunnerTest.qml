@@ -79,6 +79,14 @@ TestCase {
         tools: suite._lookingUp
     }
     property Api.CommandRunner api: Api.CommandRunner {}
+    // A runner whose guard records the words it judged (CommandRunner.refuse)
+    property var _judged: []
+    property Io.CommandRunner guarded: Io.CommandRunner {
+        refuse: argv => {
+            suite._judged.push(argv.slice());
+            return "";
+        }
+    }
 
     property Component _runnerComponent: Component {
         Io.CommandRunner {}
@@ -160,11 +168,17 @@ TestCase {
                 throw new Error("a module's mistake");
             }
         });
+        // A word that answers one thing at its first read and another after: the guard
+        // judges, and the process gets, the same copy
+        const switching = ["sh", "-c", "printf %s \"$1\"", "sh", "first"];
+        let switchReads = 0;
+        Object.defineProperty(switching, 4, { get() { return ++switchReads === 1 ? "first" : "second"; }, enumerable: true });
+        _start("readOnce", guarded, switching);
         const before = _runs.exit;
         assert(before.handle.running && before.result === null, "start(): a handle, running, no answer inside start()");
         assertEqual(wrapping.running, 12, "the runner counts its runs");
 
-        _then("the plain runs answered", () => _answered("exit", "words", "parent", "parentNoLimit", "notKept", "parentNoSetpriv", "capped", "signalled", "throws", "blank0", "blank1", "blank2", "blank3"), () => {
+        _then("the plain runs answered", () => _answered("exit", "readOnce", "words", "parent", "parentNoLimit", "notKept", "parentNoSetpriv", "capped", "signalled", "throws", "blank0", "blank1", "blank2", "blank3"), () => {
             const exit = _runs.exit.result;
             assertEqual(exit.ok + " " + exit.code + " " + exit.failedToStart + " " + exit.timedOut + " " + exit.cancelled + " " + exit.error,
                         "false 3 false false false ", "exit 3: not ok, the code, nothing else said");
@@ -178,6 +192,8 @@ TestCase {
             assert(!_runs.exit.handle.running, "the handle: not running after the answer");
             assertEqual(_runs.exit.answers, 1, "done once");
 
+            assertEqual(_runs.readOnce.result.stdout + " " + JSON.stringify(suite._judged.map(argv => argv[4])), "first [\"first\"]",
+                        "argv read once: the word the guard judged is the word that ran");
             assertEqual(_runs.words.result.stdout, "two words|$HOME; `id`|runner|run", "words kept whole, no shell reads them; the runner's environment, the run's on top");
             assert(_runs.words.result.ok, "exit 0: ok");
             assertEqual(_runs.parent.result.stdout, CommandTools.timeout, "a run with a limit is started inside timeout");

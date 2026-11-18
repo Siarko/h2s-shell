@@ -12,7 +12,8 @@ TestCase {
 
         // --- text ---
         for (const text of ["a\nb", "tab\there", "‮evil", "zero​width", "soft­hyphen", "nul\u0000",
-                            "tag󠀁", "lone \ud800 surrogate", "\u0085next line", "bom﻿"])
+                            "tag󠀁", "lone \ud800 surrogate", "\u0085next line", "bom﻿",
+                            "line\u2028separator", "paragraph\u2029separator"])
             assert(rules.unprintable(text), "unprintable: " + JSON.stringify(text));
         for (const text of ["", "plain words", "café", "日本語", "emoji 😀", "--flag=value", "a b"])
             assert(!rules.unprintable(text), "printable: " + JSON.stringify(text));
@@ -20,10 +21,12 @@ TestCase {
         assertEqual(rules.cleanWhat("​‮ \n"), "", "what: nothing left");
         assertEqual(rules.cleanWhat(42) + rules.cleanWhat(null) + rules.cleanWhat(undefined), "", "what: not a string → \"\"");
         assertEqual(rules.cleanWhat("x".repeat(500)).length, rules.whatMaxLength, "what: capped");
+        assertEqual(rules.cleanWhat("Send\u2028a\u2029file"), "Send a file", "what: line and paragraph separators are white space, folded");
 
         // --- the options ---
         const good = { what: "Connect", timeoutMs: 30000 };
-        assertEqual(JSON.stringify(rules.options(good)), JSON.stringify({ problem: "", what: "Connect", timeoutMs: 30000, notifyFailures: true }),
+        assertEqual(JSON.stringify(rules.options(good)), JSON.stringify({ problem: "", what: "Connect", timeoutMs: 30000, notifyFailures: true,
+                                                                        callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
                     "options: what and timeoutMs, notifyFailures true by default");
         for (const given of [undefined, null, "x", [1]])
             assert(rules.options(given).problem !== "", "options: not an object (" + JSON.stringify(given) + ") → a problem");
@@ -34,6 +37,20 @@ TestCase {
         assert(rules.options({ what: "x", timeoutMs: 1000, notifyFailures: "yes" }).problem.startsWith("notifyFailures"), "notifyFailures not a bool → a problem");
         assert(rules.options({ what: "x", timeoutMs: 1000, done: "no" }).problem.startsWith("done"), "done not a function → a problem");
         assertEqual(rules.options({ what: "x", timeoutMs: 1000, notifyFailures: false }).notifyFailures, false, "notifyFailures false");
+        // Each option read once: a getter cannot pass the check and then hand over another value
+        const reads = {};
+        const counted = {};
+        const answers = { what: "Connect", timeoutMs: 2000, notifyFailures: false, onStdout: () => {}, onStderr: () => {}, onLine: () => {}, done: () => {} };
+        for (const name of Object.keys(answers)) {
+            reads[name] = 0;
+            Object.defineProperty(counted, name, { get() { return ++reads[name] === 1 ? answers[name] : "switched"; }, enumerable: true });
+        }
+        const once = rules.options(counted);
+        assert(Object.keys(reads).every(name => reads[name] === 1), "options: every field read once: " + JSON.stringify(reads));
+        assert(once.problem === "" && once.what === "Connect" && once.timeoutMs === 2000 && once.notifyFailures === false
+               && once.callbacks.done === answers.done && once.callbacks.onLine === answers.onLine, "… and what was read is what is kept");
+        assert(rules.options({ what: "x", done: answers.done }).callbacks.done === answers.done && rules.options({ what: "x", onLine: answers.onLine }).callbacks.onLine === null,
+               "options wrong: done kept (an answer is owed), the others not");
 
         // --- refusals before pkexec runs ---
         const program = { declared: true, trusted: true, reason: "root's", real: "/usr/bin/tailscale" };
@@ -69,8 +86,31 @@ TestCase {
                     "untrusted", "a link whose real file is busybox: untrusted");
         assertEqual(asked({ argv: ["/nix/store/abc-pkexec/bin/pkexec", "x"], program: Object.assign({}, program, { real: "" }) }).blocked,
                     "untrusted", "pkexec itself: untrusted");
-        assertEqual(asked({ argv: ["/usr/bin/python3", "/home/u/script.py"], program: Object.assign({}, program, { real: "/usr/bin/python3.12" }) }),
-                    null, "an interpreter given a script passes: only argv[0] is judged (said in the reference)");
+        const real = path => Object.assign({}, program, { real: path });
+        for (const path of ["/usr/bin/python3", "/usr/bin/python3.12", "/usr/bin/perl", "/usr/bin/perl5.38.2", "/usr/bin/ruby", "/usr/bin/node",
+                            "/usr/bin/lua5.4", "/usr/bin/luajit", "/usr/bin/php8.3", "/usr/bin/tclsh8.6", "/usr/bin/awk", "/usr/bin/gawk", "/usr/bin/mawk",
+                            "/usr/lib/ld-linux-x86-64.so.2", "/lib/ld-musl-x86_64.so.1"])
+            assertEqual(asked({ argv: [path, "/home/u/script.py"], program: real(path) }).blocked, "untrusted", "an interpreter: untrusted (" + path + ")");
+        assertEqual(asked({ argv: ["/usr/bin/runner", "x"], program: real("/usr/bin/python3.12") }).blocked, "untrusted", "a link whose real file is an interpreter: untrusted");
+        for (const name of ["time", "prlimit", "setarch", "linux32", "linux64", "i386", "x86_64", "strace", "ltrace", "gdb", "bwrap", "capsh", "run0",
+                            "sudo", "doas", "su", "sg", "chroot", "unshare", "nsenter", "setsid", "setpriv", "nice", "ionice", "chrt", "taskset", "stdbuf",
+                            "nohup", "timeout", "flock", "xargs", "find", "dbus-run-session", "systemd-run", "busybox", "coreutils"])
+            assertEqual(asked({ argv: ["/usr/bin/" + name, "/bin/sh"], program: real("/usr/bin/" + name) }).blocked, "untrusted", "a launcher: untrusted (" + name + ")");
+        // NixOS: coreutils is one program, every tool a link to it; the tool is the name it is run by
+        const store = "/nix/store/abc-coreutils-9.5/bin/coreutils";
+        assertEqual(asked({ argv: ["/run/current-system/sw/bin/cp", "a", "b"], program: real(store) }), null, "NixOS: cp, a link to coreutils, passes");
+        assertEqual(asked({ argv: ["/run/current-system/sw/bin/chmod", "600", "/etc/x"], program: real(store) }), null, "… chmod too");
+        assertEqual(asked({ argv: ["/run/current-system/sw/bin/env", "/bin/sh"], program: real(store) }).blocked, "untrusted", "NixOS: env, a link to coreutils, is refused by its name");
+        assertEqual(asked({ argv: ["/run/current-system/sw/bin/timeout", "5", "/bin/sh"], program: real(store) }).blocked, "untrusted", "… timeout too");
+        assertEqual(asked({ argv: [store, "--coreutils-prog=env", "/bin/sh"], program: real(store) }).blocked, "untrusted", "coreutils itself: untrusted");
+        assertEqual(asked({ argv: ["/run/current-system/sw/bin/cp", "--coreutils-prog=env", "/bin/sh"], program: real(store) }).blocked, "untrusted",
+                    "a link to coreutils told --coreutils-prog=: untrusted");
+        assertEqual(asked({ argv: ["/usr/bin/mytool", "--coreutils-prog-shebang=env", "/bin/sh"], program: real(store) }).blocked, "untrusted",
+                    "… --coreutils-prog-shebang= too");
+        assertEqual(asked({ argv: ["/usr/bin/cp", "--coreutils-prog=env"], program: real("/usr/bin/cp") }), null,
+                    "Arch: cp is its own program; the word is only an argument to it");
+        assertEqual(asked({ argv: ["/usr/bin/tailscale", "up"], program: real("/usr/bin/tailscale") }), null, "an ordinary program passes");
+        assertEqual(asked({ argv: ["/usr/bin/python3-config"], program: real("/usr/bin/python3-config") }), null, "… a name that only begins like an interpreter's too");
         // The order
         assertEqual(asked({ locked: true, options: rules.options({ timeoutMs: 1000 }) }).blocked, "locked", "locked before no-purpose");
         assertEqual(asked({ active: false, locked: true }).error, "the module is off", "module off before locked");
@@ -85,6 +125,23 @@ TestCase {
                     JSON.stringify(["/run/wrappers/bin/pkexec", "/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "-x"]),
                     "pkexec, then the shell's timeout with its kill-after and the limit, then the command as given");
         assertEqual(rules.pkexecArgv("/p", "/t", 2500, 0, ["/c"]).slice(2, 5).join(" "), "-k 0.001 2.5", "seconds with decimals; a kill-after of 0 is 1 ms");
+
+        // --- the old PrivilegedAction: its default "pkexec" is the shell's trusted one ---
+        assert(rules.legacySystemPkexec(["pkexec"], false), "\"pkexec\" by name outside test mode: the trusted pkexec");
+        assert(rules.legacySystemPkexec(["pkexec", "--disable-internal-agent"], false), "… with words of its own too");
+        assert(!rules.legacySystemPkexec(["pkexec"], true), "test mode: left to the test-mode gate");
+        assert(!rules.legacySystemPkexec(["/usr/bin/pkexec"], false) && !rules.legacySystemPkexec(["/opt/x/elevate"], false),
+               "an elevating program given by its path: as given");
+        const legacyArgv = ["pkexec", "/usr/bin/tailscale", "up"];
+        assertEqual(JSON.stringify(rules.legacyLaunch(legacyArgv, true, true, "/run/wrappers/bin/pkexec", "")),
+                    JSON.stringify({ argv: ["/run/wrappers/bin/pkexec", "/usr/bin/tailscale", "up"], wait: false, problem: "" }),
+                    "the trusted pkexec in place of the name, the command after it");
+        assertEqual(rules.legacyLaunch(legacyArgv, true, false, "", "").wait, true, "the look-up not answered yet: wait for it");
+        const unavailable = rules.legacyLaunch(legacyArgv, true, true, "", "pkexec is not installed");
+        assert(unavailable.problem.includes("not available") && unavailable.problem.includes("not installed") && unavailable.argv.length === 0,
+               "no trusted pkexec: the run fails as not available, nothing run: " + JSON.stringify(unavailable));
+        assertEqual(JSON.stringify(rules.legacyLaunch(["/opt/x/elevate", "/bin/true"], false, false, "", "").argv), JSON.stringify(["/opt/x/elevate", "/bin/true"]),
+                    "an elevating program given by its path: run as given, no look-up waited for");
 
         // --- where pkexec is ---
         const root = path => "stat\tpkexec\t0\t755\t0\t" + path;

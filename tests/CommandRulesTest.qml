@@ -22,6 +22,9 @@ TestCase {
         return state;
     }
 
+    // A QML list, which is no array
+    property list<string> qmlWords: ["ls", "-l"]
+
     function run() {
         const rules = CommandRules;
 
@@ -34,9 +37,67 @@ TestCase {
         assert(rules.argvProblem([""]) !== "", "an empty program: refused");
         assert(rules.argvProblem(["echo", "a\u0000b"]) !== "", "a NUL in a word: refused");
 
+        // --- the command read once (argvSnapshot) ---
+        const copied = rules.argvSnapshot(["ls", "-l"], true);
+        assertEqual(JSON.stringify(copied), JSON.stringify({ argv: ["ls", "-l"], words: ["ls", "-l"], problem: "" }), "an array of strings: copied");
+        const original = ["ls"];
+        assert(rules.argvSnapshot(original, true).argv !== original, "… a fresh array, not the one given");
+        // An element that answers one thing to the checks and another later
+        let reads = 0;
+        const switching = ["/usr/bin/true", "x"];
+        Object.defineProperty(switching, 0, { get() { reads++; return reads === 1 ? "/usr/bin/true" : "/bin/sh"; }, enumerable: true });
+        const once = rules.argvSnapshot(switching, true);
+        assertEqual(JSON.stringify(once.argv) + " " + reads, "[\"/usr/bin/true\",\"x\"] 1", "an accessor element: read once, the copy keeps what it said");
+        // A Proxy whose length and words change at each read
+        const asked = { length: 0, word: 0 };
+        const proxy = new Proxy(["/usr/bin/true", "a", "b"], {
+            get(target, key) {
+                if (key === "length")
+                    return ++asked.length === 1 ? 1 : 3;
+                if (key === "0")
+                    return ++asked.word === 1 ? "/usr/bin/true" : "/bin/sh";
+                return target[key];
+            }
+        });
+        const proxied = rules.argvSnapshot(proxy, true);
+        assertEqual(JSON.stringify(proxied.argv) + " " + asked.length + " " + asked.word, "[\"/usr/bin/true\"] 1 1",
+                    "a Proxy: length and each word read once");
+        assert(rules.argvSnapshot({ 0: "ls", length: 1 }, true).problem !== "", "arrays only: an array-like object refused");
+        assertEqual(rules.argvSnapshot({ 0: "ls", length: 1 }, false).argv?.[0], "ls", "list-like allowed: copied (a QML list<string> is no array)");
+        assertEqual(JSON.stringify(rules.argvSnapshot(qmlWords, false).argv) + " " + rules.argvSnapshot(qmlWords, true).argv,
+                    "[\"ls\",\"-l\"] null", "a QML list<string>: copied where list-likes are allowed, refused where only arrays are");
+        assert(rules.argvSnapshot([new String("ls")], true).problem.startsWith("word 1"), "a String object, not a primitive string: refused");
+        assert(rules.argvSnapshot({ length: 1e12 }, false).problem.includes("words"), "a huge length: refused, not walked");
+        assert(rules.argvSnapshot({ length: 1.5 }, false).problem !== "", "a length that is no whole number: refused");
+        const throwing = ["ls"];
+        Object.defineProperty(throwing, 0, { get() { throw new Error("no"); } });
+        assertEqual(rules.argvSnapshot(throwing, true).problem + " " + rules.argvSnapshot(throwing, true).words, "the command could not be read null",
+                    "a read that throws: refused, no copy");
+        const emptyProgram = rules.argvSnapshot(["", "up"], true);
+        assertEqual(String(emptyProgram.argv) + " " + JSON.stringify(emptyProgram.words), "null [\"\",\"up\"]", "a problem with the words: no argv, the copy in words");
+        // Options: each field read once
+        const optionReads = {};
+        const counted = {};
+        for (const name of ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "environment", "onStdout", "onStderr", "onLine", "done"]) {
+            optionReads[name] = 0;
+            Object.defineProperty(counted, name, { get() { optionReads[name]++; return undefined; }, enumerable: true });
+        }
+        rules.options(counted);
+        assert(Object.keys(optionReads).every(name => optionReads[name] === 1), "options: every field read once: " + JSON.stringify(optionReads));
+        let envReads = 0;
+        const environment = {};
+        Object.defineProperty(environment, "A", { get() { return ++envReads === 1 ? "1" : 5; }, enumerable: true });
+        const withEnvironment = rules.options({ environment: environment });
+        assertEqual(withEnvironment.problem + "|" + JSON.stringify(withEnvironment.environment), "|{\"A\":\"1\"}",
+                    "an environment value read once: the copy checked is the one kept");
+        const done = () => {};
+        assert(rules.options({ done: done, onLine: 5 }).callbacks.done === done && rules.options({ done: done, onLine: 5 }).callbacks.onLine === null,
+               "callbacks as read: done even when the options are wrong, the others not");
+
         // --- the options ---
         const defaults = rules.options(undefined);
-        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, maxOutputBytes: 1048576, environment: {} }),
+        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, maxOutputBytes: 1048576, environment: {},
+                                                       callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
                     "none given: 30 s, KILL 3 s after, the output kept, 1 MiB");
         assertEqual(JSON.stringify(rules.options(null)), JSON.stringify(defaults), "null: the same");
         const given = rules.options({ timeoutMs: 0, killAfterMs: 250.4, keepOutput: false, maxOutputBytes: 10, environment: { A: "1", B: null }, done: () => {} });

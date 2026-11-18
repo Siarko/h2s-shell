@@ -68,18 +68,22 @@ Singleton {
 
     // A module's run (module.privileged.start). `handle`: the module's handle (moduleId,
     // active, notify(), _privilegedKey); `facts`: { testMode, tools (PrivilegedRules
-    // .availability), program (what the handle knows of argv[0]) } → { running, cancel() }.
-    // `done` is called once, never inside this call, and never while the module is off (a
-    // run asked for then is not answered).
+    // .availability), programAt(path) (what the handle knows of a path: PrivilegedRules
+    // .refusal's `program`) } → { running, cancel() }. `done` is called once, never inside
+    // this call, and never while the module is off (a run asked for then is not answered).
+    // `argv` and `options` are read once, here (CommandRules.argvSnapshot, a real array
+    // only; PrivilegedRules.options): the program judged, the words shown and the words
+    // handed to pkexec are that one copy.
     function start(handle, argv, options, facts) {
         const parsed = PrivilegedRules.options(options);
-        const callbacks = parsed.problem === "" ? options : {};
+        const snapshot = CommandRules.argvSnapshot(argv, true);
+        const words = snapshot.words;
         const job = {
             id: ++_lastId, kind: "module", owner: handle._privilegedKey, handle: handle,
             moduleId: String(handle.moduleId), what: parsed.what, timeoutMs: parsed.timeoutMs,
             notifyFailures: parsed.notifyFailures,
-            onStdout: callbacks.onStdout ?? null, onStderr: callbacks.onStderr ?? null, onLine: callbacks.onLine ?? null,
-            done: typeof options?.done === "function" ? options.done : null,
+            onStdout: parsed.callbacks.onStdout, onStderr: parsed.callbacks.onStderr, onLine: parsed.callbacks.onLine,
+            done: parsed.callbacks.done,
             argv: [], program: "", environment: {}, standIns: [], testMode: facts?.testMode === true,
             answered: false, muted: false, runner: null, result: null
         };
@@ -97,19 +101,22 @@ Singleton {
             job.answered = true;
             return runHandle;
         }
-        const refused = PrivilegedRules.refusal({
-            argv: argv, options: parsed, active: handle.active === true, locked: locked,
-            available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? "",
-            program: facts?.program ?? null
-        });
+        const first = words !== null && typeof words[0] === "string" ? words[0] : "";
+        const refused = parsed.problem === "" && words === null
+            ? { blocked: "", notFound: false, error: snapshot.problem }
+            : PrivilegedRules.refusal({
+                argv: words, options: parsed, active: handle.active === true, locked: locked,
+                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? "",
+                program: typeof facts?.programAt === "function" ? facts.programAt(first) : null
+            });
         if (refused) {
             if (refused.blocked !== "locked")
                 console.warn("[Privileged] " + job.moduleId + ": a run refused before pkexec — " + refused.error.slice(0, 300));
             _refuse(job, PrivilegedRules.refusedResult(refused));
             return runHandle;
         }
-        job.argv = PrivilegedRules.pkexecArgv(facts.tools.pkexec, facts.tools.timeout, parsed.timeoutMs, PrivilegedRules.killAfterMs, argv);
-        job.program = argv[0];
+        job.argv = PrivilegedRules.pkexecArgv(facts.tools.pkexec, facts.tools.timeout, parsed.timeoutMs, PrivilegedRules.killAfterMs, words);
+        job.program = words[0];
         // In test mode only the module's own stand-in may be the pkexec
         job.standIns = job.testMode ? [facts.tools.pkexec] : [];
         job.queued = true;
@@ -119,7 +126,9 @@ Singleton {
     }
 
     // A run of the old PrivilegedAction (its checks made, the test-mode gate among them):
-    // `request` { owner, argv (elevating program and command, as they run), program
+    // `request` { owner, argv (elevating program and command, as they run), systemPkexec
+    // (PrivilegedRules.legacySystemPkexec: argv[0] is replaced by the trusted `pkexec` when
+    // the run starts; none found — the run is answered "refused", not available), program
     // (command[0]), environment, standIns (what test mode lets run as pkexec), testMode,
     // moduleId, what }; `answer(reply)` once: { kind: "result" | "notFound" | "locked" |
     // "cancelled" | "refused", result (the runner's, for "result"), lines (stdout's non-empty
@@ -129,7 +138,7 @@ Singleton {
             id: ++_lastId, kind: "legacy", owner: String(request.owner ?? ""), handle: null,
             moduleId: String(request.moduleId || "?"), what: PrivilegedRules.cleanWhat(String(request.what ?? "")),
             timeoutMs: 0, notifyFailures: false, onStdout: null, onStderr: null, onLine: null,
-            done: answer, argv: Array.from(request.argv), program: String(request.program),
+            done: answer, argv: Array.from(request.argv), systemPkexec: request.systemPkexec === true, program: String(request.program),
             environment: request.environment ?? {}, standIns: Array.isArray(request.standIns) ? request.standIns : [],
             testMode: request.testMode === true, answered: false, muted: false, runner: null, result: null,
             lines: [], errorText: ""
@@ -171,6 +180,8 @@ Singleton {
     property var _outbox: []
 
     property bool _known: false
+    // The old type's runs whose turn came before the look-up of pkexec answered
+    property var _waitingForLookup: []
     property string _pkexec: ""
     property string _pkexecReason: "pkexec is still being looked for"
 
@@ -193,6 +204,15 @@ Singleton {
         return (_testMode ? testAgent : Authentication).state;
     }
 
+    // The queue's clock (ms): monotonic (Quickshell's ElapsedTimer, a QElapsedTimer), so a
+    // step of the wall clock neither stalls a deadline nor ends one early. Never 0, which
+    // means "no deadline".
+    property ElapsedTimer _clock: ElapsedTimer {}
+
+    function _now() {
+        return Number(_clock.elapsedMs()) + 1;
+    }
+
     // Events are taken one at a time, in order, also when an effect leads to another
     function _dispatch(event) {
         _events.push(event);
@@ -201,7 +221,7 @@ Singleton {
         _dispatching = true;
         try {
             while (_events.length > 0) {
-                const next = Object.assign({ now: Date.now() }, _events.shift());
+                const next = Object.assign({ now: _now() }, _events.shift());
                 const stepped = PrivilegedRules.queueStep(_state, next);
                 _state = stepped.state;
                 for (const effect of stepped.effects)
@@ -212,7 +232,7 @@ Singleton {
         }
         const deadline = PrivilegedRules.nextDeadline(_state);
         if (deadline > 0) {
-            _tick.interval = Math.max(1, deadline - Date.now());
+            _tick.interval = Math.max(1, deadline - _now());
             _tick.restart();
         } else {
             _tick.stop();
@@ -262,8 +282,15 @@ Singleton {
     }
 
     function _launch(job) {
+        // The old type's default "pkexec": the trusted one, once the look-up has answered
+        const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _known, _pkexec, _pkexecReason);
+        if (launch.wait) {
+            _waitingForLookup.push(job);
+            return;
+        }
+        job.argv = launch.argv;
         // Test mode: no pkexec but the stand-ins allowed (ModuleRules.testRunProblem)
-        const problem = ModuleRules.testRunProblem(job.argv, job.testMode, job.standIns);
+        const problem = launch.problem !== "" ? launch.problem : ModuleRules.testRunProblem(job.argv, job.testMode, job.standIns);
         if (problem !== "") {
             job.result = { refusal: problem };
             Qt.callLater(() => root._dispatch({ type: "exited", id: job.id }));
@@ -407,6 +434,12 @@ Singleton {
                 root._known = true;
                 if (choice.path === "")
                     console.warn("[Privileged] running as administrator is not available: " + choice.reason);
+                const waiting = root._waitingForLookup;
+                root._waitingForLookup = [];
+                for (const job of waiting) {
+                    if (root._jobs.get(job.id) === job && !job.answered && !job.muted)
+                        root._launch(job);
+                }
             }
         });
     }

@@ -19,13 +19,17 @@ The interface modules are written against (`qs.api`), versioned on its own
   it comes and one frozen answer (`dismissed`, `refused`, `notFound`, `timedOut`,
   `cancelled`, `blocked`); `module.privileged.available` and `unavailableReason`. The
   shell's own `timeout` runs inside pkexec, so the command ends at its limit even when the
-  shell cannot stop it. Refused before pkexec runs: a program that is not one of the
-  module's trusted programs, or is a shell or `env` (`untrusted`), a word with a control or
-  format character (`unprintable`), an empty `what` (`no-purpose`), the session locked
+  shell cannot stop it. `argv` must be a real array of strings and is read once, as are
+  the options. Refused before pkexec runs: a program that is not one of the module's
+  trusted programs, or is a shell, `env`, an interpreter or another program that runs one
+  named in its arguments (`untrusted`), a word with a control, format or line separator
+  character (`unprintable`), an empty `what` (`no-purpose`), the session locked
   (`locked`). One queue for the whole shell, one password question at a time; runs waiting
   when the session locks end dismissed; a module turned off loses its runs, quietly.
   `PrivilegedAction` runs through the same queue (a run still waiting at a lock answers
-  `dismissed` with `blocked: "locked"`). In test mode only the module's
+  `dismissed` with `blocked: "locked"`), and its default `elevate: ["pkexec"]` is the
+  shell's trusted setuid pkexec, never one found first on `PATH`. Every command runner
+  reads a command once: what is checked is what runs. In test mode only the module's
   `<testPrograms>/pkexec` is used; `ModuleTestKit` gains `setPolkitAgent`,
   `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`.
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,

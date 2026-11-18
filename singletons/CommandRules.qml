@@ -29,35 +29,91 @@ Singleton {
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]
 
-    // "" when `argv` can be run: a non-empty list of strings, the first one not empty,
-    // none with a NUL character (which would cut the word short)
-    function argvProblem(argv) {
-        if (argv === null || typeof argv !== "object" || typeof argv.length !== "number")
-            return "the command is not a list of words";
-        if (argv.length === 0)
-            return "the command is empty";
-        for (let i = 0; i < argv.length; i++) {
-            if (typeof argv[i] !== "string")
-                return "word " + (i + 1) + " of the command is not a string";
-            if (argv[i].includes("\u0000"))
-                return "word " + (i + 1) + " of the command holds a NUL character";
+    // A command has at most this many words
+    readonly property int maxWords: 100000
+
+    // The command a caller handed over, read once: → { argv, words, problem }. `argv` is a
+    // fresh plain array of primitive strings, the only thing checked and run after this (null
+    // when `problem` is not ""); `words` the same copy whenever every word could be read,
+    // whatever they are (null when the value is no list, too long, or a read threw), for a
+    // caller that tells some problems apart on it. `length` and each element are read
+    // exactly once, so an accessor, a getter on `length` or a Proxy cannot show one command
+    // to the checks and another at the start. `arraysOnly`: a real array (Array.isArray) and nothing else; otherwise a
+    // list-like value too (a QML list<string>, which is no array). Refused: not a list,
+    // empty, more than maxWords words, a word that is not a primitive string or holds a NUL
+    // character (which would cut the word short), the first word empty, a read that threw.
+    function argvSnapshot(value, arraysOnly) {
+        let copy = null;
+        const refuse = problem => ({ argv: null, words: copy, problem: problem });
+        try {
+            if (value === null || typeof value !== "object")
+                return refuse("the command is not a list of words");
+            if (arraysOnly === true && !Array.isArray(value))
+                return refuse("the command is not an array of words");
+            // Reflect.get: a plain `value.length` has been seen to ask a Proxy twice (the
+            // engine's property cache, primed by another kind of object, reads again)
+            const length = Reflect.get(value, "length");
+            if (typeof length !== "number" || !Number.isInteger(length) || length < 0)
+                return refuse("the command is not a list of words");
+            if (length === 0)
+                return refuse("the command is empty");
+            if (length > maxWords)
+                return refuse("the command has more than " + maxWords + " words");
+            const read = [];
+            for (let i = 0; i < length; i++)
+                read.push(Reflect.get(value, i));
+            copy = read;
+            for (let i = 0; i < copy.length; i++) {
+                if (typeof copy[i] !== "string")
+                    return refuse("word " + (i + 1) + " of the command is not a string");
+                if (copy[i].includes("\u0000"))
+                    return refuse("word " + (i + 1) + " of the command holds a NUL character");
+            }
+            if (copy[0] === "")
+                return refuse("the command's program is empty");
+            return { argv: copy, words: copy, problem: "" };
+        } catch (error) {
+            copy = null;
+            return refuse("the command could not be read");
         }
-        if (argv[0] === "")
-            return "the command's program is empty";
-        return "";
+    }
+
+    // "" when `argv` can be run (argvSnapshot's problem, list-like values accepted). For a
+    // value already copied: code that checks a caller's value and then runs it takes the
+    // snapshot and runs that.
+    function argvProblem(argv) {
+        return argvSnapshot(argv, false).problem;
+    }
+
+    // Some of an options object's fields, each read exactly once, into a plain object: what
+    // is checked is what is used (a getter is not asked twice). Undefined for a field not
+    // there; a read that throws reads as undefined.
+    function readOnce(given, names) {
+        const read = {};
+        for (const name of names) {
+            try {
+                read[name] = Reflect.get(given, name);
+            } catch (error) {
+                read[name] = undefined;
+            }
+        }
+        return read;
     }
 
     function _wholeNumber(value, least) {
         return typeof value === "number" && isFinite(value) && value >= least;
     }
 
-    // → { problem, timeoutMs, killAfterMs, keepOutput, maxOutputBytes, environment }: what
-    // was given, with the defaults for what was not. `problem` is "" when everything given
-    // is of its kind; a wrong one is never replaced by a default silently.
+    // → { problem, timeoutMs, killAfterMs, keepOutput, maxOutputBytes, environment,
+    // callbacks }: what was given, with the defaults for what was not, every field read once
+    // (`callbacks`: { onStdout, onStderr, onLine, done } as read, each a function or null —
+    // `done` even when `problem` is set, as an answer is owed). `problem` is "" when
+    // everything given is of its kind; a wrong one is never replaced by a default silently.
     function options(given) {
         const result = {
             problem: "", timeoutMs: defaultTimeoutMs, killAfterMs: defaultKillAfterMs,
-            keepOutput: true, maxOutputBytes: defaultMaxOutputBytes, environment: {}
+            keepOutput: true, maxOutputBytes: defaultMaxOutputBytes, environment: {},
+            callbacks: { onStdout: null, onStderr: null, onLine: null, done: null }
         };
         if (given === undefined || given === null)
             return result;
@@ -65,42 +121,53 @@ Singleton {
             result.problem = "the options are not an object";
             return result;
         }
-        const has = name => given[name] !== undefined && given[name] !== null;
+        const read = readOnce(given, ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "environment"].concat(_callbackNames));
+        const has = name => read[name] !== undefined && read[name] !== null;
         if (has("timeoutMs")) {
-            if (!_wholeNumber(given.timeoutMs, 0))
+            if (!_wholeNumber(read.timeoutMs, 0))
                 result.problem = "timeoutMs is not a number of milliseconds, 0 or more";
             else
-                result.timeoutMs = Math.round(given.timeoutMs);
+                result.timeoutMs = Math.round(read.timeoutMs);
         }
         if (has("killAfterMs")) {
-            if (!_wholeNumber(given.killAfterMs, 0))
+            if (!_wholeNumber(read.killAfterMs, 0))
                 result.problem = "killAfterMs is not a number of milliseconds, 0 or more";
             else
-                result.killAfterMs = Math.round(given.killAfterMs);
+                result.killAfterMs = Math.round(read.killAfterMs);
         }
         if (has("maxOutputBytes")) {
-            if (!_wholeNumber(given.maxOutputBytes, 0))
+            if (!_wholeNumber(read.maxOutputBytes, 0))
                 result.problem = "maxOutputBytes is not a number, 0 or more";
             else
-                result.maxOutputBytes = Math.round(given.maxOutputBytes);
+                result.maxOutputBytes = Math.round(read.maxOutputBytes);
         }
         if (has("keepOutput")) {
-            if (typeof given.keepOutput !== "boolean")
+            if (typeof read.keepOutput !== "boolean")
                 result.problem = "keepOutput is not true or false";
             else
-                result.keepOutput = given.keepOutput;
+                result.keepOutput = read.keepOutput;
         }
         if (has("environment")) {
-            const problem = environmentProblem(given.environment);
+            // Copied first (each value read once), then the copy checked and kept
+            let copy = read.environment;
+            try {
+                if (typeof copy === "object" && !Array.isArray(copy))
+                    copy = Object.assign({}, copy);
+            } catch (error) {
+                copy = "unreadable";
+            }
+            const problem = environmentProblem(copy);
             if (problem !== "")
                 result.problem = problem;
             else
-                result.environment = Object.assign({}, given.environment);
+                result.environment = copy;
         }
         for (const name of _callbackNames) {
-            if (has(name) && typeof given[name] !== "function")
+            if (has(name) && typeof read[name] !== "function")
                 result.problem = name + " is not a function";
         }
+        for (const name of _callbackNames)
+            result.callbacks[name] = typeof read[name] === "function" && (result.problem === "" || name === "done") ? read[name] : null;
         return result;
     }
 

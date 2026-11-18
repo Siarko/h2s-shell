@@ -61,19 +61,21 @@ QtObject {
     readonly property bool _toolsKnown: tools?.known === true
 
     function start(argv, options) {
-        let problem = CommandRules.argvProblem(argv);
+        // One copy of the command, read once: what `refuse` judges is what runs
+        const snapshot = CommandRules.argvSnapshot(argv, false);
+        let problem = snapshot.problem;
         if (problem === "" && typeof refuse === "function")
-            problem = String(refuse(Array.from(argv)) ?? "");
+            problem = String(refuse(Array.from(snapshot.argv)) ?? "");
+        // Every option read once (callbacks too)
         const given = CommandRules.options(options);
-        const callbacks = given.problem === "" && options ? options : {};
         const job = {
-            argv: problem === "" ? Array.from(argv) : [],
+            argv: problem === "" ? snapshot.argv : [],
             options: given,
-            onStdout: callbacks.onStdout ?? null,
-            onStderr: callbacks.onStderr ?? null,
-            onLine: callbacks.onLine ?? null,
+            onStdout: given.callbacks.onStdout,
+            onStderr: given.callbacks.onStderr,
+            onLine: given.callbacks.onLine,
             // An answer is owed even where the options are what is wrong
-            done: typeof options?.done === "function" ? options.done : null,
+            done: given.callbacks.done,
             state: CommandRules.fresh(given.timeoutMs, given.killAfterMs),
             item: null, starting: false, muted: false, truncated: false,
             stdout: "", stderr: "", startedAt: 0,

@@ -224,6 +224,11 @@ TestCase {
         outsider.run(["/bin/sh", standIn, "as root"], "Another elevating program", result => suite._results.outsider = result);
         admin.elevate = [module.programs.pkexec.path];
         admin.run(["/bin/sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
+        // The command read once: a word that changes after its first read runs as first read
+        const switching = ["/bin/sh", standIn, "as root"];
+        let switchReads = 0;
+        Object.defineProperty(switching, 2, { get() { return ++switchReads === 1 ? "as root" : "switched"; }, enumerable: true });
+        admin.run(switching, "Read once", result => suite._results.readOnce = result);
         admin.run(["/bin/sh", standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
         admin.run(["/bin/sh", standIn], "Refusing", result => suite._results.refused = result, { FAKE_PKEXEC_EXIT: "127" });
         // API 1.2: a program that is not there, or not given by an absolute path, is notFound —
@@ -241,7 +246,7 @@ TestCase {
             done: result => suite._ran = result
         });
 
-        _then("the commands answered", () => Object.keys(_results).length === 15 && _queried !== null, () => {
+        _then("the commands answered", () => Object.keys(_results).length === 16 && _queried !== null, () => {
             assert(!_results.defaultElevate.ok && _results.defaultElevate.error.startsWith("test mode:") && !_results.defaultElevate.refused,
                    "PrivilegedAction in test mode: the default pkexec refused, nothing run: " + JSON.stringify(_results.defaultElevate));
             assert(!_results.runnerPkexec.ok && _results.runnerPkexec.error.startsWith("test mode:"),
@@ -256,6 +261,8 @@ TestCase {
             assert(_results.plain.ok && JSON.stringify(_results.plain.lines) === "[\"a b\",\"c\"]", "CommandAction: its lines, arguments kept whole");
             assertEqual(_results.code.code, 3, "CommandAction: the exit status (environment passed)");
             assert(_results.root.ok && _results.root.lines[0] === "as root", "PrivilegedAction: run through the elevating program");
+            assert(_results.readOnce.ok && JSON.stringify(_results.readOnce.lines) === "[\"as root\"]",
+                   "PrivilegedAction: the command read once, what was checked is what ran: " + JSON.stringify(_results.readOnce.lines));
             assert(_results.dismissed.dismissed && !_results.dismissed.ok, "PrivilegedAction: 126 is dismissed");
             assert(_results.refused.refused && !_results.refused.dismissed, "PrivilegedAction: 127 is refused");
             assert(!_results.bad.ok, "PrivilegedAction: not a command — refused, answered");

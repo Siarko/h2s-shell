@@ -11,7 +11,9 @@ import QtQuick
 Singleton {
     id: root
 
-    // A run's time limit (options.timeoutMs) must lie in this range: 1 s to 1 h
+    // A run's time limit (options.timeoutMs) must lie in this range: 1 s to 1 h. It is kept
+    // by the `timeout` inside pkexec, so it starts when the command starts as root: the wait
+    // for the password is not part of it
     readonly property int minTimeoutMs: 1000
     readonly property int maxTimeoutMs: 3600000
     // How long after TERM the command gets KILL: `timeout -k` inside pkexec, and how long a
@@ -32,25 +34,47 @@ Singleton {
     // not setuid and cannot work), then the system's directories (Arch: /usr/bin)
     readonly property string pkexecSearchPath: "/run/wrappers/bin:" + ModuleRules.probeToolPath
 
-    // Programs that run another program named in their arguments: a shell, and env and its
-    // kind. As argv[0] of a privileged run they would make the real program an argument that
-    // nobody judged, so such a run is `untrusted`. Only argv[0] is judged: a trusted
-    // interpreter handed a script (python3 /some/file) passes — review catches that in the
-    // project's own modules, the rule does not.
+    // Programs that run another program named in their arguments, by its name in argv[0]:
+    // shells, env and its kind, what runs a command under other limits, ids, namespaces or
+    // a tracer, and the multi-call programs that hold them (busybox, toybox, coreutils). As
+    // argv[0] of a privileged run they would make the real program an argument that nobody
+    // judged, so such a run is `untrusted`. Not exhaustive, and only argv[0] is judged: a
+    // program that can run a command through an option of its own (sed's `e`, tar's
+    // --to-command) passes — review catches that in the project's own modules, the rule
+    // does not.
     readonly property var launchers: [
         "sh", "bash", "dash", "zsh", "fish", "ksh", "mksh", "oksh", "loksh", "pdksh", "ash", "yash",
-        "csh", "tcsh", "rc", "es", "nu", "elvish", "xonsh", "busybox", "toybox",
-        "env", "sudo", "doas", "pkexec", "su", "runuser", "setpriv", "setsid", "nohup", "nice",
-        "ionice", "chrt", "taskset", "stdbuf", "timeout", "xargs", "flock", "chroot", "unshare",
-        "nsenter", "systemd-run", "script", "watch"
+        "csh", "tcsh", "rc", "es", "nu", "elvish", "xonsh", "osh", "pwsh",
+        "busybox", "toybox", "coreutils",
+        "env", "sudo", "doas", "pkexec", "su", "sg", "newgrp", "runuser", "run0", "setpriv", "capsh",
+        "setsid", "nohup", "nice", "ionice", "chrt", "taskset", "numactl", "stdbuf", "unbuffer", "timeout",
+        "time", "prlimit", "setarch", "linux32", "linux64", "i386", "x86_64", "uname26",
+        "strace", "ltrace", "gdb", "lldb", "valgrind", "perf", "catchsegv",
+        "chroot", "unshare", "nsenter", "bwrap", "firejail", "runcon", "chpst", "cgexec",
+        "flock", "xargs", "find", "parallel", "watch", "script", "expect",
+        "dbus-run-session", "dbus-launch", "systemd-run", "systemd-nspawn", "machinectl",
+        "start-stop-daemon", "daemonize", "nix", "nix-shell"
+    ]
+    // Interpreters: refused as argv[0] outright. Nothing from a module's directory runs as
+    // root, so an interpreter as root has no use but running code nobody judged — a script
+    // named in its arguments, or code in them (python3 -c, perl -e, awk's system()).
+    readonly property var interpreters: ["node", "nodejs", "deno", "bun", "awk", "gawk", "mawk", "nawk", "busybox-awk",
+        "Rscript", "R", "irb", "jshell", "sbcl", "clisp", "racket", "ghci", "runghc", "dotnet", "java"]
+    // … with a version in the name (python3.12, perl5.38.2, lua5.4, php8.3); and the dynamic
+    // loader, which runs the program named after it (ld-linux-x86-64.so.2 /bin/sh)
+    readonly property var _interpreterPatterns: [
+        /^(python|pypy|perl|ruby|lua|luajit|php|tclsh|wish|jimsh|guile|julia)[0-9.]*(-[0-9.]+)?$/,
+        /^ld(-[^/]*)?\.so(\.[0-9]+)*$/
     ]
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]
 
     // ---- Text ----
 
-    // Unicode's control (Cc) and format (Cf) characters, and lone surrogates: what cannot be
-    // shown as it is (a line break, a right-to-left override, a zero-width joiner)
+    // Unicode's control (Cc) and format (Cf) characters, its line and paragraph separators
+    // (Zl, Zp: U+2028, U+2029, which Qt breaks a line at even in plain text), and lone
+    // surrogates: what cannot be shown as it is (a line break, a right-to-left override, a
+    // zero-width joiner)
     function unprintableCode(code) {
         if (code <= 0x1f || (code >= 0x7f && code <= 0x9f))
             return true;
@@ -58,7 +82,7 @@ Singleton {
             return true;
         const ranges = [
             [0x00ad, 0x00ad], [0x0600, 0x0605], [0x061c, 0x061c], [0x06dd, 0x06dd], [0x070f, 0x070f],
-            [0x0890, 0x0891], [0x08e2, 0x08e2], [0x180e, 0x180e], [0x200b, 0x200f], [0x202a, 0x202e],
+            [0x0890, 0x0891], [0x08e2, 0x08e2], [0x180e, 0x180e], [0x200b, 0x200f], [0x2028, 0x202e],
             [0x2060, 0x2064], [0x2066, 0x206f], [0xfeff, 0xfeff], [0xfff9, 0xfffb], [0x110bd, 0x110bd],
             [0x110cd, 0x110cd], [0x13430, 0x1343f], [0x1bca0, 0x1bca3], [0x1d173, 0x1d17a],
             [0xe0001, 0xe0001], [0xe0020, 0xe007f]
@@ -66,7 +90,7 @@ Singleton {
         return ranges.some(range => code >= range[0] && code <= range[1]);
     }
 
-    // Whether a text holds a control or format character
+    // Whether a text holds a control, format or separator character
     function unprintable(text) {
         for (const character of String(text))
             if (unprintableCode(character.codePointAt(0)))
@@ -89,33 +113,40 @@ Singleton {
 
     // ---- What a run is asked with ----
 
-    // → { problem, what (cleaned), timeoutMs, notifyFailures }. `problem` is "" when every
-    // option given is of its kind and the two needed ones are there; `what` may still be
-    // empty (refusal: "no-purpose")
+    // → { problem, what (cleaned), timeoutMs, notifyFailures, callbacks }, every field read
+    // once (CommandRules.readOnce): what is checked is what is used. `callbacks`: { onStdout,
+    // onStderr, onLine, done } as read, each a function or null — `done` even when `problem`
+    // is set, as an answer is owed. `problem` is "" when every option given is of its kind
+    // and the two needed ones are there; `what` may still be empty (refusal: "no-purpose")
     function options(given) {
-        const result = { problem: "", what: "", timeoutMs: 0, notifyFailures: true };
+        const result = { problem: "", what: "", timeoutMs: 0, notifyFailures: true,
+                         callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } };
         if (given === undefined || given === null || typeof given !== "object" || Array.isArray(given)) {
             result.problem = "the options are not an object (what and timeoutMs are needed)";
             return result;
         }
-        result.what = cleanWhat(given.what);
-        const limit = given.timeoutMs;
+        const read = CommandRules.readOnce(given, ["what", "timeoutMs", "notifyFailures"].concat(_callbackNames));
+        result.what = cleanWhat(read.what);
+        const limit = read.timeoutMs;
         if (typeof limit !== "number" || !isFinite(limit))
             result.problem = "timeoutMs is needed: the run's time limit, " + minTimeoutMs + " to " + maxTimeoutMs + " ms";
         else if (limit < minTimeoutMs || limit > maxTimeoutMs)
             result.problem = "timeoutMs must be " + minTimeoutMs + " to " + maxTimeoutMs + " ms (1 s to 1 h)";
         else
             result.timeoutMs = Math.round(limit);
-        if (given.notifyFailures !== undefined && given.notifyFailures !== null) {
-            if (typeof given.notifyFailures !== "boolean")
+        const notify = read.notifyFailures;
+        if (notify !== undefined && notify !== null) {
+            if (typeof notify !== "boolean")
                 result.problem = "notifyFailures is not true or false";
             else
-                result.notifyFailures = given.notifyFailures;
+                result.notifyFailures = notify;
         }
         for (const name of _callbackNames) {
-            if (given[name] !== undefined && given[name] !== null && typeof given[name] !== "function")
+            if (read[name] !== undefined && read[name] !== null && typeof read[name] !== "function")
                 result.problem = name + " is not a function";
         }
+        for (const name of _callbackNames)
+            result.callbacks[name] = typeof read[name] === "function" && (result.problem === "" || name === "done") ? read[name] : null;
         return result;
     }
 
@@ -124,14 +155,45 @@ Singleton {
         return String(path ?? "").replace(/\/+$/, "").replace(/^.*\//, "");
     }
 
-    // Whether a program, by its path, runs another named in its arguments (`launchers`)
+    // Whether a program's name (the last part of its path) is a launcher or an interpreter
+    function runsOthersByName(name) {
+        const base = baseName(name);
+        return base !== "" && (launchers.includes(base) || interpreters.includes(base)
+                               || _interpreterPatterns.some(pattern => pattern.test(base)));
+    }
+
+    // Whether a program, by its path, runs another named in its arguments (launchers,
+    // interpreters)
     function launcher(path) {
-        const name = baseName(path);
-        return name !== "" && launchers.includes(name);
+        return runsOthersByName(path);
+    }
+
+    // Whether a run's argv[0] would run another program than the one judged: → "" or why.
+    // `real`: its real file's path ("" unknown). Judged by the name argv[0] has — what a
+    // multi-call program goes by — and by its real file's name, except where the real file
+    // is coreutils: NixOS builds coreutils as one program that every tool (cp, chmod, env)
+    // is a link to, and it runs the tool its argv[0] names (judged already), or with a first
+    // argument `--coreutils-prog=<tool>` (or `--coreutils-prog-shebang=`) the one named
+    // there — which is refused. So `cp` passes there, and `env` does not.
+    function launcherProblem(argv, real) {
+        if (!Array.isArray(argv) || typeof argv[0] !== "string")
+            return "no program";
+        if (runsOthersByName(argv[0]))
+            return "a program that runs another named in its arguments (a shell, env, an interpreter and the like)";
+        const realName = baseName(real);
+        if (realName === "coreutils") {
+            if (argv.length > 1 && String(argv[1]).startsWith("--coreutils-prog"))
+                return "coreutils told by --coreutils-prog which of its tools to run";
+            return "";
+        }
+        if (realName !== "" && runsOthersByName(realName))
+            return "a link to a program that runs another named in its arguments (" + realName + ")";
+        return "";
     }
 
     // Why a run is refused before pkexec runs, or null when it may be queued. `request`:
-    //   argv, options (options() of what was given), active (the module is on), locked (the
+    //   argv (the caller's copy, CommandRules.argvSnapshot's `words`: what is judged here is
+    //   what runs), options (options() of what was given), active (the module is on), locked (the
     //   session), available and unavailableReason (module.privileged's), program — what the
     //   module's handle knows of argv[0]: { declared (the path of one of its programs),
     //   trusted, reason, real (its real path, "" unknown) }
@@ -159,7 +221,7 @@ Singleton {
             return refuse("no-purpose", "what is empty: a few words saying what the run does are needed");
         for (let i = 0; i < argv.length; i++) {
             if (unprintable(argv[i]))
-                return refuse("unprintable", "word " + (i + 1) + " of the command holds a control or format character, so it could not be shown as it is");
+                return refuse("unprintable", "word " + (i + 1) + " of the command holds a control, format or line separator character, so it could not be shown as it is");
         }
         if (request.available !== true)
             return refuse("", String(request.unavailableReason || "running as administrator is not available"));
@@ -171,8 +233,9 @@ Singleton {
             return refuse("untrusted", shown + " is not one of the module's programs (requires.programs, optionalPrograms)");
         if (program.trusted !== true)
             return refuse("untrusted", shown + " is not trusted" + (program.reason ? ": " + program.reason : ""));
-        if (launcher(argv[0]) || launcher(program.real))
-            return refuse("untrusted", shown + " runs a program named in its arguments (a shell, env and the like), which nothing would judge");
+        const runsOthers = launcherProblem(argv, program.real);
+        if (runsOthers !== "")
+            return refuse("untrusted", shown + " is " + runsOthers + ": what it runs nothing would judge");
         return null;
     }
 
@@ -247,6 +310,30 @@ Singleton {
         return agentState === "active" || agentState === "conflict";
     }
 
+    // ---- The old PrivilegedAction ----
+
+    // Whether a PrivilegedAction's elevating words name pkexec by its bare name ("pkexec",
+    // its default) outside module test mode: then the shell's trusted, setuid pkexec
+    // (PrivilegedRuns.pkexec) runs in its place, never one that PATH finds first. In test
+    // mode the elevating program is the test-mode gate's, untouched.
+    function legacySystemPkexec(elevating, testMode) {
+        return testMode !== true && Array.isArray(elevating) && elevating[0] === "pkexec";
+    }
+
+    // The words a PrivilegedAction's run starts with. `argv`: the elevating words, then the
+    // command; `systemPkexec` (legacySystemPkexec); `known`, `pkexec`, `reason`: the look-up
+    // of the trusted pkexec (PrivilegedRuns). → { argv, wait (the look-up has not answered:
+    // ask again when it has), problem (not available: the run fails, nothing started) }
+    function legacyLaunch(argv, systemPkexec, known, pkexec, reason) {
+        if (systemPkexec !== true)
+            return { argv: Array.from(argv), wait: false, problem: "" };
+        if (known !== true)
+            return { argv: [], wait: true, problem: "" };
+        if (typeof pkexec !== "string" || pkexec === "")
+            return { argv: [], wait: false, problem: "running as administrator is not available: " + String(reason || "no pkexec found") };
+        return { argv: [pkexec].concat(Array.from(argv).slice(1)), wait: false, problem: "" };
+    }
+
     // ---- The answer ----
 
     function _result(fields) {
@@ -281,7 +368,11 @@ Singleton {
     //   timedOut   the shell's `timeout` ended it (124; 137 after its KILL) after at least the
     //              limit
     // A command that itself exits 124, 126, 127 or 137 reads the same (pkexec and `timeout`
-    // pass the command's status through).
+    // pass the command's status through), and so does `timeout`'s own status: 125 (it
+    // failed: a plain failure), 126 (the command could not be run: read as dismissed), 127
+    // (the command not found: read as refused). The status alone cannot tell them apart;
+    // the program is looked at just before pkexec starts (the queue's "checking"), so the
+    // last is rare.
     function runResult(run, timeoutMs) {
         const code = typeof run?.code === "number" ? run.code : -1;
         const cancelled = run?.cancelled === true;
@@ -360,7 +451,8 @@ Singleton {
         return next;
     }
 
-    // → { state, effects }. Every event has `now` (ms). Events:
+    // → { state, effects }. Every event has `now` (ms, on a monotonic clock: PrivilegedRuns
+    // takes Quickshell's ElapsedTimer, never the wall clock). Events:
     //   add { id, owner }             a run asked for (refusals were made before)
     //   checked { id, found, shellAgent }   its program was looked at; which agent answers
     //   request { open }              the shell's agent has a request open, or not
