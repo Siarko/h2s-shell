@@ -44,7 +44,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.11"
+    readonly property string apiVersion: "1.12"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -886,6 +886,64 @@ Singleton {
                 return false;
         }
         return true;
+    }
+
+    // ---- Helpers (API 1.12) ----
+
+    // Api.minuteNow: the start of the minute `ms` lies in; not a number: 0
+    function minuteStart(ms) {
+        return typeof ms === "number" && Number.isFinite(ms) ? Math.floor(ms / 60000) * 60000 : 0;
+    }
+
+    // module.log's levels; another word is "info"
+    readonly property var logLevels: ["debug", "info", "warn", "error"]
+    // A line's text is cut here (with "…"), a key here
+    readonly property int logTextCap: 1000
+    readonly property int logKeyCap: 200
+    // How many keys a module's log remembers; past it the one written longest ago is dropped
+    readonly property int maxLogKeys: 256
+
+    // One line of module.log(level, text, key) → { level (one of logLevels), text (on one
+    // line: line breaks and tabs as spaces, other control characters dropped, cut at
+    // logTextCap), key (cut at logKeyCap; "" none), line ("[<id>] <text>"), write }.
+    // `written`: a Map of each key to the text it wrote last (anything else: none). With a key
+    // a line is written only when its text is not the one the key wrote last; without one,
+    // always.
+    function logEntry(moduleId, level, text, key, written) {
+        const cleanLevel = logLevels.includes(level) ? level : "info";
+        const cleanText = _logText(text, logTextCap);
+        const cleanKey = _logText(key, logKeyCap);
+        const lastText = cleanKey !== "" && written instanceof Map ? written.get(cleanKey) : undefined;
+        return {
+            level: cleanLevel, text: cleanText, key: cleanKey, line: "[" + String(moduleId) + "] " + cleanText,
+            write: cleanKey === "" || lastText !== cleanText
+        };
+    }
+
+    function _logText(value, cap) {
+        if (typeof value !== "string" && typeof value !== "number")
+            return "";
+        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+        const characters = _characters(folded);
+        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : folded;
+    }
+
+    // A text's characters, a surrogate pair kept whole (Array.from splits it here)
+    function _characters(text) {
+        const characters = [];
+        for (let i = 0; i < text.length; i++) {
+            const code = text.charCodeAt(i);
+            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+                const next = text.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    characters.push(text.substr(i, 2));
+                    i++;
+                    continue;
+                }
+            }
+            characters.push(text[i]);
+        }
+        return characters;
     }
 
     // An object of Qt's (a QtObject, an Item) rather than plain data

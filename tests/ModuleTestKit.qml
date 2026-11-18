@@ -18,7 +18,10 @@ import qs.api
 //   opened                 what Api.openUrl was asked, oldest first: [{ url, allowFile }]
 //   notified               the notifications asked for (Api.notify, module.notify, the
 //                          shell's own), oldest first: [{ summary, body, appName, urgency,
-//                          actions (the labels), command (notify-send's words) }]
+//                          actions (the labels), format ("plain" or ""; 1.12), command
+//                          (notify-send's words) }] — summary and body as they would be sent
+//   setNow(ms)             (1.12) the shell's clock for Api.minuteNow (the start of that
+//                          minute); 0: the real clock again
 //   clearRecords()         empties `opened` and `notified`
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
@@ -43,7 +46,7 @@ import qs.api
 // All of them do nothing outside test mode.
 //
 // Not here yet, because their features are not in the API yet: anchors, the file chooser's
-// answer, Api.system and module.dataDirectory, and the shell's clock.
+// answer, Api.system and module.dataDirectory.
 Singleton {
     readonly property bool testMode: Modules.host.testMode
     readonly property var widgetEntries: Modules.host.widgetEntries
@@ -110,6 +113,11 @@ Singleton {
 
     readonly property bool polkitRequestOpen: PrivilegedRuns.testAgent.flow !== null
     readonly property var polkitAnnouncement: PrivilegedRuns.announcementFor(PrivilegedRuns.testAgent.flow)
+
+    function setNow(ms) {
+        if (Modules.host.testMode)
+            Api._testNow = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : 0;
+    }
 
     function setSessionLocked(on) {
         if (Modules.host.testMode)

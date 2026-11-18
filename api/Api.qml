@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.11" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.12" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -28,7 +28,15 @@ import qs.singletons.network
 //   Api.moduleAt(url)      the handle of the module whose directory holds `url` — in any file
 //                          of a module: Api.moduleAt(Qt.resolvedUrl("."))
 //   Api.notify(summary, options)   a notification (options: Notifier's — body, urgency, icon,
-//                          actions…); a module's own handle's notify() names the module
+//                          actions…); a module's own handle's notify() names the module.
+//                          (1.12) options.format "plain": the summary and body are plain
+//                          text — use it for any text from outside (a command's output, a
+//                          peer's or a file's name): each on one line (line breaks and tabs
+//                          become spaces), other control characters dropped, the summary cut
+//                          at 200 characters and the body at 1000 with "…"; "&", "<" and ">"
+//                          in the body shown as written, never read as markup. A text that
+//                          starts with "-" is safe either way. Without it the body is markup,
+//                          as the notification spec has it
 //   Api.openUrl(url, options)  opens a link in the user's programs (xdg-open, no shell): only
 //                          http:, https:, mailto: — file: with { allowFile: true }; anything
 //                          else (no scheme, a bare path, another scheme) refused, logged, false
@@ -36,6 +44,42 @@ import qs.singletons.network
 //                          (ModuleTestKit.opened) and true returned, as for one opened
 //   Api.testMode           (1.10) true in module test mode — under tests/run-modules.sh and
 //                          in a test tree — read-only; below
+//   Api.format             (1.12) sizes, rates and moments as text, pure:
+//                            bytes(n)   "742 MB", "15.6 GB", "1.8 TB" (1 KB = 1024 B; whole
+//                                       megabytes, larger to one decimal; not a number: "0 B")
+//                            rate(n)    bytes per second: "12 KB/s", "3.4 MB/s"
+//                            ago(ms, nowMs)   "just now", "5 min ago", "3 h ago", "yesterday",
+//                                       "4 days ago", "2 months ago"; "never" for 0 or not a
+//                                       number; both in milliseconds since 1970 (nowMs not
+//                                       given: now; a moment after it: "just now")
+//   Api.address            (1.12) IP addresses and networks, pure (singletons/AddressRules.qml):
+//                            isIpv4(text), isIpv6(text), isIp(text)   IPv4 without leading
+//                                       zeros, IPv6 without a zone, at most 45 characters
+//                            parseCidr(text)   "address/prefix" or a bare address (a /32 or
+//                                       /128) → frozen { family (4 | 6), bits, bytes (host
+//                                       bits cleared), address and network ("<address>/<bits>",
+//                                       written canonically: IPv6 lower case, the longest run
+//                                       of zeros "::"), canonical (false: host bits were set) }
+//                                       or null
+//                            contains(network, inner)   `inner` (an address or a network)
+//                                       lies wholly in `network`
+//                            overlap(a, b)   two networks share addresses
+//                                       (each argument a text or parseCidr's result; anything
+//                                       else, or two families: false)
+//                            redact(text)   every address in a text (with a prefix too)
+//                                       replaced by "[address]"; version numbers and times
+//                                       stay; the first 2000 characters read
+//   Api.minuteNow          (1.12) the time, in milliseconds since 1970, at the start of the
+//                          current minute: changes once a minute, on the minute — bind to it
+//                          for "5 min ago" and grace periods instead of a clock of the
+//                          module's own. In module test mode ModuleTestKit.setNow(ms) sets it
+//                          (to the start of that minute)
+//   module.log(level, text, key)   (1.12, on its handle) a line in the shell's log, "[<id>]
+//                          <text>": level "debug" (only with the shell's debug setting),
+//                          "info", "warn", "error" (another word: "info"); the text on one
+//                          line, cut at 1000 characters. With `key` written only when the
+//                          text differs from the one last written for that key; → true
+//                          when written
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:
@@ -364,6 +408,30 @@ Singleton {
     readonly property bool testMode: Modules.host.testMode
 
     readonly property ThemeTokens theme: ThemeTokens {}
+
+    // (1.12) Helpers (above): plain functions, so a module can pass one around
+    readonly property var format: Object.freeze({
+        bytes: value => Format.bytes(value),
+        rate: value => Format.rate(value),
+        ago: (ms, nowMs) => Format.agoMs(ms, nowMs)
+    })
+    readonly property var address: Object.freeze({
+        isIpv4: text => AddressRules.isIpv4(text),
+        isIpv6: text => AddressRules.isIpv6(text),
+        isIp: text => AddressRules.isIp(text),
+        parseCidr: text => AddressRules.parseCidr(text),
+        contains: (network, inner) => AddressRules.contains(network, inner),
+        overlap: (a, b) => AddressRules.overlap(a, b),
+        redact: text => AddressRules.redact(text)
+    })
+
+    // (1.12) The start of the current minute, in ms; in test mode the test kit's
+    readonly property real minuteNow: ModuleRules.minuteStart(testMode && _testNow > 0 ? _testNow : _minuteClock.date.getTime())
+    property SystemClock _minuteClock: SystemClock {
+        precision: SystemClock.Minutes
+    }
+    // Set by ModuleTestKit.setNow in test mode (0: the real clock)
+    property real _testNow: 0
 
     // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
     readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))

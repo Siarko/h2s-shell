@@ -137,6 +137,8 @@ QtObject {
     onActiveChanged: {
         if (!active && _privilegedKey !== "")
             PrivilegedRuns.ownerGone(_privilegedKey);
+        if (!active)
+            _logWritten.clear();
     }
 
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)
@@ -248,10 +250,44 @@ QtObject {
 
     // ---- The shell ----
 
-    // A notification under the module's name (Notifier.send's options)
+    // A notification under the module's name (Notifier.send's options; API 1.12: format
+    // "plain" for text from outside, Api.qml says what it does)
     function notify(summary, options) {
         Notifier.send(String(summary), Object.assign({ appName: name || moduleId }, options ?? {}));
     }
+
+    // (API 1.12) A line in the shell's log, "[<id>] <text>": level "debug" (written only
+    // with the shell's debug setting on), "info", "warn" or "error" (another word: "info");
+    // the text on one line, cut at 1000 characters. With `key` (any short text naming what
+    // the line is about) the line is written only when its text differs from the one last
+    // written for that key — a failure logged once, again when its reason changes, and its
+    // recovery — instead of once per attempt. → true when it was written (a debug line
+    // counts as written while the setting is off). The keys are forgotten when the module
+    // is turned off; at most 256 are kept.
+    function log(level, text, key) {
+        const entry = ModuleRules.logEntry(moduleId, level, text, key, _logWritten);
+        if (!entry.write)
+            return false;
+        if (entry.key !== "") {
+            // Re-set at the end, so the oldest written goes first
+            _logWritten.delete(entry.key);
+            _logWritten.set(entry.key, entry.text);
+            if (_logWritten.size > ModuleRules.maxLogKeys)
+                _logWritten.delete(_logWritten.keys().next().value);
+        }
+        if (entry.level === "error")
+            console.error(entry.line);
+        else if (entry.level === "warn")
+            console.warn(entry.line);
+        else if (entry.level === "info")
+            console.info(entry.line);
+        else if (Profiles.value("general.debug") === true)
+            console.log(entry.line);
+        return true;
+    }
+
+    // Each log key → the text it wrote last
+    property var _logWritten: new Map()
 
     // Opens one of its settings pages: "" its page "<id>", "<name>" → "<id>.<name>"
     function openSettings(page) {

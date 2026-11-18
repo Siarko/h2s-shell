@@ -624,6 +624,16 @@ a page or slot contribution that declares `property bool shown` does its expensi
 while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 `module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
 
+Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`
+in milliseconds — `singletons/Format.qml`), `Api.address` (IPv4, IPv6, networks: `isIp`,
+`parseCidr`, `contains`, `overlap`, `redact` — `singletons/AddressRules.qml`, the reader the
+shell's network settings use too), `Api.minuteNow` (the start of the current minute, for
+"5 min ago" without a clock of the module's own), `module.log(level, text, key)` (a line
+"[<id>] …"; with a key, written only when that key's text changed — a failure once, not
+once per attempt) and notifications with `format: "plain"` (`Notifier.prepared`: summary
+and body on one line, control characters dropped, capped, the body's `&`, `<`, `>` shown as
+written) for any text from outside.
+
 **The command runner** (`api/CommandRunner.qml`; inside it and in the shell's own code
 `singletons/io/CommandRunner.qml`): `start(argv, options)` starts a command — a list of
 words, never read by a shell — and returns a handle (`running`, `cancel()`); any number

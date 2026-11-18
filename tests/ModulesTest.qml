@@ -113,11 +113,37 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.10 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.12 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
             assertEqual(main?.goodState.mains, 1, "good: one main, once (the two other spellings did not load it again)");
+
+            // module.log (API 1.12): with a key, once per change of text
+            const goodHandle = host.handle("good");
+            assert(goodHandle.log("info", "reading the state failed: no answer", "state"), "log: a key's first line is written");
+            assert(!goodHandle.log("info", "reading the state failed: no answer", "state"), "log: the same text for the key again, not written");
+            assert(!goodHandle.log("warn", "reading the state failed: no\nanswer", "state"), "… also at another level, and with a line break where the space was");
+            assert(goodHandle.log("info", "reading the state failed: refused", "state"), "log: the key's text changed, written");
+            assert(goodHandle.log("info", "reading the state failed: no answer", "other"), "log: another key has its own memory");
+            assert(goodHandle.log("info", "the state answers again", "state"), "log: the recovery, written");
+            assert(goodHandle.log("info", "no key") && goodHandle.log("info", "no key") && goodHandle.log("info", "no key", ""),
+                   "log: without a key, every line");
+            assert(goodHandle.log("error", "refused \u0007 once", "state") && goodHandle.log("whatever", "a level it does not know"), "log: every level, an unknown one too");
+            const entry = ModuleRules.logEntry("good", "loud", "a\nb\u001b[0m" + "x".repeat(2000), "k", new Map([["k", "old"]]));
+            assertEqual(entry.level + "|" + entry.key + "|" + entry.write, "info|k|true", "logEntry: an unknown level is info; a changed text is written");
+            assert(entry.line.startsWith("[good] a b[0mxx") && Array.from(entry.text).length === ModuleRules.logTextCap && entry.text.endsWith("…"),
+                   "logEntry: \"[<id>]\", one line, control characters dropped, cut: " + entry.line.slice(0, 30));
+            assertEqual(ModuleRules.logEntry("good", "info", "same", "k", new Map([["k", "same"]])).write, false, "logEntry: the key's last text again → not written");
+            assertEqual(ModuleRules.logEntry("good", "info", "same", "", new Map([["", "same"]])).write, true, "logEntry: no key → always written");
+            assertEqual(ModuleRules.logEntry("good", "info", "same", "k", { k: "same" }).write, true, "logEntry: a memory that is not a Map → none");
+            assertEqual(ModuleRules.logEntry("good", "info", { toString: () => "x" }).text, "", "logEntry: text that is not a string or number → empty");
+            for (let i = 0; i < ModuleRules.maxLogKeys + 5; i++)
+                goodHandle.log("debug", "line", "key" + i);
+            assertEqual(goodHandle._logWritten.size, ModuleRules.maxLogKeys, "log: at most maxLogKeys keys remembered");
+            assert(!goodHandle._logWritten.has("key0") && goodHandle._logWritten.has("key" + (ModuleRules.maxLogKeys + 4)), "… the oldest dropped first");
+            assertEqual(ModuleRules.minuteStart(1731400012345) + "|" + ModuleRules.minuteStart(NaN) + "|" + ModuleRules.minuteStart("5"), "1731399960000|0|0",
+                        "minuteStart: the minute's start; not a number: 0");
 
             const broken = _expectState("broken", "failed");
             assert(_has(broken?.errors, "Main.qml:5"), "broken: the syntax error, with its file and line: " + broken?.errors.join("; "));
@@ -198,6 +224,7 @@ TestCase {
         _then("good is disabled", () => _status("good")?.state === "disabled" && _goodState.mains === 0, () => {
             assertEqual(_status("good")?.enabled, false, "disabled: enabled false in its status");
             assertEqual(host.mainObject("good"), null, "disabled: no main");
+            assertEqual(host.handle("good")._logWritten.size, 0, "disabled: its log keys forgotten");
             assertEqual(_goodState.mains, 0, "disabled: its main was destroyed (its onDestruction ran)");
             assertEqual(host.widgetEntries.map(entry => entry.module).join(","), "key-collision", "disabled: its widget gone");
             assertEqual(host.slotContributions("network.popup.sections").length, 0, "disabled: its slot contribution gone");

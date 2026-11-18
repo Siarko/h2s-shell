@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.12: helpers — `Api.format` (`bytes(n)`, now up to terabytes, `rate(n)`, `ago(ms,
+  nowMs)` in milliseconds), `Api.address` (`isIpv4`, `isIpv6`, `isIp`, `parseCidr`,
+  `contains`, `overlap`, `redact`: the shell's one reader of addresses, which its network
+  settings use too), `Api.minuteNow` (the start of the current minute, in ms, changing on
+  the minute), `module.log(level, text, key)` (a line prefixed "[<id>]", on one line; with
+  a key written only when the key's text changed) and the notification option
+  `format: "plain"` for `Api.notify` and `module.notify` (summary and body on one line,
+  control characters dropped, capped at 200 and 1000 characters, the body's `&`, `<`, `>`
+  shown as written). `ModuleTestKit` gains `setNow(ms)` for `Api.minuteNow`, and
+  `notified` entries a `format`.
 - 1.11: running as administrator through the handle — `module.privileged.start(argv,
   options)` runs a command (argv[0] an absolute path) as root through pkexec, with
   `what` (a few words saying what it does) and `timeoutMs` (1 s to 1 h) required, output as
@@ -452,6 +462,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Sizes of a terabyte and more show in TB ("1.8 TB" instead of "1843.2 GB"), on the disk
+  card among others.
+- The connection editor no longer takes an IPv4 address written with leading zeros
+  ("192.168.01.1"), which NetworkManager refuses.
 - Pills (the small choice buttons) come in three sizes, small, medium and large: 22, 26
   and 30 px, each height set in Settings → Appearance → Controls → Pills. The pills of the
   profile condition editor and of the widget settings pane's presets are 2 px lower (22

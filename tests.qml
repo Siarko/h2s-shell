@@ -28,6 +28,8 @@ QtObject {
     property var _theme: ThemeTest {}
     property var _apiThemeTokens: ApiThemeTokensTest {}
     property var _format: FormatTest {}
+    property var _addressRules: AddressRulesTest {}
+    property var _notifier: NotifierTest {}
     property var _scrollNotches: ScrollNotchesTest {}
     property var _curvePoints: CurvePointsTest {}
     property var _notificationMarkup: NotificationMarkupTest {}

@@ -19,6 +19,7 @@ import QtQuick
 //                                                   value type is inferred (bool/int/double/string)
 //   actions:     [{ id, label, onTriggered }]     — action buttons
 //   onDismissed: function                         — called when dismissed without action
+//   format:      "plain"                          — the texts are plain text (plainOptions)
 // }
 // No inline reply: notify-send has no option to ask for one (libnotify 0.8.8).
 //
@@ -31,12 +32,67 @@ Singleton {
     // Record, never send (module test mode)
     property bool recordOnly: false
     // What send() was asked while recordOnly, oldest first, at most maxRecorded: frozen
-    // { summary, body, appName, urgency, actions (the labels), command (notify-send's argv) }
+    // { summary, body, appName, urgency, actions (the labels), format ("plain" or ""),
+    // command (notify-send's argv) } — summary and body as sent (plain: made plain)
     property var recorded: []
     readonly property int maxRecorded: 200
 
     function clearRecorded() {
         recorded = [];
+    }
+
+    // ---- Plain text (format: "plain") ----
+    // A notification daemon reads the body as markup (the spec's <b>, <i>, <a>, <img>; the
+    // shell's own server too, NotificationMarkup) and the summary as plain text. Text from
+    // outside the shell — a module's, a command's output, a file's name — is sent with
+    // format "plain": each text on one line (line breaks and tabs become spaces), other
+    // control characters dropped, cut with "…" at its cap; in the body "&", "<" and ">"
+    // become entities, so the daemon shows them as written. The summary is not escaped: the
+    // spec has no markup there, and a daemon would show "&amp;".
+    readonly property int plainSummaryCap: 200
+    readonly property int plainBodyCap: 1000
+
+    // One text as plain sends it, before the body's escaping: one line, no control
+    // characters (C0, DEL, C1, U+2028/2029), at most `cap` characters. Not a string or a
+    // number: ""
+    function plainText(value, cap) {
+        if (typeof value !== "string" && typeof value !== "number")
+            return "";
+        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ")
+            .replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+        const characters = _characters(folded);
+        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : folded;
+    }
+
+    // A text's characters, a surrogate pair kept whole (Array.from splits it here)
+    function _characters(text) {
+        const characters = [];
+        for (let i = 0; i < text.length; i++) {
+            const code = text.charCodeAt(i);
+            if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+                const next = text.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    characters.push(text.substr(i, 2));
+                    i++;
+                    continue;
+                }
+            }
+            characters.push(text[i]);
+        }
+        return characters;
+    }
+
+    // The summary and options as send() hands them on (pure): with format "plain" the
+    // summary and body made plain (above), every other option as given; otherwise the same
+    // objects, untouched → { summary, options }
+    function prepared(summary, opts) {
+        const options = opts ?? {};
+        if (options.format !== "plain")
+            return { summary: summary, options: options };
+        const plain = Object.assign({}, options);
+        const body = plainText(options.body ?? "", plainBodyCap);
+        plain.body = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return { summary: plainText(summary ?? "", plainSummaryCap), options: plain };
     }
 
     // notify-send's argv for a notification (pure; tests/NotifierTest.qml). Every option
@@ -100,13 +156,16 @@ Singleton {
         return cmd;
     }
 
-    function send(summary, opts) {
-        let options = opts ?? {};
+    function send(givenSummary, opts) {
+        const ready = prepared(givenSummary, opts);
+        const summary = ready.summary;
+        const options = ready.options;
         const cmd = command(summary, options);
         if (recordOnly) {
             recorded = recorded.concat([Object.freeze({
                 summary: String(summary ?? ""), body: String(options.body ?? ""), appName: String(options.appName ?? "H2S Shell"),
                 urgency: String(options.urgency ?? ""), actions: Object.freeze((Array.isArray(options.actions) ? options.actions : []).map(action => String(action?.label ?? ""))),
+                format: options.format === "plain" ? "plain" : "",
                 command: Object.freeze(cmd)
             })]).slice(-maxRecorded);
             return;

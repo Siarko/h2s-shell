@@ -1,6 +1,7 @@
 pragma Singleton
 
 import Quickshell
+import qs.singletons
 
 // Network settings' rules — pure, tested in tests/NetworkTest.qml: what is a valid
 // hostname or address, and NetworkManager's global DNS in and out of its D-Bus form.
@@ -16,32 +17,18 @@ Singleton {
         return name.split(".").every(label => /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
     }
 
+    // Addresses are AddressRules' (one reader for the shell and the modules' Api.address):
+    // no leading zeros in IPv4, no zone in IPv6
     function isIpv4(text: string): bool {
-        const parts = String(text ?? "").split(".");
-        return parts.length === 4 && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+        return AddressRules.isIpv4(String(text ?? ""));
     }
 
-    // Full, shortened (::), or ending in an IPv4 address; no zone index
     function isIpv6(text: string): bool {
-        const address = String(text ?? "");
-        if (!/^[0-9A-Fa-f:.]+$/.test(address) || (address.match(/::/g) ?? []).length > 1)
-            return false;
-        let groups = address.split(":");
-        let needed = 8;
-        if (groups.length > 0 && groups[groups.length - 1].includes(".")) {
-            if (!isIpv4(groups.pop()))
-                return false;
-            needed = 6;
-        }
-        if (address.includes("::")) {
-            const filled = groups.filter(group => group !== "");
-            return filled.length < needed && filled.every(group => /^[0-9A-Fa-f]{1,4}$/.test(group));
-        }
-        return groups.length === needed && groups.every(group => /^[0-9A-Fa-f]{1,4}$/.test(group));
+        return AddressRules.isIpv6(String(text ?? ""));
     }
 
     function isIpAddress(text: string): bool {
-        return isIpv4(text) || isIpv6(text);
+        return AddressRules.isIp(String(text ?? ""));
     }
 
     // Addresses typed in one field, split by commas, spaces or semicolons → { list, bad }:
@@ -181,13 +168,11 @@ Singleton {
 
     // "192.168.1.5/24" (prefix optional: a host)
     function isCidr4(text) {
-        const parts = String(text ?? "").split("/");
-        return parts.length <= 2 && isIpv4(parts[0]) && (parts.length === 1 || (/^\d{1,2}$/.test(parts[1]) && Number(parts[1]) <= 32));
+        return AddressRules.parseCidr(String(text ?? ""))?.family === 4;
     }
 
     function isCidr6(text) {
-        const parts = String(text ?? "").split("/");
-        return parts.length <= 2 && isIpv6(parts[0]) && (parts.length === 1 || (/^\d{1,3}$/.test(parts[1]) && Number(parts[1]) <= 128));
+        return AddressRules.parseCidr(String(text ?? ""))?.family === 6;
     }
 
     function _ipv4Number(address) {
@@ -196,16 +181,10 @@ Singleton {
 
     // Whether an IPv4 address lies in one of `cidrs`' networks
     function inSubnet4(address, cidrs) {
-        if (!isIpv4(address))
+        const text = String(address ?? "");
+        if (!AddressRules.isIpv4(text))
             return false;
-        return (cidrs ?? []).some(cidr => {
-            const [base, prefixText] = String(cidr).split("/");
-            if (!isIpv4(base))
-                return false;
-            const prefix = prefixText === undefined ? 32 : Number(prefixText);
-            const size = Math.pow(2, 32 - prefix);
-            return Math.floor(_ipv4Number(address) / size) === Math.floor(_ipv4Number(base) / size);
-        });
+        return (cidrs ?? []).some(cidr => AddressRules.contains(String(cidr), text));
     }
 
     // A MAC address, or one of NetworkManager's words for it ("" its default)

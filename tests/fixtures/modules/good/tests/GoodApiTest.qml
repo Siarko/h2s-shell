@@ -89,7 +89,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.11", "Api.version");
+        assertEqual(Api.version, "1.12", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
@@ -129,6 +129,35 @@ TestCase {
         assertEqual(notified[0]?.command?.[0], "notify-send", "… and the words notify-send would have had");
         ModuleTestKit.clearRecords();
         assertEqual(ModuleTestKit.opened.length + ModuleTestKit.notified.length, 0, "clearRecords()");
+        // (1.12) format "plain": a peer's or a file's name as written, never markup
+        module.notify("File <b>received</b>", { body: "a&b <i>.txt\nc.txt", format: "plain" });
+        Api.notify("Line\nbreak", { body: "<", format: "plain" });
+        const plain = ModuleTestKit.notified;
+        assertEqual(plain.map(entry => entry.summary + "|" + entry.body + "|" + entry.appName + "|" + entry.format).join(","),
+                    "File <b>received</b>|a&amp;b &lt;i&gt;.txt c.txt|Good fixture|plain,Line break|&lt;|H2S Shell|plain",
+                    "notify, format plain: one line each, the body's &, < and > as entities, the summary as written");
+        assertEqual(JSON.stringify(plain[0]?.command?.slice(-3)), JSON.stringify(["--", "File <b>received</b>", "a&amp;b &lt;i&gt;.txt c.txt"]),
+                    "… and so to notify-send");
+        ModuleTestKit.clearRecords();
+
+        // --- helpers (API 1.12) ---
+        assertEqual([Api.format.bytes(1610612736), Api.format.bytes(3 * 1099511627776), Api.format.rate(12.4 * 1024)].join(","), "1.5 GB,3.0 TB,12 KB/s",
+                    "Api.format: bytes, terabytes, rate");
+        const formatAgo = Api.format.ago;
+        assertEqual(formatAgo(1731400000000 - 5 * 60000, 1731400000000) + "|" + formatAgo(0, 1731400000000), "5 min ago|never", "Api.format.ago: milliseconds, passed around");
+        assert(Object.isFrozen(Api.format) && Object.isFrozen(Api.address), "Api.format and Api.address: frozen");
+        assert(Api.address.isIpv4("100.64.0.4") && Api.address.isIpv6("fd7a:115c:a1e0::4") && Api.address.isIp("::1") && !Api.address.isIp("01.2.3.4"),
+               "Api.address: isIpv4, isIpv6, isIp");
+        assertEqual(Api.address.parseCidr("fd00:99:0:0::1/64")?.network, "fd00:99::/64", "Api.address.parseCidr");
+        assert(Api.address.contains("100.64.0.0/10", "100.101.102.103") && Api.address.overlap("10.0.0.0/8", Api.address.parseCidr("10.1.0.0/16")),
+               "Api.address: contains, overlap");
+        assertEqual(Api.address.redact("peer 100.64.0.4 at fd7a::4."), "peer [address] at [address].", "Api.address.redact");
+        assert(Api.minuteNow % 60000 === 0 && Math.abs(Date.now() - Api.minuteNow) < 61000, "Api.minuteNow: the start of this minute: " + Api.minuteNow);
+        ModuleTestKit.setNow(1731400012345);
+        assertEqual(Api.minuteNow, 1731399960000, "ModuleTestKit.setNow: Api.minuteNow follows, at the minute's start");
+        ModuleTestKit.setNow(0);
+        assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "… setNow(0): the real clock again");
+        assert(module.log("info", "good: logged once", "good-key") && !module.log("info", "good: logged once", "good-key"), "module.log: once per text for a key");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");

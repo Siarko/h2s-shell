@@ -2,7 +2,7 @@
     "id": "good",
     "name": "Good fixture",
     "version": "1.2.3",
-    "api": "1.10",
+    "api": "1.12",
     "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
     "widgets": [
