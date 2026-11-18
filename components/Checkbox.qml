@@ -47,6 +47,8 @@ Item {
             visible: root.label !== ""
             anchors.verticalCenter: parent.verticalCenter
             text: root.label
+            textFormat: Text.PlainText
+            maximumLineCount: 1
             color: Theme.textSecondary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeBody

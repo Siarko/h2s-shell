@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): with qs.components, everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.4" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.5" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -50,7 +50,8 @@ import qs.singletons.network
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
 //                          building blocks, so a module's page looks like the core's
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
-//   SmallButton            (1.4) the first public element (below)
+//   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
+//                          (1.5) — the public elements (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
 // Public elements (1.4): types made for the API, which hold the shell's internal component
@@ -75,9 +76,28 @@ import qs.singletons.network
 //                          asked() — the first click of a button that asks. A danger button
 //                          without confirm acts on the first click. A button that asks
 //                          shows no `checked` and keeps its own width in a layout.
-//                          qs.components has a SmallButton too (other kinds, a fontSize):
-//                          in a file that imports both, the import written last gives the
-//                          name.
+//   Dropdown               (1.5) options ([{ value, label }]), value (the owner sets it),
+//                          placeholder (shown while the value is none of the options);
+//                          size: "xs" | "s" | "m"; picked(value) — the choice made
+//   InputField             (1.5) text, placeholder, problem (the value is wrong now),
+//                          password (hidden, with an eye), revealed (the eye flips it);
+//                          size: "xs" | "s" | "m"; accepted(), textEdited(),
+//                          editingFinished(), revealToggled()
+//   Pill                   (1.5) label, picked (the owner sets it), tooltip;
+//                          size: "s" | "m" | "l" — the theme's three pill heights;
+//                          clicked()
+//   Checkbox               (1.5) label, checked (the owner flips it); toggled()
+//   ToggleSwitch           (1.5) checked (the owner changes it), and every item's
+//                          `enabled`; toggled()
+//   PrivilegedMark         (1.5) need — polkit's answer for what the control beside it
+//                          does: "auth" (the default: the lock), "no" (not allowed), "yes"
+//                          or "" (nothing to mark: hidden, no room taken). An answer it
+//                          does not know shows the lock. Where a module sets `visible`
+//                          itself, an element with nothing to mark is empty and without
+//                          size, but a layout keeps its spacing around it.
+//                          qs.components has types of these names too (other properties:
+//                          a fontSize, other kinds): in a file that imports both, the
+//                          import written last gives the name.
 //
 // From qs.components (API 1.1): VpnProvider, the base type of a VPN provider — a module's uses
 // its module id as `providerId`, and its three VPN slots (network.vpn.row, .card, .page) are

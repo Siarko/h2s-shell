@@ -45,6 +45,8 @@ Rectangle {
             id: _label
             width: parent.width - (root._current?.color !== undefined ? 16 : 0)
             text: root._current?.label ?? root.placeholder
+            textFormat: Text.PlainText
+            maximumLineCount: 1
             elide: Text.ElideRight
             font.family: Theme.fontFamily
             font.pixelSize: root.fontSize
@@ -99,6 +101,8 @@ Rectangle {
                         id: _optionLabel
                         width: parent.width - (modelData.color !== undefined ? 16 : 0)
                         text: modelData.label
+                        textFormat: Text.PlainText
+                        maximumLineCount: 1
                         elide: Text.ElideRight
                         font.family: Theme.fontFamily
                         font.pixelSize: root.fontSize

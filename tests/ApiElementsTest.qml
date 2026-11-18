@@ -23,8 +23,31 @@ TestCase {
 
     // What a module can rely on, per element: properties and signals, sorted
     readonly property var pinned: ({
-        "SmallButton": ["asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "kind", "label", "size", "tooltip"]
+        "SmallButton": ["asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "kind", "label", "size", "tooltip"],
+        "Dropdown": ["options", "picked", "placeholder", "size", "value"],
+        "InputField": ["accepted", "editingFinished", "password", "placeholder", "problem", "revealToggled", "revealed", "size", "text", "textEdited"],
+        "Pill": ["clicked", "label", "picked", "size", "tooltip"],
+        "Checkbox": ["checked", "label", "toggled"],
+        "ToggleSwitch": ["checked", "toggled"],
+        "PrivilegedMark": ["need"]
     })
+
+    // A public pill's sizes, and what each is inside
+    readonly property var pillSizes: [
+        { size: "s", inside: "s" },
+        { size: "m", inside: "m" },
+        { size: "l", inside: "l" }
+    ]
+
+    // What a public mark is told, what that is inside, and whether anything shows
+    readonly property var needs: [
+        { need: "", inside: "", shown: false },
+        { need: "yes", inside: "yes", shown: false },
+        { need: "auth", inside: "auth", shown: true },
+        { need: "no", inside: "no", shown: true }
+    ]
+
+    readonly property var choices: [{ value: "a", label: "<b>x</b>" }, { value: "b", label: "Second" }]
 
     // The public button's kinds and sizes, and what each is inside
     readonly property var kinds: [
@@ -43,7 +66,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 700
-        implicitHeight: 320
+        implicitHeight: 700
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -55,7 +78,7 @@ TestCase {
         // Somewhere for the mouse to go that is no button
         Item {
             id: away
-            x: 640; y: 280
+            x: 640; y: 240
             width: 40; height: 40
         }
 
@@ -166,6 +189,179 @@ TestCase {
             DeleteButton { label: "Asks"; fontSize: Theme.fontSizeBody }
         }
 
+        // --- the controls ---
+        Row {
+            x: 10; y: 300
+            spacing: 20
+
+            Public.Dropdown {
+                id: dropdown
+                property string got: ""
+                options: root.choices
+                value: "a"
+                onPicked: value => got += value
+            }
+            Public.Dropdown { id: unchosen; placeholder: "<b>x</b>" }
+            Public.InputField {
+                id: field
+                property string heard: ""
+                placeholder: "<b>x</b>"
+                onAccepted: heard += "accepted "
+                onTextEdited: heard += "textEdited "
+                onEditingFinished: heard += "editingFinished "
+                onRevealToggled: heard += "revealToggled "
+            }
+            Public.InputField {
+                id: secret
+                property int toggles: 0
+                password: true
+                problem: true
+                text: "hidden"
+                onRevealToggled: toggles++
+            }
+        }
+        Row {
+            x: 10; y: 340
+            spacing: 20
+
+            Public.Pill {
+                id: pill
+                property int clicks: 0
+                label: "<b>x</b>"
+                tooltip: "What it means"
+                onClicked: clicks++
+            }
+            Public.Pill { id: pickedPill; label: "Picked"; picked: true }
+            Public.Pill { id: mistypedPill; label: "Typo"; size: "xs" }
+            Public.Checkbox {
+                id: checkbox
+                property int toggles: 0
+                label: "<b>x</b>"
+                onToggled: toggles++
+            }
+            Public.Checkbox { id: checkedBox; checked: true }
+            Public.ToggleSwitch {
+                id: toggle
+                property int toggles: 0
+                onToggled: toggles++
+            }
+            Public.ToggleSwitch {
+                id: toggleOff
+                property int toggles: 0
+                checked: true
+                enabled: false
+                onToggled: toggles++
+            }
+            Public.PrivilegedMark { id: mark }
+            Public.PrivilegedMark { id: variedMark }
+            Public.PrivilegedMark { id: mistypedMark; need: "perhaps" }
+            // A module's own condition, true, with nothing to mark
+            Public.PrivilegedMark { id: forcedMark; visible: true; need: "yes" }
+        }
+
+        // The public controls and the internal ones, in the same layouts: as they are,
+        // then every one stretched
+        RowLayout {
+            id: publicControls
+            x: 10; y: 390
+            width: 680
+            spacing: 6
+            Public.Dropdown { options: root.choices; value: "b" }
+            Public.InputField { placeholder: "Field"; Layout.fillWidth: true }
+            Public.Pill { label: "Pill"; size: "s" }
+            Public.Checkbox { label: "Check" }
+            Public.ToggleSwitch {}
+            Public.PrivilegedMark {}
+            Public.PrivilegedMark { need: "yes" }
+            Public.Dropdown { visible: false }
+            Public.InputField { visible: false }
+            Public.Pill { label: "Hidden"; visible: false }
+            Public.Checkbox { label: "Hidden"; visible: false }
+            Public.ToggleSwitch { visible: false }
+            Public.PrivilegedMark { visible: false }
+        }
+        RowLayout {
+            id: internalControls
+            x: 10; y: 425
+            width: 680
+            spacing: 6
+            Dropdown { options: root.choices; value: "b" }
+            InputField { placeholder: "Field"; Layout.fillWidth: true }
+            Pill { label: "Pill" }
+            Checkbox { label: "Check" }
+            ToggleSwitch {}
+            PrivilegedMark {}
+            PrivilegedMark { need: "yes" }
+            Dropdown { visible: false }
+            InputField { visible: false }
+            Pill { label: "Hidden"; visible: false }
+            Checkbox { label: "Hidden"; visible: false }
+            ToggleSwitch { visible: false }
+            PrivilegedMark { visible: false }
+        }
+        RowLayout {
+            id: publicStretched
+            x: 10; y: 460
+            width: 680
+            spacing: 6
+            Public.Dropdown { Layout.fillWidth: true }
+            Public.InputField { Layout.fillWidth: true }
+            Public.Pill { label: "Pill"; size: "s"; Layout.fillWidth: true }
+            Public.Checkbox { label: "Check"; Layout.fillWidth: true }
+            Public.ToggleSwitch { Layout.fillWidth: true }
+            Public.PrivilegedMark { Layout.fillWidth: true }
+        }
+        RowLayout {
+            id: internalStretched
+            x: 10; y: 495
+            width: 680
+            spacing: 6
+            Dropdown { Layout.fillWidth: true }
+            InputField { Layout.fillWidth: true }
+            Pill { label: "Pill"; Layout.fillWidth: true }
+            Checkbox { label: "Check"; Layout.fillWidth: true }
+            ToggleSwitch { Layout.fillWidth: true }
+            PrivilegedMark { Layout.fillWidth: true }
+        }
+        ColumnLayout {
+            id: publicControlColumn
+            x: 10; y: 530
+            width: 200
+            spacing: 6
+            Public.Dropdown { options: root.choices; value: "b" }
+            Public.InputField { Layout.fillWidth: true }
+            Public.Pill { label: "Pill"; size: "s" }
+            Public.Checkbox { label: "Check"; Layout.fillWidth: true }
+            Public.ToggleSwitch {}
+            Public.PrivilegedMark {}
+            Public.PrivilegedMark { need: "yes" }
+            Public.Dropdown { visible: false }
+            Public.InputField { visible: false }
+            Public.Pill { label: "Hidden"; visible: false }
+            Public.Checkbox { label: "Hidden"; visible: false }
+            Public.ToggleSwitch { visible: false }
+            Public.PrivilegedMark { visible: false }
+        }
+        ColumnLayout {
+            id: internalControlColumn
+            x: 240; y: 530
+            width: 200
+            spacing: 6
+            Dropdown { options: root.choices; value: "b" }
+            InputField { Layout.fillWidth: true }
+            Pill { label: "Pill" }
+            Checkbox { label: "Check"; Layout.fillWidth: true }
+            ToggleSwitch {}
+            PrivilegedMark {}
+            PrivilegedMark { need: "yes" }
+            Dropdown { visible: false }
+            InputField { visible: false }
+            Pill { label: "Hidden"; visible: false }
+            Checkbox { label: "Hidden"; visible: false }
+            ToggleSwitch { visible: false }
+            PrivilegedMark { visible: false }
+        }
+
         QT.TestCase {
             id: driver
             name: "ApiElementsDriver"
@@ -187,6 +383,22 @@ TestCase {
     // The internal button inside a public one
     function _inside(element) {
         return _child(element, "QQuickLoader").item;
+    }
+
+    // The internal control inside a public one
+    function _within(element) {
+        return element.children[0];
+    }
+
+    // The texts under `item`, at any depth, in order
+    function _texts(item) {
+        let found = [];
+        for (const child of Array.from(item.children)) {
+            if (child.toString().startsWith("QQuickText("))
+                found.push(child);
+            found = found.concat(_texts(child));
+        }
+        return found;
     }
 
     // The parts of an internal button that asks: the button, its label, the "×"
@@ -372,7 +584,170 @@ TestCase {
         const narrowLabel = _child(_inside(narrow), "QQuickText");
         assert(narrow.width === 80 && _inside(narrow).width === 80 && narrowLabel.truncated, "a button made narrower than its label keeps that width and cuts the label");
 
+        _controls();
+
         _window.visible = false;
         finish();
+    }
+
+    // Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
+    function _controls() {
+        const rules = ApiElementRules;
+
+        // --- the words ---
+        for (const entry of pillSizes)
+            assertEqual(JSON.stringify(rules.pillSize(entry.size)), JSON.stringify({ value: entry.inside, known: true }), "a pill's size " + entry.size + " is " + entry.inside + " inside");
+        assertEqual(Object.keys(rules.pillSizes).sort().join(" "), pillSizes.map(entry => entry.size).sort().join(" "), "and those are all a pill's sizes");
+        for (const word of ["xs", "", "huge", "toString", undefined, 3])
+            assertEqual(JSON.stringify(rules.pillSize(word)), JSON.stringify({ value: "m", known: false }), "a pill's size " + JSON.stringify(word) + " is not one: the default, m");
+        for (const entry of needs) {
+            assertEqual(JSON.stringify(rules.markNeed(entry.need)), JSON.stringify({ value: entry.inside, known: true }), "a mark's need \"" + entry.need + "\" is \"" + entry.inside + "\" inside");
+            assertEqual(rules.markShown(entry.need), entry.shown, "… and " + (entry.shown ? "shows" : "shows nothing"));
+        }
+        assertEqual(Object.keys(rules.markNeeds).sort().join(" "), needs.map(entry => entry.need).sort().join(" "), "and those are all a mark's needs");
+        for (const word of ["perhaps", "AUTH", "toString", "__proto__", undefined, null, 3]) {
+            assertEqual(JSON.stringify(rules.markNeed(word)), JSON.stringify({ value: "auth", known: false }), "a need " + JSON.stringify(word) + " is not one: the lock");
+            assert(rules.markShown(word), "… which shows");
+        }
+
+        // --- the names ---
+        const types = ["Dropdown", "InputField", "Pill", "Checkbox", "ToggleSwitch", "PrivilegedMark"];
+        for (let i = 0; i < types.length; i++)
+            assertEqual(JSON.stringify(_names(_items(publicStretched)[i])), JSON.stringify(pinned[types[i]]), types[i] + "'s public properties and signals are the pinned ones");
+        assert(_names(_within(dropdown)).includes("fontSize") && _names(_within(dropdown)).includes("open"), "… the internal dropdown's own are not among them (it has fontSize, open)");
+        assert(_names(_within(field)).includes("fieldColor") && _names(_within(field)).includes("outlined") && _names(_within(field)).includes("input"),
+            "nor the internal field's (fieldColor, outlined, input)");
+        assert(_names(_within(pill)).includes("minimumHeight") && _names(_within(toggle)).includes("offColor"), "nor the pill's minimumHeight, the switch's offColor");
+
+        // --- defaults ---
+        assertEqual([unchosen.size, field.size, pill.size].join(" "), "m m m", "a dropdown, a field and a pill are of size m unless told");
+        assertEqual(JSON.stringify([unchosen.options, unchosen.value === undefined, field.text, field.placeholder === "<b>x</b>", field.problem, field.password, field.revealed]),
+            JSON.stringify([[], true, "", true, false, false, false]), "a dropdown has no options and no value, a field is empty, right, not a password");
+        assertEqual([pill.picked, pill.tooltip, checkbox.checked, toggle.checked, toggle.enabled, mark.need].join(" "), "false What it means false false true auth",
+            "a pill is not picked, a box not checked, a switch off and enabled, a mark the lock");
+
+        // --- each size, read from the control inside ---
+        for (const entry of sizes) {
+            unchosen.size = entry.size;
+            field.size = entry.size;
+            assertEqual(_within(unchosen).fontSize, Theme[entry.inside], "a dropdown of size " + entry.size + " has the theme's " + entry.inside);
+            assertEqual(_texts(_within(unchosen))[0].font.pixelSize, Theme[entry.inside], "… its label drawn in it");
+            assertEqual(_within(field).fontSize, Theme[entry.inside], "a field of size " + entry.size + " has the theme's " + entry.inside);
+            assertEqual(_within(field).input.font.pixelSize, Theme[entry.inside], "… its text drawn in it");
+        }
+        unchosen.size = "m";
+        field.size = "m";
+        for (const entry of pillSizes) {
+            pickedPill.size = entry.size;
+            assertEqual(_within(pickedPill).size, entry.inside, "a pill of size " + entry.size + " is " + entry.inside + " inside");
+            assertEqual(pickedPill.height + " " + pickedPill.implicitHeight, ThemeRules.pillHeight(Theme.pill, entry.inside) + " " + ThemeRules.pillHeight(Theme.pill, entry.inside),
+                "… and as tall as the theme's pill of that size");
+        }
+        assert(Theme.pill.minHeight < Theme.pill.mediumHeight && Theme.pill.mediumHeight < Theme.pill.largeHeight, "the three heights differ in the theme");
+        assertEqual(pill.height, Theme.pill.mediumHeight, "a pill that names no size is m: the theme's medium height");
+
+        // --- what is passed on ---
+        assertEqual(_within(dropdown).value + " " + _within(dropdown).options.length + " " + _within(unchosen).placeholder, "a 2 <b>x</b>", "a dropdown's value, options and placeholder reach the one inside");
+        dropdown.value = "b";
+        assertEqual(_texts(_within(dropdown))[0].text, "Second", "it shows the label of the value it is given");
+        dropdown.value = "a";
+        field.text = "typed";
+        assertEqual(_within(field).input.text, "typed", "a field's text reaches the input inside");
+        _within(field).input.text = "changed inside";
+        assertEqual(field.text, "changed inside", "and what the input holds is the field's text");
+        field.text = "";
+        assert(_within(secret).problem && _within(secret).password && !_within(field).problem && !_within(field).password, "problem and password reach the field inside");
+        assertEqual(_within(secret).input.echoMode, TextInput.Password, "a password is not shown");
+        assert(_within(pickedPill).picked && !_within(pill).picked, "picked reaches the pill inside");
+        assertEqual(_within(pill).tooltip, "What it means", "and so does the tooltip");
+        assert(_within(checkedBox).checked && !_within(checkbox).checked, "checked reaches the checkbox inside");
+        assert(_within(toggleOff).checked && !_within(toggle).checked, "and the switch inside");
+        for (const signalName of ["accepted", "textEdited", "editingFinished"])
+            _within(field).input[signalName]();
+        assertEqual(field.heard, "accepted textEdited editingFinished ", "the input's accepted, textEdited and editingFinished are the field's");
+
+        // --- the mark ---
+        for (const entry of needs) {
+            variedMark.need = entry.need;
+            assertEqual(_within(variedMark).need, entry.inside, "a mark with need \"" + entry.need + "\" is \"" + entry.inside + "\" inside");
+            assertEqual(variedMark.visible + " " + _within(variedMark).visible, entry.shown + " " + entry.shown, "… and is " + (entry.shown ? "there" : "hidden"));
+        }
+        assert(mark.visible && mark.width > 0 && mark.width === _within(mark).implicitWidth, "the lock is as wide as the mark inside");
+        assert(mistypedMark.visible && _within(mistypedMark).visible && _within(mistypedMark).need === "auth", "a need it does not know shows the lock");
+        assertEqual(mistypedMark.need, "perhaps", "the element keeps the word it was given");
+        assert(forcedMark.visible && !_within(forcedMark).visible, "a mark a module shows itself still shows nothing when there is nothing to mark");
+        assertEqual(forcedMark.width + " " + forcedMark.height + " " + forcedMark.implicitWidth, "0 0 0", "… and has no size");
+
+        // --- words it does not know ---
+        assertEqual(_within(mistypedPill).size + " " + mistypedPill.height, "m " + Theme.pill.mediumHeight, "a pill of a size that does not exist shows as m");
+        unchosen.size = "l";
+        field.size = "l";
+        assertEqual(_within(unchosen).fontSize + " " + _within(field).fontSize, Theme.fontSizeBody + " " + Theme.fontSizeBody, "a dropdown and a field have no size l: m");
+        unchosen.size = "m";
+        field.size = "m";
+        for (const key of ["Pill.size=xs", "Dropdown.size=l", "InputField.size=l", "PrivilegedMark.need=perhaps"])
+            assertEqual(ApiElements.warned.filter(warned => warned === key).length, 1, "warned about once: " + key);
+        assert(!ApiElements.warned.some(key => /^(Dropdown|InputField|Pill)\.size=(s|m)$/.test(key) || /^PrivilegedMark\.need=(|yes|auth|no)$/.test(key)), "a word a control knows is not warned about");
+
+        // --- clicks ---
+        driver.mouseClick(pill, 5, 5);
+        assertEqual(pill.clicks, 1, "a click on a pill is clicked()");
+        assert(!pill.picked, "… the owner picks it");
+        driver.mouseClick(checkbox, 5, 5);
+        assertEqual(checkbox.toggles + " " + checkbox.checked, "1 false", "a click on a checkbox is toggled(); the owner flips it");
+        driver.mouseClick(toggle, 5, 5);
+        assertEqual(toggle.toggles + " " + toggle.checked, "1 false", "a click on a switch is toggled(); the owner flips it");
+        driver.mouseClick(toggleOff, 5, 5);
+        assertEqual(toggleOff.toggles, 0, "a switch that is not enabled does nothing");
+        const eye = _texts(_within(secret)).find(text => text.visible && text.text !== "" && text.text !== "hidden");
+        driver.mouseClick(eye, 3, 3);
+        assertEqual(secret.revealed + " " + secret.toggles, "true 1", "the eye of a password shows it: revealed, revealToggled()");
+        assertEqual(_within(secret).input.echoMode, TextInput.Normal, "… readable now");
+        secret.revealed = false;
+        assertEqual(_within(secret).input.echoMode, TextInput.Password, "and the owner hides it again");
+
+        driver.mouseClick(dropdown, 5, 5);
+        assert(_within(dropdown).open, "a click opens a dropdown");
+        // The list lives in the window's top item, over everything else
+        const list = Array.from(_within(dropdown).Window.contentItem.children).find(child => child.toString().startsWith("FloatingList") && child.visible);
+        assert(!!list, "its list is shown over the content");
+        const rows = list ? Array.from(list.children[0].contentItem.children[0].children).filter(child => child.toString().startsWith("QQuickRectangle")) : [];
+        assertEqual(rows.length, 2, "with a row for each option");
+        if (rows.length === 2) {
+            assert(_until(() => rows[1].width > 0 && list.y > 0), "placed under the dropdown");
+            driver.mouseClick(rows[1], 5, 5);
+            assertEqual(dropdown.got + " " + dropdown.value + " " + _within(dropdown).open, "b a false", "a click on an option is picked(value) and closes the list; the owner sets the value");
+            assert(_asWritten(_texts(rows[0])[0]), "an option's label with markup in it is shown as written");
+        }
+        driver.mouseMove(away, 5, 5);
+
+        // --- labels as written ---
+        assert(_texts(_within(dropdown))[0].text === "<b>x</b>" && _asWritten(_texts(_within(dropdown))[0]), "a dropdown's label with markup in it is shown as written");
+        assert(_texts(_within(unchosen))[0].text === "<b>x</b>" && _asWritten(_texts(_within(unchosen))[0]), "and its placeholder");
+        assert(_texts(_within(field))[0].text === "<b>x</b>" && _asWritten(_texts(_within(field))[0]), "a field's placeholder");
+        assert(_asWritten(_texts(_within(pill))[0]), "a pill's label");
+        assert(_asWritten(_texts(_within(checkbox)).find(text => text.text === "<b>x</b>")), "a checkbox's label");
+
+        // --- in layouts, as the internal ones ---
+        const pairs = [
+            { name: "a RowLayout", mine: publicControls, theirs: internalControls, shown: 6 },
+            { name: "a RowLayout, all stretched", mine: publicStretched, theirs: internalStretched, shown: 6 },
+            { name: "a ColumnLayout", mine: publicControlColumn, theirs: internalControlColumn, shown: 6 }
+        ];
+        for (const pair of pairs) {
+            const mine = _items(pair.mine);
+            const theirs = _items(pair.theirs);
+            assert(_until(() => mine[5].width > 0 && theirs[5].width > 0 && _geometry(mine[5]) === _geometry(theirs[5])), "in " + pair.name + " the layout is done");
+            for (let i = 0; i < pair.shown; i++) {
+                assertEqual(_geometry(mine[i]), _geometry(theirs[i]), "in " + pair.name + ", the " + types[i] + " stands where the internal one does, as large");
+                assertEqual(_within(mine[i]).width + " " + _within(mine[i]).height, mine[i].width + " " + mine[i].height, "… and the one inside fills it");
+                assertEqual(mine[i].implicitWidth + " " + mine[i].implicitHeight, theirs[i].implicitWidth + " " + theirs[i].implicitHeight, "… and wants the internal one's size");
+            }
+            assertEqual(pair.mine.implicitWidth + " " + pair.mine.implicitHeight, pair.theirs.implicitWidth + " " + pair.theirs.implicitHeight,
+                "in " + pair.name + ", the hidden ones and a mark with nothing to mark take no room: the layout wants the internal one's size");
+        }
+        const stretched = _items(publicStretched);
+        for (let i = 0; i < stretched.length; i++)
+            assert(stretched[i].width > stretched[i].implicitWidth, "stretched, the " + types[i] + " is wider than it needs");
     }
 }

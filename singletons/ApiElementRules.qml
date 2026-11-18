@@ -15,6 +15,15 @@ Singleton {
     readonly property var textSizes: ({ xs: "fontSizeXSmall", s: "fontSizeSmall", m: "fontSizeBody" })
     readonly property string sizeDefault: "m"
 
+    // A public pill's size → Pill's internal size (the theme's three pill heights)
+    readonly property var pillSizes: ({ s: "s", m: "m", l: "l" })
+
+    // What a public mark is told (polkit's answer) → PrivilegedMark's internal need. One
+    // it does not know is the lock: a control that may ask is never shown as one that
+    // does not.
+    readonly property var markNeeds: ({ "": "", yes: "yes", auth: "auth", no: "no" })
+    readonly property string markNeedDefault: "auth"
+
     // `word` looked up in `table`, else `fallback`'s entry: { value, known }
     function pick(table, word, fallback) {
         const known = typeof word === "string" && Object.prototype.hasOwnProperty.call(table, word);
@@ -27,6 +36,20 @@ Singleton {
 
     function textSize(size) {
         return pick(textSizes, size, sizeDefault);
+    }
+
+    function pillSize(size) {
+        return pick(pillSizes, size, sizeDefault);
+    }
+
+    function markNeed(need) {
+        return pick(markNeeds, need, markNeedDefault);
+    }
+
+    // Whether a mark with this need shows anything: the lock, or "not allowed"
+    function markShown(need) {
+        const inside = markNeed(need).value;
+        return inside === "auth" || inside === "no";
     }
 
     // The warning for a word an element does not know, and the key it is said once under

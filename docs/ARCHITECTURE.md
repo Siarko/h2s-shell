@@ -580,9 +580,13 @@ The button is `SmallButton` (`api/SmallButton.qml`): `kind` is `primary`, `secon
 `danger`, `warning` or `success`, `size` is `xs`, `s` or `m`, and `confirm: true` makes the
 first click ask, the second act — `clicked()` is "do it" either way. `qs.components` has
 a `SmallButton` of its own: in a file that imports both, the import written last gives the
-name. Every element's properties and signals are pinned in `tests/ApiElementsTest.qml`,
-with what each kind and size is inside and how the element stands in a layout; a change
-there is a change of the API's version.
+name. The other controls are `Dropdown`, `InputField` (each with `size` `xs`, `s` or `m`),
+`Pill` (`size` `s`, `m` or `l`: the theme's three pill heights), `Checkbox`, `ToggleSwitch`
+and `PrivilegedMark`, whose `need` is polkit's answer (`auth`, `no`, `yes` or none; one it
+does not know shows the lock); their names are `qs.components`' too, and the same holds
+for a file that imports both. Every element's properties and signals are pinned in
+`tests/ApiElementsTest.qml`, with what each kind and size is inside and how the element
+stands in a layout; a change there is a change of the API's version.
 
 What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the module's
 `main`, which the host destroys when the module is turned off, or binds to `module.active`

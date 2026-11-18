@@ -84,6 +84,8 @@ Rectangle {
             width: parent.width
             visible: parent.text === "" && !parent.activeFocus && root.placeholder !== ""
             text: root.placeholder
+            textFormat: Text.PlainText
+            maximumLineCount: 1
             elide: Text.ElideRight
             font: parent.font
             color: Theme.textDisabled

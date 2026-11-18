@@ -13,6 +13,15 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.5: the public controls — `Dropdown` (`options`, `value`, `placeholder`, `picked(value)`;
+  `size` `xs`, `s`, `m`), `InputField` (`text`, `placeholder`, `problem`, `password`,
+  `revealed`, `accepted()`, `textEdited()`, `editingFinished()`, `revealToggled()`; `size`
+  `xs`, `s`, `m`), `Pill` (`label`, `picked`, `tooltip`, `clicked()`; `size` `s`, `m` — the
+  default —, `l`: the theme's three pill heights), `Checkbox` (`label`, `checked`,
+  `toggled()`), `ToggleSwitch` (`checked`, `toggled()`) and `PrivilegedMark` (`need`: `auth`,
+  `no`, `yes` or empty; one it does not know shows the lock). The labels of a dropdown and
+  its options, a field's placeholder and a checkbox's label are shown as written, on one
+  line, in the shell's own views too.
 - 1.4: public elements — types in `qs.api` made for modules, which hold the shell's internal
   component inside and show only their own properties; a module picks a meaning (`kind`) and a
   `size`, never a colour or a number of pixels, and a word an element does not know shows as
