@@ -27,6 +27,18 @@ fail() { echo "test-tree.sh: $*" >&2; exit 2; }
 [ $# -eq 1 ] && [ -n "$1" ] || { echo "usage: tests/test-tree.sh <dest>" >&2; exit 2; }
 dest=$1
 made=""
+# Inside the checkout the copy would copy itself, and a running shell started from the
+# checkout would reload on every file written. Judged before anything is created: the
+# nearest existing ancestor's real path, with the missing rest appended
+probe=$dest
+rest=""
+while [ ! -e "$probe" ]; do
+    rest=/$(basename "$probe")$rest
+    probe=$(dirname "$probe")
+done
+case "$rest/" in */../* | */./*) fail "$dest: no . or .. after the part that exists" ;; esac
+real=$(cd "$probe" && pwd -P)$rest || fail "cannot enter $probe"
+case "$real/" in "$REPO/"*) fail "$real is inside the checkout ($REPO)" ;; esac
 if [ -e "$dest" ]; then
     [ -d "$dest" ] && [ -z "$(ls -A "$dest" 2> /dev/null)" ] || fail "$dest exists and is not an empty directory"
 else
@@ -34,8 +46,7 @@ else
     made=1
 fi
 dest=$(cd "$dest" && pwd -P) || fail "cannot enter $dest"
-# Inside the checkout the copy would copy itself, and a running shell started from the
-# checkout would reload on every file written
+# Checked again on the made directory, in case a part of the path changed meanwhile
 case "$dest/" in "$REPO/"*) [ -z "$made" ] || rmdir "$dest"; fail "$dest is inside the checkout ($REPO)" ;; esac
 
 undo() { [ -n "$made" ] && rm -rf "$dest" || find "$dest" -mindepth 1 -delete 2> /dev/null; }

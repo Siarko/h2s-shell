@@ -34,7 +34,7 @@ TestCase {
             + "fact untouched test \"$before\" = \"$(cat \"$repo/singletons/TestSeams.qml\" \"$repo/scripts/seams.sh\" | cksum)\"\n"
             + "fact unwritten test -z \"$(find \"$repo\" -path \"$repo/.git\" -prune -o -newer \"$work/stamp\" -print | head -n 1)\"\n"
             + "\"$repo/tests/test-tree.sh\" \"$tree\" > /dev/null 2>&1; fact refuses-full test $? = 2\n"
-            + "\"$repo/tests/test-tree.sh\" \"$repo/test-tree-probe\" > /dev/null 2>&1; fact refuses-inside test $? = 2\n"
+            + "\"$repo/tests/test-tree.sh\" \"$repo/test-tree-probe/nested\" > /dev/null 2>&1; fact refuses-inside test $? = 2\n"
             + "fact inside-left-nothing test ! -e \"$repo/test-tree-probe\"\n"
             + "rm -rf \"$work\"",
             "sh", Quickshell.shellDir];
