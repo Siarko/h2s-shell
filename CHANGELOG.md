@@ -275,6 +275,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   messages, a wrong password asked again. Decided at the first start: off when another
   agent runs, on when none does; notifications when no agent answers or two collide.
   Settings → System → Authentication, with a button to try the prompt.
+- The shell's password prompt says who asks and what for when a module runs something as
+  administrator: "Module" and "Authorization" under the title, and the exact command behind
+  a click on "Command". Its texts are shown as plain text. When the screen locks, an open
+  prompt is cancelled; click again after unlocking.
 - Settings: a System tab for this computer's settings, which apply at once in every
   profile; Authentication is its first page.
 - Wallpaper transitions, set in the theme (Appearance → Animations): a switch to a

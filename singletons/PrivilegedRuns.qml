@@ -14,15 +14,17 @@ import qs.singletons.io as Io
 //   file (a missing one is `notFound`, never pkexec's "not authorised").
 // - One log line per run started, with the module's id and its `what`. Nothing else shows
 //   when polkit lets a run go without a password.
-// - Which request the head of the queue waits for: with the shell's own prompt
-//   (Authentication.state "active" or "conflict") a request that opens while the head may
-//   still ask counts as the head's, and its end lets the head go. The agent's flow names no
-//   caller, so any request seen then counts (one that was open before the run started
-//   too): what tells the head's own request apart is the prompt's work
-//   (notes/plans/api-next/commands.md §3.4, "Which request is announced").
+// - Which request is the head's: with the shell's own prompt (Authentication.state
+//   "active" or "conflict") a request is the head's when PolkitRules.announces says so —
+//   pkexec's action, and its message names the command the head handed to pkexec. Only
+//   that request holds the head, its end lets the head go, and only it is shown with the
+//   head's announcement (announcementFor: "Module", "Authorization", the command). A
+//   request of another program, one open before the run started, or one after the head's
+//   ended is none of the head's business: shown as polkit sent it.
 // - The session locked (Profiles.screenLocked, which Lockscreen reports): nothing starts,
-//   and the runs waiting are answered `dismissed`, `blocked: "locked"`, quietly. A run whose
-//   pkexec has started is left to its prompt.
+//   and the runs waiting are answered `dismissed`, `blocked: "locked"`, quietly. The agent
+//   closes the open prompt (Authentication; the test kit's agent in test mode): the run
+//   whose pkexec asked ends `dismissed` when pkexec exits.
 // - In module test mode (ModuleHost.testMode of the shell's host) the polkit agent and the
 //   lock are the test kit's (`testAgent`, `testLocked`: tests/ModuleTestKit.qml), never the
 //   shell's: a suite never meets the real agent.
@@ -42,10 +44,21 @@ Singleton {
 
     // ---- Module test mode: the seams (tests/ModuleTestKit.qml) ----
     // The polkit agent as a suite sets it: its state (PolkitRules.state's words) and an open
-    // request (`flow`: null or an object), and what reportDenied() tells
+    // request (`flow`: null or { actionId, message }), and what reportDenied() tells. Like
+    // Authentication, it closes its request when the session locks (`closedForLock` counts)
     readonly property QtObject testAgent: QtObject {
         property string state: "active"
         property var flow: null
+        property int closedForLock: 0
+
+        onFlowChanged: closeForLock()
+
+        function closeForLock() {
+            if (PolkitRules.closesForLock(root.locked, flow !== null)) {
+                flow = null;
+                closedForLock++;
+            }
+        }
 
         function reportDenied(what) {
             const notice = PolkitRules.deniedNotice(state, what);
@@ -56,6 +69,34 @@ Singleton {
 
     readonly property bool _testMode: Modules.host.testMode
     readonly property bool locked: _testMode ? testLocked : Profiles.screenLocked
+
+    // ---- For the prompt ----
+
+    // What the prompt shows for a request (`flow`) besides polkit's own words: the head's
+    // announcement (PolkitRules.announcement: module, authorization, command) when the
+    // request is the head's, else null. The same decision as the queue's (_takeRequest),
+    // made at once, so the prompt is dressed from its first frame.
+    function announcementFor(flow) {
+        if (!flow)
+            return null;
+        const head = PrivilegedRules.queueHead(_state);
+        if (!head || head.phase !== "asking" || !head.shellAgent)
+            return null;
+        const job = _jobs.get(head.id);
+        if (!job || !job.announcement)
+            return null;
+        if (_announced.flow === flow && _announced.id === head.id)
+            return job.announcement;
+        return PolkitRules.announces(flow, _runFacts(job, head)) ? job.announcement : null;
+    }
+
+    // The head's words handed to pkexec, [] without a head that has started: what the test
+    // kit builds pkexec's message from (ModuleTestKit.setPolkitRequest)
+    function _headPkexecArgv() {
+        const head = PrivilegedRules.queueHead(_state);
+        const job = head && head.phase === "asking" ? _jobs.get(head.id) : null;
+        return job && job.pkexecWords ? Array.from(job.pkexecWords) : [];
+    }
 
     // ---- For module.privileged and PrivilegedAction ----
 
@@ -84,7 +125,8 @@ Singleton {
             onStdout: parsed.callbacks.onStdout, onStderr: parsed.callbacks.onStderr, onLine: parsed.callbacks.onLine,
             done: parsed.callbacks.done,
             argv: [], program: "", environment: {}, standIns: [], testMode: facts?.testMode === true,
-            answered: false, muted: false, runner: null, result: null
+            answered: false, muted: false, runner: null, result: null,
+            pkexecWords: [], programReal: "", announcement: null
         };
         const runHandle = {
             get running() {
@@ -138,7 +180,7 @@ Singleton {
             done: answer, argv: Array.from(request.argv), systemPkexec: request.systemPkexec === true, program: String(request.program),
             environment: request.environment ?? {}, standIns: Array.isArray(request.standIns) ? request.standIns : [],
             testMode: request.testMode === true, answered: false, muted: false, runner: null, result: null,
-            lines: [], errorText: ""
+            lines: [], errorText: "", pkexecWords: [], programReal: "", announcement: null
         };
         if (locked) {
             _refuse(job, { kind: "locked", error: "the session is locked" });
@@ -186,16 +228,39 @@ Singleton {
     // (nor polkit reached) by a shell or a suite that never runs one
     readonly property bool _watching: PrivilegedRules.queueHead(_state)?.phase === "asking"
     readonly property var _agent: _watching ? (_testMode ? testAgent : Authentication) : null
-    readonly property bool _requestOpen: _agent !== null && (_agent.flow ?? null) !== null
+    readonly property var _requestFlow: _agent !== null ? (_agent.flow ?? null) : null
+    // The request announced as the head's: { flow, id (the run's) }
+    property var _announced: ({ flow: null, id: 0 })
 
     // Taken after the change has settled: the event changes the queue, which this binding
     // reads
-    on_RequestOpenChanged: Qt.callLater(root._takeRequest)
+    on_RequestFlowChanged: Qt.callLater(root._takeRequest)
 
+    // Whether the request open now is the head's (PolkitRules.announces, or the one
+    // announced already): only that one holds the head, and its end lets it go
     function _takeRequest() {
-        _dispatch({ type: "request", open: _requestOpen });
+        const flow = _requestFlow;
+        const head = PrivilegedRules.queueHead(_state);
+        const job = head ? _jobs.get(head.id) : null;
+        let own = false;
+        if (flow !== null && job && head.phase === "asking" && head.shellAgent) {
+            own = (_announced.flow === flow && _announced.id === head.id)
+                || PolkitRules.announces(flow, _runFacts(job, head));
+        }
+        _announced = own ? { flow: flow, id: head.id } : { flow: null, id: 0 };
+        _dispatch({ type: "request", own: own });
     }
-    onLockedChanged: _dispatch({ type: "lock", locked: locked })
+
+    // What PolkitRules.announces is told of a run
+    function _runFacts(job, head) {
+        return { pkexecArgv: job.pkexecWords ?? [], programReal: job.programReal ?? "", announced: head.requestSeen === true };
+    }
+
+    onLockedChanged: {
+        _dispatch({ type: "lock", locked: locked });
+        if (_testMode)
+            testAgent.closeForLock();
+    }
 
     function _agentState() {
         return (_testMode ? testAgent : Authentication).state;
@@ -293,6 +358,14 @@ Singleton {
             Qt.callLater(() => root._dispatch({ type: "exited", id: job.id }));
             return;
         }
+        // What the prompt shows for it, and what its request is known by: the words after
+        // pkexec, the program pkexec is given first (a module's run: the shell's `timeout`)
+        job.pkexecWords = job.argv.slice(1);
+        job.programReal = job.kind === "module" && job.pkexecWords[0] === CommandTools.timeout ? CommandTools.timeoutReal : "";
+        job.announcement = PolkitRules.announcement({
+            legacy: job.kind === "legacy", moduleName: job.handle?.name ?? "", moduleId: job.moduleId,
+            what: job.what, pkexecArgv: job.pkexecWords
+        });
         console.log("[Privileged] " + job.moduleId + " runs " + JSON.stringify(job.what.slice(0, 100))
                     + " (" + JSON.stringify(job.program.slice(0, 300)) + ")");
         const legacy = job.kind === "legacy";

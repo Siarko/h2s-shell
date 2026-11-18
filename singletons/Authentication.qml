@@ -36,6 +36,21 @@ Singleton {
     readonly property string state: _trying === "decide" ? "deciding"
         : PolkitRules.state(mode, mode === "on" && registered, otherAgents, _probed === "unknown")
 
+    // The session locked: the open prompt is closed, as if dismissed (pkexec then exits
+    // 126), and a request that opens while locked too — a password is never asked behind or
+    // over the lock screen (PolkitRules.closesForLock). The program asks again when the user
+    // tries again after unlocking.
+    readonly property bool _locked: Profiles.screenLocked
+    on_LockedChanged: Qt.callLater(root._closeForLock)
+    onFlowChanged: Qt.callLater(root._closeForLock)
+
+    function _closeForLock() {
+        if (!PolkitRules.closesForLock(_locked, flow !== null))
+            return;
+        console.log("[Authentication] the session locked: the open request is cancelled");
+        flow.cancelAuthenticationRequest();
+    }
+
     // What polkit's PAM stack asks first (PolkitRules.pamStackOrder): the prompt words its
     // hints by it, Settings says it. Only read — the file is world-readable; nothing is
     // asked of PAM, polkit or the reader.

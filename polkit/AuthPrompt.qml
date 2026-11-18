@@ -19,10 +19,17 @@ import qs.singletons
 // the password first (programs.h2s-shell.polkit.passwordFirst), Enter on an empty field
 // goes on to the reader. The password is never logged or copied, and is cleared as it is
 // submitted, cancelled, or the request ends.
+//
+// A request that is a run of the shell's queue (`announcement`: PrivilegedRuns
+// .announcementFor) also says who asks and what for, under the title: "Module",
+// "Authorization" and the command one click away (polkit/AuthAnnouncement.qml). Every text
+// here is plain text: polkit's message and action, PAM's words and the accounts' names too.
 PanelWindow {
     id: root
 
     required property var flow
+    // { module, authorization, command } for a run of the shell's queue, else null
+    property var announcement: null
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -89,6 +96,7 @@ PanelWindow {
 
     // The next queued request can arrive in this same window: a fresh start
     onFlowChanged: {
+        _announcement.commandOpen = false;
         _forget();
         _error = "";
         _conversation = PolkitRules.conversationStart();
@@ -179,6 +187,7 @@ PanelWindow {
                 spacing: 12
 
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: "Authentication required"
                     color: Theme.textPrimary
@@ -188,8 +197,17 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                 }
 
+                // Who asks and what for: a run of the shell's queue
+                AuthAnnouncement {
+                    id: _announcement
+                    Layout.fillWidth: true
+                    announcement: root.announcement
+                    onCommandToggled: _input.forceActiveFocus()
+                }
+
                 // What asks
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: root.flow?.message ?? ""
                     wrapMode: Text.WordWrap
@@ -199,6 +217,7 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: (root.flow?.actionId ?? "") !== ""
                     text: root.flow?.actionId ?? ""
@@ -218,6 +237,7 @@ PanelWindow {
                     onPicked: index => root.flow.selectedIdentity = root._identities[index]
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: root._identities.length === 1
                     text: "As " + root._nameOf(root._identities[0])
@@ -229,6 +249,7 @@ PanelWindow {
 
                 // The last attempt was not accepted
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: root._error !== ""
                     text: root._error
@@ -241,6 +262,7 @@ PanelWindow {
 
                 // PAM's message (a fingerprint reader asking for a finger, its "no match")
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: text !== ""
                     text: root._phase === "asked" || root._phase === "starting" ? "" : (root.flow?.supplementaryMessage ?? "")
@@ -262,6 +284,7 @@ PanelWindow {
                     border.width: Theme.border.width
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12 }
                         // PAM's own words ("Password:"), without the colon
                         text: (root.flow?.inputPrompt ?? "").replace(/:\s*$/, "") || "Password"
@@ -298,6 +321,7 @@ PanelWindow {
 
                 // What the prompt waits for and what can be done (PolkitRules.conversationHint)
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: text !== ""
                     text: root._hint.text
@@ -325,6 +349,7 @@ PanelWindow {
                         color: _area.lit && available ? Theme.glassHover : (primary ? Theme.glassRaised : Theme.glass)
                         Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
                         Text {
+                            textFormat: Text.PlainText
                             anchors.centerIn: parent
                             text: _button.label
                             color: Theme.textPrimary

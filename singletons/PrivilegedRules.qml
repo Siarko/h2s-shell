@@ -344,8 +344,9 @@ Singleton {
     // exits, or `killAfterMs` later — after a KILL a process run as root may still be
     // there). The HEAD is the run checking or asking, or one ending that was asking
     // (`holds`): while there is one, no other run starts. The head lets go
-    //   - with the shell's prompt (shellAgent): when its polkit request has ended, or after
-    //     headQuietMs with none;
+    //   - with the shell's prompt (shellAgent): when its own polkit request has ended (the
+    //     request PolkitRules.announces ties to it: another program's request neither holds
+    //     nor releases it), or after headQuietMs with none;
     //   - with another agent: when it ends, or after headStrictMs;
     //   - when it exits, or (ending) when it exits or killAfterMs has passed: so a
     //     cancelled run's request, still on its way, is never shown with the next run.
@@ -380,7 +381,8 @@ Singleton {
     // takes Quickshell's ElapsedTimer, never the wall clock). Events:
     //   add { id, owner }             a run asked for (refusals were made before)
     //   checked { id, found, shellAgent }   its program was looked at; which agent answers
-    //   request { open }              the shell's agent has a request open, or not
+    //   request { own }               the request open now is the head's (PolkitRules
+    //                                 .announces), or there is none of its
     //   tick                          a deadline may have passed
     //   exited { id }                 its pkexec is gone (the runner answered)
     //   cancel { id, killAfterMs }    cancel() was called
@@ -436,10 +438,10 @@ Singleton {
             const head = queueHead({ jobs: jobs });
             if (!head || head.phase !== "asking" || !head.shellAgent)
                 break;
-            if (event.open === true && !head.requestSeen) {
+            if (event.own === true && !head.requestSeen) {
                 head.requestSeen = true;
                 head.deadline = 0;
-            } else if (event.open !== true && head.requestSeen) {
+            } else if (event.own !== true && head.requestSeen) {
                 head.phase = "running";
                 head.deadline = 0;
             }

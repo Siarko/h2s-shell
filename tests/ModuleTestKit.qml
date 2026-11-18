@@ -25,7 +25,16 @@ import qs.api
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
 //                          shell's own prompt answers: the default), "conflict", "other",
 //                          "blocked", "deciding", "none"
-//   setPolkitRequest(open) the shell's prompt has a password request open, or not
+//   setPolkitRequest(open, request)
+//                          the shell's prompt has a password request open, or not. Without
+//                          `request`: the request of the run at the head of the queue, with
+//                          the message pkexec sends for it (PolkitRules.pkexecMessage), so it
+//                          holds and releases the head and is announced; with `request`
+//                          ({ actionId, message }): that one, as another program's would be
+//   polkitRequestOpen      a request is open (the agent closes it when the session locks)
+//   polkitAnnouncement     what the prompt would show for the open request besides polkit's
+//                          words (PrivilegedRuns.announcementFor): { module, authorization,
+//                          command } or null
 //   setSessionLocked(on)   the session is locked, or not
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
@@ -53,10 +62,26 @@ Singleton {
             PrivilegedRuns.testAgent.state = String(state ?? "");
     }
 
-    function setPolkitRequest(open) {
-        if (Modules.host.testMode)
-            PrivilegedRuns.testAgent.flow = open === true ? ({ actionId: "org.freedesktop.policykit.exec", message: "test" }) : null;
+    function setPolkitRequest(open, request) {
+        if (!Modules.host.testMode)
+            return;
+        if (open !== true) {
+            PrivilegedRuns.testAgent.flow = null;
+            return;
+        }
+        if (request !== undefined && request !== null) {
+            PrivilegedRuns.testAgent.flow = { actionId: String(request.actionId ?? ""), message: String(request.message ?? "") };
+            return;
+        }
+        const words = PrivilegedRuns._headPkexecArgv();
+        PrivilegedRuns.testAgent.flow = {
+            actionId: PolkitRules.pkexecAction,
+            message: words.length > 0 ? PolkitRules.pkexecMessage(words) : "Authentication is required"
+        };
     }
+
+    readonly property bool polkitRequestOpen: PrivilegedRuns.testAgent.flow !== null
+    readonly property var polkitAnnouncement: PrivilegedRuns.announcementFor(PrivilegedRuns.testAgent.flow)
 
     function setSessionLocked(on) {
         if (Modules.host.testMode)

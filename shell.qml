@@ -60,12 +60,15 @@ QtObject {
     }
 
     // The polkit agent decides at start whether it answers (Authentication); its prompt
-    // exists while a request is open, on the focused screen
+    // exists while a request is open, on the focused screen, and says who asks and what for
+    // when the request is a run of the shell's queue (PrivilegedRuns.announcementFor).
+    // Never over the lock screen: Authentication cancels a request while locked
     property var _authentication: Authentication
     property var _authPrompt: LazyLoader {
-        active: Authentication.flow !== null
+        active: Authentication.flow !== null && !Profiles.screenLocked
         AuthPrompt {
             flow: Authentication.flow
+            announcement: PrivilegedRuns.announcementFor(Authentication.flow)
             screen: Quickshell.screens.find(screen => screen.name === Workspaces.screens.find(entry => entry.focused)?.name)
                 ?? Quickshell.screens[0]
         }

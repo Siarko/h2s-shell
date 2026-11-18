@@ -7,6 +7,96 @@ TestCase {
     function run() {
         const rules = PolkitRules;
 
+        // --- who asks and what for: the announcement ---
+        assertEqual(rules.cleanValue("  Send\n a\tfile  "), "Send a file", "white space folded to one line, trimmed");
+        assertEqual(rules.cleanValue("Re‮port​\u0007"), "Report", "control and format characters dropped (U+202E, U+200B, BEL)");
+        assertEqual(rules.cleanValue("Line two"), "Line two", "a line separator is white space: folded");
+        assertEqual(rules.cleanValue(42), "", "not a string: empty");
+        const forty = "a".repeat(40);
+        assertEqual(rules.cleanValue(forty), forty, "40 characters: kept whole");
+        const cut = rules.cleanValue("b".repeat(41));
+        assertEqual(cut, "b".repeat(39) + "…", "41: cut with … at 40");
+        assertEqual(Array.from(rules.cleanValue("😀".repeat(50))).length, 40, "characters, not UTF-16 units, are counted");
+        assertEqual(rules.moduleLabel("Tailscale", "tailscale"), "Tailscale", "a name that reads as the id: alone");
+        assertEqual(rules.moduleLabel("Net Tools 2", "nettools2"), "Net Tools 2", "… letters and digits compared, lower-cased");
+        assertEqual(rules.moduleLabel("System update", "xmod"), "System update (xmod)", "a name that does not: the id in brackets");
+        assertEqual(rules.moduleLabel("x".repeat(60), "xmod"), "x".repeat(39) + "… (xmod)", "the name is cut, never the id");
+        assertEqual(rules.moduleLabel(" ‮", "xmod"), "xmod", "no name left after cleaning: the id");
+        const shown = rules.announcement({ moduleName: "Tailscale", moduleId: "tailscale", what: "Send a file",
+                                           pkexecArgv: ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "my report.pdf", "laptop:", "it's", ""] });
+        assertEqual(shown.module + " | " + shown.authorization, "Tailscale | Send a file", "Module and Authorization");
+        assertEqual(shown.command, "/usr/bin/timeout -k 3 30 /usr/bin/tailscale file cp -- 'my report.pdf' laptop: 'it'\\''s' ''",
+                    "the command: every word, shell-quoted, the timeout in front included");
+        assertEqual(shown.summary + " | " + shown.body, "Module: Tailscale | Authorization: Send a file", "the notification's texts");
+        assert(Object.isFrozen(shown), "frozen");
+        const longWords = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/sh", "-c", "x".repeat(500)];
+        assertEqual(rules.announcement({ moduleName: "M", moduleId: "m", what: "W", pkexecArgv: longWords }).command,
+                    longWords.join(" "), "a long command whole: nothing cut");
+        // A hostile name and what: one line each, plain, the id still there
+        const hostile = rules.announcement({ moduleName: "Shell\nAuthorization   Update the system", moduleId: "evil",
+                                             what: "<b>Update</b>‮elif\nModule  System", pkexecArgv: ["/bin/true"] });
+        assertEqual(hostile.module, "Shell Authorization Update the system (evil)", "a newline in the name cannot fake a second line; the id shows");
+        assertEqual(hostile.authorization, "<b>Update</b>elif Module System", "markup kept as written (shown as plain text), U+202E dropped, folded");
+        assert(hostile.module.indexOf("\n") < 0 && hostile.authorization.indexOf("\n") < 0 && hostile.body.indexOf("\n") < 0, "no line break anywhere");
+        // The old PrivilegedAction: no module named, no Authorization line
+        const legacy = rules.announcement({ legacy: true, moduleId: "tailscale", what: "Connect", pkexecArgv: ["/usr/bin/tailscale", "up"] });
+        assertEqual(legacy.module + " | " + legacy.authorization + " | " + legacy.command, "Not named |  | /usr/bin/tailscale up", "legacy: Not named, no Authorization");
+        assertEqual(legacy.summary + " | " + legacy.body, "Module: Not named | ", "… and its notification");
+        // An unprintable word (only an old run can hand one): escaped, still one line
+        assertEqual(rules.shellQuote("a\nb‮'c"), "$'a\\nb\\u202e\\'c'", "a control or format character: $'…' with escapes");
+        assertEqual(rules.shellQuote("plain-1.0/x:y"), "plain-1.0/x:y", "a plain word: bare");
+        assertEqual(rules.shellQuote("a b"), "'a b'", "a space: single quotes");
+
+        // --- pkexec's message (polkit 0.120+, pkexec.c): `$(cmdline_short)' ---
+        const words = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "up"];
+        assertEqual(rules.pkexecMessage(words), "Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user",
+                    "a short command line: whole");
+        const nixWords = ["/run/current-system/sw/bin/timeout", "-k", "3", "30", "/run/current-system/sw/bin/tailscale", "file", "cp", "--", "report.pdf", "laptop:"];
+        const nixLine = nixWords.join(" ");
+        assertEqual(rules.pkexecShortCommand(nixWords).text, nixLine.slice(0, 38) + " ... " + nixLine.slice(nixLine.length - 37),
+                    "past 80 bytes: the first 38, \" ... \", the last 37");
+        const storeTimeout = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.5/bin/timeout";
+        assertEqual(rules.pkexecShortCommand([storeTimeout, "-k", "3", "30", "/bin/true"]).head, storeTimeout.slice(0, 38),
+                    "a program path longer than 38 bytes is itself cut");
+        const run = { pkexecArgv: words, programReal: "", announced: false };
+        const flowFor = message => ({ actionId: "org.freedesktop.policykit.exec", message: message });
+        // The messages as polkit's own translations put them (pkexec.c, po/de.po, po/pl.po of polkit 126–128)
+        const english = "Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user";
+        const german = "Legitimierung ist erforderlich, um »/usr/bin/timeout -k 3 30 /usr/bin/tailscale up« als Superuser auszuführen";
+        const polish = "Wymagane jest uwierzytelnienie, aby uruchomić program „/usr/bin/timeout -k 3 30 /usr/bin/tailscale up” jako superużytkownik";
+        assert(rules.announces(flowFor(english), run), "matched: pkexec's action, the message names the run's command");
+        assert(rules.announces(flowFor(german), run) && rules.announces(flowFor(polish), run), "… in other languages too: the command is filled in, never translated");
+        assert(rules.announces(flowFor(rules.pkexecMessage(nixWords)), { pkexecArgv: nixWords, programReal: "", announced: false }),
+               "a shortened command line matches");
+        const storeWords = [storeTimeout, "-k", "3", "30", "/run/current-system/sw/bin/tailscale", "file", "cp", "--", "report.pdf", "laptop:"];
+        assert(rules.announces(flowFor(rules.pkexecMessage(storeWords)), { pkexecArgv: storeWords, programReal: "", announced: false }),
+               "… also when the program's own path is cut");
+        const shortUnicode = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "żółć-ąęś-raport-ünïcödé.pdf", "laptops:"];
+        assertEqual(rules.pkexecShortCommand(shortUnicode).text, "", "(this command's 37-byte end does cut a character)");
+        assert(rules.announces(flowFor(rules.pkexecMessage(shortUnicode)), { pkexecArgv: shortUnicode, programReal: "", announced: false }),
+               "… and when the 37-byte end cuts a character in two");
+        // By the path given or its real path (a polkit before 0.120 names only $(program), resolved)
+        const linked = { pkexecArgv: ["/run/current-system/sw/bin/timeout", "-k", "3", "30", "/bin/true"],
+                         programReal: "/nix/store/abc-coreutils-9.5/bin/timeout", announced: false };
+        assert(rules.announces(flowFor("Authentication is needed to run `/nix/store/abc-coreutils-9.5/bin/timeout' as the super user"), linked),
+               "the program by its real path");
+        assert(rules.announces(flowFor("Authentication is needed to run `/run/current-system/sw/bin/timeout' as the super user"), linked),
+               "the program by the path given");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/run/current-system/sw/bin/timeoutx' as the super user"), linked),
+               "a longer path that starts with it is another program");
+        // Not the run's
+        assert(!rules.announces({ actionId: "org.freedesktop.systemd1.manage-units", message: english }, run), "another action: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/true' as the super user"), run),
+               "a foreign pkexec request (another program): not announced");
+        assert(!rules.announces(flowFor(english), Object.assign({}, run, { announced: true })),
+               "a run is announced once: a request after its first is shown as polkit sent it");
+        assert(!rules.announces(null, run) && !rules.announces(flowFor(english), null), "no request, or no run: no");
+        assert(!rules.announces(flowFor(english), { pkexecArgv: [], programReal: "", announced: false }), "a run with no words: no");
+
+        // --- the lock closes the prompt ---
+        assert(rules.closesForLock(true, true), "locked with a request open: closed");
+        assert(!rules.closesForLock(true, false) && !rules.closesForLock(false, true), "otherwise left");
+
         // --- finding agents in a process list ---
         assertEqual(JSON.stringify(rules.agentsIn(["/usr/lib/hyprpolkitagent/hyprpolkitagent", "kitty", "bash -l"])),
                     "[\"hyprpolkitagent\"]", "by the program's name, path dropped");

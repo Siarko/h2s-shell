@@ -188,12 +188,12 @@ TestCase {
         stepped = step(asking, { type: "tick", now: 2100 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "2 s with no request: released, the next looked at");
         // A request seen
-        stepped = step(asking, { type: "request", open: true, now: 500 });
+        stepped = step(asking, { type: "request", own: true, now: 500 });
         assertEqual(rules.nextDeadline(stepped.state), 0, "a request opens: held while it is open, no deadline");
         assertEqual(kinds(step(stepped.state, { type: "tick", now: 60000 })), "", "… a minute later still held");
-        stepped = step(stepped.state, { type: "request", open: false, now: 61000 });
+        stepped = step(stepped.state, { type: "request", own: false, now: 61000 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "the request ended: released");
-        assertEqual(kinds(step(asking, { type: "request", open: false, now: 500 })), "", "a request ending that was never seen opening: nothing");
+        assertEqual(kinds(step(asking, { type: "request", own: false, now: 500 })), "", "a request ending that was never seen opening: nothing");
         // The run ends while it holds the head
         stepped = step(asking, { type: "exited", id: 1, now: 300 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "answer:1:result check:2 | 2=checking", "exited: answered, the next looked at");
@@ -202,7 +202,7 @@ TestCase {
                                  { type: "add", id: 2, owner: "m", now: 0 }).state,
                             { type: "checked", id: 1, found: true, shellAgent: false, now: 0 }).state;
         assertEqual(rules.nextDeadline(strict), rules.headStrictMs, "another agent: held up to 2 minutes");
-        assertEqual(kinds(step(strict, { type: "request", open: true, now: 10 })) + kinds(step(strict, { type: "tick", now: 2000 })), "",
+        assertEqual(kinds(step(strict, { type: "request", own: true, now: 10 })) + kinds(step(strict, { type: "tick", now: 2000 })), "",
                     "… requests are not looked at, 2 s mean nothing");
         assertEqual(kinds(step(strict, { type: "tick", now: rules.headStrictMs })), "check:2", "… released after 2 minutes");
         assertEqual(kinds(step(strict, { type: "exited", id: 1, now: 5000 })), "answer:1:result check:2", "… or when it ends");

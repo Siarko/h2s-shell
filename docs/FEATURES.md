@@ -347,6 +347,13 @@ when a known agent runs, on when the shell registers) and changed in Settings â†
 Authentication, which also shows what answers now. Notifications say when no agent answers
 or another one cannot register beside the shell's.
 
+When a module runs something as administrator, the prompt also says who asks and what for:
+"Module" (the module's name) and "Authorization" (what the run does, in the module's few
+words) under the title, and "Command", which opens on a click to the exact command, whole.
+Another program's request shows polkit's own message only. Every text in the prompt is
+plain text. When the screen locks, an open prompt is cancelled: the program asks again when
+the user tries again after unlocking.
+
 polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader first in
 it, so PAM asks for the password only after the reader gives up (30 s, or three fingers
 that do not match). The prompt's field is there from the start: a password typed and

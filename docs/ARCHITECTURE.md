@@ -690,7 +690,24 @@ and a trusted `timeout` are found.
   the wrong kind give `error`. These checks catch mistakes and keep the command printable
   as it is; they do not stop a hostile module, which runs in the shell's process and could
   start pkexec itself. Against a module that is not the project's, the user's protection is
-  the password prompt (polkit's own message) and knowing what they install.
+  the password prompt and knowing what they install.
+- **The prompt says who asks and what for.** With the shell's own prompt
+  (`polkit/AuthPrompt.qml`) a run's request shows, under the title, "Module" (the
+  manifest's name, its id in brackets when the name does not read as the id), "Authorization"
+  (the run's `what`) and "Command", closed for every new request, which opens on a click to
+  the words handed to pkexec, the shell's `timeout` in front, shell-quoted, whole, in a box
+  that scrolls; then polkit's message and action. Every text there is plain text, each value
+  on one line, cut with "…" at 40 characters (the id never). A run of the old
+  `PrivilegedAction` shows "Not named" and no Authorization line. The texts are one pure
+  function, `PolkitRules.announcement`. Which request is a run's: the agent's flow names no
+  caller and no command line, so `PolkitRules.announces` takes the run at the head of the
+  queue when the action is pkexec's (`org.freedesktop.policykit.exec`) and the message
+  names the command the run handed to pkexec, its program by the path given or its real
+  path (pkexec's message holds the command line, past 80 bytes its first 38 and last 37,
+  in every language polkit translates it into). A run is announced at most once; another
+  program's request, one open before the run started and one after the run's request
+  ended are shown as polkit sent them, and do not hold or release the queue. With another
+  polkit agent the shell adds nothing to that agent's prompt.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the
@@ -699,14 +716,16 @@ and a trusted `timeout` are found.
   ends at its limit.
 - **One queue** for the whole shell: one password question at a time. A run holds the head
   while its question can still come; with the shell's own prompt
-  (`Authentication.state` `active` or `conflict`) until the polkit request that opened after
-  its start has ended, or 2 s with none; with another agent, which the shell cannot see,
+  (`Authentication.state` `active` or `conflict`) until its own polkit request (the one
+  `PolkitRules.announces` ties to it) has ended, or 2 s with none; with another agent, which the shell cannot see,
   until it ends, at most 2 minutes. Then the next may start though the first still runs. A
   run cancelled while it holds the head keeps it until its pkexec has exited, or 3 s
   (`killAfterMs`) have passed, so its request is never shown with the next run's. A module
   turned off: its waiting runs leave, its started ones are cancelled, nothing of it is
   called. The session locked (`Profiles.screenLocked`): nothing starts, the waiting runs end
-  `dismissed` with `blocked: "locked"`, quietly. One log line per run started, with the
+  `dismissed` with `blocked: "locked"`, quietly, and the shell's agent cancels the open
+  prompt (and any that opens while locked), so the run whose pkexec was asking ends
+  `dismissed` when pkexec exits. One log line per run started, with the
   module's id and its `what`.
 - NixOS: pkexec is the setuid wrapper `/run/wrappers/bin/pkexec` (the store's copy is not
   setuid); `timeout` leads into the store.
@@ -717,7 +736,9 @@ and a trusted `timeout` are found.
   of runs as administrator, the queue's life among them) and the fixture
   `tests/fixtures/modules/privileged` (its suite runs its stand-ins through the queue in
   module test mode: a stand-in pkexec that prints its arguments, streaming, cancels, the
-  head, a module turned off, the lock),
+  head and which request is its own, a module turned off, the lock),
+  `tests/PolkitRulesTest.qml` (the prompt's texts and the matching of a request to a run),
+  `tests/AuthPromptViewTest.qml` (the prompt's Module, Authorization and Command lines),
   `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on

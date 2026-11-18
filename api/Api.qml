@@ -282,8 +282,10 @@ import qs.singletons.network
 //                          mistakes and keep the command printable as it is; they do not
 //                          stop a hostile module, which runs in the shell's process. Against
 //                          a module that is not the project's, the user's protection is the
-//                          password prompt (polkit's own message) and knowing what they
-//                          install:
+//                          password prompt — with the shell's own prompt it shows "Module"
+//                          (the manifest's name), "Authorization" (`what`) and the exact
+//                          command one click away; another agent's shows polkit's message
+//                          alone — and knowing what they install:
 //                            blocked "unprintable"  a word holds a control or format character
 //                                            or a line or paragraph separator (a line
 //                                            break, a right-to-left override, U+2028): the
@@ -310,11 +312,12 @@ import qs.singletons.network
 //                          exited or 3 s later — run as root it ends at its limit.
 //                          One queue for the whole shell: one password question at a time. A
 //                          run keeps the next waiting while its question can still come —
-//                          with the shell's own prompt until its request has ended, or 2 s
+//                          with the shell's own prompt until its own request has ended, or 2 s
 //                          with none; with another agent until it ends, at most 2 minutes;
 //                          a cancelled one until it has exited, or 3 s. A long run does not
 //                          hold the others otherwise. The session locked: nothing starts,
-//                          the runs waiting end `dismissed`, `blocked: "locked"`. The module
+//                          the runs waiting end `dismissed`, `blocked: "locked"`; the open
+//                          prompt is cancelled, so a run whose pkexec asked ends `dismissed`. The module
 //                          turned off: its waiting runs leave, its started ones are
 //                          cancelled, nothing is called. One log line per run started, with
 //                          the module's id and `what`.
