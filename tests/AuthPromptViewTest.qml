@@ -149,6 +149,19 @@ TestCase {
         assert(moduleId.mapToItem(line, 0, 0).x >= module.mapToItem(line, module.width, 0).x - 1 && idRight <= line.width + 1,
                "… and sits after the name, inside the line (" + idRight + " of " + line.width + " px)");
         assertEqual(moduleId.text, " (evilmod)", "… whole");
+        // The longest id there may be (32 characters, ModuleRules.idPattern) in wide letters:
+        // nothing drawn past the column; the name gives up its room first
+        lines.announcement = PolkitRules.announcement({ moduleName: "Tailscale", moduleId: "w".repeat(32), what: "Connect", pkexecArgv: ["/bin/true"] });
+        driver.wait(50);
+        const wideRight = moduleId.mapToItem(line, moduleId.width, 0).x;
+        assert(wideRight <= line.width + 1 && moduleId.contentWidth <= moduleId.width + 1,
+               "a 32-character id of wide letters stays inside the column (" + wideRight + " / " + moduleId.contentWidth + " of " + line.width + " px)");
+        assert(moduleId.implicitWidth <= line.width || (module.width === 0 && moduleId.truncated),
+               "… the name gives up its room first; the id is cut only when it alone does not fit");
+        lines.announcement = PolkitRules.announcement({ moduleName: "Tailscale", moduleId: "w".repeat(14), what: "Connect", pkexecArgv: ["/bin/true"] });
+        driver.wait(50);
+        assert(!moduleId.truncated && moduleId.width >= moduleId.implicitWidth && module.width <= line.width - moduleId.width + 1,
+               "an id that fits alone is whole, the name in what is left");
         // Blank-looking fillers cannot push it away either
         lines.announcement = PolkitRules.announcement({ moduleName: "Tailscale" + "\u2800".repeat(39), moduleId: "evilmod", what: "Connect", pkexecArgv: ["/bin/true"] });
         driver.wait(50);

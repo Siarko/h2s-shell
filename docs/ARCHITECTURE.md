@@ -699,7 +699,8 @@ and a trusted `timeout` are found.
   the words handed to pkexec, the shell's `timeout` in front, shell-quoted, whole, in a box
   that scrolls, each word kept in its place whatever its script; then polkit's message and
   action. Every text there is plain text, each value on one line, cut with "…" at 40
-  characters; a long name elides on the screen, the bracketed id never; white space and
+  characters; a long name elides on the screen, leaving the room to the bracketed id, which is cut (in
+  the middle) only when it alone is wider than the line; white space and
   blank-looking fillers fold to one space. A run of the old `PrivilegedAction` shows "Not
   named" and no Authorization line. The texts are one pure function,
   `PolkitRules.announcement`. Which request is a run's: the agent's flow names no caller

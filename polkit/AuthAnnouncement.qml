@@ -51,8 +51,9 @@ ColumnLayout {
         Label {
             text: "Module"
         }
-        // The name elides, the id in brackets after it never does: a long name cannot push
-        // the id out of view
+        // The id in brackets comes first: the name takes only the room it leaves (down to
+        // none), so a long name cannot push the id out of view. Only an id too wide for the
+        // whole column by itself is cut, in the middle, keeping both of its ends
         Item {
             objectName: "moduleLine"
             Layout.fillWidth: true
@@ -61,16 +62,16 @@ ColumnLayout {
             Value {
                 id: _moduleName
                 objectName: "module"
-                width: Math.max(0, Math.min(implicitWidth, parent.width - (_moduleId.visible ? _moduleId.implicitWidth : 0)))
+                width: Math.max(0, Math.min(implicitWidth, parent.width - (_moduleId.visible ? _moduleId.width : 0)))
                 text: root.announcement?.moduleName ?? ""
             }
             Value {
                 id: _moduleId
                 objectName: "moduleId"
                 x: _moduleName.width
-                width: implicitWidth
+                width: Math.max(0, Math.min(implicitWidth, parent.width))
                 visible: (root.announcement?.moduleId ?? "") !== ""
-                elide: Text.ElideNone
+                elide: Text.ElideMiddle
                 text: " (" + (root.announcement?.moduleId ?? "") + ")"
             }
         }
