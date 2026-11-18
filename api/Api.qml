@@ -154,9 +154,14 @@ import qs.singletons.network
 //                            killAfterMs     3000
 //                            environment     { NAME: value } for this run, on top of the
 //                                            runner's: the way to hand over a secret
-//                            onStdout(text), onStderr(text)   output as it is read
-//                            onLine(line, stream)   whole lines, of "stdout" and "stderr"
-//                            keepOutput      true: the result holds both streams
+//                            onLine(line, stream)   each line, of "stdout" and "stderr"
+//                            onStdout(text), onStderr(text)   each line of that stream,
+//                                            with its line break. Output is read in whole
+//                                            lines: what is written without ending the
+//                                            line comes when the line, or the stream, ends
+//                            keepOutput      true: the result holds both streams, the
+//                                            lines joined by line breaks, none after the
+//                                            last
 //                            maxOutputBytes  1048576: where each kept stream, and a single
 //                                            line, is cut (counted in characters)
 //                            done(result)    called once, after start() has returned

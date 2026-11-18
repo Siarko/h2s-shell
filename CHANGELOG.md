@@ -17,7 +17,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   and returns a handle (`running`, `cancel()`); any number at once, `cancelAll()`, `running`,
   `environment`. Each run has a time limit (`timeoutMs`, 30 s unless given, 0 for none; kept
   by coreutils' `timeout` from a system directory and by the shell's own timer; TERM, then
-  KILL after `killAfterMs`), its output as it comes (`onStdout`, `onStderr`, `onLine`) and
+  KILL after `killAfterMs`), its output line by line as it comes (`onLine`, `onStdout`, `onStderr`) and
   one answer, `done(result)`: `ok`, `code`, `stdout`, `stderr` (kept up to `maxOutputBytes`,
   else `truncated`), `timedOut`, `cancelled`, `failedToStart`, `durationMs`, `error`. When
   the runner is destroyed its runs are ended and nothing is called. `CommandAction` and

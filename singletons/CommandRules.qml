@@ -217,55 +217,29 @@ Singleton {
 
     // ---- Output ----
 
-    // What is kept of a stream after `chunk`: → { text, truncated }, never longer than
-    // `limit` (counted in characters as read, which for ASCII are the bytes)
-    function kept(text, chunk, limit) {
+    // What is kept of a stream after `more`: → { text, truncated }, never longer than
+    // `limit` (counted in characters, which for ASCII are the bytes)
+    function kept(text, more, limit) {
         const room = limit - text.length;
-        if (chunk.length <= room)
-            return { text: text + chunk, truncated: false };
-        return { text: room > 0 ? text + chunk.slice(0, room) : text, truncated: true };
+        if (more.length <= room)
+            return { text: text + more, truncated: false };
+        return { text: room > 0 ? text + more.slice(0, room) : text, truncated: true };
     }
 
-    function freshLines() {
-        return { rest: "", skipping: false };
+    // The lines in one piece of a stream as Quickshell's line parser hands it over. A piece
+    // is one line — but after a line the parser does not see a line break that follows at
+    // once: an empty line is kept back and comes as a line break in front of the next
+    // piece ("\nc": an empty line, then "c"). At the stream's end what it kept back comes
+    // as the piece "\n", which reads here as two empty lines where one was written: an
+    // output that ends in an empty line shows one more.
+    function linesOf(piece) {
+        return piece.split("\n");
     }
 
-    // The whole lines `chunk` completes, after what earlier chunks left unfinished:
-    // → { lines, pending, truncated }, `pending` the state for the next chunk. A line
-    // longer than `limit` is handed over cut to it once, and the rest of it dropped.
-    function splitLines(pending, chunk, limit) {
-        const lines = [];
-        let truncated = false;
-        let rest = pending.rest;
-        let skipping = pending.skipping;
-        let from = 0;
-        while (from <= chunk.length) {
-            const at = chunk.indexOf("\n", from);
-            const piece = chunk.slice(from, at === -1 ? chunk.length : at);
-            if (!skipping) {
-                const line = kept(rest, piece, limit);
-                rest = line.text;
-                if (line.truncated) {
-                    lines.push(rest);
-                    rest = "";
-                    skipping = true;
-                    truncated = true;
-                }
-            }
-            if (at === -1)
-                break;
-            if (!skipping)
-                lines.push(rest);
-            rest = "";
-            skipping = false;
-            from = at + 1;
-        }
-        return { lines: lines, pending: { rest: rest, skipping: skipping }, truncated: truncated };
-    }
-
-    // The line a stream ends with when it did not end in a newline: [] or [line]
-    function lastLines(pending) {
-        return pending.rest !== "" && !pending.skipping ? [pending.rest] : [];
+    // A stream's kept text after one more line: the lines joined by line breaks, so the
+    // last one has none whether or not the command wrote one. `count`: lines kept before.
+    function keptLine(text, count, line, limit) {
+        return kept(text, (count > 0 ? "\n" : "") + line, limit);
     }
 
     // ---- The answer ----

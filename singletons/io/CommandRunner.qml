@@ -26,11 +26,14 @@ import qs.singletons
 //   moment; `done` comes when the process is gone, with `cancelled: true`.
 // - `done` is called exactly once per start(), never inside start() itself — and never
 //   once the runner is destroyed: its runs are then ended at once (KILL), nothing is called.
-// - Output: `onStdout` / `onStderr` get it as it is read; `onLine` whole lines, of both
-//   streams ("stdout" | "stderr"), a line split over two reads put together; the result
-//   holds both streams whole unless `keepOutput` is false, each cut at `maxOutputBytes`
-//   (`truncated` then; the callbacks still get everything, a single line cut at the
-//   same length). It is text from outside the shell: shown as plain text, never as
+// - Output is read in whole lines, each decoded as one piece (a character whose bytes
+//   come in two reads is never broken): `onLine` gets each line, of both streams
+//   ("stdout" | "stderr"); `onStdout` / `onStderr` each line of theirs with its line
+//   break; the result holds both streams unless `keepOutput` is false — the lines joined
+//   by line breaks, none after the last — each cut at `maxOutputBytes` (`truncated`
+//   then; the callbacks still get every line, a single line cut at the same length).
+//   What a command writes without ending the line is handed over when the line, or the
+//   stream, ends. It is text from outside the shell: shown as plain text, never as
 //   markup, never put on a command line unquoted.
 // - A callback that throws is logged and changes nothing for the run.
 // - Nothing is ever started by a declarative `running: true` (CLAUDE.md).
@@ -66,7 +69,7 @@ QtObject {
             state: CommandRules.fresh(given.timeoutMs, given.killAfterMs),
             item: null, starting: false, muted: false, truncated: false,
             stdout: "", stderr: "", startedAt: 0,
-            lines: { stdout: CommandRules.freshLines(), stderr: CommandRules.freshLines() },
+            lineCount: { stdout: 0, stderr: 0 },
             refusal: problem !== "" ? problem : given.problem
         };
         const handle = {
@@ -173,30 +176,28 @@ QtObject {
         }
     }
 
-    function _chunk(job, stream, text) {
-        if (job.muted || job.state.phase === "done" || _gone)
-            return;
-        if (job.options.keepOutput) {
-            const kept = CommandRules.kept(job[stream], text, job.options.maxOutputBytes);
-            job[stream] = kept.text;
-            job.truncated = job.truncated || kept.truncated;
-        }
-        _call(job, stream === "stdout" ? "onStdout" : "onStderr", text);
-        if (!job.onLine)
-            return;
-        const split = CommandRules.splitLines(job.lines[stream], text, job.options.maxOutputBytes);
-        job.lines[stream] = split.pending;
-        job.truncated = job.truncated || split.truncated;
-        _hand(job, split.lines, stream);
+    function _read(job, stream, text) {
+        for (const line of CommandRules.linesOf(text))
+            _line(job, stream, line);
     }
 
-    function _hand(job, lines, stream) {
-        for (const line of lines) {
-            // A callback may have cancelled the run, or destroyed the runner
-            if (job.muted || _gone)
-                return;
-            _call(job, "onLine", line, stream);
+    function _line(job, stream, line) {
+        if (job.muted || job.state.phase === "done" || _gone)
+            return;
+        const limit = job.options.maxOutputBytes;
+        if (job.options.keepOutput) {
+            const kept = CommandRules.keptLine(job[stream], job.lineCount[stream], line, limit);
+            job[stream] = kept.text;
+            job.lineCount[stream]++;
+            job.truncated = job.truncated || kept.truncated;
         }
+        _call(job, stream === "stdout" ? "onStdout" : "onStderr", line + "\n");
+        // A callback may have cancelled the run, or destroyed the runner
+        if (!job.onLine || job.muted || _gone)
+            return;
+        const cut = CommandRules.kept("", line, limit);
+        job.truncated = job.truncated || cut.truncated;
+        _call(job, "onLine", cut.text, stream);
     }
 
     function _answer(job) {
@@ -206,10 +207,6 @@ QtObject {
             return;
         }
         _jobs = _jobs.filter(other => other !== job);
-        if (job.onLine && !job.muted) {
-            _hand(job, CommandRules.lastLines(job.lines.stdout), "stdout");
-            _hand(job, CommandRules.lastLines(job.lines.stderr), "stderr");
-        }
         if (_gone)
             return;
         const result = CommandRules.result(job.state, {
@@ -248,13 +245,15 @@ QtObject {
             property var job: null
 
             property Process process: Process {
+                // Line by line: Quickshell decodes what a parser hands over as one piece,
+                // so raw reads would break a character whose bytes come in two of them
                 stdout: SplitParser {
-                    splitMarker: ""
-                    onRead: text => root._chunk(run.job, "stdout", text)
+                    splitMarker: "\n"
+                    onRead: text => root._read(run.job, "stdout", text)
                 }
                 stderr: SplitParser {
-                    splitMarker: ""
-                    onRead: text => root._chunk(run.job, "stderr", text)
+                    splitMarker: "\n"
+                    onRead: text => root._read(run.job, "stderr", text)
                 }
                 onExited: (exitCode, exitStatus) => root._dispatch(run.job, { type: "exited", code: exitCode, crashed: exitStatus !== 0 })
                 onRunningChanged: {

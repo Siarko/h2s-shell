@@ -164,21 +164,11 @@ TestCase {
         assertEqual(JSON.stringify(rules.kept("abcde", "f", 5)), "{\"text\":\"abcde\",\"truncated\":true}", "… full: nothing added");
         assertEqual(JSON.stringify(rules.kept("", "abc", 3)), "{\"text\":\"abc\",\"truncated\":false}", "… exactly the cap is not a cut");
 
-        let split = rules.splitLines(rules.freshLines(), "one\ntwo\npar", 100);
-        assertEqual(JSON.stringify(split.lines) + " " + split.pending.rest, "[\"one\",\"two\"] par", "whole lines, the unfinished one kept back");
-        split = rules.splitLines(split.pending, "tial\n\nlast", 100);
-        assertEqual(JSON.stringify(split.lines) + " " + split.pending.rest, "[\"partial\",\"\"] last", "a line over two chunks put together; an empty line is a line");
-        assertEqual(JSON.stringify(rules.lastLines(split.pending)), "[\"last\"]", "the end without a newline: one more line");
-        split = rules.splitLines(split.pending, "\n", 100);
-        assertEqual(JSON.stringify(split.lines) + " " + rules.lastLines(split.pending).length, "[\"last\"] 0", "the end with a newline: none");
-        assertEqual(rules.splitLines(rules.freshLines(), "", 100).lines.length, 0, "an empty chunk: nothing");
-        split = rules.splitLines(rules.freshLines(), "abcdefgh", 5);
-        assertEqual(JSON.stringify(split.lines) + " " + split.truncated + " " + split.pending.skipping, "[\"abcde\"] true true", "a line over the cap: handed over cut, at once");
-        split = rules.splitLines(split.pending, "ijk", 5);
-        assertEqual(split.lines.length + " " + rules.lastLines(split.pending).length, "0 0", "… its rest dropped, also at the end");
-        split = rules.splitLines(split.pending, "lmn\nnext\n", 5);
-        assertEqual(JSON.stringify(split.lines) + " " + split.pending.skipping, "[\"next\"] false", "… until its newline; the next line is whole again");
-        split = rules.splitLines(rules.freshLines(), "abcde\nxy\n", 5);
-        assertEqual(JSON.stringify(split.lines) + " " + split.truncated, "[\"abcde\",\"xy\"] false", "a line of exactly the cap is not cut");
+        assertEqual(JSON.stringify(rules.linesOf("one")) + JSON.stringify(rules.linesOf("")), "[\"one\"][\"\"]", "a piece of the parser's: one line, an empty one too");
+        assertEqual(JSON.stringify(rules.linesOf("\nc")) + JSON.stringify(rules.linesOf("\n")), "[\"\",\"c\"][\"\",\"\"]", "… with the empty line the parser kept back in front");
+        assertEqual(JSON.stringify(rules.keptLine("", 0, "one", 100)), "{\"text\":\"one\",\"truncated\":false}", "the first line kept: as it is");
+        assertEqual(rules.keptLine("one", 1, "two", 100).text, "one\ntwo", "… the next after a line break, none after the last");
+        assertEqual(rules.keptLine("", 1, "two", 100).text, "\ntwo", "… after an empty first line too");
+        assertEqual(JSON.stringify(rules.keptLine("one", 1, "two", 5)), "{\"text\":\"one\\nt\",\"truncated\":true}", "… cut at the cap, the line break counted");
     }
 }

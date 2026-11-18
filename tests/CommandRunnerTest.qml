@@ -135,6 +135,8 @@ TestCase {
         _start("parentNoLimit", wrapping, ["sh", "-c", "cat /proc/$PPID/comm"], { timeoutMs: 0 });
         _start("notKept", wrapping, ["sh", "-c", "echo out; echo err >&2"], { keepOutput: false });
         _start("capped", wrapping, ["sh", "-c", "head -c 5000 /dev/zero | tr '\\0' x; echo; echo short"], { maxOutputBytes: 1000 });
+        const blanks = ["\\n\\na\\n", "a\\n\\n\\nb", "\\n", "a\\n\\nb\\n\\n\\nc\\n"];
+        blanks.forEach((text, index) => _start("blank" + index, wrapping, ["printf", text]));
         _start("signalled", wrapping, ["sh", "-c", "kill -KILL $$"], { timeoutMs: 0 });
         _start("throws", wrapping, ["sh", "-c", "echo one; echo two"], {
             onLine: (line, stream) => {
@@ -144,18 +146,18 @@ TestCase {
         });
         const before = _runs.exit;
         assert(before.handle.running && before.result === null, "start(): a handle, running, no answer inside start()");
-        assertEqual(wrapping.running, 8, "the runner counts its runs");
+        assertEqual(wrapping.running, 12, "the runner counts its runs");
 
-        _then("the plain runs answered", () => _answered("exit", "words", "parent", "parentNoLimit", "notKept", "capped", "signalled", "throws"), () => {
+        _then("the plain runs answered", () => _answered("exit", "words", "parent", "parentNoLimit", "notKept", "capped", "signalled", "throws", "blank0", "blank1", "blank2", "blank3"), () => {
             const exit = _runs.exit.result;
             assertEqual(exit.ok + " " + exit.code + " " + exit.failedToStart + " " + exit.timedOut + " " + exit.cancelled + " " + exit.error,
                         "false 3 false false false ", "exit 3: not ok, the code, nothing else said");
-            assertEqual(exit.stdout, "a b\n\nc", "stdout whole");
-            assertEqual(exit.stderr, "oops\n", "stderr apart from it");
+            assertEqual(exit.stdout, "a b\n\nc", "stdout: its lines, no line break after the last");
+            assertEqual(exit.stderr, "oops", "stderr apart from it");
             assertEqual(JSON.stringify(_runs.exit.lines.filter(entry => entry[1] === "stdout").map(entry => entry[0])), "[\"a b\",\"\",\"c\"]",
                         "onLine: each line, an empty one, the last one without its newline");
             assertEqual(JSON.stringify(_runs.exit.lines.filter(entry => entry[1] === "stderr")), "[[\"oops\",\"stderr\"]]", "… stderr's lines named as such");
-            assertEqual(_runs.exit.out.join("") + "|" + _runs.exit.err.join(""), "a b\n\nc|oops\n", "onStdout, onStderr: the same text as it came");
+            assertEqual(_runs.exit.out.join("") + "|" + _runs.exit.err.join(""), "a b\n\nc\n|oops\n", "onStdout, onStderr: each line of theirs with its line break");
             assert(Object.isFrozen(exit) && exit.durationMs >= 0, "the answer is frozen");
             assert(!_runs.exit.handle.running, "the handle: not running after the answer");
             assertEqual(_runs.exit.answers, 1, "done once");
@@ -171,6 +173,9 @@ TestCase {
             assertEqual(_runs.capped.out.join("").length, 5007, "… the chunk callback still got everything");
             assertEqual(_runs.capped.lines.map(entry => entry[0].length).join(), "1000,5", "… a line over the cap handed over cut once, the next one whole");
 
+            assertEqual([0, 1, 2, 3].map(index => JSON.stringify(_runs["blank" + index].lines.map(entry => entry[0]))).join(" "),
+                        "[\"\",\"\",\"a\"] [\"a\",\"\",\"\",\"b\"] [\"\"] [\"a\",\"\",\"b\",\"\",\"\",\"c\"]", "empty lines: each one a line, at the start and between others");
+            assertEqual(JSON.stringify(_runs.blank1.result.stdout), "\"a\\n\\n\\nb\"", "… and kept");
             const signalled = _runs.signalled.result;
             assertEqual(signalled.ok + " " + signalled.code + " " + signalled.failedToStart, "false -1 false", "ended by a signal: no exit status, not a failure to start");
             assertEqual(_runs.throws.lines.length + " " + _runs.throws.result.ok, "2 true", "a callback that throws: the run goes on and is answered");
@@ -219,7 +224,7 @@ TestCase {
             const wrapped = _runs.limitWrapped.result;
             assertEqual(wrapped.timedOut + " " + wrapped.ok + " " + wrapped.code + " " + wrapped.cancelled, "true false 124 false", "past the limit, inside timeout: timedOut, timeout's 124");
             assert(wrapped.durationMs >= 300 && wrapped.durationMs < 5000, "… at the limit, not at the script's end (" + wrapped.durationMs + " ms)");
-            assertEqual(wrapped.stdout, "started\n", "… with what it printed until then");
+            assertEqual(wrapped.stdout, "started", "… with what it printed until then");
             const watchdog = _runs.limitBare.result;
             assertEqual(watchdog.timedOut + " " + watchdog.ok + " " + watchdog.code + " " + watchdog.failedToStart, "true false -1 false", "past the limit, bare: the runner's watchdog ends it, timedOut");
             assert(watchdog.durationMs >= 300 && watchdog.durationMs < 5000, "… at the limit (" + watchdog.durationMs + " ms)");
@@ -249,7 +254,7 @@ TestCase {
 
         _then("the runs to cancel are running", () => _has("cancelWrapped", "ready") && _has("cancelBare", "ready")
               && _runs.cancelStubbornWrapped.lines.length === 1 && _runs.cancelStubbornBare.lines.length === 1 && _answered("noLimitNoWait"), () => {
-            assertEqual(_runs.noLimitNoWait.result.stdout, "ran\n", "a run without a limit does not wait for the look-up");
+            assertEqual(_runs.noLimitNoWait.result.stdout, "ran", "a run without a limit does not wait for the look-up");
             assert(_runs.cancelWaiting.handle.running && _runs.cancelWaiting.result === null && _runs.launchedLater.out.length === 0, "the others still wait");
             for (const name of ["cancelWrapped", "cancelBare", "cancelStubbornWrapped", "cancelStubbornBare", "cancelWaiting"]) {
                 _runs[name].handle.cancel();
@@ -263,7 +268,7 @@ TestCase {
                 const record = _runs[name];
                 assertEqual(record.result.cancelled + " " + record.result.ok + " " + record.result.timedOut + " " + record.answers, "true false false 1",
                             name + ": cancelled, answered once (cancel() twice)");
-                assertEqual(record.result.stdout + "|" + JSON.stringify(record.lines) + "|" + record.out.join(""), "ready\n|[[\"ready\",\"stdout\"]]|ready\n",
+                assertEqual(record.result.stdout + "|" + JSON.stringify(record.lines) + "|" + record.out.join(""), "ready|[[\"ready\",\"stdout\"]]|ready\n",
                             name + ": what the script said after the cancel is not handed over, nor kept");
                 assert(record.result.durationMs < 5000, name + ": ended by the TERM (" + record.result.durationMs + " ms)");
             }
@@ -275,7 +280,7 @@ TestCase {
             const waited = _runs.cancelWaiting;
             assertEqual(waited.result.cancelled + " " + waited.result.failedToStart + " " + waited.result.stdout + " " + waited.result.durationMs + " " + waited.answers,
                         "true false  0 1", "cancelled while waiting: answered, never started");
-            assertEqual(_runs.launchedLater.result.stdout + " " + _runs.launchedLater.result.ok, "ran\n true", "the look-up answered: the run that waited is started");
+            assertEqual(_runs.launchedLater.result.stdout + " " + _runs.launchedLater.result.ok, "ran true", "the look-up answered: the run that waited is started");
             _cancelAll();
         });
     }
@@ -295,26 +300,56 @@ TestCase {
         });
     }
 
-    // ---- a line that comes in two reads ----
-    // The script writes half a line and goes on only when told to: the first chunk has
-    // been handed over by then, so the line really is split
+    // ---- a line written in two pieces ----
+    // The script writes half a line and goes on only when told to
     function _linesOverChunks() {
         _start("directory", bare, ["mktemp", "-d"]);
         _then("a scratch directory", () => _answered("directory"), () => {
             const directory = _runs.directory.result.stdout.trim();
             assert(_runs.directory.result.ok && directory.startsWith("/"), "a scratch directory for the test");
             suite._directory = directory;
-            _start("split", bare, ["sh", "-c", "printf 'par'; until [ -e \"$1/go\" ]; do sleep 0.02; done; printf 'tial\\nsecond\\n'", "sh", directory], {
-                onStdout: text => {
-                    _runs.split.out.push(text);
-                    if (_runs.split.out.length === 1)
+            _start("split", bare, ["sh", "-c", "echo ready; printf 'par'; until [ -e \"$1/go\" ]; do sleep 0.02; done; printf 'tial\\nsecond\\n'", "sh", directory], {
+                onLine: (line, stream) => {
+                    _runs.split.lines.push([line, stream]);
+                    if (line === "ready")
                         _start("go", bare, ["touch", directory + "/go"]);
                 }
             });
         });
         _then("the split line's run answered", () => _answered("split", "go"), () => {
-            assert(_runs.split.out.length >= 2 && _runs.split.out[0] === "par", "the line came in two reads");
-            assertEqual(JSON.stringify(_runs.split.lines), "[[\"partial\",\"stdout\"],[\"second\",\"stdout\"]]", "onLine: put together, one line");
+            assertEqual(JSON.stringify(_runs.split.lines), "[[\"ready\",\"stdout\"],[\"partial\",\"stdout\"],[\"second\",\"stdout\"]]",
+                        "a line written in two pieces: handed over once, whole");
+            assertEqual(_runs.split.out.join("|"), "ready\n|partial\n|second\n", "… to onStdout too");
+            _wholeCharacters();
+        });
+    }
+
+    // ---- a character that comes in two reads ----
+    // "é" is two bytes: the script writes the first, waits to be told, and writes the
+    // second. And 300 kB of a three-byte character, which no read boundary respects.
+    function _wholeCharacters() {
+        const half = "printf 'ready\\n'; printf 'caf\\303'; printf 'th\\303' >&2; until [ -e \"$1/go-on\" ]; do sleep 0.02; done; "
+            + "printf '\\251 au lait\\n'; printf '\\251\\n' >&2";
+        _start("character", wrapping, ["sh", "-c", half, "sh", _directory], {
+            onLine: (line, stream) => {
+                _runs.character.lines.push([line, stream]);
+                if (line === "ready")
+                    _start("goOn", bare, ["touch", _directory + "/go-on"]);
+            }
+        });
+        const euros = "\u20ac".repeat(500);
+        _start("characters", wrapping, ["sh", "-c", "i=0; while [ $i -lt 200 ]; do printf '%s\\n' \"$1\"; i=$((i+1)); done", "sh", euros]);
+        _then("the runs with split characters answered", () => _answered("character", "characters", "goOn"), () => {
+            const record = _runs.character;
+            assertEqual(JSON.stringify(record.lines.map(entry => entry[0]).sort()), JSON.stringify(["caf\u00e9 au lait", "ready", "th\u00e9"]),
+                        "a character whose bytes come in two reads: whole in the lines, on both streams");
+            assertEqual(record.result.stdout + "|" + record.result.stderr, "ready\ncaf\u00e9 au lait|th\u00e9", "… and in the kept output");
+            assert(!record.out.join("").includes("\ufffd") && !record.err.join("").includes("\ufffd"), "… and in what onStdout and onStderr got");
+            const many = _runs.characters;
+            const lines = many.lines.map(entry => entry[0]);
+            assertEqual(lines.length + " " + lines.filter(line => line === euros).length, "200 200", "300 kB of a three-byte character: every line as written");
+            assert(!many.result.stdout.includes("\ufffd") && many.result.stdout.length >= 200 * 500 && !many.out.join("").includes("\ufffd"),
+                   "… the kept output and the chunks too");
             _destroyed();
         });
     }

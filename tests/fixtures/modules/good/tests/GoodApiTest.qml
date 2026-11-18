@@ -198,7 +198,7 @@ TestCase {
         _then("the runner's command answered", () => _ran !== null, () => {
             assertEqual(_ran.ok + " " + _ran.code + " " + _ran.timedOut + " " + _ran.failedToStart + " " + _ran.error, "false 5 false false ",
                         "CommandRunner: the exit status (the run's environment passed), nothing else said");
-            assertEqual(_ran.stdout + "|" + _ranLines.join(), "one two\nthree\n|stdout:one two,stdout:three", "CommandRunner: its output, whole and line by line, arguments kept whole");
+            assertEqual(_ran.stdout + "|" + _ranLines.join(), "one two\nthree|stdout:one two,stdout:three", "CommandRunner: its output, whole and line by line, arguments kept whole");
             assertEqual(runner.running, 0, "CommandRunner: no run left");
         });
     }

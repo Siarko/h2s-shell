@@ -613,8 +613,9 @@ while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 **The command runner** (`api/CommandRunner.qml`; inside it and in the shell's own code
 `singletons/io/CommandRunner.qml`): `start(argv, options)` starts a command — a list of
 words, never read by a shell — and returns a handle (`running`, `cancel()`); any number
-run at once. Each run has a time limit (30 s unless given; 0 for none), gets its output as
-it comes (`onStdout`, `onStderr`, `onLine` with whole lines) and is answered once, through
+run at once. Each run has a time limit (30 s unless given; 0 for none), gets its output
+line by line as it comes (`onLine`; `onStdout` and `onStderr` per stream; read in whole
+lines, so a character whose bytes arrive in two reads is never broken) and is answered once, through
 `done`, with a frozen result: `ok`, `code`, `stdout`, `stderr` (each kept up to
 `maxOutputBytes`, `truncated` beyond), `timedOut`, `cancelled`, `failedToStart`,
 `durationMs`, and `error` when what was asked could not be run at all. The decisions are
