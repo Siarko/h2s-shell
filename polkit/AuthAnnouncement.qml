@@ -51,9 +51,28 @@ ColumnLayout {
         Label {
             text: "Module"
         }
-        Value {
-            objectName: "module"
-            text: root.announcement?.module ?? ""
+        // The name elides, the id in brackets after it never does: a long name cannot push
+        // the id out of view
+        Item {
+            objectName: "moduleLine"
+            Layout.fillWidth: true
+            implicitHeight: _moduleName.implicitHeight
+
+            Value {
+                id: _moduleName
+                objectName: "module"
+                width: Math.max(0, Math.min(implicitWidth, parent.width - (_moduleId.visible ? _moduleId.implicitWidth : 0)))
+                text: root.announcement?.moduleName ?? ""
+            }
+            Value {
+                id: _moduleId
+                objectName: "moduleId"
+                x: _moduleName.width
+                width: implicitWidth
+                visible: (root.announcement?.moduleId ?? "") !== ""
+                elide: Text.ElideNone
+                text: " (" + (root.announcement?.moduleId ?? "") + ")"
+            }
         }
         Label {
             visible: (root.announcement?.authorization ?? "") !== ""
@@ -88,7 +107,8 @@ ColumnLayout {
         }
     }
 
-    // The command, whole: wrapped anywhere, scrolling past a few lines
+    // The command, whole: wrapped anywhere, scrolling past a few lines; its words in their
+    // order whatever their script (commandShown)
     Rectangle {
         objectName: "commandBox"
         visible: root.commandOpen
@@ -112,7 +132,7 @@ ColumnLayout {
                 id: _command
                 objectName: "command"
                 width: _flick.width
-                text: root.announcement?.command ?? ""
+                text: root.announcement?.commandShown ?? ""
                 textFormat: Text.PlainText
                 wrapMode: Text.WrapAnywhere
                 color: Theme.textPrimary

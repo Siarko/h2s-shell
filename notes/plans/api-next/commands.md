@@ -206,12 +206,17 @@ opened:
 - **Which request is announced.** The agent's flow carries only `message`, `actionId` and
   `cookie` (verified in Quickshell's polkit types): no command line, no caller. So
   `PolkitRules.announces(flow, run)` matches the run at the head of the queue when the
-  action is pkexec's (`org.freedesktop.policykit.exec`) and the message names the program
-  pkexec is given, which is the shell's `timeout`, by the path given or its real path
-  (assumed: pkexec's message holds one of them in every locale). A run is announced at
-  most once: a request that arrives after the head's request ended is shown as today,
-  with no module lines, and so is anything else. A request the shell did not start is
-  never dressed up.
+  action is pkexec's (`org.freedesktop.policykit.exec`) and the message quotes exactly
+  the command the run handed to pkexec as pkexec puts it in its message (polkit 0.120 and
+  later: `$(cmdline_short)`, the words joined with spaces, past 80 bytes their first 38
+  bytes, " ... " and their last 37), between quote marks of some language, with nothing
+  more on either side. The decision is made once per request and kept: a new head never
+  re-dresses a request still open. A run is announced at most once: a request that
+  arrives after the head's request ended is shown as today, with no module lines, and so
+  is anything else. **A limit of polkit:** past 80 bytes another command with the same
+  two ends gives the very same message, and the flow tells nothing else, so such a
+  request — another program's too — is dressed as the run's. The lines are not a guard
+  against hostile code in the session (the owner's trust decision, 2026-11-18).
 - **The notification.** Whenever the agent's state is not `active` or `conflict` (the two
   in which the shell's own prompt answers: `PolkitRules.state`) the shell cannot dress the
   prompt, or does not know: `other`, `blocked`, `deciding`, `none`. Then the run goes
@@ -224,8 +229,8 @@ The old `PrivilegedAction` type keeps working until the closing slice (§7), lis
 module's `deprecations` (§6); its runs go through the same queue and are announced with
 `Module  Not named` and no `Authorization` line.
 
-Test: `PolkitRulesTest` (announcement cleaning and caps, the bracketed id, matching by
-both paths, a run announced once, a hostile name and `what`, an `argv` with a newline and
+Test: `PolkitRulesTest` (announcement cleaning and caps, the bracketed id, exact matching
+of pkexec's message, written out literally, a run announced once, a hostile name and `what`, an `argv` with a newline and
 with U+202E refused, the notification's texts); a shell suite with a stand-in pkexec that
 prints and sleeps: streaming, cancel while queued and after start, the next run waiting
 for a cancelled one's exit, the head released when the request ended and after 2 s
@@ -271,8 +276,8 @@ The part of the plan's §9 that is about this file.
 
 **Assumed.**
 - A program that cannot start gives no `exited` (seen in the module's working code).
-- pkexec's message names the path of the program it is given (the shell's `timeout`), as
-  given or resolved, in every locale. A5 reads the real pkexec's message once, by hand, on
+- pkexec's message quotes its `cmdline_short` in every locale (polkit 126–128's
+  `pkexec.c` and translations read). A5 reads the real pkexec's message once, by hand, on
   both systems; the rule's cases then hold both texts.
 - Signalling pkexec while its prompt shows ends it; a destroyed `Process` may not kill its
   child (the runner signals explicitly).

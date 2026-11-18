@@ -281,11 +281,14 @@ import qs.singletons.network
 //                          Refused before pkexec runs, nothing started. These checks catch
 //                          mistakes and keep the command printable as it is; they do not
 //                          stop a hostile module, which runs in the shell's process. Against
-//                          a module that is not the project's, the user's protection is the
-//                          password prompt — with the shell's own prompt it shows "Module"
-//                          (the manifest's name), "Authorization" (`what`) and the exact
-//                          command one click away; another agent's shows polkit's message
-//                          alone — and knowing what they install:
+//                          a module that is not the project's, the user's protection is
+//                          knowing what they install. The shell's own prompt shows "Module"
+//                          (the manifest's name and id), "Authorization" (`what`) and the
+//                          command handed to pkexec one click away, attached when pkexec's
+//                          message names that command; past 80 bytes pkexec names only its
+//                          first 38 and last 37 bytes, so another command with the same ends
+//                          gets the same lines. Another agent's prompt shows polkit's message
+//                          alone:
 //                            blocked "unprintable"  a word holds a control or format character
 //                                            or a line or paragraph separator (a line
 //                                            break, a right-to-left override, U+2028): the
@@ -312,8 +315,10 @@ import qs.singletons.network
 //                          exited or 3 s later — run as root it ends at its limit.
 //                          One queue for the whole shell: one password question at a time. A
 //                          run keeps the next waiting while its question can still come —
-//                          with the shell's own prompt until its own request has ended, or 2 s
-//                          with none; with another agent until it ends, at most 2 minutes;
+//                          with the shell's own prompt until its own request was seen and no
+//                          request is open, or 2 s with none (not counted while another
+//                          program's request is open, at most 2 minutes); with another agent
+//                          until it ends, at most 2 minutes;
 //                          a cancelled one until it has exited, or 3 s. A long run does not
 //                          hold the others otherwise. The session locked: nothing starts,
 //                          the runs waiting end `dismissed`, `blocked: "locked"`; the open

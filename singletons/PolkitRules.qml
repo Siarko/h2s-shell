@@ -74,7 +74,8 @@ Singleton {
     // for the run at the head of the queue, when the request is that run's (announces());
     // the notification sent when the shell's prompt does not answer says the same. The
     // agent's flow names no caller and no command line: what ties a request to a run is
-    // pkexec's message, which names the command it was given.
+    // pkexec's message, which names the command it was given — past 80 bytes only its two
+    // ends, so another command with the same ends reads the same (see announces()).
 
     // The action pkexec asks for
     readonly property string pkexecAction: "org.freedesktop.policykit.exec"
@@ -84,13 +85,19 @@ Singleton {
     // What a run of the old PrivilegedAction shows for its module: it names none
     readonly property string unnamedModule: "Not named"
 
-    // A value as the prompt shows it: control and format characters dropped, white space
-    // folded to single spaces, trimmed, cut with "…" at announcementCap. Not a string: ""
+    // White space, and the characters that show as blank though they are letters or symbols
+    // (Braille's blank, the Hangul fillers): a name padded with them would read as a shorter
+    // one, so they fold like spaces
+    readonly property var _blank: /[\s   -   　⠀ㅤᅟᅠﾠ]+/g
+
+    // A value as the prompt shows it: control and format characters dropped, white space and
+    // blank-looking fillers folded to single spaces, trimmed, cut with "…" at
+    // announcementCap. Not a string: ""
     function cleanValue(value) {
         if (typeof value !== "string")
             return "";
         let kept = "";
-        for (const character of value.replace(/\s+/g, " ")) {
+        for (const character of value.replace(_blank, " ")) {
             if (!PrivilegedRules.unprintableCode(character.codePointAt(0)))
                 kept += character;
         }
@@ -100,17 +107,24 @@ Singleton {
         return characters.slice(0, announcementCap - 1).join("").replace(/ +$/, "") + "…";
     }
 
-    // The "Module" line: the manifest's name, with the id in brackets when the name does not
-    // read as the id (lower-cased, letters and digits only, it differs from it). The id is
-    // never cut: the name is free text, the id is what keeps it honest. No name: the id.
-    function moduleLabel(name, id) {
+    // The "Module" line's two parts: { name (the manifest's name, cleaned; the id when there
+    // is none), id (the id, shown in brackets after the name: "" when the name reads as the
+    // id — lower-cased, letters and digits only, the same) }. The id is never cut: the name
+    // is free text, the id is what keeps it honest.
+    function moduleParts(name, id) {
         const cleanName = cleanValue(name);
         const cleanId = cleanValue(id);
         if (cleanName === "")
-            return cleanId !== "" ? cleanId : unnamedModule;
+            return { name: cleanId !== "" ? cleanId : unnamedModule, id: "" };
         if (cleanId === "" || cleanName.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanId)
-            return cleanName;
-        return cleanName + " (" + cleanId + ")";
+            return { name: cleanName, id: "" };
+        return { name: cleanName, id: cleanId };
+    }
+
+    // The "Module" line as one text: the name, " (id)" after it when moduleParts shows one
+    function moduleLabel(name, id) {
+        const parts = moduleParts(name, id);
+        return parts.id !== "" ? parts.name + " (" + parts.id + ")" : parts.name;
     }
 
     // One word as a shell reads it back: bare when it holds only characters a shell takes
@@ -149,29 +163,44 @@ Singleton {
     // Every text of a run's announcement. `request`: { moduleName, moduleId, what,
     // pkexecArgv (the words handed to pkexec, after pkexec itself: the shell's `timeout`
     // first for a module's run), legacy (a run of the old PrivilegedAction: it names no
-    // module and no purpose) } → frozen { module, authorization ("" for an old run: no
-    // line), command (every word, shell-quoted, nothing dropped or cut), summary, body (the
-    // notification's: "Module: …", "Authorization: …" or "") }
+    // module and no purpose) } → frozen { module (the line as one text), moduleName,
+    // moduleId (moduleParts: the view elides the name, never the id), authorization (""
+    // for an old run: no line), command (every word, shell-quoted, nothing dropped or cut:
+    // the text compared and copied), commandShown (the same for the screen: each word
+    // isolated left to right, so right-to-left text in a word cannot reorder the words),
+    // summary, body (the notification's: "Module: …", "Authorization: …" or "") }
     function announcement(request) {
         const legacy = request?.legacy === true;
-        const module = legacy ? unnamedModule : moduleLabel(request?.moduleName, request?.moduleId);
+        const parts = legacy ? { name: unnamedModule, id: "" } : moduleParts(request?.moduleName, request?.moduleId);
+        const module = parts.id !== "" ? parts.name + " (" + parts.id + ")" : parts.name;
         const authorization = legacy ? "" : cleanValue(request?.what);
-        const words = Array.isArray(request?.pkexecArgv) ? Array.from(request.pkexecArgv) : [];
+        const quoted = (Array.isArray(request?.pkexecArgv) ? Array.from(request.pkexecArgv) : []).map(word => shellQuote(word));
         return Object.freeze({
             module: module,
+            moduleName: parts.name,
+            moduleId: parts.id,
             authorization: authorization,
-            command: words.map(word => shellQuote(word)).join(" "),
+            command: quoted.join(" "),
+            commandShown: isolatedWords(quoted),
             summary: "Module: " + module,
             body: authorization !== "" ? "Authorization: " + authorization : ""
         });
     }
 
+    // Words for the screen, in their order whatever their script: a left-to-right mark first
+    // (the paragraph's direction), each word between U+2066 (left-to-right isolate) and
+    // U+2069 (pop directional isolate), so the bidirectional algorithm reorders inside a word
+    // at most, never across words
+    function isolatedWords(words) {
+        return "‎" + Array.from(words ?? []).map(word => "⁦" + String(word) + "⁩").join(" ");
+    }
+
     // pkexec's message (polkit 0.120 and later, src/programs/pkexec.c): "Authentication is
     // needed to run `$(cmdline_short)' as the super user", translated by polkitd into the
-    // agent's language, `cmdline_short` filled in. `command_line` is the words handed to
-    // pkexec joined with single spaces (the program as given: an absolute path is not
-    // resolved there); `cmdline_short` is that, or, past 80 bytes, its first 38 bytes, " ... "
-    // and its last 37 bytes.
+    // agent's language with other quote marks, `cmdline_short` filled in. `command_line` is
+    // the words handed to pkexec joined with single spaces (the program as given: an
+    // absolute path is not resolved there); `cmdline_short` is that, or, past 80 bytes, its
+    // first 38 bytes, " ... " and its last 37 bytes.
     readonly property int _pkexecShortLimit: 80
     readonly property int _pkexecShortHead: 38
     readonly property int _pkexecShortTail: 37
@@ -193,16 +222,14 @@ Singleton {
         return bytes;
     }
 
-    // UTF-8 bytes as text, a character cut at either end dropped → { text, cut }
+    // UTF-8 bytes as text, a character cut at either end dropped
     function _fromUtf8(bytes) {
         let text = "";
-        let cut = false;
         let i = 0;
         while (i < bytes.length) {
             const lead = bytes[i];
             const size = lead < 0x80 ? 1 : (lead & 0xe0) === 0xc0 ? 2 : (lead & 0xf0) === 0xe0 ? 3 : (lead & 0xf8) === 0xf0 ? 4 : 0;
             if (size === 0 || i + size > bytes.length) {
-                cut = true;
                 i++;
                 continue;
             }
@@ -212,60 +239,72 @@ Singleton {
             text += String.fromCodePoint(code);
             i += size;
         }
-        return { text: text, cut: cut };
+        return text;
     }
 
-    // `cmdline_short` for these words → { text (whole, when nothing was cut inside a
-    // character), head, tail (the two ends either side of " ... ", whole characters only;
-    // "" when not shortened) }
+    // `cmdline_short` for these words → { text (the whole line: "" when shortened), head,
+    // tail (the two ends either side of " ... ", whole characters only: a character the
+    // 38/37-byte cut splits is dropped; "" when not shortened) }
     function pkexecShortCommand(pkexecArgv) {
         const line = Array.from(pkexecArgv ?? []).map(word => String(word)).join(" ");
         const bytes = _utf8(line);
         if (bytes.length <= _pkexecShortLimit)
             return { text: line, head: "", tail: "" };
-        const head = _fromUtf8(bytes.slice(0, _pkexecShortHead));
-        const tail = _fromUtf8(bytes.slice(bytes.length - _pkexecShortTail));
-        return { text: head.cut || tail.cut ? "" : head.text + " ... " + tail.text, head: head.text, tail: tail.text };
+        return { text: "", head: _fromUtf8(bytes.slice(0, _pkexecShortHead)),
+                 tail: _fromUtf8(bytes.slice(bytes.length - _pkexecShortTail)) };
     }
 
-    // pkexec's message in English for these words, as polkit 0.120 and later sends it
-    function pkexecMessage(pkexecArgv) {
-        const short = pkexecShortCommand(pkexecArgv);
-        return "Authentication is needed to run `" + (short.text !== "" ? short.text : short.head + " ... " + short.tail) + "' as the super user";
+    // A text as a regular expression matching it literally
+    function _literal(text) {
+        return text.replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&");
     }
 
-    // Whether `message` holds `path` as a whole word (no path character either side): the
-    // message of a polkit before 0.120 names only the program ($(program): its real path)
-    function _namesPath(message, path) {
-        if (path === "")
-            return false;
-        const pathCharacter = /[A-Za-z0-9._\/-]/;
-        for (let at = message.indexOf(path); at >= 0; at = message.indexOf(path, at + 1)) {
-            const before = at === 0 ? "" : message.charAt(at - 1);
-            const after = message.charAt(at + path.length);
-            if (!pathCharacter.test(before) && (after === "" || !pathCharacter.test(after)))
-                return true;
-        }
-        return false;
+    // The quote marks polkit's translations put around the command: ASCII's, the typographic
+    // ones, guillemets, the CJK corner brackets and their full-width forms
+    readonly property string _quoteMarks: "`'\"\u2018\u2019\u201a\u201b\u201c\u201d\u201e\u201f\u00ab\u00bb\u2039\u203a\u300c\u300d\u300e\u300f\u3008\u3009\u300a\u300b\uff02\uff07\uff62\uff63"
+
+    // Whether a character is one of those quote marks ("" — the message's start or end — is
+    // not)
+    function _quoteMark(character) {
+        return character !== "" && _quoteMarks.indexOf(character) >= 0;
     }
 
-    // Whether `message` holds the short command line of these words (in any language: the
-    // command is the part polkitd fills in, never translated)
-    function _namesCommand(message, words) {
-        const short = pkexecShortCommand(words);
-        if (short.text !== "")
-            return message.indexOf(short.text) >= 0;
-        // A character cut by the 38/37-byte ends: both whole parts, in order
-        const at = message.indexOf(short.head);
-        return short.head !== "" && at >= 0 && message.indexOf(short.tail, at + short.head.length) >= 0;
+    // The character before `at` and the one after `end` in `text`, whole (a surrogate pair
+    // is one), "" past either end
+    function _before(text, at) {
+        if (at <= 0)
+            return "";
+        const low = text.charCodeAt(at - 1);
+        return at >= 2 && low >= 0xdc00 && low <= 0xdfff ? text.slice(at - 2, at) : text.charAt(at - 1);
+    }
+    function _after(text, end) {
+        return end >= text.length ? "" : String.fromCodePoint(text.codePointAt(end));
+    }
+
+    // Whether the match [at, end) stands between quote marks: right beside them, or with one
+    // white space between (French puts « » apart from what they quote)
+    function _quoted(text, at, end) {
+        let before = _before(text, at);
+        if (/^\s$/.test(before))
+            before = _before(text, at - 1);
+        let after = _after(text, end);
+        if (/^\s$/.test(after))
+            after = _after(text, end + 1);
+        return _quoteMark(before) && _quoteMark(after);
     }
 
     // Whether a polkit request (`flow`: { actionId, message }) is the one of a run
-    // (`run`: { pkexecArgv (as for announcement()), programReal (the real path of the
-    // program pkexec is given, "" when not known), announced (one of its requests was
-    // announced already) }): pkexec's action, and the message names the command the run
-    // handed to pkexec — its program by the path given or its real path. A run is announced
-    // at most once; anything else is shown as polkit sent it, with no module lines.
+    // (`run`: { pkexecArgv (as for announcement()), announced (one of its requests was
+    // announced already) }): pkexec's action, and the message quotes exactly the run's
+    // command as pkexec puts it — its `cmdline_short`, between quote marks of any language,
+    // nothing more on either side. A run is announced at most once; anything else is shown
+    // as polkit sent it, with no module lines.
+    //
+    // A limit of polkit, not of this match: past 80 bytes the message keeps only the
+    // command's first 38 and last 37 bytes, so another command with the same two ends gives
+    // the very same message, and the flow tells nothing else. Such a request is dressed as
+    // the run's. The lines are not a guard against hostile code in the session (a module
+    // runs in the shell's process).
     function announces(flow, run) {
         if (!flow || !run || run.announced === true)
             return false;
@@ -275,12 +314,17 @@ Singleton {
         const words = Array.isArray(run.pkexecArgv) ? run.pkexecArgv.map(word => String(word)) : [];
         if (message === "" || words.length === 0 || words[0] === "")
             return false;
-        const real = typeof run.programReal === "string" ? run.programReal : "";
-        const programs = real !== "" && real !== words[0] ? [words[0], real] : [words[0]];
-        return programs.some(program => {
-            const named = [program].concat(words.slice(1));
-            return _namesCommand(message, named) || _namesPath(message, program);
-        });
+        const short = pkexecShortCommand(words);
+        // A character split by the cut may reach the message as U+FFFD, or not at all
+        const pattern = short.text !== "" ? _literal(short.text)
+            : _literal(short.head) + "�{0,3} \\.\\.\\. �{0,3}" + _literal(short.tail);
+        const search = new RegExp(pattern, "g");
+        for (let found = search.exec(message); found !== null; found = search.exec(message)) {
+            if (_quoted(message, found.index, found.index + found[0].length))
+                return true;
+            search.lastIndex = found.index + 1;
+        }
+        return false;
     }
 
     // Whether the open request is closed because the session locked: a password is never

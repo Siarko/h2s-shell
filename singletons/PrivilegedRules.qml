@@ -344,9 +344,13 @@ Singleton {
     // exits, or `killAfterMs` later — after a KILL a process run as root may still be
     // there). The HEAD is the run checking or asking, or one ending that was asking
     // (`holds`): while there is one, no other run starts. The head lets go
-    //   - with the shell's prompt (shellAgent): when its own polkit request has ended (the
-    //     request PolkitRules.announces ties to it: another program's request neither holds
-    //     nor releases it), or after headQuietMs with none;
+    //   - with the shell's prompt (shellAgent): when its own polkit request (the one
+    //     PolkitRules.announces ties to it) was seen and no request is open any more, or
+    //     after headQuietMs with none. The agent shows one request at a time, so the head's
+    //     own may wait behind another program's: while another request is open before its
+    //     own was seen, the headQuietMs wait does not run (it starts again when that request
+    //     ends), up to headStrictMs from the launch; once its own was seen, another request
+    //     shown after it keeps the head until that one ends too;
     //   - with another agent: when it ends, or after headStrictMs;
     //   - when it exits, or (ending) when it exits or killAfterMs has passed: so a
     //     cancelled run's request, still on its way, is never shown with the next run.
@@ -354,7 +358,8 @@ Singleton {
     // owner gone (the module turned off, a PrivilegedAction destroyed): its runs leave, and
     // the started ones are cancelled, with no answer at all.
     //
-    // state = { locked, jobs: [{ id, owner, phase, holds, shellAgent, requestSeen, deadline
+    // state = { locked, jobs: [{ id, owner, phase, holds, shellAgent, requestSeen,
+    // otherOpen (another request open before its own was seen), launchedAt (ms), deadline
     // (ms; 0: none), silent }] }, in the order they were queued.
 
     function queueStart(locked) {
@@ -381,8 +386,8 @@ Singleton {
     // takes Quickshell's ElapsedTimer, never the wall clock). Events:
     //   add { id, owner }             a run asked for (refusals were made before)
     //   checked { id, found, shellAgent }   its program was looked at; which agent answers
-    //   request { own }               the request open now is the head's (PolkitRules
-    //                                 .announces), or there is none of its
+    //   request { open, own }         a request is open now (any program's), and whether it
+    //                                 is the head's own (PolkitRules.announces)
     //   tick                          a deadline may have passed
     //   exited { id }                 its pkexec is gone (the runner answered)
     //   cancel { id, killAfterMs }    cancel() was called
@@ -417,7 +422,7 @@ Singleton {
                 break;
             }
             jobs.push({ id: event.id, owner: event.owner ?? "", phase: "waiting", holds: false, shellAgent: false,
-                        requestSeen: false, deadline: 0, silent: false });
+                        requestSeen: false, otherOpen: false, launchedAt: 0, deadline: 0, silent: false });
             break;
         case "checked": {
             const job = find(event.id);
@@ -430,6 +435,8 @@ Singleton {
             job.phase = "asking";
             job.shellAgent = event.shellAgent === true;
             job.requestSeen = false;
+            job.otherOpen = false;
+            job.launchedAt = now;
             job.deadline = now + (job.shellAgent ? headQuietMs : headStrictMs);
             effects.push({ type: "launch", id: job.id });
             break;
@@ -438,12 +445,24 @@ Singleton {
             const head = queueHead({ jobs: jobs });
             if (!head || head.phase !== "asking" || !head.shellAgent)
                 break;
-            if (event.own === true && !head.requestSeen) {
+            const open = event.open === true || event.own === true;
+            if (head.requestSeen) {
+                // Its own seen: held while any request is open, let go when none is
+                if (!open) {
+                    head.phase = "running";
+                    head.deadline = 0;
+                }
+            } else if (event.own === true) {
                 head.requestSeen = true;
+                head.otherOpen = false;
                 head.deadline = 0;
-            } else if (event.own !== true && head.requestSeen) {
-                head.phase = "running";
-                head.deadline = 0;
+            } else if (open) {
+                // Another program's in front: its own may wait behind it
+                head.otherOpen = true;
+                head.deadline = head.launchedAt + headStrictMs;
+            } else if (head.otherOpen) {
+                head.otherOpen = false;
+                head.deadline = Math.min(now + headQuietMs, head.launchedAt + headStrictMs);
             }
             break;
         }

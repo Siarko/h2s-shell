@@ -18,9 +18,6 @@ Singleton {
     readonly property bool known: _known
     readonly property string timeout: _found.timeout ?? ""
     readonly property string setpriv: _found.setpriv ?? ""
-    // The real file `timeout` leads to (its links resolved): pkexec's message may name the
-    // program by either (PolkitRules.announces)
-    readonly property string timeoutReal: _found.timeoutReal ?? ""
 
     // How long the look-up, and then each candidate's probe, may take
     readonly property int lookupMs: 5000
@@ -67,8 +64,8 @@ Singleton {
             return;
         const queue = [];
         for (const tool of CommandRules.wrapperTools) {
-            for (const verdict of ModuleRules.trustedVerdicts(lines, tool.name))
-                queue.push({ tool: tool, path: verdict.path, real: verdict.real });
+            for (const path of ModuleRules.trustedPrograms(lines, tool.name))
+                queue.push({ tool: tool, path: path });
         }
         _queue = queue;
         Qt.callLater(root._tryNext);
@@ -97,7 +94,7 @@ Singleton {
         const candidate = _queue[0];
         _queue = _queue.slice(1);
         if (ok)
-            _found = Object.assign({}, _found, { [candidate.tool.name]: candidate.path, [candidate.tool.name + "Real"]: candidate.real });
+            _found = Object.assign({}, _found, { [candidate.tool.name]: candidate.path });
         Qt.callLater(root._tryNext);
     }
 

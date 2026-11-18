@@ -460,14 +460,9 @@ Singleton {
     // The probe's lines, run with "all" → the paths of the trusted matches of `name`, in
     // PATH order
     function trustedPrograms(lines, name) {
-        return trustedVerdicts(lines, name).map(verdict => verdict.path);
-    }
-
-    // The same, as their verdicts (programVerdict: the path found and its real file)
-    function trustedVerdicts(lines, name) {
         const probe = programProbe(lines, [name]);
         return (probe.names[name] ?? []).map(candidate => programVerdict(candidate, probe.user))
-            .filter(verdict => verdict.trusted);
+            .filter(verdict => verdict.trusted).map(verdict => verdict.path);
     }
 
     // How long a module's recheckPrograms() waits: 0 (now) when the last look was at least

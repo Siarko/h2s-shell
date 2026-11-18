@@ -26,15 +26,18 @@ import qs.api
 //                          shell's own prompt answers: the default), "conflict", "other",
 //                          "blocked", "deciding", "none"
 //   setPolkitRequest(open, request)
-//                          the shell's prompt has a password request open, or not. Without
-//                          `request`: the request of the run at the head of the queue, with
-//                          the message pkexec sends for it (PolkitRules.pkexecMessage), so it
-//                          holds and releases the head and is announced; with `request`
-//                          ({ actionId, message }): that one, as another program's would be
+//                          the shell's prompt has a password request open, or not; each call
+//                          opens a new one. `request`: { command: [words handed to pkexec] }
+//                          — pkexec's request for that command, its English message built
+//                          here as pkexec builds it (pkexecMessage) — or { actionId,
+//                          message } as given; without it a pkexec request that names no
+//                          command (as another program's would be)
+//   pkexecMessage(words)   pkexec's message for these words (polkit 0.120 and later)
 //   polkitRequestOpen      a request is open (the agent closes it when the session locks)
 //   polkitAnnouncement     what the prompt would show for the open request besides polkit's
-//                          words (PrivilegedRuns.announcementFor): { module, authorization,
-//                          command } or null
+//                          words (PrivilegedRuns.announcementFor: PolkitRules.announcement's
+//                          { module, moduleName, moduleId, authorization, command,
+//                          commandShown, … }) or null
 //   setSessionLocked(on)   the session is locked, or not
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
@@ -69,15 +72,40 @@ Singleton {
             PrivilegedRuns.testAgent.flow = null;
             return;
         }
-        if (request !== undefined && request !== null) {
+        const pkexecAction = "org.freedesktop.policykit.exec";
+        if (Array.isArray(request?.command))
+            PrivilegedRuns.testAgent.flow = { actionId: pkexecAction, message: pkexecMessage(request.command) };
+        else if (request !== undefined && request !== null)
             PrivilegedRuns.testAgent.flow = { actionId: String(request.actionId ?? ""), message: String(request.message ?? "") };
-            return;
+        else
+            PrivilegedRuns.testAgent.flow = { actionId: pkexecAction, message: "Authentication is required to run a program as the super user" };
+    }
+
+    // pkexec's message, written here from polkit's src/programs/pkexec.c and not from the
+    // shell's PolkitRules, so a suite checks the shell's matching against pkexec rather than
+    // against itself: command_line = g_strjoinv (" ", argv); past 80 bytes cmdline_short =
+    // g_strdup_printf ("%.38s ... %s", command_line, command_line + len - 37). Bytes are
+    // UTF-8 (encodeURIComponent's); a character the cut splits is dropped.
+    function pkexecMessage(words) {
+        const commandLine = Array.from(words ?? []).map(word => String(word)).join(" ");
+        const bytes = unescape(encodeURIComponent(commandLine));
+        let short = commandLine;
+        if (bytes.length > 80)
+            short = _decodeCut(bytes.substring(0, 38)) + " ... " + _decodeCut(bytes.substring(bytes.length - 37));
+        return "Authentication is needed to run `" + short + "' as the super user";
+    }
+
+    // A byte string as text, a character split at either end dropped
+    function _decodeCut(bytes) {
+        let text = bytes;
+        while (text.length > 0 && (text.charCodeAt(0) & 0xc0) === 0x80)
+            text = text.substring(1);
+        for (let drop = 0; drop <= 3; drop++) {
+            try {
+                return decodeURIComponent(escape(text.substring(0, text.length - drop)));
+            } catch (error) {}
         }
-        const words = PrivilegedRuns._headPkexecArgv();
-        PrivilegedRuns.testAgent.flow = {
-            actionId: PolkitRules.pkexecAction,
-            message: words.length > 0 ? PolkitRules.pkexecMessage(words) : "Authentication is required"
-        };
+        return "";
     }
 
     readonly property bool polkitRequestOpen: PrivilegedRuns.testAgent.flow !== null

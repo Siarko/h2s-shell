@@ -348,10 +348,14 @@ Authentication, which also shows what answers now. Notifications say when no age
 or another one cannot register beside the shell's.
 
 When a module runs something as administrator, the prompt also says who asks and what for:
-"Module" (the module's name) and "Authorization" (what the run does, in the module's few
-words) under the title, and "Command", which opens on a click to the exact command, whole.
-Another program's request shows polkit's own message only. Every text in the prompt is
-plain text. When the screen locks, an open prompt is cancelled: the program asks again when
+"Module" (the module's name, with its id in brackets) and "Authorization" (what the run
+does, in the module's few words) under the title, and "Command", which opens on a click to
+the command handed to pkexec, whole. These lines are attached when polkit's own message
+names the module's command; another program's request shows polkit's message alone. polkit
+names a command longer than 80 bytes by its first and last few words only, so another
+command that starts and ends the same way would get the same lines: they say what a module
+asks, they do not guard against a program bent on fooling the user. Every text in the
+prompt is plain text. When the screen locks, an open prompt is cancelled: the program asks again when
 the user tries again after unlocking.
 
 polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader first in

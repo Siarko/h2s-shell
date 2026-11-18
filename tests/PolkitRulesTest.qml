@@ -12,6 +12,10 @@ TestCase {
         assertEqual(rules.cleanValue("Re‮port​\u0007"), "Report", "control and format characters dropped (U+202E, U+200B, BEL)");
         assertEqual(rules.cleanValue("Line two"), "Line two", "a line separator is white space: folded");
         assertEqual(rules.cleanValue(42), "", "not a string: empty");
+        for (const filler of ["⠀", "ㅤ", "ᅟ", "ᅠ", "ﾠ", " ", " ", "　", " "])
+            assertEqual(rules.cleanValue("Tail" + filler.repeat(5) + "scale"), "Tail scale",
+                        "a blank-looking filler (U+" + filler.codePointAt(0).toString(16) + ") folds like a space");
+        assertEqual(rules.cleanValue("Tailscale" + "⠀".repeat(60) + "x"), "Tailscale x", "… so a name padded with them reads as what it is");
         const forty = "a".repeat(40);
         assertEqual(rules.cleanValue(forty), forty, "40 characters: kept whole");
         const cut = rules.cleanValue("b".repeat(41));
@@ -22,13 +26,23 @@ TestCase {
         assertEqual(rules.moduleLabel("System update", "xmod"), "System update (xmod)", "a name that does not: the id in brackets");
         assertEqual(rules.moduleLabel("x".repeat(60), "xmod"), "x".repeat(39) + "… (xmod)", "the name is cut, never the id");
         assertEqual(rules.moduleLabel(" ‮", "xmod"), "xmod", "no name left after cleaning: the id");
+        assertEqual(JSON.stringify(rules.moduleParts("System update", "xmod")), "{\"name\":\"System update\",\"id\":\"xmod\"}",
+                    "the two parts, for the view to elide the name alone");
+        assertEqual(JSON.stringify(rules.moduleParts("Tailscale", "tailscale")), "{\"name\":\"Tailscale\",\"id\":\"\"}", "… no id when the name reads as it");
         const shown = rules.announcement({ moduleName: "Tailscale", moduleId: "tailscale", what: "Send a file",
                                            pkexecArgv: ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "my report.pdf", "laptop:", "it's", ""] });
         assertEqual(shown.module + " | " + shown.authorization, "Tailscale | Send a file", "Module and Authorization");
+        assertEqual(shown.moduleName + " | " + shown.moduleId, "Tailscale | ", "… its parts");
         assertEqual(shown.command, "/usr/bin/timeout -k 3 30 /usr/bin/tailscale file cp -- 'my report.pdf' laptop: 'it'\\''s' ''",
                     "the command: every word, shell-quoted, the timeout in front included");
         assertEqual(shown.summary + " | " + shown.body, "Module: Tailscale | Authorization: Send a file", "the notification's texts");
         assert(Object.isFrozen(shown), "frozen");
+        // Right-to-left words keep their order on the screen; the command compared stays bare
+        const rtl = rules.announcement({ moduleName: "M", moduleId: "m", what: "W", pkexecArgv: ["/bin/echo", "שלום", "עולם", "x"] });
+        assertEqual(rtl.command, "/bin/echo 'שלום' 'עולם' x", "the command: no direction marks in it");
+        assertEqual(rtl.commandShown, "‎⁦/bin/echo⁩ ⁦'שלום'⁩ ⁦'עולם'⁩ ⁦x⁩",
+                    "shown: left to right, each word isolated (U+2066 … U+2069)");
+        assertEqual(rtl.commandShown.replace(/[‎⁦⁩]/g, ""), rtl.command, "… nothing else added");
         const longWords = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/sh", "-c", "x".repeat(500)];
         assertEqual(rules.announcement({ moduleName: "M", moduleId: "m", what: "W", pkexecArgv: longWords }).command,
                     longWords.join(" "), "a long command whole: nothing cut");
@@ -48,50 +62,62 @@ TestCase {
         assertEqual(rules.shellQuote("a b"), "'a b'", "a space: single quotes");
 
         // --- pkexec's message (polkit 0.120+, pkexec.c): `$(cmdline_short)' ---
+        // The messages here are written out as pkexec sends them, not built by the code tested
         const words = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "up"];
-        assertEqual(rules.pkexecMessage(words), "Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user",
-                    "a short command line: whole");
         const nixWords = ["/run/current-system/sw/bin/timeout", "-k", "3", "30", "/run/current-system/sw/bin/tailscale", "file", "cp", "--", "report.pdf", "laptop:"];
-        const nixLine = nixWords.join(" ");
-        assertEqual(rules.pkexecShortCommand(nixWords).text, nixLine.slice(0, 38) + " ... " + nixLine.slice(nixLine.length - 37),
-                    "past 80 bytes: the first 38, \" ... \", the last 37");
-        const storeTimeout = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.5/bin/timeout";
-        assertEqual(rules.pkexecShortCommand([storeTimeout, "-k", "3", "30", "/bin/true"]).head, storeTimeout.slice(0, 38),
-                    "a program path longer than 38 bytes is itself cut");
-        const run = { pkexecArgv: words, programReal: "", announced: false };
+        assertEqual(JSON.stringify(rules.pkexecShortCommand(words)), JSON.stringify({ text: words.join(" "), head: "", tail: "" }),
+                    "80 bytes or fewer: the whole line");
+        assertEqual(JSON.stringify(rules.pkexecShortCommand(nixWords)),
+                    JSON.stringify({ text: "", head: "/run/current-system/sw/bin/timeout -k ", tail: "ilscale file cp -- report.pdf laptop:" }),
+                    "past 80 bytes: the first 38 and the last 37");
+        const run = { pkexecArgv: words, announced: false };
+        const nixRun = { pkexecArgv: nixWords, announced: false };
         const flowFor = message => ({ actionId: "org.freedesktop.policykit.exec", message: message });
-        // The messages as polkit's own translations put them (pkexec.c, po/de.po, po/pl.po of polkit 126–128)
+        // As polkit's own translations put it (pkexec.c, po/de.po, po/pl.po of polkit 126–128)
         const english = "Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user";
         const german = "Legitimierung ist erforderlich, um »/usr/bin/timeout -k 3 30 /usr/bin/tailscale up« als Superuser auszuführen";
         const polish = "Wymagane jest uwierzytelnienie, aby uruchomić program „/usr/bin/timeout -k 3 30 /usr/bin/tailscale up” jako superużytkownik";
-        assert(rules.announces(flowFor(english), run), "matched: pkexec's action, the message names the run's command");
-        assert(rules.announces(flowFor(german), run) && rules.announces(flowFor(polish), run), "… in other languages too: the command is filled in, never translated");
-        assert(rules.announces(flowFor(rules.pkexecMessage(nixWords)), { pkexecArgv: nixWords, programReal: "", announced: false }),
-               "a shortened command line matches");
-        const storeWords = [storeTimeout, "-k", "3", "30", "/run/current-system/sw/bin/tailscale", "file", "cp", "--", "report.pdf", "laptop:"];
-        assert(rules.announces(flowFor(rules.pkexecMessage(storeWords)), { pkexecArgv: storeWords, programReal: "", announced: false }),
-               "… also when the program's own path is cut");
+        const french = "Une authentification est nécessaire pour exécuter « /usr/bin/timeout -k 3 30 /usr/bin/tailscale up » en tant que super-utilisateur";
+        assert(rules.announces(flowFor(english), run), "matched: pkexec's action, the message quotes the run's command exactly");
+        assert(rules.announces(flowFor(german), run) && rules.announces(flowFor(polish), run), "… in other languages, with their quote marks");
+        assert(rules.announces(flowFor(french), run), "… a quote mark one space apart (French)");
+        const nixMessage = "Authentication is needed to run `/run/current-system/sw/bin/timeout -k  ... ilscale file cp -- report.pdf laptop:' as the super user";
+        assert(rules.announces(flowFor(nixMessage), nixRun), "the cut form: a shortened command line matches");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/run/current-system/sw/bin/timeout -k  ... ilscale file cp -- report.pdf laptop:2' as the super user"), nixRun),
+               "… but not with more after its end");
+        const storeTimeout = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.5/bin/timeout";
+        assertEqual(rules.pkexecShortCommand([storeTimeout, "-k", "3", "30", "/bin/true"]).head, storeTimeout.slice(0, 38),
+                    "a program path longer than 38 bytes is itself cut");
         const shortUnicode = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "żółć-ąęś-raport-ünïcödé.pdf", "laptops:"];
-        assertEqual(rules.pkexecShortCommand(shortUnicode).text, "", "(this command's 37-byte end does cut a character)");
-        assert(rules.announces(flowFor(rules.pkexecMessage(shortUnicode)), { pkexecArgv: shortUnicode, programReal: "", announced: false }),
-               "… and when the 37-byte end cuts a character in two");
-        // By the path given or its real path (a polkit before 0.120 names only $(program), resolved)
-        const linked = { pkexecArgv: ["/run/current-system/sw/bin/timeout", "-k", "3", "30", "/bin/true"],
-                         programReal: "/nix/store/abc-coreutils-9.5/bin/timeout", announced: false };
-        assert(rules.announces(flowFor("Authentication is needed to run `/nix/store/abc-coreutils-9.5/bin/timeout' as the super user"), linked),
-               "the program by its real path");
-        assert(rules.announces(flowFor("Authentication is needed to run `/run/current-system/sw/bin/timeout' as the super user"), linked),
-               "the program by the path given");
-        assert(!rules.announces(flowFor("Authentication is needed to run `/run/current-system/sw/bin/timeoutx' as the super user"), linked),
-               "a longer path that starts with it is another program");
+        assertEqual(rules.pkexecShortCommand(shortUnicode).tail, "ęś-raport-ünïcödé.pdf laptops:", "a character split by the 37-byte end is dropped");
+        assert(rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tail ... ęś-raport-ünïcödé.pdf laptops:' as the super user"),
+                               { pkexecArgv: shortUnicode, announced: false }), "… the message without it matches");
+        assert(rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tail ... \ufffdęś-raport-ünïcödé.pdf laptops:' as the super user"),
+                               { pkexecArgv: shortUnicode, announced: false }), "… and with it as U+FFFD");
         // Not the run's
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout 3600 /bin/sh -c evil' as the super user"), run),
+               "the same timeout, another command: not announced (every run starts with that timeout)");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout' as the super user"), run),
+               "the timeout alone: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale up --reset' as the super user"), run),
+               "the head's line plus more words: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `sudo /usr/bin/timeout -k 3 30 /usr/bin/tailscale up' as the super user"), run),
+               "more words in front: not announced");
+        assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/tailscale down' as the super user"), run),
+               "another run's command: not announced");
+        assert(!rules.announces(flowFor("/usr/bin/timeout -k 3 30 /usr/bin/tailscale up"), run), "the bare command, no quote marks: not announced");
         assert(!rules.announces({ actionId: "org.freedesktop.systemd1.manage-units", message: english }, run), "another action: not announced");
         assert(!rules.announces(flowFor("Authentication is needed to run `/usr/bin/true' as the super user"), run),
                "a foreign pkexec request (another program): not announced");
         assert(!rules.announces(flowFor(english), Object.assign({}, run, { announced: true })),
                "a run is announced once: a request after its first is shown as polkit sent it");
         assert(!rules.announces(null, run) && !rules.announces(flowFor(english), null), "no request, or no run: no");
-        assert(!rules.announces(flowFor(english), { pkexecArgv: [], programReal: "", announced: false }), "a run with no words: no");
+        assert(!rules.announces(flowFor(english), { pkexecArgv: [], announced: false }), "a run with no words: no");
+        // polkit's limit: past 80 bytes another command with the same two ends gives the same
+        // message, and is matched — written down in the docs, not something a match can fix
+        const lookalike = ["/run/current-system/sw/bin/timeout", "-k", "3", "30", "/tmp/evil;", "/run/current-system/sw/bin/tailscale", "file", "cp", "--", "report.pdf", "laptop:"];
+        assert(rules.announces(flowFor(nixMessage), { pkexecArgv: lookalike, announced: false }),
+               "(a command with the same 38 + 37 bytes reads the same: polkit's limit)");
 
         // --- the lock closes the prompt ---
         assert(rules.closesForLock(true, true), "locked with a request open: closed");

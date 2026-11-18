@@ -690,23 +690,30 @@ and a trusted `timeout` are found.
   the wrong kind give `error`. These checks catch mistakes and keep the command printable
   as it is; they do not stop a hostile module, which runs in the shell's process and could
   start pkexec itself. Against a module that is not the project's, the user's protection is
-  the password prompt and knowing what they install.
+  knowing what they install: the prompt's lines below say what pkexec's message says, and
+  past 80 bytes that message cannot tell two commands with the same ends apart.
 - **The prompt says who asks and what for.** With the shell's own prompt
   (`polkit/AuthPrompt.qml`) a run's request shows, under the title, "Module" (the
   manifest's name, its id in brackets when the name does not read as the id), "Authorization"
   (the run's `what`) and "Command", closed for every new request, which opens on a click to
   the words handed to pkexec, the shell's `timeout` in front, shell-quoted, whole, in a box
-  that scrolls; then polkit's message and action. Every text there is plain text, each value
-  on one line, cut with "…" at 40 characters (the id never). A run of the old
-  `PrivilegedAction` shows "Not named" and no Authorization line. The texts are one pure
-  function, `PolkitRules.announcement`. Which request is a run's: the agent's flow names no
-  caller and no command line, so `PolkitRules.announces` takes the run at the head of the
-  queue when the action is pkexec's (`org.freedesktop.policykit.exec`) and the message
-  names the command the run handed to pkexec, its program by the path given or its real
-  path (pkexec's message holds the command line, past 80 bytes its first 38 and last 37,
-  in every language polkit translates it into). A run is announced at most once; another
-  program's request, one open before the run started and one after the run's request
-  ended are shown as polkit sent them, and do not hold or release the queue. With another
+  that scrolls, each word kept in its place whatever its script; then polkit's message and
+  action. Every text there is plain text, each value on one line, cut with "…" at 40
+  characters; a long name elides on the screen, the bracketed id never; white space and
+  blank-looking fillers fold to one space. A run of the old `PrivilegedAction` shows "Not
+  named" and no Authorization line. The texts are one pure function,
+  `PolkitRules.announcement`. Which request is a run's: the agent's flow names no caller
+  and no command line, so `PolkitRules.announces` takes the run at the head of the queue
+  when the action is pkexec's (`org.freedesktop.policykit.exec`) and the message quotes
+  exactly the run's command as pkexec puts it (polkit 0.120 and later: the words joined
+  with spaces, past 80 bytes only their first 38 bytes, " ... " and their last 37),
+  between quote marks of any language, nothing more on either side. The decision is made
+  once per request and kept, so a request still open when the next run takes the head is
+  not dressed as that run's. A run is announced at most once. **The lines are attached by
+  pkexec's message, which is all polkit tells:** past 80 bytes another command with the
+  same two ends — another program's too — gives the very same message and is dressed as
+  the run's. They help the user see what a module asks; they are not a guard against
+  hostile code in the session. Any other request is shown as polkit sent it. With another
   polkit agent the shell adds nothing to that agent's prompt.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
@@ -717,8 +724,11 @@ and a trusted `timeout` are found.
 - **One queue** for the whole shell: one password question at a time. A run holds the head
   while its question can still come; with the shell's own prompt
   (`Authentication.state` `active` or `conflict`) until its own polkit request (the one
-  `PolkitRules.announces` ties to it) has ended, or 2 s with none; with another agent, which the shell cannot see,
-  until it ends, at most 2 minutes. Then the next may start though the first still runs. A
+  `PolkitRules.announces` ties to it) was seen and no request is open any more, or 2 s
+  with none. The agent shows one request at a time, so the run's own may wait behind
+  another program's: while another request is open before the run's own was seen, the 2 s
+  do not run (they start again when it ends), at most 2 minutes. With another agent, which
+  the shell cannot see, until it ends, at most 2 minutes. Then the next may start though the first still runs. A
   run cancelled while it holds the head keeps it until its pkexec has exited, or 3 s
   (`killAfterMs`) have passed, so its request is never shown with the next run's. A module
   turned off: its waiting runs leave, its started ones are cancelled, nothing of it is
@@ -780,7 +790,10 @@ and a trusted `timeout` are found.
   and its runs see the test kit's polkit agent and lock, never the shell's. A module's
   suites see test mode through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`,
   `widgetEntries`, `opened`, `notified`, `clearRecords`, and for runs as administrator
-  `setPolkitAgent`, `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`.
+  `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
+  its message written by the kit from pkexec's algorithm, not the shell's),
+  `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`, `setSessionLocked`,
+  `privilegedIdle`.
 
 ### Logging
 

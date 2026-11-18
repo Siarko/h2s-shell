@@ -16,11 +16,13 @@ import qs.singletons.io as Io
 //   when polkit lets a run go without a password.
 // - Which request is the head's: with the shell's own prompt (Authentication.state
 //   "active" or "conflict") a request is the head's when PolkitRules.announces says so —
-//   pkexec's action, and its message names the command the head handed to pkexec. Only
-//   that request holds the head, its end lets the head go, and only it is shown with the
-//   head's announcement (announcementFor: "Module", "Authorization", the command). A
-//   request of another program, one open before the run started, or one after the head's
-//   ended is none of the head's business: shown as polkit sent it.
+//   pkexec's action, and its message quotes the command the head handed to pkexec as
+//   pkexec shortens it. Only that request is shown with the head's announcement
+//   (announcementFor: "Module", "Authorization", the command), decided once per request:
+//   a new head never re-dresses a request still open. The agent shows one request at a
+//   time, so the head's own may wait behind another program's: while any request is open
+//   the head is held (PrivilegedRules.queueStep, `request { open, own }`), and once its own
+//   was seen it lets go when no request is open any more.
 // - The session locked (Profiles.screenLocked, which Lockscreen reports): nothing starts,
 //   and the runs waiting are answered `dismissed`, `blocked: "locked"`, quietly. The agent
 //   closes the open prompt (Authentication; the test kit's agent in test mode): the run
@@ -45,19 +47,16 @@ Singleton {
     // ---- Module test mode: the seams (tests/ModuleTestKit.qml) ----
     // The polkit agent as a suite sets it: its state (PolkitRules.state's words) and an open
     // request (`flow`: null or { actionId, message }), and what reportDenied() tells. Like
-    // Authentication, it closes its request when the session locks (`closedForLock` counts)
+    // Authentication, it closes its request when the session locks
     readonly property QtObject testAgent: QtObject {
         property string state: "active"
         property var flow: null
-        property int closedForLock: 0
 
         onFlowChanged: closeForLock()
 
         function closeForLock() {
-            if (PolkitRules.closesForLock(root.locked, flow !== null)) {
+            if (PolkitRules.closesForLock(root.locked, flow !== null))
                 flow = null;
-                closedForLock++;
-            }
         }
 
         function reportDenied(what) {
@@ -74,28 +73,12 @@ Singleton {
 
     // What the prompt shows for a request (`flow`) besides polkit's own words: the head's
     // announcement (PolkitRules.announcement: module, authorization, command) when the
-    // request is the head's, else null. The same decision as the queue's (_takeRequest),
-    // made at once, so the prompt is dressed from its first frame.
+    // request is the head's, else null. Decided the first time the request is looked at
+    // (here or by the queue, _takeRequest) and kept for it: the prompt is dressed from its
+    // first frame, and a request still open when the next run becomes the head is never
+    // dressed as that run's.
     function announcementFor(flow) {
-        if (!flow)
-            return null;
-        const head = PrivilegedRules.queueHead(_state);
-        if (!head || head.phase !== "asking" || !head.shellAgent)
-            return null;
-        const job = _jobs.get(head.id);
-        if (!job || !job.announcement)
-            return null;
-        if (_announced.flow === flow && _announced.id === head.id)
-            return job.announcement;
-        return PolkitRules.announces(flow, _runFacts(job, head)) ? job.announcement : null;
-    }
-
-    // The head's words handed to pkexec, [] without a head that has started: what the test
-    // kit builds pkexec's message from (ModuleTestKit.setPolkitRequest)
-    function _headPkexecArgv() {
-        const head = PrivilegedRules.queueHead(_state);
-        const job = head && head.phase === "asking" ? _jobs.get(head.id) : null;
-        return job && job.pkexecWords ? Array.from(job.pkexecWords) : [];
+        return _decide(flow).announcement;
     }
 
     // ---- For module.privileged and PrivilegedAction ----
@@ -126,7 +109,7 @@ Singleton {
             done: parsed.callbacks.done,
             argv: [], program: "", environment: {}, standIns: [], testMode: facts?.testMode === true,
             answered: false, muted: false, runner: null, result: null,
-            pkexecWords: [], programReal: "", announcement: null
+            pkexecWords: [], announcement: null
         };
         const runHandle = {
             get running() {
@@ -180,7 +163,7 @@ Singleton {
             done: answer, argv: Array.from(request.argv), systemPkexec: request.systemPkexec === true, program: String(request.program),
             environment: request.environment ?? {}, standIns: Array.isArray(request.standIns) ? request.standIns : [],
             testMode: request.testMode === true, answered: false, muted: false, runner: null, result: null,
-            lines: [], errorText: "", pkexecWords: [], programReal: "", announcement: null
+            lines: [], errorText: "", pkexecWords: [], announcement: null
         };
         if (locked) {
             _refuse(job, { kind: "locked", error: "the session is locked" });
@@ -229,31 +212,42 @@ Singleton {
     readonly property bool _watching: PrivilegedRules.queueHead(_state)?.phase === "asking"
     readonly property var _agent: _watching ? (_testMode ? testAgent : Authentication) : null
     readonly property var _requestFlow: _agent !== null ? (_agent.flow ?? null) : null
-    // The request announced as the head's: { flow, id (the run's) }
-    property var _announced: ({ flow: null, id: 0 })
+    // The decisions for the last requests looked at: [{ flow, id (the run it was matched to,
+    // 0: none), announcement (or null) }], newest last. A plain array changed in place — no
+    // binding is told: a request is decided once and its decision never changes.
+    readonly property var _decisions: []
 
     // Taken after the change has settled: the event changes the queue, which this binding
     // reads
     on_RequestFlowChanged: Qt.callLater(root._takeRequest)
 
-    // Whether the request open now is the head's (PolkitRules.announces, or the one
-    // announced already): only that one holds the head, and its end lets it go
+    // The decision for a request: the kept one when it was decided already, else made now —
+    // the head's announcement when PolkitRules.announces ties the request to the head
+    // (asking, with the shell's prompt, not announced yet), else none
+    function _decide(flow) {
+        if (!flow)
+            return { flow: null, id: 0, announcement: null };
+        const kept = _decisions.find(decision => decision.flow === flow);
+        if (kept)
+            return kept;
+        const head = PrivilegedRules.queueHead(_state);
+        const job = head ? _jobs.get(head.id) : null;
+        const own = !!job && !!job.announcement && head.phase === "asking" && head.shellAgent
+            && PolkitRules.announces(flow, { pkexecArgv: job.pkexecWords ?? [], announced: head.requestSeen === true });
+        const decision = { flow: flow, id: own ? head.id : 0, announcement: own ? job.announcement : null };
+        _decisions.push(decision);
+        if (_decisions.length > 8)
+            _decisions.shift();
+        return decision;
+    }
+
+    // Tells the queue what is open now: any request (`open`), and whether it is the head's
+    // own (`own`: decided for this request and the head it was matched to)
     function _takeRequest() {
         const flow = _requestFlow;
         const head = PrivilegedRules.queueHead(_state);
-        const job = head ? _jobs.get(head.id) : null;
-        let own = false;
-        if (flow !== null && job && head.phase === "asking" && head.shellAgent) {
-            own = (_announced.flow === flow && _announced.id === head.id)
-                || PolkitRules.announces(flow, _runFacts(job, head));
-        }
-        _announced = own ? { flow: flow, id: head.id } : { flow: null, id: 0 };
-        _dispatch({ type: "request", own: own });
-    }
-
-    // What PolkitRules.announces is told of a run
-    function _runFacts(job, head) {
-        return { pkexecArgv: job.pkexecWords ?? [], programReal: job.programReal ?? "", announced: head.requestSeen === true };
+        const decision = _decide(flow);
+        _dispatch({ type: "request", open: flow !== null, own: flow !== null && head !== null && decision.id === head.id });
     }
 
     onLockedChanged: {
@@ -361,7 +355,6 @@ Singleton {
         // What the prompt shows for it, and what its request is known by: the words after
         // pkexec, the program pkexec is given first (a module's run: the shell's `timeout`)
         job.pkexecWords = job.argv.slice(1);
-        job.programReal = job.kind === "module" && job.pkexecWords[0] === CommandTools.timeout ? CommandTools.timeoutReal : "";
         job.announcement = PolkitRules.announcement({
             legacy: job.kind === "legacy", moduleName: job.handle?.name ?? "", moduleId: job.moduleId,
             what: job.what, pkexecArgv: job.pkexecWords

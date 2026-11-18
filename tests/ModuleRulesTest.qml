@@ -164,9 +164,6 @@ TestCase {
             .concat(_probeLines("timeout", "/usr/bin/timeout", {}, archStats).slice(1));
         assertEqual(_verdictOf(two, "timeout").path, "/home/u/bin/timeout", "with \"first\": the first on PATH is judged, untrusted or not");
         assertEqual(JSON.stringify(rules.trustedPrograms(two, "timeout")), "[\"/usr/bin/timeout\"]", "with \"all\": the trusted ones, in PATH order");
-        const trustedVerdict = rules.trustedVerdicts(two, "timeout");
-        assertEqual(trustedVerdict.length + " " + trustedVerdict[0]?.path + " " + trustedVerdict[0]?.real, "1 /usr/bin/timeout /usr/bin/timeout",
-                    "… as verdicts, with the real file (what pkexec's message may name)");
         for (const hostile of [null, undefined, 5, "cand\tx\t/x", [null, 7, "cand\t__proto__\t/x", "stat\tx\t0"], ["cand\tx\t/a\u0001b"]])
             assert(typeof rules.programVerdicts(hostile, ["x", "__proto__"]) === "object", "hostile probe output " + JSON.stringify(hostile) + ": an answer, no throw");
         assertEqual(rules.programVerdicts(["cand\tx\t/a\u0001b"], ["x"]).x.path, "", "a path with a control character: not found");

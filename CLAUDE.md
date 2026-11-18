@@ -71,7 +71,7 @@ tests/run-system-selftest.sh, tests/run-all-selftest.sh   # the runners' own ver
 ```
 
 Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
-three suites open a small window, and the runner puts them in a private headless compositor
+five suites open a small window, and the runner puts them in a private headless compositor
 (nothing shows on your screen). `--log <file>`, before the names, also saves the output.
 
 Every runner takes its tools — that compositor (labwc), and for the lock test bed Hyprland

@@ -103,6 +103,18 @@ TestCase {
         return ModuleTestKit.privilegedIdle;
     }
 
+    // Whether a run's pkexec has started and printed its words (the shell's timeout, -k, 3,
+    // the limit, the command)
+    function _asking(name) {
+        return _runs[name]?.startedAt > 0 && _pkexecWords(_runs[name]).length >= 5;
+    }
+
+    // Opens the request pkexec sends for that run's command (the test kit writes pkexec's
+    // message from polkit's algorithm, not the shell's)
+    function _openOwnRequest(name) {
+        ModuleTestKit.setPolkitRequest(true, { command: _pkexecWords(_runs[name]) });
+    }
+
     function runAsync() {
         assert(Api.testMode, "test mode is on");
         _then("its programs are known and running as administrator is available",
@@ -341,11 +353,10 @@ TestCase {
         _runs = {};
         const talk = _path("talk");
         _start("asking", [talk, "sleep", "20"]);
-        _then("the asking run has started", () => _runs.asking.startedAt > 0, () => {
-            ModuleTestKit.setPolkitRequest(true);
+        _then("the asking run has started", () => _asking("asking"), () => {
+            _openOwnRequest("asking");
             _start("behind", [talk, "lines", "1", "0"]);
-            // The words the stand-in pkexec was given, as it printed them
-            const words = _runs.asking.stderr.split("\n").filter(line => line.startsWith("pkexec:")).map(line => line.slice(7));
+            const words = _pkexecWords(_runs["asking"]);
             const shown = ModuleTestKit.polkitAnnouncement;
             assert(shown !== null, "the head's request (pkexec's message names its command) is announced");
             assertEqual(shown?.module, "Privileged fixture (privileged)", "Module: the manifest's name, the id after it");
@@ -368,34 +379,38 @@ TestCase {
         _then("the asking run is answered", () => _done("asking") && _idle(), () => _foreignRequest());
     }
 
-    // --- Another program's request: neither holds nor releases the head, never announced
-    // (one open before the run started, one while it asks, one replacing the head's own) ---
+    // --- Another program's request: the agent shows one at a time, so while one is open the
+    // head's own may wait behind it: it holds the head, and is never announced ---
     function _foreignRequest() {
         _runs = {};
         const talk = _path("talk");
         const foreign = { actionId: "org.freedesktop.policykit.exec", message: "Authentication is needed to run `/usr/bin/true' as the super user" };
-        // Open before the run starts
+        // Open in front before the run starts
         ModuleTestKit.setPolkitRequest(true, foreign);
         _start("asking", [talk, "sleep", "20"]);
         _start("behind", [talk, "lines", "1", "0"]);
         let dressed = false;
-        _then("the next one has run", () => {
+        _then("3 s after the run started", () => {
             dressed = dressed || ModuleTestKit.polkitAnnouncement !== null;
-            return _done("behind");
+            return _runs.asking.startedAt > 0 && Date.now() - _runs.asking.startedAt >= 3000;
         }, () => {
-            const after = _runs.behind.firstLineAt - _runs.asking.startedAt;
-            assert(after >= 1500 && after < 4500, "a foreign request open at launch does not hold the head: released by the 2 s rule (" + after + " ms)");
+            assertEqual(_runs.behind.firstLineAt, 0, "another program's request open in front holds the head past the 2 s");
             assert(!dressed, "… and it is never shown with the run's lines");
+            _runs.asking.foreignEndedAt = Date.now();
             ModuleTestKit.setPolkitRequest(false);
+        });
+        _then("the next one has run", () => _done("behind"), () => {
+            const after = _runs.behind.firstLineAt - _runs.asking.foreignEndedAt;
+            assert(after >= 1500 && after < 4500, "that request ended: the 2 s ran again, then the head let go (" + after + " ms)");
             _cancel("asking");
         });
         _then("the first is answered", () => _done("asking") && _idle(), () => {
             _start("own", [talk, "sleep", "20"]);
             _start("third", [talk, "lines", "1", "0"]);
         });
-        _then("the run has started", () => _runs.own.startedAt > 0, () => {
-            ModuleTestKit.setPolkitRequest(true);
-            assert(ModuleTestKit.polkitAnnouncement !== null, "its own request is announced");
+        _then("the run has started", () => _asking("own"), () => {
+            _openOwnRequest("own");
+            assertEqual(ModuleTestKit.polkitAnnouncement?.authorization, "own", "its own request is announced");
             _runs.own.askedAt = Date.now();
         });
         // Held past the 2 s by its own request; then another program's in its place
@@ -406,15 +421,45 @@ TestCase {
             assertEqual(ModuleTestKit.polkitAnnouncement, null, "a foreign request in its place is not announced");
             _runs.own.replacedAt = Date.now();
         });
+        _then("3 s with the other program's request open", () => Date.now() - _runs.own.replacedAt >= 3000, () => {
+            assertEqual(_runs.third.firstLineAt, 0, "its own replaced by another program's: the head is not let go");
+            _runs.own.foreignEndedAt = Date.now();
+            ModuleTestKit.setPolkitRequest(false);
+        });
         _then("the third has run", () => _done("third"), () => {
-            assert(_runs.third.firstLineAt >= _runs.own.replacedAt, "the head's own request ended (replaced): let go");
+            assert(_runs.third.firstLineAt >= _runs.own.foreignEndedAt, "no request open any more: let go");
             // The same head asking again: announced once, the second is shown as polkit sent it
-            ModuleTestKit.setPolkitRequest(true);
+            _openOwnRequest("own");
             assertEqual(ModuleTestKit.polkitAnnouncement, null, "a request after the head's ended is not announced");
             ModuleTestKit.setPolkitRequest(false);
             _cancel("own");
         });
-        _then("the queue is idle", () => _done("own") && _idle(), () => _quietHead());
+        _then("the queue is idle", () => _done("own") && _idle(), () => _requestOutlivesHead());
+    }
+
+    // --- A request still open after its run has gone is never dressed as the next run's,
+    // though the next hands pkexec the very same words ---
+    function _requestOutlivesHead() {
+        _runs = {};
+        const talk = _path("talk");
+        _start("before", [talk, "sleep", "20"]);
+        _start("after", [talk, "sleep", "20"]);
+        _then("the first has started", () => _asking("before"), () => {
+            _openOwnRequest("before");
+            assertEqual(ModuleTestKit.polkitAnnouncement?.authorization, "before", "the first's request: announced as the first's");
+            _cancel("before");
+        });
+        _then("the second has started, the first's request still open", () => _done("before") && _asking("after"), () => {
+            assertEqual(JSON.stringify(_pkexecWords(_runs["after"])), JSON.stringify(_pkexecWords(_runs["before"])), "(the same words handed to pkexec)");
+            assertEqual(ModuleTestKit.polkitAnnouncement?.authorization, "before", "the request open is still the first's: not re-dressed as the second's");
+            _runs.after.firstsEndedAt = Date.now();
+            ModuleTestKit.setPolkitRequest(false);
+            _openOwnRequest("after");
+            assertEqual(ModuleTestKit.polkitAnnouncement?.authorization, "after", "the second's own request: the second's");
+            ModuleTestKit.setPolkitRequest(false);
+            _cancel("after");
+        });
+        _then("the queue is idle", () => _done("after") && _idle(), () => _quietHead());
     }
 
     function _quietHead() {
@@ -466,8 +511,8 @@ TestCase {
         _start("going", [talk, "sleep", "20"]);
         _start("waiting 1", [talk, "lines", "1", "0"]);
         _start("waiting 2", [talk, "lines", "1", "0"]);
-        _then("the first has started", () => _runs.going.startedAt > 0, () => {
-            ModuleTestKit.setPolkitRequest(true);
+        _then("the first has started", () => _asking("going"), () => {
+            _openOwnRequest("going");
             assert(ModuleTestKit.polkitRequestOpen && ModuleTestKit.polkitAnnouncement !== null, "its request is open, announced");
             ModuleTestKit.setSessionLocked(true);
             assert(!ModuleTestKit.polkitRequestOpen, "the session locks: the open prompt is closed");

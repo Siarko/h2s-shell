@@ -187,13 +187,34 @@ TestCase {
         assertEqual(kinds(step(asking, { type: "tick", now: 2099 })), "", "before 2 s: still held");
         stepped = step(asking, { type: "tick", now: 2100 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "2 s with no request: released, the next looked at");
-        // A request seen
-        stepped = step(asking, { type: "request", own: true, now: 500 });
-        assertEqual(rules.nextDeadline(stepped.state), 0, "a request opens: held while it is open, no deadline");
-        assertEqual(kinds(step(stepped.state, { type: "tick", now: 60000 })), "", "… a minute later still held");
-        stepped = step(stepped.state, { type: "request", own: false, now: 61000 });
-        assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "the request ended: released");
-        assertEqual(kinds(step(asking, { type: "request", own: false, now: 500 })), "", "a request ending that was never seen opening: nothing");
+        // Its own request seen
+        stepped = step(asking, { type: "request", open: true, own: true, now: 500 });
+        assertEqual(rules.nextDeadline(stepped.state), 0, "its own request opens: held while it is open, no deadline");
+        const ownOpen = stepped.state;
+        assertEqual(kinds(step(ownOpen, { type: "tick", now: 60000 })), "", "… a minute later still held");
+        stepped = step(ownOpen, { type: "request", open: false, own: false, now: 61000 });
+        assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "its request ended: released");
+        assertEqual(kinds(step(asking, { type: "request", open: false, own: false, now: 500 })) + " | " + rules.nextDeadline(asking), " | 2100",
+                    "no request ending that was never seen opening: nothing, the 2 s unchanged");
+        // Another program's request shown after its own: held until no request is open
+        stepped = step(ownOpen, { type: "request", open: true, own: false, now: 3000 });
+        assertEqual(kinds(stepped) + " | " + phases(stepped.state) + " | " + rules.nextDeadline(stepped.state), " | 1=asking 2=waiting | 0",
+                    "its own replaced by another program's: not released");
+        stepped = step(stepped.state, { type: "request", open: false, own: false, now: 9000 });
+        assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "… released when that one ends too");
+        // Another program's request in front, before its own was seen: its own may wait behind it
+        stepped = step(asking, { type: "request", open: true, own: false, now: 500 });
+        assertEqual(rules.nextDeadline(stepped.state), 100 + rules.headStrictMs, "another program's request open: the 2 s do not run, at most 2 minutes from the launch");
+        const otherInFront = stepped.state;
+        assertEqual(kinds(step(otherInFront, { type: "tick", now: 30000 })), "", "… 30 s later still held");
+        assertEqual(kinds(step(otherInFront, { type: "tick", now: 100 + rules.headStrictMs })), "check:2", "… released after 2 minutes");
+        stepped = step(otherInFront, { type: "request", open: false, own: false, now: 30000 });
+        assertEqual(kinds(stepped) + " | " + rules.nextDeadline(stepped.state), " | 32000", "that one ended: the 2 s start again");
+        assertEqual(kinds(step(stepped.state, { type: "tick", now: 32000 })), "check:2", "… and release the head when they pass");
+        stepped = step(step(otherInFront, { type: "request", open: true, own: true, now: 40000 }).state, { type: "tick", now: 200000 });
+        assertEqual(kinds(stepped), "", "its own after it: held while it is open, no limit");
+        assertEqual(rules.nextDeadline(step(otherInFront, { type: "request", open: false, own: false, now: 119000 }).state), 100 + rules.headStrictMs,
+                    "… the 2 s after another's end never pass the 2 minutes");
         // The run ends while it holds the head
         stepped = step(asking, { type: "exited", id: 1, now: 300 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "answer:1:result check:2 | 2=checking", "exited: answered, the next looked at");
@@ -202,7 +223,7 @@ TestCase {
                                  { type: "add", id: 2, owner: "m", now: 0 }).state,
                             { type: "checked", id: 1, found: true, shellAgent: false, now: 0 }).state;
         assertEqual(rules.nextDeadline(strict), rules.headStrictMs, "another agent: held up to 2 minutes");
-        assertEqual(kinds(step(strict, { type: "request", own: true, now: 10 })) + kinds(step(strict, { type: "tick", now: 2000 })), "",
+        assertEqual(kinds(step(strict, { type: "request", open: true, own: true, now: 10 })) + kinds(step(strict, { type: "tick", now: 2000 })), "",
                     "… requests are not looked at, 2 s mean nothing");
         assertEqual(kinds(step(strict, { type: "tick", now: rules.headStrictMs })), "check:2", "… released after 2 minutes");
         assertEqual(kinds(step(strict, { type: "exited", id: 1, now: 5000 })), "answer:1:result check:2", "… or when it ends");

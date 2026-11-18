@@ -29,7 +29,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   shell's trusted setuid pkexec, never one found first on `PATH`. Every command runner
   reads a command once: what is checked is what runs. In test mode only the module's
   `<testPrograms>/pkexec` is used; `ModuleTestKit` gains `setPolkitAgent`,
-  `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`.
+  `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`, and for the prompt's lines
+  `setPolkitRequest(true, { command })` (pkexec's request for those words, its message
+  written by the kit as pkexec writes it), `pkexecMessage(words)`, `polkitRequestOpen` and
+  `polkitAnnouncement`.
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,
   a test tree), never from a variable alone and never by a module, and told by the new
   read-only `Api.testMode`.
@@ -276,8 +279,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   agent runs, on when none does; notifications when no agent answers or two collide.
   Settings → System → Authentication, with a button to try the prompt.
 - The shell's password prompt says who asks and what for when a module runs something as
-  administrator: "Module" and "Authorization" under the title, and the exact command behind
-  a click on "Command". Its texts are shown as plain text. When the screen locks, an open
+  administrator: "Module" and "Authorization" under the title, and the command handed to
+  pkexec behind a click on "Command". The lines are attached when polkit's message names
+  the module's command; polkit shortens a command past 80 bytes to its two ends, so another
+  command with the same ends would get them too. Its texts are shown as plain text. When the screen locks, an open
   prompt is cancelled; click again after unlocking.
 - Settings: a System tab for this computer's settings, which apply at once in every
   profile; Authentication is its first page.
