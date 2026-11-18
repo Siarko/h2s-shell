@@ -612,8 +612,9 @@ What acts (an `IpcHandler`, a `Process`, a `Timer`, a provider) lives under the 
 A singleton finds its handle with `Api.moduleAt(Qt.resolvedUrl("."))`. Commands go through
 `CommandRunner` (below), `CommandAction` / `CommandQuery` (one after another, or a query run
 again on request; both run by a `CommandRunner`, without a time limit) and
-`PrivilegedAction` (pkexec, by an absolute path checked first —
-`notFound` otherwise; 126 dismissed, quietly; 127 refused, said once). Wake-up: `module.resumed()`;
+`module.privileged.start` (one of its programs as root, below; the older `PrivilegedAction`
+— pkexec, by an absolute path checked first, `notFound` otherwise; 126 dismissed, quietly;
+127 refused, said once — runs through the same queue). Wake-up: `module.resumed()`;
 a page or slot contribution that declares `property bool shown` does its expensive reading only
 while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
 `module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
@@ -673,8 +674,46 @@ line in the shell's log, with the path, the real file, its owner and mode.
   Nix install's store is the user's, and is judged like any other directory.
 - Arch: root's `/usr/bin`. A program in `~/.local/bin` is untrusted.
 
+**Running as administrator** (`module.privileged` on the handle; `singletons/PrivilegedRuns.qml`
+with its decisions in `singletons/PrivilegedRules.qml`): `start(argv, options)` runs one of
+the module's own programs as root through pkexec. The shell knows which module asks from
+the handle; the run says what it does in a few words (`what`, required) and how long it may
+take (`timeoutMs`, required, 1 s to 1 h). `available` is true once a trusted, setuid pkexec
+and a trusted `timeout` are found.
+- **Refused before pkexec runs**, with `blocked` saying why: `untrusted` (argv[0] is not the
+  path of one of the module's programs that is trusted, or it is a shell, `env` or another
+  program that runs one named in its arguments — only argv[0] is judged, so a trusted
+  interpreter given a script passes), `unprintable` (a word holds a control or format
+  character: a line break, a right-to-left override), `no-purpose` (`what` empty once
+  cleaned), `locked`. A program not there is `notFound` (argv[0] `""`, or not an executable
+  file when the run's turn comes); options of the wrong kind give `error`.
+- **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
+  trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
+  happens to the shell. Nothing is put around pkexec: once the command runs as root the
+  shell cannot signal it, and the kernel drops `setpriv --pdeathsig` at the exec of a setuid
+  program. So `cancel()` after the start sends TERM and stops waiting; the command itself
+  ends at its limit.
+- **One queue** for the whole shell: one password question at a time. A run holds the head
+  while its question can still come; with the shell's own prompt
+  (`Authentication.state` `active` or `conflict`) until the polkit request that opened after
+  its start has ended, or 2 s with none; with another agent, which the shell cannot see,
+  until it ends, at most 2 minutes. Then the next may start though the first still runs. A
+  run cancelled while it holds the head keeps it until its pkexec has exited, or 3 s
+  (`killAfterMs`) have passed, so its request is never shown with the next run's. A module
+  turned off: its waiting runs leave, its started ones are cancelled, nothing of it is
+  called. The session locked (`Profiles.screenLocked`): nothing starts, the waiting runs end
+  `dismissed` with `blocked: "locked"`, quietly. One log line per run started, with the
+  module's id and its `what`.
+- NixOS: pkexec is the setuid wrapper `/run/wrappers/bin/pkexec` (the store's copy is not
+  setuid); `timeout` leads into the store.
+- Arch: `/usr/bin/pkexec`, `/usr/bin/timeout`.
+
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
-  rules, and the runner against `sh -c` scripts),
+  rules, and the runner against `sh -c` scripts), `tests/PrivilegedRulesTest.qml` (the rules
+  of runs as administrator, the queue's life among them) and the fixture
+  `tests/fixtures/modules/privileged` (its suite runs its stand-ins through the queue in
+  module test mode: a stand-in pkexec that prints its arguments, streaming, cancels, the
+  head, a module turned off, the lock),
   `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
@@ -711,9 +750,12 @@ line in the shell's log, with the path, the real file, its owner and mode.
   real one. Which rule a run is under is read from the code that called it (the modules
   whose files are on its JavaScript stack: the gate only when all are older ones), and the
   gate is listed in the module's `deprecations`. `tests/run-modules.sh` puts a pkexec
-  first on `PATH` that fails the run if anything starts it. A module's suites see test mode
-  through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`, `widgetEntries`, `opened`,
-  `notified`, `clearRecords`.
+  first on `PATH` that fails the run if anything starts it. `module.privileged` takes the
+  module's `<testPrograms>/pkexec` and nothing else — without one it is not available —
+  and its runs see the test kit's polkit agent and lock, never the shell's. A module's
+  suites see test mode through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`,
+  `widgetEntries`, `opened`, `notified`, `clearRecords`, and for runs as administrator
+  `setPolkitAgent`, `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`.
 
 ### Logging
 

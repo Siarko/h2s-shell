@@ -59,6 +59,16 @@ Singleton {
         return others || unknownAgent === true ? "other" : "none";
     }
 
+    // What to tell when a privileged request of the shell's own was refused (pkexec exited
+    // 127), with the agents in `agentState` (state()): → { summary, body, noAgent }. With no
+    // agent at all the refusal may be that, and the shell offers its own prompt (noAgent)
+    function deniedNotice(agentState, what) {
+        if (agentState === "none")
+            return { summary: String(what) + " — no authentication prompt answered", noAgent: true,
+                     body: "No polkit agent is running, so programs asking for an administrator's password are refused. The shell can be the agent." };
+        return { summary: String(what) + " — not allowed", body: "The password was not given or not accepted.", noAgent: false };
+    }
+
     // ── The prompt's conversation ──
     // polkit's helper runs one fixed PAM stack, `polkit-1`, and relays its conversation:
     // a question (PAM_PROMPT_ECHO_OFF/ON → `request`, answered with `submit`), a message

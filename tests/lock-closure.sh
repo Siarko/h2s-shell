@@ -1,6 +1,7 @@
 #!/bin/sh
 # The lock screen's files and every file they build, transitively — then those of them that
-# name anything of the module system (ModuleSlot, ModuleContribution, Modules.): printed as
+# name anything of the module system (ModuleSlot, ModuleContribution, Modules., and
+# PrivilegedRuns — the modules' queue of runs as administrator, which reads Modules): printed as
 # "LOCK:<file>", nothing when clean (notes/plans/modules.md §4 item 1; ModuleRegistriesTest).
 #
 #   tests/lock-closure.sh <shell tree>
@@ -36,7 +37,7 @@ while [ -n "$queue" ]; do
     done
 done
 for file in $seen; do
-    if grep -qE 'ModuleSlot|ModuleContribution|Modules\.' "$file"; then
+    if grep -qE 'ModuleSlot|ModuleContribution|Modules\.|PrivilegedRuns' "$file"; then
         echo "LOCK:$file"
     fi
 done

@@ -85,18 +85,19 @@ Singleton {
     // For the shell's own privileged requests (the System tab): refused, and maybe because
     // no agent answered — say so, with the way out
     function reportDenied(what: string): void {
-        if (state === "none") {
-            _tellNoAgent(what + " — no authentication prompt answered");
+        const notice = PolkitRules.deniedNotice(state, what);
+        if (notice.noAgent) {
+            _tellNoAgent(notice.summary);
             return;
         }
-        Notifier.send(what + " — not allowed", { body: "The password was not given or not accepted." });
+        Notifier.send(notice.summary, { body: notice.body });
     }
 
     function _tellNoAgent(summary) {
         Notifier.send(summary, {
             // Stays until answered: a toast that slid away would leave the problem unseen
             urgency: "critical",
-            body: "No polkit agent is running, so programs asking for an administrator's password are refused. The shell can be the agent.",
+            body: PolkitRules.deniedNotice("none", "").body,
             actions: [{ id: "on", label: "Turn the shell's prompt on", onTriggered: () => root.setOn(true) }]
         });
     }

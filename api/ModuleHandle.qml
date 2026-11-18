@@ -106,6 +106,50 @@ QtObject {
         onTriggered: root._recheckNow()
     }
 
+    // ---- Running as administrator (API 1.11) ----
+    // `privileged.start(argv, options)` runs one of its programs as root through pkexec, in
+    // the shell's one queue (singletons/PrivilegedRuns.qml; Api.qml says what it does). The
+    // shell knows the module by this handle: it is not told.
+    readonly property QtObject privileged: QtObject {
+        // pkexec and a trusted `timeout` found: { available, reason, pkexec, timeout }
+        readonly property var _tools: PrivilegedRules.availability({
+            testMode: root.host?.testMode === true,
+            standIn: root.host?.testProgramVerdicts?.[root.moduleId]?.pkexec?.path ?? "",
+            pkexecKnown: PrivilegedRuns.known, pkexec: PrivilegedRuns.pkexec, pkexecReason: PrivilegedRuns.pkexecReason,
+            timeoutKnown: CommandTools.known, timeout: CommandTools.timeout
+        })
+        readonly property bool available: _tools.available
+        readonly property string unavailableReason: _tools.reason
+
+        function start(argv, options) {
+            if (root._privilegedKey === "")
+                root._privilegedKey = PrivilegedRuns.newOwnerKey();
+            const first = Array.isArray(argv) && typeof argv[0] === "string" ? argv[0] : "";
+            return PrivilegedRuns.start(root, argv, options, {
+                testMode: root.host?.testMode === true, tools: _tools, program: root._programAt(first)
+            });
+        }
+    }
+
+    // What its programs' verdicts say of a path: { declared (one of its programs is there),
+    // trusted, reason, real }
+    function _programAt(path) {
+        for (const name of _programNames) {
+            const verdict = _verdicts[name];
+            if (verdict && verdict.path !== "" && verdict.path === path)
+                return { declared: true, trusted: verdict.trusted === true, reason: String(verdict.reason ?? ""), real: String(verdict.real ?? "") };
+        }
+        return { declared: false, trusted: false, reason: "", real: "" };
+    }
+
+    // What PrivilegedRuns knows its runs by ("" until the first)
+    property string _privilegedKey: ""
+    // Turned off: its runs leave the queue, the started ones are cancelled, nothing is called
+    onActiveChanged: {
+        if (!active && _privilegedKey !== "")
+            PrivilegedRuns.ownerGone(_privilegedKey);
+    }
+
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)
     function url(relative) {
         return directory === "" ? "" : ModuleFileRules.fileUrl(directory, String(relative ?? ""));

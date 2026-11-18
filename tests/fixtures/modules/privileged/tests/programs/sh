@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stand-in named as a shell: a privileged run refuses it before anything runs
+exit 0

@@ -9,19 +9,26 @@ import qs.singletons.io as Io
 //   PrivilegedAction { id: admin }
 //   admin.run(["/run/current-system/sw/bin/tailscale", "up"], "Connecting Tailscale", result => { … })
 //
-// run(command, what, done, environment) queues `pkexec <command…>` (one at a time) and calls
-// done({ ok, code, dismissed, refused, notFound, lines, error }):
+// run(command, what, done, environment) queues `pkexec <command…>` (one at a time per object,
+// and in the shell's one queue of runs as administrator: singletons/PrivilegedRuns.qml, one
+// password question at a time) and calls done({ ok, code, dismissed, refused, notFound,
+// lines, error }):
 //   ok         it ran and exited 0
 //   notFound   (1.2) command[0] is not an absolute path to an executable regular file —
 //              checked BEFORE pkexec is asked, so a missing program never shows as "not
 //              authorised": a plain failure, notified as "<what> failed" with the reason
 //              (unless notifyFailures is false); pkexec is not run, nothing is denied
 //   dismissed  pkexec exited 126: the prompt was dismissed or the password not accepted —
-//              nothing is shown (the user chose it); put the state back
+//              nothing is shown (the user chose it); put the state back. (1.11) Also a run
+//              still waiting when the session locks, or asked for while it is locked:
+//              then with `blocked: "locked"`, and pkexec was not run
 //   refused    pkexec exited 127: not authorised, or no authentication agent answered — the
 //              shell says so once, with the way out (Authentication.reportDenied(what))
 //   otherwise  the command itself failed: notified as "<what> failed" with its error, unless
 //              notifyFailures is false (a VPN provider emits failed() instead)
+// No time limit: the command decides how long it takes. The object destroyed (its module
+// turned off): its runs leave the queue, a started one is cancelled, nothing is called.
+// Replaced by `module.privileged.start` (1.11): a time limit, `what` in the prompt, live output.
 // What cannot be told apart: a command that itself exits 126 or 127 looks exactly like pkexec's
 // own 126 / 127 (pkexec passes the command's status through). Give a command that may exit
 // with those its own wrapper, or read its output, before taking `dismissed` / `refused` as
@@ -44,7 +51,7 @@ QtObject {
     property var elevate: ["pkexec"]
     // "<what> failed" notifications for a command that ran and failed
     property bool notifyFailures: true
-    readonly property bool busy: _action.busy || _probe.busy
+    readonly property bool busy: _current !== null || _queue.length > 0 || _probe.busy
 
     function run(command, what, done, environment) {
         if (!Array.isArray(command) || command.length === 0 || command.some(part => typeof part !== "string")) {
@@ -52,49 +59,30 @@ QtObject {
             return;
         }
         const label = String(what ?? command[0]);
-        const notFound = reason => {
-            const answer = { ok: false, code: -1, dismissed: false, refused: false, notFound: true, lines: [], error: reason };
-            if (root.notifyFailures)
-                Notifier.send(label + " failed", { body: reason });
-            done?.(answer);
-        };
         const testRefused = problem => {
             console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + problem);
             if (root.notifyFailures)
                 Notifier.send(label + " failed", { body: problem });
             done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: problem });
         };
-        // Taken here, where the module's code called: whose rule this run is under
-        const rule = Modules.host.testMode ? Modules.host.testCallRule(new Error().stack) : "strict";
+        // Taken here, where the module's code called: whose rule this run is under, and whose
+        // run it is (for the log)
+        const stack = new Error().stack;
+        const rule = Modules.host.testMode ? Modules.host.testCallRule(stack) : "strict";
         const elevating = Array.isArray(elevate) ? Array.from(elevate) : elevate;
         const testProblem = ModuleRules.testElevateProblem(elevating, Modules.host.testMode, Modules.host.testStandIns, rule);
         if (testProblem !== "") {
             testRefused(testProblem);
             return;
         }
+        const request = { command: command, label: label, done: done ?? null, environment: environment ?? {}, elevating: elevating,
+                          moduleId: _moduleOf(stack) };
         if (!command[0].startsWith("/")) {
-            notFound(command[0] + " is not an absolute path (pkexec needs one)");
+            _notFound(request, command[0] + " is not an absolute path (pkexec needs one)");
             return;
         }
-        const runIt = () => {
-            // The program first: an executable regular file (no shell sees the path: it is $1)
-            _probe.run(["sh", "-c", "[ -f \"$1\" ] && [ -x \"$1\" ]", "sh", command[0]], probe => {
-                if (!probe.ok) {
-                    notFound(command[0] + " is not there, or not an executable file");
-                    return;
-                }
-                _action.run(elevating.concat(command), result => {
-                    const answer = Object.assign({}, result, { dismissed: result.code === 126, refused: result.code === 127, notFound: false });
-                    if (answer.refused)
-                        Authentication.reportDenied(label);
-                    else if (!answer.ok && !answer.dismissed && root.notifyFailures)
-                        Notifier.send(label + " failed", { body: result.error || ("Exit code " + result.code) });
-                    done?.(answer);
-                }, environment ?? {});
-            }, {});
-        };
         if (!Modules.host.testMode || rule !== "legacy") {
-            runIt();
+            _enqueue(request);
             return;
         }
         // The gate (removed by slice Z): the elevating program checked first, never the real
@@ -108,7 +96,7 @@ QtObject {
             }
             if (!root._checkedElevate.includes(elevating[0]))
                 root._checkedElevate = root._checkedElevate.concat([elevating[0]]);
-            runIt();
+            root._enqueue(request);
         }, { PATH: ModuleRules.probeToolPath });
     }
 
@@ -116,10 +104,82 @@ QtObject {
     // SLICE Z with the gate)
     property var _checkedElevate: []
 
-    property Io.CommandAction _action: Io.CommandAction {
-        refuse: function (argv) {
-            return ModuleRules.testRunProblem(argv, Modules.host.testMode, Modules.host.testStandIns.concat(root._checkedElevate));
-        }
+    // This object's runs, one at a time: the one in the shell's queue, and those after it
+    property var _queue: []
+    property var _current: null
+    property string _ownerKey: ""
+
+    // The id of the innermost module on a call's stack, for the log ("" when none is seen)
+    function _moduleOf(stack) {
+        const directory = ModuleRules.stackDirectories(stack, Modules.host.directories)[0];
+        return directory ? (Modules.host.statuses.find(status => status.directory === directory)?.id ?? "") : "";
     }
+
+    function _notFound(request, reason) {
+        if (root.notifyFailures)
+            Notifier.send(request.label + " failed", { body: reason });
+        request.done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: true, lines: [], error: reason });
+    }
+
+    function _enqueue(request) {
+        _queue = _queue.concat([request]);
+        _next();
+    }
+
+    function _next() {
+        if (_current !== null || _queue.length === 0)
+            return;
+        const request = _queue[0];
+        _queue = _queue.slice(1);
+        _current = request;
+        if (_ownerKey === "")
+            _ownerKey = PrivilegedRuns.newOwnerKey();
+        PrivilegedRuns.startLegacy({
+            owner: _ownerKey, argv: request.elevating.concat(request.command), program: request.command[0],
+            environment: request.environment, testMode: Modules.host.testMode,
+            standIns: Modules.host.testStandIns.concat(root._checkedElevate),
+            moduleId: request.moduleId, what: request.label
+        }, reply => {
+            root._current = null;
+            root._answered(request, reply);
+            Qt.callLater(root._next);
+        });
+    }
+
+    function _answered(request, reply) {
+        const label = request.label;
+        switch (reply.kind) {
+        case "notFound":
+            _notFound(request, request.command[0] + " is not there, or not an executable file");
+            return;
+        case "locked":
+            request.done?.({ ok: false, code: -1, dismissed: true, refused: false, notFound: false, blocked: "locked", lines: [], error: reply.error });
+            return;
+        case "cancelled":
+            request.done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: "cancelled" });
+            return;
+        case "refused":
+            console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + reply.error);
+            if (root.notifyFailures)
+                Notifier.send(label + " failed", { body: reply.error });
+            request.done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: reply.error });
+            return;
+        }
+        const result = reply.result ?? {};
+        const error = reply.errorText.trim() || result.error || (result.failedToStart ? "the program could not be started" : "");
+        const answer = { ok: result.ok === true, code: result.code ?? -1, lines: reply.lines, error: error,
+                         dismissed: result.code === 126, refused: result.code === 127, notFound: false };
+        if (answer.refused)
+            PrivilegedRuns.reportDenied(label);
+        else if (!answer.ok && !answer.dismissed && root.notifyFailures)
+            Notifier.send(label + " failed", { body: error || ("Exit code " + answer.code) });
+        request.done?.(answer);
+    }
+
     property Io.CommandAction _probe: Io.CommandAction {}
+
+    Component.onDestruction: {
+        if (_ownerKey !== "")
+            PrivilegedRuns.ownerGone(_ownerKey);
+    }
 }

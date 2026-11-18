@@ -5,7 +5,7 @@ import QtQuick
 import qs.singletons
 import qs.api
 
-// What a module's suites get of the shell in module test mode (module API 1.10; tests only:
+// What a module's suites get of the shell in module test mode (module API 1.10, 1.11; tests only:
 // `import qs.tests`, which a module may import in its tests alone). Under tests/run-modules.sh
 // the shell's own module host runs in test mode; this is that host, seen from a suite.
 //
@@ -20,6 +20,15 @@ import qs.api
 //                          shell's own), oldest first: [{ summary, body, appName, urgency,
 //                          actions (the labels), command (notify-send's words) }]
 //   clearRecords()         empties `opened` and `notified`
+//   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
+//   agent and lock are never looked at in test mode, these are what the runs see)
+//   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
+//                          shell's own prompt answers: the default), "conflict", "other",
+//                          "blocked", "deciding", "none"
+//   setPolkitRequest(open) the shell's prompt has a password request open, or not
+//   setSessionLocked(on)   the session is locked, or not
+//   privilegedIdle         no run as administrator waits or runs, of any module
+// All of them do nothing outside test mode.
 //
 // Not here yet, because their features are not in the API yet: anchors, the file chooser's
 // answer, Api.system and module.dataDirectory, and the shell's clock.
@@ -35,6 +44,23 @@ Singleton {
 
     function status(id) {
         return Modules.host.status(String(id ?? ""));
+    }
+
+    readonly property bool privilegedIdle: PrivilegedRuns.idle
+
+    function setPolkitAgent(state) {
+        if (Modules.host.testMode)
+            PrivilegedRuns.testAgent.state = String(state ?? "");
+    }
+
+    function setPolkitRequest(open) {
+        if (Modules.host.testMode)
+            PrivilegedRuns.testAgent.flow = open === true ? ({ actionId: "org.freedesktop.policykit.exec", message: "test" }) : null;
+    }
+
+    function setSessionLocked(on) {
+        if (Modules.host.testMode)
+            PrivilegedRuns.testLocked = on === true;
     }
 
     function clearRecords() {

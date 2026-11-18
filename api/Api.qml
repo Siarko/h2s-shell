@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.10" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.11" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -233,6 +233,81 @@ import qs.singletons.network
 //     anywhere into PrivilegedAction's `elevate` (its absolute path): it runs unless a check
 //     finds the system's pkexec or a setuid file there, and a check that fails counts as
 //     that. Listed in the module's `deprecations`; it will be removed.
+//
+// Running as administrator (1.11), on a module's handle (api/ModuleHandle.qml). The shell
+// knows which module asks from the handle the run is started on.
+//   module.privileged.available   a trusted pkexec, setuid root, and a trusted `timeout`
+//                          (coreutils) were found
+//   module.privileged.unavailableReason   why not, in a few words ("" when available)
+//   module.privileged.start(argv, options)   runs one of the module's programs as root
+//                          through pkexec → a handle { running (bool), cancel() }.
+//                          `argv[0]`: the path of one of its programs, `module.programs[name]
+//                          .path`, judged trusted. options:
+//                            what            needed: a few words saying what the run does
+//                                            ("Send a file", "Connect"), never a sentence;
+//                                            control and format characters dropped, white
+//                                            space folded, at most 200 characters
+//                            timeoutMs       needed: the run's time limit, 1000 to 3600000
+//                            onLine(line, stream), onStdout(text), onStderr(text)   as
+//                                            CommandRunner's: whole lines, as they come
+//                            notifyFailures  true: a run that ran and failed, timed out, or
+//                                            whose program was not there is notified as
+//                                            "<what> failed" under the module's name
+//                            done(result)    called once, after start() has returned —
+//                                            never while the module is off
+//                          result, frozen: { ok (exit 0), code (-1 without one), stdout,
+//                          stderr, dismissed (pkexec's 126: the prompt dismissed or the
+//                          password not accepted — nothing is shown; also a run refused for
+//                          the lock), refused (127: not authorised, or no agent answered —
+//                          the shell says so once), notFound, timedOut, cancelled, blocked,
+//                          error }. A command that itself exits 124, 126, 127 or 137 reads
+//                          as the shell's or pkexec's own (both pass its status through).
+//                          Refused before pkexec runs, nothing started:
+//                            blocked "untrusted"    argv[0] is not the absolute path of one of
+//                                            its programs, or that program is not trusted, or
+//                                            it is a shell, env, or another program that
+//                                            runs one named in its arguments. Only argv[0]
+//                                            is judged: a trusted interpreter handed a
+//                                            script passes — the prompt's command line is
+//                                            all that shows it
+//                            blocked "unprintable"  a word holds a control or format character
+//                                            (a line break, a right-to-left override): the
+//                                            command could not be shown as it is
+//                            blocked "no-purpose"   `what` empty once cleaned
+//                            blocked "locked"       the session is locked (dismissed too: the
+//                                            user clicks again once unlocked)
+//                            notFound        argv[0] is "" (the path of a program not
+//                                            found), or — checked when the run's turn comes —
+//                                            not an executable file
+//                            error           options of the wrong kind, timeoutMs missing or
+//                                            out of range, argv not a list of words, not
+//                                            available (the reason)
+//                          The words pkexec gets: `<pkexec> <timeout> -k 3 <limit> <argv…>`.
+//                          The shell's own `timeout` runs inside pkexec, as root, and ends the
+//                          command at its limit (TERM, KILL 3 s later) even when the shell is
+//                          gone. Nothing is put around pkexec: once the command runs as root
+//                          the shell cannot signal it, and the kernel drops `setpriv
+//                          --pdeathsig` at the exec of a setuid program.
+//                          cancel(): a run still waiting is answered at once; a started one
+//                          gets TERM (which ends pkexec while it asks), no output is handed
+//                          over from then, and done comes with `cancelled: true` when it has
+//                          exited or 3 s later — run as root it ends at its limit.
+//                          One queue for the whole shell: one password question at a time. A
+//                          run keeps the next waiting while its question can still come —
+//                          with the shell's own prompt until its request has ended, or 2 s
+//                          with none; with another agent until it ends, at most 2 minutes;
+//                          a cancelled one until it has exited, or 3 s. A long run does not
+//                          hold the others otherwise. The session locked: nothing starts,
+//                          the runs waiting end `dismissed`, `blocked: "locked"`. The module
+//                          turned off: its waiting runs leave, its started ones are
+//                          cancelled, nothing is called. One log line per run started, with
+//                          the module's id and `what`.
+//                          In module test mode the pkexec is the module's own
+//                          `<testPrograms>/pkexec` (pkexec named among its programs) and
+//                          nothing else: without one `available` is false. The polkit agent
+//                          and the lock are then the test kit's (ModuleTestKit).
+//   PrivilegedAction keeps working and runs through the same queue: one run at a time per
+//                          object, no time limit, no `what` the prompt can show.
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

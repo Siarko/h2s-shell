@@ -13,6 +13,21 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.11: running as administrator through the handle — `module.privileged.start(argv,
+  options)` runs one of the module's own trusted programs as root through pkexec, with
+  `what` (a few words saying what it does) and `timeoutMs` (1 s to 1 h) required, output as
+  it comes and one frozen answer (`dismissed`, `refused`, `notFound`, `timedOut`,
+  `cancelled`, `blocked`); `module.privileged.available` and `unavailableReason`. The
+  shell's own `timeout` runs inside pkexec, so the command ends at its limit even when the
+  shell cannot stop it. Refused before pkexec runs: a program that is not one of the
+  module's trusted programs, or is a shell or `env` (`untrusted`), a word with a control or
+  format character (`unprintable`), an empty `what` (`no-purpose`), the session locked
+  (`locked`). One queue for the whole shell, one password question at a time; runs waiting
+  when the session locks end dismissed; a module turned off loses its runs, quietly.
+  `PrivilegedAction` runs through the same queue (a run still waiting at a lock answers
+  `dismissed` with `blocked: "locked"`). In test mode only the module's
+  `<testPrograms>/pkexec` is used; `ModuleTestKit` gains `setPolkitAgent`,
+  `setPolkitRequest`, `setSessionLocked`, `privilegedIdle`.
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,
   a test tree), never from a variable alone and never by a module, and told by the new
   read-only `Api.testMode`.

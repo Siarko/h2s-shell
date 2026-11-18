@@ -41,6 +41,7 @@ QtObject {
     property var _toastRules: ToastRulesTest {}
     property var _wallpaperRules: WallpaperRulesTest {}
     property var _polkitRules: PolkitRulesTest {}
+    property var _privilegedRules: PrivilegedRulesTest {}
     property var _energyRules: EnergyRulesTest {}
     property var _lockRules: LockRulesTest {}
     property var _lockIoRules: LockIoRulesTest {}

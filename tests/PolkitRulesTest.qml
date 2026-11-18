@@ -34,6 +34,13 @@ TestCase {
         assertEqual(rules.state("off", false, []), "none", "no agent at all");
         assertEqual(rules.state("off", false, [], true), "other", "an agent the shell does not know: refused its registration");
 
+        // --- a refused request of the shell's own ---
+        assertEqual(JSON.stringify(rules.deniedNotice("active", "Connect")),
+                    JSON.stringify({ summary: "Connect — not allowed", body: "The password was not given or not accepted.", noAgent: false }),
+                    "refused with an agent: not allowed");
+        assert(rules.deniedNotice("none", "Connect").noAgent && rules.deniedNotice("none", "Connect").summary === "Connect — no authentication prompt answered",
+               "refused with no agent at all: said so, the shell's prompt offered");
+
         // --- the polkit-1 stack ---
         const fingerprintFirst = "# Account management.\n"
             + "account required /nix/store/x-linux-pam/lib/security/pam_unix.so # unix (order 11000)\n"

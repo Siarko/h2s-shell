@@ -1,0 +1,3 @@
+#!/bin/sh
+# Its name makes the stand-in pkexec exit 127, as for a request not authorised
+exit 0

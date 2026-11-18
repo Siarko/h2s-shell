@@ -1,0 +1,26 @@
+#!/bin/sh
+# The command the fixture's suite runs as "root":
+#   talk lines <n> <seconds>   prints "line 1" … "line <n>", <seconds> apart, then a line on stderr
+#   talk sleep <seconds>       prints "started", then sleeps (TERM ends it at once)
+#   talk hold <seconds>        prints "started", then sleeps ignoring TERM (as a process run as
+#                              root, which the shell cannot signal: only KILL ends it here)
+case "$1" in
+    lines)
+        i=1
+        while [ "$i" -le "$2" ]; do
+            echo "line $i"
+            i=$((i + 1))
+            if [ "$i" -le "$2" ]; then sleep "$3"; fi
+        done
+        echo "to stderr" >&2
+        ;;
+    sleep)
+        echo started
+        exec sleep "$2"
+        ;;
+    hold)
+        trap '' TERM
+        echo started
+        sleep "$2"
+        ;;
+esac
