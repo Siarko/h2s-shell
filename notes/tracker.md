@@ -20,9 +20,33 @@ the bordered buttons (second), pills in three sizes and the public button (third
 other public elements (fourth), the command runner and the module host on it (fifth) are
 on `master` (below). The elements lane is done but for a module's icon (U7a). The first
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
-fifth and sixth were reviewed and ran on both machines. Next in the commands lane: test
-mode (A3) — it waits on the owner's answer about gating the test seams (sixth batch,
-below).
+fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
+installed shell into a test tree (below). Next in the commands lane: test mode (A3), on
+the test tree's `moduleTestMode` (`plans/test-seams.md` §6).
+
+- [x] **Test seams in a test tree** ([plans/test-seams.md](plans/test-seams.md)): on
+      `master` (2026-11-18; the owner chose the test tree over the gate of
+      `architecture-cleanup.md` decision 7.5, and asked that how test runs work be well
+      documented: `docs/ARCHITECTURE.md` "Testing", `tests/lock/README.md`. Reviewed by a
+      second agent on the diff: no defect in production paths, one in `tests/test-tree.sh`,
+      fixed by the lead; `tests/run-all.sh` passes on Arch, tools from `PATH`, and on
+      NixOS, tools from nix). The production `singletons/TestSeams.qml` and
+      `scripts/seams.sh` are constants; the readers live in `tests/lock/seams/` and
+      `tests/test-tree.sh` copies them over the production ones (the lock bed builds its
+      copies through it). Also: `ModuleHost.testMode` from `TestSeams.moduleTestMode`
+      (O3), the Lockscreen child-order test (L1, `LockscreenShapeTest`), the `locktest`
+      reload IPC in the test seam file (O4). Left open:
+  - The by-hand recipe in `tests/lock/README.md` ("The test tree": a nested labwc, a
+    private runtime and config directory) was never run; the agent could not use the
+    screen. Try it once before relying on it.
+  - In a test tree module test mode is always on (a constant in the test seam file), not
+    switched by a variable.
+  - `TestSeamsShapeTest` finds code that reads a seam variable by its literal name
+    (`Quickshell.env("H2S_…")`, `$H2S_…`); a read through a computed name would pass.
+    `Lockscreen` and `VpnManager` still name the variables in log strings.
+  - O6 (the lock's `gdbus` / `systemd-inhibit` from the trusted lookup) is not built.
+  - Seen once, not this branch's code: `CommandRunnerTest` "killAfterMs after the limit
+    (499 ms)" failed in one run on Arch and passed three times alone — a timing margin.
 
 - [x] **API plan, sixth batch**: on `master` (2026-11-18; reviewed by a second agent on
       the diff, four findings in the trust verdict, all fixed by the author with a failing
@@ -32,12 +56,6 @@ below).
       `programVerdict`; `CommandTools` takes the first trusted `timeout` / `setpriv` on
       `PATH`, the fixed-directory stand-in is gone) and one reader for the test seams
       (A2b, `TestSeams`, no API change). Left open:
-  - **For the owner, before A3:** the test seams (environment variables by which the
-    tests swap programs and paths for stand-ins) are read in one place now, but still
-    count in any session, as before. `architecture-cleanup.md` decision 7.5 (count them
-    only with `H2S_TEST_BED=1` plus a marker file) was never answered; A3's rule "a stray
-    environment variable never turns test mode on" needs that gate, and adding it changes
-    the lock bed.
   - The verdict walks the path component by component (as `namei -l`), judging the
     directory that holds each link; it is stricter than the plan's wording.
   - A required program found but untrusted does not stop the module: it shows
