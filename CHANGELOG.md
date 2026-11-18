@@ -41,7 +41,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   them) are dropped; `checked` is documented as shown only on a secondary button. The
   import check reads an import on the line of the first "{" (`import qs.singletons; Item {`),
   and the import warnings and deprecations cover every QML file under a module's
-  directory (subdirectories, files only a Loader builds), not only the ones it names.
+  directory (subdirectories, files only a Loader builds), not only the ones it names —
+  up to 100 files, 8 directories deep, after every module's named files (so a slow scan
+  never fails another module); the files it left out or could not read are one warning,
+  "imports not checked in N files", and import warnings are capped at 5 per file and 50
+  per module.
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,
   a test tree), never from a variable alone and never by a module, and told by the new
   read-only `Api.testMode`.

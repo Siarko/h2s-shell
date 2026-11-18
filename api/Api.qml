@@ -351,8 +351,10 @@ import qs.singletons.network
 // its status (`deprecations`, in `modules list`); it becomes an error with the change
 // that raises the floor. The imports are read from every QML file under the module's
 // directory — in subdirectories too, and ones only a Loader builds — up to 100 files, 8
-// directories deep, hidden directories and links skipped; an import outside what modules
-// may import is a warning in the status.
+// directories deep, hidden directories, links and other file systems skipped; an import
+// outside what modules may import is a warning in the status (at most 5 per file, 50 per
+// module, the rest counted). Files the scan left out or could not read are one warning
+// ("imports not checked in N files"), never a silent "no warnings".
 Singleton {
     id: root
 

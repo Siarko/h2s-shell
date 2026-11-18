@@ -600,6 +600,16 @@ TestCase {
         assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nQtObject {}").length, 0, "an allowed file: no warning");
         assertEqual(ModuleSourceRules.importWarnings("A.qml", null).length, 0, "no text: no warning, no throw");
         assert(Array.isArray(ModuleSourceRules.importWarnings("A.qml", "import ".repeat(100000))), "a huge garbage header: no throw");
+        const repeated = ModuleSourceRules.importWarnings("A.qml", "import qs.singletons\n".repeat(3000) + "Item {}");
+        assertEqual(repeated.length, ModuleSourceRules.maxImportWarningsPerFile + 1, "a header of 3000 forbidden imports: maxImportWarningsPerFile warnings and a count");
+        assertEqual(repeated[repeated.length - 1], "… and " + (3000 - ModuleSourceRules.maxImportWarningsPerFile) + " more", "… the count of the rest");
+        assertEqual(JSON.stringify(ModuleSourceRules.cappedLines(["a", "b"], 2)), "[\"a\",\"b\"]", "cappedLines: up to the cap, as it is");
+        assertEqual(JSON.stringify(ModuleSourceRules.cappedLines(["a", "b", "c"], 1)), "[\"a\",\"… and 2 more\"]", "… past it, the first and the count");
+        const longName = "d/".repeat(500) + "A.qml";
+        const longWarning = ModuleSourceRules.importWarnings(longName, "import qs.singletons\nItem {}")[0];
+        assert(longWarning.startsWith("d/d/") && longWarning.indexOf("… imports qs.singletons") === 79 && longWarning.length < 300,
+               "a listed file's long path is cut at 80 characters in its warning: " + longWarning.slice(0, 100));
+        assert(ModuleSourceRules.importWarnings("A.qml", "import \"/" + "x".repeat(5000) + "\"\nItem {}")[0].length < 300, "… and so is a long quoted import");
         assert(!ModuleSourceRules.importAllowed({ name: "QtQuickX", directory: false }), "QtQuickX is not under QtQuick");
         assertEqual(JSON.stringify(ModuleSourceRules.importsOf("import qs.components; Item {}")), JSON.stringify([{ name: "qs.components", directory: false }]),
                     "an import on the line with the first \"{\" is read before stopping");
@@ -865,11 +875,33 @@ TestCase {
         const files = ModuleFileRules.filesToCheck(alpha, "singleton S 1.0 S.qml\n");
         assertEqual(files.map(entry => entry.file + ":" + entry.kind).join(","), "A1.qml:entry,P.qml:entry,A2.qml:entry,Page.qml:entry,Row.qml:entry,S.qml:qmldir",
                     "filesToCheck: every file named, each once, with its kind");
-        assertEqual(JSON.stringify(ModuleFileRules.listedQmlFiles("Main.qml\nsections/Row.qml\n../Out.qml\n/abs.qml\nsub//X.qml\na\tb.qml\nNotes.txt\nMain.qml\n")),
-                    JSON.stringify(["Main.qml", "sections/Row.qml"]), "listedQmlFiles: the listing's QML files inside the directory, each once");
-        assertEqual(ModuleFileRules.listedQmlFiles(Array.from({ length: 300 }, (unused, i) => "F" + i + ".qml").join("\n")).length, ModuleFileRules.maxScannedFiles,
-                    "… at most maxScannedFiles");
-        assertEqual(ModuleFileRules.listedQmlFiles(null).length, 0, "… no text: none");
+        const listed = ModuleFileRules.listing("ok", "./Main.qml\n./sections/Row.qml\n./../Out.qml\n/abs.qml\n./sub//X.qml\n./a\tb.qml\n./Main.qml\n./line\nbreak.qml\nstatus 0");
+        assertEqual(JSON.stringify(listed.files), JSON.stringify(["Main.qml", "sections/Row.qml"]), "listing: the listing's QML files inside the directory, each once");
+        assertEqual(listed.skipped + " " + listed.more + " " + listed.failed, "5 false false",
+                    "… the ones left out counted (a \"..\" part, absolute, an empty part, a control character, a name with a line break once)");
+        assertEqual(ModuleFileRules.scanWarning(listed, 0), "imports not checked in 5 files", "scanWarning: says how many files were not checked");
+        const many = ModuleFileRules.listing("ok", Array.from({ length: 103 }, (unused, i) => "./F" + i + ".qml").join("\n") + "\nstatus 0");
+        assertEqual(many.files.length + " " + many.skipped, ModuleFileRules.maxScannedFiles + " 3", "… at most maxScannedFiles, the rest counted");
+        const depthPath = levels => "./" + Array.from({ length: levels }, (unused, i) => "d" + i + "/").join("") + "F.qml";
+        const deep = ModuleFileRules.listing("ok", depthPath(ModuleFileRules.scanDepth) + "\n" + depthPath(ModuleFileRules.scanDepth + 1) + "\nstatus 0");
+        assertEqual(deep.files.length + " " + deep.skipped + " " + deep.more, "1 1 true",
+                    "… a file " + ModuleFileRules.scanDepth + " directories deep is read, one deeper counted, and more may be below it");
+        const cut = ModuleFileRules.listing("ok", Array.from({ length: ModuleFileRules.maxListedLines }, (unused, i) => "./F" + i + ".qml").join("\n"));
+        assert(cut.more && !cut.failed, "… cut at maxListedLines (no status line): more than it counted");
+        assertEqual(ModuleFileRules.scanWarning(cut, 2), "imports not checked in " + (ModuleFileRules.maxListedLines - ModuleFileRules.maxScannedFiles + 2) + " or more files",
+                    "… said so, with the files it could not read");
+        assert(ModuleFileRules.listing("ok", "./A.qml\nstatus 1").failed, "… find failing on a directory: not read whole");
+        assert(ModuleFileRules.listing("ok", "./A.qml").failed, "… no status line and not cut: not read whole");
+        assert(ModuleFileRules.listing(undefined, undefined).failed && ModuleFileRules.listing("cannot be listed", "").failed, "… no answer, or a refusal: failed");
+        assertEqual(ModuleFileRules.scanWarning(ModuleFileRules.listing(undefined, undefined), 0), "imports not checked: the file list could not be read",
+                    "scanWarning: a list that could not be read is said, never \"no warnings\"");
+        assertEqual(ModuleFileRules.scanWarning(ModuleFileRules.listing("ok", "./A.qml\nstatus 0"), 0), "", "… every file read: nothing");
+        assertEqual(ModuleFileRules.scanWarning(ModuleFileRules.listing("ok", "./A.qml\nstatus 0"), 1), "imports not checked in 1 file", "… a file it could not read");
+        assertEqual(ModuleFileRules.scanWarning(ModuleFileRules.listing("ok", "status 0"), 0), "", "… an empty module: nothing");
+        const order = ModuleFileRules.checkOrder([{ id: "A main" }, { id: "A scan 1", optional: true }, { id: "A scan 2", optional: true },
+                                                  { id: "B main" }, { id: "B scan", optional: true }, { id: "B entry" }]);
+        assertEqual(order.map(entry => entry.id).join(", "), "A main, B main, B entry, A scan 1, A scan 2, B scan",
+                    "checkOrder: every module's required files before any module's scan reads");
         assertEqual(JSON.stringify(ModuleFileRules.scanOnly(["A1.qml", "sections/Row.qml", "S.qml"], files)), JSON.stringify(["sections/Row.qml"]),
                     "scanOnly: the listed files the check does not read already");
         assertEqual(JSON.stringify(ModuleFileRules.parseFileCheck(["0\tok", "1\tis not a regular file", "junk", "2\t"])),

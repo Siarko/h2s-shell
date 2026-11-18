@@ -548,7 +548,8 @@ listed among the module's `deprecations` in `qs ipc call modules list`; an impor
 outside those, `Quickshell`, `Quickshell.Io`, `QtQuick…`, `QtQml…` and the module's own
 directory is a warning there. Every QML file under
 the module's directory is read for its imports, in subdirectories too — up to 100 files,
-8 directories deep, hidden directories and links skipped):
+8 directories deep, hidden directories, links and other file systems skipped; the files it
+left out or could not read are one warning, "imports not checked in N files"):
 
 ```qml
 // module.json: "widgets": [{ "type": "example", "name": "Example", "widget": "Widget.qml",

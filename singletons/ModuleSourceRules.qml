@@ -215,15 +215,36 @@ Singleton {
             || allowedImportPrefixes.some(prefix => entry.name === prefix || entry.name.startsWith(prefix + "."));
     }
 
-    // The warnings for one file of a module: one per import outside the allowlist. A test
-    // suite (`isTest`: listed in the manifest's tests) may also import qs.tests — the shell's
-    // TestCase, which tests/run-modules.sh provides and the running shell does not: a module's
-    // own file importing it would pass its suites and fail in the shell.
+    // How many import warnings one file gives at most, and one module (the rest are
+    // counted: cappedLines). A header of repeated imports would otherwise give thousands.
+    readonly property int maxImportWarningsPerFile: 5
+    readonly property int maxImportWarnings: 50
+
+    // A file's or an import's name in a message: at most 80 characters, cut with "…" (a
+    // listed file may have a path of thousands)
+    function nameLabel(name) {
+        const text = String(name ?? "");
+        return text.length > 80 ? text.slice(0, 79) + "…" : text;
+    }
+
+    // `lines`, at most `cap` of them: past it, the first cap and "… and <n> more"
+    function cappedLines(lines, cap) {
+        const list = lines ?? [];
+        if (list.length <= cap)
+            return list.slice();
+        return list.slice(0, cap).concat(["… and " + (list.length - cap) + " more"]);
+    }
+
+    // The warnings for one file of a module: one per import outside the allowlist, at most
+    // maxImportWarningsPerFile. A test suite (`isTest`: listed in the manifest's tests) may
+    // also import qs.tests — the shell's TestCase, which tests/run-modules.sh provides and the
+    // running shell does not: a module's own file importing it would pass its suites and fail
+    // in the shell.
     function importWarnings(file, text, isTest) {
-        return importsOf(text).filter(entry => !importAllowed(entry, file) && !(isTest === true && !entry.directory && entry.name === "qs.tests")).map(entry =>
-            file + " imports " + (entry.directory ? "\"" + entry.name + "\"" : entry.name)
+        return cappedLines(importsOf(text).filter(entry => !importAllowed(entry, file) && !(isTest === true && !entry.directory && entry.name === "qs.tests")).map(entry =>
+            nameLabel(file) + " imports " + (entry.directory ? "\"" + nameLabel(entry.name) + "\"" : nameLabel(entry.name))
             + ", outside what modules may import (" + allowedImports.concat(allowedImportPrefixes.map(prefix => prefix + "*")).join(", ")
-            + ", the module's own directory)");
+            + ", the module's own directory)"), maxImportWarningsPerFile);
     }
 
     // The deprecations for a module's files (`texts`: { file: text }): one line per
@@ -236,7 +257,7 @@ Singleton {
                 importsOf(texts[file]).some(entry => !entry.directory && entry.name === name));
             if (files.length === 0)
                 continue;
-            lines.push(ModuleRules.deprecation("import " + name + " (in " + (files.length === 1 ? files[0] : files.length + " files") + ")",
+            lines.push(ModuleRules.deprecation("import " + name + " (in " + (files.length === 1 ? nameLabel(files[0]) : files.length + " files") + ")",
                 deprecatedImports[name]));
         }
         return lines;

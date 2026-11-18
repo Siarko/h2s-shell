@@ -365,6 +365,55 @@ TestCase {
             assertEqual(_status("good")?.warnings.length, 0, "… no warnings");
             host.unload();
 
+            // The import scan: a module's many scanned files, slow to read (a stand-in head
+            // that hangs on the scan's header reads alone), must not keep another module's
+            // main from being checked; what the scan leaves out is said in the status
+            suite._made = null;
+            _sh("set -e; s=$1; header=$2; real_head=$(command -v head); "
+                + "module() { mkdir -p \"$s/$1\"; printf '{\"id\":\"%s\",\"name\":\"S\",\"version\":\"1\",\"api\":\"1.0\",\"main\":\"Main.qml\"}' \"$1\" > \"$s/$1/module.json\"; "
+                + "printf 'import QtQuick\\nQtObject {}\\n' > \"$s/$1/Main.qml\"; }; "
+                + "forbidden() { mkdir -p \"$(dirname \"$1\")\"; printf 'import QtQuick\\nimport %s\\nQtObject {}\\n' \"$2\" > \"$1\"; }; "
+                + "module scan-a; module scan-b; for n in 1 2 3; do forbidden \"$s/scan-a/sub/S$n.qml\" qs.singletons; done; "
+                + "mkdir -p \"$s/slow-bin\"; printf '#!/bin/sh\\n[ \"$2\" = %s ] && { sleep 3; exit 1; }\\nexec %s \"$@\"\\n' \"$header\" \"$real_head\" > \"$s/slow-bin/head\"; "
+                + "chmod +x \"$s/slow-bin/head\"; "
+                + "module scan-kinds; printf 'import qs.panels\\nQtObject {}\\n' > \"$s/scan-kinds/target.txt\"; ln -s target.txt \"$s/scan-kinds/Link.qml\"; "
+                + "mkfifo \"$s/scan-kinds/Fifo.qml\"; forbidden \"$s/scan-kinds/d1/d2/d3/d4/d5/d6/d7/d8/AtLimit.qml\" Quickshell.Hyprland; "
+                + "module scan-deep; forbidden \"$s/scan-deep/d1/d2/d3/d4/d5/d6/d7/d8/d9/Past.qml\" Quickshell.Hyprland; "
+                + "module scan-many; for n in $(seq 1 101); do printf 'import QtQuick\\nQtObject {}\\n' > \"$s/scan-many/F$n.qml\"; done",
+                [_scratch, String(ModuleRules.maxHeaderBytes)], code => suite._made = code);
+        });
+        _then("the scan fixtures are made", () => _made !== null, () => {
+            assertEqual(_made, 0, "made the scan fixtures");
+            host.checkEnvironment = { PATH: _scratch + "/slow-bin:" + Quickshell.env("PATH") };
+            host.checkTimeoutMs = 1500;
+            host.load([_scratch + "/scan-a", _scratch + "/scan-b"], {});
+        });
+        _then("the slow scan settles", _settled, () => {
+            const scanA = host.statuses.find(status => status.id === "scan-a");
+            const scanB = host.statuses.find(status => status.id === "scan-b");
+            assertEqual(scanB?.state + " " + scanB?.errors.length, "loaded 0",
+                        "a module after one whose scanned files hang: its main checked in time, loaded: " + scanB?.errors.join("; "));
+            assertEqual(scanA?.state, "loaded", "… the slow one loads too (its scan is no error)");
+            assert(_has(scanA?.warnings, "imports not checked in 3 files"), "… and says its imports were not checked: " + JSON.stringify(scanA?.warnings));
+            host.checkEnvironment = ({});
+            host.checkTimeoutMs = 5000;
+            host.load([_scratch + "/scan-kinds", _scratch + "/scan-deep", _scratch + "/scan-many"], {});
+        });
+        _then("the scan's limits settle", _settled, () => {
+            const kinds = host.statuses.find(status => status.id === "scan-kinds");
+            assertEqual(kinds?.state, "loaded", "scan-kinds: a FIFO and a link among its QML files, loaded (nothing hung)");
+            assert(_has(kinds?.warnings, "d8/AtLimit.qml imports Quickshell.Hyprland"),
+                   "… a file " + ModuleFileRules.scanDepth + " directories deep is scanned: " + JSON.stringify(kinds?.warnings));
+            assert(!_has(kinds?.warnings, "qs.panels"), "… a link is not followed");
+            assert(!_has(kinds?.warnings, "not checked"), "… links and FIFOs are skipped, not counted as unread");
+            const deep = host.statuses.find(status => status.id === "scan-deep");
+            assert(!_has(deep?.warnings, "Past.qml"), "scan-deep: a file deeper than that is not read");
+            assert(_has(deep?.warnings, "imports not checked in 1 or more files"), "… but counted: " + JSON.stringify(deep?.warnings));
+            const many = host.statuses.find(status => status.id === "scan-many");
+            assert(_has(many?.warnings, "imports not checked in 2 files"),
+                   "scan-many: past " + ModuleFileRules.maxScannedFiles + " files, the rest counted: " + JSON.stringify(many?.warnings));
+            host.unload();
+
             // A2: the programs a module names, looked up and judged. The fixture's bin/ is on
             // the look-up's PATH: a program there is the user's (this checkout), so untrusted
             host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };

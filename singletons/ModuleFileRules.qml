@@ -145,35 +145,96 @@ Singleton {
 
     // The import scan (importWarnings, importDeprecations) reads every QML file under the
     // module's directory, not only the ones it names: a file in a subdirectory, or one a
-    // Loader builds, imports as much as main does. At most this many files, this deep; of
-    // each, its first ModuleRules.maxHeaderBytes (all the import reader looks at).
+    // Loader builds, imports as much as main does. At most this many files, at most this many
+    // directories deep; of each, its first ModuleRules.maxHeaderBytes (all the import reader
+    // looks at). What it leaves out (more files, deeper ones, names it cannot read back) or
+    // cannot read is one warning in the module's status (scanWarning): never "nothing found".
     readonly property int maxScannedFiles: 100
     readonly property int scanDepth: 8
+    // The listing's lines at most (a line per file found, one level deeper than scanDepth
+    // too, so that deeper files are seen and counted)
+    readonly property int maxListedLines: 400
     // The key the listing's answer and text are filed under, among a check's files
     readonly property string listKey: "*.qml"
 
-    // The listing's text → the QML files it names, relative to the module's directory, the
-    // first maxScannedFiles of them. A name that is not plainly a path inside the directory
-    // (a line break or another control character in it, a ".." part, absolute) is left out.
-    function listedQmlFiles(text) {
-        if (typeof text !== "string")
-            return [];
-        const files = [];
-        for (const line of text.split("\n")) {
-            if (files.length >= maxScannedFiles)
-                break;
-            if (!line.endsWith(".qml") || line.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(line) || line.split("/").some(part => part === ".." || part === "" || part === "."))
-                continue;
-            if (!files.includes(line))
-                files.push(line);
+    // The listing's answer and text → { files, skipped, more, failed }: the QML files it
+    // names, relative to the module's directory, the first maxScannedFiles of them, each
+    // once; `skipped` the ones found and left out — past maxScannedFiles, deeper than
+    // scanDepth, a name that is not plainly a path inside the directory (a line break or
+    // another control character in it, a ".." part); `more` when more may have been left
+    // out than counted (the listing cut at maxListedLines, or a file deeper than scanDepth:
+    // the listing looks one level further only); `failed` when it was not read whole
+    // (no answer, find failing on a directory it could not read, no status line).
+    function listing(answer, text) {
+        const result = { files: [], skipped: 0, more: false, failed: false };
+        if (answer !== "ok" || typeof text !== "string") {
+            result.failed = true;
+            return result;
         }
-        return files;
+        const lines = text.split("\n");
+        const status = /^status ([0-9]+)$/.exec(lines[lines.length - 1]);
+        if (status) {
+            lines.pop();
+            result.failed = status[1] !== "0";
+        } else if (lines.length >= maxListedLines) {
+            result.more = true;
+        } else {
+            result.failed = true;
+        }
+        for (const line of lines) {
+            // find prints every name ending in .qml: a line that does not is a piece of a
+            // name with a line break in it (its last piece is counted)
+            if (!line.endsWith(".qml"))
+                continue;
+            const file = line.startsWith("./") ? line.slice(2) : "";
+            const parts = file.split("/");
+            if (file === "" || /[\x00-\x1f\x7f\\]/.test(file) || parts.some(part => part === ".." || part === "" || part === ".")) {
+                result.skipped++;
+                continue;
+            }
+            // Deeper than scanDepth: seen one level down only, so there may be more below
+            if (parts.length - 1 > scanDepth) {
+                result.skipped++;
+                result.more = true;
+                continue;
+            }
+            if (result.files.includes(file))
+                continue;
+            if (result.files.length >= maxScannedFiles) {
+                result.skipped++;
+                continue;
+            }
+            result.files.push(file);
+        }
+        return result;
+    }
+
+    // The status warning for an incomplete import scan: "" when every QML file was read.
+    // `unread`: how many of the listed files the check did not read (gone, not a regular file
+    // any more, a name not valid UTF-8, out of time).
+    function scanWarning(listed, unread) {
+        if (!listed || listed.failed)
+            return "imports not checked: the file list could not be read";
+        const count = (listed.skipped ?? 0) + (unread ?? 0);
+        if (count === 0 && !listed.more)
+            return "";
+        return "imports not checked in " + count + (listed.more ? " or more files" : count === 1 ? " file" : " files");
     }
 
     // Of the listed files, the ones the check does not read already (`checked`: filesToCheck's)
     function scanOnly(listed, checked) {
         const named = (checked ?? []).map(entry => entry.file);
         return (listed ?? []).filter(file => !named.includes(file));
+    }
+
+    // The order of a check's triples: `asked` (each with `optional`: true for the listing and
+    // the import scan's reads) → the required ones first, every module's, then the optional
+    // ones, each group in its order. One process under one deadline reads them all, so a
+    // module's many scanned files must never push another's main past it: a timeout costs
+    // only the scan (a warning), never a module.
+    function checkOrder(asked) {
+        const list = asked ?? [];
+        return list.filter(entry => entry?.optional !== true).concat(list.filter(entry => entry?.optional === true));
     }
 
     // The files of a module the check looks at: { file, kind } — kind "main", "entry",
@@ -204,23 +265,27 @@ Singleton {
     // counts as failed. The "ok" comes after the text, so a text cut short is never whole.
     //
     // Two kinds of triple more: a cap "list" lists the module's QML files instead (the
-    // file is ignored) — regular files only, links not followed, hidden directories
-    // skipped, at most scanDepth deep and maxScannedFiles names, each line
-    // "<index>:<path relative to the directory>", then "<index>\tok"; a cap "h<n>" reads the
-    // first n bytes of a file of any size (the import scan needs only its header).
-    readonly property string fileCheckScript: "i=0; "
+    // file is ignored) — regular files only, links not followed, hidden directories skipped,
+    // not into another file system (-xdev), one level deeper than scanDepth, at most
+    // maxListedLines — each line "<index>:./<path relative to the directory>", then
+    // "<index>:status <find's exit status>" (not 0: a directory it could not read), then
+    // "<index>\tok"; a cap "h<n>" reads the first n bytes of a file of any size (the import
+    // scan needs only its header; no size asked). The module's real directory is resolved
+    // once for its run of triples.
+    readonly property string fileCheckScript: "i=0; last_dir=; "
         + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
         + "if [ \"$cap\" = list ]; then "
-        + "if [ -d \"$dir\" ]; then ( cd -- \"$dir\" && find . -mindepth 1 -maxdepth " + scanDepth + " -name '.*' -prune -o -type f -name '*.qml' -print ) 2>/dev/null "
-        + "| head -n " + maxScannedFiles + " | sed \"s|^\\./||; s/^/$i:/\"; printf '%s\\tok\\n' $i; "
+        + "if [ -d \"$dir\" ]; then ( cd -- \"$dir\" && find -P . -xdev -mindepth 1 -maxdepth " + (scanDepth + 2)
+        + " -name '.*' -prune -o -type f -name '*.qml' -print; echo \"status $?\" ) 2>/dev/null "
+        + "| head -n " + maxListedLines + " | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tcannot be listed\\n' $i; fi; i=$((i+1)); continue; fi; "
         + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; esac; "
-        + "real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; "
+        + "if [ \"$dir\" != \"$last_dir\" ]; then real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; last_dir=$dir; fi; "
         + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
         + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
         + "else case \"$real\" in \"$real_dir\"/*) "
         + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
-        + "else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; "
+        + "else if [ \"$whole\" = 0 ]; then size=0; else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; fi; "
         + "if [ \"$size\" -ge 0 ] && { [ \"$whole\" = 0 ] || [ \"$size\" -le \"$cap\" ]; }; then "
         + "{ head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
