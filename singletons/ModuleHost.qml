@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.singletons.io
 
 // The module host (notes/plans/modules.md): given the module directories, it reads NOTHING on
 // the GUI thread before its check — each module.json and qmldir, and then the text of every
@@ -13,6 +14,8 @@ import qs.components
 // (a process), creates each enabled, compatible module's `main` by URL inside a guard, and keeps
 // every module's status, its handle (api/ModuleHandle.qml), its facts and the merged
 // contributions as plain reactive lists. A module is "pending" until all of that has answered.
+// The four checks (the file check, the stores' directory, the start guard, the program
+// look-up) are runs of the host's one CommandRunner (singletons/io), under checkTimeoutMs.
 // Turning a module off (setEnabled, stored in Config.disabledModules) destroys its main, drops
 // its contributions and facts and turns its handle's `active` off; on again, they come back.
 //
@@ -89,11 +92,11 @@ Scope {
     property string hostError: ""
     // Counts every change of the statuses and lists
     property int generation: 0
-    readonly property bool checkingPrograms: _programCheck.running
-    readonly property bool checkingFiles: _fileCheck.running
+    readonly property bool checkingPrograms: _checkingPrograms
+    readonly property bool checkingFiles: _checkingFiles
     // load() has been called and every module has settled (none pending, no check running):
     // its facts are as known as they will get
-    readonly property bool settled: _loadCalled && !_fileCheck.running && !statuses.some(status => status.state === "pending")
+    readonly property bool settled: _loadCalled && !_checkingFiles && !statuses.some(status => status.state === "pending")
     property bool _loadCalled: false
     // The ids of the modules loaded now (their handles' `active`): set before a main is
     // created, so the main sees itself active while it is built
@@ -399,10 +402,8 @@ Scope {
     function _checkFiles() {
         // One run at a time: a load() while one runs asks again when it has answered (its
         // answer is for records that are gone, and ignored)
-        if (_fileCheck.running) {
-            _fileCheck.again = true;
+        if (_checkingFiles)
             return;
-        }
         const asked = [];
         // First every manifest not read yet (precedence needs them all); their files in the
         // next run
@@ -433,13 +434,26 @@ Scope {
                 _applyGuarded();
             return;
         }
-        _fileCheck.asked = asked;
-        _fileCheck.lines = [];
-        _fileCheck.environment = checkEnvironment ?? {};
-        _fileCheck.command = ["sh", "-c", ModuleFileRules.fileCheckScript, "sh"]
-            .concat(...asked.map(entry => [String(entry.cap), entry.record.directory, entry.file]));
-        _fileCheck.running = true;
-        _fileCheckDeadline.restart();
+        const lines = [];
+        _checkingFiles = true;
+        _check(["sh", "-c", ModuleFileRules.fileCheckScript, "sh"]
+                   .concat(...asked.map(entry => [String(entry.cap), entry.record.directory, entry.file])), {
+            environment: checkEnvironment ?? {},
+            // A line is a line of a file with its index in front: never cut below a whole file
+            maxOutputBytes: ModuleFileRules.maxFileBytes + 64,
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                root._checkingFiles = false;
+                // What it did not answer, for whatever reason, counts as failed
+                root._fileCheckDone(asked, lines);
+                // The next stage (the files of the manifests just read), or what a load()
+                // during this run asked for; nothing when nothing is left to check
+                root._checkFiles();
+            }
+        });
     }
 
     // The check answered (or ran out of time: what it did not answer counts as failed)
@@ -524,16 +538,19 @@ Scope {
     property bool _storeDirectoryMade: false
 
     function _makeStoreDirectory() {
-        if (storeDirectory === "" || _storeDirectoryMade || _storeDirectoryCheck.running)
+        if (storeDirectory === "" || _storeDirectoryMade || _makingStoreDirectory)
             return;
         _storeDirectoryKnown = false;
-        _storeDirectoryCheck.command = ["sh", "-c", "umask 077; mkdir -p -- \"$1\" && chmod 700 -- \"$1\"", "sh", storeDirectory];
-        _storeDirectoryCheck.running = true;
-        _storeDirectoryDeadline.restart();
+        _makingStoreDirectory = true;
+        _check(["sh", "-c", "umask 077; mkdir -p -- \"$1\" && chmod 700 -- \"$1\"", "sh", storeDirectory], {
+            done: result => {
+                root._makingStoreDirectory = false;
+                root._storeDirectoryAnswered(result.ok);
+            }
+        });
     }
 
     function _storeDirectoryAnswered(ok) {
-        _storeDirectoryDeadline.stop();
         if (_storeDirectoryKnown)
             return;
         _storeDirectoryKnown = true;
@@ -541,20 +558,6 @@ Scope {
         if (!ok)
             console.warn("[Modules] the modules' store directory " + storeDirectory + " could not be made private (mode 700)");
         _applyGuarded();
-    }
-
-    Process {
-        id: _storeDirectoryCheck
-        onExited: (exitCode, exitStatus) => root._storeDirectoryAnswered(exitCode === 0)
-    }
-
-    Timer {
-        id: _storeDirectoryDeadline
-        interval: root.checkTimeoutMs
-        onTriggered: {
-            _storeDirectoryCheck.running = false;
-            root._storeDirectoryAnswered(false);
-        }
     }
 
     // ---- The start guard ----
@@ -569,12 +572,21 @@ Scope {
         }
         _guardKnown = false;
         // A load() while it runs: its answer stands for this load too (counted once)
-        if (_guardCheck.running)
+        if (_checkingGuard)
             return;
-        _guardCheck.output = "";
-        _guardCheck.command = ["sh", "-c", ModuleFileRules.startGuardScript, "sh", guardFile, guardIdentity];
-        _guardCheck.running = true;
-        _guardDeadline.restart();
+        let output = "";
+        _checkingGuard = true;
+        // The shell's pid is handed over: the script's own parent is the runner's `timeout`
+        _check(["sh", "-c", ModuleFileRules.startGuardScript, "sh", guardFile, guardIdentity, String(Quickshell.processId)], {
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    output += line;
+            },
+            done: result => {
+                root._checkingGuard = false;
+                root._guardAnswered(output);
+            }
+        });
     }
 
     function _guardAnswered(output) {
@@ -797,17 +809,29 @@ Scope {
     // shell builtins); re-applies when it answers
     function _checkPrograms(names) {
         // One at a time: when it answers, _apply asks again for what is still unknown
-        if (_programCheck.running)
+        if (_checkingPrograms)
             return;
-        _programCheck.asked = names;
-        _programCheck.found = [];
-        _programCheck.timedOut = false;
-        _programCheck.command = ["sh", "-c",
+        const found = [];
+        _checkingPrograms = true;
+        _check(["sh", "-c",
             "set -f; for program; do (IFS=:; for dir in $PATH; do "
             + "if [ -f \"${dir:-.}/$program\" ] && [ -x \"${dir:-.}/$program\" ]; then printf '%s\\n' \"$program\"; break; fi; "
-            + "done); done", "sh"].concat(names);
-        _programCheck.running = true;
-        _programDeadline.restart();
+            + "done); done", "sh"].concat(names), {
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    found.push(line.trim());
+            },
+            done: result => {
+                root._checkingPrograms = false;
+                for (const program of names) {
+                    const present = found.includes(program);
+                    root._programs.set(program, present);
+                    if (!present && result.timedOut && !root._programsTimedOut.includes(program))
+                        root._programsTimedOut = root._programsTimedOut.concat([program]);
+                }
+                root._applyGuarded();
+            }
+        });
     }
 
     // The machine woke (SystemSleep, neutral: the lock screen reports it there): each active
@@ -849,98 +873,36 @@ Scope {
         }
     }
 
-    Process {
-        id: _fileCheck
-        property var asked: []
-        property var lines: []
-        property bool again: false
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _fileCheck.lines.push(line)
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            _fileCheckDeadline.stop();
-            const asked = _fileCheck.asked;
-            const lines = _fileCheck.lines;
-            _fileCheck.asked = [];
-            _fileCheck.lines = [];
-            if (asked.length > 0)
-                root._fileCheckDone(asked, lines);
-            // The next stage (the files of the manifests just read), or what a load() during
-            // this run asked for; nothing when nothing is left to check
-            _fileCheck.again = false;
-            root._checkFiles();
-        }
+    // ---- The checks' processes ----
+    //
+    // The file check, the stores' directory, the start guard and the program look-up each
+    // run one command through this runner, one at a time per check, under checkTimeoutMs:
+    // a check that takes longer is ended (TERM, KILL a second later) and answered with
+    // what it had said until then.
+    property bool _checkingFiles: false
+    property bool _checkingPrograms: false
+    property bool _checkingGuard: false
+    property bool _makingStoreDirectory: false
+
+    function _check(argv, options) {
+        const done = options.done;
+        return _runner.start(argv, Object.assign({ timeoutMs: Math.max(1, checkTimeoutMs), killAfterMs: 1000, keepOutput: false }, options, {
+            done: result => {
+                // Answered all the same, as a check that said nothing
+                if (result.error !== "")
+                    console.warn("[Modules] a check could not be run: " + result.error);
+                done(result);
+            }
+        }));
     }
 
-    Timer {
-        id: _fileCheckDeadline
-        interval: root.checkTimeoutMs
-        onTriggered: _fileCheck.running = false
-    }
-
-    Process {
-        id: _guardCheck
-        property string output: ""
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _guardCheck.output += line
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            _guardDeadline.stop();
-            root._guardAnswered(_guardCheck.output);
-        }
-    }
-
-    Timer {
-        id: _guardDeadline
-        interval: root.checkTimeoutMs
-        onTriggered: {
-            _guardCheck.running = false;
-            root._guardAnswered("");
-        }
+    CommandRunner {
+        id: _runner
     }
 
     // The shell has lived long enough: whatever kills it now is not a start-up crash loop
     Timer {
         id: _guardClear
         onTriggered: root._clearGuard()
-    }
-
-    Process {
-        id: _programCheck
-        property var asked: []
-        property var found: []
-        property bool timedOut: false
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _programCheck.found.push(line.trim())
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            _programDeadline.stop();
-            for (const program of asked) {
-                const present = found.includes(program);
-                root._programs.set(program, present);
-                if (!present && timedOut && !root._programsTimedOut.includes(program))
-                    root._programsTimedOut = root._programsTimedOut.concat([program]);
-            }
-            asked = [];
-            root._applyGuarded();
-        }
-    }
-
-    Timer {
-        id: _programDeadline
-        interval: root.checkTimeoutMs
-        onTriggered: {
-            _programCheck.timedOut = true;
-            _programCheck.running = false;
-        }
     }
 }

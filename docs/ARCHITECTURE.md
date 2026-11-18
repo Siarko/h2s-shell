@@ -511,7 +511,9 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   `shell.qml` touches before the bars. It reads no module file on the GUI thread: the
   manifests, qmldirs and file texts come out of its file check (a process, with a deadline),
   then it checks them and the required programs (a process too), creates each enabled module's `main` inside
-  a guard, keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
+  a guard (the file check, the program look-up, the start guard and the making of the
+  stores' directory each run one command through a `singletons/io/CommandRunner`, under
+  the host's `checkTimeoutMs`), keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
   exposes the statuses and the merged contributions. `qs ipc call modules list` prints them;
   `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`).
 - **The registries** read the merged lists — through `ModuleLists` (plain values the

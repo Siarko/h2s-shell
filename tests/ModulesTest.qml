@@ -315,6 +315,13 @@ TestCase {
         _then("a fresh process settles", () => _settled() && host.guard !== null, () => {
             assertEqual(host.guard?.count, 0, "a fresh process: 0");
             assert(!host.safeMode, "… no safe mode");
+            // No identity given, as in the running shell: the script finds the shell's own
+            host.guardIdentity = "";
+            host.load(_dirs(["good"]), {});
+        });
+        _then("the load under the shell's own identity settles", () => _settled() && host.guard !== null, () => {
+            assertEqual(host.guard?.identity, Quickshell.processId + ":", "no identity given: the shell's own pid (not the pid of what the check runs inside), no crash");
+            assertEqual(host.guard?.count, 0, "… a fresh process: 0");
             host.guardFile = "";
             host.unload();
 

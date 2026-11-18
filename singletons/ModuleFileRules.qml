@@ -253,13 +253,16 @@ Singleton {
     // counters tell one story: a start that lived 30 s was not a crash loop
     readonly property int guardClearMs: 30000
 
-    // The guard's shell script: arguments the file and an identity to use instead of the
-    // process's own ("" — the suites give one). Refuses anything but a plain file (a link, a
-    // FIFO: "refused <identity>"), prints "<count> <identity>", writes the same (atomically)
-    readonly property string startGuardScript: "file=$1; identity=$2; "
+    // The guard's shell script: arguments the file, an identity to use instead of the
+    // process's own ("" — the suites give one) and the shell's pid (the script's parent is
+    // not the shell where it is started inside `timeout`; not a number: the parent).
+    // Refuses anything but a plain file (a link, a FIFO: "refused <identity>"), prints
+    // "<count> <identity>", writes the same (atomically)
+    readonly property string startGuardScript: "file=$1; identity=$2; shell=$3; "
+        + "case \"$shell\" in ''|*[!0-9]*) shell=$PPID ;; esac; "
         + "if [ -z \"$identity\" ]; then "
-        + "crash=$(tr '\\000' '\\n' < /proc/$PPID/environ 2>/dev/null | sed -n 's/^__QUICKSHELL_CRASH_DUMP_PID=//p' | head -n 1 | tr -cd 0-9); "
-        + "identity=\"$PPID:$crash\"; fi; "
+        + "crash=$(tr '\\000' '\\n' < /proc/$shell/environ 2>/dev/null | sed -n 's/^__QUICKSHELL_CRASH_DUMP_PID=//p' | head -n 1 | tr -cd 0-9); "
+        + "identity=\"$shell:$crash\"; fi; "
         + "if [ -L \"$file\" ] || { [ -e \"$file\" ] && [ ! -f \"$file\" ]; }; then echo \"refused $identity\"; exit 0; fi; "
         + "stored=; old=0; if [ -f \"$file\" ]; then line=$(head -c 80 -- \"$file\" | head -n 1); stored=${line%% *}; "
         + "old=$(printf '%s' \"${line#* }\" | tr -cd 0-9 | cut -c1-4); fi; old=${old:-0}; "
