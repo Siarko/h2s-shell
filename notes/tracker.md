@@ -21,8 +21,44 @@ other public elements (fourth), the command runner and the module host on it (fi
 on `master` (below). The elements lane is done but for a module's icon (U7a). The first
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
-installed shell into a test tree (below). Module test mode (A3) and privileged start (A4)
-are on `master` (below). Next in the commands lane: the prompt says who and what for (A5).
+installed shell into a test tree (below). Module test mode (A3), privileged start (A4) and
+the prompt saying who and what for (A5) are on `master` (below). Next in the commands
+lane: the notification when the shell's prompt does not answer (A6).
+
+- [x] **API plan, A5 the prompt says who and what for**: on `master` (2026-11-18; no API
+      bump, user-visible: CHANGELOG "Unreleased"; reviewed twice by a second agent on the
+      diff — first round eight findings, second round three, all fixed by other authors
+      with cases that fail before the fix; `tests/run-all.sh` passes on Arch, tools from
+      `PATH`, and on NixOS, tools from nix; the Tailscale module's suites pass against it).
+      `PolkitRules.announcement` makes every text (Module, Authorization, Command, and the
+      summary/body A6 sends); `polkit/AuthAnnouncement.qml` in `AuthPrompt.qml`: Module and
+      Authorization lines, "Command" closed for every request, opens on a click, focus
+      stays in the password field; all prompt texts plain. `PolkitRules.announces`: the
+      text between the first and last quote mark of pkexec's message equals the head's
+      `cmdline_short` (pkexec.c: args joined by spaces, past 80 bytes 38 + " ... " + 37),
+      read in polkit's source 126–128 and all 28 translations. The decision is made once
+      per flow object. Only the head's own request holds it without bound; another
+      program's open request holds it at most 2 minutes from launch and never releases it.
+      On lock the open request is cancelled (any, not only the shell's) and the prompt is
+      not shown while locked. Left open:
+  - **To read once by hand (the owner, both machines):** pkexec's real message in the
+    shell's prompt. Everything ran on the test kit's agent; its message is built
+    independently of the code, from pkexec.c.
+  - **polkit's limit, documented:** past 80 bytes another command with the same first 38
+    and last 37 bytes (another program's too) gets the same lines. Not fixable from the
+    flow, which carries only message, action and cookie. Consistent with the trust
+    decision.
+  - Legacy `PrivilegedAction` runs with a relative program, or with pkexec options in
+    `elevate`, are not announced (shown as today).
+  - A Georgian message is never announced: polkit's `ka.po` misspells `$(cmdline_short)`.
+  - The run whose pkexec was asking at lock ends as pkexec reports it (`dismissed`), without
+    `blocked: "locked"`. The "Module" line elides the name first; an id too wide alone
+    elides in the middle.
+  - Right-to-left words are isolated (LRI/PDI) in the shown command; checked as a string,
+    not on screen. A request that opens and closes within one event-loop turn is missed.
+  - `ModuleTestKit` gained polkit seams (`setPolkitRequest` with a command or a foreign
+    `{ actionId, message }`, `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`),
+    listed in the unreleased `- 1.11:` line.
 
 - [x] **API plan, A4 privileged start**: on `master` (2026-11-18; module API 1.11; reviewed
       by a second agent on the diff, eight findings, all handled by a second author with
@@ -58,7 +94,7 @@ are on `master` (below). Next in the commands lane: the prompt says who and what
   Left open:
   - `CommandRunnerTest` fails one check about once in 20 runs, alone too, on a branch that
     did not touch it; which check is not known (also "Seen once" under the test seams).
-  - **For A5:** with the agent `active` or `conflict`, any polkit request seen while the
+  - **For A5 (done there, see A5):** with the agent `active` or `conflict`, any polkit request seen while the
     head asks counts as the head's (also a foreign one, or one open at launch) until
     `PolkitRules.announces`; a run whose pkexec has started is left to its prompt when the
     session locks (only waiting runs end `locked`); the prompt's lines. With any other agent
