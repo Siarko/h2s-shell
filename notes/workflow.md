@@ -135,3 +135,21 @@ reload keeps the old singleton.
 
 The owner uses the machines while work goes on. Before anything that shows on the screen
 or takes input, say so and wait if asked. Background tests need no notice.
+
+## Autonomous runs
+
+The owner's rules (2026-11-18) for a lead session left to work through the plan alone:
+
+- **Deploying:** fast-forward the live checkouts (core and the module repository, whose
+  `module/` is the installed module) and restart the shell after each finished, tested
+  section, only while the session is unlocked. Releases, tags and pushing stay the owner's.
+- **Decisions the plan does not cover** (behaviour, security rules, user-visible wording or
+  looks): park the slice, write the question under the tracker's "Open points", continue in
+  another lane. Points the plan leaves "for the owner's eyes" take the plan's choice and are
+  listed there too.
+- **Review:** the author, one diff-only review, fixes by an author; a second review only
+  when the first found something high. `tests/run-all.sh` on both machines before every
+  merge to `master` / `main`.
+- **Flaky tests:** a single failure in a known flaky test is rerun once alone; failing
+  twice stops the slice and goes into the tracker.
+- **Agents** run tests in the foreground and leave no monitors or background work behind.
