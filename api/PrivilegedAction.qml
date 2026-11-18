@@ -29,6 +29,10 @@ import qs.singletons.io as Io
 // is there so that this does not happen for a program that is simply missing.)
 // `environment` ({ NAME: value }) goes to pkexec's environment — but pkexec clears the
 // environment of what it runs: pass what the command needs as arguments, never a secret.
+// In module test mode (API 1.10) `elevate` must be a module's stand-in, `<testPrograms>/pkexec`
+// (its handle's `programs.pkexec.path` when it names pkexec): anything else — the default
+// "pkexec" included — is answered { ok: false, code: -1, error } and nothing runs
+// (ModuleRules.testElevateProblem), so a module's suites never meet the real pkexec.
 QtObject {
     id: root
 
@@ -50,6 +54,14 @@ QtObject {
                 Notifier.send(label + " failed", { body: reason });
             done?.(answer);
         };
+        const testProblem = ModuleRules.testElevateProblem(elevate, Modules.host.testMode, Modules.host.testStandIns);
+        if (testProblem !== "") {
+            console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + testProblem);
+            if (root.notifyFailures)
+                Notifier.send(label + " failed", { body: testProblem });
+            done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, lines: [], error: testProblem });
+            return;
+        }
         if (!command[0].startsWith("/")) {
             notFound(command[0] + " is not an absolute path (pkexec needs one)");
             return;
@@ -71,6 +83,10 @@ QtObject {
         }, {});
     }
 
-    property Io.CommandAction _action: Io.CommandAction {}
+    property Io.CommandAction _action: Io.CommandAction {
+        refuse: function (argv) {
+            return ModuleRules.testRunProblem(argv, Modules.host.testMode, Modules.host.testStandIns);
+        }
+    }
     property Io.CommandAction _probe: Io.CommandAction {}
 }

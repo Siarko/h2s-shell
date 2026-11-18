@@ -52,6 +52,9 @@ import QtQuick
 //   optionalPrograms  optional list of program names (API 1.9): looked up and judged like
 //                 the required ones (the handle's `programs`), but a missing one does not
 //                 stop the module. A name also required counts as required.
+//   testPrograms  optional directory inside the module (API 1.10): in module test mode
+//                 (tests/run-modules.sh, a test tree) every program it names is taken from
+//                 there, as a stand-in (ModuleRules.programSource); ignored otherwise.
 //   setupHints    optional list of strings: how to get the module working.
 //   tests         optional list of .qml test suites (tests/run-modules.sh runs them).
 //
@@ -96,7 +99,7 @@ Singleton {
     // ---- The manifest ----
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
-        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "setupHints", "tests"]
+        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests"]
 
     // A list field: its entries (at most maxEntries), or [] with an error when it is not a list
     function _list(raw, field, errors) {
@@ -345,7 +348,8 @@ Singleton {
     //   valid        the required fields are there and fine (the module can be considered)
     //   id, name, version, api, description, main ("" for none)
     //   widgets, settingsPages, settings, facts, slots   the entries kept, checked
-    //   programs, optionalPrograms, setupHints, tests
+    //   programs, optionalPrograms, testPrograms ("" for none, else without a trailing "/"),
+    //   setupHints, tests
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
     //   errors, warnings
@@ -354,7 +358,7 @@ Singleton {
         const result = {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [],
-            programs: [], optionalPrograms: [], setupHints: [], tests: [], unknownFields: [], raw: null,
+            programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -476,6 +480,14 @@ Singleton {
             else if (!result.programs.includes(program) && !result.optionalPrograms.includes(program))
                 result.optionalPrograms.push(program);
         });
+        const testPrograms = ModuleRules.get(raw, "testPrograms");
+        if (testPrograms !== undefined) {
+            const problem = ModuleFileRules.directoryProblem(testPrograms);
+            if (problem !== "")
+                errors.push("testPrograms " + ModuleRules.show(testPrograms) + ": " + problem + " (ignored)");
+            else
+                result.testPrograms = testPrograms.replace(/\/$/, "");
+        }
         _list(raw, "setupHints", errors).forEach((hint, index) => {
             if (typeof hint !== "string" || hint.length === 0 || hint.length > 1000)
                 errors.push("setupHints[" + index + "]: not a text of at most 1000 characters (dropped)");

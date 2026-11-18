@@ -686,6 +686,20 @@ line in the shell's log, with the path, the real file, its owner and mode.
   extend `TestCase` (`import qs.tests`, allowed in its tests only), use `qs.api` as in the
   shell and reach the module's singletons (`import ".."` from its `tests/`).
   `tests/fixtures/modules/good` is the worked example of everything above.
+- **Module test mode** (`ModuleHost.testMode`, read by modules as `Api.testMode`): set only
+  by the shell's test entry points — `tests-modules.qml` in process, a test tree through
+  `TestSeams.moduleTestMode` — never by a variable alone. A module whose manifest names
+  `testPrograms` (a directory inside the module) then gets every program it names from
+  there (`module.programs`: trusted, reason "test stand-in"; a name the directory does not
+  hold is not found, never taken from `PATH`); without test mode the field is ignored.
+  `Api.openUrl` and `Notifier.send` record the call (`Api._opened`, `Notifier.recorded`)
+  and open or send nothing. No command a module starts through the API (`CommandRunner`,
+  `CommandAction`, `CommandQuery`, `PrivilegedAction`) runs a pkexec other than a module's
+  `<testPrograms>/pkexec`, and `PrivilegedAction`'s `elevate` must be that stand-in
+  (`ModuleRules.testRunProblem`, `testElevateProblem`). `tests/run-modules.sh` puts a pkexec
+  first on `PATH` that fails the run if anything starts it. A module's suites see test mode
+  through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`, `widgetEntries`, `opened`,
+  `notified`, `clearRecords`.
 
 ### Logging
 
@@ -867,7 +881,9 @@ with the same names:
   `VpnManager`. The shell's version holds constants (what the reader gives with nothing set:
   the real directories and tools, no timings, no stand-ins, module test mode off). The test
   version, `tests/lock/seams/TestSeams.qml` with `TestSeamRules.qml` beside it, reads the
-  variables, and holds the `locktest` reload IPC and module test mode on.
+  variables, and holds the `locktest` reload IPC and module test mode on (so in the lock
+  bed the shell's notifications are recorded, not sent: "Module test mode" under
+  "Modules").
 - `scripts/seams.sh` — sourced by `scripts/lock-auth-methods.sh` and `scripts/launch.sh`.
   The shell's version sets constants; `tests/lock/seams/seams.sh` sets the same names from
   the variables.

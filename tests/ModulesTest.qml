@@ -113,7 +113,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.0 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.10 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
@@ -412,6 +412,54 @@ TestCase {
         _then("a wake looks the programs up again", () => _programsHandle.programs["h2s-fixture-later-program"]?.path !== "", () => {
             assertEqual(_programsHandle.programs["h2s-fixture-user-program"].path, "", "after a wake: what is on PATH now");
             host.unload();
+            host.programEnvironment = ({});
+
+            // Module test mode (API 1.10): a module's testPrograms are its programs in test
+            // mode only. Off, they are ignored: its required program, a stand-in only, is missing
+            host.testMode = false;
+            host.load(_dirs(["test-programs"]), {});
+        });
+        _then("test-programs settles with test mode off", () => _settled() && _status("test-programs")?.state !== "pending", () => {
+            const status = _expectState("test-programs", "missing-program");
+            assertEqual(JSON.stringify(status?.missingPrograms), "[\"h2s-fixture-standin\"]", "test mode off: testPrograms ignored, its stand-in not found");
+            assert(_has(status?.errors, "h2s-fixture-standin, which is not on PATH"), "… looked for on PATH: " + status?.errors.join("; "));
+            const programs = host.handle("test-programs").programs;
+            assert(programs.sh.path !== "" && !programs.sh.path.startsWith(fixtures) && programs.sh.reason !== "test stand-in",
+                   "… sh from PATH, judged as usual: " + JSON.stringify(programs.sh));
+            assert(!String(programs.pkexec?.path).startsWith(fixtures), "… no stand-in pkexec: " + JSON.stringify(programs.pkexec));
+            assertEqual(host.testStandIns.length, 0, "… no stand-in pkexec is allowed to run");
+            assertEqual(JSON.stringify(host.testProgramVerdicts), "{}", "… no stand-in verdicts");
+            assertEqual(host.describe().testMode, false, "describe(): testMode false");
+
+            host.testMode = true;
+            host.load(_dirs(["test-programs"]), {});
+        });
+        _then("test-programs loads in test mode", () => _settled() && _status("test-programs")?.state === "loaded", () => {
+            const directory = fixtures + "/test-programs/stand-ins";
+            const status = _status("test-programs");
+            assertEqual(status?.errors.length + " " + JSON.stringify(status?.missingPrograms), "0 []", "test mode: its required stand-in found, loaded: " + status?.errors.join("; "));
+            const handle = host.handle("test-programs");
+            const programs = handle.programs;
+            assert(handle.programsReady && Object.isFrozen(programs) && Object.isFrozen(programs.pkexec), "programsReady, frozen");
+            assertEqual(JSON.stringify(programs["h2s-fixture-standin"]),
+                        JSON.stringify({ path: directory + "/h2s-fixture-standin", trusted: true, reason: "test stand-in" }),
+                        "a program in testPrograms: its path there, trusted, \"test stand-in\"");
+            assertEqual(programs.pkexec.path + " " + programs.pkexec.trusted, directory + "/pkexec true", "… pkexec too");
+            assertEqual(JSON.stringify(programs.sh), JSON.stringify({ path: "", trusted: false, reason: "no stand-in" }),
+                        "a program testPrograms does not hold: not found — never taken from PATH");
+            assertEqual(programs["h2s-fixture-not-executable"].path, "", "a file there that is not executable: not found");
+            assertEqual(JSON.stringify(host.testStandIns), JSON.stringify([directory + "/pkexec"]), "testStandIns: its stand-in pkexec, the only one a module may start");
+            assertEqual(host.describe().testMode, true, "describe(): testMode true");
+            // A recheck in test mode looks at the stand-ins again, not at PATH
+            host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };
+            host.recheckPrograms("test-programs");
+            assert(host.checkingPrograms, "a recheck in test mode: a look is running");
+        });
+        _then("the recheck in test mode answers", () => !host.checkingPrograms, () => {
+            assertEqual(host.handle("test-programs").programs.sh.path, "", "… still not from PATH");
+            assertEqual(_status("test-programs")?.state, "loaded", "… loaded all along");
+            host.unload();
+            host.testMode = false;
             host.programEnvironment = ({});
 
             // A3: the stores' directory made private at the host's start; a store's file

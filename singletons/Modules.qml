@@ -27,7 +27,7 @@ import QtCore
 //
 // Over IPC:
 //   qs ipc call modules list                 JSON: { api, safeMode, safeModeReason, hostError,
-//                                            checkingPrograms, checkingFiles, startGuard,
+//                                            testMode, checkingPrograms, checkingFiles, startGuard,
 //                                            ignoredEntries, modules: [status…] }
 //   qs ipc call modules setEnabled <id> <on> turns a module on or off, as Settings → Modules
 //                                            will (Config.disabledModules); "" or why not
@@ -104,6 +104,8 @@ Singleton {
     Binding { target: ModuleLists; property: "factTypes"; value: _host.factTypes }
     Binding { target: ModuleLists; property: "factValues"; value: _host.factValues }
     Binding { target: ModuleLists; property: "settled"; value: _host.settled }
+    // Module test mode: notifications are recorded, never sent (Notifier.recorded)
+    Binding { target: Notifier; property: "recordOnly"; value: _host.testMode }
 
     // Entering safe mode, once: a notification says so (`modules list` says why)
     property bool _safeModeNotified: false

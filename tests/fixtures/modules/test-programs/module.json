@@ -1,0 +1,10 @@
+{
+    "id": "test-programs",
+    "name": "Test programs fixture",
+    "version": "0.1.0",
+    "api": "1.10",
+    "main": "Main.qml",
+    "requires": { "programs": ["h2s-fixture-standin"] },
+    "optionalPrograms": ["sh", "pkexec", "h2s-fixture-not-executable"],
+    "testPrograms": "stand-ins/"
+}

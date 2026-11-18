@@ -57,8 +57,13 @@ QtObject {
     // every directory passed, the directory of each link met and the real file root's and
     // writable by root alone; a root-owned, daemon-run Nix store counts as root's). A read
     // that failed is untrusted. A new object only when something in it changed.
+    // (API 1.10) In module test mode, when its manifest names testPrograms: every program is
+    // taken from that directory — { path: "<directory>/<testPrograms>/<name>", trusted: true,
+    // reason: "test stand-in" }, or path "" when it is not there — and never from PATH.
+    readonly property var _verdicts: ModuleRules.programSource(host?.testMode === true, manifest?.testPrograms) === "test"
+        ? (host?.testProgramVerdicts?.[moduleId] ?? {}) : (host?.programVerdicts ?? {})
     readonly property string _programsText: {
-        const verdicts = host?.programVerdicts ?? {};
+        const verdicts = _verdicts;
         const own = {};
         for (const name of _programNames) {
             const verdict = verdicts[name];
@@ -74,7 +79,7 @@ QtObject {
         return Object.freeze(parsed);
     }
     // Every program it names has a verdict (the module loads only once they have)
-    readonly property bool programsReady: manifest !== null && _programNames.every(name => (host?.programVerdicts ?? {})[name] !== undefined)
+    readonly property bool programsReady: manifest !== null && _programNames.every(name => _verdicts[name] !== undefined)
 
     // Looks its programs up again (installed or changed since): at most once every 2 s — a
     // call sooner is done when the 2 s are over. The verdicts stay until the new ones come.

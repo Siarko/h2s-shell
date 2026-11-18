@@ -21,8 +21,23 @@ import QtQuick
 //   onDismissed: function                         — called when dismissed without action
 // }
 // No inline reply: notify-send has no option to ask for one (libnotify 0.8.8).
+//
+// In module test mode (Modules binds `recordOnly` to ModuleHost.testMode) nothing is sent: each
+// call is recorded in `recorded` instead, and no callback ever runs — a suite must not reach
+// a real notification daemon.
 Singleton {
     id: root
+
+    // Record, never send (module test mode)
+    property bool recordOnly: false
+    // What send() was asked while recordOnly, oldest first, at most maxRecorded: frozen
+    // { summary, body, appName, urgency, actions (the labels), command (notify-send's argv) }
+    property var recorded: []
+    readonly property int maxRecorded: 200
+
+    function clearRecorded() {
+        recorded = [];
+    }
 
     // notify-send's argv for a notification (pure; tests/NotifierTest.qml). Every option
     // comes first, then "--", then the summary and the body: text from anywhere (a module, a
@@ -88,6 +103,14 @@ Singleton {
     function send(summary, opts) {
         let options = opts ?? {};
         const cmd = command(summary, options);
+        if (recordOnly) {
+            recorded = recorded.concat([Object.freeze({
+                summary: String(summary ?? ""), body: String(options.body ?? ""), appName: String(options.appName ?? "H2S Shell"),
+                urgency: String(options.urgency ?? ""), actions: Object.freeze((Array.isArray(options.actions) ? options.actions : []).map(action => String(action?.label ?? ""))),
+                command: Object.freeze(cmd)
+            })]).slice(-maxRecorded);
+            return;
+        }
         let needWait = (options.actions && options.actions.length > 0) || !!options.onDismissed;
 
         // A process of its own per notification: one shared process meant a second

@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.9" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.10" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -32,6 +32,10 @@ import qs.singletons.network
 //   Api.openUrl(url, options)  opens a link in the user's programs (xdg-open, no shell): only
 //                          http:, https:, mailto: — file: with { allowFile: true }; anything
 //                          else (no scheme, a bare path, another scheme) refused, logged, false
+//                          In module test mode it opens nothing: the link is recorded
+//                          (ModuleTestKit.opened) and true returned, as for one opened
+//   Api.testMode           (1.10) true in module test mode — under tests/run-modules.sh and
+//                          in a test tree — read-only; below
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:
@@ -207,6 +211,22 @@ import qs.singletons.network
 //                          Run a program by its `path`, never by its name; hand one to
 //                          anything that runs as root only when `trusted`.
 //
+// Module test mode (1.10): set only by the shell's test entry points — tests-modules.qml
+// (tests/run-modules.sh) in process, a test tree (the lock bed's copy) by its own test seam
+// file — never by a variable alone; Api.testMode tells it. Then:
+//   - a module whose manifest names `testPrograms` (a directory inside the module) gets
+//     every program it names from there: module.programs[name] is { path:
+//     "<directory>/<testPrograms>/<name>", trusted: true, reason: "test stand-in" }, or
+//     path "" when the directory has no such executable file — never a program on PATH.
+//     Without test mode `testPrograms` is ignored;
+//   - Api.openUrl and Notifier's notifications (Api.notify, module.notify) are recorded,
+//     not opened or sent; the module's suites read them from ModuleTestKit (qs.tests);
+//   - no command a module starts (CommandRunner, CommandAction, CommandQuery,
+//     PrivilegedAction) runs a pkexec other than a module's `<testPrograms>/pkexec`: it is
+//     answered with an error and nothing runs. PrivilegedAction's `elevate` must be that
+//     stand-in. A guard against mistakes, not a sandbox: a shell handed "pkexec" as a word
+//     is not read.
+//
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any
 // release. A module that still imports it loads as before, and the import is listed in
@@ -216,6 +236,9 @@ Singleton {
     id: root
 
     readonly property string version: ModuleRules.apiVersion
+
+    // (1.10) Module test mode (above)
+    readonly property bool testMode: Modules.host.testMode
 
     readonly property ThemeTokens theme: ThemeTokens {}
 
@@ -255,6 +278,11 @@ Singleton {
             console.warn("[Modules] Api.openUrl refused " + JSON.stringify(text.slice(0, 200)) + ": " + problem);
             return false;
         }
+        // Test mode: recorded, nothing opened
+        if (testMode) {
+            _opened = _opened.concat([Object.freeze({ url: text, allowFile: options?.allowFile === true })]).slice(-200);
+            return true;
+        }
         // No time limit: where xdg-open starts the program itself it lasts as long as it
         _opener.start(["xdg-open", text], {
             timeoutMs: 0,
@@ -277,4 +305,7 @@ Singleton {
     }
 
     property Io.CommandRunner _opener: Io.CommandRunner {}
+    // What openUrl was asked in test mode, oldest first: frozen { url, allowFile } (read by
+    // tests/ModuleTestKit.qml)
+    property var _opened: []
 }

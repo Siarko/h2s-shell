@@ -15,6 +15,8 @@ import qs.singletons.io
 // not), creates each enabled, compatible module's `main` by URL inside a guard, and keeps
 // every module's status, its handle (api/ModuleHandle.qml), its facts and the merged
 // contributions as plain reactive lists. A module is "pending" until all of that has answered.
+// In module test mode (`testMode`) a module that names testPrograms has its programs looked
+// for there instead, as stand-ins, and never on PATH.
 // The four checks (the file check, the stores' directory, the start guard, the program
 // look-up) are runs of the host's one CommandRunner (singletons/io), under checkTimeoutMs.
 // Turning a module off (setEnabled, stored in Config.disabledModules) destroys its main, drops
@@ -72,9 +74,11 @@ Scope {
     // The program look-up's environment: its PATH is the one searched instead of the shell's
     // (the suites' seam: a PATH that holds stand-in programs)
     property var programEnvironment: ({})
-    // Module test mode: set by Modules from TestSeams.moduleTestMode (true only in a test
-    // tree), or by a suite that builds a host. Told in describe(); the modules' API does not
-    // show it
+    // Module test mode (ModuleRules, "Module test mode"): set by Modules from
+    // TestSeams.moduleTestMode (true only in a test tree), by tests-modules.qml, or by a
+    // suite that builds a host — before load(). A module that names testPrograms then gets
+    // its programs from there (testProgramVerdicts), never from PATH. Told in describe() and
+    // to modules as Api.testMode
     property bool testMode: false
     property bool _storeDirectoryKnown: true
 
@@ -100,11 +104,20 @@ Scope {
     // (ModuleRules.programVerdict), for every program a module names, required or optional:
     // what the handles' `programs` show. A new object only when something in it changed
     property var programVerdicts: ({})
+    // In test mode, per module that names testPrograms: { <id>: { <name>: verdict } }
+    // (ModuleRules.testProgramVerdicts) — what its handle's `programs` show instead
+    property var testProgramVerdicts: ({})
+    // In test mode, the stand-in pkexec of each module that names testPrograms
+    // (ModuleRules.testStandIns): the only pkexec a module's commands may start
+    readonly property var testStandIns: testMode
+        ? ModuleRules.testStandIns(_records.filter(record => record.shadowedBy === "" && record.manifest.valid)
+                                   .map(record => ({ directory: record.directory, testPrograms: record.manifest.testPrograms })))
+        : []
     // Set when the host itself failed: it then holds no module
     property string hostError: ""
     // Counts every change of the statuses and lists
     property int generation: 0
-    readonly property bool checkingPrograms: _checkingPrograms
+    readonly property bool checkingPrograms: _checkingPrograms || _checkingTestPrograms
     readonly property bool checkingFiles: _checkingFiles
     // load() has been called and every module has settled (none pending, no check running):
     // its facts are as known as they will get
@@ -187,6 +200,8 @@ Scope {
         // since, perhaps)
         if (enabled) {
             for (const record of _records.filter(entry => entry.manifest.id === id)) {
+                if (record.testVerdicts && Object.keys(record.testVerdicts).some(name => record.testVerdicts[name].path === ""))
+                    record.testVerdicts = null;
                 for (const program of _programNames(record.manifest)) {
                     if (_programs.get(program)?.path === "") {
                         _programs.delete(program);
@@ -346,6 +361,13 @@ Scope {
         const names = record ? _programNames(record.manifest) : [];
         if (names.length === 0)
             return;
+        if (_fromStandIns(record)) {
+            // Asked during a look at the same module: looked at again after it
+            if (!_testProgramsQueue.includes(record))
+                _testProgramsQueue = _testProgramsQueue.concat([record]);
+            _checkTestPrograms([]);
+            return;
+        }
         if (_checkingPrograms) {
             _recheckNames = _recheckNames.concat(names.filter(name => !_recheckNames.includes(name)));
             return;
@@ -385,6 +407,17 @@ Scope {
         return (manifest?.programs ?? []).concat((manifest?.optionalPrograms ?? []).filter(name => !(manifest?.programs ?? []).includes(name)));
     }
 
+    // Its programs come from its testPrograms directory (test mode, and it names one)
+    function _fromStandIns(record) {
+        return ModuleRules.programSource(testMode, record?.manifest?.testPrograms) === "test";
+    }
+
+    // A program's verdict for a module: from its stand-ins or from the PATH look-up
+    // (undefined: not known yet)
+    function _verdictFor(record, program) {
+        return _fromStandIns(record) ? record.testVerdicts?.[program] : _programs.get(program);
+    }
+
     // A module not read yet: pending until the file check hands over its module.json
     function _newRecord(directory) {
         return {
@@ -392,7 +425,9 @@ Scope {
             compatible: false, errors: [], warnings: [], deprecations: [],
             shadowedBy: "", qmldirText: "", filesChecked: true, mainFileError: "",
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
-            rootProperties: ({})
+            rootProperties: ({}),
+            // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
+            testVerdicts: null
         };
     }
 
@@ -662,6 +697,7 @@ Scope {
     // Brings every module to the state it should be in, then publishes
     function _apply() {
         const unknownPrograms = [];
+        const unknownStandIns = [];
         for (const record of _records) {
             const manifest = record.manifest;
             // Every one is looked up before the module loads; only a required one missing
@@ -672,8 +708,8 @@ Scope {
                 manifestRead: record.manifestRead,
                 filesChecked: record.filesChecked, mainFileError: record.mainFileError, guardKnown: _guardKnown && _storeDirectoryKnown,
                 safeMode: safeMode, settingsKnown: settingsKnown, enabled: !disabledIds.includes(manifest.id),
-                programsKnown: programs.every(program => _programs.has(program)),
-                missingPrograms: (manifest.programs ?? []).filter(program => _programs.get(program)?.path === ""),
+                programsKnown: programs.every(program => _verdictFor(record, program) !== undefined),
+                missingPrograms: (manifest.programs ?? []).filter(program => _verdictFor(record, program)?.path === ""),
                 mainError: ""
             };
             let state = ModuleMergeRules.stateOf(facts);
@@ -691,8 +727,12 @@ Scope {
                 _destroyMain(record);
                 // Off, or waiting: a later start tries the main again
                 record.mainError = "";
-                if (state === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown)
-                    unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
+                if (state === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown) {
+                    if (!_fromStandIns(record))
+                        unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
+                    else if (programs.some(program => _verdictFor(record, program) === undefined))
+                        unknownStandIns.push(record);
+                }
             }
             if (state !== "loaded" && Object.keys(record.facts).length > 0)
                 record.facts = {};
@@ -701,6 +741,8 @@ Scope {
         }
         if (unknownPrograms.length > 0)
             _checkPrograms(unknownPrograms);
+        if (unknownStandIns.length > 0)
+            _checkTestPrograms(unknownStandIns);
         _publish();
     }
 
@@ -767,8 +809,8 @@ Scope {
             if (record.state === "duplicate")
                 errors.push("the id " + record.manifest.id + " is already taken by " + record.shadowedBy);
             for (const program of record.missingPrograms ?? [])
-                errors.push("needs the program " + program + ", which is not on PATH"
-                            + (_programsTimedOut.includes(program) ? " (the look-up did not answer within " + checkTimeoutMs / 1000 + " s)" : ""));
+                errors.push(ModuleRules.missingProgramText(program, _fromStandIns(record) ? "test" : "path", record.manifest.testPrograms,
+                                                           _programsTimedOut.includes(program) ? checkTimeoutMs / 1000 : 0));
             if (record.state === "safe-mode" && safeModeReason !== "")
                 errors.push(safeModeReason);
             errors.push(...record.runtimeErrors);
@@ -804,6 +846,13 @@ Scope {
             factTypes = merged.factTypes;
         if (JSON.stringify(merged.slots) !== JSON.stringify(slots))
             slots = merged.slots;
+        const standIns = {};
+        for (const record of _records) {
+            if (record.shadowedBy === "" && record.manifest.id && record.testVerdicts && _fromStandIns(record))
+                standIns[record.manifest.id] = record.testVerdicts;
+        }
+        if (JSON.stringify(standIns) !== JSON.stringify(testProgramVerdicts))
+            testProgramVerdicts = standIns;
         _publishFacts();
         generation++;
         modulesChanged();
@@ -835,6 +884,7 @@ Scope {
         factTypes = [];
         slots = ({});
         factValues = ({});
+        testProgramVerdicts = ({});
         generation++;
         modulesChanged();
     }
@@ -906,6 +956,66 @@ Scope {
             published[program] = verdict;
         if (JSON.stringify(published) !== JSON.stringify(programVerdicts))
             programVerdicts = published;
+    }
+
+    // Test mode: each module's programs looked for in its testPrograms directory, never on
+    // PATH (ModuleRules.testProgramProbeScript, testProgramVerdicts); one module per run,
+    // one run at a time, the others when it has answered. An answer for a record that is
+    // gone (a load() since), or that test mode no longer applies to, is dropped. A name the
+    // run did not answer (it ran out of time) is "not found"
+    property bool _checkingTestPrograms: false
+    property var _testProgramsQueue: []
+    // The record whose stand-ins are being looked at (not asked for again meanwhile by _apply)
+    property var _testProgramsLooking: null
+
+    function _checkTestPrograms(records) {
+        _testProgramsQueue = _testProgramsQueue.concat(records.filter(record => !_testProgramsQueue.includes(record) && record !== _testProgramsLooking));
+        if (_checkingTestPrograms)
+            return;
+        const record = _testProgramsQueue[0];
+        _testProgramsQueue = _testProgramsQueue.slice(1);
+        if (!record)
+            return;
+        if (!_records.includes(record) || !_fromStandIns(record)) {
+            _checkTestPrograms([]);
+            return;
+        }
+        const names = _programNames(record.manifest);
+        const directory = ModuleRules.testProgramsDirectory(record.directory, record.manifest.testPrograms);
+        const lines = [];
+        _checkingTestPrograms = true;
+        _testProgramsLooking = record;
+        _check([ModuleRules.probeShell, "-c", ModuleRules.testProgramProbeScript, "sh", directory].concat(names), {
+            environment: { PATH: ModuleRules.probeToolPath },
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                root._checkingTestPrograms = false;
+                root._testProgramsLooking = null;
+                root._testProgramsAnswered(record, names, directory, lines);
+                root._applyGuarded();
+                root._checkTestPrograms([]);
+            }
+        });
+    }
+
+    function _testProgramsAnswered(record, names, directory, lines) {
+        if (!_records.includes(record) || !_fromStandIns(record))
+            return;
+        const answered = ModuleRules.testProgramVerdicts(lines, names, directory);
+        const verdicts = {};
+        for (const name of names)
+            verdicts[name] = answered[name] ?? Object.freeze({ path: "", real: "", trusted: false, reason: "the look-up gave no answer", owner: "", mode: "" });
+        // One line per change of what its stand-ins are
+        if (logStates && JSON.stringify(record.testVerdicts) !== JSON.stringify(verdicts)) {
+            const found = names.filter(name => verdicts[name].path !== "");
+            console.info("[Modules] " + record.manifest.id + ": test mode, programs from " + directory + ": "
+                         + (found.length > 0 ? found.join(", ") : "none") + (found.length < names.length
+                            ? "; no stand-in for " + names.filter(name => verdicts[name].path === "").join(", ") : ""));
+        }
+        record.testVerdicts = verdicts;
     }
 
     // The machine woke (SystemSleep, neutral: the lock screen reports it there): each active

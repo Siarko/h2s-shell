@@ -1,0 +1,3 @@
+#!/bin/sh
+# The test-programs fixture's stand-in pkexec: found, never run by the suites
+exit 127

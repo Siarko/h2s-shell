@@ -1,5 +1,6 @@
 #!/bin/sh
-# Stands in for pkexec in the fixture's suites: FAKE_PKEXEC_EXIT=126 or 127 in its
+# Stands in for pkexec in the fixture's suites (module test mode: the manifest's
+# testPrograms, so module.programs.pkexec is this file): FAKE_PKEXEC_EXIT=126 or 127 in its
 # environment exits with it (the prompt dismissed; not authorised), anything else runs the
 # command it is given
 case "${FAKE_PKEXEC_EXIT:-}" in

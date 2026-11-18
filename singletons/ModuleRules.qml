@@ -44,7 +44,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.9"
+    readonly property string apiVersion: "1.10"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -471,6 +471,98 @@ Singleton {
         if (typeof lastMs !== "number" || !isFinite(lastMs) || lastMs <= 0 || typeof nowMs !== "number" || nowMs < lastMs)
             return 0;
         return Math.max(0, lastMs + minMs - nowMs);
+    }
+
+    // What a status says of a required program that was not found: on PATH, or (test mode)
+    // in the module's stand-ins. `timedOutSeconds` > 0: the look-up did not answer in that time
+    function missingProgramText(program, source, testPrograms, timedOutSeconds) {
+        if (source === "test")
+            return "needs the program " + program + ", which has no stand-in in " + testPrograms;
+        return "needs the program " + program + ", which is not on PATH"
+            + (timedOutSeconds > 0 ? " (the look-up did not answer within " + timedOutSeconds + " s)" : "");
+    }
+
+    // ---- Module test mode (API 1.10) ----
+    //
+    // On only where the shell's test entry points set ModuleHost.testMode: tests-modules.qml
+    // in process, a test tree through TestSeams.moduleTestMode — never a variable alone. Then
+    // a module's programs come from its manifest's testPrograms, Api.openUrl and Notifier.send
+    // record the call instead of acting, and nothing a module starts reaches a pkexec that is
+    // not a module's stand-in.
+
+    readonly property string testStandInReason: "test stand-in"
+
+    // Where a module's programs come from: "test" — its testPrograms directory — in test mode
+    // when its manifest names one; else "path" (looked up on PATH and judged)
+    function programSource(testMode, testPrograms) {
+        return testMode === true && typeof testPrograms === "string" && testPrograms !== "" ? "test" : "path";
+    }
+
+    // The absolute directory of a module's stand-ins ("" without one); `directory` is the
+    // module's canonical directory
+    function testProgramsDirectory(directory, testPrograms) {
+        if (typeof directory !== "string" || !directory.startsWith("/") || typeof testPrograms !== "string" || testPrograms === "")
+            return "";
+        return directory.replace(/\/+$/, "") + "/" + testPrograms.replace(/\/+$/, "");
+    }
+
+    // The stand-in pkexec of each module given ([{ directory, testPrograms }]) that names a
+    // testPrograms directory: "<directory>/<testPrograms>/pkexec"
+    function testStandIns(modules) {
+        return (Array.isArray(modules) ? modules : [])
+            .map(entry => testProgramsDirectory(entry?.directory, entry?.testPrograms))
+            .filter(directory => directory !== "")
+            .map(directory => directory + "/pkexec");
+    }
+
+    // `/bin/sh -c testProgramProbeScript sh <stand-ins' directory> <name>…`: one line per
+    // name, "ok<TAB><name>" when the directory holds it as an executable regular file, else
+    // "no<TAB><name>"
+    readonly property string testProgramProbeScript: "dir=$1; shift; for name; do "
+        + "if [ -f \"$dir/$name\" ] && [ -x \"$dir/$name\" ]; then printf 'ok\\t%s\\n' \"$name\"; "
+        + "else printf 'no\\t%s\\n' \"$name\"; fi; done"
+
+    // The probe's lines → { <name>: frozen verdict } for each of `names` it answered, in the
+    // shape of programVerdict: there → { path: "<directory>/<name>", real: the same,
+    // trusted: true, reason: testStandInReason }; not there → path "", untrusted, "no
+    // stand-in". A stand-in is trusted because test mode only ever runs stand-ins: nothing it
+    // starts is real, nothing runs as root
+    function testProgramVerdicts(lines, names, directory) {
+        const verdicts = {};
+        const wanted = Array.isArray(names) ? names : [];
+        for (const line of Array.isArray(lines) ? lines : []) {
+            const parts = String(line).split("\t");
+            if (parts.length !== 2 || (parts[0] !== "ok" && parts[0] !== "no") || !wanted.includes(parts[1])
+                    || Object.prototype.hasOwnProperty.call(verdicts, parts[1]))
+                continue;
+            const path = parts[0] === "ok" && typeof directory === "string" && directory.startsWith("/") ? directory + "/" + parts[1] : "";
+            verdicts[parts[1]] = Object.freeze(path !== ""
+                ? { path: path, real: path, trusted: true, reason: testStandInReason, owner: "", mode: "" }
+                : { path: "", real: "", trusted: false, reason: "no stand-in", owner: "", mode: "" });
+        }
+        return verdicts;
+    }
+
+    // Of a command a module starts (its CommandRunner, CommandAction, CommandQuery,
+    // PrivilegedAction): "" when it may run, else why not. In test mode a program named
+    // pkexec runs only as one of `standIns` (testStandIns), so a module's suites never meet
+    // the real one. A guard against mistakes: a shell handed "pkexec" as a word is not read.
+    function testRunProblem(argv, testMode, standIns) {
+        if (testMode !== true || !Array.isArray(argv) || typeof argv[0] !== "string")
+            return "";
+        if (argv[0].replace(/^.*\//, "") !== "pkexec" || (Array.isArray(standIns) && standIns.includes(argv[0])))
+            return "";
+        return "test mode: pkexec is not run; a module's suites use its stand-in, <testPrograms>/pkexec";
+    }
+
+    // PrivilegedAction's elevating program in test mode: only a module's stand-in pkexec (one
+    // of `standIns`), whatever the module set — "" or why not. Off test mode: "" (as set)
+    function testElevateProblem(elevate, testMode, standIns) {
+        if (testMode !== true)
+            return "";
+        if (Array.isArray(elevate) && typeof elevate[0] === "string" && Array.isArray(standIns) && standIns.includes(elevate[0]))
+            return "";
+        return "test mode: a privileged run needs the module's stand-in pkexec (<testPrograms>/pkexec) as its elevating program";
     }
 
     // ---- Api.openUrl ----

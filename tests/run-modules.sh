@@ -22,6 +22,11 @@
 # way and only the named suites are created (the names reach tests-modules.qml as
 # H2S_TEST_MODULE_SUITES); a name is looked for in every module given.
 #
+# The suites run in module test mode (tests-modules.qml): a module's testPrograms are its
+# programs, links and notifications are recorded, not opened or sent. A pkexec is put first
+# on PATH (tests/fixtures/pkexec-on-path) that marks the run failed if anything starts it:
+# a suite must never meet the real one.
+#
 # Exit status as tests/run-unit.sh: 0 when every suite passed, 1 when a check FAILed, a
 # module did not load, a suite timed out or did not report, a TypeError / ReferenceError was
 # printed or Quickshell exited non-zero, 2 when the runner could not be set up (no module
@@ -67,7 +72,8 @@ module_list=$(IFS=:; echo "${directories[*]}")
 source "$REPO/tests/headless.sh"
 headless_setup
 headless_run "$REPO/tests-modules.qml" "$output_copy" H2S_TEST_MODULES="$module_list" \
-    H2S_TEST_MODULE_SUITES="$(IFS=:; echo "${suites[*]}")"
+    H2S_TEST_MODULE_SUITES="$(IFS=:; echo "${suites[*]}")" \
+    PATH="$REPO/tests/fixtures/pkexec-on-path:${LOCKTEST_TOOLS:+$LOCKTEST_TOOLS/bin:}$PATH"
 # A name no loaded module lists: the runner says so and creates no suite
 unknown=$(sed -n 's/^.*MODULE-SUITES-UNKNOWN: \([A-Za-z0-9_ ]*\).*$/\1/p' "$HEADLESS_LOG" | tail -n 1)
 if [ -n "$unknown" ]; then
@@ -82,4 +88,9 @@ if [ ${#suites[@]} -gt 0 ]; then
 else
     headless_verdict "Module suites" "${expected:-1}" "the modules list"
 fi
-exit $?
+verdict=$?
+if [ -e "$work/run/h2s-pkexec-on-path-ran" ]; then
+    echo "  a pkexec found on PATH was started (module test mode allows only a module's <testPrograms>/pkexec)"
+    verdict=1
+fi
+exit $verdict

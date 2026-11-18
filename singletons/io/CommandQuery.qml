@@ -43,5 +43,10 @@ QtObject {
         });
     }
 
-    property CommandRunner _runner: CommandRunner {}
+    // null, or a function (argv) → "" or why a run is refused (CommandRunner.refuse)
+    property var refuse: null
+
+    property CommandRunner _runner: CommandRunner {
+        refuse: root.refuse
+    }
 }

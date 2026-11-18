@@ -180,6 +180,63 @@ TestCase {
         assertEqual(rules.recheckMinMs, 2000, "recheck: every 2 s at most");
     }
 
+    // Module test mode (API 1.10): where programs come from, the stand-ins' verdicts, the
+    // manifest's testPrograms, and the guard that keeps a module's commands from any pkexec
+    // but a module's stand-in
+    function _testMode() {
+        const rules = ModuleRules;
+        assertEqual(rules.programSource(true, "tests/programs"), "test", "source: test mode and a testPrograms directory — the stand-ins");
+        assertEqual(rules.programSource(false, "tests/programs"), "path", "… test mode off: testPrograms ignored, PATH");
+        assertEqual(rules.programSource(true, ""), "path", "… test mode without testPrograms: PATH");
+        assertEqual(rules.programSource("true", "x") + rules.programSource(1, "x") + rules.programSource(true, null), "pathpathpath",
+                    "… only test mode that is `true`, and only a directory given");
+        assertEqual(rules.testProgramsDirectory("/m/good/", "tests/programs/"), "/m/good/tests/programs", "the stand-ins' directory");
+        assertEqual(rules.testProgramsDirectory("relative", "x") + rules.testProgramsDirectory("/m", ""), "", "… none for a relative module directory or no testPrograms");
+        assertEqual(JSON.stringify(rules.testStandIns([{ directory: "/m/a", testPrograms: "bin" }, { directory: "/m/b", testPrograms: "" }, null])),
+                    "[\"/m/a/bin/pkexec\"]", "testStandIns: one per module that names testPrograms");
+
+        const verdicts = rules.testProgramVerdicts(["ok\ttool", "no\tsh", "ok\tother", "garbage", "ok\ttool\textra", "no\ttool"], ["tool", "sh", "absent"], "/m/a/bin");
+        assertEqual(JSON.stringify(verdicts.tool), JSON.stringify({ path: "/m/a/bin/tool", real: "/m/a/bin/tool", trusted: true, reason: "test stand-in", owner: "", mode: "" }),
+                    "a stand-in there: its path, trusted, \"test stand-in\"");
+        assertEqual(verdicts.sh.path + "|" + verdicts.sh.trusted + "|" + verdicts.sh.reason, "|false|no stand-in", "one not there: not found, untrusted");
+        assert(!("other" in verdicts) && !("absent" in verdicts), "a name not asked for is dropped; one not answered has no verdict");
+        assert(Object.isFrozen(verdicts.tool), "… frozen");
+        assertEqual(rules.testProgramVerdicts(["ok\ttool"], ["tool"], "relative").tool.path, "", "a relative directory: nothing found");
+        assertEqual(JSON.stringify(rules.testProgramVerdicts(null, null, null)), "{}", "nothing given: nothing, no throw");
+
+        const standIns = ["/m/a/bin/pkexec"];
+        assertEqual(rules.testRunProblem(["pkexec", "true"], false, []), "", "runs off test mode: as asked");
+        assert(rules.testRunProblem(["pkexec", "true"], true, standIns).startsWith("test mode:"), "test mode: pkexec by name refused (whatever PATH holds)");
+        assert(rules.testRunProblem(["/usr/bin/pkexec"], true, standIns) !== "" && rules.testRunProblem(["/run/wrappers/bin/pkexec"], true, standIns) !== "",
+               "… by its system paths too");
+        assert(rules.testRunProblem(["/m/b/bin/pkexec"], true, standIns) !== "", "… and a pkexec that is not a module's stand-in");
+        assertEqual(rules.testRunProblem(["/m/a/bin/pkexec", "/bin/true"], true, standIns), "", "a module's stand-in pkexec runs");
+        assertEqual(rules.testRunProblem(["/bin/sh", "-c", "x"], true, standIns), "", "anything else runs");
+        assertEqual(rules.testRunProblem(["pkexec-helper"], true, []), "", "… a name that only starts with pkexec too");
+        assertEqual(rules.testRunProblem(null, true, standIns) + rules.testRunProblem([7], true, null), "", "not an argv: not this rule's to refuse (the runner does)");
+
+        assertEqual(rules.testElevateProblem(["pkexec"], false, []), "", "elevate off test mode: as set");
+        assert(rules.testElevateProblem(["pkexec"], true, standIns).startsWith("test mode:"), "elevate in test mode: the default refused");
+        assert(rules.testElevateProblem(["sh", "/m/a/bin/pkexec"], true, standIns) !== "", "… a stand-in handed to a shell refused: only the stand-in itself");
+        assert(rules.testElevateProblem(["/m/a/bin/pkexec"], true, []) !== "" && rules.testElevateProblem(null, true, standIns) !== "",
+               "… no stand-ins known, or no elevate: refused");
+        assertEqual(rules.testElevateProblem(["/m/a/bin/pkexec"], true, standIns), "", "… the stand-in: runs");
+
+        assertEqual(rules.missingProgramText("x", "path", "", 0), "needs the program x, which is not on PATH", "missing: on PATH");
+        assertEqual(rules.missingProgramText("x", "path", "", 5), "needs the program x, which is not on PATH (the look-up did not answer within 5 s)", "… timed out");
+        assertEqual(rules.missingProgramText("x", "test", "stand-ins", 0), "needs the program x, which has no stand-in in stand-ins", "… in test mode");
+
+        // The manifest's testPrograms
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ testPrograms: "tests/programs/" })).testPrograms, "tests/programs", "testPrograms: a directory inside, the trailing / dropped");
+        assertEqual(ModuleManifestRules.parseManifest(_manifest()).testPrograms, "", "… none: \"\"");
+        for (const bad of ["../x", "/abs", "a/../b", "", "a b", 5, ".", "a//b"]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest({ testPrograms: bad }));
+            assert(parsed.testPrograms === "" && _has(parsed.errors, "testPrograms") && parsed.valid, "testPrograms " + JSON.stringify(bad) + ": ignored, with an error; the module still valid");
+        }
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ testPrograms: "bin" })).warnings.length, 0, "… a known field, no warning");
+        assertEqual(ModuleFileRules.directoryProblem("tests/programs"), "", "directoryProblem: a plain relative directory");
+    }
+
     function _manifest(fields) {
         return JSON.stringify(Object.assign({ id: "tailscale", name: "Tailscale", version: "0.1.0", api: "1.0" }, fields ?? {}));
     }
@@ -476,6 +533,7 @@ TestCase {
                "optionalPrograms: not a list");
 
         _programTrust();
+        _testMode();
 
         // --- qmldir ---
         assertEqual(JSON.stringify(ModuleFileRules.qmldirFiles("module foo\nsingleton Ts 1.0 Ts.qml\nHelper 1.0 Helper.qml\n"

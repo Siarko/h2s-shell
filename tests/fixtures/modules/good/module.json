@@ -2,7 +2,7 @@
     "id": "good",
     "name": "Good fixture",
     "version": "1.2.3",
-    "api": "1.0",
+    "api": "1.10",
     "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
     "widgets": [
@@ -24,5 +24,7 @@
     "slots": [
         { "slot": "network.popup.sections", "component": "GoodSlot.qml" }
     ],
+    "optionalPrograms": ["pkexec"],
+    "testPrograms": "tests/programs",
     "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml"]
 }

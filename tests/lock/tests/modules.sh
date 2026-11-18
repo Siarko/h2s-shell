@@ -4,8 +4,8 @@
 # ones among them: a syntax error, a main that throws, a manifest that is not JSON, another
 # with fields missing, a wrong API, keys outside the namespace, a forbidden import, two
 # modules with one id, a missing program, a slot contribution that does not compile, a main
-# that is a link out of its module. The shell comes up, `ipc call modules list` reports each
-# fixture's state, a module's own IPC answers; the `good` fixture's widget is in the bar (a
+# that is a link out of its module, a module whose required program is only a stand-in. The
+# shell comes up, `ipc call modules list` reports each fixture's state, a module's own IPC answers; the `good` fixture's widget is in the bar (a
 # bar section of the test's config names it) and drawn, its settings page opens, and turning
 # it off over IPC (`modules setEnabled`) takes the widget and its IPC away, on again brings
 # them back — and the lock still locks and unlocks by password with all of them installed
@@ -78,6 +78,7 @@ check "the start guard: a fresh process counts 0" test "$(shell_ipc modules list
 check "… in its file, under its identity (pid, no crash)" test "$(cat "$RUN/h2s-shell-module-starts" 2> /dev/null)" = "$SHELL_PID: 0"
 check "module test mode is on in the test tree (TestSeams.moduleTestMode)" \
     test "$(shell_ipc modules list | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["testMode"])')" = True
+check "test-programs: loaded — test mode: its required program is its stand-in (testPrograms)" module_state_is test-programs loaded
 
 # The good fixture's widget in the bar (bar.left names it), drawn
 cell_rect() { shell_ipc shelltest cellRect good; }

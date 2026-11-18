@@ -13,7 +13,10 @@ import qs.tests
 // ".qml", colon-separated: tests/run-modules.sh --suite) only those suites are created; a
 // name that no module lists, all of them loaded, is printed as MODULE-SUITES-UNKNOWN and
 // nothing is created. Imports qs.tests so that Quickshell makes the
-// TestCase type available to the modules' suites (they are loaded by URL).
+// TestCase type and ModuleTestKit available to the modules' suites (they are loaded by URL).
+// The host runs in module test mode (ModuleHost.testMode, set here in process before the
+// load, never from a variable): a module's testPrograms are its programs, Api.openUrl and
+// the notifications are recorded, and no module starts a pkexec but its stand-in.
 QtObject {
     id: root
 
@@ -135,6 +138,7 @@ QtObject {
 
     Component.onCompleted: {
         const value = Quickshell.env("H2S_TEST_MODULES");
+        host.testMode = true;
         host.load(typeof value === "string" ? value : "", {});
         if (host.directories.length === 0) {
             _fail("no module directory given (H2S_TEST_MODULES; run tests/run-modules.sh <dir>…)");

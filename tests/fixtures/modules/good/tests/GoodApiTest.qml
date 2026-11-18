@@ -5,7 +5,9 @@ import ".."
 
 // The module API from a module's side (tests/run-modules.sh): only qs.api (and the shell's
 // TestCase) — its handle, its settings, facts, store, the theme, the slot table, commands
-// through the API's helpers against stand-in programs (tests/stand-in.sh, fake-pkexec.sh)
+// through the API's helpers against stand-in programs (tests/stand-in.sh, and its pkexec in
+// tests/programs — the manifest's testPrograms), and module test mode as a module's suites see
+// it (Api.testMode, its stand-ins, what openUrl and notify record: ModuleTestKit)
 TestCase {
     id: suite
     suiteName: "good: the module API"
@@ -84,11 +86,39 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.9", "Api.version");
+        assertEqual(Api.version, "1.10", "Api.version");
 
-        // --- its programs (API 1.9): it names none ---
-        assertEqual(JSON.stringify(module.programs), "{}", "programs: none named, none judged");
+        // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
+        assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
+        try {
+            Api.testMode = false;
+        } catch (error) {}
+        assert(Api.testMode, "… read-only");
+        // Its programs (API 1.9): pkexec, from its testPrograms in test mode, never from PATH
+        assertEqual(JSON.stringify(module.programs),
+                    JSON.stringify({ pkexec: { path: module.directory + "/tests/programs/pkexec", trusted: true, reason: "test stand-in" } }),
+                    "programs: pkexec is the stand-in in its testPrograms, trusted as one");
         assert(module.programsReady && Object.isFrozen(module.programs), "… ready, frozen");
+        assertEqual(ModuleTestKit.status("good")?.state, "loaded", "ModuleTestKit.status(id)");
+        assertEqual(ModuleTestKit.status("no-such-module"), null, "… null for no module");
+        assert(ModuleTestKit.widgetEntries.some(entry => entry.module === "good" && entry.type === "good"), "ModuleTestKit.widgetEntries: its widget");
+        // Links and notifications: recorded, nothing opened or sent
+        ModuleTestKit.clearRecords();
+        assert(Api.openUrl("https://example.org/a b"), "openUrl in test mode: true");
+        assert(!Api.openUrl("javascript:alert(1)"), "… a link it refuses is still refused");
+        assert(Api.openUrl("file:///tmp", { allowFile: true }), "… a file: link when allowed");
+        assertEqual(JSON.stringify(ModuleTestKit.opened),
+                    JSON.stringify([{ url: "https://example.org/a b", allowFile: false }, { url: "file:///tmp", allowFile: true }]),
+                    "ModuleTestKit.opened: what would have been opened, in order");
+        Api.notify("From the API", { body: "a body", urgency: "low" });
+        module.notify("From the handle", { actions: [{ id: "go", label: "Go", onTriggered: () => suite.fail("a recorded notification's action ran") }] });
+        const notified = ModuleTestKit.notified;
+        assertEqual(notified.map(entry => entry.summary + "|" + entry.body + "|" + entry.appName + "|" + entry.urgency).join(","),
+                    "From the API|a body|H2S Shell|low,From the handle||Good fixture|", "ModuleTestKit.notified: both, with the module's name on the handle's");
+        assertEqual(JSON.stringify(notified[1]?.actions), "[\"Go\"]", "… its actions' labels");
+        assertEqual(notified[0]?.command?.[0], "notify-send", "… and the words notify-send would have had");
+        ModuleTestKit.clearRecords();
+        assertEqual(ModuleTestKit.opened.length + ModuleTestKit.notified.length, 0, "clearRecords()");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");
@@ -167,7 +197,13 @@ TestCase {
         // --- commands, the shell's way ---
         action.run(["sh", standIn, "a b", "c"], result => suite._results.plain = result);
         action.run(["sh", standIn], result => suite._results.code = result, { STAND_IN_EXIT: "3" });
-        admin.elevate = ["sh", module.directory + "/tests/fake-pkexec.sh"];
+        // Test mode: the real pkexec is never started — not the default "pkexec", not one on
+        // PATH (tests/run-modules.sh puts one there that fails the run), not through the
+        // runner either; only its stand-in, module.programs.pkexec
+        admin.run(["/bin/sh", standIn, "as root"], "Default pkexec", result => suite._results.defaultElevate = result);
+        runner.start(["pkexec", "/bin/true"], { done: result => suite._results.runnerPkexec = result });
+        action.run(["/usr/bin/pkexec", "/bin/true"], result => suite._results.actionPkexec = result);
+        admin.elevate = [module.programs.pkexec.path];
         admin.run(["/bin/sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
         admin.run(["/bin/sh", standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
         admin.run(["/bin/sh", standIn], "Refusing", result => suite._results.refused = result, { FAKE_PKEXEC_EXIT: "127" });
@@ -186,7 +222,13 @@ TestCase {
             done: result => suite._ran = result
         });
 
-        _then("the commands answered", () => Object.keys(_results).length === 8 && _queried !== null, () => {
+        _then("the commands answered", () => Object.keys(_results).length === 11 && _queried !== null, () => {
+            assert(!_results.defaultElevate.ok && _results.defaultElevate.error.startsWith("test mode:") && !_results.defaultElevate.refused,
+                   "PrivilegedAction in test mode: the default pkexec refused, nothing run: " + JSON.stringify(_results.defaultElevate));
+            assert(!_results.runnerPkexec.ok && _results.runnerPkexec.error.startsWith("test mode:"),
+                   "CommandRunner in test mode: a pkexec on PATH refused: " + JSON.stringify(_results.runnerPkexec));
+            assert(!_results.actionPkexec.ok && _results.actionPkexec.error.startsWith("test mode:"),
+                   "CommandAction in test mode: /usr/bin/pkexec refused: " + JSON.stringify(_results.actionPkexec));
             assert(_results.plain.ok && JSON.stringify(_results.plain.lines) === "[\"a b\",\"c\"]", "CommandAction: its lines, arguments kept whole");
             assertEqual(_results.code.code, 3, "CommandAction: the exit status (environment passed)");
             assert(_results.root.ok && _results.root.lines[0] === "as root", "PrivilegedAction: run through the elevating program");
@@ -204,6 +246,16 @@ TestCase {
                         "CommandRunner: the exit status (the run's environment passed), nothing else said");
             assertEqual(_ran.stdout + "|" + _ranLines.join(), "one two\nthree|stdout:one two,stdout:three", "CommandRunner: its output, whole and line by line, arguments kept whole");
             assertEqual(runner.running, 0, "CommandRunner: no run left");
+            // Last: turned off and on as Settings → Modules does (ModuleTestKit.setEnabled)
+            assertEqual(ModuleTestKit.setEnabled("Not An Id", false), false, "ModuleTestKit.setEnabled: not a module id, refused");
+            assert(ModuleTestKit.setEnabled("good", false), "ModuleTestKit.setEnabled(good, false)");
+        });
+        _then("it is turned off", () => !module.active && ModuleTestKit.status("good")?.state === "disabled", () => {
+            assert(!ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "off: its widget is gone");
+            assert(ModuleTestKit.setEnabled("good", true), "ModuleTestKit.setEnabled(good, true)");
+        });
+        _then("it is on again", () => module.active && ModuleTestKit.status("good")?.state === "loaded", () => {
+            assert(ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "on again: its widget is back");
         });
     }
 }

@@ -51,13 +51,19 @@ QtObject {
     // Where `timeout` and `setpriv` are: { known, timeout, setpriv }
     property var tools: CommandTools
 
+    // null, or a function (argv) → "" or why the run is refused: answered like an argv
+    // that is wrong, nothing started (the module API's guard in module test mode)
+    property var refuse: null
+
     property var _jobs: []
     property var _deferred: []
     property bool _gone: false
     readonly property bool _toolsKnown: tools?.known === true
 
     function start(argv, options) {
-        const problem = CommandRules.argvProblem(argv);
+        let problem = CommandRules.argvProblem(argv);
+        if (problem === "" && typeof refuse === "function")
+            problem = String(refuse(Array.from(argv)) ?? "");
         const given = CommandRules.options(options);
         const callbacks = given.problem === "" && options ? options : {};
         const job = {

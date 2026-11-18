@@ -1,0 +1,8 @@
+#!/bin/sh
+# Put first on PATH by tests/run-modules.sh: a module's suites run in module test mode, where
+# nothing may start a pkexec found on PATH (only a module's <testPrograms>/pkexec). If this
+# runs, it leaves a mark the runner fails the run on, and stops as pkexec does when it
+# cannot authorise.
+: > "${XDG_RUNTIME_DIR:?}/h2s-pkexec-on-path-ran"
+echo "pkexec on PATH was run: module test mode must never start it" >&2
+exit 127

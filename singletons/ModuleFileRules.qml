@@ -68,6 +68,22 @@ Singleton {
         return "";
     }
 
+    // A directory of a module, as given in its manifest (testPrograms): "" when fine, else
+    // why not — as pathProblem, without the .qml, a trailing "/" allowed
+    function directoryProblem(path) {
+        if (typeof path !== "string" || path === "")
+            return "not a directory name";
+        if (path.length > 300)
+            return "too long";
+        if (path.startsWith("/"))
+            return "an absolute path";
+        if (!/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(path))
+            return "has characters a module file name may not have";
+        if (path.replace(/\/$/, "").split("/").some(part => part === ".." || part === "." || part === ""))
+            return "leaves the module's directory or is not a plain path";
+        return "";
+    }
+
     // The file:// URL of a module's file. Only what a URL cannot hold as it is is escaped,
     // so that one file always gets one spelling
     function fileUrl(directory, relative) {
