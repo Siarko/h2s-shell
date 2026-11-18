@@ -12,7 +12,7 @@ import QtQuick
 //   id            required. ^[a-z][a-z0-9_-]{0,31}$, not one of `reservedIds`. The module's
 //                 name everywhere: its settings are mod.<id>.*, its facts <id>.*, its widget
 //                 types, popups and settings pages <id> or <id>.<name>.
-//   name          required. A non-empty string (shown in Settings → Modules).
+//   name          required. A non-empty string (shown by `modules list` over IPC).
 //   version       required. The module's own version, ^[0-9A-Za-z][0-9A-Za-z.+~-]{0,63}$
 //                 (semver recommended, not enforced).
 //   api           required. The module API it is written for, "major.minor" (Api.version):

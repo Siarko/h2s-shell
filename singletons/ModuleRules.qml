@@ -117,7 +117,7 @@ Singleton {
 
     // The states a module can be in (statusOf):
     //   loaded           running: its main (if any) was created, its contributions count
-    //   disabled         turned off in Settings → Modules (Config.disabledModules)
+    //   disabled         turned off over IPC, `modules setEnabled <id> false` (Config.disabledModules)
     //   failed           its manifest is unusable, or its main could not be created
     //   incompatible     written for another module API: another major, a newer minor than
     //                    the shell's, or one below the shell's floor (apiFloor)

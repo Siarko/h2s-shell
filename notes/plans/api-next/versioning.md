@@ -39,7 +39,7 @@ authors** (the owner's decisions). Until then, what it means here:
   removes the old ways and raises the floor. `master` therefore always runs the released
   module.
 - **Old ways are listed, not warned about.** A module's status gains a list,
-  `deprecations` (`ModuleRules.statusOf`), shown by `modules list` and Settings → Modules:
+  `deprecations` (`ModuleRules.statusOf`), shown by `modules list` and Settings → Modules (planned, tracker step 8):
   "slots: use `anchors` (goes with the shell's next tightening)". `warnings` stays what it
   is: the released module's suite asserts it is empty (verified:
   `tests/TailscaleModuleTest.qml`), and a slice that added a warning would turn the gate

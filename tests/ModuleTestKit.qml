@@ -10,7 +10,7 @@ import qs.api
 // the shell's own module host runs in test mode; this is that host, seen from a suite.
 //
 //   testMode               the host is in test mode (true under tests/run-modules.sh)
-//   setEnabled(id, on)     turns a module off or on as Settings → Modules does (the runner's
+//   setEnabled(id, on)     turns a module off or on as `modules setEnabled` over IPC does (the runner's
 //                          config is never written) → true when `id` is a module id; false,
 //                          and nothing done, outside test mode
 //   status(id)             a module's status, as `modules list` has it, or null

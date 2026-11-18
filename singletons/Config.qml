@@ -33,7 +33,7 @@ Singleton {
     // Settings already copied from their old place in this file into the profiles, once
     // each (notes/plans/global-profiles.md)
     property alias migratedKeys: _adapter.migratedKeys
-    // The ids of the modules turned off in Settings → Modules (ModuleHost): a module is on
+    // The ids of the modules turned off over IPC, `modules setEnabled` (ModuleHost): a module is on
     // unless listed here. Global, not per profile: which code runs in the shell is not a
     // preference a profile switches.
     property alias disabledModules: _adapter.disabledModules

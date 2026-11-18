@@ -319,7 +319,12 @@ TestCase {
         assert(!rules.apiCompatibility("1.25", "1.27", "1.26").compatible, "one minor below the floor: not");
         assert(_has([rules.apiCompatibility("1.28", "1.27", "1.26").reason], "newer shell"), "above the shell's, with a floor: a newer shell is needed");
         assert(_has([rules.apiCompatibility("0.9", "1.27", "1.26").reason], "the shell has 1.27"), "another major, with a floor: the major's reason");
-        assertEqual(rules.apiCompatibility("1.0", "1.3", rules.apiFloor).compatible, rules.apiCompatibility("1.0", "1.3").compatible, "no floor given: the shell's own");
+        // A shell of the major before the floor's, and a module of its own version: only a
+        // floor keeps it out, so a call that names none fails it only by taking the shell's
+        const before = (floor.major - 1) + ".5";
+        const unfloored = rules.apiCompatibility(before, before);
+        assert(!unfloored.compatible, "no floor given: the shell's own, which keeps out a module below it");
+        assertEqual(unfloored.reason, rules.apiCompatibility(before, before, rules.apiFloor).reason, "… the same answer as naming the shell's floor");
         for (const bad of ["1", "", null, {}, "1.x", 1.0])
             assert(!rules.apiCompatibility("1.3", "1.3", bad).compatible && _has([rules.apiCompatibility("1.3", "1.3", bad).reason], "floor"),
                    "a floor that is not major.minor lets nothing through — " + JSON.stringify(bad));
