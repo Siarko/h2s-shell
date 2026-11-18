@@ -33,6 +33,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   `setPolkitRequest(true, { command })` (pkexec's request for those words, its message
   written by the kit as pkexec writes it), `pkexecMessage(words)`, `polkitRequestOpen` and
   `polkitAnnouncement`.
+  Fixes to the public elements and the module checks: `SmallButton`'s `asking` holds
+  whichever of `asking` and `confirm` is declared first, and a binding on it keeps
+  following the owner's value; a label, a button's question, a pill's text and a
+  dropdown's option labels and placeholder a module hands over are one line, cut at 80
+  characters with "…"; a dropdown option's other fields (an undocumented `color` among
+  them) are dropped; `checked` is documented as shown only on a secondary button. The
+  import check reads an import on the line of the first "{" (`import qs.singletons; Item {`),
+  and the import warnings and deprecations cover every QML file under a module's
+  directory (subdirectories, files only a Loader builds), not only the ones it names.
 - 1.10: module test mode — on only under the shell's test entry points (`tests/run-modules.sh`,
   a test tree), never from a variable alone and never by a module, and told by the new
   read-only `Api.testMode`.
@@ -525,6 +534,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A pill or a button that asks shows a label with line breaks on one line, at its usual
+  height, instead of growing taller.
+- A switch that cannot be used is dimmed, as an unavailable button is; and an unavailable
+  button that is asking dims its "×" and ignores clicks on it too.
 - The password prompt no longer lets windows behind it show through.
 - Modules: a module that is only its `module.json` (no main, no widgets, no pages) could
   stay "pending" for good after a start.

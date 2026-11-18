@@ -168,7 +168,8 @@ Singleton {
 
     // The imports at the top of a QML file: [{ name, directory }] — `name` a module name
     // (QtQuick.Layouts) or, for a quoted import, the quoted text with `directory` true. Read
-    // as Quickshell's scanner reads them: line by line until the first line with a "{".
+    // as Quickshell's scanner reads them: line by line until the first line with a "{",
+    // whose statements before the "{" are read too (`import qs.components; Item {}`).
     function importsOf(text) {
         const imports = [];
         if (typeof text !== "string")
@@ -177,14 +178,15 @@ Singleton {
         for (const rawLine of header.split("\n")) {
             // A line comment, not a "//" inside a quoted import ("file:///…")
             const line = rawLine.replace(/^((?:[^"\/]|"[^"]*"|\/(?!\/))*)\/\/.*$/, "$1").trim();
-            if (line.includes("{"))
-                break;
-            for (const statement of line.split(";")) {
+            const brace = line.indexOf("{");
+            for (const statement of (brace >= 0 ? line.slice(0, brace) : line).split(";")) {
                 const match = /^import\s+(?:"([^"]*)"|([A-Za-z_][A-Za-z0-9_.]*))/.exec(statement.trim());
                 if (!match)
                     continue;
                 imports.push(match[1] !== undefined ? { name: match[1], directory: true } : { name: match[2], directory: false });
             }
+            if (brace >= 0)
+                break;
         }
         return imports;
     }

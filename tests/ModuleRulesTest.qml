@@ -596,6 +596,11 @@ TestCase {
         assertEqual(ModuleSourceRules.importWarnings("A.qml", null).length, 0, "no text: no warning, no throw");
         assert(Array.isArray(ModuleSourceRules.importWarnings("A.qml", "import ".repeat(100000))), "a huge garbage header: no throw");
         assert(!ModuleSourceRules.importAllowed({ name: "QtQuickX", directory: false }), "QtQuickX is not under QtQuick");
+        assertEqual(JSON.stringify(ModuleSourceRules.importsOf("import qs.components; Item {}")), JSON.stringify([{ name: "qs.components", directory: false }]),
+                    "an import on the line with the first \"{\" is read before stopping");
+        assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nimport qs.singletons; Item {\n}").length, 1,
+                    "… so one outside the allowlist there is warned about");
+        assertEqual(ModuleSourceRules.importsOf("import QtQuick\nItem { import qs.panels }").length, 1, "what follows the \"{\" is not an import");
 
         // --- an import that is an old way: allowed, listed among the deprecations ---
         assert(ModuleSourceRules.importAllowed({ name: "qs.components", directory: false }) && !_has(warnings, "imports qs.components"),
@@ -855,6 +860,13 @@ TestCase {
         const files = ModuleFileRules.filesToCheck(alpha, "singleton S 1.0 S.qml\n");
         assertEqual(files.map(entry => entry.file + ":" + entry.kind).join(","), "A1.qml:entry,P.qml:entry,A2.qml:entry,Page.qml:entry,Row.qml:entry,S.qml:qmldir",
                     "filesToCheck: every file named, each once, with its kind");
+        assertEqual(JSON.stringify(ModuleFileRules.listedQmlFiles("Main.qml\nsections/Row.qml\n../Out.qml\n/abs.qml\nsub//X.qml\na\tb.qml\nNotes.txt\nMain.qml\n")),
+                    JSON.stringify(["Main.qml", "sections/Row.qml"]), "listedQmlFiles: the listing's QML files inside the directory, each once");
+        assertEqual(ModuleFileRules.listedQmlFiles(Array.from({ length: 300 }, (unused, i) => "F" + i + ".qml").join("\n")).length, ModuleFileRules.maxScannedFiles,
+                    "… at most maxScannedFiles");
+        assertEqual(ModuleFileRules.listedQmlFiles(null).length, 0, "… no text: none");
+        assertEqual(JSON.stringify(ModuleFileRules.scanOnly(["A1.qml", "sections/Row.qml", "S.qml"], files)), JSON.stringify(["sections/Row.qml"]),
+                    "scanOnly: the listed files the check does not read already");
         assertEqual(JSON.stringify(ModuleFileRules.parseFileCheck(["0\tok", "1\tis not a regular file", "junk", "2\t"])),
                     "{\"0\":\"ok\",\"1\":\"is not a regular file\",\"2\":\"\"}", "parseFileCheck");
         const checked = ModuleFileRules.withoutBadFiles(alpha, { "P.qml": "is not a regular file", "Row.qml": "leaves the module directory through a link" }, "");

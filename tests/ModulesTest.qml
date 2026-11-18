@@ -146,6 +146,11 @@ TestCase {
             const forbidden = _expectState("forbidden-import", "loaded");
             assert(_has(forbidden?.warnings, "imports qs.singletons"), "forbidden-import: loaded, with a warning naming the import");
             assertEqual(forbidden?.errors.length, 0, "forbidden-import: a warning, not an error");
+            assert(_has(forbidden?.warnings, "sections/deeper/Deeper.qml imports Quickshell.Hyprland"),
+                   "forbidden-import: a QML file in a subdirectory, named nowhere, is scanned too: " + JSON.stringify(forbidden?.warnings));
+            assert(_has(forbidden?.deprecations, "qs.components (in sections/Section.qml)"),
+                   "… and its deprecated import listed: " + JSON.stringify(forbidden?.deprecations));
+            assert(!_has(forbidden?.warnings, "qs.panels"), "… but not one in a hidden directory");
 
             _expectState("duplicate-id", "loaded");
             const second = _expectState("duplicate-id-2", "duplicate");

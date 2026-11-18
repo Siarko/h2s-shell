@@ -349,7 +349,10 @@ import qs.singletons.network
 // everything a module took from the shell's internal components, which may change in any
 // release. A module that still imports it loads as before, and the import is listed in
 // its status (`deprecations`, in `modules list`); it becomes an error with the change
-// that raises the floor.
+// that raises the floor. The imports are read from every QML file under the module's
+// directory — in subdirectories too, and ones only a Loader builds — up to 100 files, 8
+// directories deep, hidden directories and links skipped; an import outside what modules
+// may import is a warning in the status.
 Singleton {
     id: root
 

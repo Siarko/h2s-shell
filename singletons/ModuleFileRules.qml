@@ -143,6 +143,39 @@ Singleton {
 
     readonly property int maxFileBytes: 1024 * 1024
 
+    // The import scan (importWarnings, importDeprecations) reads every QML file under the
+    // module's directory, not only the ones it names: a file in a subdirectory, or one a
+    // Loader builds, imports as much as main does. At most this many files, this deep; of
+    // each, its first ModuleRules.maxHeaderBytes (all the import reader looks at).
+    readonly property int maxScannedFiles: 100
+    readonly property int scanDepth: 8
+    // The key the listing's answer and text are filed under, among a check's files
+    readonly property string listKey: "*.qml"
+
+    // The listing's text → the QML files it names, relative to the module's directory, the
+    // first maxScannedFiles of them. A name that is not plainly a path inside the directory
+    // (a line break or another control character in it, a ".." part, absolute) is left out.
+    function listedQmlFiles(text) {
+        if (typeof text !== "string")
+            return [];
+        const files = [];
+        for (const line of text.split("\n")) {
+            if (files.length >= maxScannedFiles)
+                break;
+            if (!line.endsWith(".qml") || line.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(line) || line.split("/").some(part => part === ".." || part === "" || part === "."))
+                continue;
+            if (!files.includes(line))
+                files.push(line);
+        }
+        return files;
+    }
+
+    // Of the listed files, the ones the check does not read already (`checked`: filesToCheck's)
+    function scanOnly(listed, checked) {
+        const named = (checked ?? []).map(entry => entry.file);
+        return (listed ?? []).filter(file => !named.includes(file));
+    }
+
     // The files of a module the check looks at: { file, kind } — kind "main", "entry",
     // "test" or "qmldir"; each file once (the first kind wins)
     function filesToCheck(manifest, qmldirText) {
@@ -169,15 +202,26 @@ Singleton {
     // and the texts for the import and property checks all come from here, under the host's
     // checkTimeoutMs, and a triple without its "ok" line when the deadline kills the process
     // counts as failed. The "ok" comes after the text, so a text cut short is never whole.
+    //
+    // Two kinds of triple more: a cap "list" lists the module's QML files instead (the
+    // file is ignored) — regular files only, links not followed, hidden directories
+    // skipped, at most scanDepth deep and maxScannedFiles names, each line
+    // "<index>:<path relative to the directory>", then "<index>\tok"; a cap "h<n>" reads the
+    // first n bytes of a file of any size (the import scan needs only its header).
     readonly property string fileCheckScript: "i=0; "
         + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
+        + "if [ \"$cap\" = list ]; then "
+        + "if [ -d \"$dir\" ]; then ( cd -- \"$dir\" && find . -mindepth 1 -maxdepth " + scanDepth + " -name '.*' -prune -o -type f -name '*.qml' -print ) 2>/dev/null "
+        + "| head -n " + maxScannedFiles + " | sed \"s|^\\./||; s/^/$i:/\"; printf '%s\\tok\\n' $i; "
+        + "else printf '%s\\tcannot be listed\\n' $i; fi; i=$((i+1)); continue; fi; "
+        + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; esac; "
         + "real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; "
         + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
         + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
         + "else case \"$real\" in \"$real_dir\"/*) "
         + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
         + "else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; "
-        + "if [ \"$size\" -ge 0 ] && [ \"$size\" -le \"$cap\" ]; then "
+        + "if [ \"$size\" -ge 0 ] && { [ \"$whole\" = 0 ] || [ \"$size\" -le \"$cap\" ]; }; then "
         + "{ head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
         + "*) printf '%s\\tleaves the module directory through a link\\n' $i ;; esac; fi; "

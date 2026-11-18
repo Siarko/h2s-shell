@@ -475,6 +475,8 @@ Scope {
             directory: directory, manifest: { valid: false, errors: [], warnings: [] }, manifestRead: false,
             compatible: false, errors: [], warnings: [], deprecations: [],
             shadowedBy: "", qmldirText: "", filesChecked: true, mainFileError: "",
+            // Every QML file under its directory (ModuleFileRules.listedQmlFiles), for the import scan
+            scanFiles: [],
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
             rootProperties: ({}),
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
@@ -532,6 +534,7 @@ Scope {
                 continue;
             for (const file of ["module.json", "qmldir"])
                 asked.push({ record: record, file: file, stage: "manifest", cap: ModuleRules.maxManifestBytes });
+            asked.push({ record: record, file: ModuleFileRules.listKey, stage: "manifest", cap: "list" });
         }
         let settledAtOnce = false;
         if (asked.length === 0) {
@@ -539,13 +542,17 @@ Scope {
                 if (record.filesChecked)
                     continue;
                 const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
+                const scanned = ModuleFileRules.scanOnly(record.scanFiles, files);
                 // Nothing to check: settled at once
-                if (files.length === 0) {
+                if (files.length === 0 && scanned.length === 0) {
                     _filesAnswered(record, {}, {});
                     settledAtOnce = true;
                 }
                 for (const entry of files)
                     asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleFileRules.maxFileBytes });
+                // Only for the import scan: its header, whatever its size
+                for (const file of scanned)
+                    asked.push({ record: record, file: file, stage: "files", cap: "h" + ModuleRules.maxHeaderBytes });
             }
         }
         if (asked.length === 0) {
@@ -594,6 +601,7 @@ Scope {
         let manifests = false;
         for (const [record, answered] of byRecord) {
             if (answered.stage === "manifest" && !record.manifestRead) {
+                record.scanFiles = answered.answers[ModuleFileRules.listKey] === "ok" ? ModuleFileRules.listedQmlFiles(answered.texts[ModuleFileRules.listKey]) : [];
                 _manifestAnswered(record, answered.answers, answered.texts);
                 manifests = true;
             } else if (answered.stage === "files" && !record.filesChecked) {
@@ -645,6 +653,16 @@ Scope {
             if (moduleWarning !== "")
                 record.warnings.push(moduleWarning);
             record.warnings.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
+        }
+        // Its other QML files, in subdirectories or built by a Loader, for their imports
+        // alone; one that could not be read is not an error (nothing loads it by name)
+        for (const name of record.scanFiles) {
+            const text = texts?.[name];
+            if (ModuleRules.has(read, name) || typeof text !== "string")
+                continue;
+            read[name] = text;
+            // Under tests/: a suite's helper, which runs under the runner as the suites do
+            record.warnings.push(...ModuleSourceRules.importWarnings(name, text, name.startsWith("tests/")));
         }
         // The old ways its files still use: listed in its status, the module loads as before
         record.deprecations = ModuleSourceRules.importDeprecations(read);

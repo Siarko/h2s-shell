@@ -544,7 +544,11 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
 Writing a module, from the author's side (everything through `import qs.api`; nothing from
 `qs.singletons`, and `qs.components` — the shell's internal components, which may change
 in any release — only for a module not yet moved off it: the import still works and is
-listed among the module's `deprecations` in `qs ipc call modules list`):
+listed among the module's `deprecations` in `qs ipc call modules list`; an import
+outside those, `Quickshell`, `Quickshell.Io`, `QtQuick…`, `QtQml…` and the module's own
+directory is a warning there. Every QML file under
+the module's directory is read for its imports, in subdirectories too — up to 100 files,
+8 directories deep, hidden directories and links skipped):
 
 ```qml
 // module.json: "widgets": [{ "type": "example", "name": "Example", "widget": "Widget.qml",
