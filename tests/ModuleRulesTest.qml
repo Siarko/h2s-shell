@@ -656,6 +656,9 @@ TestCase {
         assertEqual(state({ enabled: false, programsKnown: false }), "disabled", "turned off: disabled (its programs are not looked for)");
         assertEqual(state({ programsKnown: false }), "pending", "programs not checked yet: pending");
         assertEqual(state({ missingPrograms: ["tailscale"] }), "missing-program", "a program missing");
+        assertEqual(state({ dataDirectoryKnown: false }), "pending", "its data directory not made yet (1.13): pending");
+        assertEqual(state({ dataDirectoryKnown: false, missingPrograms: ["tailscale"] }), "missing-program", "… a program missing first: no directory made for it");
+        assertEqual(state({ dataDirectoryKnown: false, enabled: false }), "disabled", "… nor for one turned off");
         assertEqual(state({ mainError: "Main.qml: syntax error" }), "failed", "a main that failed");
         assertEqual(ModuleMergeRules.stateOf(null), "failed", "nothing known: failed, no throw");
         for (const each of rules.states)

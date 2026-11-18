@@ -519,8 +519,9 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   manifests, qmldirs and file texts come out of its file check (a process, with a deadline),
   then it checks them and looks up the programs they name (a process too: the program
   lookup below), creates each enabled module's `main` inside
-  a guard (the file check, the program look-up, the start guard and the making of the
-  stores' directory each run one command through a `singletons/io/CommandRunner`, under
+  a guard (the file check, the program look-up, the start guard, the making of the
+  stores' directory and of the modules' data directories each run one command through a
+  `singletons/io/CommandRunner`, under
   the host's `checkTimeoutMs`), keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
   exposes the statuses and the merged contributions. `qs ipc call modules list` prints them;
   `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`).
@@ -622,7 +623,35 @@ again on request; both run by a `CommandRunner`, without a time limit) and
 127 refused, said once — runs through the same queue). Wake-up: `module.resumed()`;
 a page or slot contribution that declares `property bool shown` does its expensive reading only
 while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
-`module.setValue`); anything else (tokens, remembered state) goes in `module.store`.
+`module.setValue`); anything else (tokens, remembered state) goes in `module.store`, and
+files (certificates, caches) in `module.dataDirectory`.
+
+**System facts and the data directory.** `Api.system` is what the shell read of the
+system: `userName`, `uid`, `hostName`, `home`, `configHome`, `dataHome`, `runtimeDirectory`,
+`downloadDirectory`, `ready`, and `readIpForwarding()` and `refresh()`. `singletons/SystemFacts.qml`
+holds the shell's one `singletons/io/SystemFactsReader.qml`, which reads; the pure
+`singletons/SystemFactsRules.qml` decides from what it read. The readings are the same on
+both systems: the environment (`HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+`XDG_RUNTIME_DIR`; a relative `XDG_*` is ignored, as the XDG specification says),
+`/proc/self/status` for the user id, `id -un` for the name (the user database, through NSS),
+`/proc/sys/kernel/hostname`, `user-dirs.dirs` in the config home (read as text, never run:
+only `"$HOME/…"` or an absolute path in double quotes counts), and `/proc`'s two forwarding
+switches, read when asked. A reading that failed or says something unexpected is unknown
+(`""`, or `null` for the id and a switch), never a guess.
+- NixOS: `user-dirs.dirs` is home-manager's when `xdg.userDirs` is on (often a link into
+  the store, read the same way), else there is none and the download folder is
+  `~/Downloads`.
+- Arch: `user-dirs.dirs` is xdg-user-dirs' when it is installed, else there is none and the
+  download folder is `~/Downloads`.
+
+A module's data directory is `<dataHome>/h2s-shell/module-data/<id>`, apart from its own
+directory (which installing and removing it owns). The host makes it before the module
+loads (`ModuleHost.dataRoot`, set by `Modules` from `SystemFacts.dataHome`): under umask
+077, then the root and the module's directory each checked to be a real directory, not a
+link, that the user owns, and set to 700. One it cannot make so leaves the module loading
+with `module.dataDirectory` `""` and a warning in its status. The shell never removes it.
+The user can write it, so nothing in it runs as root: `module.privileged.start` refuses a
+program that lies there (`PrivilegedRules.refusal`).
 
 Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`
 in milliseconds — `singletons/Format.qml`), `Api.address` (IPv4, IPv6, networks: `isIp`,
@@ -780,8 +809,10 @@ and a trusted `timeout` are found.
   head and which request is its own, a module turned off, the lock),
   `tests/PolkitRulesTest.qml` (the prompt's texts and the matching of a request to a run),
   `tests/AuthPromptViewTest.qml` (the prompt's Module, Authorization and Command lines),
-  `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
-  the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup),
+  `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
+  from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
+  the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup,
+  data directories),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the
@@ -818,9 +849,14 @@ and a trusted `timeout` are found.
   gate is listed in the module's `deprecations`. `tests/run-modules.sh` puts a pkexec
   first on `PATH` that fails the run if anything starts it. `module.privileged` takes the
   module's `<testPrograms>/pkexec` and nothing else — without one it is not available —
-  and its runs see the test kit's polkit agent and lock, never the shell's. A module's
-  suites see test mode through `ModuleTestKit` (`qs.tests`): `setEnabled`, `status`,
-  `widgetEntries`, `opened`, `notified`, `clearRecords`, and for runs as administrator
+  and its runs see the test kit's polkit agent and lock, never the shell's.
+  `Api.system` is then the test kit's made-up facts, nothing read, and the data
+  directories lie below a private temporary home the host makes before the first module
+  loads (`ModuleHost.testHome`: `mktemp -d` in `XDG_RUNTIME_DIR`, else `/tmp`), never in the
+  user's data home. A module's suites see test mode through `ModuleTestKit` (`qs.tests`):
+  `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
+  (the facts `Api.system` tells; never moves `module.dataDirectory`), `dataHome`,
+  `clearRecords`, and for runs as administrator
   `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
   its message written by the kit from pkexec's algorithm, not the shell's),
   `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`, `setSessionLocked`,

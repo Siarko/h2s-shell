@@ -5,7 +5,7 @@ import QtQuick
 import qs.singletons
 import qs.api
 
-// What a module's suites get of the shell in module test mode (module API 1.10, 1.11; tests only:
+// What a module's suites get of the shell in module test mode (module API 1.10–1.13; tests only:
 // `import qs.tests`, which a module may import in its tests alone). Under tests/run-modules.sh
 // the shell's own module host runs in test mode; this is that host, seen from a suite.
 //
@@ -22,7 +22,21 @@ import qs.api
 //                          (notify-send's words) }] — summary and body as they would be sent
 //   setNow(ms)             (1.12) the shell's clock for Api.minuteNow (the start of that
 //                          minute); 0: the real clock again. Reset before each suite
-//   clearRecords()         empties `opened` and `notified`, and sets the real clock again
+//   setSystem(facts)       (1.13) what Api.system tells: the fields given ({ ready, userName,
+//                          uid, hostName, home, configHome, dataHome, runtimeDirectory,
+//                          downloadDirectory, ipForwarding: { ipv4, ipv6 } } — what
+//                          readIpForwarding() returns) over made-up defaults (ready, "tester",
+//                          1000, "test-host", the directories below the host's private
+//                          temporary home, forwarding off) — each call from the defaults, not
+//                          from the call before; null: the defaults. → the
+//                          problems, frozen ([] when every field was taken): a field of the
+//                          wrong kind or one Api.system does not have is left out. Never
+//                          moves module.dataDirectory, which stays in the host's temporary
+//                          home. Reset before each suite
+//   dataHome               (1.13) the data home the modules' data directories are in now:
+//                          below the host's private temporary home ("" until it is made)
+//   clearRecords()         empties `opened` and `notified`, and sets the real clock and the
+//                          default system facts again
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
@@ -45,8 +59,8 @@ import qs.api
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
 //
-// Not here yet, because their features are not in the API yet: anchors, the file chooser's
-// answer, Api.system and module.dataDirectory.
+// Not here yet, because their features are not in the API yet: anchors and the file
+// chooser's answer.
 Singleton {
     readonly property bool testMode: Modules.host.testMode
     readonly property var widgetEntries: Modules.host.widgetEntries
@@ -119,6 +133,26 @@ Singleton {
             Api._testNow = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : 0;
     }
 
+    function setSystem(facts) {
+        if (!Modules.host.testMode)
+            return Object.freeze(["module test mode is off"]);
+        const checked = SystemFactsRules.testFacts(facts, {});
+        if (facts === null || facts === undefined || typeof facts !== "object" || Array.isArray(facts)) {
+            Api._testSystemGiven = null;
+            return Object.freeze(checked.problems);
+        }
+        // Only the fields taken, so the defaults (the temporary home once made) show through
+        const taken = {};
+        for (const key of Object.keys(facts)) {
+            if (!checked.problems.some(problem => problem.startsWith(key + ":")))
+                taken[key] = checked.facts[key];
+        }
+        Api._testSystemGiven = taken;
+        return Object.freeze(checked.problems);
+    }
+
+    readonly property string dataHome: Modules.host.testMode && Modules.host.testHome !== "" ? Modules.host.testHome + "/.local/share" : ""
+
     function setSessionLocked(on) {
         if (Modules.host.testMode)
             PrivilegedRuns.testLocked = on === true;
@@ -126,8 +160,10 @@ Singleton {
 
     // The links and notifications recorded, and the clock setNow set
     function clearRecords() {
-        if (Modules.host.testMode)
+        if (Modules.host.testMode) {
             Api._testNow = 0;
+            Api._testSystemGiven = null;
+        }
         Api._opened = [];
         Notifier.clearRecorded();
     }

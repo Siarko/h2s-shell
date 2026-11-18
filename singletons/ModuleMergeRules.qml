@@ -37,6 +37,7 @@ Singleton {
     //   mainError          why its main could not be created ("" for none)
     //   filesChecked       the check of the module's files has answered (false: pending)
     //   guardKnown         the start guard has answered (false: pending; see startGuard)
+    //   dataDirectoryKnown making its data directory has answered (false: pending)
     function stateOf(facts) {
         // module.json not answered yet (the file check reads it): pending
         if (facts?.manifestRead === false)
@@ -63,6 +64,9 @@ Singleton {
             return "pending";
         if ((facts.missingPrograms ?? []).length > 0)
             return "missing-program";
+        // Its data directory is being made (API 1.13)
+        if (facts.dataDirectoryKnown === false)
+            return "pending";
         if (facts.mainError)
             return "failed";
         return "loaded";

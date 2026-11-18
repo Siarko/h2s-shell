@@ -17,8 +17,11 @@ import qs.singletons.io
 // contributions as plain reactive lists. A module is "pending" until all of that has answered.
 // In module test mode (`testMode`) a module that names testPrograms has its programs looked
 // for there instead, as stand-ins, and never on PATH.
-// The four checks (the file check, the stores' directory, the start guard, the program
-// look-up) are runs of the host's one CommandRunner (singletons/io), under checkTimeoutMs.
+// Before a module loads, its data directory is made private (module.dataDirectory, API 1.13:
+// "<dataRoot>/<id>", mode 700; in test mode below a private temporary home instead).
+// The five checks (the file check, the stores' directory, the start guard, the program
+// look-up, the data directories) are runs of the host's one CommandRunner (singletons/io),
+// under checkTimeoutMs.
 // Turning a module off (setEnabled, stored in Config.disabledModules) destroys its main, drops
 // its contributions and facts and turns its handle's `active` off; on again, they come back.
 //
@@ -68,6 +71,25 @@ Scope {
     // made private (mode 700, and its parent if it has to be made) at the first load(), before
     // any module is created, so no store ever lands in a directory others can read
     property string storeDirectory: ""
+    // (API 1.13) Where the modules' data directories are: "<dataHome>/h2s-shell/module-data"
+    // (SystemFactsRules.dataRoot; "" — the suites' default — none: every module.dataDirectory
+    // is ""). A module's, "<dataRoot>/<id>", is made before the module loads: under umask 077
+    // (a parent it has to make is 700), then the root and the module's directory chmod 700,
+    // each first checked to be a real directory (not a link) the user owns. One that cannot
+    // be made so leaves the module loading with module.dataDirectory "" and a warning in its
+    // status. Never anything run as root: the user can write there. Not used in test mode,
+    // where the data directories are below `testHome`
+    property string dataRoot: ""
+    // In module test mode: the private temporary home the host made (mktemp -d, in
+    // XDG_RUNTIME_DIR, else /tmp) before the first module loaded — the data directories are
+    // below its .local/share, and Api.system's made-up directories below it too. "" until made
+    property string testHome: ""
+    // The root the data directories are made in now: dataRoot, or in test mode testHome's
+    readonly property string dataRootInUse: testMode ? (testHome !== "" ? SystemFactsRules.dataRoot(testHome + "/.local/share") : "")
+        : SystemFactsRules.absolutePath(dataRoot)
+    // { <id>: its data directory } for every module whose directory was made private:
+    // what the handles' `dataDirectory` show
+    property var dataDirectories: ({})
     // Added to the file check's environment (the suites' and the lock bed's seam: a PATH whose
     // `head` hangs, as a mount that answers stat and then blocks on read would)
     property var checkEnvironment: ({})
@@ -429,7 +451,7 @@ Scope {
     // Everything `qs ipc call modules list` tells: plain data, no secrets
     function describe() {
         return { api: apiVersion, safeMode: safeMode, safeModeReason: safeModeReason, hostError: hostError, testMode: testMode,
-                 checkingPrograms: checkingPrograms, checkingFiles: checkingFiles, startGuard: guard,
+                 checkingPrograms: checkingPrograms, checkingFiles: checkingFiles, startGuard: guard, dataRoot: dataRootInUse,
                  ignoredEntries: ignoredEntries, modules: statuses };
     }
 
@@ -713,6 +735,66 @@ Scope {
         _applyGuarded();
     }
 
+    // ---- The data directories (API 1.13) ----
+
+    // { <id>: true (made) | false (could not be) }, for the host's life
+    property var _dataAnswers: ({})
+    property bool _makingData: false
+
+    function _dataDirectoryKnown(id) {
+        if (!id)
+            return true;
+        // No root (the suites' default, or not an absolute path): no data directories
+        if (!testMode && SystemFactsRules.absolutePath(dataRoot) === "")
+            return true;
+        return ModuleRules.has(_dataAnswers, id);
+    }
+
+    function _dataWarning(id) {
+        const path = SystemFactsRules.dataDirectory(dataRootInUse, id);
+        return "its data directory " + (path || "(none: no place to make it)") + " could not be made private (mode 700): module.dataDirectory is \"\"";
+    }
+
+    // One run for the modules waiting; when it answers, _apply asks for any still waiting
+    function _makeDataDirectories(ids) {
+        if (_makingData)
+            return;
+        // In test mode before the temporary home exists: "" — the script makes it first
+        const where = testMode ? (testHome !== "" ? dataRootInUse : "") : SystemFactsRules.absolutePath(dataRoot);
+        const base = SystemFactsRules.baseDirectories({ XDG_RUNTIME_DIR: Quickshell.env("XDG_RUNTIME_DIR") }).runtimeDirectory;
+        const lines = [];
+        _makingData = true;
+        _check(["sh", "-c", SystemFactsRules.makeScript, "sh", where, base].concat(ids), {
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                root._makingData = false;
+                root._dataAnswered(ids, lines, result.timedOut);
+            }
+        });
+    }
+
+    function _dataAnswered(ids, lines, timedOut) {
+        const answers = SystemFactsRules.makeAnswers(lines, ids);
+        if (testMode && testHome === "" && answers.home !== "")
+            testHome = answers.home;
+        const known = Object.assign({}, _dataAnswers);
+        const made = Object.assign({}, dataDirectories);
+        for (const id of ids) {
+            known[id] = answers.made[id] === true;
+            if (known[id])
+                made[id] = SystemFactsRules.dataDirectory(dataRootInUse, id);
+            else
+                console.warn("[Modules] " + id + ": " + _dataWarning(id) + (timedOut ? " (no answer in " + checkTimeoutMs / 1000 + " s)" : ""));
+        }
+        _dataAnswers = known;
+        if (JSON.stringify(made) !== JSON.stringify(dataDirectories))
+            dataDirectories = made;
+        _applyGuarded();
+    }
+
     // ---- The start guard ----
 
     function _startGuard() {
@@ -782,6 +864,7 @@ Scope {
     function _apply() {
         const unknownPrograms = [];
         const unknownStandIns = [];
+        const unknownData = [];
         for (const record of _records) {
             const manifest = record.manifest;
             // Every one is looked up before the module loads; only a required one missing
@@ -794,9 +877,14 @@ Scope {
                 safeMode: safeMode, settingsKnown: settingsKnown, enabled: !disabledIds.includes(manifest.id),
                 programsKnown: programs.every(program => _verdictFor(record, program) !== undefined),
                 missingPrograms: (manifest.programs ?? []).filter(program => _verdictFor(record, program)?.path === ""),
+                dataDirectoryKnown: _dataDirectoryKnown(manifest.id),
                 mainError: ""
             };
             let state = ModuleMergeRules.stateOf(facts);
+            // Waiting for its data directory alone: asked for below
+            if (state === "pending" && !facts.dataDirectoryKnown
+                    && ModuleMergeRules.stateOf(Object.assign({}, facts, { dataDirectoryKnown: true })) === "loaded")
+                unknownData.push(manifest.id);
             if (state === "loaded") {
                 _setActive(manifest.id, true);
                 if (!record.main && record.mainError === "" && manifest.main !== "")
@@ -827,6 +915,8 @@ Scope {
             _checkPrograms(unknownPrograms);
         if (unknownStandIns.length > 0)
             _checkTestPrograms(unknownStandIns);
+        if (unknownData.length > 0)
+            _makeDataDirectories(unknownData);
         _publish();
     }
 
@@ -910,9 +1000,11 @@ Scope {
                 else
                     console.warn(what + ": " + errors.join("; "));
             }
+            const warnings = record.shadowedBy === "" && ModuleRules.has(_dataAnswers, record.manifest.id) && _dataAnswers[record.manifest.id] === false
+                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings;
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
-                enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: record.warnings,
+                enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,
                 deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api)),
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
             });

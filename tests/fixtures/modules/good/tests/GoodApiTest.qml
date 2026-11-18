@@ -62,6 +62,9 @@ TestCase {
     }
     property var _queried: null
     property CommandRunner runner: CommandRunner {}
+    property CommandRunner dataRunner: CommandRunner {}
+    property var _dataRefused: null
+    property var _dataMode: null
     property var _ran: null
     property var _ranLines: []
     property var _results: ({})
@@ -90,7 +93,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.12", "Api.version");
+        assertEqual(Api.version, "1.13", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
@@ -168,6 +171,38 @@ TestCase {
         ModuleTestKit.clearRecords();
         assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "… clearRecords(): the real clock again");
         assert(module.log("info", "good: logged once", "good-key") && !module.log("info", "good: logged once", "good-key"), "module.log: once per text for a key");
+
+        // --- system facts and the data directory (API 1.13) ---
+        const facts = Api.system;
+        const home = ModuleTestKit.dataHome.replace(/\/\.local\/share$/, "");
+        assert(home !== "" && ModuleTestKit.dataHome.endsWith("/.local/share"), "ModuleTestKit.dataHome: below the host's temporary home: " + ModuleTestKit.dataHome);
+        assertEqual([facts.ready, facts.userName, facts.uid, facts.hostName].join(" "), "true tester 1000 test-host", "Api.system in test mode: the made-up defaults");
+        assertEqual([facts.home, facts.configHome, facts.dataHome, facts.runtimeDirectory, facts.downloadDirectory].join(" "),
+                    [home, home + "/.config", home + "/.local/share", home + "/run", home + "/Downloads"].join(" "),
+                    "… its directories below the temporary home, never the user's");
+        assertEqual(JSON.stringify(facts.readIpForwarding()), "{\"ipv4\":false,\"ipv6\":false}", "… readIpForwarding(): off, off");
+        assert(Object.isFrozen(facts) && Object.isFrozen(facts.readIpForwarding()), "… frozen, and what readIpForwarding() returns");
+        assertEqual(module.dataDirectory, ModuleTestKit.dataHome + "/h2s-shell/module-data/good", "module.dataDirectory: <dataHome>/h2s-shell/module-data/<id>");
+        assertEqual(JSON.stringify(ModuleTestKit.setSystem({ userName: "carol", uid: 0, hostName: "", dataHome: "/home/carol/.local/share",
+                                                             ipForwarding: { ipv4: true, ipv6: null } })), "[]", "setSystem: every field taken");
+        assertEqual([Api.system.userName, Api.system.uid, "[" + Api.system.hostName + "]", Api.system.dataHome].join(" "), "carol 0 [] /home/carol/.local/share",
+                    "… Api.system follows (a new object), \"\" for a fact not known");
+        assert(Api.system !== facts && facts.userName === "tester", "… the object read before is unchanged");
+        assertEqual(JSON.stringify(Api.system.readIpForwarding()), "{\"ipv4\":true,\"ipv6\":null}", "… readIpForwarding(): as set, null for not readable");
+        assertEqual(module.dataDirectory, ModuleTestKit.dataHome + "/h2s-shell/module-data/good", "… module.dataDirectory does not move");
+        const problems = ModuleTestKit.setSystem({ uid: "0", home: "relative", colour: "red" });
+        assertEqual(problems.map(problem => problem.split(":")[0]).join(","), "uid,home,colour", "setSystem: the wrong fields named: " + problems.join("; "));
+        assertEqual(Api.system.uid + " " + Api.system.userName, "1000 tester", "… left out; each call starts from the defaults");
+        Api.system.refresh();
+        assertEqual(Api.system.userName, "tester", "refresh() in test mode: nothing read");
+        ModuleTestKit.setSystem({ userName: "dave" });
+        ModuleTestKit.clearRecords();
+        assertEqual(Api.system.userName, "tester", "clearRecords(): the default facts again");
+        // Nothing in the data directory runs as root
+        module.privileged.start([module.dataDirectory + "/helper", "x"], {
+            what: "Run a helper", timeoutMs: 1000, notifyFailures: false, done: result => suite._dataRefused = result
+        });
+        dataRunner.start(["stat", "-c", "%a %U", module.dataDirectory], { done: result => suite._dataMode = result });
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");
@@ -285,6 +320,11 @@ TestCase {
             done: result => suite._ran = result
         });
 
+        _then("the data directory is looked at", () => _dataRefused !== null && _dataMode !== null, () => {
+            assert(!_dataRefused.ok && _dataRefused.error.includes("data directory") && _dataRefused.code === -1,
+                   "privileged.start: a program in its data directory refused, nothing run: " + JSON.stringify(_dataRefused));
+            assert(_dataMode.ok && _dataMode.stdout.startsWith("700 "), "module.dataDirectory: there, mode 700: " + _dataMode.stdout);
+        });
         _then("the commands answered", () => Object.keys(_results).length === 16 && _queried !== null, () => {
             assert(!_results.defaultElevate.ok && _results.defaultElevate.error.startsWith("test mode:") && !_results.defaultElevate.refused,
                    "PrivilegedAction in test mode: the default pkexec refused, nothing run: " + JSON.stringify(_results.defaultElevate));

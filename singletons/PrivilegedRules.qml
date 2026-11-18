@@ -147,7 +147,8 @@ Singleton {
     // `request`:
     //   argv (the caller's copy, CommandRules.argvSnapshot's `words`: what is judged here is
     //   what runs), options (options() of what was given), active (the module is on), locked (the
-    //   session), available and unavailableReason (module.privileged's)
+    //   session), available and unavailableReason (module.privileged's), dataRoot (where the
+    //   modules' data directories are, "" for none: a program there is refused)
     // → { blocked ("" | a blockedReasons word), notFound (bool), error }. In this order: what
     // was asked wrongly (error), a program that cannot be found (notFound: argv[0] is "", the
     // path a missing program has, or not an absolute path), the module off, the session
@@ -168,6 +169,9 @@ Singleton {
             return refuse("", problem);
         if (!argv[0].startsWith("/"))
             return refuse("", ModuleRules.show(argv[0].slice(0, 200)) + " is not an absolute path (a program's path, as module.programs has it)", true);
+        // (1.13) The modules' data directories are the user's to write
+        if (SystemFactsRules.within(argv[0], request.dataRoot))
+            return refuse("", "the program lies in a module's data directory, which the user can write: nothing there runs as root");
         if (request.active !== true)
             return refuse("", "the module is off");
         if (request.locked === true)

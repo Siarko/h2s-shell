@@ -84,6 +84,8 @@ QtObject {
             }
             // A clock a suite before set (ModuleTestKit.setNow) is not this suite's
             ModuleTestKit.setNow(0);
+            // … nor the system facts it set (ModuleTestKit.setSystem)
+            ModuleTestKit.setSystem(null);
             let suite = null;
             try {
                 suite = component.createObject(root);

@@ -130,6 +130,11 @@ Singleton {
             // The stores' directory, private before any module runs (api/ModuleStore.qml)
             if (!Config.readOnly)
                 _host.storeDirectory = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "") + "/h2s_shell/modules";
+            // The modules' data directories (module.dataDirectory): below the data home
+            // (XDG_DATA_HOME, else ~/.local/share); in module test mode the host's own
+            // temporary one instead
+            if (!Config.readOnly)
+                _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
             // Test seams (TestSeams): the guard's window, shortened by the lock test bed; a
             // directory put first on the file check's PATH (a `head` that hangs) and the
             // checks' deadline (tests/lock/tests/modules-hung.sh)

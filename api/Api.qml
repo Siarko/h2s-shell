@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.12" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.13" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -87,6 +87,52 @@ import qs.singletons.network
 //                          level or text differs from the one last written for that key;
 //                          → true when written (a debug line with the setting off is not,
 //                          and is not remembered)
+//   Api.system             (1.13) what the shell read of the system, frozen; a new object
+//                          only when something in it changed:
+//                            ready              the user name and the download folder have
+//                                               been read (the rest is there from the start)
+//                            userName           the user's name (`id -un`: the user database,
+//                                               a network account too)
+//                            uid                the user's id, a number (/proc/self/status)
+//                            hostName           the machine's name (/proc/sys/kernel/hostname)
+//                            home               HOME
+//                            configHome         XDG_CONFIG_HOME, else <home>/.config
+//                            dataHome           XDG_DATA_HOME, else <home>/.local/share
+//                            runtimeDirectory   XDG_RUNTIME_DIR (no default)
+//                            downloadDirectory  XDG_DOWNLOAD_DIR from <configHome>/user-dirs.dirs
+//                                               (read as text, never run: only "$HOME/…" or an
+//                                               absolute path in double quotes counts), else
+//                                               <home>/Downloads
+//                            readIpForwarding() → frozen { ipv4, ipv6 }: /proc's two switches
+//                                               read now, each true, false, or null when it
+//                                               could not be read
+//                            refresh()          reads the name, the host name and
+//                                               user-dirs.dirs again; the facts stay as they
+//                                               were until the new answers come
+//                          Every path is absolute, without a trailing "/". A fact that could
+//                          not be read, or reads as something unexpected (a relative path, a
+//                          line break), is unknown — "" for a text, null for `uid` — never a
+//                          guess; an XDG_* variable that is not an absolute path is ignored,
+//                          as the XDG specification says. The same on NixOS and on Arch (a
+//                          home-manager user-dirs.dirs on NixOS is read like xdg-user-dirs'
+//                          on Arch; with none, <home>/Downloads). In module test mode the
+//                          facts are the test kit's (ModuleTestKit.setSystem): made up, the
+//                          same on every machine, nothing read
+//   module.dataDirectory   (1.13, on its handle) the module's own directory for its files
+//                          (certificates, caches): "<dataHome>/h2s-shell/module-data/<id>".
+//                          The shell makes it before the module loads, mode 700 — the
+//                          directory above it too — after checking that each is a real
+//                          directory (not a link) that the user owns; a directory there
+//                          before is closed (700) as well. When that fails the module loads
+//                          all the same with dataDirectory "" and a warning in its status
+//                          (`modules list`): a module that needs it checks for "". It is
+//                          apart from the module's own directory, which installing and
+//                          removing the module owns; the shell never removes it. The user
+//                          can write it, so nothing in it may ever run as root — never hand
+//                          a file of it to module.privileged.start as the program (refused:
+//                          `error`) or as a script. In module test mode it lies in a private
+//                          temporary directory the shell made, never in the user's data home,
+//                          and setSystem does not move it
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:
@@ -440,6 +486,32 @@ Singleton {
     }
     // Set by ModuleTestKit.setNow in test mode (0: the real clock)
     property real _testNow: 0
+
+    // (1.13) System facts (above): the shell's reading, or in test mode the test kit's
+    readonly property var system: testMode ? _systemObject(_testSystemFacts, true) : _systemObject(SystemFacts.facts, false)
+    // Set by ModuleTestKit.setSystem in test mode (null: the made-up defaults)
+    property var _testSystemGiven: null
+    readonly property var _testSystemFacts: SystemFactsRules.testFacts(_testSystemGiven, SystemFactsRules.testDefaults(Modules.host.testHome)).facts
+
+    function _systemObject(facts, test) {
+        const forwarding = test ? Object.freeze({ ipv4: facts.ipForwarding?.ipv4 ?? null, ipv6: facts.ipForwarding?.ipv6 ?? null }) : null;
+        return Object.freeze({
+            ready: facts.ready === true,
+            userName: String(facts.userName ?? ""),
+            uid: typeof facts.uid === "number" ? facts.uid : null,
+            hostName: String(facts.hostName ?? ""),
+            home: String(facts.home ?? ""),
+            configHome: String(facts.configHome ?? ""),
+            dataHome: String(facts.dataHome ?? ""),
+            runtimeDirectory: String(facts.runtimeDirectory ?? ""),
+            downloadDirectory: String(facts.downloadDirectory ?? ""),
+            readIpForwarding: () => test ? forwarding : SystemFacts.readIpForwarding(),
+            refresh: () => {
+                if (!test)
+                    SystemFacts.refresh();
+            }
+        });
+    }
 
     // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
     readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))

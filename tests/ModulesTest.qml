@@ -113,7 +113,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.12 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.13 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
@@ -121,6 +121,7 @@ TestCase {
 
             // module.log (API 1.12): with a key, once per change of text
             const goodHandle = host.handle("good");
+            assertEqual(goodHandle.dataDirectory, "", "no dataRoot (the suites' default), not in test mode: module.dataDirectory \"\", nothing made");
             assert(goodHandle.log("info", "reading the state failed: no answer", "state"), "log: a key's first line is written");
             assert(!goodHandle.log("info", "reading the state failed: no answer", "state"), "log: the same text for the key again, not written");
             assert(!goodHandle.log("info", "reading the state failed: no\nanswer", "state"), "… also with a line break where the space was");
@@ -576,6 +577,13 @@ TestCase {
             assertEqual(JSON.stringify(host.testStandIns), JSON.stringify([directory + "/pkexec"]),
                         "testStandIns: its stand-in pkexec, the only one a module may start — no link out of a module among them");
             assertEqual(host.describe().testMode, true, "describe(): testMode true");
+            // C2: in test mode the data directories lie below a private temporary home the
+            // host made, never in the user's data home
+            const runtime = Quickshell.env("XDG_RUNTIME_DIR") || "/tmp";
+            assert(host.testHome.startsWith(runtime + "/h2s-module-data."), "test mode: a private temporary home, made with mktemp: " + host.testHome);
+            assertEqual(handle.dataDirectory, host.testHome + "/.local/share/h2s-shell/module-data/test-programs",
+                        "test mode: module.dataDirectory below it");
+            suite._testDataDirectory = handle.dataDirectory;
             assertEqual(_status("test-programs")?.deprecations.length, 0, "a 1.10 module: no test-mode gate in its deprecations");
 
             // Links: a stand-in, or the stand-ins' directory, that leads out of the module is
@@ -590,6 +598,12 @@ TestCase {
             assertEqual(dirOut.pkexec.path + dirOut["h2s-fixture-standin"].path, "",
                         "a testPrograms directory that links out of the module: nothing in it is a stand-in, pkexec included");
 
+            suite._exists = null;
+            _sh("stat -c '%a' \"$1\" \"$2\"", [_testDataDirectory, host.testHome], (code, output) => suite._exists = output.trim());
+        });
+        _then("the test data directory's mode is read", () => _exists !== null, () => {
+            assertEqual(_exists.split("\n").join(" "), "700 700", "… made 700, in a temporary home of 700");
+            suite._exists = null;
             // A recheck in test mode looks at the stand-ins again, not at PATH
             host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };
             host.recheckPrograms("test-programs");
@@ -650,12 +664,59 @@ TestCase {
             assertEqual(_exists, "2097152", "… and never overwritten");
             host.unload();
             host.storeDirectory = "";
+
+            // C2: the data directories, outside test mode — a host of its own, so nothing
+            // answered before counts; the parent it has to make is 700 too
+            suite._dataHost = _hostComponent.createObject(suite, { dataRoot: _scratch + "/data/h2s-shell/module-data" });
+            suite._exists = null;
+            _sh("mkdir -p \"$1/data\" && chmod 755 \"$1/data\"", [_scratch], () => {
+                suite._dataHost.load(_dirs(["good", "needs-program"]), {});
+            });
+        });
+        _then("the data directory is made", () => _dataHost?.statuses.length > 0 && !_dataHost.statuses.some(status => status.state === "pending"), () => {
+            const good = _dataHost.statuses.find(status => status.id === "good");
+            assertEqual(good?.state + " " + good?.warnings.length, "loaded 0", "good loaded, no warning");
+            assertEqual(_dataHost.handle("good").dataDirectory, _scratch + "/data/h2s-shell/module-data/good",
+                        "module.dataDirectory: <dataRoot>/<id>");
+            assertEqual(_dataHost.handle("needs-program").dataDirectory, "", "a module that does not load (a program missing): none made");
+            assertEqual(_dataHost.describe().dataRoot, _scratch + "/data/h2s-shell/module-data", "describe(): the data root");
+            _sh("stat -c '%a' \"$1/data\" \"$1/data/h2s-shell\" \"$1/data/h2s-shell/module-data\" \"$1/data/h2s-shell/module-data/good\"; "
+                + "test -e \"$1/data/h2s-shell/module-data/needs-program\" && echo made || echo none",
+                [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("the data directories' modes are read", () => _exists !== null, () => {
+            assertEqual(_exists.split("\n").join(" "), "755 700 700 700 none",
+                        "the data home left as it was; the parent made 700, the root and good's 700; none for the module not loaded");
+            _dataHost.unload();
+            _dataHost.destroy();
+            // A root that is a link: refused — the module loads with no data directory and a warning
+            suite._exists = null;
+            _sh("mkdir -p \"$1/elsewhere\" && mkdir -p \"$1/linked/h2s-shell\" && ln -s \"$1/elsewhere\" \"$1/linked/h2s-shell/module-data\"",
+                [_scratch], () => {
+                suite._dataHost = _hostComponent.createObject(suite, { dataRoot: _scratch + "/linked/h2s-shell/module-data" });
+                suite._dataHost.load(_dirs(["good"]), {});
+            });
+        });
+        _then("good loads beside a linked data root", () => _dataHost?.statuses.length > 0 && !_dataHost.statuses.some(status => status.state === "pending"), () => {
+            const good = _dataHost.statuses.find(status => status.id === "good");
+            assertEqual(good?.state, "loaded", "a data directory that cannot be made: the module loads all the same");
+            assertEqual(_dataHost.handle("good").dataDirectory, "", "… module.dataDirectory \"\"");
+            assert(_has(good?.warnings, "could not be made private (mode 700)"), "… said in its status: " + JSON.stringify(good?.warnings));
+            _sh("ls -A \"$1/elsewhere\"", [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("the link's target is read", () => _exists !== null, () => {
+            assertEqual(_exists, "", "nothing made through the link");
+            _dataHost.unload();
+            _dataHost.destroy();
+            _dataHost = null;
             _sh("rm -rf \"$1\"", [_scratch], () => {});
         });
         _clock.start();
     }
 
     property var _goodState: null
+    property var _dataHost: null
+    property string _testDataDirectory: ""
     // The suite's own host while a second one, in test mode, is `host`
     property var _mainHost: null
     property Component _hostComponent: Component {

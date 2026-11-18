@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.13: system facts and a data directory — `Api.system` (`ready`, `userName`, `uid`,
+  `hostName`, `home`, `configHome`, `dataHome`, `runtimeDirectory`, `downloadDirectory`
+  from `user-dirs.dirs` read as text, `readIpForwarding()` → `{ ipv4, ipv6 }`,
+  `refresh()`; a fact that could not be read is `""` or `null`, never a guess) and
+  `module.dataDirectory` (`<dataHome>/h2s-shell/module-data/<id>`, made 700 by the shell
+  before the module loads; `""` with a warning in the status when it cannot be made).
+  `module.privileged.start` refuses a program that lies in a module's data directory.
+  In module test mode `Api.system` is `ModuleTestKit.setSystem`'s made-up facts and the
+  data directory lies in a private temporary home (`ModuleTestKit.dataHome`); the facts
+  are reset before each suite and by `clearRecords()`.
 - 1.12: helpers — `Api.format` (`bytes(n)`, now up to terabytes, `rate(n)`, `ago(ms,
   nowMs)` in milliseconds), `Api.address` (`isIpv4`, `isIpv6`, `isIp`, `parseCidr`,
   `contains`, `overlap`, `redact`: the shell's one reader of addresses, which its network

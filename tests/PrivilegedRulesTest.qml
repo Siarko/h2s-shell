@@ -79,6 +79,14 @@ TestCase {
         const missing = asked({ argv: ["", "up"] });
         assert(missing.notFound && missing.blocked === "" && missing.error.includes("not found"),
                "argv[0] \"\" (the path of a program not found): notFound: " + JSON.stringify(missing));
+        const dataRoot = "/home/u/.local/share/h2s-shell/module-data";
+        const inData = asked({ argv: [dataRoot + "/tailscale/helper", "up"], dataRoot: dataRoot });
+        assert(inData && inData.error.includes("data directory") && inData.blocked === "" && !inData.notFound,
+               "a program in a module's data directory (1.13): refused, error: " + JSON.stringify(inData));
+        assertEqual(asked({ argv: ["/usr/bin/tailscale", "--cert-file=" + dataRoot + "/tailscale/c.crt"], dataRoot: dataRoot }), null,
+                    "… a file there as an argument (data, not the program): not refused");
+        assertEqual(asked({ argv: ["/home/u/.local/share/h2s-shell/module-data-other/x"], dataRoot: dataRoot }), null,
+                    "… a neighbour with the same start: not in it");
         assertEqual(asked({ active: false }).error, "the module is off", "module off: error");
         assertEqual(asked({ locked: true }).blocked, "locked", "locked: blocked locked");
         assertEqual(asked({ options: rules.options({ what: " ‮\n", timeoutMs: 1000 }) }).blocked, "no-purpose", "what empty after cleaning: no-purpose");
