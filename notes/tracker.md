@@ -17,10 +17,45 @@ State on 2026-11-17, end of the session on the Arch machine. One topic at a time
 (index [plans/api-next.md](plans/api-next.md)): the theme token test, the
 `ModuleRules.qml` split and the version gate (first batch), the file chooser trial and
 the bordered buttons (second), pills in three sizes and the public button (third), the
-other public elements (fourth) are on `master` (below). The elements lane is done but
-for a module's icon (U7a). None of it was reviewed by a second agent; run on the Arch machine
-only, not on the NixOS machine.
+other public elements (fourth), the command runner and the module host on it (fifth) are
+on `master` (below). The elements lane is done but for a module's icon (U7a). The first
+four batches were not reviewed by a second agent and ran on the Arch machine only; the
+fifth was reviewed and ran on both machines. Next in the commands lane: program lookup
+with trust (A2).
 
+- [x] **API plan, fifth batch**: on `master` (2026-11-18; reviewed by a second agent on
+      the diff, two medium findings, both fixed by the author; `tests/run-all.sh` passes
+      on Arch, tools from `PATH`, and on NixOS, tools from nix): the command runner (A1,
+      module API 1.8: `singletons/io/CommandRunner.qml`, `CommandRules`, `CommandTools`,
+      `api/CommandRunner.qml`; `CommandAction`, `CommandQuery` and xdg-open run through
+      it) and the module host's four checks on it (A1b). Left open:
+  - **For A2 (program lookup with trust):** `CommandTools` finds `timeout` and `setpriv`
+    in two fixed system directories (`/run/current-system/sw/bin`, `/usr/bin`), never on
+    `PATH`. It is a stand-in for A2's verdict and goes when A2 is built.
+  - **For A4 (privileged start):** a run with a limit starts as
+    `timeout -k … setpriv --pdeathsig KILL -- <command>`, so the command dies when
+    `timeout` is killed. The kernel drops that request for a setuid program: a `pkexec`
+    run is not protected by it and needs its own answer.
+  - Without `timeout` or `setpriv` a run is not wrapped; the runner's own watchdog keeps
+    the limit. A process stuck in uninterruptible I/O then delays the answer.
+  - A run with a limit whose command exits 126 or 127 reads as `failedToStart` (inside
+    `timeout` a missing program looks the same); said in the `Api.qml` reference.
+  - A module's `onStdout` / `onStderr` get whole lines, not raw chunks (a character cut
+    by a read boundary was decoded as two U+FFFD otherwise). An output that ends in an
+    empty line shows one empty line too many: Quickshell 0.3.2's line parser holds an
+    empty line back and prefixes it to the next piece, and `CommandRules.linesOf` cannot
+    tell the two cases apart. Worth a note under `notes/upstream/`.
+  - `maxOutputBytes` counts characters, and also caps a single line.
+  - The start guard's script gets the shell's process id as an argument
+    (`ModuleFileRules`), since `$PPID` is `timeout` inside the runner. `Lockscreen.qml`
+    uses `$PPID` in a script too: the same change when its probes move to the runner.
+  - `ModuleHost._clearGuard` still uses `execDetached` (not one of the four blocks).
+  - An orderly quit of the shell with a run in flight has no test of its own: covered
+    only by the unit case that kills `timeout` with KILL from outside. A reload in place
+    is covered by the lock scenario `modules-reload`, which passed without the fix too.
+  - No test hangs the lookup of `timeout` itself or the stores' directory check.
+  - A `CommandAction` whose program cannot start is answered with an error now; before,
+    its queue hung.
 - [ ] **API plan, fourth batch**: on `master` (2026-11-18, not reviewed): the public
       controls (F2, module API 1.5: `Dropdown`, `InputField`, `Pill`, `Checkbox`,
       `ToggleSwitch`, `PrivilegedMark` under `api/`), rows and texts (F3, 1.6: the new
