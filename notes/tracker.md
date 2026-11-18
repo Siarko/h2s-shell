@@ -15,8 +15,39 @@ machine. How sessions work is in [workflow.md](workflow.md).
 State on 2026-11-17, end of the session on the Arch machine. One topic at a time from here
 (the owner). The test split is done; the next topic is the API plan's implementation
 (index [plans/api-next.md](plans/api-next.md)): the theme token test, the
-`ModuleRules.qml` split and the version gate are done on branch `api-batch-1` (below);
-the file chooser trial and the bordered buttons on branch `api-batch-2`.
+`ModuleRules.qml` split and the version gate (first batch), the file chooser trial and
+the bordered buttons (second), pills in three sizes and the public button (third) are on
+`master` (below). None of it was reviewed by a second agent; run on the Arch machine
+only, not on the NixOS machine.
+
+- [ ] **API plan, third batch**: on `master` (2026-11-18, not reviewed): pills in three
+      sizes (T1: the theme's `pill` group with 22, 26 and 30 px, `Pill.size`,
+      `tests/PillSizesTest.qml`) and the public button (F1b, module API 1.4:
+      `api/SmallButton.qml`, `ApiElementRules`, `tests/ApiElementsTest.qml`). Left open:
+  - **A test of the released Tailscale module fails** under `tests/run-modules.sh`: "its
+    end date — expected 1802606400000, got 0" (the suite on serve, certificates, lock,
+    exit node per network). The agent reported the same on `master` before this batch;
+    the lead did not check that. The module's other suites pass. To look at before the
+    module's next slice.
+  - `Pill.minimumHeight` stays, writable, defaulting to the size's height: the released
+    module sets `minimumHeight: 26`. It goes when the module is off the shell's
+    internals (M10) or with the closing slice (Z).
+  - The internal `Pill` defaults to `s`, so the pills that set no height stay 22 px; the
+    public `Pill` (F2) is to default to `m` and has to map that.
+  - The plan counted 21 pills with a height in pixels; there were 19 (9 of 24, 9 of 26,
+    one of 30).
+  - A public button that asks keeps its own width in a layout (inside it is
+    `DeleteButton`, a `Row`) and ignores `checked`; said in the `Api.qml` header.
+  - `qs.api` and `qs.components` both have a `SmallButton`: the import written last
+    wins (pinned by a test). Ends with F4 and M10.
+  - "The mark" in F1b's row of the plan is not built: §4.9 does not describe it for a
+    button. To settle before F2.
+  - The tooltip of a button that asks is tested as a passed-on property only, not as
+    shown under the pointer.
+  - Seen, not touched: `Math.max(22, …)` for a pill's width in
+    `panels/calendar/RecurrenceEditor.qml`.
+  - Next in the elements lane: the public controls (F2), rows and texts (F3), the base
+    types (F4).
 
 - [x] **Test split** ([plans/test-split.md](plans/test-split.md)): done — a general set
       that runs on NixOS and on Arch, a set per system (`tests/run-system.sh`), and one
@@ -24,8 +55,7 @@ the file chooser trial and the bordered buttons on branch `api-batch-2`.
 - [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
       nix tool lookup is remembered; the whole lock bed takes about three minutes on either
       machine.
-- [ ] **API plan, second batch**: done on branch `api-batch-2` (not merged, not
-      reviewed): the file chooser trial (E0; the finding is in
+- [ ] **API plan, second batch**: on `master` (not reviewed): the file chooser trial (E0; the finding is in
       [plans/api-next/facts.md](plans/api-next/facts.md) §3.9) and the bordered buttons
       (F1a: `ThemeRules.buttonLook`, `SmallButton`, `DeleteButton`, the theme groups
       `warningButton` and `successButton`, `tests/ButtonKindsTest.qml`). Run on the Arch
@@ -59,9 +89,7 @@ the file chooser trial and the bordered buttons on branch `api-batch-2`.
     `panels/settings/ControlsShapeSettings.qml`. The internal `saveChange` and `cancel`
     kinds ask in `confirmSecondary` and as `normal`; the plan does not say, and nothing
     uses them that way.
-  - Next in the elements lane: pills in three sizes (T1), the public button (F1b).
-- [ ] **API plan, first batch**: done on branch `api-batch-1` (three commits, not merged,
-      not reviewed): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
+- [ ] **API plan, first batch**: on `master` (three commits, not reviewed): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
       `ModuleRules.qml` split into five files (S0, a pure move), and the version gate (A0:
       `ModuleRules.apiFloor`, `apiCompatibility` with the floor, `deprecations` in a
       module's status, the CHANGELOG ↔ `apiVersion` test). Run on the Arch machine only
