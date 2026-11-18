@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.components as Components
+import qs.singletons
 
 // The public row (module API 1.6): one line of a settings page, a card or a popup — a
 // `label`, a short line under it on what it is about (`hint`), and on the right a
@@ -16,7 +17,7 @@ import qs.components as Components
 Item {
     id: root
 
-    property alias label: _inner.label
+    property string label
     property alias hint: _inner.hint
     property alias value: _inner.value
     default property alias controls: _inner.controls
@@ -30,5 +31,6 @@ Item {
 
         width: root.width
         height: root.height
+        label: ApiElementRules.oneLine(root.label)
     }
 }

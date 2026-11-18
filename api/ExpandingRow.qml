@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.components as Components
+import qs.singletons
 
 // The public row that opens (module API 1.6): a `label`, a short line under it (`hint`)
 // and the mark of a card's header; a click anywhere on the line flips `open`. What it
@@ -15,7 +16,7 @@ import qs.components as Components
 Item {
     id: root
 
-    property alias label: _inner.label
+    property string label
     property alias hint: _inner.hint
     property alias open: _inner.open
     default property alias content: _inner.content
@@ -29,5 +30,6 @@ Item {
 
         width: root.width
         height: root.height
+        label: ApiElementRules.oneLine(root.label)
     }
 }

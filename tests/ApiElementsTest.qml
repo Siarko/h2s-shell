@@ -211,6 +211,38 @@ TestCase {
             DeleteButton { label: "Asks"; fontSize: Theme.fontSizeBody }
         }
 
+        // How `asking` is declared, one-line texts, an unavailable question
+        Row {
+            x: 10; y: 200
+            spacing: 10
+
+            Public.SmallButton {
+                id: unavailableAsking
+                label: "U"
+                confirm: true
+                asking: true
+                available: false
+            }
+            Public.SmallButton { id: askingFirst; label: "A"; asking: true; confirm: true }
+            Public.SmallButton { id: confirmFirst; label: "B"; confirm: true; asking: true }
+            Public.SmallButton { id: boundAsking; property bool flag: true; label: "C"; confirm: true; asking: flag }
+            Public.SmallButton { id: multiLine; label: "One\nTwo\nThree"; confirm: true; confirmLabel: "Really\nsure?" }
+            Public.Pill { id: multiPill; label: "One\nTwo\nThree" }
+        }
+        Row {
+            x: 10; y: 250
+            spacing: 10
+
+            Pill { id: internalMultiPill; label: "One\nTwo\nThree" }
+            DeleteButton { id: internalMultiAsk; label: "One\nTwo"; confirmLabel: "Really\nsure?" }
+            DeleteButton { id: internalOneAsk; label: "One"; confirmLabel: "Sure?" }
+            ToggleSwitch { id: internalOff; enabled: false }
+            ToggleSwitch { id: internalOn }
+            Public.Dropdown { id: coloured; options: [{ value: "a", label: "Red\nline", color: "red" }]; value: "a" }
+            Public.Pill { id: longPill; label: "y".repeat(200) }
+            Public.SmallButton { id: longButton; label: "x".repeat(200) }
+        }
+
         // --- the controls ---
         Row {
             x: 10; y: 300
@@ -757,12 +789,75 @@ TestCase {
         const narrowLabel = _child(_inside(narrow), "QQuickText");
         assert(narrow.width === 80 && _inside(narrow).width === 80 && narrowLabel.truncated, "a button made narrower than its label keeps that width and cuts the label");
 
+        _askingAndOneLine();
         _controls();
         _rows();
         _baseTypes();
 
         _window.visible = false;
         finish();
+    }
+
+    // `asking` however it is declared; module texts on one line and capped; the dimmed
+    // states (an unavailable question's "×", a switch not enabled); a dropdown's colours
+    function _askingAndOneLine() {
+        const rules = ApiElementRules;
+
+        // --- asking, declared ---
+        assert(askingFirst.asking && _inside(askingFirst).asking, "asking declared before confirm: asking");
+        assert(confirmFirst.asking && _inside(confirmFirst).asking, "… and after it");
+        assert(boundAsking.asking && _inside(boundAsking).asking, "asking bound to the owner's flag: asking while it is true");
+        for (const flag of [false, true, false, true]) {
+            boundAsking.flag = flag;
+            assertEqual(boundAsking.asking + " " + _inside(boundAsking).asking, flag + " " + flag, "… and follows it when it turns " + flag);
+        }
+
+        // --- the cap ---
+        assertEqual(rules.oneLine("a\nb\r\nc\td\u2028e"), "a b c d e", "oneLine: line breaks and tabs folded into spaces");
+        assertEqual(rules.oneLine("x".repeat(rules.textCap)), "x".repeat(rules.textCap), "… a text as long as the cap kept");
+        const cut = rules.oneLine("x".repeat(rules.textCap + 1));
+        assert(Array.from(cut).length === rules.textCap && cut.endsWith("…"), "… a longer one cut to the cap, \"…\" at the end");
+        assertEqual(Array.from(rules.oneLine("😀".repeat(100))).length, rules.textCap, "… counted in characters, never splitting one");
+        assertEqual(rules.oneLine(null) + rules.oneLine(undefined) + rules.oneLine({}) + rules.oneLine(3), "3", "… not a text: \"\"; a number as written");
+        assertEqual(rules.textCap, 80, "the cap is 80 characters");
+        assertEqual(Array.from(_child(_inside(longButton), "QQuickText").text).length, rules.textCap, "a button's long label is capped");
+        assertEqual(Array.from(_texts(_within(longPill))[0].text).length, rules.textCap, "… a pill's");
+        assertEqual(longPill.label.length, 200, "the element keeps what it was given");
+
+        // --- one line ---
+        const multiParts = _parts(_inside(multiLine));
+        assertEqual(multiParts.label.text, "One Two Three", "a button's label with line breaks is one line");
+        assertEqual(multiLine.height, asks.height, "… as tall as one with a one-line label");
+        multiLine.asking = true;
+        assertEqual(multiParts.label.text + "|" + multiLine.height, "Really sure?|" + asks.height, "… and so is its question");
+        multiLine.asking = false;
+        assertEqual(_texts(_within(multiPill))[0].text + "|" + multiPill.height, "One Two Three|" + Theme.pill.mediumHeight, "a pill's label too, the pill at its size's height");
+        assertEqual(internalMultiPill.height, ThemeRules.pillHeight(Theme.pill, "s"), "the shell's own pill shows a label with line breaks on one line");
+        assertEqual(internalMultiAsk.height, internalOneAsk.height, "… and its asking button");
+        internalMultiAsk.asking = true;
+        internalOneAsk.asking = true;
+        assertEqual(internalMultiAsk.height, internalOneAsk.height, "… asking too");
+        internalMultiAsk.asking = false;
+        internalOneAsk.asking = false;
+
+        // --- a dropdown's options ---
+        const option = _within(coloured).options[0];
+        assertEqual(JSON.stringify(option), JSON.stringify({ value: "a", label: "Red line" }), "a dropdown's option reaches the one inside without its colour, its label on one line");
+        assertEqual(JSON.stringify(rules.dropdownOptions([{ value: 1, label: "One", color: "#f00", extra: true }, null])),
+            JSON.stringify([{ value: 1, label: "One" }, { label: "" }]), "dropdownOptions: value and label alone");
+        assertEqual(rules.dropdownOptions("junk").length, 0, "… not a list: none");
+
+        // --- dimmed ---
+        const dimmed = _inside(unavailable).opacity;
+        assert(dimmed < 1, "a button that is not available is dimmed");
+        const unavailableParts = _parts(_inside(unavailableAsking));
+        assert(unavailableAsking.asking && unavailableParts.cancel.visible, "a button that is not available may be asking");
+        assertEqual(unavailableParts.face.opacity + " " + unavailableParts.cancel.opacity, dimmed + " " + dimmed, "… its question and its \"×\" dimmed alike");
+        driver.mouseClick(unavailableParts.cancel, 3, 3);
+        assert(unavailableAsking.asking, "… and the \"×\" takes no click");
+        driver.mouseMove(away, 5, 5);
+        assertEqual(internalOff.opacity + " " + internalOn.opacity, dimmed + " 1", "a switch not enabled is dimmed as a button not available");
+        assertEqual(_within(toggleOff).opacity + " " + _within(toggle).opacity, dimmed + " 1", "… the public one too");
     }
 
     // PopupWidget, BarText, BarRow, PointerArea, VpnProvider: subtypes, not wrappers

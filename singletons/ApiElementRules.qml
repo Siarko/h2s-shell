@@ -28,6 +28,32 @@ Singleton {
     readonly property var noticeKinds: ({ warning: "warning", danger: "error", success: "success" })
     readonly property string noticeKindDefault: "warning"
 
+    // The longest a text a module hands a public element for one line may be, in
+    // characters, before it is cut
+    readonly property int textCap: 80
+
+    // A text from a module as a public element shows it on one line: line breaks and
+    // tabs folded into spaces, and longer than `textCap` cut, "…" at the end. Anything not
+    // a string or a number is "". Characters are counted as code points, so a cut never
+    // splits one.
+    function oneLine(text) {
+        if (typeof text !== "string" && typeof text !== "number")
+            return "";
+        const folded = String(text).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
+        const characters = Array.from(folded);
+        return characters.length > textCap ? characters.slice(0, textCap - 1).join("") + "…" : folded;
+    }
+
+    // A public dropdown's options as the internal one is given them: { value, label } of
+    // each, the label on one line. Every other field is left out — the internal dropdown
+    // draws a `color` as a dot, and a module puts no colour of its own on screen. Not an
+    // array: none.
+    function dropdownOptions(options) {
+        if (!Array.isArray(options))
+            return [];
+        return options.map(option => ({ value: option?.value, label: oneLine(option?.label) }));
+    }
+
     // `word` looked up in `table`, else `fallback`'s entry: { value, known }
     function pick(table, word, fallback) {
         const known = typeof word === "string" && Object.prototype.hasOwnProperty.call(table, word);

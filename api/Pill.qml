@@ -16,7 +16,7 @@ import qs.singletons
 Item {
     id: root
 
-    property alias label: _inner.label
+    property string label
     property alias picked: _inner.picked
     property alias tooltip: _inner.tooltip
     property string size: "m"
@@ -36,6 +36,7 @@ Item {
         width: root.width
         height: root.height
         size: sizeWord.value
+        label: ApiElementRules.oneLine(root.label)
         onClicked: root.clicked()
     }
 }

@@ -17,7 +17,11 @@ import qs.singletons
 // with a "×" that takes it back (`cancelTip`); `asked()` says so and `asking` is true
 // until it is answered. Set `asking = false` when what the button acts on changes.
 // `clicked()` is "do it" either way: the click, or with `confirm` the second one. A
-// button that asks shows no `checked`.
+// button that asks shows no `checked`, and only a secondary button shows it at all: the
+// other kinds look the same checked or not.
+//
+// A label or question with line breaks is shown on one line, and one longer than 80
+// characters is cut with "…" (ApiElementRules.oneLine).
 //
 // A wrapper around the internal buttons (components/SmallButton.qml, DeleteButton.qml):
 // what is declared here is all a module can rely on. As wide and tall as the button
@@ -42,14 +46,28 @@ Item {
     implicitWidth: _inner.item?.implicitWidth ?? 0
     implicitHeight: _inner.item?.implicitHeight ?? 0
 
-    // Only a button that asks can be asking
-    onAskingChanged: {
-        if (asking && !confirm)
-            asking = false;
-        else if (confirm && _inner.item)
-            _inner.item.asking = asking;
+    // Not on the element itself, so nothing here becomes a name a module could use
+    QtObject {
+        id: _asking
+
+        // Set once the declared values are all in: before, `confirm` may not be yet, and
+        // which of the two is assigned first must not matter
+        property bool ready: false
+
+        // Only a button that asks can be asking
+        function apply() {
+            if (root.asking && !root.confirm)
+                root.asking = false;
+            else if (root.confirm && _inner.item && _inner.item.asking !== root.asking)
+                _inner.item.asking = root.asking;
+        }
     }
-    onConfirmChanged: if (!confirm) asking = false
+    onAskingChanged: if (_asking.ready) _asking.apply()
+    onConfirmChanged: if (_asking.ready && !confirm && asking) asking = false
+    Component.onCompleted: {
+        _asking.ready = true;
+        _asking.apply();
+    }
 
     Loader {
         id: _inner
@@ -72,7 +90,7 @@ Item {
         Components.SmallButton {
             width: root.width
             height: root.height
-            label: root.label
+            label: ApiElementRules.oneLine(root.label)
             available: root.available
             checked: root.checked
             tooltip: root.tooltip
@@ -86,14 +104,16 @@ Item {
         id: _asks
 
         Components.DeleteButton {
-            label: root.label
-            confirmLabel: root.confirmLabel
+            label: ApiElementRules.oneLine(root.label)
+            confirmLabel: ApiElementRules.oneLine(root.confirmLabel)
             cancelTip: root.cancelTip
             available: root.available
             tooltip: root.tooltip
             kind: _inner.kind.value
             fontSize: Theme[_inner.size.value]
-            onAskingChanged: root.asking = asking
+            // Written back only when it differs, so an owner's binding on `asking`
+            // is not replaced by its own value coming back
+            onAskingChanged: if (root.asking !== asking) root.asking = asking
             onAskingStarted: root.asked()
             onConfirmed: root.clicked()
             Component.onCompleted: asking = root.asking

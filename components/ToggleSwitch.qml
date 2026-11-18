@@ -17,6 +17,8 @@ Rectangle {
     width: implicitWidth
     height: implicitHeight
     radius: height / 2
+    // Not enabled, it is dimmed as a button that is not available
+    opacity: enabled ? 1 : 0.35
     color: checked ? Theme.accent : offColor
     Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 

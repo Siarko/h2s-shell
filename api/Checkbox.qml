@@ -1,5 +1,6 @@
 import QtQuick
 import qs.components as Components
+import qs.singletons
 
 // The public checkbox (module API 1.5): a box with an optional `label` beside it. A click
 // on either, or Space while it has the focus, gives `toggled()`; the owner flips
@@ -12,7 +13,7 @@ import qs.components as Components
 Item {
     id: root
 
-    property alias label: _inner.label
+    property string label
     property alias checked: _inner.checked
 
     signal toggled
@@ -25,6 +26,7 @@ Item {
 
         width: root.width
         height: root.height
+        label: ApiElementRules.oneLine(root.label)
         onToggled: root.toggled()
     }
 }

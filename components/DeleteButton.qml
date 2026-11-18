@@ -62,6 +62,9 @@ Row {
             anchors.centerIn: parent
             text: root.asking ? root.confirmLabel : root.label
             textFormat: Text.PlainText
+            // One line: a label or question with line breaks does not make the button taller
+            maximumLineCount: 1
+            elide: Text.ElideRight
             font.family: Theme.fontFamily
             font.pixelSize: root.fontSize
             color: Theme[root._look.label]
@@ -112,7 +115,9 @@ Row {
         radius: root._shape.radius
         topLeftRadius: 0
         bottomLeftRadius: 0
-        color: _cancelArea.lit ? Theme.surfaceHover : Theme.surface
+        // Not available, it is dimmed and takes no click, as the button it belongs to
+        opacity: root.available ? 1 : 0.35
+        color: _cancelArea.lit && root.available ? Theme.surfaceHover : Theme.surface
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
         Text {
@@ -127,6 +132,7 @@ Row {
             id: _cancelArea
             centred: false
             anchors.fill: parent
+            enabled: root.available
             cursorShape: Qt.PointingHandCursor
             onClicked: root.asking = false
         }

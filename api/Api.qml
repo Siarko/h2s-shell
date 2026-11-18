@@ -68,7 +68,9 @@ import qs.singletons.network
 // the element is about) and `size` ("xs", "s", "m" — the default —, "l"; an element takes
 // the ones it has). Both lists are open: a word an element does not know shows as its
 // default and is logged once per element type and word. Every text is shown as written
-// (plain text). An element's properties and signals are pinned by tests/ApiElementsTest.qml;
+// (plain text). A label, a button's question, a pill's text and a dropdown's option
+// labels and placeholder are one line: line breaks become spaces, and past 80 characters
+// the text is cut with "…" (ApiElementRules.oneLine). An element's properties and signals are pinned by tests/ApiElementsTest.qml;
 // a change to them is a version change.
 //   SmallButton            label, available, checked, tooltip;
 //                          kind: "primary" (performs the action) | "secondary" (the default:
@@ -84,7 +86,10 @@ import qs.singletons.network
 //                          asked() — the first click of a button that asks. A danger button
 //                          without confirm acts on the first click. A button that asks
 //                          shows no `checked` and keeps its own width in a layout.
-//   Dropdown               (1.5) options ([{ value, label }]), value (the owner sets it),
+//                          `checked` shows only on a secondary button: a primary,
+//                          danger, warning or success one looks the same either way.
+//   Dropdown               (1.5) options ([{ value, label }]; other fields of an option
+//                          are dropped), value (the owner sets it),
 //                          placeholder (shown while the value is none of the options);
 //                          size: "xs" | "s" | "m"; picked(value) — the choice made
 //   InputField             (1.5) text, placeholder, problem (the value is wrong now),
