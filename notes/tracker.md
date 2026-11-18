@@ -25,6 +25,24 @@ installed shell into a test tree (below). Module test mode (A3), privileged star
 the prompt saying who and what for (A5) are on `master` (below). Next in the commands
 lane: the notification when the shell's prompt does not answer (A6).
 
+- [x] **Review of the first four batches**: on `master` (2026-11-18). Two reviewers on the
+      diffs of T0, S0, A0 (no defect: S0 confirmed a pure move, the version gate numeric)
+      and F1a, T1, F1b–F4 (no high finding); fixes by another author with cases that fail
+      before; the new file scan reviewed once more and fixed; `tests/run-all.sh` passes on
+      Arch, tools from `PATH`, and on NixOS, tools from nix; the Tailscale module's suites
+      pass. Fixed: the public `SmallButton`'s `asking` follows a binding and either
+      declaration order; module text one line and capped at 80 characters in the public
+      elements (`ApiElementRules.oneLine`), the internal `Pill` and `DeleteButton` one line;
+      the public `Dropdown` drops an option's `color`; a disabled `ToggleSwitch` and an
+      unavailable asking "×" are dimmed; `importsOf` reads imports on the first `{` line;
+      the import check scans every `.qml` under a module (at most 100 files, 8 directories
+      deep, no links, no other file systems, required files first so a slow scan only
+      warns, "imports not checked in N files" when incomplete, warnings capped 5 per file
+      and 50 per module); a floor test that can fail; no Settings → Modules page claimed.
+      Documented: the public `checked` shows only on `secondary`. Left open: the hover
+      contrast of warning/success buttons ("Open points"); a quoted import holding `{` is
+      still missed by `importsOf`.
+
 - [x] **API plan, A5 the prompt says who and what for**: on `master` (2026-11-18; no API
       bump, user-visible: CHANGELOG "Unreleased"; reviewed twice by a second agent on the
       diff — first round eight findings, second round three, all fixed by other authors
@@ -235,7 +253,7 @@ lane: the notification when the shell's prompt does not answer (A6).
   - No test hangs the lookup of `timeout` itself or the stores' directory check.
   - A `CommandAction` whose program cannot start is answered with an error now; before,
     its queue hung.
-- [ ] **API plan, fourth batch**: on `master` (2026-11-18, not reviewed): the public
+- [x] **API plan, fourth batch**: on `master` (2026-11-18, reviewed later, see "Review of the first four batches"): the public
       controls (F2, module API 1.5: `Dropdown`, `InputField`, `Pill`, `Checkbox`,
       `ToggleSwitch`, `PrivilegedMark` under `api/`), rows and texts (F3, 1.6: the new
       `components/SettingsRow.qml` and `ExpandingRow.qml`, `api/SettingsRow.qml`,
@@ -271,7 +289,7 @@ lane: the notification when the shell's prompt does not answer (A6).
     imports both, the import written last wins. Ends with M10.
   - `tests/run-modules.sh` does not fail on a deprecation (an error only from Z), and
     `tests-modules.qml` prints a module's deprecations beside its warnings.
-- [ ] **API plan, third batch**: on `master` (2026-11-18, not reviewed): pills in three
+- [x] **API plan, third batch**: on `master` (2026-11-18, reviewed later, see "Review of the first four batches"): pills in three
       sizes (T1: the theme's `pill` group with 22, 26 and 30 px, `Pill.size`,
       `tests/PillSizesTest.qml`) and the public button (F1b, module API 1.4:
       `api/SmallButton.qml`, `ApiElementRules`, `tests/ApiElementsTest.qml`). Left open:
@@ -305,7 +323,7 @@ lane: the notification when the shell's prompt does not answer (A6).
 - [x] **Test speed**: done — the lock bed's runner takes the machine-wide lock itself, the
       nix tool lookup is remembered; the whole lock bed takes about three minutes on either
       machine.
-- [ ] **API plan, second batch**: on `master` (not reviewed): the file chooser trial (E0; the finding is in
+- [x] **API plan, second batch**: on `master` (reviewed later, see "Review of the first four batches"): the file chooser trial (E0; the finding is in
       [plans/api-next/facts.md](plans/api-next/facts.md) §3.9) and the bordered buttons
       (F1a: `ThemeRules.buttonLook`, `SmallButton`, `DeleteButton`, the theme groups
       `warningButton` and `successButton`, `tests/ButtonKindsTest.qml`). Run on the Arch
@@ -339,7 +357,7 @@ lane: the notification when the shell's prompt does not answer (A6).
     `panels/settings/ControlsShapeSettings.qml`. The internal `saveChange` and `cancel`
     kinds ask in `confirmSecondary` and as `normal`; the plan does not say, and nothing
     uses them that way.
-- [ ] **API plan, first batch**: on `master` (three commits, not reviewed): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
+- [x] **API plan, first batch**: on `master` (three commits, reviewed later, see "Review of the first four batches"): the theme token test (T0, `tests/ApiThemeTokensTest.qml`), the
       `ModuleRules.qml` split into five files (S0, a pure move), and the version gate (A0:
       `ModuleRules.apiFloor`, `apiCompatibility` with the floor, `deprecations` in a
       module's status, the CHANGELOG ↔ `apiVersion` test). Run on the Arch machine only
