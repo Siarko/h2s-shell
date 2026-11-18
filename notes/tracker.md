@@ -22,8 +22,40 @@ on `master` (below). The elements lane is done but for a module's icon (U7a). Th
 four batches were not reviewed by a second agent and ran on the Arch machine only; the
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
 installed shell into a test tree (below). Module test mode (A3), privileged start (A4) and
-the prompt saying who and what for (A5) are on `master` (below). Next in the commands
-lane: the notification when the shell's prompt does not answer (A6).
+the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
+with helpers (C1) and the notification (A6). Next: system facts (C2), then the module's
+M2 and M3 (privileged runs with a `what`, so the full prompt shows on a real run).
+
+- [x] **API plan, C1 helpers and A6 the notification**: on `master` (2026-11-19; module API
+      1.12; each reviewed by a second agent on the diff, fixed by other authors with cases
+      that fail before; `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS,
+      tools from nix; the Tailscale module's suites pass). C1: `Api.format` (bytes, rate,
+      ago), `Api.address` (`singletons/AddressRules.qml`: isIpv4/isIpv6/isIp/parseCidr/
+      contains/overlap/redact; `NetworkRules` delegates — IPv4 with leading zeros now
+      refused, as `inet_pton`), `Api.minuteNow` (+ `ModuleTestKit.setNow`, reset per
+      suite), `module.log(level, text, key)` (dedupe by key and level, 256 keys, cleared
+      on module off), `format: "plain"` notifications (one line, Cc/Cf dropped, caps 200/
+      1000, body escaped after the cut); a module can no longer send the shell's
+      `x-qs-*` categories; the shell's toast and notification card show plain text;
+      `redact` handles ports, brackets and `::` in identifiers; emoji are never cut
+      (`PrivilegedRules.characters`; `Array.from` splits surrogate pairs in this engine,
+      `for…of` does not); `tests/run-modules.sh` fails when the suite count is missing.
+      A6: with another polkit agent (state `other`, `blocked`, `deciding`, `none`) a run
+      reaching the head sends one plain notification "Module: <name>" / "Authorization:
+      <what>" just before pkexec (`PrivilegedRules.launchNotice`). Review found an older
+      defect, fixed: a legacy `PrivilegedAction` run with the default `elevate` waiting for
+      the pkexec lookup survived a lock and launched pkexec while locked, and could launch
+      beside the next run; it now waits in the check step (`legacyCheckWaits`). Test seam
+      `testLookupHeld` (test mode only) and `tests/PrivilegedLookupSeam.qml`. Left open:
+  - A legacy run's notification reads "Module: Not named" with no body (as the plan says);
+    urgency and app name are the defaults ("H2S Shell").
+  - `deciding` (the first moments after start) counts as "the shell's prompt does not
+    answer": runs then get the notification and the strict one-at-a-time rule.
+  - The plain body is entity-escaped; a notification server without body markup would show
+    `&lt;` literally.
+  - Nothing was sent to a real notification daemon or seen next to another agent's prompt.
+  - The lock scenario `restart-crash-locked` failed once in a full run on Arch and passed
+    alone and in the next full run.
 
 - [x] **Review of the first four batches**: on `master` (2026-11-18). Two reviewers on the
       diffs of T0, S0, A0 (no defect: S0 confirmed a pure move, the version gate numeric)
@@ -443,7 +475,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
    - [x] test mode
    - [x] privileged start (A4), the prompt says who and what for (A5)
    - [ ] shared module object
-   - [ ] helpers
+   - [x] helpers (C1)
    - [ ] system and network facts
 4. UI anchors; today's slots (`components/ModuleSlot.qml`, `Api.slots`) moved onto them — open
 5. A module's public API for other modules, basic version — open
