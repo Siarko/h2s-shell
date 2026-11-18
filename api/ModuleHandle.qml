@@ -49,6 +49,57 @@ QtObject {
         }
     }
 
+    // ---- Its programs (API 1.9) ----
+    // Every program its manifest names (requires.programs, optionalPrograms), as the shell
+    // found it on PATH and judged it (ModuleRules.programVerdict), frozen:
+    //   { <name>: { path: the absolute path ("" — not found), trusted, reason } }
+    // `trusted`: only root can change what runs (the real file in the Nix store, or root's
+    // and writable by root alone, with every directory above it and above the path found).
+    // A read that failed is untrusted. A new object only when something in it changed.
+    readonly property string _programsText: {
+        const verdicts = host?.programVerdicts ?? {};
+        const own = {};
+        for (const name of _programNames) {
+            const verdict = verdicts[name];
+            if (verdict)
+                own[name] = { path: verdict.path, trusted: verdict.trusted === true, reason: verdict.reason };
+        }
+        return JSON.stringify(own);
+    }
+    readonly property var programs: {
+        const parsed = JSON.parse(_programsText);
+        for (const name of Object.keys(parsed))
+            Object.freeze(parsed[name]);
+        return Object.freeze(parsed);
+    }
+    // Every program it names has a verdict (the module loads only once they have)
+    readonly property bool programsReady: manifest !== null && _programNames.every(name => (host?.programVerdicts ?? {})[name] !== undefined)
+
+    // Looks its programs up again (installed or changed since): at most once every 2 s — a
+    // call sooner is done when the 2 s are over. The verdicts stay until the new ones come.
+    // The shell does this itself after the machine wakes, before `resumed()`.
+    function recheckPrograms() {
+        const wait = ModuleRules.recheckDelay(_lastRecheck, Date.now(), ModuleRules.recheckMinMs);
+        if (wait === 0) {
+            _recheckNow();
+        } else if (!_recheckTimer.running) {
+            _recheckTimer.interval = wait;
+            _recheckTimer.start();
+        }
+    }
+
+    readonly property var _programNames: (manifest?.programs ?? []).concat(manifest?.optionalPrograms ?? [])
+    property real _lastRecheck: 0
+
+    function _recheckNow() {
+        _lastRecheck = Date.now();
+        host?.recheckPrograms(moduleId);
+    }
+
+    property Timer _recheckTimer: Timer {
+        onTriggered: root._recheckNow()
+    }
+
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)
     function url(relative) {
         return directory === "" ? "" : ModuleFileRules.fileUrl(directory, String(relative ?? ""));

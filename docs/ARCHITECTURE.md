@@ -510,7 +510,8 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
 - **The host**: `singletons/ModuleHost.qml`, one instance in the `Modules` singleton, which
   `shell.qml` touches before the bars. It reads no module file on the GUI thread: the
   manifests, qmldirs and file texts come out of its file check (a process, with a deadline),
-  then it checks them and the required programs (a process too), creates each enabled module's `main` inside
+  then it checks them and looks up the programs they name (a process too: the program
+  lookup below), creates each enabled module's `main` inside
   a guard (the file check, the program look-up, the start guard and the making of the
   stores' directory each run one command through a `singletons/io/CommandRunner`, under
   the host's `checkTimeoutMs`), keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
@@ -627,10 +628,12 @@ life as `step`, the cuts, the result); the runner starts processes and keeps tim
   Between `timeout` and the command is util-linux's `setpriv --pdeathsig KILL`, which
   becomes the command after asking the kernel to kill it when `timeout` dies: a KILL
   that reaches `timeout` (the shell's child) cannot be passed on, and the command would
-  go on without a limit. `singletons/CommandTools.qml` looks for both programs once, in
-  system directories only and never on `PATH`; runs with a limit wait for its answer.
-  With either missing a run is started bare, and the watchdog is its only limit.
-  - NixOS: `/run/current-system/sw/bin/timeout`, `/run/current-system/sw/bin/setpriv`.
+  go on without a limit. `singletons/CommandTools.qml` looks for both programs once, on
+  `PATH`, and takes the first match that is trusted (the program lookup below: only root
+  can change it); runs with a limit wait for its answer. With either missing a run is
+  started bare, and the watchdog is its only limit.
+  - NixOS: `/run/current-system/sw/bin/timeout` and `setpriv` there, which lead into the
+    Nix store.
   - Arch: `/usr/bin/timeout`, `/usr/bin/setpriv`.
 - Past the limit, and on `cancel()`, the command gets TERM, and KILL `killAfterMs` later.
   From a `cancel()` on no output is handed over; `done` comes when the process is gone.
@@ -641,10 +644,27 @@ life as `step`, the cuts, the result); the runner starts processes and keeps tim
   with a limit is `timeout`, and the command dies with that; the runner also sends KILL
   to the process group `timeout` leads, for what the command started itself.
 
+**The program lookup**: a module names the programs it runs in its manifest,
+`requires.programs` (without one it is not loaded: `missing-program`) and
+`optionalPrograms` (looked up the same way; a missing one does not stop it). The host
+looks each up on `PATH` (an executable file; absolute entries only) and judges what it
+finds; the module reads the result on its handle, `module.programs`: per name the path
+(`""` when not found), `trusted` and a `reason`. `module.recheckPrograms()` looks again (at
+most every 2 s); the host does so itself after the machine wakes. A program is trusted
+when only root can change what runs: its real file is in the Nix store, or it is root's
+and writable by no one else, and so is every directory above the path found, above each
+link on the way and above the real file. A read that fails is untrusted. The probe is
+`ModuleRules.programProbeScript`, the verdict `ModuleRules.programVerdict`; each change of
+a verdict is one line in the shell's log, with the path, the real file, its owner and mode.
+- NixOS: `/run/current-system/sw/bin` leads into the store; the setuid wrappers
+  (`/run/wrappers/bin`) are root's files. A program under `~/.nix-profile` is untrusted:
+  the link lives in a directory the user owns.
+- Arch: root's `/usr/bin`. A program in `~/.local/bin` is untrusted.
+
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
   rules, and the runner against `sh -c` scripts),
   `tests/ModuleRulesTest.qml` (the rules), `tests/ModulesTest.qml` (the host on
-  the fixtures in `tests/fixtures/modules`: guard, file check, start guard),
+  the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the

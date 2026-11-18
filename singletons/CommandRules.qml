@@ -17,14 +17,14 @@ Singleton {
     // `timeout` wraps: they are only there for a `timeout` that does not do its work
     readonly property int backstopMs: 1000
 
-    // The programs put around a run with a time limit, where each is looked for, in this
-    // order — system directories only (NixOS, Arch), never PATH: what ends a run is not
-    // taken from a place the user can write — and the arguments each must run with, exit 0,
-    // to count. `timeout` (coreutils) ends the command; `setpriv` (util-linux) is there
-    // for its --pdeathsig alone (commandLine).
+    // The programs put around a run with a time limit, in this order, and the arguments
+    // each must run with, exit 0, to count. CommandTools takes each from PATH, and only a
+    // match that only root can change (ModuleRules.programVerdict): what ends a run is not
+    // taken from a place the user can write. `timeout` (coreutils) ends the command;
+    // `setpriv` (util-linux) is there for its --pdeathsig alone (commandLine).
     readonly property var wrapperTools: [
-        { name: "timeout", candidates: ["/run/current-system/sw/bin/timeout", "/usr/bin/timeout"], probe: ["--version"] },
-        { name: "setpriv", candidates: ["/run/current-system/sw/bin/setpriv", "/usr/bin/setpriv"], probe: ["--pdeathsig", "KILL", "--version"] }
+        { name: "timeout", probe: ["--version"] },
+        { name: "setpriv", probe: ["--pdeathsig", "KILL", "--version"] }
     ]
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]

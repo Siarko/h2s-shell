@@ -1,0 +1,9 @@
+{
+    "id": "programs",
+    "name": "Programs fixture",
+    "version": "0.1.0",
+    "api": "1.9",
+    "main": "Main.qml",
+    "requires": { "programs": ["sh"] },
+    "optionalPrograms": ["h2s-fixture-no-such-program", "h2s-fixture-user-program", "h2s-fixture-later-program"]
+}

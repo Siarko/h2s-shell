@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stand-in program the suite puts on PATH later, for a recheck
+exit 0

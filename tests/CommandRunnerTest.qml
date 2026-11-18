@@ -134,8 +134,8 @@ TestCase {
 
     function runAsync() {
         _then("the look-up of timeout answered", () => CommandTools.known, () => {
-            assert(CommandRules.wrapperTools[0].candidates.includes(CommandTools.timeout), "coreutils' timeout found in a system directory: " + CommandTools.timeout);
-            assert(CommandRules.wrapperTools[1].candidates.includes(CommandTools.setpriv), "util-linux's setpriv found in a system directory: " + CommandTools.setpriv);
+            assert(CommandTools.timeout.startsWith("/") && CommandTools.timeout.endsWith("/timeout"), "coreutils' timeout found on PATH and trusted: " + CommandTools.timeout);
+            assert(CommandTools.setpriv.startsWith("/") && CommandTools.setpriv.endsWith("/setpriv"), "util-linux's setpriv found on PATH and trusted: " + CommandTools.setpriv);
             _plain();
         });
         _clock.start();

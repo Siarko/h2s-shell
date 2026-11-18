@@ -74,9 +74,8 @@ TestCase {
         assert(!rules.wraps(undefined, 30000) && !rules.wraps({}, 30000) && !rules.wraps({ timeout: "/usr/bin/timeout" }, 30000)
                && !rules.wraps(tools, 0) && rules.wraps(tools, 1), "wrapped: a limit and both programs");
         assertEqual(rules.wrapperTools.map(tool => tool.name).join(), "timeout,setpriv", "the two programs looked for");
-        assert(rules.wrapperTools.every(tool => tool.probe.length > 0 && tool.candidates.length > 0
-               && tool.candidates.every(path => path.startsWith("/") && !path.startsWith("/home") && !path.includes("/.") && path.endsWith("/" + tool.name))),
-               "… in system directories only, each with a probe");
+        assert(rules.wrapperTools.every(tool => tool.probe.length > 0 && tool.candidates === undefined),
+               "… each with a probe, and no directory of its own: found on PATH and judged (ModuleRules.programVerdict)");
 
         // --- a run's life ---
         const waiting = rules.fresh(1000, 300);

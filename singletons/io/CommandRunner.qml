@@ -19,7 +19,7 @@ import qs.singletons
 // - `environment` ({ NAME: value }) is added to the command's, the runner's first, then
 //   the run's: the way to hand a command a secret (a command line is anyone's to read).
 // - The time limit is kept twice. The command is started inside coreutils' `timeout -k`
-//   (CommandTools: found in a system directory), which ends it even when the shell is
+//   (CommandTools: found on PATH, trusted only), which ends it even when the shell is
 //   gone — with `setpriv --pdeathsig KILL` between the two, so that the command dies
 //   with `timeout` when the shell's own end kills that; and the runner has its own
 //   watchdog, the only limit where one of the two programs is missing. Past the limit

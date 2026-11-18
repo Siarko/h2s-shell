@@ -360,6 +360,59 @@ TestCase {
             assertEqual(_status("good")?.warnings.length, 0, "… no warnings");
             host.unload();
 
+            // A2: the programs a module names, looked up and judged. The fixture's bin/ is on
+            // the look-up's PATH: a program there is the user's (this checkout), so untrusted
+            host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };
+            host.load(_dirs(["programs"]), {});
+        });
+        _then("the programs fixture loads", () => _settled() && _status("programs")?.state === "loaded", () => {
+            const status = _status("programs");
+            assertEqual(status?.errors.length + " " + status?.warnings.length + " " + JSON.stringify(status?.missingPrograms), "0 0 []",
+                        "programs: loaded, an optional program missing is no error: " + status?.errors.join("; "));
+            const handle = host.handle("programs");
+            suite._programsHandle = handle;
+            const programs = handle.programs;
+            assert(handle.programsReady, "programsReady: every program it names has a verdict");
+            assertEqual(Object.keys(programs).sort().join(","), "h2s-fixture-later-program,h2s-fixture-no-such-program,h2s-fixture-user-program,sh",
+                        "programs: the required and the optional ones");
+            assert(Object.isFrozen(programs) && Object.isFrozen(programs.sh), "… frozen");
+            assertEqual(Object.keys(programs.sh).sort().join(","), "path,reason,trusted", "… each { path, trusted, reason }");
+            assert(programs.sh.path.startsWith("/") && programs.sh.path.endsWith("/sh") && typeof programs.sh.trusted === "boolean",
+                   "sh: found by its absolute path, judged: " + JSON.stringify(programs.sh));
+            assertEqual(JSON.stringify(programs["h2s-fixture-no-such-program"]), "{\"path\":\"\",\"trusted\":false,\"reason\":\"not found\"}",
+                        "a missing optional program: path \"\", untrusted, not found");
+            const user = programs["h2s-fixture-user-program"];
+            assertEqual(user.path, fixtures + "/programs/bin/h2s-fixture-user-program", "a program in a directory the user owns: found, by its path");
+            assert(user.trusted === false && user.reason.startsWith("others than root can change"), "… and not trusted: " + user.reason);
+            assertEqual(programs["h2s-fixture-later-program"].path, "", "a program on no directory of the PATH: not found");
+
+            // Looked up again: on a PATH that has it now
+            host.programEnvironment = { PATH: fixtures + "/programs/bin:" + fixtures + "/programs/later:" + Quickshell.env("PATH") };
+            suite._recheckedAt = Date.now();
+            handle.recheckPrograms();
+        });
+        _then("a recheck finds the program put on PATH", () => _programsHandle.programs["h2s-fixture-later-program"]?.path !== "", () => {
+            assertEqual(_programsHandle.programs["h2s-fixture-later-program"].path, fixtures + "/programs/later/h2s-fixture-later-program",
+                        "recheckPrograms(): the program on the new PATH found");
+            // A second one at once: kept to one look every 2 s, the verdicts stay meanwhile
+            host.programEnvironment = { PATH: fixtures + "/programs/bin:" + Quickshell.env("PATH") };
+            _programsHandle.recheckPrograms();
+            _programsHandle.recheckPrograms();
+            assert(_programsHandle.programs["h2s-fixture-later-program"].path !== "", "… a recheck asked: the verdict known stays until the new one");
+        });
+        _then("the second recheck answers", () => _programsHandle.programs["h2s-fixture-later-program"]?.path === "", () => {
+            const waited = Date.now() - _recheckedAt;
+            assert(waited >= 1900, "two rechecks at once: the second not before 2 s after the first (" + waited + " ms)");
+            assertEqual(_status("programs")?.state, "loaded", "… the module loaded all along");
+            // The machine woke: the host looks again by itself
+            host.programEnvironment = { PATH: fixtures + "/programs/later:" + Quickshell.env("PATH") };
+            host.forwardResumed();
+        });
+        _then("a wake looks the programs up again", () => _programsHandle.programs["h2s-fixture-later-program"]?.path !== "", () => {
+            assertEqual(_programsHandle.programs["h2s-fixture-user-program"].path, "", "after a wake: what is on PATH now");
+            host.unload();
+            host.programEnvironment = ({});
+
             // A3: the stores' directory made private at the host's start; a store's file
             // written synchronously, atomically, 600; flushed when destroyed; a huge file
             // refused on read
@@ -413,6 +466,8 @@ TestCase {
 
     property var _goodState: null
     property var _hungSince: 0
+    property var _programsHandle: null
+    property var _recheckedAt: 0
     property var _store: null
     property Component _storeComponent: Component {
         ModuleStore {

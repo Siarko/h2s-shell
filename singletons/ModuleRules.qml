@@ -44,7 +44,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.8"
+    readonly property string apiVersion: "1.9"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -204,6 +204,219 @@ Singleton {
     // Listed, never a warning: a module's warnings stay empty while it only uses old ways.
     function deprecation(what, use) {
         return String(what) + ": use " + String(use) + " (goes with the shell's next tightening)";
+    }
+
+    // ---- Program lookup with trust (API 1.9) ----
+    //
+    // Which program a name runs, and whether it can be trusted: what a module's handle shows
+    // (`programs`) and where the command runner takes `timeout` and `setpriv` from
+    // (CommandTools). The probe (programProbeScript) does the reading; everything here judges
+    // what it printed.
+    //
+    // TRUSTED means that nobody but root can change what runs: the program's real file is in
+    // the Nix store, or it is owned by root and writable by no one else — and so is every
+    // directory above the path found, above each link on the way to the real file, and above
+    // the real file (each judged where its name leads: `stat -L`), up to "/". A path in the
+    // Nix store is not looked above (the store is read-only; its own directory is not root's
+    // alone on every install). NixOS: /run/current-system/sw/bin leads into the store, the
+    // setuid wrappers are root's files under /run/wrappers; Arch: root's /usr/bin. Anything
+    // not read — a stat missing, a link that does not resolve — is untrusted, never trusted.
+    // A guard against mistakes (a program in a directory the user owns, handed on to run as
+    // root), not against a process that can already write where it likes.
+
+    // Links followed from the path found to the real file; a longer chain is untrusted
+    readonly property int maxLinkHops: 16
+    // How often a module may ask for its programs to be looked up again (recheckDelay)
+    readonly property int recheckMinMs: 2000
+
+    // `sh -c programProbeScript sh <"first" | "all"> <name>…`: each name on PATH (absolute
+    // entries only; an executable regular file), the first match or all of them. Per match,
+    // tab-separated lines:
+    //   cand <name> <path>             a match ("" after the name: none at all)
+    //   real <name> <readlink -f>      its real file (missing: it does not resolve)
+    //   hop  <name> <path>             each link on the way, made absolute, at most maxLinkHops
+    //   stat <name> <uid> <mode> <path>  every directory above the path, each hop and the
+    //                                  real file, and the real file itself (stat -L; octal
+    //                                  mode); nothing at or above a path under /nix/store/
+    readonly property string programProbeScript: [
+        "mode=$1; shift",
+        "set -f",
+        "say() { s=$(stat -L -c '%u %a' -- \"$2\") && printf 'stat\\t%s\\t%s\\t%s\\t%s\\n' \"$1\" \"${s% *}\" \"${s#* }\" \"$2\"; }",
+        "look() {",
+        "  n=$1; p=$2",
+        "  printf 'cand\\t%s\\t%s\\n' \"$n\" \"$p\"",
+        "  r=$(readlink -f -- \"$p\") && printf 'real\\t%s\\t%s\\n' \"$n\" \"$r\" || r=",
+        "  set -- \"$p\"",
+        "  h=$p; i=0",
+        "  while [ -L \"$h\" ] && [ \"$i\" -lt " + maxLinkHops + " ]; do",
+        "    t=$(readlink -- \"$h\") || break",
+        "    case $t in /*) h=$t ;; *) h=${h%/*}/$t ;; esac",
+        "    printf 'hop\\t%s\\t%s\\n' \"$n\" \"$h\"",
+        "    set -- \"$@\" \"$h\"",
+        "    i=$((i + 1))",
+        "  done",
+        "  [ -n \"$r\" ] && set -- \"$@\" \"$r\"",
+        "  for e; do",
+        "    case $e in /nix/store/*) continue ;; esac",
+        "    a=$e",
+        "    while [ \"$a\" != / ]; do",
+        "      a=${a%/*}; [ -n \"$a\" ] || a=/",
+        "      say \"$n\" \"$a\"",
+        "    done",
+        "  done",
+        "  case $r in ''|/nix/store/*) ;; *) say \"$n\" \"$r\" ;; esac",
+        "}",
+        "for n; do",
+        "  hit=",
+        "  IFS=:",
+        "  for d in $PATH; do",
+        "    case $d in /*) ;; *) continue ;; esac",
+        "    p=$d/$n",
+        "    if [ -f \"$p\" ] && [ -x \"$p\" ]; then hit=1; look \"$n\" \"$p\"; [ \"$mode\" = all ] || break; fi",
+        "  done",
+        "  unset IFS",
+        "  [ -n \"$hit\" ] || printf 'cand\\t%s\\t\\n' \"$n\"",
+        "done"
+    ].join("\n")
+
+    // An absolute path as the probe prints it: no control character, not too long
+    function _probePath(value) {
+        return typeof value === "string" && value.startsWith("/") && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value);
+    }
+
+    // In the Nix store (and not leaving it by "..")
+    function programInStore(path) {
+        return typeof path === "string" && path.startsWith("/nix/store/") && !path.split("/").includes("..");
+    }
+
+    // The directories above an absolute path, nearest first, up to "/" — the steps the probe
+    // takes (strip the last "/…"; "/" when nothing is left)
+    function programAncestors(path) {
+        const list = [];
+        if (!_probePath(path))
+            return list;
+        let above = path;
+        while (above !== "/") {
+            above = above.slice(0, above.lastIndexOf("/"));
+            if (above === "")
+                above = "/";
+            list.push(above);
+        }
+        return list;
+    }
+
+    // One stat's verdict: owned by root, no write bit for the group or others
+    function statTrusted(stat) {
+        const mode = stat?.mode;
+        const bits = typeof mode === "string" && /^[0-7]{1,5}$/.test(mode) ? parseInt(mode, 8) : -1;
+        return stat?.uid === "0" && bits >= 0 && (bits & 0o022) === 0;
+    }
+
+    // The probe's lines → { names: { <name>: [candidate…] }, answered: [names] }, a candidate
+    // { path, hops, real, stats: { <path>: { uid, mode } } }, in PATH order. `answered`: the
+    // names the probe got to (a "cand" line, found or not); it did not reach the others.
+    // Lines of names not asked for, and malformed ones, are skipped.
+    function programProbe(lines, names) {
+        const found = Object.create(null);
+        const last = Object.create(null);
+        const answered = [];
+        for (const name of Array.isArray(names) ? names : []) {
+            if (typeof name === "string")
+                found[name] = [];
+        }
+        for (const line of Array.isArray(lines) ? lines.slice(0, 20000) : []) {
+            if (typeof line !== "string")
+                continue;
+            const parts = line.split("\t");
+            const name = parts[1];
+            if (typeof name !== "string" || !(name in found))
+                continue;
+            if (parts[0] === "cand" && parts.length === 3) {
+                if (!answered.includes(name))
+                    answered.push(name);
+                last[name] = null;
+                if (parts[2] === "")
+                    continue;
+                const candidate = { path: parts[2], hops: [], real: "", stats: Object.create(null) };
+                found[name].push(candidate);
+                last[name] = candidate;
+                continue;
+            }
+            const candidate = last[name];
+            if (!candidate)
+                continue;
+            if (parts[0] === "hop" && parts.length === 3)
+                candidate.hops.push(parts[2]);
+            else if (parts[0] === "real" && parts.length === 3)
+                candidate.real = parts[2];
+            else if (parts[0] === "stat" && parts.length === 5 && _probePath(parts[4]))
+                candidate.stats[parts[4]] = { uid: parts[2], mode: parts[3] };
+        }
+        return { names: found, answered: answered };
+    }
+
+    // One candidate's verdict → frozen { path, real, trusted, reason, owner, mode } (owner
+    // and mode: the real file's, "" in the store). Nothing found: path "".
+    function programVerdict(candidate) {
+        if (!candidate || !_probePath(candidate.path))
+            return Object.freeze({ path: "", real: "", trusted: false, reason: "not found", owner: "", mode: "" });
+        const real = _probePath(candidate.real) ? candidate.real : "";
+        const verdict = (trusted, reason) => {
+            const stat = real !== "" ? candidate.stats?.[real] : undefined;
+            return Object.freeze({ path: candidate.path, real: real, trusted: trusted, reason: reason,
+                                   owner: stat?.uid ?? "", mode: stat?.mode ?? "" });
+        };
+        const hops = Array.isArray(candidate.hops) ? candidate.hops : [];
+        if (hops.length >= maxLinkHops)
+            return verdict(false, "more than " + maxLinkHops + " links on the way to its real file");
+        if (real === "")
+            return verdict(false, "its real file could not be found");
+        const needed = [];
+        for (const entry of [candidate.path].concat(hops, [real])) {
+            if (!_probePath(entry))
+                return verdict(false, "a link on the way could not be read");
+            if (programInStore(entry))
+                continue;
+            for (const directory of programAncestors(entry)) {
+                if (!needed.includes(directory))
+                    needed.push(directory);
+            }
+        }
+        const inStore = programInStore(real);
+        if (!inStore)
+            needed.push(real);
+        for (const path of needed) {
+            const stat = candidate.stats?.[path];
+            if (!stat)
+                return verdict(false, "could not be checked: " + path);
+            if (!statTrusted(stat))
+                return verdict(false, "others than root can change " + path);
+        }
+        return verdict(true, inStore ? "in the Nix store" : "root's, and only root can change it");
+    }
+
+    // The probe's lines, run with "first" → { <name>: verdict } for each name it answered
+    function programVerdicts(lines, names) {
+        const probe = programProbe(lines, names);
+        const verdicts = {};
+        for (const name of probe.answered)
+            verdicts[name] = programVerdict(probe.names[name][0] ?? null);
+        return verdicts;
+    }
+
+    // The probe's lines, run with "all" → the paths of the trusted matches of `name`, in
+    // PATH order
+    function trustedPrograms(lines, name) {
+        return (programProbe(lines, [name]).names[name] ?? []).map(candidate => programVerdict(candidate))
+            .filter(verdict => verdict.trusted).map(verdict => verdict.path);
+    }
+
+    // How long a module's recheckPrograms() waits: 0 (now) when the last look was at least
+    // `minMs` ago, or never, else the rest of that time
+    function recheckDelay(lastMs, nowMs, minMs) {
+        if (typeof lastMs !== "number" || !isFinite(lastMs) || lastMs <= 0 || typeof nowMs !== "number" || nowMs < lastMs)
+            return 0;
+        return Math.max(0, lastMs + minMs - nowMs);
     }
 
     // ---- Api.openUrl ----

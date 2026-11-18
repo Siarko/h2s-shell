@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.8" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.9" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -179,12 +179,31 @@ import qs.singletons.network
 //   cancelAll()            cancel() for every run
 //                          The limit is kept by coreutils' `timeout` around the command
 //                          (with util-linux's `setpriv`, so that the command dies with
-//                          it), both taken from a system directory, never PATH — so a run
-//                          ends even when the shell is gone — and by the shell's own
-//                          timer where one of the two is missing. What a command prints is text from
+//                          it), both taken from PATH, and only where only root can change
+//                          them (as a handle's `programs` judge it) — so a run ends even
+//                          when the shell is gone — and by the shell's own timer where one
+//                          of the two is missing. What a command prints is text from
 //                          outside: show it as plain text, never put it on a command line
 //                          unquoted. A callback that throws is logged; the run goes on.
 //                          CommandAction and CommandQuery are run by it, without a limit.
+//
+// A module's programs (1.9), on its handle (api/ModuleHandle.qml). The manifest names them:
+// `requires.programs` (without one the module is not loaded) and `optionalPrograms` (a
+// missing one does not stop it). The shell looks each up on PATH before the module loads.
+//   module.programs        frozen { <name>: { path, trusted, reason } } — `path` absolute,
+//                          "" when not found; `trusted`: only root can change what runs (the
+//                          real file in the Nix store, or root's and writable by no one
+//                          else, with every directory above it, above each link on the way
+//                          and above the path found); a read that failed is untrusted;
+//                          `reason` says why, in a few words. A new object only when
+//                          something in it changed
+//   module.programsReady   every program it names has a verdict
+//   module.recheckPrograms()  looks them up again (installed or changed since); at most once
+//                          every 2 s, a call sooner is done when they are over; the verdicts
+//                          stay until the new ones come. The shell does it after the
+//                          machine wakes, before `resumed()`
+//                          Run a program by its `path`, never by its name; hand one to
+//                          anything that runs as root only when `trusted`.
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

@@ -25,6 +25,140 @@ TestCase {
         return /^- (\d+\.\d+):/m.exec(section)?.[1] ?? "";
     }
 
+    // A probe's lines for one match of `name`: `path`, its links (`hops`), its real file, and
+    // a stat line for each { path: "uid mode" } given — stand-in paths, nothing on disk
+    function _probeLines(name, path, hops, real, stats) {
+        const lines = ["cand\t" + name + "\t" + path];
+        if (real !== "")
+            lines.push("real\t" + name + "\t" + real);
+        for (const hop of hops)
+            lines.push("hop\t" + name + "\t" + hop);
+        for (const statPath of Object.keys(stats)) {
+            const [uid, mode] = stats[statPath].split(" ");
+            lines.push("stat\t" + name + "\t" + uid + "\t" + mode + "\t" + statPath);
+        }
+        return lines;
+    }
+
+    function _verdictOf(lines, name) {
+        return ModuleRules.programVerdicts(lines, [name])[name];
+    }
+
+    // Program lookup with trust (API 1.9): every directory above, the resolved path, the
+    // setuid wrapper, on NixOS's and Arch's layouts and on bad ones
+    function _programTrust() {
+        const rules = ModuleRules;
+        assertEqual(JSON.stringify(rules.programAncestors("/usr/bin/timeout")), "[\"/usr/bin\",\"/usr\",\"/\"]", "ancestors: nearest first, up to /");
+        assertEqual(JSON.stringify(rules.programAncestors("/usr/bin//x")), "[\"/usr/bin/\",\"/usr/bin\",\"/usr\",\"/\"]", "ancestors: the probe's steps exactly, a doubled / too");
+        assertEqual(JSON.stringify(rules.programAncestors("bin/x")), "[]", "ancestors: none of a relative path");
+        assert(rules.statTrusted({ uid: "0", mode: "755" }) && rules.statTrusted({ uid: "0", mode: "4511" }) && rules.statTrusted({ uid: "0", mode: "555" }),
+               "stat: root's, 755, a setuid 4511, 555 — trusted");
+        assert(!rules.statTrusted({ uid: "0", mode: "775" }) && !rules.statTrusted({ uid: "0", mode: "757" }) && !rules.statTrusted({ uid: "0", mode: "1777" })
+               && !rules.statTrusted({ uid: "1000", mode: "755" }) && !rules.statTrusted({ uid: "0", mode: "9" }) && !rules.statTrusted(null),
+               "stat: group- or other-writable (sticky too), not root's, a mode that is no octal number — untrusted");
+
+        // Arch: root's files in /usr/bin; /bin a link to usr/bin, judged where it leads
+        const archStats = { "/usr/bin": "0 755", "/usr": "0 755", "/": "0 755", "/usr/bin/timeout": "0 755" };
+        const arch = _verdictOf(_probeLines("timeout", "/usr/bin/timeout", [], "/usr/bin/timeout", archStats), "timeout");
+        assert(arch.trusted && arch.path === "/usr/bin/timeout" && arch.owner === "0" && arch.mode === "755", "Arch: /usr/bin/timeout trusted: " + JSON.stringify(arch));
+        const binLink = _verdictOf(_probeLines("timeout", "/bin/timeout", [], "/usr/bin/timeout", Object.assign({ "/bin": "0 755" }, archStats)), "timeout");
+        assert(binLink.trusted && binLink.path === "/bin/timeout" && binLink.real === "/usr/bin/timeout", "Arch: through the /bin link, by the path found");
+        const shLink = _verdictOf(_probeLines("sh", "/usr/bin/sh", ["/usr/bin/bash"], "/usr/bin/bash", { "/usr/bin": "0 755", "/usr": "0 755", "/": "0 755", "/usr/bin/bash": "0 755" }), "sh");
+        assert(shLink.trusted, "Arch: sh, a link to bash beside it: trusted");
+
+        // NixOS: the system profile leads into the store; the store's paths are not looked above
+        const store = "/nix/store/abc-coreutils-9.5/bin/coreutils";
+        const nixStats = { "/run/current-system/sw/bin": "0 555", "/run/current-system/sw": "0 555", "/run/current-system": "0 555", "/run": "0 755", "/": "0 755" };
+        const nixos = _verdictOf(_probeLines("timeout", "/run/current-system/sw/bin/timeout", ["/nix/store/xyz-system-path/bin/timeout", store], store, nixStats), "timeout");
+        assert(nixos.trusted && nixos.reason === "in the Nix store" && nixos.owner === "", "NixOS: the system profile's timeout, a link into the store: trusted: " + JSON.stringify(nixos));
+        const storeOnPath = _verdictOf(_probeLines("timeout", "/nix/store/abc/bin/timeout", [], "/nix/store/abc/bin/timeout", {}), "timeout");
+        assert(storeOnPath.trusted, "NixOS: a store path on PATH itself (a nix shell's): trusted, nothing above it asked");
+        const nixMissing = Object.assign({}, nixStats);
+        delete nixMissing["/run"];
+        assert(!_verdictOf(_probeLines("timeout", "/run/current-system/sw/bin/timeout", [store], store, nixMissing), "timeout").trusted,
+               "NixOS: one directory above the path found not read (/run): untrusted");
+        // The user's profile: ~/.nix-profile leads into the store, but the link lives in a
+        // directory the user owns and can be swapped
+        const home = _verdictOf(_probeLines("timeout", "/home/u/.nix-profile/bin/timeout", [store], store,
+            { "/home/u/.nix-profile/bin": "0 555", "/home/u/.nix-profile": "0 555", "/home/u": "1000 700", "/home": "0 755", "/": "0 755" }), "timeout");
+        assert(!home.trusted && home.reason === "others than root can change /home/u", "NixOS: ~/.nix-profile's timeout: untrusted, the user's directory named: " + home.reason);
+        const dots = _verdictOf(_probeLines("x", "/nix/store/../home/u/x", [], "/home/u/x", {}), "x");
+        assert(!dots.trusted && !rules.programInStore("/nix/store/../home/u/x") && rules.programInStore("/nix/store/a/b"), "a store path that leaves it by \"..\" is no store path");
+
+        // The setuid wrapper (NixOS): /run/wrappers/bin leads to the wrappers' directory, where
+        // pkexec is a setuid file of root's
+        const wrapperStats = { "/run/wrappers/bin": "0 755", "/run/wrappers": "0 755", "/run": "0 755", "/": "0 755",
+                               "/run/wrappers/wrappers.x": "0 755", "/run/wrappers/wrappers.x/pkexec": "0 4511" };
+        const wrapper = _verdictOf(_probeLines("pkexec", "/run/wrappers/bin/pkexec", [], "/run/wrappers/wrappers.x/pkexec", wrapperStats), "pkexec");
+        assert(wrapper.trusted && wrapper.path === "/run/wrappers/bin/pkexec" && wrapper.mode === "4511", "NixOS: the setuid wrapper of pkexec: trusted: " + JSON.stringify(wrapper));
+        const wrapperUser = Object.assign({}, wrapperStats, { "/run/wrappers/wrappers.x/pkexec": "1000 4755" });
+        assert(!_verdictOf(_probeLines("pkexec", "/run/wrappers/bin/pkexec", [], "/run/wrappers/wrappers.x/pkexec", wrapperUser), "pkexec").trusted,
+               "a setuid file that is not root's: untrusted");
+        const archPkexec = _verdictOf(_probeLines("pkexec", "/usr/bin/pkexec", [], "/usr/bin/pkexec",
+            { "/usr/bin": "0 755", "/usr": "0 755", "/": "0 755", "/usr/bin/pkexec": "0 4755" }), "pkexec");
+        assert(archPkexec.trusted, "Arch: the setuid /usr/bin/pkexec: trusted");
+
+        // Every directory above, the real file and each link on the way
+        const local = { "/home/u/.local/bin": "1000 755", "/home/u/.local": "1000 755", "/home/u": "1000 700", "/home": "0 755", "/": "0 755",
+                        "/home/u/.local/bin/tailscale": "1000 755" };
+        const userOwned = _verdictOf(_probeLines("tailscale", "/home/u/.local/bin/tailscale", [], "/home/u/.local/bin/tailscale", local), "tailscale");
+        assert(!userOwned.trusted && userOwned.path === "/home/u/.local/bin/tailscale", "a program in a directory the user owns: untrusted, its path kept");
+        const deep = { "/opt/a/bin": "0 755", "/opt/a": "1000 755", "/opt": "0 755", "/": "0 755", "/opt/a/bin/x": "0 755" };
+        assertEqual(_verdictOf(_probeLines("x", "/opt/a/bin/x", [], "/opt/a/bin/x", deep), "x").reason, "others than root can change /opt/a",
+                    "a directory two above the program, the user's: untrusted, named");
+        const rootLinkOut = _verdictOf(_probeLines("x", "/usr/local/bin/x", [], "/opt/x/x",
+            { "/usr/local/bin": "0 755", "/usr/local": "0 755", "/usr": "0 755", "/": "0 755", "/opt/x": "1000 755", "/opt": "0 755", "/opt/x/x": "0 755" }), "x");
+        assert(!rootLinkOut.trusted, "root's link to a real file in a directory the user owns: untrusted");
+        const hopStats = { "/usr/bin": "0 755", "/usr": "0 755", "/": "0 755", "/usr/bin/vim": "0 755",
+                           "/etc/alternatives": "1000 755", "/etc": "0 755" };
+        assertEqual(_verdictOf(_probeLines("editor", "/usr/bin/editor", ["/etc/alternatives/editor", "/usr/bin/vim"], "/usr/bin/vim", hopStats), "editor").reason,
+                    "others than root can change /etc/alternatives", "a link on the way in a directory the user owns: untrusted, though both ends are root's");
+        hopStats["/etc/alternatives"] = "0 755";
+        assert(_verdictOf(_probeLines("editor", "/usr/bin/editor", ["/etc/alternatives/editor", "/usr/bin/vim"], "/usr/bin/vim", hopStats), "editor").trusted,
+               "… and trusted where that directory is root's");
+        const groupWritable = Object.assign({}, archStats, { "/usr/bin/timeout": "0 775" });
+        assert(!_verdictOf(_probeLines("timeout", "/usr/bin/timeout", [], "/usr/bin/timeout", groupWritable), "timeout").trusted, "the real file group-writable: untrusted");
+        const tmp = _verdictOf(_probeLines("x", "/tmp/x", [], "/tmp/x", { "/tmp": "0 1777", "/": "0 755", "/tmp/x": "0 755" }), "x");
+        assert(!tmp.trusted, "a root file in /tmp (1777): untrusted");
+
+        // A read that failed is untrusted, never trusted
+        const noReal = _verdictOf(_probeLines("timeout", "/usr/bin/timeout", [], "", archStats), "timeout");
+        assert(!noReal.trusted && noReal.path === "/usr/bin/timeout", "no real file (a link that does not resolve): untrusted, the path kept");
+        const noStat = Object.assign({}, archStats);
+        delete noStat["/usr/bin/timeout"];
+        assertEqual(_verdictOf(_probeLines("timeout", "/usr/bin/timeout", [], "/usr/bin/timeout", noStat), "timeout").reason, "could not be checked: /usr/bin/timeout",
+                    "the real file's stat missing: untrusted, could not be checked");
+        const loop = [];
+        for (let i = 0; i < rules.maxLinkHops; i++)
+            loop.push("/usr/bin/l" + i);
+        assert(!_verdictOf(_probeLines("x", "/usr/bin/x", loop, "/usr/bin/real", archStats), "x").trusted, "too many links on the way: untrusted");
+        assert(!_verdictOf(_probeLines("x", "/usr/bin/x", ["relative/x"], "/usr/bin/x", archStats), "x").trusted, "a link not made absolute: untrusted");
+
+        // Parsing: not found, not answered, the first of several, hostile lines
+        const notFound = rules.programVerdicts(["cand\tnope\t"], ["nope", "other"]);
+        assert(notFound.nope.path === "" && !notFound.nope.trusted && notFound.nope.reason === "not found", "a name the probe found nowhere: path \"\", not found");
+        assertEqual(notFound.other, undefined, "a name the probe did not get to: no verdict (the host decides)");
+        const two = _probeLines("timeout", "/home/u/bin/timeout", [], "/home/u/bin/timeout",
+                                { "/home/u/bin": "1000 755", "/home/u": "1000 700", "/home": "0 755", "/": "0 755", "/home/u/bin/timeout": "1000 755" })
+            .concat(_probeLines("timeout", "/usr/bin/timeout", [], "/usr/bin/timeout", archStats));
+        assertEqual(_verdictOf(two, "timeout").path, "/home/u/bin/timeout", "with \"first\": the first on PATH is judged, untrusted or not");
+        assertEqual(JSON.stringify(rules.trustedPrograms(two, "timeout")), "[\"/usr/bin/timeout\"]", "with \"all\": the trusted ones, in PATH order");
+        for (const hostile of [null, undefined, 5, "cand\tx\t/x", [null, 7, "cand\t__proto__\t/x", "stat\tx\t0"], ["cand\tx\t/a\u0001b"]])
+            assert(typeof rules.programVerdicts(hostile, ["x", "__proto__"]) === "object", "hostile probe output " + JSON.stringify(hostile) + ": an answer, no throw");
+        assertEqual(rules.programVerdicts(["cand\tx\t/a\u0001b"], ["x"]).x.path, "", "a path with a control character: not found");
+        assertEqual(rules.programVerdicts(["cand\tx\tbin/x"], ["x"]).x.path, "", "a relative path printed: not found");
+        assertEqual(rules.programVerdicts(["cand\ttimeout\t/usr/bin/timeout", "real\ttimeout\t/usr/bin/timeout", "stat\ttimeout\t0\t755\t/usr/bin\textra"], ["timeout"]).timeout.trusted, false,
+                    "a stat line with a tab in its path is no stat line");
+        assertEqual(rules.programProbeScript.indexOf("command -v"), -1, "the probe looks for files, not shell builtins");
+
+        // A module's rechecks: at most every recheckMinMs
+        assertEqual(rules.recheckDelay(0, 5000, 2000), 0, "recheck: never looked: now");
+        assertEqual(rules.recheckDelay(4000, 5000, 2000), 1000, "recheck: 1 s after the last: in 1 s");
+        assertEqual(rules.recheckDelay(1000, 5000, 2000), 0, "recheck: 4 s after: now");
+        assertEqual(rules.recheckDelay(9000, 5000, 2000), 0, "recheck: a clock that went back: now");
+        assertEqual(rules.recheckMinMs, 2000, "recheck: every 2 s at most");
+    }
+
     function _manifest(fields) {
         return JSON.stringify(Object.assign({ id: "tailscale", name: "Tailscale", version: "0.1.0", api: "1.0" }, fields ?? {}));
     }
@@ -313,6 +447,14 @@ TestCase {
                                                                       services: ["tailscaled"] } }));
         assertEqual(JSON.stringify(requires.programs), "[\"tailscale\",\"jq\"]", "program names, each once; paths and junk dropped");
         assert(_has(requires.warnings, "requires: unknown field \"services\""), "an unknown requirement: a warning");
+        const optional = ModuleManifestRules.parseManifest(_manifest({ requires: { programs: ["tailscale"] },
+                                                                      optionalPrograms: ["curl", "tailscale", "curl", "../x", 5] }));
+        assertEqual(JSON.stringify(optional.optionalPrograms), "[\"curl\"]", "optionalPrograms: each once; a required one stays required; junk dropped");
+        assert(_has(optional.errors, "optionalPrograms[3]") && optional.warnings.length === 0, "… junk named as an error, the field known");
+        assert(_has(ModuleManifestRules.parseManifest(_manifest({ optionalPrograms: "curl" })).errors, "optionalPrograms: not a list (ignored)"),
+               "optionalPrograms: not a list");
+
+        _programTrust();
 
         // --- qmldir ---
         assertEqual(JSON.stringify(ModuleFileRules.qmldirFiles("module foo\nsingleton Ts 1.0 Ts.qml\nHelper 1.0 Helper.qml\n"

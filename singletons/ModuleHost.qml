@@ -10,8 +10,9 @@ import qs.singletons.io
 // out of one process, the file check (ModuleFileRules.fileCheckScript: resolved inside the module's
 // directory, a regular file, not too large), under checkTimeoutMs; a module whose files did
 // not answer in time is failed, with the reason, and the shell goes on. It checks the manifest
-// with ModuleRules, counts the start (the start guard, below), checks the programs the modules require
-// (a process), creates each enabled, compatible module's `main` by URL inside a guard, and keeps
+// with ModuleRules, counts the start (the start guard, below), looks up and judges the
+// programs the modules name (a process; ModuleRules.programVerdict: found on PATH, trusted or
+// not), creates each enabled, compatible module's `main` by URL inside a guard, and keeps
 // every module's status, its handle (api/ModuleHandle.qml), its facts and the merged
 // contributions as plain reactive lists. A module is "pending" until all of that has answered.
 // The four checks (the file check, the stores' directory, the start guard, the program
@@ -68,6 +69,9 @@ Scope {
     // Added to the file check's environment (the suites' and the lock bed's seam: a PATH whose
     // `head` hangs, as a mount that answers stat and then blocks on read would)
     property var checkEnvironment: ({})
+    // Added to the program look-up's environment (the suites' seam: a PATH that holds
+    // stand-in programs)
+    property var programEnvironment: ({})
     property bool _storeDirectoryKnown: true
 
     // The canonical module directories given to load(), in search order, and the entries
@@ -88,6 +92,10 @@ Scope {
     // The loaded modules' facts, { "<id>.<name>": plain value } (setFact; checked against
     // the declared type): what Profiles adds to its facts
     property var factValues: ({})
+    // What the program look-up found, { <name>: { path, real, trusted, reason, owner, mode } }
+    // (ModuleRules.programVerdict), for every program a module names, required or optional:
+    // what the handles' `programs` show. A new object only when something in it changed
+    property var programVerdicts: ({})
     // Set when the host itself failed: it then holds no module
     property string hostError: ""
     // Counts every change of the statuses and lists
@@ -112,9 +120,11 @@ Scope {
     // manifest, API and files), warnings, deprecations, shadowedBy, qmldirText, filesChecked,
     // mainFileError, main, component, mainError, state, facts, runtimeErrors }
     property var _records: []
-    // What the program check found: name → true / false; and the ones it did not answer
+    // What the program look-up found: name → verdict (ModuleRules.programVerdict); the ones
+    // it did not answer in time; the ones a module asked to look up again while it ran
     property var _programs: new Map()
     property var _programsTimedOut: []
+    property var _recheckNames: []
     property bool _guardKnown: true
     property bool _askedSafeMode: false
     // id → handle (api/ModuleHandle.qml), made on first use, kept for the host's life
@@ -173,8 +183,8 @@ Scope {
         // since, perhaps)
         if (enabled) {
             for (const record of _records.filter(entry => entry.manifest.id === id)) {
-                for (const program of record.manifest.programs ?? []) {
-                    if (_programs.get(program) === false) {
+                for (const program of _programNames(record.manifest)) {
+                    if (_programs.get(program)?.path === "") {
                         _programs.delete(program);
                         _programsTimedOut = _programsTimedOut.filter(name => name !== program);
                     }
@@ -324,6 +334,21 @@ Scope {
         return _slotHolders.get(key).component;
     }
 
+    // Looks up the programs a module names again (its handle's recheckPrograms(), which
+    // keeps it to one look every ModuleRules.recheckMinMs). The verdicts known stay until the
+    // new ones answer
+    function recheckPrograms(id) {
+        const record = _record(id);
+        const names = record ? _programNames(record.manifest) : [];
+        if (names.length === 0)
+            return;
+        if (_checkingPrograms) {
+            _recheckNames = _recheckNames.concat(names.filter(name => !_recheckNames.includes(name)));
+            return;
+        }
+        _checkPrograms(names);
+    }
+
     // Everything `qs ipc call modules list` tells: plain data, no secrets
     function describe() {
         return { api: apiVersion, safeMode: safeMode, safeModeReason: safeModeReason, hostError: hostError,
@@ -349,6 +374,11 @@ Scope {
                 list.push(value[i]);
         }
         return list;
+    }
+
+    // Every program a manifest names: the required ones, then the optional ones
+    function _programNames(manifest) {
+        return (manifest?.programs ?? []).concat((manifest?.optionalPrograms ?? []).filter(name => !(manifest?.programs ?? []).includes(name)));
     }
 
     // A module not read yet: pending until the file check hands over its module.json
@@ -630,14 +660,16 @@ Scope {
         const unknownPrograms = [];
         for (const record of _records) {
             const manifest = record.manifest;
-            const programs = manifest.programs ?? [];
+            // Every one is looked up before the module loads; only a required one missing
+            // stops it
+            const programs = _programNames(manifest);
             const facts = {
                 valid: manifest.valid, compatible: record.compatible, duplicate: record.shadowedBy !== "",
                 manifestRead: record.manifestRead,
                 filesChecked: record.filesChecked, mainFileError: record.mainFileError, guardKnown: _guardKnown && _storeDirectoryKnown,
                 safeMode: safeMode, settingsKnown: settingsKnown, enabled: !disabledIds.includes(manifest.id),
                 programsKnown: programs.every(program => _programs.has(program)),
-                missingPrograms: programs.filter(program => _programs.get(program) === false),
+                missingPrograms: (manifest.programs ?? []).filter(program => _programs.get(program)?.path === ""),
                 mainError: ""
             };
             let state = ModuleMergeRules.stateOf(facts);
@@ -803,43 +835,80 @@ Scope {
         modulesChanged();
     }
 
-    // ---- Required programs ----
+    // ---- Programs ----
 
     // Looks each name up on PATH as an executable file (not `command -v`, which also finds
-    // shell builtins); re-applies when it answers
+    // shell builtins) and judges what it finds (ModuleRules.programProbeScript,
+    // programVerdict); re-applies when it answers. A name the look-up did not answer in time
+    // is "not found" the first time; a verdict known before keeps its path, untrusted.
     function _checkPrograms(names) {
-        // One at a time: when it answers, _apply asks again for what is still unknown
+        // One at a time: when it answers, _apply asks again for what is still unknown, and
+        // the rechecks asked for meanwhile run
         if (_checkingPrograms)
             return;
-        const found = [];
+        const lines = [];
         _checkingPrograms = true;
-        _check(["sh", "-c",
-            "set -f; for program; do (IFS=:; for dir in $PATH; do "
-            + "if [ -f \"${dir:-.}/$program\" ] && [ -x \"${dir:-.}/$program\" ]; then printf '%s\\n' \"$program\"; break; fi; "
-            + "done); done", "sh"].concat(names), {
+        _check(["sh", "-c", ModuleRules.programProbeScript, "sh", "first"].concat(names), {
+            environment: programEnvironment ?? {},
             onLine: (line, stream) => {
                 if (stream === "stdout")
-                    found.push(line.trim());
+                    lines.push(line);
             },
             done: result => {
                 root._checkingPrograms = false;
-                for (const program of names) {
-                    const present = found.includes(program);
-                    root._programs.set(program, present);
-                    if (!present && result.timedOut && !root._programsTimedOut.includes(program))
-                        root._programsTimedOut = root._programsTimedOut.concat([program]);
-                }
+                root._programsAnswered(names, lines, result.timedOut);
                 root._applyGuarded();
+                if (!root._checkingPrograms && root._recheckNames.length > 0) {
+                    const again = root._recheckNames;
+                    root._recheckNames = [];
+                    root._checkPrograms(again);
+                }
             }
         });
     }
 
+    function _programsAnswered(names, lines, timedOut) {
+        const verdicts = ModuleRules.programVerdicts(lines, names);
+        for (const program of names) {
+            const before = _programs.get(program);
+            let verdict = verdicts[program];
+            if (!verdict) {
+                const reason = timedOut ? "the look-up did not answer within " + checkTimeoutMs / 1000 + " s" : "the look-up gave no answer";
+                verdict = before && before.path !== ""
+                    ? Object.freeze(Object.assign({}, before, { trusted: false, reason: reason }))
+                    : Object.freeze({ path: "", real: "", trusted: false, reason: reason, owner: "", mode: "" });
+                if (timedOut && verdict.path === "" && !_programsTimedOut.includes(program))
+                    _programsTimedOut = _programsTimedOut.concat([program]);
+            } else if (_programsTimedOut.includes(program)) {
+                _programsTimedOut = _programsTimedOut.filter(name => name !== program);
+            }
+            _programs.set(program, verdict);
+            // One line per change of what a name runs, or of its verdict
+            if (logStates && JSON.stringify(before ?? null) !== JSON.stringify(verdict)) {
+                const line = "[Modules] program " + program + ": " + (verdict.path === "" ? verdict.reason
+                    : verdict.path + " (real file " + (verdict.real || "?") + (verdict.owner !== "" ? ", owner " + verdict.owner + ", mode " + verdict.mode : "") + "): "
+                      + (verdict.trusted ? "trusted, " : "not trusted, ") + verdict.reason);
+                if (verdict.path !== "" && verdict.trusted)
+                    console.info(line);
+                else
+                    console.warn(line);
+            }
+        }
+        const published = {};
+        for (const [program, verdict] of _programs)
+            published[program] = verdict;
+        if (JSON.stringify(published) !== JSON.stringify(programVerdicts))
+            programVerdicts = published;
+    }
+
     // The machine woke (SystemSleep, neutral: the lock screen reports it there): each active
-    // module's handle says so (module API 1.2, `module.resumed()`)
+    // module's programs are looked up again (1.9) and its handle says so (module API 1.2,
+    // `module.resumed()`)
     function forwardResumed() {
         for (const [id, made] of _handles) {
             if (!activeIds.includes(id))
                 continue;
+            made.recheckPrograms();
             try {
                 made.resumed();
             } catch (error) {

@@ -7,11 +7,11 @@ import QtQuick
 // The two programs the command runner puts around a run with a time limit
 // (CommandRules.wrapperTools): coreutils' `timeout`, which ends the command, and
 // util-linux's `setpriv`, which makes the command die with `timeout`. Each is looked for
-// once, in system directories only. A candidate counts when its file is there and it
-// runs its probe with exit 0 — no shell, and a file that cannot run, or a `setpriv`
-// without --pdeathsig, is not taken. Until `known`, runs with a limit wait
-// (singletons/io/CommandRunner.qml); with one of the two missing, they run bare, under the
-// runner's own watchdog alone.
+// once, on PATH, and only a trusted match is taken (ModuleRules.programVerdict: only root
+// can change it) — the first, in PATH order, that also runs its probe with exit 0: no
+// shell, and a file that cannot run, or a `setpriv` without --pdeathsig, is not taken.
+// Until `known`, runs with a limit wait (singletons/io/CommandRunner.qml); with one of the
+// two missing, they run bare, under the runner's own watchdog alone.
 Singleton {
     id: root
 
@@ -19,74 +19,104 @@ Singleton {
     readonly property string timeout: _found.timeout ?? ""
     readonly property string setpriv: _found.setpriv ?? ""
 
-    // How long one candidate may take to answer
+    // How long the look-up, and then each candidate's probe, may take
+    readonly property int lookupMs: 5000
     readonly property int probeMs: 2000
 
     property bool _known: false
     property var _found: ({})
-    // Which tool, which of its candidates
-    property int _tool: 0
-    property int _index: -1
-    // What the current candidate is asked: "file" (is it there), "run", or "" (answered)
-    property string _asking: ""
-    // Counts the questions, so that an answer names the one it is for
+    // What is left to try: [{ tool, path }], in order
+    property var _queue: []
+    // Counts the questions, so that an answer names the one it is for; `_open` while the
+    // current one has not been answered
     property int _question: 0
+    property bool _open: false
 
-    function _candidate() {
-        return CommandRules.wrapperTools[_tool].candidates[_index];
-    }
-
-    function _tryNext() {
-        const tools = CommandRules.wrapperTools;
-        _index++;
-        if (_index >= tools[_tool].candidates.length) {
-            _tool++;
-            _index = 0;
-        }
-        if (_tool >= tools.length) {
-            _known = true;
-            _file.path = "";
-            const missing = tools.filter(tool => !_found[tool.name]);
-            if (missing.length > 0)
-                console.warn("[Commands] " + missing.map(tool => "no `" + tool.name + "` in " + tool.candidates.join(", ")).join("; ")
-                             + ": time limits are kept by the shell alone, and end with it");
-            return;
-        }
+    function _ask() {
         _question++;
-        _asking = "file";
-        _deadline.restart();
-        _file.path = _candidate();
+        _open = true;
+        return _question;
     }
 
-    // Late answers lose: only the question that is open counts
-    function _answered(question, asked, ok) {
-        if (_known || question !== _question || asked !== _asking)
-            return;
-        if (ok && asked === "file") {
-            _asking = "run";
-            _probe.command = [_candidate()].concat(CommandRules.wrapperTools[_tool].probe);
-            _probe.running = true;
-            return;
-        }
-        _asking = "";
+    // Late answers lose: only the question that is open counts, once
+    function _takes(question) {
+        if (_known || !_open || question !== _question)
+            return false;
+        _open = false;
         _deadline.stop();
-        if (ok) {
-            _found = Object.assign({}, _found, { [CommandRules.wrapperTools[_tool].name]: _candidate() });
-            // The next tool
-            _index = CommandRules.wrapperTools[_tool].candidates.length;
+        return true;
+    }
+
+    function _lookUp() {
+        _lookup.lines = [];
+        _lookup.question = _ask();
+        _lookup.command = ["sh", "-c", ModuleRules.programProbeScript, "sh", "all"].concat(CommandRules.wrapperTools.map(tool => tool.name));
+        _deadline.interval = lookupMs;
+        _deadline.restart();
+        _lookup.running = true;
+    }
+
+    function _lookedUp(question, lines) {
+        if (!_takes(question))
+            return;
+        const queue = [];
+        for (const tool of CommandRules.wrapperTools) {
+            for (const path of ModuleRules.trustedPrograms(lines, tool.name))
+                queue.push({ tool: tool, path: path });
         }
+        _queue = queue;
         Qt.callLater(root._tryNext);
     }
 
-    // Asked first, quietly: starting a program that is not there is a warning in the log
-    // at every start of the shell, on the system whose candidate comes second
-    property FileView _file: FileView {
-        printErrors: false
-        onLoaded: root._answered(root._question, "file", true)
-        onLoadFailed: root._answered(root._question, "file", false)
+    function _tryNext() {
+        if (_known)
+            return;
+        // A tool found already: its other candidates are not tried
+        while (_queue.length > 0 && _found[_queue[0].tool.name])
+            _queue = _queue.slice(1);
+        if (_queue.length === 0) {
+            _finish();
+            return;
+        }
+        _probe.question = _ask();
+        _probe.command = [_queue[0].path].concat(_queue[0].tool.probe);
+        _deadline.interval = probeMs;
+        _deadline.restart();
+        _probe.running = true;
+    }
+
+    function _probed(question, ok) {
+        if (!_takes(question))
+            return;
+        const candidate = _queue[0];
+        _queue = _queue.slice(1);
+        if (ok)
+            _found = Object.assign({}, _found, { [candidate.tool.name]: candidate.path });
+        Qt.callLater(root._tryNext);
+    }
+
+    function _finish() {
+        _known = true;
+        const missing = CommandRules.wrapperTools.filter(tool => !_found[tool.name]);
+        if (missing.length > 0)
+            console.warn("[Commands] " + missing.map(tool => "no trusted `" + tool.name + "` on PATH").join("; ")
+                         + ": time limits are kept by the shell alone, and end with it");
+    }
+
+    property Process _lookup: Process {
+        property int question: 0
+        property var lines: []
+        stdout: SplitParser {
+            onRead: data => _lookup.lines.push(data)
+        }
+        onRunningChanged: {
+            if (!running)
+                root._lookedUp(question, lines);
+        }
     }
 
     property Process _probe: Process {
+        property int question: 0
         property int code: -1
         onExited: (exitCode, exitStatus) => code = exitStatus === 0 ? exitCode : -1
         onRunningChanged: {
@@ -94,20 +124,23 @@ Singleton {
                 code = -1;
                 return;
             }
-            root._answered(root._question, "run", code === 0);
+            root._probed(question, code === 0);
         }
     }
 
+    // A look-up that does not answer in time: what it printed so far counts; a probe: the
+    // candidate is not taken. The process's own answer, when it comes, is late
     property Timer _deadline: Timer {
-        interval: root.probeMs
         onTriggered: {
-            const question = root._question;
-            const asked = root._asking;
-            if (_probe.running)
+            if (_lookup.running) {
+                root._lookedUp(_lookup.question, _lookup.lines.slice());
+                _lookup.running = false;
+            } else if (_probe.running) {
+                root._probed(_probe.question, false);
                 _probe.running = false;
-            root._answered(question, asked, false);
+            }
         }
     }
 
-    Component.onCompleted: _tryNext()
+    Component.onCompleted: _lookUp()
 }

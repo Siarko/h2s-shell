@@ -49,6 +49,9 @@ import QtQuick
 //   requires      optional: { programs: [names] } — programs that must be on PATH; without
 //                 them the module is not loaded (state missing-program) and its setupHints
 //                 are shown.
+//   optionalPrograms  optional list of program names (API 1.9): looked up and judged like
+//                 the required ones (the handle's `programs`), but a missing one does not
+//                 stop the module. A name also required counts as required.
 //   setupHints    optional list of strings: how to get the module working.
 //   tests         optional list of .qml test suites (tests/run-modules.sh runs them).
 //
@@ -93,7 +96,7 @@ Singleton {
     // ---- The manifest ----
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
-        "settingsPages", "settings", "facts", "slots", "requires", "setupHints", "tests"]
+        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "setupHints", "tests"]
 
     // A list field: its entries (at most maxEntries), or [] with an error when it is not a list
     function _list(raw, field, errors) {
@@ -342,7 +345,7 @@ Singleton {
     //   valid        the required fields are there and fine (the module can be considered)
     //   id, name, version, api, description, main ("" for none)
     //   widgets, settingsPages, settings, facts, slots   the entries kept, checked
-    //   programs, setupHints, tests
+    //   programs, optionalPrograms, setupHints, tests
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
     //   errors, warnings
@@ -351,7 +354,7 @@ Singleton {
         const result = {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [],
-            programs: [], setupHints: [], tests: [], unknownFields: [], raw: null,
+            programs: [], optionalPrograms: [], setupHints: [], tests: [], unknownFields: [], raw: null,
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -467,6 +470,12 @@ Singleton {
                 });
             }
         }
+        _list(raw, "optionalPrograms", errors).forEach((program, index) => {
+            if (typeof program !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.+-]{0,63}$/.test(program))
+                errors.push("optionalPrograms[" + index + "]: " + ModuleRules.show(program) + " is not a program's name (dropped)");
+            else if (!result.programs.includes(program) && !result.optionalPrograms.includes(program))
+                result.optionalPrograms.push(program);
+        });
         _list(raw, "setupHints", errors).forEach((hint, index) => {
             if (typeof hint !== "string" || hint.length === 0 || hint.length > 1000)
                 errors.push("setupHints[" + index + "]: not a text of at most 1000 characters (dropped)");

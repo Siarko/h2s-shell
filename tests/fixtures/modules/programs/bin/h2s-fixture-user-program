@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stand-in program in a directory the user owns: found, never trusted
+exit 0
