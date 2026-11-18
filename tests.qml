@@ -47,6 +47,7 @@ QtObject {
     property var _testSeamRules: TestSeamRulesTest {}
     property var _testSeamsShape: TestSeamsShapeTest {}
     property var _lockscreenShape: LockscreenShapeTest {}
+    property var _testTree: TestTreeTest {}
     property var _pointerInput: PointerInputTest {}
     property var _buttonKinds: ButtonKindsTest {}
     property var _pillSizes: PillSizesTest {}
@@ -60,7 +61,7 @@ QtObject {
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _commandRunner, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape]
+    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _commandRunner, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed. A suite

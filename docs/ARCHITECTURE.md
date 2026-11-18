@@ -154,8 +154,8 @@ kill switch (`VpnLockdown`) reads `nmDetails`/`nmInterfaceNames` only — it doe
 provider VPNs, and says so on their cards (and rows, while up) while blocking. Providers fill the slots named in
 `VpnManager.slots` (`network.vpn.row`, `.card`, `.page`) through `VpnManager.extrasFor`.
 The contract is in `components/VpnProvider.qml`; the stand-in provider
-for tests is `tests/FakeVpnProvider.qml` (by hand: `H2S_FAKE_VPN_PROVIDER=1`, IPC target
-`fakevpn`).
+for tests is `tests/FakeVpnProvider.qml` (by hand: a test tree started with
+`H2S_FAKE_VPN_PROVIDER=1`, "The test tree" under "Testing"; IPC target `fakevpn`).
 
 ### Config and profiles
 
@@ -824,7 +824,8 @@ which QtTest, sending events to the Qt window directly, cannot reach. It finds w
 through the `shelltest` IPC (`Bar.qml`). See its README.
 
 `tests/lock/` runs the real shell, from a copy of the checkout made at the start of a run
-(so edits during a run cannot reload it; each test gets its own copy of that), in an invisible, isolated compositor (Hyprland nested in a
+(so edits during a run cannot reload it; each test gets its own copy of that) — a test
+tree, below — in an invisible, isolated compositor (Hyprland nested in a
 headless labwc, private runtime dir, no D-Bus, no seat, no new privileges) and drives its
 lock screen end to end: locked for real, keys typed and the pointer moved through the
 compositor, PAM against test stacks (`H2S_LOCK_AUTH_METHODS`, see
@@ -851,6 +852,55 @@ one-directory `PATH`, the private home and no new privileges. It checks
 the packages asked for and how, where the shell is cloned, that nothing else runs as root,
 that a second run changes nothing, another Quickshell config left alone, and what happens
 when `pacman`, the clone or reading the config's origin fails. It runs on both systems.
+
+### The test tree
+
+The lock test bed changes what the shell does through environment variables — stand-in
+`gdbus` and `systemd-inhibit`, its own PAM directory and methods script, short timings, a
+reload IPC, the module host's checks, a stand-in VPN provider (the seams; the list, with
+what each changes, is in `tests/lock/README.md`, "The test tree"). The shell itself reads
+none of them: a variable left in a terminal or the systemd user environment must never
+change the real lock screen. They reach the shell through two files, each in two versions
+with the same names:
+
+- `singletons/TestSeams.qml` — read by `Lockscreen`, `CapsLockLed`, `Modules` and
+  `VpnManager`. The shell's version holds constants (what the reader gives with nothing set:
+  the real directories and tools, no timings, no stand-ins, module test mode off). The test
+  version, `tests/lock/seams/TestSeams.qml` with `TestSeamRules.qml` beside it, reads the
+  variables, and holds the `locktest` reload IPC and module test mode on.
+- `scripts/seams.sh` — sourced by `scripts/lock-auth-methods.sh` and `scripts/launch.sh`.
+  The shell's version sets constants; `tests/lock/seams/seams.sh` sets the same names from
+  the variables.
+
+A **test tree** is a copy of the checkout with the test versions in place:
+`tests/test-tree.sh <dest>` makes one (the checkout without `.git` and `result*`, the three
+files copied over). `tests/lock/run.sh` makes each run's copy with it, then removes
+`tests/lock` from the copy and replaces `pam/` with configs that only deny; `stack_start`
+checks that the shell under test reports the seams in force, so a copy without the swap
+fails at once. Unit suites guard the arrangement: `TestSeamsShapeTest` (the two versions
+have the same names and types, the shell's are constants with the no-seam values, and no
+file of the shell outside `tests/` reads a seam variable — `H2S_LOCK_*`, `H2S_*TEST*`,
+`H2S_FAKE_*` — itself), `TestSeamRulesTest` (what each variable says) and `TestTreeTest`
+(the tree has the test files, the checkout is untouched). Adding a seam means a name in both
+versions and a case; `tests/lock/README.md` lists the steps.
+
+To use test behaviour by hand — the stand-in VPN provider, say — make a test tree and start
+the shell from it with the variable set, in a nested compositor (labwc opens as a window)
+with a runtime and config directory of its own, so that it shares neither the launcher's
+lock, the lock marker nor the settings with the session's shell. `tests/lock/README.md`
+gives the commands. They differ only in the launcher:
+
+#### NixOS
+
+The package's `h2s-shell` runs the tree named by `H2S_SHELL_DIR` (with the programs the
+package puts on `PATH`). `tests/lock/` is not in the package, so an installed shell has no
+test files at all.
+
+#### Arch
+
+The shell is a checkout, so the test files are on disk, but nothing loads them unless they
+are copied over the production ones, which only `tests/test-tree.sh` does. The tree is
+started with its own `scripts/launch.sh`, which runs the `qs` on `PATH`.
 
 ### The system sets
 

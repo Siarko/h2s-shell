@@ -287,10 +287,13 @@ fi
 # locked unlocks. So the shell runs from a copy: whatever is written to the checkout
 # meanwhile (by you, by another tool) cannot disturb a test. The copy is the checkout as
 # it is at the start of the run, without the test bed itself (tests/lock), git data and
-# build results — and with pam/ replaced: the shipped configs check the real account
-# (pam_unix), and the shell falls back to them when the methods script fails or lists no
-# password. In the copy every one of them denies, so a typed test string can never reach
-# the system's password check.
+# build results — a test tree (tests/test-tree.sh): the test seam files in the production
+# ones' place, so that the copy reads the seams the tests set (tools, PAM directory,
+# timings, …) from its environment, which the checkout's own files never do
+# (tests/lock/README.md, "The test tree"). And with pam/ replaced: the shipped configs
+# check the real account (pam_unix), and the shell falls back to them when the methods
+# script fails or lists no password. In the copy every one of them denies, so a typed test
+# string can never reach the system's password check.
 #
 # It is made once (shell/, never run from) and copied again for each test (shells/<name>,
 # a few MB, some 20 ms): tests edit their copy on purpose (edit-while-locked,
@@ -298,17 +301,8 @@ fi
 # by side an edit in a shared copy would reload or break every other test's shell.
 shell_template=$ARTIFACTS/shell
 mkdir -p "$shell_template" "$ARTIFACTS/shells" || setup_error "cannot create $shell_template"
-for entry in "$LOCKTEST_REPO"/* "$LOCKTEST_REPO"/.[!.]*; do
-    [ -e "$entry" ] || continue
-    case "$(basename "$entry")" in .git | result | result-*) continue ;; esac
-    cp -a "$entry" "$shell_template/" || setup_error "cannot copy $entry into $shell_template"
-done
-# The test seam files in the production ones' place: the copy reads the seams the tests
-# set (tools, PAM directory, timings, …) from its environment; the checkout's own files
-# are constants and read none (tests/lock/README.md, "The test tree")
-cp "$LOCKTEST_DIR/seams/TestSeams.qml" "$LOCKTEST_DIR/seams/TestSeamRules.qml" "$shell_template/singletons/" \
-    && cp "$LOCKTEST_DIR/seams/seams.sh" "$shell_template/scripts/seams.sh" \
-    || setup_error "cannot put the test seam files into $shell_template"
+tree_error=$("$LOCKTEST_DIR/../test-tree.sh" "$shell_template" 2>&1 > /dev/null {lock_fd}<&-) \
+    || setup_error "cannot make the copy of the checkout: ${tree_error:-tests/test-tree.sh failed}"
 rm -rf "$shell_template/tests/lock"
 [ -f "$shell_template/shell.qml" ] && [ -x "$shell_template/scripts/lock-auth-methods.sh" ] \
     || setup_error "the copy of the checkout lacks shell.qml or scripts/lock-auth-methods.sh"

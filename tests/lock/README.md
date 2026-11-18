@@ -91,7 +91,8 @@ child).
 scripts they run (templates: `@...@` is filled in per run), `tools.nix` the pinned tools,
 `resolve.sh` the lookup of the tools, the launcher and Quickshell, `protocols/` the two
 protocol files the input bindings are generated from, `launcher.sh` the launcher for a
-machine without an `h2s-shell` command, `run.sh` the runner.
+machine without an `h2s-shell` command, `seams/` the test seam files a test tree has in
+place of the shell's own ("The test tree"), `run.sh` the runner.
 
 ## Isolation, and why each measure is there
 
@@ -301,17 +302,115 @@ seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own.
 
 ## The test tree
 
-The installed shell and a checkout read none of the seams above: `singletons/TestSeams.qml`,
-through which the lock screen, the Caps Lock reader, the module host and the VPN manager
-get them, holds constants, and so does `scripts/seams.sh`, which the methods script and the
-launcher source. `run.sh` copies `seams/TestSeams.qml` (the reader of the variables) and
-`seams/TestSeamRules.qml` (what each says) over the first in the run's copy, and
-`seams/seams.sh` over the second, and
-`stack_start` checks that the shell under test names the seams in force in its lock state
-(`state_field test_seams`), so a copy without the swap fails at once instead of running
-with the real tools and `/etc/pam.d`. `TestSeamsShapeTest` (a unit suite) checks that the
-two `TestSeams.qml` have the same properties, the two `seams.sh` the same variables, and
-that no file of the shell reads a seam itself.
+**Why.** The seams above change what the shell does about authentication (which PAM
+directory, which methods script, which `gdbus`) and when. If the installed shell honoured
+them, a variable left behind in a terminal or in the systemd user environment would
+silently change the real lock screen the next time the shell is started from there. So the
+shell does not read them at all. Only a *test tree* does: a copy of the checkout, made for
+a test, in which the seam files are swapped for the test bed's.
+
+**The files.** Each seam file has a production version, which every checkout and the
+installed shell use, and a test version under `tests/lock/seams/`, which only a test tree
+has in its place:
+
+| Production (constants) | In a test tree | Read by |
+|---|---|---|
+| `singletons/TestSeams.qml` | `seams/TestSeams.qml` (and `seams/TestSeamRules.qml`, copied beside it) | `Lockscreen`, `CapsLockLed`, `Modules`, `VpnManager` |
+| `scripts/seams.sh` | `seams/seams.sh` | `scripts/lock-auth-methods.sh`, `scripts/launch.sh` (they source it) |
+
+The two versions have the same names: a consumer reads `TestSeams.lockTools` or
+`$seam_gdbus` and gets the real value or the test's, depending on the tree. The production
+`TestSeams.qml` holds what the reader says when nothing is set (`TestSeamRules.read({})`):
+empty directories, which each consumer takes as its own default (`/etc/pam.d`,
+`/sys/class/leds`, `gdbus` from `PATH`), no timings, no stand-ins. The test version also
+holds what only a test tree has: the `locktest` IPC (a reload on request) and module test
+mode (`moduleTestMode`, on in every test tree; `ModuleHost.testMode`).
+
+On NixOS the package leaves `tests/lock/` out (`nix/package.nix`); on Arch the shell is a
+checkout, so the test files are on disk, but nothing loads them unless they are copied over
+the production ones — which only `tests/test-tree.sh` does.
+
+**How a run assembles its tree.** `run.sh` makes the run's copy with `tests/test-tree.sh`
+(the checkout without `.git` and `result*`, the three files above swapped), then takes
+`tests/lock` out of it and writes PAM configs that only deny into its `pam/` ("Isolation").
+Each test runs from a copy of that copy (`shells/<test>`), started through the launcher with
+`H2S_SHELL_DIR` pointing at it. `stack_start` then checks that the shell under test names
+the seams in force in its lock state (`state_field test_seams`): never none in the bed, so a
+copy without the swap fails at once instead of running with the real tools and
+`/etc/pam.d`.
+
+**The variables.** Read only in a test tree; one that is not set leaves the production
+value, one set to a value that cannot be used is ignored (and named in the log).
+
+| Variable | Read by | What it changes |
+|---|---|---|
+| `H2S_LOCK_TOOLS` | `TestSeams`, `seams.sh` | a directory whose `gdbus` and `systemd-inhibit` stand in (logind, the inhibitor, fprintd) |
+| `H2S_LOCK_SYSTEM_PAM_DIR` | `TestSeams`, `seams.sh` | where the system-wide `h2s-shell-*` PAM configs are looked for, instead of `/etc/pam.d` |
+| `H2S_LOCK_SYSTEM` | `TestSeams`, `seams.sh` | `nixos` or `other`: the system the lock takes itself to be on (only with `H2S_LOCK_SYSTEM_PAM_DIR`) |
+| `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
+| `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
+| `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings` |
+| `H2S_LOCK_TEST_RELOAD` | `TestSeams` | `1`: the `locktest` IPC, `reload(hard)` |
+| `H2S_SHELL_TEST_MODULE_GUARD_MS` | `TestSeams` | the module start guard's window, ms |
+| `H2S_SHELL_TEST_MODULE_CHECK_PATH` | `TestSeams` | a directory put first on the module file check's `PATH` |
+| `H2S_SHELL_TEST_MODULE_CHECK_MS` | `TestSeams` | the module checks' deadline, ms |
+| `H2S_FAKE_VPN_PROVIDER` | `TestSeams` | `1`: the stand-in VPN provider (`tests/FakeVpnProvider.qml`, IPC target `fakevpn`) |
+| `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S slow=S lockwait=S`, and `discoveryhang=S` |
+
+When any of the QML ones is in force the shell logs `[TestSeams] test bed: <names>`, and
+`ipc call modules list` and the lock screen's `state` (its `driver` block) carry the names as
+`testSeams`.
+
+**Running the shell with stand-ins by hand** — to look at the VPN views with the stand-in
+provider, say. Make a tree anywhere outside the checkout, and start the shell from it in a
+nested compositor (labwc, the compositor the unit runner uses, opens as a window in your
+session), with a runtime and a config directory of its own:
+
+```
+tree=$HOME/h2s-test-tree
+launcher=…                                 # by system, below
+tests/test-tree.sh "$tree"
+private=$(mktemp -d)                       # the hand-run shell's runtime and config dirs
+parent=$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY   # your session's compositor, by its full path
+env XDG_RUNTIME_DIR="$private" WAYLAND_DISPLAY="$parent" XDG_CONFIG_HOME="$private/config" \
+    H2S_SHELL_DIR="$tree" H2S_FAKE_VPN_PROVIDER=1 \
+    labwc -s "$launcher"
+```
+
+The launcher that starts the tree, and how to reach that shell over IPC from another
+terminal, differ by system:
+
+- **NixOS**, with the package: `launcher=h2s-shell` (it runs the tree `H2S_SHELL_DIR`
+  names); `XDG_RUNTIME_DIR="$private" H2S_SHELL_DIR="$tree" h2s-shell ipc call fakevpn list`.
+- **Arch** (and any machine without the package): `launcher=$tree/scripts/launch.sh` (the
+  tree's own launcher, which runs the `qs` on `PATH`);
+  `XDG_RUNTIME_DIR="$private" "$tree/scripts/launch.sh" ipc call fakevpn list`.
+
+Why the private directories: the launcher's one-supervisor lock, the lock marker and the
+module start guard live in the runtime directory, and the shell's settings in the config
+directory; shared with your session's shell, the second launcher would give up, and the
+hand-run shell would write your settings. What it still shares with your session: the
+session and system buses (it follows logind's lock and takes a sleep inhibitor as the real
+shell does, and reads NetworkManager), and the real PAM stacks for its own lock screen
+unless you set the lock seams. Close the labwc window to end it; remove `$private` and the
+tree after.
+
+**Adding a seam.** A seam is one name in both versions of a file, and its test:
+
+1. *For QML*: in `seams/TestSeamRules.qml`, add the variable to `seams` (with what it is
+   for) and decide its value in `read()` (and whether it is in force, `taken`); add a case to
+   `tests/TestSeamRulesTest.qml`. Add the property to `seams/TestSeams.qml` (from `_read`)
+   and to `singletons/TestSeams.qml`, there as the constant `read({})` gives. The consumer
+   reads `TestSeams.<property>`.
+2. *For a script*: a `seam_<name>=` line in `scripts/seams.sh` (the constant) and in
+   `seams/seams.sh` (`${VARIABLE:-<the constant>}`); the script uses `$seam_<name>`.
+3. Name the variable `H2S_LOCK_*`, `H2S_*TEST*` or `H2S_FAKE_*`, and never read it anywhere
+   else: `TestSeamsShapeTest` (a unit suite) checks that the two versions have the same
+   names (and types), that the production ones are constants with the no-seam values, and
+   searches the shell's files outside `tests/` for a read of such a variable
+   (`Quickshell.env("H2S_…")`, `$H2S_…`).
+4. Have the bed set it: in `stack_start`'s environment (`lib.sh`, `LAUNCHER_ENV`), or from
+   a test with `stack_start --shell-env NAME=value`; and add it to the table above.
 
 ## Reading the shell's state
 

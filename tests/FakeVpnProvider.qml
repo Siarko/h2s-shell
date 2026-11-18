@@ -5,8 +5,10 @@ import qs.components
 // A stand-in VPN provider (components/VpnProvider.qml) for the tests — never part of the
 // shell's UI. Scriptable: entries, states, attention, failures, slow operations, busy,
 // canChange, the kill switch's note, extras for the slots. Used by tests/VpnProvidersTest
-// .qml; and, by hand, in a shell started with H2S_FAKE_VPN_PROVIDER=1 (VpnManager loads it
-// then, with `ipc` on): `qs ipc call fakevpn <function> …` — see the IpcHandler below.
+// .qml; and, by hand, in a shell started from a test tree with H2S_FAKE_VPN_PROVIDER=1
+// (tests/test-tree.sh; tests/lock/README.md, "The test tree", says how to start one):
+// VpnManager loads it then, with `ipc` on — `qs ipc call fakevpn <function> …`, see the
+// IpcHandler below. The installed shell and a checkout never load it.
 VpnProvider {
     id: root
 
@@ -170,7 +172,7 @@ VpnProvider {
             clearAttention(entryId);
     }
 
-    // ── By hand ── only in a shell started with H2S_FAKE_VPN_PROVIDER=1
+    // ── By hand ── only in a test tree's shell started with H2S_FAKE_VPN_PROVIDER=1
     property bool ipc: false
     property IpcHandler _ipc: IpcHandler {
         target: "fakevpn"
