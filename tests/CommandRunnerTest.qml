@@ -47,14 +47,22 @@ TestCase {
         }
     }
 
-    // Stand-ins for CommandTools: no `timeout` on this system, and a look-up not answered yet
+    // Stand-ins for CommandTools: neither program on this system, `timeout` alone, and a
+    // look-up not answered yet
     property QtObject _noTimeout: QtObject {
         property bool known: true
         property string timeout: ""
+        property string setpriv: ""
+    }
+    property QtObject _noSetpriv: QtObject {
+        property bool known: true
+        property string timeout: CommandTools.timeout
+        property string setpriv: ""
     }
     property QtObject _lookingUp: QtObject {
         property bool known: false
         property string timeout: ""
+        property string setpriv: ""
     }
 
     // Inside `timeout` (the real one, found by CommandTools), bare, and waiting for the look-up
@@ -63,6 +71,9 @@ TestCase {
     }
     property Io.CommandRunner bare: Io.CommandRunner {
         tools: suite._noTimeout
+    }
+    property Io.CommandRunner halfWrapping: Io.CommandRunner {
+        tools: suite._noSetpriv
     }
     property Io.CommandRunner waiting: Io.CommandRunner {
         tools: suite._lookingUp
@@ -119,8 +130,8 @@ TestCase {
 
     function runAsync() {
         _then("the look-up of timeout answered", () => CommandTools.known, () => {
-            assert(CommandTools.timeout.startsWith("/") && CommandRules.timeoutCandidates.includes(CommandTools.timeout),
-                   "coreutils' timeout found in a system directory: " + CommandTools.timeout);
+            assert(CommandRules.wrapperTools[0].candidates.includes(CommandTools.timeout), "coreutils' timeout found in a system directory: " + CommandTools.timeout);
+            assert(CommandRules.wrapperTools[1].candidates.includes(CommandTools.setpriv), "util-linux's setpriv found in a system directory: " + CommandTools.setpriv);
             _plain();
         });
         _clock.start();
@@ -133,6 +144,7 @@ TestCase {
                { environment: { BOTH: "run" } });
         _start("parent", wrapping, ["sh", "-c", "cat /proc/$PPID/comm"]);
         _start("parentNoLimit", wrapping, ["sh", "-c", "cat /proc/$PPID/comm"], { timeoutMs: 0 });
+        _start("parentNoSetpriv", halfWrapping, ["sh", "-c", "cat /proc/$PPID/comm"]);
         _start("notKept", wrapping, ["sh", "-c", "echo out; echo err >&2"], { keepOutput: false });
         _start("capped", wrapping, ["sh", "-c", "head -c 5000 /dev/zero | tr '\\0' x; echo; echo short"], { maxOutputBytes: 1000 });
         const blanks = ["\\n\\na\\n", "a\\n\\n\\nb", "\\n", "a\\n\\nb\\n\\n\\nc\\n"];
@@ -148,7 +160,7 @@ TestCase {
         assert(before.handle.running && before.result === null, "start(): a handle, running, no answer inside start()");
         assertEqual(wrapping.running, 12, "the runner counts its runs");
 
-        _then("the plain runs answered", () => _answered("exit", "words", "parent", "parentNoLimit", "notKept", "capped", "signalled", "throws", "blank0", "blank1", "blank2", "blank3"), () => {
+        _then("the plain runs answered", () => _answered("exit", "words", "parent", "parentNoLimit", "notKept", "parentNoSetpriv", "capped", "signalled", "throws", "blank0", "blank1", "blank2", "blank3"), () => {
             const exit = _runs.exit.result;
             assertEqual(exit.ok + " " + exit.code + " " + exit.failedToStart + " " + exit.timedOut + " " + exit.cancelled + " " + exit.error,
                         "false 3 false false false ", "exit 3: not ok, the code, nothing else said");
@@ -166,6 +178,8 @@ TestCase {
             assert(_runs.words.result.ok, "exit 0: ok");
             assertEqual(_runs.parent.result.stdout.trim(), "timeout", "a run with a limit is started inside timeout");
             assert(_runs.parentNoLimit.result.ok && _runs.parentNoLimit.result.stdout.trim() !== "timeout", "one without a limit is not");
+            assert(_runs.parentNoSetpriv.result.ok && _runs.parentNoSetpriv.result.stdout.trim() !== "timeout",
+                   "… nor one with a limit where setpriv is missing: it would outlive its timeout");
 
             assertEqual(_runs.notKept.result.stdout + "|" + _runs.notKept.result.stderr + "|" + _runs.notKept.lines.length, "||2", "keepOutput false: the answer holds none, the callbacks got it");
             const capped = _runs.capped.result;
@@ -219,8 +233,9 @@ TestCase {
         _start("stubbornWrapped", wrapping, ["sh", "-c", _stubborn], { timeoutMs: 300, killAfterMs: 200 });
         _start("stubbornBare", bare, ["sh", "-c", _stubborn], { timeoutMs: 300, killAfterMs: 200 });
         _start("inTime", bare, ["sh", "-c", "echo quick"], { timeoutMs: 5000 });
+        _start("limitNoSetpriv", halfWrapping, ["sh", "-c", "echo started; exec sleep 30"], { timeoutMs: 300 });
 
-        _then("the runs past their limit answered", () => _answered("limitWrapped", "limitBare", "stubbornWrapped", "stubbornBare", "inTime"), () => {
+        _then("the runs past their limit answered", () => _answered("limitWrapped", "limitBare", "stubbornWrapped", "stubbornBare", "inTime", "limitNoSetpriv"), () => {
             const wrapped = _runs.limitWrapped.result;
             assertEqual(wrapped.timedOut + " " + wrapped.ok + " " + wrapped.code + " " + wrapped.cancelled, "true false 124 false", "past the limit, inside timeout: timedOut, timeout's 124");
             assert(wrapped.durationMs >= 300 && wrapped.durationMs < 5000, "… at the limit, not at the script's end (" + wrapped.durationMs + " ms)");
@@ -235,6 +250,7 @@ TestCase {
             assertEqual(killedBare.timedOut + " " + killedBare.ok + " " + killedBare.code, "true false -1", "TERM shrugged off, bare: the runner's KILL ends it, timedOut");
             assert(killedBare.durationMs >= 500 && killedBare.durationMs < 5000, "… killAfterMs after the limit (" + killedBare.durationMs + " ms)");
             assertEqual(_runs.inTime.result.ok + " " + _runs.inTime.result.timedOut, "true false", "a run that ends in time: the watchdog never speaks");
+            assertEqual(_runs.limitNoSetpriv.result.timedOut + " " + _runs.limitNoSetpriv.result.code, "true -1", "timeout but no setpriv: the watchdog keeps the limit");
             _cancelling();
         });
     }
@@ -261,6 +277,7 @@ TestCase {
                 _runs[name].handle.cancel();
             }
             _lookingUp.timeout = CommandTools.timeout;
+            _lookingUp.setpriv = CommandTools.setpriv;
             _lookingUp.known = true;
         });
         _then("the cancelled runs answered", () => _answered("cancelWrapped", "cancelBare", "cancelStubbornWrapped", "cancelStubbornBare", "cancelWaiting", "launchedLater"), () => {
@@ -350,6 +367,26 @@ TestCase {
             assertEqual(lines.length + " " + lines.filter(line => line === euros).length, "200 200", "300 kB of a three-byte character: every line as written");
             assert(!many.result.stdout.includes("\ufffd") && many.result.stdout.length >= 200 * 500 && !many.out.join("").includes("\ufffd"),
                    "… the kept output and the chunks too");
+            _wrapperKilled();
+        });
+    }
+
+    // ---- timeout killed from outside ----
+    // What the shell's own end does to a run with a limit: `timeout`, the shell's child,
+    // gets a KILL it cannot pass on. The command must not outlive it.
+    function _wrapperKilled() {
+        _start("orphan", wrapping, ["sh", "-c", "trap '' TERM; echo \"$PPID $$\"; while :; do sleep 0.05; done"]);
+        _then("the script inside timeout runs", () => _runs.orphan.lines.length === 1, () => {
+            const pids = _runs.orphan.lines[0][0].split(" ");
+            assert(/^[0-9]+$/.test(pids[0]) && /^[0-9]+$/.test(pids[1]), "the script runs inside timeout (" + pids.join(", ") + ")");
+            _start("killWrapper", bare, ["kill", "-KILL", pids[0]]);
+            _start("orphanGone", bare, ["sh", "-c", _untilGone, "sh", pids[1]], { timeoutMs: 8000 });
+        });
+        _then("the script is gone with its timeout", () => _answered("orphan", "killWrapper", "orphanGone"), () => {
+            assertEqual(_runs.orphanGone.result.stdout.trim() + " " + _runs.orphanGone.result.timedOut, "gone false",
+                        "timeout killed with KILL from outside: the command (which shrugs TERM off) goes with it");
+            const result = _runs.orphan.result;
+            assertEqual(result.ok + " " + result.code + " " + result.timedOut + " " + result.failedToStart, "false -1 false false", "… the run answered: not ok, no time-out");
             _destroyed();
         });
     }

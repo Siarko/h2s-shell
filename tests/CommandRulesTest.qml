@@ -61,14 +61,22 @@ TestCase {
         // --- the command line ---
         assertEqual(rules.seconds(30000) + " " + rules.seconds(800) + " " + rules.seconds(1) + " " + rules.seconds(3600000), "30 0.8 0.001 3600",
                     "durations in seconds, as `timeout` reads them");
-        assertEqual(JSON.stringify(rules.commandLine(["tailscale", "file", "cp", "--", "a b"], "/usr/bin/timeout", 30000, 3000)),
-                    JSON.stringify(["/usr/bin/timeout", "-k", "3", "30", "tailscale", "file", "cp", "--", "a b"]), "with a limit: inside timeout -k, the words untouched");
-        assertEqual(JSON.stringify(rules.commandLine(["-n", "x"], "/usr/bin/timeout", 500, 0)),
-                    JSON.stringify(["/usr/bin/timeout", "-k", "0.001", "0.5", "-n", "x"]), "a kill-after of 0 would switch timeout's KILL off: 1 ms");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], "/usr/bin/timeout", 0, 3000)), "[\"ls\"]", "no limit: the command as it is");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], "", 30000, 3000)), "[\"ls\"]", "no timeout found: the command as it is");
-        assert(!rules.wraps(undefined, 30000) && !rules.wraps("", 30000) && !rules.wraps("/usr/bin/timeout", 0) && rules.wraps("/usr/bin/timeout", 1), "wrapped: a limit and a program");
-        assert(rules.timeoutCandidates.every(path => path.startsWith("/") && !path.startsWith("/home") && !path.includes("/.")), "timeout is looked for in system directories only");
+        const tools = { timeout: "/usr/bin/timeout", setpriv: "/usr/bin/setpriv" };
+        assertEqual(JSON.stringify(rules.commandLine(["tailscale", "file", "cp", "--", "a b"], tools, 30000, 3000)),
+                    JSON.stringify(["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "tailscale", "file", "cp", "--", "a b"]),
+                    "with a limit: inside timeout -k, which the command dies with (setpriv --pdeathsig), the words untouched");
+        assertEqual(JSON.stringify(rules.commandLine(["-n", "x"], tools, 500, 0).slice(0, 4)),
+                    JSON.stringify(["/usr/bin/timeout", "-k", "0.001", "0.5"]), "a kill-after of 0 would switch timeout's KILL off: 1 ms");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], tools, 0, 3000)), "[\"ls\"]", "no limit: the command as it is");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000)), "[\"ls\"]", "no timeout found: the command as it is");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 30000, 3000)), "[\"ls\"]",
+                    "no setpriv found: the command as it is — never inside a timeout it would outlive");
+        assert(!rules.wraps(undefined, 30000) && !rules.wraps({}, 30000) && !rules.wraps({ timeout: "/usr/bin/timeout" }, 30000)
+               && !rules.wraps(tools, 0) && rules.wraps(tools, 1), "wrapped: a limit and both programs");
+        assertEqual(rules.wrapperTools.map(tool => tool.name).join(), "timeout,setpriv", "the two programs looked for");
+        assert(rules.wrapperTools.every(tool => tool.probe.length > 0 && tool.candidates.length > 0
+               && tool.candidates.every(path => path.startsWith("/") && !path.startsWith("/home") && !path.includes("/.") && path.endsWith("/" + tool.name))),
+               "… in system directories only, each with a probe");
 
         // --- a run's life ---
         const waiting = rules.fresh(1000, 300);

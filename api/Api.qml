@@ -177,10 +177,11 @@ import qs.singletons.network
 //                          that moment; done comes with `cancelled: true` when the process
 //                          is gone. A run that waits to be started is answered at once
 //   cancelAll()            cancel() for every run
-//                          The limit is kept by coreutils' `timeout` around the command,
-//                          taken from a system directory, never PATH — so a run ends even
-//                          when the shell is gone — and by the shell's own timer where
-//                          there is no `timeout`. What a command prints is text from
+//                          The limit is kept by coreutils' `timeout` around the command
+//                          (with util-linux's `setpriv`, so that the command dies with
+//                          it), both taken from a system directory, never PATH — so a run
+//                          ends even when the shell is gone — and by the shell's own
+//                          timer where one of the two is missing. What a command prints is text from
 //                          outside: show it as plain text, never put it on a command line
 //                          unquoted. A callback that throws is logged; the run goes on.
 //                          CommandAction and CommandQuery are run by it, without a limit.

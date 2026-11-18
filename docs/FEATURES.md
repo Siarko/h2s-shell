@@ -430,6 +430,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `notify-send` | the shell's own outbound notifications |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `flock`, `setsid` (util-linux) | `scripts/launch.sh`: one supervisor per session (without `flock` it warns and goes on unguarded), the detached restart |
+| `timeout` (coreutils), `setpriv` (util-linux) | time limits of the commands the shell and modules run through the command runner, taken from the system's directory (NixOS: `/run/current-system/sw/bin`; Arch: `/usr/bin`), never from `PATH` (optional — without both, a limit is kept by the shell alone and ends with it) |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |

@@ -623,20 +623,23 @@ pure functions in `singletons/CommandRules.qml` (what may be run, the command li
 life as `step`, the cuts, the result); the runner starts processes and keeps timers.
 
 - The time limit is kept twice: the command is started inside coreutils' `timeout -k`,
-  which ends it even when the shell is gone, and the runner has a watchdog of its own,
-  the only limit where no `timeout` is found. `singletons/CommandTools.qml` looks for
-  `timeout` once, in system directories only and never on `PATH`; runs with a limit wait
-  for its answer.
-  - NixOS: `/run/current-system/sw/bin/timeout`.
-  - Arch: `/usr/bin/timeout`.
+  which ends it even when the shell is gone, and the runner has a watchdog of its own.
+  Between `timeout` and the command is util-linux's `setpriv --pdeathsig KILL`, which
+  becomes the command after asking the kernel to kill it when `timeout` dies: a KILL
+  that reaches `timeout` (the shell's child) cannot be passed on, and the command would
+  go on without a limit. `singletons/CommandTools.qml` looks for both programs once, in
+  system directories only and never on `PATH`; runs with a limit wait for its answer.
+  With either missing a run is started bare, and the watchdog is its only limit.
+  - NixOS: `/run/current-system/sw/bin/timeout`, `/run/current-system/sw/bin/setpriv`.
+  - Arch: `/usr/bin/timeout`, `/usr/bin/setpriv`.
 - Past the limit, and on `cancel()`, the command gets TERM, and KILL `killAfterMs` later.
   From a `cancel()` on no output is handed over; `done` comes when the process is gone.
 - A program that cannot start is `failedToStart`. Quickshell reports it as a process that
   ends without an exit status; inside `timeout` it is that program's exit status 126 or 127.
-- When the runner is destroyed (a module turned off, the shell reloading) nothing is
-  called any more and its runs are ended at once: a destroyed `Process` takes its child
-  with it, which for a run with a limit is `timeout`, so the runner sends KILL to the
-  process group `timeout` leads.
+- When the runner is destroyed (a module turned off) nothing is called any more and its
+  runs are ended at once: a destroyed `Process` takes its child with it, which for a run
+  with a limit is `timeout`, and the command dies with that; the runner also sends KILL
+  to the process group `timeout` leads, for what the command started itself.
 
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
   rules, and the runner against `sh -c` scripts),
@@ -645,7 +648,7 @@ life as `step`, the cuts, the result); the runner starts processes and keeps tim
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the
-  lock-bed tests `modules`, `modules-launcher`, `modules-discovery` and `modules-hung`. A module's own suites
+  lock-bed tests `modules`, `modules-launcher`, `modules-discovery`, `modules-hung` and `modules-reload` (a reload while the file check runs). A module's own suites
   run with `tests/run-modules.sh <module dir>…` — the module may live in another repository;
   it is loaded into the shell's own host, with this tree as the config root, so its suites
   extend `TestCase` (`import qs.tests`, allowed in its tests only), use `qs.api` as in the

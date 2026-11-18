@@ -17,10 +17,15 @@ Singleton {
     // `timeout` wraps: they are only there for a `timeout` that does not do its work
     readonly property int backstopMs: 1000
 
-    // Where coreutils' `timeout` is looked for, in this order: system directories only
-    // (NixOS, Arch), never PATH — the program that ends a run is not taken from a place the
-    // user can write
-    readonly property var timeoutCandidates: ["/run/current-system/sw/bin/timeout", "/usr/bin/timeout"]
+    // The programs put around a run with a time limit, where each is looked for, in this
+    // order — system directories only (NixOS, Arch), never PATH: what ends a run is not
+    // taken from a place the user can write — and the arguments each must run with, exit 0,
+    // to count. `timeout` (coreutils) ends the command; `setpriv` (util-linux) is there
+    // for its --pdeathsig alone (commandLine).
+    readonly property var wrapperTools: [
+        { name: "timeout", candidates: ["/run/current-system/sw/bin/timeout", "/usr/bin/timeout"], probe: ["--version"] },
+        { name: "setpriv", candidates: ["/run/current-system/sw/bin/setpriv", "/usr/bin/setpriv"], probe: ["--pdeathsig", "KILL", "--version"] }
+    ]
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]
 
@@ -126,19 +131,29 @@ Singleton {
         return String(Number((milliseconds / 1000).toFixed(3)));
     }
 
-    // Whether a run is put inside `timeout`: it has a time limit and the program was found
-    function wraps(timeoutProgram, timeoutMs) {
-        return typeof timeoutProgram === "string" && timeoutProgram !== "" && timeoutMs > 0;
+    // Whether a run is put inside `timeout`: it has a time limit and both programs were
+    // found (`tools`: { timeout, setpriv }). Without `setpriv` it is not: the shell's end
+    // would then leave the command running, with nothing to end it.
+    function wraps(tools, timeoutMs) {
+        const found = path => typeof path === "string" && path !== "";
+        return found(tools?.timeout) && found(tools?.setpriv) && timeoutMs > 0;
     }
 
-    // The words actually started. With a limit: `timeout -k <kill after> <limit> <argv…>`;
-    // `timeout` stops reading options at the limit, so the command's own words are never
-    // taken for its options. A kill-after of 0 would switch its KILL off: 1 ms then.
-    function commandLine(argv, timeoutProgram, timeoutMs, killAfterMs) {
+    // The words actually started. With a limit:
+    //   timeout -k <kill after> <limit> setpriv --pdeathsig KILL -- <argv…>
+    // `timeout` ends the command at the limit, also when the shell is gone. `setpriv` only
+    // asks the kernel to send the command a KILL when its parent — `timeout` — dies, and
+    // then becomes the command: the shell's own end kills its child, `timeout`, with a
+    // KILL that cannot be passed on, and the command would go on without a limit. (The
+    // kernel drops that request when the command is a setuid program.) `timeout` stops
+    // reading options at the limit and `setpriv` at "--", so the command's own words are
+    // never taken for theirs. A kill-after of 0 would switch `timeout`'s KILL off: 1 ms.
+    function commandLine(argv, tools, timeoutMs, killAfterMs) {
         const words = Array.from(argv);
-        if (!wraps(timeoutProgram, timeoutMs))
+        if (!wraps(tools, timeoutMs))
             return words;
-        return [timeoutProgram, "-k", seconds(Math.max(killAfterMs, 1)), seconds(timeoutMs)].concat(words);
+        return [tools.timeout, "-k", seconds(Math.max(killAfterMs, 1)), seconds(timeoutMs),
+                tools.setpriv, "--pdeathsig", "KILL", "--"].concat(words);
     }
 
     // ---- A run's life ----
@@ -247,7 +262,7 @@ Singleton {
     // `state` at the end; `facts`: { stdout, stderr, truncated, durationMs }. Frozen.
     //   failedToStart  the process ended without an exit status (Quickshell reports a
     //                  program that cannot start so) — or, inside `timeout`, with 126 or
-    //                  127, the two codes `timeout` gives for a command it could not run
+    //                  127, the two codes it and `setpriv` give for a command not run
     //                  (a command that exits with one of them itself reads the same)
     //   timedOut       the runner's own limit ended it, or `timeout` did: the run took at
     //                  least the limit and ended with 124, or by the KILL that follows

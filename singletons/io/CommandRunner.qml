@@ -20,8 +20,10 @@ import qs.singletons
 //   the run's: the way to hand a command a secret (a command line is anyone's to read).
 // - The time limit is kept twice. The command is started inside coreutils' `timeout -k`
 //   (CommandTools: found in a system directory), which ends it even when the shell is
-//   gone; and the runner has its own watchdog, the only limit where there is no
-//   `timeout`. Past the limit the command gets TERM, and KILL `killAfterMs` later.
+//   gone — with `setpriv --pdeathsig KILL` between the two, so that the command dies
+//   with `timeout` when the shell's own end kills that; and the runner has its own
+//   watchdog, the only limit where one of the two programs is missing. Past the limit
+//   the command gets TERM, and KILL `killAfterMs` later.
 // - cancel(): TERM, KILL after `killAfterMs`; no chunk or line is handed over from that
 //   moment; `done` comes when the process is gone, with `cancelled: true`.
 // - `done` is called exactly once per start(), never inside start() itself — and never
@@ -46,7 +48,7 @@ QtObject {
     // Runs started and not yet answered
     readonly property int running: _jobs.length
 
-    // Where `timeout` is: { known, timeout }
+    // Where `timeout` and `setpriv` are: { known, timeout, setpriv }
     property var tools: CommandTools
 
     property var _jobs: []
@@ -110,7 +112,7 @@ QtObject {
 
     function _launch(job) {
         if (job.state.phase === "waiting")
-            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools?.timeout, job.state.timeoutMs) });
+            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools, job.state.timeoutMs) });
     }
 
     function _dispatch(job, event) {
@@ -155,7 +157,7 @@ QtObject {
         const item = _runComponent.createObject(root);
         item.job = job;
         job.item = item;
-        item.process.command = CommandRules.commandLine(job.argv, tools?.timeout, job.state.timeoutMs, job.state.killAfterMs);
+        item.process.command = CommandRules.commandLine(job.argv, tools, job.state.timeoutMs, job.state.killAfterMs);
         item.process.environment = CommandRules.mergedEnvironment(root.environment, job.options.environment);
         job.startedAt = Date.now();
         // A program that cannot start may be reported inside the next line: its answer
@@ -270,12 +272,13 @@ QtObject {
         }
     }
 
-    // The runner goes (a module turned off, the shell reloading): nothing is called from
-    // here on, and its runs are ended at once, with KILL — nobody is left to send one
-    // later. A destroyed Process takes its own child with it, which for a wrapped run is
-    // `timeout`: the command would go on without it, and without a limit. `timeout` makes
-    // itself the leader of a process group that holds the command, so that group gets
-    // the KILL (through `kill`: a Process can only signal its own child).
+    // The runner is destroyed (a module turned off): nothing is called from here on, and
+    // its runs are ended at once, with KILL — nobody is left to send one later. The
+    // destroyed Process takes its child with it, which for a wrapped run is `timeout`,
+    // and the command dies with that (commandLine); what the command started itself is in
+    // the process group `timeout` leads, so that group gets a KILL too (through `kill`: a
+    // Process can only signal its own child). When the shell itself ends or reloads
+    // nothing here runs: then the command dying with `timeout` is all there is.
     Component.onDestruction: {
         _gone = true;
         for (const job of _jobs) {
