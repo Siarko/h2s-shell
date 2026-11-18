@@ -563,14 +563,14 @@ Singleton {
 
     // A stand-in provider for looking at the views by hand (tests/FakeVpnProvider.qml, with
     // its IPC target "fakevpn"): only when H2S_FAKE_VPN_PROVIDER=1 is in the shell's
-    // environment, never otherwise
+    // environment (TestSeams.fakeVpnProvider), never otherwise
     property var _fakeProvider: null
     // By a file URL, as a module's files are loaded (the shell's scanner does not reach
     // tests/; such a file gets the same singletons — notes/plans/modules.md §2)
     readonly property string fakeProviderUrl: "file://" + Quickshell.shellDir + "/tests/FakeVpnProvider.qml"
 
     function _startFakeProvider() {
-        if (Quickshell.env("H2S_FAKE_VPN_PROVIDER") !== "1" || _fakeProvider !== null)
+        if (!TestSeams.fakeVpnProvider || _fakeProvider !== null)
             return;
         const component = Qt.createComponent(fakeProviderUrl);
         if (component.status !== Component.Ready) {

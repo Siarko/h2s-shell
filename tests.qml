@@ -44,6 +44,7 @@ QtObject {
     property var _energyRules: EnergyRulesTest {}
     property var _lockRules: LockRulesTest {}
     property var _lockIoRules: LockIoRulesTest {}
+    property var _testSeamRules: TestSeamRulesTest {}
     property var _pointerInput: PointerInputTest {}
     property var _buttonKinds: ButtonKindsTest {}
     property var _pillSizes: PillSizesTest {}

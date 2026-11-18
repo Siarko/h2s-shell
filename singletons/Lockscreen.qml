@@ -119,32 +119,28 @@ Singleton {
     // The operations of the driver, closures over its private state; null until built
     property var _api: null
 
-    // The lock test bed's seams (tests/lock/README.md), like H2S_LOCK_AUTH_METHODS, inert
-    // unless set. H2S_LOCK_TOOLS: a directory whose `gdbus` and `systemd-inhibit` stand in
+    // The lock test bed's seams (tests/lock/README.md; read by TestSeams), like
+    // H2S_LOCK_AUTH_METHODS, inert unless set. H2S_LOCK_TOOLS: a directory whose `gdbus` and `systemd-inhibit` stand in
     // for the real ones, since the test bed cuts the system bus off (and the launcher puts
     // the real gdbus first on PATH). H2S_LOCK_SYSTEM_PAM_DIR: where the system-wide
     // h2s-shell-* configs are looked for (/etc/pam.d), so that the password fallback of a
     // test shell can never be the system's real PAM stack. Neither grants anything: whoever
     // sets the shell's environment can already run anything as the user.
-    readonly property string _toolDirectory: Quickshell.env("H2S_LOCK_TOOLS") ?? ""
-    readonly property string _systemPamDirectory: Quickshell.env("H2S_LOCK_SYSTEM_PAM_DIR") || "/etc/pam.d"
+    readonly property string _toolDirectory: TestSeams.lockTools
+    readonly property string _systemPamDirectory: TestSeams.systemPamDirectory || "/etc/pam.d"
 
     // H2S_LOCK_TEST_TIMINGS: a JSON object of LockRules.timings overrides, so that a test of
     // what happens after minutes (rounds that time out) runs in seconds. initial() keeps
     // only known names with finite values ≥ 0; anything unparsable is no override. Like the
     // seams above, it grants nothing: the timings decide when, never whether, a lock ends.
     function _testTimings() {
-        const text = Quickshell.env("H2S_LOCK_TEST_TIMINGS") ?? "";
-        if (text === "")
-            return {};
-        try {
-            const parsed = JSON.parse(text);
-            _log("warning", "test timings in force (H2S_LOCK_TEST_TIMINGS): " + JSON.stringify(parsed));
-            return parsed !== null && typeof parsed === "object" ? parsed : {};
-        } catch (error) {
-            _log("error", "H2S_LOCK_TEST_TIMINGS is not JSON: ignored");
+        if (TestSeams.timingsProblem !== "") {
+            _log("error", "H2S_LOCK_TEST_TIMINGS is " + TestSeams.timingsProblem + ": ignored");
             return {};
         }
+        if (TestSeams.inForce.includes("H2S_LOCK_TEST_TIMINGS"))
+            _log("warning", "test timings in force (H2S_LOCK_TEST_TIMINGS): " + JSON.stringify(TestSeams.timings));
+        return Object.assign({}, TestSeams.timings);
     }
 
     // The events each source may raise: a child object's signal emitted by other QML can
@@ -833,6 +829,7 @@ Singleton {
                     inhibitorRunning: _inhibitor.running,
                     logindSession: _logind.sessionPath,
                     lockScope: scope !== null,
+                    testSeams: TestSeams.inForce.slice(),
                     watchFiles: Quickshell.watchFiles,
                     passwordFallbackKnown: fallbackKnown,
                     capsLock: _capsLed.on,
@@ -1056,7 +1053,7 @@ Singleton {
             + "case $2 in nixos) echo nixos ;; other) ;; *) test -e /etc/NIXOS && echo nixos ;; esac\n"
             + "echo answered",
             "sh", root._systemPamDirectory,
-            LockIoRules.systemSeam(Quickshell.env("H2S_LOCK_SYSTEM_PAM_DIR"), Quickshell.env("H2S_LOCK_SYSTEM"))]
+            LockIoRules.systemSeam(TestSeams.systemPamDirectory, TestSeams.lockSystem)]
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: line => _fallbackDirectProbe._lines = _fallbackDirectProbe._lines.concat([line])
@@ -1184,7 +1181,7 @@ Singleton {
     // grants nothing (it carries the lock over, or ends in a restart that locks again).
     IpcHandler {
         target: "locktest"
-        enabled: Quickshell.env("H2S_LOCK_TEST_RELOAD") === "1"
+        enabled: TestSeams.reloadIpc
 
         function reload(hard: bool): string {
             Qt.callLater(() => Quickshell.reload(hard));

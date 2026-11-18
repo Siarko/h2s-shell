@@ -18,7 +18,7 @@ import qs.singletons
 // read may still see the old value. Never on a timer while nobody types.
 //
 // H2S_LOCK_LEDS_DIR names another directory instead of /sys/class/leds — the lock test bed's
-// seam (no keyboard, so no LED, in its nested compositor); inert unless set.
+// seam (no keyboard, so no LED, in its nested compositor; read by TestSeams); inert unless set.
 Scope {
     id: root
 
@@ -26,7 +26,7 @@ Scope {
     readonly property var on: _on
     property var _on: null
 
-    readonly property string directory: Quickshell.env("H2S_LOCK_LEDS_DIR") || "/sys/class/leds"
+    readonly property string directory: TestSeams.ledsDirectory || "/sys/class/leds"
 
     // A read now (and one shortly after); a read asked for while one runs is run after it
     function read() {

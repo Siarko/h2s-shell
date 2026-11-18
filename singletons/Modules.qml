@@ -128,18 +128,15 @@ Singleton {
             // The stores' directory, private before any module runs (api/ModuleStore.qml)
             if (!Config.readOnly)
                 _host.storeDirectory = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "") + "/h2s_shell/modules";
-            // Test seam: the guard's window, shortened by the lock test bed
-            const window = Number(Quickshell.env("H2S_SHELL_TEST_MODULE_GUARD_MS"));
-            if (window > 0)
-                _host.guardClearMs = window;
-            // Test seams of the lock bed (tests/lock/tests/modules-hung.sh): a directory put
-            // first on the file check's PATH (a `head` that hangs) and the checks' deadline
-            const checkPath = Quickshell.env("H2S_SHELL_TEST_MODULE_CHECK_PATH");
-            if (typeof checkPath === "string" && checkPath.startsWith("/"))
-                _host.checkEnvironment = { PATH: checkPath + ":" + (Quickshell.env("PATH") ?? "") };
-            const checkMs = Number(Quickshell.env("H2S_SHELL_TEST_MODULE_CHECK_MS"));
-            if (checkMs > 0)
-                _host.checkTimeoutMs = checkMs;
+            // Test seams (TestSeams): the guard's window, shortened by the lock test bed; a
+            // directory put first on the file check's PATH (a `head` that hangs) and the
+            // checks' deadline (tests/lock/tests/modules-hung.sh)
+            if (TestSeams.moduleGuardMs > 0)
+                _host.guardClearMs = TestSeams.moduleGuardMs;
+            if (TestSeams.moduleCheckPath !== "")
+                _host.checkEnvironment = { PATH: TestSeams.moduleCheckPath + ":" + (Quickshell.env("PATH") ?? "") };
+            if (TestSeams.moduleCheckMs > 0)
+                _host.checkTimeoutMs = TestSeams.moduleCheckMs;
             _host.load(typeof value === "string" ? value : "", {
                 safeMode: safe,
                 safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting twice in a row"
@@ -157,7 +154,7 @@ Singleton {
 
         function list(): string {
             try {
-                return JSON.stringify(_host.describe());
+                return JSON.stringify(Object.assign(_host.describe(), { testSeams: TestSeams.inForce.slice() }));
             } catch (error) {
                 return JSON.stringify({ hostError: String(error), modules: [] });
             }

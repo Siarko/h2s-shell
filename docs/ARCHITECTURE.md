@@ -485,7 +485,14 @@ on every machine),
 `Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
 Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (JSON
 overrides of `LockRules.timings`, so that minutes of PAM rounds run in seconds) and the
-launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds).
+launcher's `H2S_LAUNCHER_TEST_TIMINGS` (its restart pauses, in seconds). Inside the shell
+one singleton reads the seams, `singletons/TestSeams.qml` (the lock screen's above, the
+module host's `H2S_SHELL_TEST_MODULE_*` and `H2S_FAKE_VPN_PROVIDER`; the list and what each
+value says: `singletons/TestSeamRules.qml`, tested by `tests/TestSeamRulesTest.qml`, which
+also checks that no other file reads one). When any is in force it logs one line,
+`[TestSeams] test bed: <names>`, and `qs ipc call modules list` and the lock screen's
+`state` (its `driver` block) carry them as `testSeams`. The two scripts read theirs
+themselves.
 
 ### Modules
 
