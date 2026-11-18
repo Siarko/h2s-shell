@@ -661,6 +661,67 @@ TestCase {
             assertEqual(JSON.stringify(_notices().map(entry => [entry.summary, entry.body, entry.format])),
                         JSON.stringify([["Module: Not named", "", "plain"]]), "one notification, as its announcement gives it");
             ModuleTestKit.setPolkitAgent("active");
+            _lockedBeforeLookup();
+        });
+    }
+
+    // The old type's default "pkexec" (the trusted one, PrivilegedLookupSeam.startTrusted)
+    // whose turn comes before the look-up of pkexec has answered: it waits in its check, so
+    // the session locked meanwhile ends it "locked", and the look-up answering after the
+    // unlock starts nothing for it — no log, no notification (another agent: one would be
+    // sent at a launch), no pkexec
+    function _lockedBeforeLookup() {
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent("other");
+        PrivilegedLookupSeam.holdLookup(true);
+        const answers = [];
+        PrivilegedLookupSeam.startTrusted("Before the look-up", _path("talk"), reply => answers.push(reply));
+        _then("the trusted run waits for the look-up", () => PrivilegedLookupSeam.waitingCount() === 1, () => {
+            assertEqual(answers.length, 0, "not answered while it waits");
+            ModuleTestKit.setSessionLocked(true);
+        });
+        _then("the waiting run is answered", () => answers.length > 0 && _idle(), () => {
+            assertEqual(JSON.stringify(answers.map(reply => reply.kind)), JSON.stringify(["locked"]), "the lock ends it: \"locked\" (dismissed, blocked)");
+            ModuleTestKit.setSessionLocked(false);
+            PrivilegedLookupSeam.holdLookup(false);
+            // A run after it, through the same queue: once it has run, the look-up's answer
+            // has been taken
+            _start("after the look-up", [_path("talk"), "lines", "1", "0"]);
+        });
+        _then("the run after it has run", () => _done("after the look-up") && _idle(), () => {
+            assertEqual(JSON.stringify(answers.map(reply => reply.kind)), JSON.stringify(["locked"]), "the ended run: never answered again, never launched");
+            assertEqual(JSON.stringify(_notices().map(entry => entry.body)), JSON.stringify(["Authorization: after the look-up"]),
+                        "only the run after it was announced: nothing for the ended run");
+            _quietBeforeLookup();
+        });
+    }
+
+    // With the shell's prompt, the trusted run waiting for the look-up longer than
+    // headQuietMs holds the head: the run behind it starts only after it has gone on (and,
+    // in test mode, been refused at its launch: no stand-in)
+    function _quietBeforeLookup() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent("active");
+        PrivilegedLookupSeam.holdLookup(true);
+        const answers = [];
+        let heldAt = 0;
+        PrivilegedLookupSeam.startTrusted("Held head", _path("talk"), reply => answers.push(reply));
+        _start("behind the held", [_path("talk"), "lines", "1", "0"]);
+        _then("the trusted run waits for the look-up", () => PrivilegedLookupSeam.waitingCount() === 1, () => {
+            heldAt = Date.now();
+        });
+        _then("past the quiet wait of the head", () => heldAt > 0 && Date.now() - heldAt >= 3000, () => {
+            assertEqual(_runs["behind the held"].firstLineAt + " " + _runs["behind the held"].stderr.length, "0 0",
+                        "the run behind has not started while the first waits");
+            assertEqual(answers.length, 0, "the waiting run is not answered");
+            PrivilegedLookupSeam.holdLookup(false);
+        });
+        _then("both are answered", () => answers.length > 0 && _done("behind the held") && _idle(), () => {
+            assertEqual(JSON.stringify(answers.map(reply => reply.kind)), JSON.stringify(["refused"]),
+                        "the trusted run went on and was refused at its launch (test mode: no stand-in)");
+            assert(_runs["behind the held"].result.ok, "the run behind has run: " + JSON.stringify(_runs["behind the held"].result));
+            assert(_runs["behind the held"].firstLineAt >= heldAt + 3000, "… only after the first was answered");
         });
     }
 }

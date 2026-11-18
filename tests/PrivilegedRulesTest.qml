@@ -120,9 +120,27 @@ TestCase {
                "an elevating program given by its path: as given");
         const legacyArgv = ["pkexec", "/usr/bin/tailscale", "up"];
         assertEqual(JSON.stringify(rules.legacyLaunch(legacyArgv, true, true, "/run/wrappers/bin/pkexec", "")),
-                    JSON.stringify({ argv: ["/run/wrappers/bin/pkexec", "/usr/bin/tailscale", "up"], wait: false, problem: "" }),
+                    JSON.stringify({ argv: ["/run/wrappers/bin/pkexec", "/usr/bin/tailscale", "up"], problem: "" }),
                     "the trusted pkexec in place of the name, the command after it");
-        assertEqual(rules.legacyLaunch(legacyArgv, true, false, "", "").wait, true, "the look-up not answered yet: wait for it");
+        const unlooked = rules.legacyLaunch(legacyArgv, true, false, "", "");
+        assert(unlooked.problem.includes("not available") && unlooked.argv.length === 0,
+               "the look-up not answered at launch: nothing run, never a pkexec not looked for: " + JSON.stringify(unlooked));
+        assert(rules.legacyCheckWaits(true, false), "the trusted pkexec not looked up yet: the run waits in its check");
+        assert(!rules.legacyCheckWaits(true, true), "… looked up (found or not): it goes on");
+        assert(!rules.legacyCheckWaits(false, false), "an elevating program given by its path, or test mode: no look-up waited for");
+        // Waiting in the check step: the queue still holds it as "checking", so a lock ends
+        // it as "locked" and no head deadline runs meanwhile
+        let waiting = rules.queueStep(rules.queueStart(false), { type: "add", id: 1, owner: "a", now: 10 });
+        waiting = rules.queueStep(waiting.state, { type: "add", id: 2, owner: "b", now: 11 });
+        assertEqual(waiting.state.jobs[0].phase, "checking", "the first run is being checked (waiting for the look-up)");
+        assertEqual(rules.nextDeadline(waiting.state), 0, "no deadline while it waits: nothing lets the next run go");
+        const later = rules.queueStep(waiting.state, { type: "tick", now: 10 + rules.headStrictMs + 1 });
+        assertEqual(JSON.stringify(later.effects), "[]", "a tick long after: the second run is not started");
+        const lockedWait = rules.queueStep(later.state, { type: "lock", locked: true, now: 9000 });
+        assertEqual(JSON.stringify(lockedWait.effects.filter(effect => effect.id === 1)), JSON.stringify([{ type: "answer", id: 1, kind: "locked" }]),
+                    "the session locked while it waits: answered \"locked\"");
+        const lateCheck = rules.queueStep(lockedWait.state, { type: "checked", id: 1, found: true, shellAgent: true, now: 9100 });
+        assertEqual(lateCheck.effects.length, 0, "its check answering after the lock: nothing launches");
         const unavailable = rules.legacyLaunch(legacyArgv, true, true, "", "pkexec is not installed");
         assert(unavailable.problem.includes("not available") && unavailable.problem.includes("not installed") && unavailable.argv.length === 0,
                "no trusted pkexec: the run fails as not available, nothing run: " + JSON.stringify(unavailable));

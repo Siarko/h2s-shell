@@ -563,6 +563,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A module's run as administrator through the old `PrivilegedAction` asked for in the
+  first seconds after the shell starts no longer starts when the session has locked
+  meanwhile, and no longer lets the next run start beside it.
 - The shell's own short messages at the bottom of the screen ("Copied: …") show their text
   as written, never as formatting, and so do a notification's app name, link and buttons.
 - A pill or a button that asks shows a label with line breaks on one line, at its usual

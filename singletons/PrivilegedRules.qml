@@ -277,18 +277,28 @@ Singleton {
         return testMode !== true && Array.isArray(elevating) && elevating[0] === "pkexec";
     }
 
+    // Whether a PrivilegedAction's run, its program looked at, waits before its turn may go
+    // on to pkexec: it names the trusted pkexec (`systemPkexec`, legacySystemPkexec) and the
+    // look-up of that pkexec (PrivilegedRuns) has not answered. It waits still in the check
+    // step, so a lock ends it like any run being checked, no deadline of the head runs, and
+    // which agent answers is read once it goes on. The look-up has a time limit of its own.
+    function legacyCheckWaits(systemPkexec, known) {
+        return systemPkexec === true && known !== true;
+    }
+
     // The words a PrivilegedAction's run starts with. `argv`: the elevating words, then the
     // command; `systemPkexec` (legacySystemPkexec); `known`, `pkexec`, `reason`: the look-up
-    // of the trusted pkexec (PrivilegedRuns). → { argv, wait (the look-up has not answered:
-    // ask again when it has), problem (not available: the run fails, nothing started) }
+    // of the trusted pkexec (PrivilegedRuns). → { argv, problem (not available: the run
+    // fails, nothing started) }. The look-up not answered is a problem too: a run never
+    // starts a pkexec that was not looked for (the wait is legacyCheckWaits', before this).
     function legacyLaunch(argv, systemPkexec, known, pkexec, reason) {
         if (systemPkexec !== true)
-            return { argv: Array.from(argv), wait: false, problem: "" };
+            return { argv: Array.from(argv), problem: "" };
         if (known !== true)
-            return { argv: [], wait: true, problem: "" };
+            return { argv: [], problem: "running as administrator is not available: pkexec is still being looked for" };
         if (typeof pkexec !== "string" || pkexec === "")
-            return { argv: [], wait: false, problem: "running as administrator is not available: " + String(reason || "no pkexec found") };
-        return { argv: [pkexec].concat(Array.from(argv).slice(1)), wait: false, problem: "" };
+            return { argv: [], problem: "running as administrator is not available: " + String(reason || "no pkexec found") };
+        return { argv: [pkexec].concat(Array.from(argv).slice(1)), problem: "" };
     }
 
     // ---- The answer ----

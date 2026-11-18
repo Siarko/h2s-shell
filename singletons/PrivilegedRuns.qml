@@ -69,6 +69,9 @@ Singleton {
         }
     }
     property bool testLocked: false
+    // The look-up of pkexec held, as if it had not answered yet (released: it answers with
+    // what it found)
+    property bool testLookupHeld: false
 
     readonly property bool _testMode: Modules.host.testMode
     readonly property bool locked: _testMode ? testLocked : Profiles.screenLocked
@@ -206,7 +209,10 @@ Singleton {
     property var _outbox: []
 
     property bool _known: false
-    // The old type's runs whose turn came before the look-up of pkexec answered
+    // The look-up has answered (in test mode, and not held by the suite)
+    readonly property bool _lookupAnswered: _known && !(_testMode && testLookupHeld)
+    // The old type's runs whose program was looked at before the look-up of pkexec answered:
+    // still "checking" in the queue (PrivilegedRules.legacyCheckWaits)
     property var _waitingForLookup: []
     property string _pkexec: ""
     property string _pkexecReason: "pkexec is still being looked for"
@@ -335,24 +341,52 @@ Singleton {
         }
     }
 
-    // Its program, looked at just before pkexec is asked (no shell reads the path: it is $1)
+    // Its program, looked at just before pkexec is asked (no shell reads the path: it is $1).
+    // The old type's run naming the trusted pkexec before the look-up has answered stays
+    // "checking" until it has, then is looked at again (_resumeChecks): a lock ends it
+    // meanwhile, and which agent answers is read just before it launches.
     function _check(job) {
         _probe.start([ModuleRules.probeShell, "-c", "[ -f \"$1\" ] && [ -x \"$1\" ]", "sh", job.program], {
             timeoutMs: 5000,
             keepOutput: false,
             environment: { PATH: ModuleRules.probeToolPath },
-            done: result => root._dispatch({ type: "checked", id: job.id, found: result.ok,
-                                             shellAgent: PrivilegedRules.shellAnswers(root._agentState()) })
+            done: result => {
+                if (!root._stillChecking(job))
+                    return;
+                if (PrivilegedRules.legacyCheckWaits(job.systemPkexec === true, root._lookupAnswered)) {
+                    root._waitingForLookup.push(job);
+                    return;
+                }
+                root._dispatch({ type: "checked", id: job.id, found: result.ok,
+                                 shellAgent: PrivilegedRules.shellAnswers(root._agentState()) });
+            }
         });
+    }
+
+    // The run is still the one being checked (not ended by a lock, a cancel, its owner gone)
+    function _stillChecking(job) {
+        return _jobs.get(job.id) === job && !job.answered && !job.muted && _queued(job.id)?.phase === "checking";
+    }
+
+    // The look-up answered: the runs that waited for it are looked at again, those still
+    // being checked
+    function _resumeChecks() {
+        const waiting = _waitingForLookup;
+        _waitingForLookup = [];
+        for (const job of waiting) {
+            if (_stillChecking(job))
+                _check(job);
+        }
+    }
+
+    on_LookupAnsweredChanged: {
+        if (_lookupAnswered)
+            _resumeChecks();
     }
 
     function _launch(job) {
         // The old type's default "pkexec": the trusted one, once the look-up has answered
-        const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _known, _pkexec, _pkexecReason);
-        if (launch.wait) {
-            _waitingForLookup.push(job);
-            return;
-        }
+        const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _lookupAnswered, _pkexec, _pkexecReason);
         job.argv = launch.argv;
         // Test mode: no pkexec but the stand-ins allowed (ModuleRules.testRunProblem)
         const problem = launch.problem !== "" ? launch.problem : ModuleRules.testRunProblem(job.argv, job.testMode, job.standIns);
@@ -512,12 +546,6 @@ Singleton {
                 root._known = true;
                 if (choice.path === "")
                     console.warn("[Privileged] running as administrator is not available: " + choice.reason);
-                const waiting = root._waitingForLookup;
-                root._waitingForLookup = [];
-                for (const job of waiting) {
-                    if (root._jobs.get(job.id) === job && !job.answered && !job.muted)
-                        root._launch(job);
-                }
             }
         });
     }
