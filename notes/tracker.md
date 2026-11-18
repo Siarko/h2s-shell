@@ -36,11 +36,7 @@ are on `master` (below). Next in the commands lane: the prompt says who and what
       `tests/run-all.sh`, not in `--quick`. Review findings fixed: argv (and options) read
       once into a plain copy at the boundary — an accessor/Proxy argv got `/bin/sh` past
       every refusal (high; also in `CommandRunner`'s test-mode guard and the legacy path);
-      launchers widened and **interpreters refused as argv[0] outright** (the lead's call,
-      stricter than §3.4, which let an interpreter with a script pass: nothing from a
-      module's directory runs as root, so an interpreter as root has no module use); on
-      NixOS the multi-call `coreutils` refuses only `--coreutils-prog`; U+2028/2029
-      unprintable; the legacy default `elevate: ["pkexec"]` takes the trusted setuid
+      U+2028/2029 unprintable; the legacy default `elevate: ["pkexec"]` takes the trusted setuid
       pkexec outside test mode; the queue's clock is monotonic (`ElapsedTimer`). The two
       points left open before:
   - **pdeathsig and setuid:** pkexec gets `<pkexec> <trusted timeout> -k 3 <limit> <argv…>`;
@@ -51,7 +47,17 @@ are on `master` (below). Next in the commands lane: the prompt says who and what
   - **The gate for modules below 1.10:** unchanged; the queue repeats the test-mode check
     per run. `module.privileged` has no gate: in test mode only `<testPrograms>/pkexec`,
     without one `available` is false.
+  - **The command is not parsed** (the owner's decision, 2026-11-18, "Decisions"): after a
+    first round that refused undeclared or untrusted programs, shells, launchers and
+    interpreters, the refusals were cut to argv[0] an absolute existing executable
+    (`notFound` otherwise), printable words, a `what`, not while locked. Reviewed on the
+    diff (docs claimed the A5 prompt and the enable warning as built — fixed; `start()`
+    not checking `trusted` now said; a test-mode pkexec word through `module.privileged`
+    pinned). Documented in `docs/ARCHITECTURE.md` "Modules" and `Api.qml`. A module must
+    itself pass only a program whose `module.programs[name].trusted` is true.
   Left open:
+  - `CommandRunnerTest` fails one check about once in 20 runs, alone too, on a branch that
+    did not touch it; which check is not known (also "Seen once" under the test seams).
   - **For A5:** with the agent `active` or `conflict`, any polkit request seen while the
     head asks counts as the head's (also a foreign one, or one open at launch) until
     `PolkitRules.announces`; a run whose pkexec has started is left to its prompt when the
@@ -465,6 +471,7 @@ All by the owner, 2026-11-17.
 - Module API, UI anchors: views are built from shared blocks (settings page, section, card, row, popup section) that register under a path derived from where they stand; a module names a path, a placement (before, after, appended inside) and its element. Addressable: settings pages and popup content; not the bar (the user places widgets there). One naming convention for anchors; the list of anchors pinned by a test and documented. Today's slots move onto anchors.
 - Module API: a module may publish its own versioned API object for other modules (declared in the manifest; a dependent module gets only that object). Basic version in this round. Reaching into another module or the host goes away.
 - Privileged runs by a module: no time window; the password prompt says which module asks and what for, next to the actual command.
+- Privileged runs, 2026-11-18: the shell does not parse or judge a module's command (no lists of shells, launchers or interpreters, no requirement of a declared program). A module runs in the shell's process, so such checks never stop a hostile one; the checks left (absolute existing program, printable words, a purpose, not while locked, one prompt at a time, the shell's timeout inside the trusted pkexec) catch mistakes and keep the prompt honest. The protection against a module not from the project is the prompt and the user knowing what they install. Written in `docs/ARCHITECTURE.md` "Modules".
 - Exit node (Tailscale): a manual choice "for now" that overrides the per-network setting, and a per-network choice in that connection's options (through an anchor).
 - No terminal setting of its own: a global "default programs" setting later.
 - (Temporary, see "Module authors" and "Trust" below.) Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
