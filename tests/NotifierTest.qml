@@ -116,20 +116,45 @@ TestCase {
         assertEqual(toastCard?.bodyMaxLines, 6, "the toast: at most 6 lines of the body");
         const centreCard = _card.createObject(null, { notification: notification });
         assertEqual(centreCard.bodyMaxLines, 0, "the centre's card: the whole body");
-        const isBody = item => item instanceof TextEdit && String(item.text).includes("line 20");
-        const toastBody = _find(toastCard, isBody);
-        const centreBody = _find(centreCard, isBody);
-        const lineSpacing = toastBody.font.pixelSize * 1.6;
-        assert(toastCard.bodyCut && toastCard.bodyShownHeight <= 6 * lineSpacing && toastCard.bodyShownHeight >= 5 * toastBody.font.pixelSize
-               && toastCard.bodyShownHeight < toastBody.implicitHeight / 2,
+        const isBody = item => item instanceof TextEdit && String(item.text).includes("line ");
+        // Laid out at a toast's width: without a window the layouts here are not run, so the
+        // body's box is given its width (the text wraps and counts its lines at it)
+        const toastBody = _layOut(toastCard, isBody);
+        const centreBody = _layOut(centreCard, isBody);
+        const lineHeight = toastBody.implicitHeight / toastBody.lineCount;
+        assert(toastBody.width === 300 && toastBody.lineCount === 20 && lineHeight >= toastBody.font.pixelSize, "the toast's body laid out at 300, one line each ("
+               + toastBody.lineCount + " lines of " + lineHeight + ")");
+        assert(toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - 6 * lineHeight) < 0.5,
                "the toast: 20 lines cut to 6 lines' height (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
         assert(toastBody.parent.clip, "… clipped");
         assert(!centreCard.bodyCut && Math.abs(centreCard.bodyShownHeight - centreBody.implicitHeight) < 0.5 && !centreBody.parent.clip,
                "the centre's card: the whole body, not clipped (" + centreCard.bodyShownHeight + " of " + centreBody.implicitHeight + ")");
+        const lines = count => Array.from({ length: count }, (_, i) => "line " + (i + 1)).join("\n");
+        hudItem.currentNotif = Object.assign({}, notification, { body: lines(6) });
+        assert(toastBody.lineCount === 6 && !toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - toastBody.implicitHeight) < 0.5,
+               "the toast: a body of exactly 6 lines whole, not cut (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
+        hudItem.currentNotif = Object.assign({}, notification, { body: lines(7) });
+        assert(toastBody.lineCount === 7 && toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - 6 * toastBody.implicitHeight / 7) < 0.5,
+               "the toast: 7 lines cut to 6 (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
         hudItem.currentNotif = Object.assign({}, notification, { body: "one line" });
         assert(!toastCard.bodyCut, "the toast: a short body not cut");
+        // A word longer than the line breaks onto the next lines rather than running off the side
+        const longWord = "line" + "x".repeat(200);
+        hudItem.currentNotif = Object.assign({}, notification, { body: longWord });
+        assert(toastBody.lineCount > 1 && toastBody.contentWidth <= toastBody.width + 0.5,
+               "the toast: a long word wrapped within the width (" + toastBody.lineCount + " lines, " + toastBody.contentWidth + " of " + toastBody.width + ")");
+        centreCard.notification = Object.assign({}, notification, { body: longWord });
+        assert(centreBody.lineCount > 1 && centreBody.contentWidth <= centreBody.width + 0.5,
+               "the centre's card: a long word wrapped within the width (" + centreBody.lineCount + " lines, " + centreBody.contentWidth + " of " + centreBody.width + ")");
         centreCard.destroy();
         hudItem.destroy();
+    }
+
+    // The body under `card` (found by `test`), its box given a toast's width
+    function _layOut(card, test) {
+        const body = _find(card, test);
+        body.parent.width = 300;
+        return body;
     }
 
     // The first item under `item` (itself not included) for which `test` holds, or null

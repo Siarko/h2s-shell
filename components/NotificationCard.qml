@@ -25,8 +25,8 @@ Rectangle {
     // At most this many lines of the body show, the rest cut under a fade (a toast); 0: the
     // whole body (the notification centre)
     property int bodyMaxLines: 0
-    // The body is taller than it may be, and cut; the height it shows
-    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyEdit.implicitHeight > _bodyBox.implicitHeight + 0.5
+    // The body has more lines than it may show, and is cut; the height it shows
+    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyEdit.lineCount > bodyMaxLines
     readonly property real bodyShownHeight: _bodyBox.implicitHeight
 
     property bool timerVisible: false
@@ -326,14 +326,11 @@ Rectangle {
                     id: _bodyBox
                     Layout.fillWidth: true
                     visible: notifCard._body.length > 0
-                    implicitHeight: notifCard.bodyMaxLines > 0
-                        ? Math.min(_bodyEdit.implicitHeight, notifCard.bodyMaxLines * _bodyMetrics.lineSpacing) : _bodyEdit.implicitHeight
+                    // A line's height as the text lays it out (taller than the font's line
+                    // spacing, which would cut the last line that fits)
+                    implicitHeight: notifCard.bodyCut
+                        ? notifCard.bodyMaxLines * _bodyEdit.implicitHeight / _bodyEdit.lineCount : _bodyEdit.implicitHeight
                     clip: notifCard.bodyMaxLines > 0
-
-                    FontMetrics {
-                        id: _bodyMetrics
-                        font: _bodyEdit.font
-                    }
 
                     TextEdit {
                         id: _bodyEdit
@@ -349,7 +346,8 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        wrapMode: TextEdit.WordWrap
+                        // A word longer than the line is broken, not cut off at the side
+                        wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                         readOnly: true
                         selectByMouse: true
 
@@ -412,7 +410,7 @@ Rectangle {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
-                        height: _bodyMetrics.lineSpacing
+                        height: _bodyEdit.implicitHeight / Math.max(1, _bodyEdit.lineCount)
                         visible: notifCard.bodyCut
                         gradient: Gradient {
                             GradientStop { position: 0.0; color: Qt.rgba(notifCard.color.r, notifCard.color.g, notifCard.color.b, 0) }
