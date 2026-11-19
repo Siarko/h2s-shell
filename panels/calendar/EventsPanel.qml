@@ -13,6 +13,9 @@ Item {
     property int displayMonth
     property int selectedDay
 
+    // The calendar backend: GoogleCalendar, or a test's stand-in
+    property var calendar: GoogleCalendar
+
     property bool _addingEvent: false
     readonly property string _selectedKey: CalendarDates.dateKey(displayYear, displayMonth, selectedDay)
 
@@ -31,7 +34,7 @@ Item {
     property var _editingCard: null
     function _editStarted(card) {
         _editingCard = card;
-        _editingEvent = card.modelData;
+        _editingEvent = card.calendarEvent;
         activeForm = card.form;
     }
     function _editEnded(card) {
@@ -56,6 +59,12 @@ Item {
         return events;
     }
 
+    KeyedModel {
+        id: _eventsModel
+        values: root._displayedEvents
+        keyProp: "id"
+    }
+
     readonly property var _eventsOfView: {
         if (viewMode === "week") {
             let dow = new Date(displayYear, displayMonth, selectedDay).getDay();
@@ -66,7 +75,7 @@ Item {
                 let d = new Date(weekStart);
                 d.setDate(weekStart.getDate() + i);
                 let key = CalendarDates.dateKey(d.getFullYear(), d.getMonth(), d.getDate());
-                result.push(...(GoogleCalendar.events[key] ?? []));
+                result.push(...(root.calendar.events[key] ?? []));
             }
             return _dedupById(result);
         }
@@ -74,21 +83,21 @@ Item {
             let days = new Date(displayYear, displayMonth + 1, 0).getDate();
             let result = [];
             for (let d = 1; d <= days; d++)
-                result.push(...(GoogleCalendar.events[CalendarDates.dateKey(displayYear, displayMonth, d)] ?? []));
+                result.push(...(root.calendar.events[CalendarDates.dateKey(displayYear, displayMonth, d)] ?? []));
             return _dedupById(result);
         }
-        return GoogleCalendar.events[CalendarDates.dateKey(displayYear, displayMonth, selectedDay)] ?? [];
+        return root.calendar.events[CalendarDates.dateKey(displayYear, displayMonth, selectedDay)] ?? [];
     }
 
     // One banner at a time: switched off, not signed in, or the last load failed — each
     // with its own action on click
-    readonly property string _statusKind: !GoogleCalendar.enabled ? "off"
+    readonly property string _statusKind: !root.calendar.enabled ? "off"
         : !GoogleCalendarAuth.isAuthorized ? "unauthorized"
-        : GoogleCalendar.error !== "" ? "error" : ""
+        : root.calendar.error !== "" ? "error" : ""
     readonly property string _statusMessage: ({
         "off": "Google Calendar is off",
         "unauthorized": "Google Calendar connected but not authorized",
-        "error": GoogleCalendar.error + " — click to retry",
+        "error": root.calendar.error + " — click to retry",
         "": ""
     })[_statusKind]
 
@@ -175,7 +184,7 @@ Item {
 
             Row {
                 spacing: 6
-                visible: GoogleCalendar.available
+                visible: root.calendar.available
 
                 Text {
                     objectName: "calendarAdd"
@@ -208,7 +217,7 @@ Item {
                         id: _refreshArea
                         reach: 8
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
+                        onClicked: root.calendar.fetchMonthEvents(root.displayYear, root.displayMonth, true)
                     }
                 }
             }
@@ -246,7 +255,7 @@ Item {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
                     if (root._statusKind === "error")
-                        GoogleCalendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
+                        root.calendar.fetchMonthEvents(root.displayYear, root.displayMonth, true);
                     else if (root._statusKind === "unauthorized")
                         GoogleCalendarAuth.login();
                     else
@@ -283,7 +292,7 @@ Item {
                 submitKind: "save"
                 showCalendarPicker: true
                 onSubmitted: event => {
-                    GoogleCalendar.createEvent(Object.assign(event, {
+                    root.calendar.createEvent(Object.assign(event, {
                         year: root.displayYear, month: root.displayMonth,
                         calendarId: _addEventForm.selectedCalendarId,
                         colorId: _addEventForm.selectedColorId || null,
@@ -297,22 +306,20 @@ Item {
         // Event cards
         ListView {
             id: _eventsList
+            objectName: "calendarEvents"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
             spacing: 6
-            // ScriptModel diffs old vs. new values so only changed delegates get
-            // added/removed — see MusicPanel.qml for why binding a plain live-model
-            // array straight to Repeater/ListView.model was crashing this app.
-            // Keyed by "id" since GoogleCalendar rebuilds the events array as brand-new
-            // JS objects on every fetch.
-            model: ScriptModel {
-                objectProp: "id"
-                values: root._displayedEvents
-            }
+            // Keyed by the event's id (GoogleCalendar builds new objects on every fetch): a
+            // card keeps its event — an open edit with it — while events before it come
+            // and go
+            model: _eventsModel.model
 
             delegate: EventCard {
-                // required property var modelData
+                required property string modelData
+                calendarEvent: _eventsModel.byKey[modelData] ?? ({})
+                calendar: root.calendar
                 displayYear: root.displayYear
                 displayMonth: root.displayMonth
                 selectedDay: root.selectedDay
@@ -333,7 +340,7 @@ Item {
     }
 
     // Loading spinner overlay
-    property bool _loading: GoogleCalendar.eventsLoading[CalendarDates.monthKey(displayYear, displayMonth)] ?? false
+    property bool _loading: root.calendar.eventsLoading[CalendarDates.monthKey(displayYear, displayMonth)] ?? false
 
     // Spins around the centre of the glyph's ring. Rotating the Text spun it around the
     // middle of its box instead — Nerd Font icons are wider than the one-cell box and

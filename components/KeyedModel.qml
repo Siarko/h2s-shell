@@ -29,20 +29,24 @@ QtObject {
     property string keyProp: ""
     property var keyOf: null
 
-    // The current keys, in order, and the item of each
+    // The current keys, in order, and the item of each. byKey also holds, until the next
+    // change, the items the last change removed: a view may keep a removed delegate a
+    // moment (a ListView until its next layout), and its bindings still find their item.
     property var keys: []
     property var byKey: Object.create(null)
     readonly property int count: keys.length
 
     readonly property ScriptModel model: ScriptModel { values: root.keys }
 
+    // The items of the current keys only
+    property var _current: Object.create(null)
+
     function _update() {
         const next = ListKeyRules.keyed(values, keyProp, keyOf);
-        // While the rows change, every key old and new finds its item: a delegate being
-        // created reads the new map, one being removed still finds its old item
-        byKey = ListKeyRules.union(byKey, next.byKey);
+        // Set before the keys: a delegate created for a new key finds its item at once
+        byKey = ListKeyRules.union(_current, next.byKey);
+        _current = next.byKey;
         keys = next.keys;
-        byKey = next.byKey;
     }
 
     onValuesChanged: _update()

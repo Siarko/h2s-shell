@@ -200,4 +200,21 @@ Singleton {
         result[ruleIndex] = rule;
         return result;
     }
+
+    // Where an edit is saved: `started` is { id, calendarId } of the event the edit was
+    // started on, `eventsByDay` GoogleCalendar.events ({ dateKey: [event] }). → { eventId,
+    // calendarId, refusal }: the event the edit started on and nothing else, and only while
+    // that event is still in the calendar as loaded — gone (deleted elsewhere, or the
+    // calendar emptied), the save is refused with words for the form, refusal "" otherwise.
+    function editSaveTarget(started, eventsByDay) {
+        const refused = refusal => ({ eventId: "", calendarId: "", refusal: refusal });
+        if (!started?.id)
+            return refused("This event cannot be saved");
+        for (const dateKey in (eventsByDay ?? {})) {
+            const found = (eventsByDay[dateKey] ?? []).find(event => event?.id === started.id);
+            if (found)
+                return { eventId: started.id, calendarId: started.calendarId || found.calendarId || "", refusal: "" };
+        }
+        return refused("This event is no longer in the calendar");
+    }
 }

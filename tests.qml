@@ -21,6 +21,7 @@ QtObject {
     property var _deviceAddressReading: DeviceAddressReadingTest {}
     property var _vpnProviders: VpnProvidersTest {}
     property var _calendarDates: CalendarDatesTest {}
+    property var _calendarEvents: CalendarEventsTest {}
     property var _widgetRegistry: WidgetRegistryTest {}
     property var _hardware: HardwareTest {}
     property var _profiles: ProfilesTest {}

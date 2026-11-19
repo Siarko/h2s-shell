@@ -82,6 +82,10 @@ Item {
     signal submitted(var event)
     signal cancelled
 
+    // Why the last submit was refused (set by the owner), shown above the buttons; cleared
+    // when the form is filled anew or submitted again
+    property string message: ""
+
     Component.onCompleted: {
         if (showCalendarPicker && selectedCalendarId === "") {
             let enabled = root._writableCalendarIds;
@@ -94,6 +98,7 @@ Item {
     // rrule }
     function populate(event) {
         pickTarget = "";
+        message = "";
         _titleInput.text = event.title ?? "";
         startDate = event.startDate;
         endDate = event.endDate || event.startDate;
@@ -108,6 +113,7 @@ Item {
     // An empty form for an event on `dateKey`
     function reset(dateKey) {
         pickTarget = "";
+        message = "";
         startDate = dateKey ?? "";
         endDate = dateKey ?? "";
         _titleInput.text = "";
@@ -121,6 +127,7 @@ Item {
 
     function _submit() {
         pickTarget = "";
+        message = "";
         const startTime = _allDay ? "" : _startInput.text;
         const endTime = _allDay ? "" : (_endInput.text || startTime);
         let end = endDate || startDate;
@@ -327,6 +334,18 @@ Item {
         RecurrenceEditor {
             id: _recurrence
             width: parent.width
+        }
+
+        Text {
+            objectName: "eventFormMessage"
+            width: parent.width
+            visible: root.message !== ""
+            text: root.message
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: Theme.error
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
         }
 
         // Submit / Cancel buttons

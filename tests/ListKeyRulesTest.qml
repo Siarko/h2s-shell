@@ -76,11 +76,13 @@ TestCase {
         assert(after[0] === before[0] && after[1] === before[2] && after[2] === before[3],
                "… each in its own delegate — B's delegate went, not D's");
         assertEqual(after.map(delegate => delegate.typed).join(","), "a,c,d", "… with its own state");
+        assert(view.list.byKey["b"]?.name === "B", "a removed item is still found until the next change (a view may keep its delegate a moment)");
 
         before = after;
         view.list.values = _items(["A", "X", "C", "D"]);
         after = _delegates(view);
         assertEqual(_shown(view), "A,X,C,D", "an insert in the middle");
+        assertEqual(view.list.byKey["b"], undefined, "… then it is gone");
         assert(after[0] === before[0] && after[2] === before[1] && after[3] === before[2] && after[1].typed === "",
                "… a new delegate for the new item, the others kept");
 
