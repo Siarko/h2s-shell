@@ -27,7 +27,26 @@ with helpers (C1) and the notification (A6). System facts (C2) are on `master`. 
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
 B1, D1 and E1 are on `master` (below): the facts lane is done. P1 and P2 are on `master`:
 the dependencies lane is done. U0, U1a, U1b of the places lane are on `master` (below).
-Next: U2 (popups), then U4a–U7b, then the remaining module slices.
+U2 is on `master` (below). Next: U4a–U7b, then the remaining module slices.
+
+- [x] **API plan, U2 popups**: on `master` (2026-11-19; module API 1.22; reviewed by a
+      second agent on the diff, no code defect; test fixes by another author; `tests/run-all.sh`
+      passes on Arch, tools from `PATH`, and on NixOS, tools from nix; the Tailscale module's
+      suites pass). `components/PopupSection.qml` (before / header / prepend / content /
+      append / divider / after, `fillHeight`, `inset`), `PopupRow.qml`; `panels/Popup.qml`
+      gives a shell panel's root base `popup.<key>` in `loadContent`; the network panel's
+      root a PopupSection with section `connections`, `VpnSection` a PopupSection of
+      PopupRows, the notifications panel a PopupSection; anchors `popup.network.connections`
+      (append, `{ wifiEnabled, wifiConnected, ethernetConnected }`) and `popup.notifications`
+      (prepend, `{ count }`), old slots read through aliases; parts at the same places
+      (measured, waiting for layout). Left open:
+  - **`popup.network.connections.vpn.row` is named but not published** (the lead's call):
+    the plan has U2 publish it, but its slot `network.vpn.row` (the Tailscale module's
+    exit-node chooser) is still served through `VpnExtras` / `VpnManager.extrasFor` and
+    needs the per-VPN context and the own-provider scope: U4c publishes it with the VPN
+    page's rows.
+  - The by-hand look is under "Open points". `- _panel.contentTop` in the network list's
+    height has no test (nothing can stand above the panel's root content yet).
 
 - [x] **API plan, U0 anchor rules, U1a the host and the page block, U1b the General page**:
       on `master` (2026-11-19; module API 1.20 and 1.21; U0/U1a reviewed by a second agent
