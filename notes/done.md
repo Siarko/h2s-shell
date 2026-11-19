@@ -2084,3 +2084,16 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `expireTimeout` is the sender's value in ms unchanged (-1, 0, 2000), updated with
   `expireTimeoutChanged` on a replacement. Reviewed (nothing medium or higher);
   `tests/run-all.sh` passed on both machines.
+- **The transfer rules and sends per file without time limits (D1, D2)** — on the module's
+  `main` 2026-11-19 (manifest `api` 1.32, unreleased). `TaildropTransferRules`: states,
+  stall (from 2 min, only while progress can be read), per-device scheduling with
+  `maxParallel` 4 and extra slots, Skip / "Send now" / "Fetch now" offered only when they start
+  something, a "saved" answer winning over a later Skip, the per-file save script (TERM held
+  after the rename, staging removed), `popupSplit`, bus entries assigned so they never cross
+  files of one name (newest 512 kept). Sends: one `file cp` per file, `timeoutMs: 0`, stall
+  line instead of a stop, a second send to a device queued, several devices at once, one
+  click one transfer (the chosen files move into it), the page's Cancel stops the page's
+  sends; IPC `transfers`, `cancelTransfer`, `skipFile`, `nowFile`; stand-in
+  `TS_FAKE_SEND_STALL`. Reviewed, fixed; module suites and stand-ins on both machines, the
+  module's lock bed on NixOS. Only on stand-ins: one file per `file cp`, a kill of one file,
+  two devices at once, the bus's per-peer entries (D6 checks them for real).
