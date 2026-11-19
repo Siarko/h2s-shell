@@ -2128,3 +2128,9 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   Cancel / Clear, the send lines and the `saved` lines went. New `TaildropListTest`. Reviewed
   (nothing medium or higher); module suites and stand-ins on both machines, the module's lock
   bed on NixOS.
+- **Several devices from the page (D8)** — on the module's `main` 2026-11-19. The target pills
+  are toggles; Send's label ("Send to laptop" / "Send to N devices"), availability and targets
+  from one rule (`sendButton`); `targetIds` instead of `targetId`, kept to picked devices still
+  there and available and emptied by account operations (`keptTargets`); pills keyed by device
+  id. The `find -P` check runs once for several devices. Reviewed, fixed; module suites and
+  stand-ins on both machines, the module's lock bed on NixOS.
