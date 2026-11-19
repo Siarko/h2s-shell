@@ -198,8 +198,9 @@ Each comes from defects reviews found more than once. Add to the list when a rev
 new kind.
 
 - **Text from outside the shell** (a module, a daemon, a command's output, a network name)
-  is shown as plain text (`textFormat: Text.PlainText`), on one line, length-capped; never
-  interpreted as markup, never put on a command line unquoted. — Markup injection and
+  is shown as plain text (`textFormat: Text.PlainText`), length-capped, and on one line where
+  it stands in a line (a label, a row, a title); a notification's body keeps its line
+  breaks. Never interpreted as markup, never put on a command line unquoted. — Markup injection and
   shell injection both happened.
 - **Nothing asks for a password without the user's click.** Automatic actions (timers,
   network changes, IPC) never prompt; a dismissed prompt is silent (`PrivilegedAction`'s

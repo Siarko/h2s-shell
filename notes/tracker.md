@@ -64,11 +64,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
-- **Tailscale module on the shell's runner** (M1): saving received Taildrop files keeps
-  coreutils `timeout` per file (600 s each; the runner limits only the whole script, so one
-  hung file would change behaviour) — keep? A run that cannot start now shows "The program
-  could not be started." / "It could not be run: …" (was "Tailscale exited with status -1.").
-
 - **A module's icon and marks on closed cards** (U7a, U7b, the agent's looks): 6 px between a
   card's name and the first mark, 4 px between marks; icons in the name's colour, also on an
   active card; a module without an icon shows the first letter of its name, upper case,
@@ -82,15 +77,10 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   bottom, inherited from the old card and kept so the rebuilt card measures the same (U4b).
   Remove it?
 
-- **Hover on warning and success buttons**: white text on `#e8a854` / `#44d47a`, about 2:1
-  contrast (text wants 4.5:1). Dark text, or darker fills?
 - **A question in the confirm colour**: "Connect" on a network card and "Turn on" for a
   hotspot ask in dark green on the surface, hard to read. Keep, or another colour?
 - **The public pill's text** (before M10): small font at every size, as the shell's pills;
   the module's pills get smaller text than today when it moves. Keep?
-- **Plain notifications on one line** (C1): line breaks become spaces, so the module's
-  "received several files" reads "a.txt b.txt". Or keep line breaks in a plain body? Caps:
-  summary 200, body 1000, a `module.log` line 1000 characters.
 - **The Tailscale module's texts since M3** (the agent's words):
   - "Authorization" lines: Connect, Disconnect, Log in, Add an account, Log out; Change
     the exit node; Allow / Block the local network; Accept / Ignore routes; Use / Ignore
@@ -263,6 +253,17 @@ All by the owner, 2026-11-17.
 - Privileged runs by a module: no time window; the password prompt says which module asks and what for, next to the actual command.
 - Privileged runs, 2026-11-18: the shell does not parse or judge a module's command (no lists of shells, launchers or interpreters, no requirement of a declared program). A module runs in the shell's process, so such checks never stop a hostile one; the checks left (absolute existing program, printable words, a purpose, not while locked, one prompt at a time, the shell's timeout inside the trusted pkexec) catch mistakes and keep the prompt honest. The protection against a module not from the project is the prompt and the user knowing what they install. Written in `docs/ARCHITECTURE.md` "Modules".
 - Exit node (Tailscale): a manual choice "for now" that overrides the per-network setting, and a per-network choice in that connection's options (through an anchor).
+- Taildrop (2026-11-19): no fixed time limits on transfers (sending, or copying received
+  files out of Tailscale's inbox). Instead a list of transfers with progress; per file "Skip"
+  (stop it, the rest go on) and "Fetch in parallel" (start the next file beside a stuck one);
+  a transfer with no progress shows "no progress for N min" and waits for the user. A feature
+  of the module, planned after the migration slices. A run that cannot start says "The
+  program could not be started." (kept).
+- Notifications (2026-11-19): a plain notification's body keeps its line breaks (the title
+  stays one line). Notifications with a progress bar are wanted: a module updates one
+  notification's progress instead of sending new ones (the spec's `value` hint and
+  replacement; the shell is the notification server). An API feature, planned.
+- Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
 - (Temporary, see "Module authors" and "Trust" below.) Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
