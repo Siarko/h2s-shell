@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.20: anchors — the manifest's `"anchors": [{ "at", "place", "component" }]` puts a module's
+  element at a place in the shell's views: `at` a path, `<surface>.<view>[.<block>]…`
+  (`settings` or `popup`, a page's id or a popup's key, the names of the blocks around it),
+  `place` one of `before`, `after` (next to the block), `prepend`, `append` (first and last
+  inside it). The element gets its handle as `module` and `context` (`{ anchor, placement, …}`)
+  as a slot's does; several modules at one place by module id. `Api.anchors` lists the places
+  offered — none yet: the shell's views get them one by one. A place not offered, or a
+  placement it does not take, is an error in the module's status; the rest of the module
+  loads. A slot whose view is built from anchor blocks is read as its anchor (its context
+  keeps `slot`) and listed in the module's `deprecations`.
 - 1.19: reach closed, the old ways listed — `Api.moduleStatus(id)` gives another module's
   plain state, frozen `{ id, name, version, state, active }` (null for no such module).
   `Api.module(id)` and the handle's `host` still work and are listed in the module's

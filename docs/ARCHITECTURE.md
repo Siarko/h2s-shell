@@ -497,9 +497,9 @@ one singleton reads the seams, `TestSeams` (the lock screen's above, the module 
 ### Modules
 
 Integrations as separate packages. The module API's reference
-(the facade, the slot table, the handle, the lifetime rules) is the header of `api/Api.qml`;
+(the facade, the slot table, the anchors, the handle, the lifetime rules) is the header of `api/Api.qml`;
 the manifest schema is in `singletons/ModuleManifestRules.qml`. What exists: the rules, the host, discovery,
-the `qs.api` facade, the registries taking modules' contributions, and slots.
+the `qs.api` facade, the registries taking modules' contributions, slots and anchors.
 
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
   header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
@@ -575,6 +575,40 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
   components they build, transitively: `tests/lock-closure.sh`).
+- **Anchors**: the places in the shell's views where a module puts elements, replacing the
+  slots view by view. A view is built from shared blocks on one base,
+  `components/AnchorBlock.qml` — so far the settings page, `components/SettingsPage.qml`
+  (it scrolls, keeps the page's margins, draws the heading and a banner, then the content);
+  the section, card, row and popup section follow. A view's author writes only a block's
+  `anchor`, a word for what it holds (`saved`, `vpns`), never where it stands or its title's
+  words. The block's path follows from where it stands, found by walking up `parent` (a
+  binding: a block moved has the new path):
+  `<surface>.<view>[.<block>]…[.<region>]` — surface `settings` or `popup`; view the page's id
+  or the popup's key, the base the window or popup gives the view's root (the first item up
+  the parents with a string `anchorBase`); then the names of the enclosing blocks and its
+  own; a block repeated per item is named by its kind (`card`, `row`), its item in the
+  element's context; a card's regions `actions` and `settings` last. A block with no anchor
+  adds no level. Addressable are settings pages and popup content; never the bar, the lock
+  screen or the screensaver (the anchor blocks and `AnchorContent` are among the names
+  `tests/lock-closure.sh` looks for). The rule is `ModuleRules.anchorPathProblem`. A module
+  names a path, a placement and its file in its manifest's `anchors`
+  (`{ "at", "place", "component" }`): `before` and `after` put the element next to the block,
+  outside it; `prepend` and `append` inside it, first and last of its content, under its
+  frame. Top to bottom, for a block B holding c1 … cn: B.before · B's frame · B.prepend ·
+  c1.before · c1 · c1.after · … · B.append · B.after. Only the paths in
+  `ModuleRules.anchorTable` take content (`Api.anchors` is its frozen copy; empty until the
+  first view is converted): naming a block does not publish it, and a place not in the table
+  or a placement it does not take is an error in the module's status, the rest of the module
+  loading. Each placement a kind has is a host, `components/AnchorContent.qml` — the slot's
+  machinery: a `Repeater` on a `ScriptModel` keyed by module and file, each element in a
+  `ModuleContribution` guard, given `module` and `context` (`{ anchor, placement, …the
+  block's context }`); its list is built only while the module host lists elements for it.
+  Several modules at one place: by module id, a module's in its manifest's order
+  (`ModuleMergeRules.anchorContent`, the one place that orders them). Blocks report
+  themselves to `singletons/Anchors.qml` (`live`: path → count), which only the suites read.
+  A slot whose view has been converted is read as its anchor (`ModuleRules.slotAliases`: the
+  element's context keeps `slot`) and listed in the module's `deprecations`.
+  `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view.
 
 Writing a module, from the author's side (everything through `import qs.api`; nothing from
 `qs.singletons` — importing it, or a directory outside the module's own, is an error in its

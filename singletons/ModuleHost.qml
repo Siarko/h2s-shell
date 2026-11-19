@@ -146,6 +146,13 @@ Scope {
     property var settingEntries: []
     property var factTypes: []
     property var slots: ({})
+    // The loaded modules' elements at the anchors the table offers (ModuleMergeRules.merge):
+    // [{ module, at, place, component, context }] — their manifests' `anchors`, and their
+    // slots read as anchors. What the anchor blocks' hosts show (anchorContent)
+    property var anchors: []
+    // The anchors offered: ModuleRules.anchorTable (a suite's host is given its own). A
+    // manifest's anchor not in it is an error in the module's status; only its paths take content
+    property var anchorTable: ModuleRules.anchorTable
     // The loaded modules' facts, { "<id>.<name>": plain value } (setFact; checked against
     // the declared type): what Profiles adds to its facts
     property var factValues: ({})
@@ -310,6 +317,16 @@ Scope {
     // The contributions to one slot: [{ module, slot, component }]
     function slotContributions(name) {
         return ModuleMergeRules.slotContributions(slots, name);
+    }
+
+    // The elements one anchor host shows ([{ module, at, place, component, context, key }],
+    // ModuleMergeRules.anchorContent): none for a path the table does not offer or a placement
+    // it does not take; on an own-provider path only those of the module `scopeId` names
+    function anchorContent(path, placement, scopeId) {
+        const row = ModuleRules.anchorRow(anchorTable, path);
+        if (!row || !(row.placements ?? []).includes(placement))
+            return [];
+        return ModuleMergeRules.anchorContent(anchors, path, placement, row.scope === "own-provider" ? String(scopeId ?? "") : undefined);
     }
 
     // The object made from a module's main while it exists (a handle's `main`), or null:
@@ -569,6 +586,7 @@ Scope {
             return;
         }
         record.warnings.push(...ModuleMergeRules.unknownSlotWarnings(manifest));
+        record.errors.push(...ModuleMergeRules.anchorErrors(manifest, anchorTable));
         const qmldir = answers["qmldir"];
         if (qmldir === "ok") {
             record.qmldirText = texts["qmldir"] ?? "";
@@ -1324,11 +1342,12 @@ Scope {
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,
-                deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api)),
+                deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api),
+                                                         ModuleMergeRules.slotDeprecations(record.manifest, anchorTable)),
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
             });
         });
-        const merged = ModuleMergeRules.merge(loaded);
+        const merged = ModuleMergeRules.merge(loaded, anchorTable);
         // Assigned only when they changed, so that the registries (and the bars, the settings
         // window) are not rebuilt for a status line
         if (JSON.stringify(merged.widgetEntries) !== JSON.stringify(widgetEntries))
@@ -1341,6 +1360,8 @@ Scope {
             factTypes = merged.factTypes;
         if (JSON.stringify(merged.slots) !== JSON.stringify(slots))
             slots = merged.slots;
+        if (JSON.stringify(merged.anchors) !== JSON.stringify(anchors))
+            anchors = merged.anchors;
         const standIns = {};
         for (const record of _records) {
             if (record.shadowedBy === "" && record.manifest.id && record.testVerdicts && _fromStandIns(record))
@@ -1378,6 +1399,7 @@ Scope {
         settingEntries = [];
         factTypes = [];
         slots = ({});
+        anchors = [];
         factValues = ({});
         testProgramVerdicts = ({});
         generation++;

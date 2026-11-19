@@ -14,7 +14,7 @@ import qs.singletons
 // it is seen. Gone, or blank, while the module is not active. A change of `url` and of the
 // module's state together (another module's page picked) builds it once, not twice.
 //
-// ModuleSlot builds each contribution with one; ModuleHost.slotComponent hands one out as a
+// ModuleSlot and AnchorContent build each contribution with one; ModuleHost.slotComponent hands one out as a
 // Component for core places that take a Component per module (the VPN slots); the settings
 // window shows a module's page with one.
 Item {
@@ -25,6 +25,9 @@ Item {
     property string url: ""
     // The slot it is built for ("" for a page), for the error it reports
     property string slot: ""
+    // Or the anchor's path and placement (AnchorContent)
+    property string anchor: ""
+    property string placement: ""
     property var context: null
     property var properties: ({})
 
@@ -98,7 +101,8 @@ Item {
 
     function _failed(text) {
         error = text;
-        host?.reportError(moduleId, (slot !== "" ? "slot " + slot + ": " : "") + text);
+        const where = anchor !== "" ? "anchors: " + anchor + ", " + placement + ": " : slot !== "" ? "slot " + slot + ": " : "";
+        host?.reportError(moduleId, where + text);
     }
 
     function _passContext() {

@@ -84,6 +84,32 @@ TestCase {
         row.open = true;
         assertEqual(row.built, 2, "(e) … and anew each time");
 
+        // (f) An item finds an enclosing one by walking up `parent` in a binding — at its
+        // completion, also as a Loader's item and a Repeater's delegate — and the binding
+        // follows a move under another parent (components/AnchorBlock.qml finds its
+        // enclosing block, and the base a window or popup gives, this way)
+        const tree = Qt.createQmlObject("import QtQuick\nimport Quickshell\nItem {\n"
+            + "    id: top\n    property string anchorBase: \"settings.pin\"\n"
+            + "    property alias direct: direct\n    property alias loader: loader\n    property alias repeater: repeater\n"
+            + "    property alias other: other\n"
+            + "    component Probe: Item {\n"
+            + "        readonly property var enclosing: { for (let p = parent; p; p = p.parent) { if (typeof p.anchorBase === \"string\") return p; } return null; }\n"
+            + "        property var atCompletion: null\n"
+            + "        Component.onCompleted: atCompletion = enclosing\n"
+            + "    }\n"
+            + "    Column { Item { Probe { id: direct } } }\n"
+            + "    Loader { id: loader; sourceComponent: Probe {} }\n"
+            + "    Column { Repeater { id: repeater; model: ScriptModel { values: [{ k: 1 }, { k: 2 }]; objectProp: \"k\" } Probe {} } }\n"
+            + "    Item { id: other; property string anchorBase: \"popup.pin\" }\n"
+            + "}", suite, "AnchorWalkPin.qml");
+        _held.push(tree);
+        assert(tree.direct.atCompletion === tree, "(f) an item finds the enclosing one by walking up parent, already at its Component.onCompleted — if not, an anchor block has no path while it is built");
+        assert(tree.loader.item?.atCompletion === tree && tree.loader.item.enclosing === tree, "(f) … as a Loader's item");
+        const delegate = tree.repeater.itemAt(1);
+        assert(delegate?.atCompletion === tree && delegate.enclosing === tree, "(f) … as a Repeater's delegate (on a ScriptModel)");
+        tree.direct.parent = tree.other;
+        assert(tree.direct.enclosing === tree.other, "(f) the walk is a binding: an item moved under another parent finds the new enclosing one — if not, a moved block keeps a stale path");
+
         for (const object of _held)
             object.destroy();
         _held = [];

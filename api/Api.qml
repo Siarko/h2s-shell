@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.19" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.20" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -23,7 +23,32 @@ import qs.singletons.network
 //                          removal needs a major version, after at least one release that
 //                          listed the thing as deprecated.
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
-//   Api.slots              the slots the core offers: [{ name, where, context, since }]
+//   Api.slots              the slots the core offers: [{ name, where, context, since }]. Once
+//                          a slot's view is built from anchor blocks, a manifest's `slots`
+//                          entry for it is read as its anchor (ModuleRules.slotAliases: the
+//                          element's context also carries `slot`) and listed in the
+//                          module's deprecations
+//   Api.anchors            (1.20) the places in the shell's views a module may put elements
+//                          at, frozen [{ path, kind, placements, takes, marks, context, scope,
+//                          since, where }] (ModuleRules.anchorTable, the reference). A path is
+//                          <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
+//                          "popup" (the bar has none, nor the lock screen); view a settings
+//                          page's id or a popup's key; block a block's name, what it holds
+//                          (a block repeated per item named by its kind, card or row: the item
+//                          is in the context); region a card's "actions" or "settings". A
+//                          module names a path, a placement and its file in its manifest:
+//                            "anchors": [{ "at": "settings.general", "place": "append",
+//                                          "component": "GeneralRow.qml" }]
+//                          `before` and `after` put the element next to the block, outside it;
+//                          `prepend` and `append` inside, first and last of its content (under
+//                          its heading or title). The element gets its handle as `module` and
+//                          `context` ({ anchor: the path, placement, …what the row's context
+//                          names }), again only when that changes by value, and `shown` (1.2)
+//                          when it declares them. Several modules at one place: by module id,
+//                          a module's in its manifest's order. A path this shell does not offer
+//                          or a placement it does not take is an error in the module's status;
+//                          the rest of the module loads. Today the list is empty: the shell's
+//                          views get their anchors one by one
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
 //                          (1.19): a module keeps to its own handle — another module is
 //                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose
@@ -725,6 +750,10 @@ Singleton {
 
     // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
     readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))
+
+    // (1.20) The anchors the core offers (ModuleRules.anchorTable, the reference), frozen
+    readonly property var anchors: Object.freeze(ModuleRules.anchorTable.map(row =>
+        Object.freeze(Object.assign({}, row, { placements: Object.freeze((row.placements ?? []).slice()) }))))
 
     // (1.3, 1.16) Network facts (above). Through a JSON text: a string property notifies only
     // when its value changes, so a module reacting to these is not woken by every re-read of

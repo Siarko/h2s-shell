@@ -1,0 +1,21 @@
+{
+    "id": "places-a",
+    "name": "Anchors fixture A",
+    "version": "1.0.0",
+    "api": "1.20",
+    "description": "Puts elements at every placement of AnchorsTest's fixture page and box, one at a place no shell offers and one at a placement the place does not take; a slot read as its anchor",
+    "anchors": [
+        { "at": "settings.fixture", "place": "append", "component": "Element.qml" },
+        { "at": "settings.fixture", "place": "append", "component": "Second.qml" },
+        { "at": "settings.fixture", "place": "prepend", "component": "Element.qml" },
+        { "at": "settings.fixture.box", "place": "before", "component": "Element.qml" },
+        { "at": "settings.fixture.box", "place": "after", "component": "Element.qml" },
+        { "at": "settings.fixture.box", "place": "prepend", "component": "Element.qml" },
+        { "at": "settings.fixture.box", "place": "append", "component": "Element.qml" },
+        { "at": "settings.nowhere", "place": "append", "component": "Element.qml" },
+        { "at": "settings.fixture", "place": "before", "component": "Element.qml" }
+    ],
+    "slots": [
+        { "slot": "settings.general.bottom", "component": "Element.qml" }
+    ]
+}

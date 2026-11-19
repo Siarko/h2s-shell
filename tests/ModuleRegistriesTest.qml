@@ -438,7 +438,7 @@ TestCase {
             _identity("unloaded");
             // The reserved ids against the tree: every IPC target, and every widget type, popup
             // key and settings page id shaped like a module id
-            _grep.command = ["sh", "-c", "cd \"$1\" && grep -rhoE 'target: *\"[^\"]+\"' --include=*.qml . | grep -v fixtures | sed 's/.*\"\\(.*\\)\"/\\1/' | sort -u; sh tests/lock-closure.sh .; t=$(mktemp -d -p \"${XDG_RUNTIME_DIR:-/tmp}\") && mkdir -p $t/screensaver $t/components && printf 'import QtQuick\\nimport qs.components\\nItem {\\n    Shared { }\\n    Picker { }\\n}\\n' > $t/screensaver/A.qml && printf 'import QtQuick\\nItem { Inner {} }\\n' > $t/components/Shared.qml && printf 'import QtQuick\\nItem { ModuleSlot {} }\\n' > $t/components/Inner.qml && printf 'import QtQuick\\nItem { Component.onCompleted: FileChooser.open }\\n' > $t/components/Picker.qml && sh tests/lock-closure.sh $t | sed 's/^/SELFTEST:/'; rm -rf $t",
+            _grep.command = ["sh", "-c", "cd \"$1\" && grep -rhoE 'target: *\"[^\"]+\"' --include=*.qml . | grep -v fixtures | sed 's/.*\"\\(.*\\)\"/\\1/' | sort -u; sh tests/lock-closure.sh .; t=$(mktemp -d -p \"${XDG_RUNTIME_DIR:-/tmp}\") && mkdir -p $t/screensaver $t/components && printf 'import QtQuick\\nimport qs.components\\nItem {\\n    Shared { }\\n    Picker { }\\n    Paged { }\\n}\\n' > $t/screensaver/A.qml && printf 'import QtQuick\\nItem { SettingsPage {} }\\n' > $t/components/Paged.qml && printf 'import QtQuick\\nItem { Inner {} }\\n' > $t/components/Shared.qml && printf 'import QtQuick\\nItem { ModuleSlot {} }\\n' > $t/components/Inner.qml && printf 'import QtQuick\\nItem { Component.onCompleted: FileChooser.open }\\n' > $t/components/Picker.qml && sh tests/lock-closure.sh $t | sed 's/^/SELFTEST:/'; rm -rf $t",
                              "sh", Quickshell.shellDir];
             _grep.running = true;
         });
@@ -449,6 +449,8 @@ TestCase {
             assert(walked >= 10, "… the walk reached the lock screen's files and what they build (" + walked + ")");
             assert(_grepped.includes("SELFTEST:LOCK:components/Inner.qml"),
                    "… and catches a ModuleSlot in a component a lock file builds through another (a made-up tree): " + _grepped.filter(name => name.startsWith("SELFTEST")).join(", "));
+            assert(_grepped.includes("SELFTEST:LOCK:components/Paged.qml"),
+                   "… and an anchor block (whose hosts build modules' elements) in a component a lock file builds (a made-up tree): " + _grepped.filter(name => name.startsWith("SELFTEST")).join(", "));
             assert(_grepped.includes("SELFTEST:LOCK:components/Picker.qml"),
                    "… and the file chooser in a component a lock file builds (a made-up tree): " + _grepped.filter(name => name.startsWith("SELFTEST")).join(", "));
             const names = _grepped.filter(name => name !== "good" && !/^(LOCK|LOCKFILES|SELFTEST):/.test(name))

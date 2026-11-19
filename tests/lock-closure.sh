@@ -1,6 +1,8 @@
 #!/bin/sh
 # The lock screen's files and every file they build, transitively — then those of them that
-# name anything of the module system (ModuleSlot, ModuleContribution, Modules., PrivilegedRuns —
+# name anything of the module system (ModuleSlot; AnchorContent and the anchor blocks — AnchorBlock,
+# SettingsPage, SettingsSection, SettingsCard, SettingsRow, PopupRow, PopupSection — that
+# host modules' elements; ModuleContribution, Modules., PrivilegedRuns —
 # the modules' queue of runs as administrator, which reads Modules — and FileChooser, the
 # modules' file chooser, which reads Modules and the lock's state): printed as
 # "LOCK:<file>", nothing when clean (notes/plans/modules.md §4 item 1; ModuleRegistriesTest).
@@ -15,7 +17,7 @@
 # (Profiles.value(...) — the lock reads settings through those, and the singletons the lock
 # needs must not depend on Modules either: Profiles reads ModuleLists, plain values),
 # components made with Qt.createComponent or a Loader's `source` (none on the lock path),
-# and quoted imports. So a shared component that gains a ModuleSlot is caught.
+# and quoted imports. So a shared component that gains a ModuleSlot or an anchor block is caught.
 set -u
 root=$1
 cd "$root" || exit 2
@@ -38,7 +40,7 @@ while [ -n "$queue" ]; do
     done
 done
 for file in $seen; do
-    if grep -qE 'ModuleSlot|ModuleContribution|Modules\.|PrivilegedRuns|FileChooser' "$file"; then
+    if grep -qE 'ModuleSlot|AnchorContent|AnchorBlock|SettingsPage|SettingsSection|SettingsCard|SettingsRow|PopupRow|PopupSection|ModuleContribution|Modules\.|PrivilegedRuns|FileChooser' "$file"; then
         echo "LOCK:$file"
     fi
 done

@@ -109,6 +109,8 @@ Singleton {
             add(page.component);
         for (const slot of manifest?.slots ?? [])
             add(slot.component);
+        for (const anchor of manifest?.anchors ?? [])
+            add(anchor.component);
         return files;
     }
 
@@ -349,6 +351,7 @@ Singleton {
         copy.widgets = keep(manifest?.widgets, entry => [entry.widget, entry.popupPanel, entry.settings], entry => "widget " + entry.type);
         copy.settingsPages = keep(manifest?.settingsPages, entry => [entry.component], entry => "settings page " + entry.id);
         copy.slots = keep(manifest?.slots, entry => [entry.component], entry => "slot " + entry.slot);
+        copy.anchors = keep(manifest?.anchors, entry => [entry.component], entry => "anchors " + entry.at + ", " + entry.place);
         copy.tests = (manifest?.tests ?? []).filter(file => {
             if (failing(file))
                 errors.push("test " + why(file) + " (dropped)");

@@ -294,10 +294,14 @@ Singleton {
     // The contributions of the loaded modules merged into the lists the core's registries
     // read, every file an absolute file:// URL, every entry marked with its module. Stable:
     // modules by id, each one's entries in manifest order — not in search-path order, which
-    // differs from one machine to the next. `modules`: [{ id, directory, manifest }].
-    // → { widgetEntries, settingsPages, settingEntries, factTypes, slots: { name: [...] } }
-    function merge(modules) {
-        const result = { widgetEntries: [], settingsPages: [], settingEntries: [], factTypes: [], slots: ({}) };
+    // differs from one machine to the next. `modules`: [{ id, directory, manifest }];
+    // `anchorTable` the anchors offered (not given: ModuleRules.anchorTable): a module's
+    // elements at them (anchorEntries), and its slots read as anchors leave `slots`.
+    // → { widgetEntries, settingsPages, settingEntries, factTypes, slots: { name: [...] },
+    //     anchors: [{ module, at, place, component, context }] }
+    function merge(modules, anchorTable) {
+        const table = anchorTable === undefined ? ModuleRules.anchorTable : anchorTable;
+        const result = { widgetEntries: [], settingsPages: [], settingEntries: [], factTypes: [], slots: ({}), anchors: [] };
         const sorted = (modules ?? []).filter(module => module && typeof module.id === "string" && module.manifest)
             .slice().sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
         const slotMap = new Map();
@@ -322,7 +326,12 @@ Singleton {
                 result.settingEntries.push(Object.assign({}, setting, { module: module.id }));
             for (const fact of module.manifest.facts ?? [])
                 result.factTypes.push(Object.assign({}, fact, { module: module.id }));
+            for (const entry of anchorEntries(module.manifest, table))
+                result.anchors.push({ module: module.id, at: entry.at, place: entry.place, component: url(entry.component), context: entry.context });
+            const readAsAnchors = slotsAsAnchors(module.manifest, table).map(entry => entry.slot + "|" + entry.component);
             for (const slot of module.manifest.slots ?? []) {
+                if (readAsAnchors.includes(slot.slot + "|" + slot.component))
+                    continue;
                 if (!slotMap.has(slot.slot))
                     slotMap.set(slot.slot, []);
                 slotMap.get(slot.slot).push({ module: module.id, slot: slot.slot, component: url(slot.component) });

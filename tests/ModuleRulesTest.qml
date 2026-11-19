@@ -969,6 +969,33 @@ TestCase {
         assertEqual(ModuleMergeRules.anchorContent(null, "x", "append").length + ModuleMergeRules.anchorContent(merged, "", "append").length
                     + ModuleMergeRules.anchorContent(merged, "settings.general", null).length, 0, "… nothing asked: none, no throw");
         assertEqual(merged[0].key, undefined, "… the merged list untouched");
+
+        // --- the manifest, the file check and the merge (API 1.20) ---
+        const anchored = ModuleManifestRules.parseManifest(_manifest({ id: "anch", api: "1.20",
+            anchors: [{ at: "settings.general", place: "append", component: "Row.qml" }, { at: "settings.fixture.box", place: "before", component: "sub/Box.qml" }],
+            slots: [{ slot: "settings.general.bottom", component: "Bottom.qml" }, { slot: "network.vpn.row", component: "VpnRow.qml" }] }));
+        assert(anchored.valid && anchored.anchors.length === 2 && anchored.warnings.length === 0 && anchored.errors.length === 0,
+               "parseManifest: anchors read, a known field: " + anchored.warnings.concat(anchored.errors).join("; "));
+        const olderAnchors = ModuleManifestRules.parseManifest(_manifest({ id: "anch", api: "1.19", anchors: [{ at: "settings.general", place: "append", component: "Row.qml" }] }));
+        assert(olderAnchors.valid && olderAnchors.anchors.length === 1 && _has(olderAnchors.warnings, "anchors: a field of API 1.20, the manifest asks for API 1.19 (read all the same)"),
+               "anchors with api 1.19: read all the same, with a warning");
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ id: "anch", api: "1.20", anchors: [{ at: "x", place: "append", component: "A.qml" }] })).errors.length, 1,
+                    "… a malformed entry: an error, the module valid");
+        assert(ModuleFileRules.manifestFiles(anchored).includes("Row.qml") && ModuleFileRules.manifestFiles(anchored).includes("sub/Box.qml"),
+               "the file check reads the anchors' files (their imports, their roots' properties)");
+        const badAnchorFile = ModuleFileRules.withoutBadFiles(anchored, { "sub/Box.qml": "is not a regular file" }, "");
+        assertEqual(badAnchorFile.manifest.anchors.map(entry => entry.component).join(",") + " | " + badAnchorFile.errors.join(""),
+                    "Row.qml | anchors settings.fixture.box, before: sub/Box.qml is not a regular file (dropped)", "… an anchor whose file fails it: dropped, said");
+        const mergedAnchors = ModuleMergeRules.merge([{ id: "anch", directory: "/m/anch", manifest: anchored }], table);
+        assertEqual(JSON.stringify(mergedAnchors.anchors), JSON.stringify([
+            { module: "anch", at: "settings.general", place: "append", component: "file:///m/anch/Row.qml", context: {} },
+            { module: "anch", at: "settings.fixture.box", place: "before", component: "file:///m/anch/sub/Box.qml", context: {} },
+            { module: "anch", at: "settings.general", place: "append", component: "file:///m/anch/Bottom.qml", context: { slot: "settings.general.bottom" } }]),
+                    "merge with a table: the anchors it takes and the slots read as anchors, by URL, naming the module");
+        assertEqual(Object.keys(mergedAnchors.slots).join(","), "network.vpn.row", "… a slot read as an anchor leaves the slots");
+        const mergedHere = ModuleMergeRules.merge([{ id: "anch", directory: "/m/anch", manifest: anchored }]);
+        assertEqual(mergedHere.anchors.length + " " + Object.keys(mergedHere.slots).join(","), "0 settings.general.bottom,network.vpn.row",
+                    "merge on this shell's table: no anchor taken, every slot a slot");
     }
 
     // API 1.18: a module's API for other modules — `exports` and `uses` in the manifest, the

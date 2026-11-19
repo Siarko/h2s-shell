@@ -45,7 +45,16 @@ import QtQuick
 //   slots         optional list of contributions to slots the core declares:
 //                 { slot, component } — slot a dotted name; the ones this shell offers are
 //                 `slotTable` (a name it does not offer is a warning: the contribution is
-//                 kept, and shows nowhere).
+//                 kept, and shows nowhere). A slot whose view is converted to anchors is
+//                 read as its anchor (ModuleRules.slotAliases) and listed in the module's
+//                 deprecations.
+//   anchors       optional list (API 1.20) of elements at the places the shell's views offer:
+//                 { at, place, component } — at a place's path (ModuleRules.anchorPathProblem:
+//                 <surface>.<view>[.<block>]…), place one of before, after, prepend, append,
+//                 component a file of the module. The places this shell offers and the
+//                 placements each takes are ModuleRules.anchorTable: another one is an error
+//                 in the module's status (the rest of the module loads, that element shows
+//                 nowhere). The same three twice: the second is dropped, with an error.
 //   requires      optional: { programs: [names] } — programs that must be on PATH; without
 //                 them the module is not loaded (state missing-program) and its setupHints
 //                 are shown.
@@ -113,7 +122,7 @@ Singleton {
     // ---- The manifest ----
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
-        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
+        "settingsPages", "settings", "facts", "slots", "anchors", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
         "exports", "uses"]
 
     // A list field: its entries (at most maxEntries), or [] with an error when it is not a list
@@ -395,7 +404,7 @@ Singleton {
     // Reads module.json's text. Never throws. → {
     //   valid        the required fields are there and fine (the module can be considered)
     //   id, name, version, api, description, main ("" for none)
-    //   widgets, settingsPages, settings, facts, slots   the entries kept, checked
+    //   widgets, settingsPages, settings, facts, slots, anchors   the entries kept, checked
     //   programs, optionalPrograms, testPrograms ("" for none, else without a trailing "/"),
     //   setupHints, tests
     //   exports      (1.18) { version } or null; uses (1.18) [{ id, version }]
@@ -406,7 +415,7 @@ Singleton {
     function parseManifest(text) {
         const result = {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
-            widgets: [], settingsPages: [], settings: [], facts: [], slots: [],
+            widgets: [], settingsPages: [], settings: [], facts: [], slots: [], anchors: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
             exports: null, uses: [],
             errors: [], warnings: []
@@ -482,14 +491,12 @@ Singleton {
         }
         _readExports(raw, result, errors, warnings);
         _readUses(raw, result, errors);
-        // Fields of API 1.18 in a manifest that asks for an older one: read all the same,
-        // and said — the module is written against an API that does not have them
+        // Fields of a newer API than the manifest asks for: read all the same, and said —
+        // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
-        if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < 18))) {
-            for (const field of ["exports", "uses"]) {
-                if (ModuleRules.get(raw, field) !== undefined)
-                    warnings.push(field + ": a field of API 1.18, the manifest asks for API " + result.api + " (read all the same)");
-            }
+        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20]]) {
+            if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < minor)) && ModuleRules.get(raw, field) !== undefined)
+                warnings.push(field + ": a field of API 1." + minor + ", the manifest asks for API " + result.api + " (read all the same)");
         }
         result.valid = errors.length === 0;
         // Without a usable id the namespaces cannot be checked: nothing more is read
@@ -508,6 +515,7 @@ Singleton {
         result.facts = _entries(raw, "facts", ["fact", "label", "type", "options"],
                                 entry => _checkFact(moduleId, entry), errors, warnings);
         result.slots = _entries(raw, "slots", ["slot", "component"], entry => _checkSlot(entry), errors, warnings);
+        result.anchors = readAnchors(raw, errors, warnings);
         _dropRepeated(result.widgets, "type", "widgets", errors);
         _dropRepeated(result.widgets.filter(widget => widget.popup), "popup", "widgets", errors);
         _dropRepeated(result.settingsPages, "id", "settingsPages", errors);
