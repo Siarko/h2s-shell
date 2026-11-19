@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -79,17 +80,15 @@ Item {
                 }
             }
 
+            // Keyed by id: _colorEntries is new objects on each change ("The Repeater crash"
+            // in docs/ARCHITECTURE.md)
+            KeyedModel { id: _colorsModel; values: root._colorEntries; keyProp: "id" }
             Repeater {
-                // ScriptModel, never the bare array — see "The Repeater crash" in
-                // docs/ARCHITECTURE.md. Keyed by "id" since _colorEntries rebuilds fresh
-                // objects.
-                model: ScriptModel {
-                    objectProp: "id"
-                    values: root._colorEntries
-                }
+                model: _colorsModel.model
 
                 Item {
-                    required property var modelData
+                    required property string modelData
+                    readonly property var colorEntry: _colorsModel.byKey[modelData] ?? ({})
                     width: 20
                     height: 20
                     anchors.verticalCenter: parent.verticalCenter
@@ -99,15 +98,15 @@ Item {
                         height: 16
                         radius: width / 2
                         anchors.centerIn: parent
-                        color: modelData.hex
-                        border.color: root.selectedColorId === modelData.id ? Theme.textPrimary : "transparent"
+                        color: colorEntry.hex ?? "transparent"
+                        border.color: root.selectedColorId === colorEntry.id ? Theme.textPrimary : "transparent"
                         border.width: Theme.border.selectedWidth
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.selectedColorId = modelData.id
+                        onClicked: root.selectedColorId = colorEntry.id
                     }
                 }
             }

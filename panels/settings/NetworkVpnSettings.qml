@@ -154,15 +154,17 @@ Item {
                     Flow {
                         Layout.fillWidth: true
                         spacing: 4
+                        KeyedModel { id: _importTypesModel; values: root._importTypes; keyProp: "value" }
                         Repeater {
-                            model: ScriptModel { values: root._importTypes; objectProp: "value" }
+                            model: _importTypesModel.model
                             Pill {
-                                required property var modelData
-                                label: modelData.label
+                                required property string modelData
+                                readonly property var importType: _importTypesModel.byKey[modelData] ?? ({})
+                                label: importType.label ?? ""
                                 fontSize: Theme.fontSizeBody
                                 size: "m"
-                                picked: root._importType === modelData.value
-                                onClicked: root._importType = modelData.value
+                                picked: root._importType === importType.value
+                                onClicked: root._importType = importType.value
                             }
                         }
                     }
@@ -573,10 +575,12 @@ Item {
             // plugin missing is named with what it is for — how to install one differs from
             // one system to another, so no command
             SectionTitle { text: "Files you can import" }
+            KeyedModel { id: _importKindsModel; values: root._importKinds; keyProp: "name" }
             Repeater {
-                model: ScriptModel { values: root._importKinds; objectProp: "name" }
+                model: _importKindsModel.model
                 RowLayout {
-                    required property var modelData
+                    required property string modelData
+                    readonly property var importKind: _importKindsModel.byKey[modelData] ?? ({})
                     Layout.fillWidth: true
                     Layout.bottomMargin: 4
                     spacing: 10
@@ -586,19 +590,19 @@ Item {
                         implicitWidth: 8
                         implicitHeight: 8
                         radius: 4
-                        color: modelData.ready ? Theme.success : Theme.textMuted
+                        color: importKind.ready ? Theme.success : Theme.textMuted
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.label + (modelData.files !== "" ? "  ·  " + modelData.files : "")
+                            text: importKind.label + (importKind.files !== "" ? "  ·  " + importKind.files : "")
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: Theme.textPrimary
                         }
-                        Hint { text: modelData.note }
+                        Hint { text: importKind.note ?? "" }
                     }
                 }
             }
