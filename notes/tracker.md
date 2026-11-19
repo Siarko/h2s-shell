@@ -26,8 +26,30 @@ the prompt saying who and what for (A5) are on `master` (below). The commands la
 with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
 B1, D1 and E1 are on `master` (below): the facts lane is done. P1 and P2 are on `master`:
-the dependencies lane is done. Next: the places lane (U0 …), then the remaining module
-slices.
+the dependencies lane is done. U0, U1a, U1b of the places lane are on `master` (below).
+Next: U2 (popups), then U4a–U7b, then the remaining module slices.
+
+- [x] **API plan, U0 anchor rules, U1a the host and the page block, U1b the General page**:
+      on `master` (2026-11-19; module API 1.20 and 1.21; U0/U1a reviewed by a second agent
+      on the diff, fixed by another author with cases that fail before; U1b reviewed, no
+      defect; `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS, tools from
+      nix; the Tailscale module's suites pass — it uses only the VPN slots, still slots).
+      Manifest `anchors: [{ at, place, component }]`, `Api.anchors`; paths
+      `<surface>.<view>[.<block>]…[.<region>]`; `components/AnchorBlock.qml` (path from the
+      first `anchorBase` up the parents; only a `page` block is addressable as the base;
+      `scopeId` for own-provider places), `AnchorContent.qml` (ScriptModel; shows nothing
+      when the block's kind or placements do not fit the row), `SettingsPage.qml`,
+      `singletons/Anchors.qml`; table rows carry `view`, slot aliases `needs`;
+      `ModuleRules.slotAliasProblems` checks a published alias leaves no `ModuleSlot` behind.
+      The settings window's page loader sets the base (`_showPage()`); the General page is a
+      `SettingsPage` (rows at the same places, measured), the first row `settings.general`
+      (append, `{ editIndex }`), the old General slot read through its alias. Left open:
+  - The General page now scrolls and clips (before, overflow was cut off); an open list
+    (icon theme, theme suggestions) stays put while the page scrolls under it, as on the
+    other scrolling pages.
+  - An element that came through an old slot reports errors under the anchor's name.
+  - `editIndex` changes and the page's scrolling are not tested.
+  - Spacing choices are under "Open points".
 
 - [x] **API plan, P2 reach closed**: on `master` (2026-11-19; module API 1.19; reviewed by a
       second agent on the diff, fixed by another author with cases that fail before;
@@ -752,6 +774,7 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
+- [ ] Unit suites that open the real `SettingsWindow` (ModuleRegistriesTest, AnchorsTest) start the `NetworkManager` singleton's real `nmcli monitor` (it exits in the headless runner, but it touches the rule "never the real network"): give those suites stand-ins or keep the singleton from starting there
 - [ ] `panels/Popup.qml` `contentLoader.onLoaded` assigns `availableHeight` / `popupAnimating` to a panel unguarded: a readonly one throws and skips the rest of the handler (found in B1's review fixes; core and module panels)
 From the old TODO (numbers kept, see done.md for the rest):
 - [ ] 11.34 A command button bar widget: label and/or icon, a command per click (left, right, middle, maybe long press), run detached
