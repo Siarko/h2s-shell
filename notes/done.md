@@ -2152,3 +2152,9 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   both; a send to a device no longer listed gets a header under its last known name. Fits half
   of a 1366-px screen. Shared `TaildropFileRow.qml`. Reviewed (page sends were missing from the
   popup), fixed; module suites and stand-ins on both machines, the module's lock bed on NixOS.
+- **Taildrop's runs end with the shell; a save stopped after its rename reports "Saved"** — on
+  the module's `main` 2026-11-19 (manifest `api` 1.33). Each `file cp`, each per-file save and
+  the event stream take `endWithShell`; saves take `outputAfterCancel`, so the script's
+  `saved` line after a Skip / Cancel / logout reaches `answerCounts`. Live scenario
+  `skip-after-rename`; a recording runner checks the options. Read by the lead (small); module
+  suites and stand-ins on both machines, the module's lock bed on NixOS.
