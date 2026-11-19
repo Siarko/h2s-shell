@@ -88,11 +88,18 @@ TestCase {
             module.manifest.id = "evil";
         } catch (error) {}
         assertEqual(module.manifest.id, "good", "… frozen: writing does nothing");
+        // (1.15) its main object, shared with every view of the module
+        assert(module.main !== null && module.main.module === module && module.main.goodState === GoodState,
+               "module.main: its main object, given this handle");
+        try {
+            module.main = null;
+        } catch (error) {}
+        assert(module.main !== null, "… read-only");
         assertEqual(Api.moduleAt("file:///etc/passwd"), null, "a file of no module: no handle");
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.14", "Api.version");
+        assertEqual(Api.version, "1.15", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");

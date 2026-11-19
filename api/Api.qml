@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.14" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.15" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -27,6 +27,15 @@ import qs.singletons.network
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null
 //   Api.moduleAt(url)      the handle of the module whose directory holds `url` — in any file
 //                          of a module: Api.moduleAt(Qt.resolvedUrl("."))
+//   module.main            (1.15, on its handle) the object made from the manifest's `main`
+//                          while the module is active, read-only, and it notifies: null while
+//                          the module is off, while the main itself is being built and for a
+//                          module without one. The shell sets it right after making the main,
+//                          before any of the module's widgets, popup panels or pages are
+//                          built, and clears it before destroying the main; turned on again,
+//                          it is a new object. What the module's views share (a client, its
+//                          state) lives on the main and is read through it, allowing null:
+//                          `module.main?.client`
 //   Api.notify(summary, options)   a notification (options: Notifier's — body, urgency, icon,
 //                          actions…); a module's own handle's notify() names the module.
 //                          (1.12) options.format "plain": the summary and body are plain
@@ -232,7 +241,9 @@ import qs.singletons.network
 //   PopupWidget            a bar widget that opens the popup its manifest names:
 //                          widgetType, popup (set by the bar), popupOpen, interactive;
 //                          clicked, hover(status), scrolled(delta), scrollNotch(direction),
-//                          middleClicked; its children are the cell's content
+//                          middleClicked; its children are the cell's content. A widget that
+//                          declares `property string preset` is given its bar entry's preset
+//                          by the bar, and its popup panel is told it (`opener`, below)
 //   BarText                text on the bar, turned or stacked on a bar at a side: text,
 //                          font, color, alignment, elide, length, leadingGap
 //   BarRow                 items along the bar, a row or a column: vertical (read-only),
@@ -247,6 +258,29 @@ import qs.singletons.network
 //                          failed(entryId, what, reason). Its three VPN slots
 //                          (network.vpn.row, .card, .page) are manifest `slots`
 //                          contributions like any other (Api.slots).
+//
+// A module's popup panel (the manifest's `popupPanel`, 1.15): built when its popup opens and
+// destroyed when it closes; it gets its module's handle as `module` (`property var module`)
+// and, each only when its root object declares the property:
+//   opener                 `property var opener` — the bar widget that opened it, frozen
+//                          { widgetType, preset (its bar entry's: "" when the widget declares
+//                          no `preset`), edge (the bar's: "top", "bottom", "left", "right"),
+//                          byTouch (opened by a tap) }; set before the panel's
+//                          Component.onCompleted. Two entries of the widget on different
+//                          presets each open it with their own. While the panel stays open
+//                          and is opened again from another entry (by hover), it is given
+//                          the new opener; an unchanged one is not set again
+//   availableHeight        `property real availableHeight` — the most height the panel may
+//                          take before it must scroll (to a gap short of the screen's edge,
+//                          or along a bar at a side); kept current
+//   fitsShownHeight        `readonly property bool fitsShownHeight: true` — declared by the
+//                          panel: it is then given, as its height, the height shown while the
+//                          popup opens and resizes, so what it holds to its edges stays in
+//                          sight instead of being cut (its implicitHeight still sizes the
+//                          popup)
+//   popupAnimating         `property bool popupAnimating` — true while the popup opens,
+//                          closes, moves or resizes (a panel may leave out costly parts
+//                          meanwhile)
 //
 // CommandRunner (1.8): runs commands for a module. It is written under the module's main
 // object or one of its views; when that is destroyed (the module turned off) its runs are

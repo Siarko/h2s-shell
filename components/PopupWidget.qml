@@ -19,6 +19,13 @@ BarWidget {
 
     active: popupOpen
 
+    // What the popup is told of the widget that opened it (Popup.open's contentData; a
+    // module's panel gets it as `opener`, API 1.15): its type and its bar entry's preset —
+    // "" for a widget that declares no `preset` (the bar sets it on those that do)
+    function _openerData() {
+        return { widgetType: widgetType, preset: typeof root.preset === "string" ? root.preset : "" };
+    }
+
     // Opened by click it stays until clicked again; opened by hover it closes when the
     // pointer leaves the popup. Opened by a tap it stays too, and a tap outside closes it
     // (Popup, touchOpened).
@@ -28,7 +35,7 @@ BarWidget {
         if (popupOpen)
             popup.close();
         else
-            popup.open(root, true, popupContent, null, byTouch);
+            popup.open(root, true, popupContent, _openerData(), byTouch);
     }
 
     // A tap opens even a hover-mode popup: a finger cannot hover, so it is a click there
@@ -38,6 +45,6 @@ BarWidget {
     }
     onHover: state => {
         if (popupMode === "hover" && state && popup)
-            popup.open(root, false, popupContent, null, false);
+            popup.open(root, false, popupContent, _openerData(), false);
     }
 }

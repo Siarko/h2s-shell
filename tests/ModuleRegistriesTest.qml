@@ -37,6 +37,15 @@ TestCase {
     property var _grepped: null
     property int _resumes: 0
     property real _waitUntil: 0
+    // (API 1.15) A bar of the suite's own: two entries of good's widget on two presets and
+    // a popup (panels/Popup.qml), and a loader that builds good's widget as the bar does
+    property var _barWindow: null
+    property var _popup: null
+    property var _widgetA: null
+    property var _widgetB: null
+    property var _widgetLoader: null
+    property int _cycles: 0
+    property int _builtBefore: 0
 
     function _then(description, condition, action, timeoutMs) {
         _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 15000 });
@@ -75,12 +84,57 @@ TestCase {
     }
 
     function _end() {
+        _dropBar();
         Modules.host.unload();
         Config.disabledModules = _savedDisabled;
         for (const name of Object.keys(_slots))
             _slots[name]?.destroy();
         _window?.destroy();
         finish();
+    }
+
+    // The suite's bar: a layer surface in a corner (it moves no windows), the two widgets
+    // built from good's URL as the bar builds them (the handle and the preset set), and a
+    // popup on the same screen
+    function _makeBar() {
+        _barWindow = Qt.createQmlObject("import QtQuick; import Quickshell; import Quickshell.Wayland; PanelWindow {"
+            + " anchors { top: true; left: true } implicitWidth: 300; implicitHeight: 40; color: \"transparent\";"
+            + " exclusionMode: ExclusionMode.Ignore; WlrLayershell.layer: WlrLayer.Overlay; WlrLayershell.namespace: \"h2s-tests\";"
+            + " WlrLayershell.keyboardFocus: WlrKeyboardFocus.None; property alias row: row; Row { id: row; spacing: 20 } }", suite);
+        const popupComponent = Qt.createComponent(Qt.resolvedUrl("../panels/Popup.qml"), Component.PreferSynchronous);
+        _popup = popupComponent.createObject(suite, { popupPosition: 0, popupLength: 0, barScreen: _barWindow.screen ?? Quickshell.screens[0], barEdge: "top" });
+        assert(_popup !== null, "the popup can be made (" + popupComponent.errorString() + ")");
+        const url = WidgetRegistry.widgetUrl("good");
+        const widgetComponent = Qt.createComponent(url, Component.PreferSynchronous);
+        const make = preset => {
+            const widget = widgetComponent.createObject(_barWindow.row, Modules.initialProperties(url, { preset: preset }));
+            widget.width = 100;
+            widget.height = 40;
+            widget.popup = _popup;
+            return widget;
+        };
+        _widgetA = make("Alpha");
+        _widgetB = make("Beta");
+        assert(_widgetA !== null && _widgetB !== null, "good's widget built twice (" + widgetComponent.errorString() + ")");
+        assertEqual(_widgetA.preset + "," + _widgetB.preset, "Alpha,Beta", "… one per preset");
+    }
+
+    function _dropBar() {
+        _widgetA?.destroy();
+        _widgetB?.destroy();
+        _popup?.destroy();
+        _barWindow?.destroy();
+        _widgetLoader?.destroy();
+        _widgetA = _widgetB = _popup = _barWindow = _widgetLoader = null;
+    }
+
+    // Good's popup on screen with its panel, done animating
+    function _panelShown() {
+        return _popup?.active === true && _popup.item?.showPopup === true && _goodState.panel !== null && !_goodState.panel.popupAnimating;
+    }
+
+    function _popupGone() {
+        return _popup?.active === false && _goodState.panel === null;
     }
 
     function _settled() {
@@ -244,6 +298,81 @@ TestCase {
             assertEqual(ModuleLists.factValues["good.ready"], true, "Profiles' facts come from ModuleLists (plain values the host feeds)");
             assert(ModuleLists.settled, "… which says when the modules have settled");
 
+            // API 1.15: module.main, the object made from its manifest's main
+            assert(handle.main !== null && handle.main === _main, "module.main: the main object, while the module is active");
+            assertEqual(handle.main.module, handle, "… the one given this handle");
+            try {
+                handle.main = null;
+            } catch (error) {}
+            assert(handle.main === _main, "… read-only");
+
+            // API 1.15: what a popup panel is given
+            _makeBar();
+            _widgetA.togglePopup(false);
+        });
+        _then("good's popup shows, opened from the entry on Alpha", _panelShown, () => {
+            const opener = _goodState.panelOpenerAtStart;
+            assertEqual(JSON.stringify(opener), JSON.stringify({ widgetType: "good", preset: "Alpha", edge: "top", byTouch: false }),
+                        "opener: the widget that opened it, before the panel completed");
+            assert(Object.isFrozen(opener), "… frozen");
+            assert(_goodState.panel.opener === opener, "… and still the panel's");
+            assertEqual(_goodState.panel.module, Modules.handle("good"), "the panel has its module's handle");
+            assert(_goodState.panel.availableHeight > 0 && _goodState.panel.availableHeight === _popup.item.availableContentHeight,
+                   "availableHeight: the popup's (" + _goodState.panel.availableHeight + ")");
+            assertEqual(_goodState.panel.height, Math.max(0, _popup.item.shownContentHeight), "fitsShownHeight: the panel is the height shown");
+            assert(_goodState.panelSawAnimating, "popupAnimating: true while the popup opened");
+            assertEqual(_goodState.panel.popupAnimating, false, "… false once it is still");
+            assert(_widgetA.popupOpen, "the widget: its popup open");
+            _builtBefore = _goodState.panelsBuilt;
+            // The same panel told of another opener: the other entry, by hover
+            _widgetB.popupMode = "hover";
+            _widgetB.hover(true);
+        });
+        _then("the open panel is told its new opener", () => _goodState.panel?.opener?.preset === "Beta", () => {
+            assertEqual(_goodState.panelsBuilt, _builtBefore, "… not built again");
+            assertEqual(JSON.stringify(_goodState.panel.opener), JSON.stringify({ widgetType: "good", preset: "Beta", edge: "top", byTouch: false }),
+                        "… the entry on Beta");
+            const same = _goodState.panel.opener;
+            _widgetB.hover(true);
+            assert(_goodState.panel.opener === same, "… opened again from the same entry: the object unchanged");
+            _widgetB.popupMode = "click";
+            _widgetB.togglePopup(false);
+        });
+        _then("the popup closes", _popupGone, () => {
+            assertEqual(_goodState.panelsGone, _goodState.panelsBuilt, "its panel destroyed with it");
+            _widgetB.togglePopup(true);
+        });
+        _then("good's popup shows again, opened by a tap on Beta", _panelShown, () => {
+            assertEqual(JSON.stringify(_goodState.panelOpenerAtStart), JSON.stringify({ widgetType: "good", preset: "Beta", edge: "top", byTouch: true }),
+                        "a new panel: the opener of the entry on Beta, by touch");
+            _widgetB.togglePopup(true);
+        });
+        // Opened and closed again and again, from either entry: each time a panel is built (from
+        // Qt.callLater, the Repeater rules) and destroyed, and the shell stays up
+        for (let i = 0; i < 6; i++) {
+            _then("closed, cycle " + i, _popupGone, () => (i % 2 === 0 ? _widgetA : _widgetB).togglePopup(i % 3 === 0));
+            _then("open, cycle " + i, _panelShown, () => {
+                assertEqual(_goodState.panelOpenerAtStart?.preset, i % 2 === 0 ? "Alpha" : "Beta", "cycle " + i + ": its opener's preset");
+                suite._cycles++;
+                (i % 2 === 0 ? _widgetA : _widgetB).togglePopup(false);
+            });
+        }
+        _then("closed after the cycles", _popupGone, () => {
+            assertEqual(_cycles, 6, "six popups opened and closed");
+            assertEqual(_goodState.panelsGone, _goodState.panelsBuilt, "… every panel built destroyed");
+            _widgetA.destroy();
+            _widgetB.destroy();
+            _popup.destroy();
+            _barWindow.destroy();
+            _widgetA = _widgetB = _popup = _barWindow = null;
+            // Good's widget built as the bar builds it (by URL from the registry, following it):
+            // turned on again, it is built within the host's publishing, after the main
+            _widgetLoader = Qt.createQmlObject("import QtQuick; import qs.singletons; Loader {"
+                + " readonly property string _url: WidgetRegistry.widgetUrl(\"good\");"
+                + " function _load() { if (_url === \"\") source = \"\"; else setSource(_url, Modules.initialProperties(_url)); }"
+                + " on_UrlChanged: _load(); Component.onCompleted: _load() }", suite);
+            assert(_widgetLoader.item !== null, "the loader built good's widget");
+
             // Off
             assert(Modules.setEnabled("good", false), "setEnabled(good, false)");
         });
@@ -254,6 +383,9 @@ TestCase {
             const handle = Modules.handle("good");
             assert(!handle.active, "the handle: not active");
             assertEqual(Modules.host.mainObject("good"), null, "its main destroyed");
+            assertEqual(handle.main, null, "module.main: null while off");
+            assertEqual(_widgetLoader.item, null, "the bar's widget gone with its type");
+            _goodState.widgetSawMain = null;
             SystemSleep.reportResumed();
             assertEqual(_resumes, 1, "resumed(): not told while the module is off");
             assert(_has(Modules.status("broken-slot")?.errors, "slot notifications.popup.top"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
@@ -272,6 +404,11 @@ TestCase {
         _then("good is on again", () => Modules.status("good")?.state === "loaded", () => {
             const main = Modules.host.mainObject("good");
             assert(main !== null && main !== _main, "a new main");
+            assert(Modules.handle("good").main === main, "module.main: the new main");
+            assert(_widgetLoader.item !== null && _goodState.widgetSawMain === main,
+                   "… set before the module's widget completed (built as the module came back)");
+            _widgetLoader.destroy();
+            _widgetLoader = null;
             assertEqual(main.goodState.mains + "," + main.goodState.registrations.length, "1,1", "… one, its registration in again");
             assert(main.goodState.ticking, "… its timer running again");
             assertEqual(Profiles.facts["good.ready"], true, "… its fact back");

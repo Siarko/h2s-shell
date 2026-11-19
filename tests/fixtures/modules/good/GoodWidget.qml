@@ -11,7 +11,10 @@ PopupWidget {
     property var module: null
     property string preset: ""
     property var goodState: GoodState
-    Component.onCompleted: GoodState.widgetSawHandle = module !== null
+    Component.onCompleted: {
+        GoodState.widgetSawHandle = module !== null;
+        GoodState.widgetSawMain = module?.main ?? null;
+    }
 
     Text {
         anchors.centerIn: parent

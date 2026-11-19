@@ -44,7 +44,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.14"
+    readonly property string apiVersion: "1.15"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -886,6 +886,33 @@ Singleton {
                 return false;
         }
         return true;
+    }
+
+    // ---- What a popup panel is given (API 1.15) ----
+
+    // A popup panel's `opener`: the bar widget that opened it, from what PopupWidget passes
+    // to Popup.open ({ widgetType, preset }), the bar's edge and whether a tap opened it.
+    // Frozen { widgetType, preset, edge, byTouch }; null when no bar widget opened it (a
+    // tray menu's request, nothing). Texts are kept to 64 characters.
+    function popupOpener(contentData, edge, byTouch) {
+        if (!isObject(contentData) || !isString(contentData.widgetType) || contentData.widgetType === "")
+            return null;
+        const text = value => typeof value === "string" ? value.slice(0, 64) : "";
+        return Object.freeze({
+            widgetType: text(contentData.widgetType),
+            preset: text(contentData.preset),
+            edge: text(edge),
+            byTouch: byTouch === true
+        });
+    }
+
+    // Whether two openers are the same (null for none)
+    function sameOpener(a, b) {
+        if (a === b)
+            return true;
+        if (!isObject(a) || !isObject(b))
+            return false;
+        return a.widgetType === b.widgetType && a.preset === b.preset && a.edge === b.edge && a.byTouch === b.byTouch;
     }
 
     // ---- Helpers (API 1.12) ----

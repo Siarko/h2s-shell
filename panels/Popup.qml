@@ -58,6 +58,10 @@ LazyLoader {
     // What the content needs to know beyond its type, given to open(): the tray menu's
     // { menu, direction }. Kept per popup, so each screen's bar has its own.
     property var contentData: null
+    // The bar widget that opened it, as a module's panel gets it (`opener`, module API 1.15:
+    // ModuleRules.popupOpener); null when no bar widget did. Set before the content is
+    // switched, so a new panel is built with it.
+    property var opener: null
 
     // A module's panel whose module was turned off: the popup closes (its panel was built
     // from the module's file, which must not stay on screen)
@@ -112,8 +116,14 @@ LazyLoader {
         popupLoader.persistent = persistent;
         popupLoader.touchOpened = byTouch;
         popupLoader._typing = false;
+        // The same panel staying (opened again, or from another entry of the same type): it
+        // is told its new opener below, as it is not built again
+        const samePanel = popupLoader.active && popupLoader.contentType === contentType;
+        popupLoader.opener = ModuleRules.popupOpener(contentData, barEdge, byTouch);
         popupLoader.contentType = contentType;
         popupLoader.contentData = contentData;
+        if (samePanel && popupLoader.item)
+            popupLoader.item._passOpener();
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = _vertical ? mapped.y : mapped.x;
         popupLoader.popupLength = _vertical ? element.height : element.width;
@@ -281,6 +291,13 @@ LazyLoader {
         implicitHeight: popup.screen.height
 
         property bool showPopup: false
+
+        // A panel that declares `opener` and stays on screen: the widget that opened it again
+        function _passOpener() {
+            const item = contentLoader.item;
+            if (item && typeof item.opener !== "undefined" && !ModuleRules.sameOpener(item.opener, popupLoader.opener))
+                item.opener = popupLoader.opener;
+        }
         // Deferred so the panel and its Repeaters are created on the main event loop, after
         // this window's incubation — see "The Repeater crash" in docs/ARCHITECTURE.md
         Component.onCompleted: Qt.callLater(() => {
@@ -553,7 +570,7 @@ LazyLoader {
                             // completes (and is created here, from Qt.callLater, like the rest)
                             const owner = WidgetRegistry.popupModule(popupLoader.contentType);
                             const url = WidgetRegistry.popupPanelUrl(popupLoader.contentType) || WidgetRegistry.popupPanelUrl("calendar");
-                            contentLoader.setSource(url, owner !== "" ? Modules.initialProperties(url) : {});
+                            contentLoader.setSource(url, owner !== "" ? Modules.initialProperties(url, { opener: popupLoader.opener }) : {});
                         }
                     }
 

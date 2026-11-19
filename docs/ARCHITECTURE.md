@@ -622,7 +622,14 @@ again on request; both run by a `CommandRunner`, without a time limit) and
 — pkexec, by an absolute path checked first, `notFound` otherwise; 126 dismissed, quietly;
 127 refused, said once — runs through the same queue). Wake-up: `module.resumed()`;
 a page or slot contribution that declares `property bool shown` does its expensive reading only
-while it is on screen. Preferences are settings (`mod.<id>.*`, `module.value` /
+while it is on screen. What the module's views share (a client, its state) lives on the main
+and is read through `module.main` (set by the host right after the main is made, before the
+module's views are built; null while the module is off; `module.main?.client`). A popup
+panel is given, when it declares them, `opener` (the bar widget that opened it, frozen
+`{ widgetType, preset, edge, byTouch }`: `PopupWidget` passes its type and its entry's
+preset to `Popup.open`, `ModuleRules.popupOpener` makes the object), `availableHeight`,
+`popupAnimating`, and with `fitsShownHeight: true` the height shown while the popup
+animates; `api/Api.qml` has the details. Preferences are settings (`mod.<id>.*`, `module.value` /
 `module.setValue`); anything else (tokens, remembered state) goes in `module.store`, and
 files (certificates, caches) in `module.dataDirectory`.
 

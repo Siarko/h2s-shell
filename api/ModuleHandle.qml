@@ -31,6 +31,14 @@ QtObject {
     readonly property var status: host ? (host.statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null) : null
     // True while the module is enabled and loaded: everything that acts follows this
     readonly property bool active: host ? host.activeIds.includes(moduleId) : false
+    // (API 1.15) The object made from its manifest's `main` while the module is active: null
+    // while it is off, before the main exists and while the main itself is being built, and
+    // for a module without one. Set by the host right after the main is created, so before
+    // any of its widgets, popups or pages are built; cleared before the main is destroyed, so
+    // views read through it allowing null (`module.main?.client`). Turned on again, it is a
+    // new object.
+    readonly property var main: _main
+    property var _main: null
 
     // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
     // the module is active: re-read what may have changed while it slept, restart what a

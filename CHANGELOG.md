@@ -13,6 +13,13 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.15: a module's shared object and what its popup panel is given — `module.main` (the
+  object made from the manifest's `main` while the module is active, set before its
+  widgets, popups and pages are built, null while it is off, a new object when it is turned
+  on again), and a popup panel's `opener` (the bar widget that opened it, frozen
+  `{ widgetType, preset, edge, byTouch }`, so two bar entries on different presets each
+  see their own), given when the panel declares it. `availableHeight`, `fitsShownHeight`
+  and `popupAnimating`, given before without a word, are now part of the API.
 - 1.14: `module.privileged.start`'s `options.environment`, in module test mode only — the
   variables (CommandRunner's shape, read once into a copy) reach the stand-in pkexec and the
   command it runs, so a module's suites can give each scenario its own stand-in state.

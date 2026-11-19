@@ -25,6 +25,16 @@ Singleton {
     property bool mainSawHandle: false
     // The bar's widget had its handle by its Component.onCompleted (the core injects it)
     property bool widgetSawHandle: false
+    // (API 1.15) module.main as the last widget saw it in its Component.onCompleted
+    property var widgetSawMain: null
+    // Its popup panel on screen now (null: none), the opener it had when it completed, and
+    // how many were built and destroyed
+    property var panel: null
+    property var panelOpenerAtStart: null
+    property int panelsBuilt: 0
+    property int panelsGone: 0
+    // A panel was told the popup was animating (opening)
+    property bool panelSawAnimating: false
 
     function greet(name) {
         return "hello, " + name;

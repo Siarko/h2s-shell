@@ -868,6 +868,23 @@ TestCase {
         assert(!rules.sameContext({ close: close }, { close: () => 1 }), "… another function");
         assert(!rules.sameContext(null, {}) && rules.sameContext(null, null), "… null");
         object.destroy();
+
+        // A popup panel's opener (API 1.15)
+        const opener = rules.popupOpener({ widgetType: "good", preset: "Alpha" }, "left", true);
+        assertEqual(JSON.stringify(opener), JSON.stringify({ widgetType: "good", preset: "Alpha", edge: "left", byTouch: true }),
+                    "popupOpener: the widget type, its preset, the bar's edge, a tap");
+        assert(Object.isFrozen(opener), "… frozen");
+        assertEqual(JSON.stringify(rules.popupOpener({ widgetType: "good" }, "top", "yes")),
+                    JSON.stringify({ widgetType: "good", preset: "", edge: "top", byTouch: false }), "… no preset: \"\"; byTouch only when true");
+        assertEqual(JSON.stringify(rules.popupOpener({ widgetType: "good", preset: 3 }, undefined, false)),
+                    JSON.stringify({ widgetType: "good", preset: "", edge: "", byTouch: false }), "… a preset or edge that is no text: \"\"");
+        assertEqual(rules.popupOpener({ widgetType: "x".repeat(100), preset: "p".repeat(100) }, "top", false)?.preset.length, 64, "… texts kept to 64 characters");
+        assertEqual(rules.popupOpener({ menu: {}, direction: "down" }, "top", false), null, "… a tray menu's request: none");
+        assertEqual(rules.popupOpener(null, "top", false), null, "… nothing: none");
+        assertEqual(rules.popupOpener({ widgetType: "" }, "top", false), null, "… an empty type: none");
+        assert(rules.sameOpener(opener, rules.popupOpener({ widgetType: "good", preset: "Alpha" }, "left", true)), "sameOpener: by value");
+        assert(!rules.sameOpener(opener, rules.popupOpener({ widgetType: "good", preset: "Beta" }, "left", true)), "… another preset");
+        assert(!rules.sameOpener(opener, null) && rules.sameOpener(null, null), "… null");
         assertEqual(ModuleMergeRules.contributionKey({ module: "a", component: "file:///x" }), "a|file:///x", "a contribution's identity");
         assertEqual(ModuleFileRules.directoryIndexOf(["/m/a", "/m/a/b"], "file:///m/a/b/c/X.qml"), 1, "directoryIndexOf: the deepest");
         assertEqual(ModuleFileRules.directoryIndexOf(["/m/a"], "file:///m/ab/X.qml"), -1, "… not a prefix of another name");

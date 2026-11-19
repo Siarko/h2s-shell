@@ -997,10 +997,19 @@ Scope {
         }
         record.component = component;
         record.main = object;
+        // module.main: set right after the main is made, before _publish builds its views
+        const owner = handle(record.manifest.id);
+        if (owner)
+            owner._main = object;
     }
 
     function _destroyMain(record) {
         if (record.main) {
+            // module.main cleared before the main goes (only this record's: a duplicate's
+            // record has no main of its own)
+            const owner = _handles.get(record.manifest.id);
+            if (owner && owner._main === record.main)
+                owner._main = null;
             try {
                 record.main.destroy();
             } catch (error) {
