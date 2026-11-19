@@ -1075,8 +1075,7 @@ Scope {
             for (let i = 0; i < group.length; i++) {
                 const id = group[i].manifest.id;
                 for (const other of counted) {
-                    if (other.main && !group.includes(other) && !restarting.has(other)
-                            && (other.manifest.uses ?? []).some(use => use.id === id))
+                    if (other.main && !group.includes(other) && !restarting.has(other) && _wasGiven(other, id))
                         group.push(other);
                 }
             }
@@ -1162,6 +1161,16 @@ Scope {
                 given[use.id] = provider.exportsObject;
         }
         return given;
+    }
+
+    // Whether a running module's main was given `id`'s object: a hard use always was; a
+    // soft one only when its module.uses holds it — one left out (a dropped cycle edge, a
+    // version that does not fit) has nothing to lose when that provider restarts
+    function _wasGiven(record, id) {
+        const use = (record.manifest.uses ?? []).find(entry => entry.id === id);
+        if (!use)
+            return false;
+        return use.optional !== true || !!(_uses.get(record.manifest.id)?.[id]);
     }
 
     function _sameUses(before, given) {
@@ -1297,9 +1306,10 @@ Scope {
         if (!main)
             return;
         mainsRevision++;
-        // Already deleted by something other than the host: nothing to wait for
+        // Already deleted by something other than the host: nothing to wait for — but a
+        // module waiting for it (restarting) is applied again, as when a main goes
         if (deleted) {
-            Qt.callLater(root._reap);
+            Qt.callLater(root._afterGoing);
             return;
         }
         _going.push({ id: record.manifest.id, main: main, offered: offered, uses: _uses.get(record.manifest.id) ?? _noUses, destroying: false });
@@ -1348,9 +1358,19 @@ Scope {
     // applied again
     function _goneEntries(entries) {
         _going = _going.filter(entry => !entries.includes(entry));
-        Qt.callLater(root._reap);
+        Qt.callLater(root._afterGoing);
+    }
+
+    // One turn of the event loop after a main went (or was found gone): the next providers
+    // go, and a module waiting for an old main is applied again. Whether one waits is read
+    // then, not when the main went: an entry dropped inside _apply (its destroy() threw)
+    // goes before that pass has said who waits
+    function _afterGoing() {
+        if (_dying)
+            return;
+        _reap();
         if (_waitingForGoing)
-            Qt.callLater(root._applyGuarded);
+            _applyGuarded();
     }
 
     // A main is gone (its watcher saw it destroyed): the providers waiting on it go next, one

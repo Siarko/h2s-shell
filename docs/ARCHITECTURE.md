@@ -621,10 +621,16 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   Every running main that uses the restarting one, hard or soft, directly or through others,
   restarts with it: the whole set is taken down in the reverse of the plan, each dependent
   queued in `_going` before its provider's main is asked to go, so it still reaches its
-  providers while it goes, and made again in the plan's order. A soft dependent without a
-  main (views only) is not turned off: its `module.uses` is replaced by a new object under
-  its live views — a binding on `module.uses.<id>` follows it (`null` once the provider has
-  gone), and a view keeps no reference to the old object. Cycles: only hard edges make a cycle an error; a soft edge
+  providers while it goes, and made again in the plan's order. Only the mains given the
+  restarting one's object restart with it: a soft dependent that never got it (a cycle edge
+  left out, a version that does not fit) keeps its main. A soft dependent without a
+  main (views only) is not turned off when its provider comes or goes: its `module.uses` is
+  replaced by a new object under its live views — a binding on `module.uses.<id>` follows it
+  (`null` once the provider has gone), and a view keeps no reference to the old object. While
+  that provider is pending, though — restarting with a module it uses, or starting — the
+  views-only dependent is pending too, its views gone until the provider is back. A soft
+  provider pending whose manifest does not fit (another major, an older version, no
+  `exports`) is not waited for. Cycles: only hard edges make a cycle an error; a soft edge
   whose provider already reaches its dependent is left out (dependent ids, then provider
   ids, in order), its entry `null`, warned about ("left out, a cycle of uses").
 - **Reaching another module or the host**: a module knows of another only its plain state,
@@ -1115,7 +1121,7 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup,
-  data directories, and `provider` / `consumer` / `consumer-soft` and the chain `zmid` / `ztop` / `ztop-soft` for
+  data directories, and `provider` / `consumer` / `consumer-soft` and the chain `zmid` / `ztop` / `ztop-soft` / `ztop-unfit` for
   `exports` and `uses`),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests

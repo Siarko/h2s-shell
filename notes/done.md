@@ -1615,6 +1615,12 @@ The tracker's state paragraphs as they stood when these moved:
       tools, the whole lock bed on Arch; system detection behind a seam (`methods-script`
       runs both branches everywhere); `tests/run-system.sh` and the first checks per
       system; `install.sh` under stand-ins; `tests/run-all.sh`.
+- [x] Soft dependencies, low (second review of 1.30), 2026-11-19: the docs now say a
+      views-only soft dependent goes pending while its provider is pending; only the mains
+      given a restarting module's object restart with it, and a soft provider pending whose
+      manifest does not fit is not waited for (`ztop-unfit` fixture, ModulesTest,
+      ModuleRulesTest); a main that went (or was found gone, or whose `destroy()` threw)
+      applies the waiting module again one turn later, reading who waits then (`_afterGoing`).
 
 ## The tracker's open sections as worded before 2026-11-19
 

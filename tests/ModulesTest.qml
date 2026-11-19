@@ -1061,8 +1061,40 @@ TestCase {
             host.setEnabled("provider", true);
         });
         _then("the soft chain is back", () => _settled() && host.mainObject("provider") !== null && host.mainObject("ztop-soft") !== null, () => {
-            host.unload();
+            // A soft dependent never given zmid (it asks for a major zmid does not have)
+            host.load(_dirs(["ztop-unfit", "zmid", "provider"]), {});
         });
+        _then("the unfitting top loads", () => _settled() && _chainMains(["provider", "zmid", "ztop-unfit"]), () => {
+            const status = _expectState("ztop-unfit", "loaded");
+            assert(_has(status?.warnings, "can use module zmid 2.0: has 1.0"), "a soft use that does not fit: a warning: " + status?.warnings.join("; "));
+            assertEqual(host.mainObject("ztop-unfit").module.uses.zmid, null, "… module.uses.zmid null");
+            _watchChain(["zmid", "ztop-unfit"]);
+            host.setEnabled("provider", false);
+        });
+        _then("zmid restarts without the provider", () => _settled() && _chainRestarted(["zmid"]), () => {
+            assertEqual(_chainLog.join("|"), "mid gone", "zmid restarted alone: a soft dependent it never gave anything to stays");
+            assert(host.mainObject("ztop-unfit") === _chainWatched["ztop-unfit"] && _status("ztop-unfit")?.state === "loaded", "… the same main, loaded");
+            host.setEnabled("provider", true);
+        });
+        _then("zmid is back with the provider", () => _settled() && host.mainObject("provider") !== null && _chainMains(["zmid", "ztop-unfit"]), () => {
+            assert(host.mainObject("ztop-unfit") === _chainWatched["ztop-unfit"], "… and when it comes back the unfitting top still keeps its main");
+            // A soft dependent whose main something else deleted, restarting alone (its
+            // provider made in a pass where nothing else goes): not left pending
+            host.load(_dirs(["consumer-soft", "provider"]), {});
+        });
+        _then("the soft consumer and the provider load", () => _settled() && _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft")?.answer === "hello, soft up", () => {
+            host.setEnabled("provider", false);
+        });
+        _then("the soft consumer runs without the provider", () => _settled() && _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft")?.answer === "no provider", () => {
+            host.mainObject("consumer-soft").destroy();
+        });
+        _then("the soft consumer's main is destroyed from outside", () => host._records.some(record => record.manifest.id === "consumer-soft" && record.mainDeleted), () => {
+            host.setEnabled("provider", true);
+        });
+        _then("the soft consumer restarts with the provider", () => _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft")?.answer === "hello, soft up", () => {
+            assertEqual(host._going.length, 0, "a restarting main deleted from outside: nothing left waiting");
+            host.unload();
+        }, 3000);
         _clock.start();
     }
 

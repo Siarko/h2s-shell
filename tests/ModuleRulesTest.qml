@@ -1266,6 +1266,14 @@ TestCase {
         states = all(["app", "lib"]);
         states.lib.state = "pending";
         assertEqual(summary(ModuleMergeRules.dependencyPlan(softPair, states)), "lib:pending,app:pending", "soft, the provider pending: the dependent waits for it");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "2.0" }), module("lib", {}, "1.2")], states);
+        assertEqual(summary(plan) + " [" + optional(plan, "app") + "] " + notes(plan, "app"), "lib:pending,app:loaded [] can use module lib 2.0: has 1.2",
+                    "soft, the provider pending at a version that does not fit: not waited for, loaded without it, noted");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "1.0" }), module("lib")], states);
+        assertEqual(summary(plan) + " " + notes(plan, "app"), "lib:pending,app:loaded can use module lib 1.0: exports no API",
+                    "soft, the provider pending and exporting nothing: not waited for either");
+        plan = ModuleMergeRules.dependencyPlan([module("app", { lib: "2.0" }), module("lib", {}, "1.2")], states);
+        assertEqual(summary(plan), "lib:pending,app:pending", "hard, the provider pending at a version that does not fit: waits (it says why once the provider settles)");
         plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "1.3" }), module("lib", {}, "1.2")], all(["app", "lib"]));
         assertEqual(summary(plan) + " [" + optional(plan, "app") + "] " + notes(plan, "app"), "lib:loaded,app:loaded [] can use module lib 1.3: has 1.2",
                     "soft, an older exports version: loaded without it, noted");

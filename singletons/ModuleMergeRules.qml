@@ -114,8 +114,8 @@ Singleton {
     // A module whose own state is not "loaded" keeps it. One that would load:
     //   in a cycle of hard uses               → failed, "uses form a cycle: a → b → a", or
     //                                            "uses itself"
-    //   a provider pending (hard, or soft
-    //   and kept)                             → pending (it waits for it)
+    //   a provider pending (hard, or soft,
+    //   kept and fitting by its manifest)     → pending (it waits for it)
     //   a hard provider missing or not loaded, exporting nothing or an older version, or
     //   without its exports object            → missing-module, one reason per provider:
     //     "needs module tailscale 1.0: not installed" / "turned off" / "failed" /
@@ -276,6 +276,13 @@ Singleton {
                     }
                     const providerState = final.get(use.id) ?? stateOf(use.id);
                     if (providerState === "pending") {
+                        // A soft provider whose manifest does not fit is never given: not
+                        // waited for (nor turned off and on with it)
+                        const unfit = use.optional ? _manifestMisfit(use, known.get(use.id)) : "";
+                        if (unfit !== "") {
+                            miss(unfit, true);
+                            continue;
+                        }
                         waiting = true;
                         continue;
                     }
@@ -310,6 +317,15 @@ Singleton {
                           optional: state === "loaded" ? optional : [], notes: state === "loaded" ? notes : [] });
         }
         return { order: order, modules: result, cycles: cycles };
+    }
+
+    // Why a use cannot be served by `provider` by its manifest alone ("exports no API", "has
+    // 2.0"), or "" when it may be
+    function _manifestMisfit(use, provider) {
+        if (!provider.exports)
+            return "exports no API";
+        const fit = usesFit(use.version, provider.exports.version);
+        return fit.fits ? "" : fit.reason;
     }
 
     // One cycle through `start` inside a component (`members`): the shortest way back to it,

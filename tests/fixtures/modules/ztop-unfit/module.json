@@ -1,0 +1,9 @@
+{
+    "id": "ztop-unfit",
+    "name": "Unfitting top fixture",
+    "version": "1.0.0",
+    "api": "1.30",
+    "description": "A module that can use the middle fixture's API at a major it does not have, so it never gets it (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": { "zmid": { "version": "2.0", "optional": true } }
+}
