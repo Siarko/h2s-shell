@@ -649,6 +649,7 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
+- [ ] `panels/Popup.qml` `contentLoader.onLoaded` assigns `availableHeight` / `popupAnimating` to a panel unguarded: a readonly one throws and skips the rest of the handler (found in B1's review fixes; core and module panels)
 From the old TODO (numbers kept, see done.md for the rest):
 - [ ] 11.34 A command button bar widget: label and/or icon, a command per click (left, right, middle, maybe long press), run detached
 - [ ] 11.31 Popups clear of the on-screen keyboard: done for a bar at the top; left: a bar at the bottom, popups by a bar at a side, the settings window (`panels/Popup.qml`)
