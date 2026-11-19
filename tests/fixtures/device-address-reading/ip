@@ -1,0 +1,11 @@
+#!/bin/sh
+# A stand-in for ip (tests/DeviceAddressReadingTest.qml), started through a link in the
+# suite's scratch directory: it prints that directory's `ip.json` as `ip -j -6 address show`
+# would, and waits while `ip-wait` is there. Anything else it is asked fails.
+here=$(dirname "$0")
+if [ "$*" != "-j -6 address show" ]; then
+    echo "the stand-in only knows -j -6 address show" >&2
+    exit 2
+fi
+while [ -e "$here/ip-wait" ]; do sleep 0.02; done
+cat "$here/ip.json"

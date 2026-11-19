@@ -16,6 +16,7 @@ QtObject {
     property var _promises: PromisesTest {}
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}
+    property var _deviceAddressReading: DeviceAddressReadingTest {}
     property var _vpnProviders: VpnProvidersTest {}
     property var _calendarDates: CalendarDatesTest {}
     property var _widgetRegistry: WidgetRegistryTest {}
@@ -66,7 +67,7 @@ QtObject {
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree]
+    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading]
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed. A suite

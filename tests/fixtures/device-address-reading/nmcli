@@ -1,0 +1,11 @@
+#!/bin/sh
+# A stand-in for nmcli (tests/DeviceAddressReadingTest.qml), started through a link in the
+# suite's scratch directory: it prints that directory's `devices` as `nmcli -t -f <fields>
+# device show` would, and waits while `nmcli-wait` is there. Anything else it is asked fails.
+here=$(dirname "$0")
+case "$1 $2 $4 $5" in
+    "-t -f device show") ;;
+    *) echo "Error: the stand-in only knows -t -f <fields> device show" >&2; exit 2 ;;
+esac
+while [ -e "$here/nmcli-wait" ]; do sleep 0.02; done
+cat "$here/devices"
