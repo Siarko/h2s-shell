@@ -2164,3 +2164,19 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   CHANGELOG merged into a short set ("Needs … 1.33" kept, no version bump). No text names a time
   limit on sends or saves. Read by the lead; module suites on both machines. Left to the owner:
   the real tailnet checks and the 0.7.0 release (tracker).
+- **Notifier's progress handle (N2)** — on `master` 2026-11-20. `Notifier.send` with `progress`
+  returns a handle (`singletons/io/NotificationHandle.qml`: `open`, `state`, `update()`,
+  `close()`, `finished`). Not the plan's `notify-send --wait` waiter: on the bed, `notify-send`
+  closes the notification itself after a click and `--action` always waits, so actions could
+  not stay. Instead one-shot `gdbus call … Notify -- <GVariant text>` / `CloseNotification`,
+  one call in flight per handle, coalesced (`nextSend`); clicks and closing from the shell's
+  own server in-process (`Notifications.actionInvoked`, `notificationClosed`, `tracks()`,
+  `invokeAction()` — the card's actions go through it); an id the server does not hold →
+  "unknown", closing what it made (found by `x-qs-progress-handle` when the first show
+  failed); a failed update retried after 1, 2, 4, 8, 16 s, then "unknown"; early clicks
+  buffered; orphans dismissed after a reload. `NotificationRules.gvariantString` and friends:
+  printable ASCII in single quotes, `'` and `\` escaped, all else `\u`/`\U`, NUL and lone
+  surrogates dropped, cut at 4000 first; `x-qs-` keys filtered on the received form. Plain
+  `send` unchanged. Lock-bed scenario `notifier-progress` (real gdbus, the shell's own server;
+  adversarial text round-trips). Reviewed (escaping held; a failed "done" and an unknown
+  handle's leftovers fixed); `tests/run-all.sh` passed on both machines.
