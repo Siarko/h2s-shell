@@ -18,6 +18,11 @@ import qs.singletons
 // notificationClosed, tracks), so no process waits for them. In test mode (recordOnly)
 // nothing runs: each show, update and close is recorded (Notifier.recorded) and the
 // server answers at once with a made-up id.
+//
+// A failed update is tried again (NotificationRules.retryDelay), the newest content each
+// time; past the last try the handle is "unknown". Whatever the handle made on a server
+// that it then cannot follow ("unknown") is closed, so nothing it left stays running. An
+// ended handle lets go of the server's signals and says `finished`.
 QtObject {
     id: root
 
@@ -25,8 +30,8 @@ QtObject {
     property int number: 0
     property bool recordOnly: false
     property var runner: null
-    // Notifications, or a stand-in: tracks(id), signals actionInvoked(id, actionId) and
-    // notificationClosed(id, reason)
+    // Notifications, or a stand-in: tracks(id), progressIds(run, handle), signals
+    // actionInvoked(id, actionId) and notificationClosed(id, reason)
     property var server: null
     // The content it wants shown (Notifier.progressContent / updatedContent)
     property var wanted: null
@@ -40,6 +45,9 @@ QtObject {
     // gdbus calls started (show, updates and closes): what coalescing saves shows here
     property int calls: 0
 
+    // Once, when it ends (closed, dismissed, unknown): Notifier lets go of it then
+    signal finished()
+
     property bool _ended: false
     property bool _inFlight: false
     property var _sent: null
@@ -48,6 +56,12 @@ QtObject {
     // Notifications closed while the first show's answer was on its way, by id → reason:
     // a user quick enough to dismiss it before the answer is still a dismissal
     property var _closedEarly: ({})
+    // Clicks on its card before the first show's answer came, [{ id, identifier }]
+    property var _actionsEarly: []
+    // Failed updates in a row, and not before when the next try goes (ms)
+    property int _failures: 0
+    property real _retryAt: 0
+    property bool _connected: false
 
     property Timer _later: Timer {
         onTriggered: root._pump()
@@ -76,6 +90,7 @@ QtObject {
         if (recordOnly) {
             _ended = true;
             Notifier._recordHandle("close", number, wanted);
+            finished();
             return;
         }
         _pump();
@@ -84,7 +99,7 @@ QtObject {
     function _pump() {
         const next = NotificationRules.nextSend({
             ended: _ended, inFlight: _inFlight, id: id, closeWanted: _closeWanted,
-            sent: _sent, wanted: wanted, lastSentAt: _lastSentAt
+            sent: _sent, wanted: wanted, lastSentAt: _lastSentAt, retryAt: _retryAt
         }, Date.now());
         switch (next.action) {
         case "show":
@@ -93,8 +108,7 @@ QtObject {
             _send();
             break;
         case "close":
-            _later.stop();
-            _ended = true;
+            _end("closed");
             _sendClose(id);
             break;
         case "later":
@@ -132,45 +146,92 @@ QtObject {
             return;
         case "failed":
             if (id === 0) {
-                console.warn("[Notifier] a progress notification could not be shown: "
-                             + (result.error || result.stderr || ("exit " + result.code)).slice(0, 200));
+                console.warn("[Notifier] a progress notification could not be shown: " + _why(result));
+                // The server may have made it before the call failed (killed at its time
+                // limit): what carries this handle's mark is closed
+                for (const madeId of server?.progressIds(content.run, content.handle) ?? [])
+                    _sendClose(madeId);
                 _end("unknown");
                 return;
             }
-            // Not sent again: the next change sends the whole content anyway
-            _sent = content;
+            // What it sent is not shown: tried again after a pause, the newest content then
+            _failures++;
+            const delay = NotificationRules.retryDelay(_failures);
+            if (delay < 0) {
+                console.warn("[Notifier] a progress notification could not be updated, given up: " + _why(result));
+                _giveUp();
+                return;
+            }
+            if (_failures === 1)
+                console.warn("[Notifier] a progress notification could not be updated, trying again: " + _why(result));
+            _retryAt = Date.now() + delay;
             break;
         case "shown":
             id = step.id;
             if (server?.tracks(id) !== true) {
                 const early = _closedEarly[id];
                 _closedEarly = ({});
+                _actionsEarly = [];
                 if (early !== undefined)
                     _closedBy(early);
                 else
-                    _end("unknown");
+                    _giveUp();
                 return;
             }
             _closedEarly = ({});
             _sent = content;
             if (state === "starting")
                 state = wanted.state;
+            // Clicks that came before the id: theirs now, in order
+            for (const early of _actionsEarly.splice(0)) {
+                if (early.id === id)
+                    _onAction(early.id, early.identifier);
+            }
+            if (_ended)
+                return;
             break;
         case "foreign":
             _sendClose(step.closeId);
             _end("closed");
             return;
         case "updated":
+            if (_failures > 0)
+                console.warn("[Notifier] a progress notification is updated again");
+            _failures = 0;
+            _retryAt = 0;
             _sent = content;
             break;
         }
         _pump();
     }
 
+    function _why(result) {
+        return String(result.error || result.stderr || (result.timedOut ? "timed out" : "exit " + result.code)).slice(0, 200);
+    }
+
+    // The server cannot be followed (it does not hold the id, or it stopped answering):
+    // what the handle made there is closed, and nothing about it is known any more
+    function _giveUp() {
+        _sendClose(id);
+        _end("unknown");
+    }
+
     function _end(endState) {
-        _ended = true;
         _later.stop();
         state = endState;
+        if (_ended)
+            return;
+        _ended = true;
+        _disconnect();
+        finished();
+    }
+
+    function _disconnect() {
+        if (!_connected)
+            return;
+        _connected = false;
+        server?.notificationClosed.disconnect(_onClosed);
+        server?.actionInvoked.disconnect(_onAction);
     }
 
     function _closedBy(reason) {
@@ -189,7 +250,7 @@ QtObject {
     }
 
     function _onClosed(closedId, reason) {
-        if (_ended && !_closeWanted)
+        if (_ended)
             return;
         if (id === 0) {
             if (_inFlight) {
@@ -201,15 +262,18 @@ QtObject {
         }
         if (closedId !== id || state === "unknown")
             return;
-        if (_closeWanted) {
-            _end("closed");
-            return;
-        }
         _closedBy(reason);
     }
 
     function _onAction(actionId, identifier) {
-        if (_ended || _closeWanted || id === 0 || actionId !== id)
+        if (_ended || _closeWanted)
+            return;
+        if (id === 0) {
+            if (_inFlight)
+                _actionsEarly = _actionsEarly.concat([{ id: actionId, identifier: identifier }]);
+            return;
+        }
+        if (actionId !== id)
             return;
         const action = (callbacks.actions ?? []).find(candidate => String(candidate?.id ?? "") === identifier);
         if (action && typeof action.onTriggered === "function")
@@ -224,15 +288,13 @@ QtObject {
             Notifier._recordHandle("show", number, wanted);
             return;
         }
-        server?.notificationClosed.connect(_onClosed);
-        server?.actionInvoked.connect(_onAction);
+        if (server) {
+            server.notificationClosed.connect(_onClosed);
+            server.actionInvoked.connect(_onAction);
+            _connected = true;
+        }
         _pump();
     }
 
-    Component.onDestruction: {
-        if (recordOnly)
-            return;
-        server?.notificationClosed.disconnect(_onClosed);
-        server?.actionInvoked.disconnect(_onAction);
-    }
+    Component.onDestruction: _disconnect()
 }

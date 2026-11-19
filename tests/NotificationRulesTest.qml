@@ -81,6 +81,12 @@ TestCase {
         assertEqual(act({ closeWanted: true, id: 0, inFlight: true }), "none", "close() before the id: when the id comes");
         assertEqual(act({ closeWanted: true, ended: true }), "none", "after the close went: nothing more");
         assertEqual(rules.nextSend(null, 0).action, "none", "no handle: nothing");
+        const retrying = next({ retryAt: 22000, wanted: content({ state: "done" }) }, 20000);
+        assertEqual(retrying.action + " " + retrying.delayMs, "later 2000", "after a failed update: the retry waits its pause, even for an end state");
+        assertEqual(act({ retryAt: 22000, wanted: content({ state: "done" }) }, 22000), "update", "… and goes when it has passed");
+        assertEqual(act({ retryAt: 22000, closeWanted: true }, 20000), "close", "close() does not wait for a retry's pause");
+        assertEqual([0, 1, 2, 3, 5, 6, 1.5].map(n => rules.retryDelay(n)).join(" "), "0 1000 2000 4000 16000 -1 0",
+                    "retryDelay: 1 s doubling to 16 s, past five tries -1 (given up)");
 
         // --- answered ---
         const answer = (handle, id) => {
@@ -184,6 +190,11 @@ TestCase {
         assertEqual(rules.gvariantHints([{ key: "", type: "boolean", value: true }, { key: 3, type: "boolean", value: true },
                                          { key: "n", type: "int32", value: "40" }, null]), "@a{sv} {}", "hints: a bad key or value left out");
         assertEqual(rules.gvariantHints(undefined), "@a{sv} {}", "no hints: typed empty");
+        assertEqual(rules.gvariantHints([{ key: "\u0000value", type: "int32", value: 99 }, { key: "value", type: "int32", value: 40 }]),
+                    "@a{sv} {'value': <int32 40>}", "hints: keys the same once a NUL is dropped are one key, the later wins");
+        assertEqual(rules.gvariantHints([{ key: "\ud800", type: "boolean", value: true }]), "@a{sv} {}", "hints: a key of a lone surrogate is empty: left out");
+        assertEqual(rules.gvariantText("\ud800x-qs-a\u0000b😀", 100) + "|" + rules.gvariantText("abcdef", 3) + "|" + rules.gvariantText(null),
+                    "x-qs-ab😀|abc|", "gvariantText: the text as the server receives it");
         assertEqual([true, 4, 2 ** 40, 0.5, "s", null, {}].map(v => rules.hintType(v)).join(" "), "boolean int32 int64 double string  ",
                     "hintType: as notify-send's inference, else left out");
     }

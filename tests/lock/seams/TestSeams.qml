@@ -81,6 +81,7 @@ Singleton {
     }
 
     property var _progressHandle: null
+    property int _progressHandles: 0
     property var _progressEvents: []
     property var _progressRunner: null
     property Component _progressHandleComponent: Component {
@@ -107,8 +108,8 @@ Singleton {
             }));
             const options = Object.assign({}, given, { actions: actions });
             _progressHandle = _progressHandleComponent.createObject(root, {
-                number: 1, recordOnly: false, runner: _progressRunner, server: Notifications,
-                wanted: Notifier.progressContent(given.summary ?? "", options, Notifier.progressRun),
+                number: ++_progressHandles, recordOnly: false, runner: _progressRunner, server: Notifications,
+                wanted: Notifier.progressContent(given.summary ?? "", options, Notifier.progressRun, "seam" + _progressHandles),
                 callbacks: { actions: actions, onDismissed: () => root._progressEvents = root._progressEvents.concat(["dismissed"]) }
             });
         } else if (handle === null) {

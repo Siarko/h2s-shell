@@ -183,35 +183,39 @@ opts.actions         as today; on a progress notification they stay after a clic
   screen, or the centre open, nothing slides in (the rules of §3.1). A module uses it for
   a change of status the user should see (Taildrop: started, stalled, done, failed).
 
-How it runs (only programs the shell already depends on):
+How it runs (only programs the shell already depends on). No process waits on the bus:
+libnotify's `notify-send --wait` closes the notification itself after an action (seen in
+N2), so a progress notification is sent with `gdbus`, and the shell, being the server,
+tells the handle of clicks and closing in-process.
 
-- **Show:** `notify-send --print-id --wait --expire-time=<per mode> --hint=boolean:resident:true
-  --hint=int:value:N --hint=string:x-qs-progress-state:running --hint=string:x-qs-progress-run:<run> …`.
-  The first stdout line is the id; a later line is an action (`_dispatch` reads the line
-  after the id). The process exits when the notification closes — that is how the handle
-  learns it was dismissed, whoever the server is.
-- **Update:** a new `notify-send --print-id --wait --replace-id=<id> …` with the whole
-  current content (the spec replaces every field, so actions and the expire time are sent
-  again); when it has started, the previous waiter is stopped and its exit ignored. One
-  waiter per handle at any time; only the newest waiter's lines count (a click that both
-  hear in the hand-over is dispatched once). The same run re-arms the actions after a
-  click: libnotify's `notify-send --wait` ends after the first action, so after each action
-  the handle sends its current content again with `--replace-id`.
-- **Close:** `gdbus call --session --dest org.freedesktop.Notifications
-  --object-path /org/freedesktop/Notifications --method
-  org.freedesktop.Notifications.CloseNotification <id>`; the waiter then exits; no
-  `onDismissed`.
-- **Coalescing** (`NotificationRules.nextSend(handleState, change, now)`, pure): at most one
-  `notify-send` starting per handle; while one starts, only the newest wanted content is
-  kept. A progress-only change is sent at most once per `minUpdateMs` (1000) and only
-  when the whole percent moved; a text, action, state or announce change goes at the next
-  free moment (two announces coalesced are one); an end state always goes. Nothing is sent
-  after `close()` or after the waiter reported a dismissal.
+- **Show and update:** one-shot `gdbus call --session --dest org.freedesktop.Notifications
+  --object-path /org/freedesktop/Notifications --method org.freedesktop.Notifications.Notify
+  -- <8 words>`, each argument one word of GVariant text (`NotificationRules.gvariant*`:
+  every string a single-quoted literal of printable ASCII, NUL and lone surrogates
+  dropped, capped); the answer `(uint32 N,)` is the id. An update replaces that id with the
+  whole current content (the spec replaces every field). Hints: resident, `value`,
+  `x-qs-progress-state`, `x-qs-progress-run`, `x-qs-progress-handle` (the handle's mark),
+  `x-qs-announce`.
+- **Clicks and closing:** `Notifications.actionInvoked(id, action)` (the card runs actions
+  through `Notifications.invokeAction`) and `notificationClosed(id, reason)`; a dismissal
+  (reason Dismissed, not after `close()`) calls `onDismissed` once. Actions stay after a
+  click (resident). An id the shell's server does not hold (another daemon owns the name)
+  makes the handle "unknown": what it made there is closed, no callbacks.
+- **Close:** `gdbus call … CloseNotification -- uint32 <id>`; no `onDismissed`.
+- **Coalescing** (`NotificationRules.nextSend(handle, now)`, pure): one gdbus call at a time
+  per handle; while one runs, only the newest wanted content is kept. A progress-only
+  change is sent at most once per `minUpdateMs` (1000) and only when the whole percent
+  moved; a text, action, state or announce change goes at the next free moment (two
+  announces coalesced are one); an end state always goes. Nothing is sent after `close()`
+  or a dismissal. A failed update is sent again after `retryDelay` (1 s doubling to 16 s,
+  five tries, then "unknown" and its notification closed).
 - **Late answers lose.** An update before the id is known waits for it (only the newest
   content is kept). An answer whose id is not the handle's means the old one was closed
   meanwhile and the server made a new one: the handle closes the new one at once and goes
   to "closed" (so a dismissed notification never comes back). A close() before the id is
-  known closes it when the id arrives.
+  known closes it when the id arrives; a click or a dismissal before it is kept and
+  applied when it arrives. A first show that fails closes whatever the server made under
+  the handle's mark.
 - **Orphans.** Every progress notification carries `x-qs-progress-run`, a token made once
   per Notifier instance. The server keeps notifications over a reload; at start
   (`Component.onCompleted`) `Notifications` dismisses any tracked notification with
@@ -251,9 +255,9 @@ The reference also states, for every `notify` (1.33): `options.expireTime` (mill
 0 stays until closed; absent: the user's time) is now followed by the shell's toasts
 (§3.4) unless the user turned that off.
 
-**Why a handle and not `id` + `replaces`:** the id comes back from `notify-send` some
+**Why a handle and not `id` + `replaces`:** the id comes back from the server some
 milliseconds later, so an `id` API would make every module wait for it and race (the late
-answers rule); coalescing, the one-waiter rule, re-arming actions after a click and "never
+answers rule); coalescing, one call at a time, clicks by id, retries and "never
 bring back a dismissed one" would each be written again in every module. The handle keeps
 all of it in one tested place, and it serves any module (a download, a backup, a sync), not
 Taildrop only. A door stays open: a plain notification could later get a handle too
@@ -389,12 +393,16 @@ handle at once. Taildrop's notification slice needs N3 (manifest `api` 1.33).
   (the code at `Notifications.qml:99-102` relies on it already; N1's scenario shows it).
 - The unit of `expireTimeout` (the spec's milliseconds, or seconds) and how -1 arrives; and
   that a replacement updates it with `expireTimeoutChanged` (N5, first step).
-- `notify-send --print-id --wait` prints the id before it waits, and with `--replace-id` its
-  `--wait` follows that id's actions and closing (N2's scenario).
-- Stopping a `notify-send --wait` closes nothing on the server (N2).
+- `notify-send` (0.8.9), checked in N2 on a stand-in server: `--print-id --wait` prints the
+  id before it waits; with `--replace-id` its `--wait` follows that id; TERM closes
+  nothing — but after an action it closes the notification itself, and `--action` implies
+  `--wait`. So the handle sends with `gdbus` and learns clicks from the shell's own server.
+- `gdbus call` takes `--` before its arguments (after it even `--help` is an argument);
+  its parser refuses `\u0000` (N2).
 
-**Hard:** the one-waiter hand-over (start the new waiter, then stop the old, ignore its
-exit) is where double callbacks or a lost click could hide; N2's review looks there. In
+**Hard:** the GVariant text gdbus parses (text from modules goes into it; N2's rule and
+its cases, and the bed's round trip of quotes, backslashes, line breaks and an emoji), and
+late answers (an update in flight when the user dismisses: what it made is closed). In
 N5, the toast's countdown is shared state (`countingToast`) across slots and screens: a
 toast whose time changes while shown, or leaves while counting, must not leave the next
 one waiting for ever (the `Component.onDestruction` case of today, again).

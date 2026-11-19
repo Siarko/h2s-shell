@@ -148,6 +148,15 @@ Singleton {
         return notifications.values.some(notification => notification.id === id);
     }
 
+    // The ids of the notifications the shell's own sender made with this run token and
+    // handle mark (x-qs-progress-run, x-qs-progress-handle)
+    function progressIds(run, handle) {
+        if (typeof run !== "string" || run === "" || typeof handle !== "string" || handle === "")
+            return [];
+        return notifications.values.filter(notification => notification.hints?.["x-qs-progress-run"] === run
+            && notification.hints?.["x-qs-progress-handle"] === handle).map(notification => notification.id);
+    }
+
     // Runs one of a notification's actions, as its card does: the server sends it to the
     // sender, and it is said by id (actionInvoked)
     function invokeAction(notification, action) {

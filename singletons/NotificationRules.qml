@@ -78,7 +78,7 @@ Singleton {
     readonly property int minUpdateMs: 1000
 
     // What a handle does next (pure; one call to the server at a time per handle):
-    //   handle = { ended, inFlight, id, closeWanted, sent, wanted, lastSentAt }
+    //   handle = { ended, inFlight, id, closeWanted, sent, wanted, lastSentAt, retryAt }
     //     ended        closed, dismissed or unknown: nothing more is sent
     //     inFlight     a call to the server has not answered yet
     //     id           the server's id, 0 while not known
@@ -86,6 +86,7 @@ Singleton {
     //     sent         the content of the last call answered (null: none yet)
     //     wanted       the content it wants shown now
     //     lastSentAt   when the last call started (ms)
+    //     retryAt      after a failed update, not before this time (ms; 0: no wait)
     // → { action: "none" | "show" | "update" | "close" | "later", delayMs }
     //   "later": a progress-only change waits delayMs for minUpdateMs to pass; the newest
     //   wanted content is what goes then (so a burst of updates is one call)
@@ -102,6 +103,8 @@ Singleton {
         const change = contentChange(handle.sent, handle.wanted);
         if (change === "none")
             return none;
+        if (handle.retryAt > now)
+            return { action: "later", delayMs: handle.retryAt - now };
         if (change === "progress") {
             const since = now - handle.lastSentAt;
             if (since < minUpdateMs)
@@ -121,8 +124,8 @@ Singleton {
     //                      (closeId), so a dismissed notification never comes back
     //           "foreign"  another id: the old one was closed meanwhile and the server made
     //                      a new one — closed at once (closeId), the handle ends
-    //           "failed"   no id: a first show ends the handle ("unknown"), a failed update
-    //                      is not sent again
+    //           "failed"   no id: a first show ends the handle ("unknown"); a failed
+    //                      update is sent again after retryDelay (what it sent stays unsent)
     function answered(handle, answerId) {
         const known = handle?.id > 0 ? handle.id : 0;
         const answer = Number.isInteger(answerId) && answerId > 0 ? answerId : 0;
@@ -135,6 +138,18 @@ Singleton {
         if (answer !== known)
             return { id: known, closeId: answer, outcome: "foreign" };
         return { id: known, closeId: 0, outcome: "updated" };
+    }
+
+    // After `failures` failed updates in a row, how long until the next try (ms): 1 s,
+    // doubling, at most 16 s; past maxRetries, -1: the handle gives up ("unknown")
+    readonly property int maxRetries: 5
+
+    function retryDelay(failures): int {
+        if (!Number.isInteger(failures) || failures < 1)
+            return 0;
+        if (failures > maxRetries)
+            return -1;
+        return 1000 * Math.pow(2, failures - 1);
     }
 
     // The id in gdbus's answer to Notify: "(uint32 7,)" → 7; anything else 0
@@ -180,12 +195,13 @@ Singleton {
         return code.toString(16).padStart(digits, "0");
     }
 
-    function gvariantString(text, cap): string {
+    // The code points of a text as a GVariant string holds it: a NUL and lone surrogates
+    // dropped, at most `cap` (default gvariantTextCap). A string or a number; else none.
+    function _codePoints(text, cap) {
         const source = typeof text === "string" ? text : (typeof text === "number" ? String(text) : "");
         const limit = typeof cap === "number" && cap > 0 ? Math.floor(cap) : gvariantTextCap;
-        let out = "'";
-        let count = 0;
-        for (let i = 0; i < source.length && count < limit; i++) {
+        const codes = [];
+        for (let i = 0; i < source.length && codes.length < limit; i++) {
             let code = source.charCodeAt(i);
             if (code >= 0xd800 && code <= 0xdbff) {
                 const next = i + 1 < source.length ? source.charCodeAt(i + 1) : 0;
@@ -198,7 +214,20 @@ Singleton {
             }
             if (code === 0)
                 continue;                                    // NUL: dropped
-            count++;
+            codes.push(code);
+        }
+        return codes;
+    }
+
+    // The text the server receives for a text sent (what gvariantString writes, read back):
+    // so a check on it (a hint key's "x-qs-" prefix) sees what the server will see
+    function gvariantText(text, cap): string {
+        return String.fromCodePoint(..._codePoints(text, cap));
+    }
+
+    function gvariantString(text, cap): string {
+        let out = "'";
+        for (const code of _codePoints(text, cap)) {
             if (code === 0x27)
                 out += "\\'";
             else if (code === 0x5c)
@@ -247,17 +276,18 @@ Singleton {
     // The hints as an "a{sv}": entries [{ key, type, value }] in order, each key a string
     // (written by gvariantString), each value by gvariantValue — an entry whose key is not
     // a non-empty string or whose value does not fit its type is left out; a later entry
-    // with the same key replaces an earlier one
+    // with the same key, as the server receives it (gvariantText), replaces an earlier one
     function gvariantHints(entries): string {
         const byKey = new Map();
         for (const entry of Array.isArray(entries) ? entries : []) {
-            if (typeof entry?.key !== "string" || entry.key === "")
+            if (typeof entry?.key !== "string")
                 continue;
+            const key = gvariantText(entry.key);
             const value = gvariantValue(entry.type, entry.value);
-            if (value === "")
+            if (key === "" || value === "")
                 continue;
-            byKey.delete(entry.key);
-            byKey.set(entry.key, value);
+            byKey.delete(key);
+            byKey.set(key, value);
         }
         const pairs = [];
         for (const [key, value] of byKey)

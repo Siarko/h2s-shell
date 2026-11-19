@@ -195,8 +195,10 @@ Singleton {
 
     // The content a handle shows first, from send()'s summary and options → { appName,
     // icon, urgency, category, transient, hints, format, summary, body, actions [{ id,
-    // label }], actionsKey, progress, state "running", toast, announce 0, run }
-    function progressContent(givenSummary, opts, run) {
+    // label }], actionsKey, progress, state "running", toast, announce 0, run, handle }
+    // — `handle` the handle's mark ("" for none), sent as x-qs-progress-handle, by which a
+    // notification made by a show whose answer was lost is found again
+    function progressContent(givenSummary, opts, run, handle) {
         const ready = prepared(givenSummary, opts);
         const options = ready.options;
         const actions = (Array.isArray(options.actions) ? options.actions : [])
@@ -210,7 +212,7 @@ Singleton {
             actions: Object.freeze(actions), actionsKey: JSON.stringify(actions),
             progress: typeof options.progress === "number" && !isNaN(options.progress) ? options.progress : 0,
             state: "running", toast: options.toast === "whileRunning" ? "whileRunning" : "brief",
-            announce: 0, run: String(run ?? "")
+            announce: 0, run: String(run ?? ""), handle: String(handle ?? "")
         });
     }
 
@@ -251,12 +253,14 @@ Singleton {
     // spec's Notify(app_name, replaces_id, app_icon, summary, body, actions, hints,
     // expire_timeout). The caller's hints first, without "x-qs-…" keys; the shell's own
     // after them, so they win: urgency, category, transient as given, resident true, the
-    // value, the state, the run, the announce count (from 1)
+    // value, the state, the run, the handle's mark, the announce count (from 1)
     function progressCommand(content, replaceId) {
         const urgencies = { low: 0, normal: 1, critical: 2 };
         const entries = [];
         for (const key in content.hints) {
-            if (key.startsWith("x-qs-"))
+            // Judged as the server receives the key: a NUL or a lone surrogate in front
+            // does not get an "x-qs-" key past this
+            if (NotificationRules.gvariantText(key).startsWith("x-qs-"))
                 continue;
             const value = content.hints[key];
             entries.push({ key: key, type: NotificationRules.hintType(value), value: value });
@@ -271,6 +275,8 @@ Singleton {
         entries.push({ key: "value", type: "int32", value: NotificationRules.progressValue(content.progress) });
         entries.push({ key: "x-qs-progress-state", type: "string", value: content.state });
         entries.push({ key: "x-qs-progress-run", type: "string", value: content.run });
+        if (content.handle !== "")
+            entries.push({ key: "x-qs-progress-handle", type: "string", value: content.handle });
         if (content.announce > 0)
             entries.push({ key: "x-qs-announce", type: "string", value: String(content.announce) });
         const actionWords = [];
@@ -293,13 +299,22 @@ Singleton {
     // Handles made so far (their numbers), and the ids test mode makes up for them
     property int _handles: 0
 
+    // Handles not yet ended, kept here; an ended one is kept only by its caller, so it is
+    // freed when the caller lets it go (made without a parent: JavaScript owns it)
+    property var _liveHandles: []
+
     function _sendProgress(givenSummary, options) {
         _handles++;
-        return _handleComponent.createObject(root, {
+        const handle = _handleComponent.createObject(null, {
             number: _handles, recordOnly: recordOnly, runner: _runner, server: Notifications,
-            wanted: progressContent(givenSummary, options, progressRun),
+            wanted: progressContent(givenSummary, options, progressRun, String(_handles)),
             callbacks: { actions: Array.isArray(options.actions) ? options.actions : [], onDismissed: options.onDismissed ?? null }
         });
+        if (handle.open) {
+            _liveHandles = _liveHandles.concat([handle]);
+            handle.finished.connect(() => root._liveHandles = root._liveHandles.filter(live => live !== handle));
+        }
+        return handle;
     }
 
     // A handle's show, update or close in test mode, as recorded

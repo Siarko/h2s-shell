@@ -236,6 +236,11 @@ TestCase {
         const crafted = Notifier.progressCommand(Notifier.progressContent("x', 'evil", { progress: -1, body: "\\'\n😀" }, "r"), 0);
         assertEqual(crafted[13] + " " + crafted[14], "'x\\', \\'evil' '\\\\\\'\\u000a\\U0001f600'", "crafted texts stay inside their literals");
         assert(crafted[16].includes("'value': <int32 -1>"), "-1: a run of unknown length");
+        const forged = Notifier.progressCommand(Notifier.progressContent("s", { progress: 1,
+            hints: { "\ud800x-qs-announce": "9", "\u0000x-qs-progress-state": "done", "\u0000value": 77 } }, "run1", "3"), 0);
+        assert(forged[16] === "@a{sv} {'resident': <true>, 'value': <int32 1>, 'x-qs-progress-state': <'running'>, 'x-qs-progress-run': <'run1'>, "
+               + "'x-qs-progress-handle': <'3'>}", "x-qs- keys judged as the server receives them: a NUL or a lone surrogate in front does not pass; "
+               + "a caller's value is replaced; the handle's mark sent (" + forged[16] + ")");
         assertEqual(JSON.stringify(Notifier.closeCommand(7).slice(8)), JSON.stringify(["org.freedesktop.Notifications.CloseNotification", "--", "uint32 7"]),
                     "close: CloseNotification with the id after \"--\"");
         assertEqual(JSON.stringify(Notifier.command("Hi")), "[\"notify-send\",\"--app-name=H2S Shell\",\"--\",\"Hi\"]", "plain send: notify-send's argv as before");
@@ -258,6 +263,11 @@ TestCase {
                     "test mode: one record per show, update and close, with the handle's number");
         assertEqual(Notifier.recorded[0].actions.join(","), "Stop", "test mode: the actions' labels recorded");
         assertEqual(Notifier.send("Plain", {}), undefined, "test mode: a plain send still returns nothing");
+        assert(!Notifier._liveHandles.includes(recorded), "an ended handle is no longer kept by Notifier");
+        const kept = Notifier.send("Kept", { progress: 0 });
+        assert(Notifier._liveHandles.includes(kept), "an open one is");
+        kept.close();
+        assert(!Notifier._liveHandles.includes(kept), "… until it ends");
         Notifier.clearRecorded();
         Notifier.recordOnly = savedRecordOnly;
 
@@ -348,6 +358,8 @@ TestCase {
         server.tracked = [];
         answer(base - 1, 80);
         assertEqual(elsewhere.state + " " + elsewhere.open, "unknown false", "an id the shell's server does not hold: unknown, not open");
+        assertEqual(runner.calls[base]?.argv.slice(-1)[0] + " " + runner.calls[base]?.argv[8], "uint32 80 org.freedesktop.Notifications.CloseNotification",
+                    "… and what it made there is closed (nothing left running)");
         server.actionInvoked(80, "cancel");
         server.notificationClosed(80, NotificationCloseReason.Dismissed);
         assertEqual(events.length + " " + elsewhere.update({ progress: 5 }), "0 false", "unknown: no callbacks, no updates");
@@ -363,12 +375,68 @@ TestCase {
         quick.destroy();
         events.length = 0;
 
-        // A failed show: unknown, no callbacks
+        // A failed show: unknown, no callbacks; what the server made under its mark is closed
         const failed = handleOf({});
         base = runner.calls.length;
+        server.marked = [95];
         runner.fail(base - 1);
+        server.marked = [];
         assertEqual(failed.state, "unknown", "the show failed: unknown");
+        assertEqual(runner.calls[base]?.argv.slice(-1)[0], "uint32 95", "… and a notification the server made under its mark before the call failed is closed");
         failed.destroy();
+
+        // A failed update: tried again after a pause with the newest content; done is never lost
+        const retried = handleOf({ toast: "whileRunning" });
+        base = runner.calls.length;
+        server.tracked = [100];
+        answer(base - 1, 100);
+        retried.update({ state: "done" });
+        runner.fail(base);
+        assertEqual(runner.calls.length + " " + retried._later.running + " " + retried.state, (base + 1) + " true done",
+                    "the done update failed: nothing sent at once, a retry waits");
+        retried._retryAt = 0;
+        retried._pump();
+        assertEqual(runner.calls.length, base + 2, "the retry goes");
+        assert(runner.calls[base + 1].argv[16].includes("'x-qs-progress-state': <'done'>") && runner.calls[base + 1].argv[17] === "int32 -1",
+               "… with done and the user's time (the toast does not stay for ever)");
+        answer(base + 1, 100);
+        assertEqual(retried._failures + " " + retried._later.running, "0 false", "answered: no more retries");
+        retried.destroy();
+        const givingUp = handleOf({});
+        base = runner.calls.length;
+        server.tracked = [110];
+        answer(base - 1, 110);
+        givingUp.update({ summary: "B" });
+        for (let i = 0; i <= NotificationRules.maxRetries; i++) {
+            runner.fail(runner.calls.length - 1);
+            if (givingUp.state === "unknown")
+                break;
+            givingUp._retryAt = 0;
+            givingUp._pump();
+        }
+        assertEqual(givingUp.state + " " + runner.calls.length + " " + runner.calls[runner.calls.length - 1].argv.slice(-1)[0],
+                    "unknown " + (base + 2 + NotificationRules.maxRetries) + " uint32 110",
+                    "every retry failed: given up after the last, unknown, and its notification closed");
+        givingUp.destroy();
+
+        // A click before the show's id came: delivered once the id is known
+        events.length = 0;
+        const early = handleOf({});
+        base = runner.calls.length;
+        server.actionInvoked(120, "cancel");
+        server.actionInvoked(121, "cancel");
+        server.tracked = [120];
+        answer(base - 1, 120);
+        assertEqual(events.join(","), "cancel", "an early click on its own card: its callback, once; one on another: nothing");
+
+        // Ended: it lets go of the server's signals and says so
+        let finishedCount = 0;
+        early.finished.connect(() => finishedCount++);
+        early.close();
+        server.notificationClosed(120, NotificationCloseReason.CloseRequested);
+        server.actionInvoked(120, "cancel");
+        assertEqual(finishedCount + " " + early._connected + " " + events.length, "1 false 1", "closed: finished once, disconnected, no more callbacks");
+        early.destroy();
         runner.destroy();
         server.destroy();
     }
@@ -393,10 +461,14 @@ TestCase {
     property Component _standInServer: Component {
         QtObject {
             property var tracked: []
+            property var marked: []
             signal notificationClosed(int id, int reason)
             signal actionInvoked(int id, string actionId)
             function tracks(id) {
                 return tracked.includes(id);
+            }
+            function progressIds(run, handle) {
+                return marked;
             }
         }
     }
