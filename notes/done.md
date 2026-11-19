@@ -1967,3 +1967,13 @@ For the owner, from the autonomous run (2026-11-18 on):
   could load any file and stall every image through a FIFO — fixed); `tests/run-all.sh`
   passed on both machines.
 
+- **The module's runner (M1) and main and popup (M4)** — on the module's `main` 2026-11-19
+  (manifest `api` 1.15, version 0.6.0, not released). Every command through one shell
+  `CommandRunner` (`TailscaleClient._run`; the own process factory, watchdog and `timed`
+  wrapping gone; the event stream on the runner; answers after a stop dropped; a cut answer
+  is a failed read, cap 32 MB; `tailscale cert` and each Taildrop file keep their own
+  `timeout`); `module.main?.client` replaces the `Tailscale` singleton, the popup's
+  `opener.preset` replaces `Tailscale.popupPreset`. Core fix on `master` with it: a cancelled
+  run whose answer was still queued answers `cancelled: true`. Reviewed; the module's suites,
+  stand-ins and lock bed and the core's full set passed on both machines.
+

@@ -21,7 +21,7 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the module: its runner (M1), main and popup (M4), helpers and facts (M5), row and
+- [ ] the module: helpers and facts (M5), row and
       card onto anchors (M6), exit node per network on the cards (M7), "Send file…" through
       the chooser (M8), the "for now" override (M9), off the shell's internals (M10), the
       last (M11)
@@ -291,6 +291,8 @@ All by the owner, 2026-11-17.
 - File chooser for modules (2026-11-18): the system's standard dialog is enough for now. No chooser of the shell's own in this round, and sending files is not extended. The better answer is wanted later: integration with file managers (backlog).
 
 ## Backlog / later
+
+- [ ] Tailscale module: the event stream is started outside `_run`, so one bus message is cut at the runner's default 1 MB (a very large netmap message)
 
 - [ ] A VPN provider's id is matched against module ids without checking the module that registered it is that module (`VpnManager.register`): a module could register under another's id and get its elements under its VPNs (older than U4c). Also `VpnManager.ownExtrasOf` serves `rowExtras` for a module's provider too (unreachable for Tailscale)
 
