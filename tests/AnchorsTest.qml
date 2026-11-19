@@ -425,6 +425,21 @@ TestCase {
         return rows.sort((a, b) => a.y - b.y);
     }
 
+    // Whether the General page's column has placed the elements at its end: under the last
+    // setting, given the page's width, and where they stood at the last look (a column places
+    // its children in its polish pass, after they are built)
+    property string _lastGeneralEnd: ""
+    function _generalEndLaidOut(loader) {
+        const host = loader.item.appendHost;
+        const rows = _generalRows(loader).filter(row => row.name.startsWith("setting "));
+        const last = rows[rows.length - 1];
+        const element = host.items[0].mapToItem(loader, 0, 0);
+        const described = [element.x, element.y, host.width, last.y, last.height].join(" ");
+        const steady = described === _lastGeneralEnd;
+        _lastGeneralEnd = described;
+        return steady && host.width > 0 && element.y >= last.y + last.height;
+    }
+
     // What the rows must be: the heading at the page's margin; under it, 8 apart, the general
     // settings one after another; 16 lower the second heading, 2 under it the hint, 8 under
     // that the appearance settings; every row at the margin, the settings as wide as the page
@@ -492,6 +507,18 @@ TestCase {
         }
     }
     property var _popupView: null
+    property real _cutHeight: 0
+    // The network list's list view, in a network panel
+    function _findListView(item) {
+        for (const child of item.children ?? []) {
+            if (String(child).startsWith("WifiNetworkList"))
+                return child.children.find(inner => inner.contentY !== undefined && inner.count !== undefined) ?? null;
+            const found = _findListView(child);
+            if (found !== null)
+                return found;
+        }
+        return null;
+    }
     property var _fakeVpn: null
     // The network state the popup is measured in, held while _pinned: an Ethernet link up,
     // Wi-Fi on but joined to nothing — what the panel would show with no NetworkManager
@@ -634,6 +661,44 @@ TestCase {
 
     function _describeParts(parts) {
         return parts.map(part => part.name + " " + [part.x, part.y, part.width, part.height].map(Math.round).join(" ")).join(" · ");
+    }
+
+    // Whether a popup's columns have placed its parts: the parts `expected` names, each under
+    // the one before it, and where they stood at the last look — a Column places its children
+    // in its polish pass, after they are built, so a count alone may meet them all at the top
+    property string _lastParts: ""
+    function _partsLaidOut(panel, expected) {
+        const parts = _popupParts(panel);
+        const placed = parts.map(part => part.name).join("|") === expected.map(entry => entry[0]).join("|")
+            && parts.every((part, index) => index === 0 || part.y >= parts[index - 1].y + parts[index - 1].height - 0.01);
+        const described = _describeParts(parts) + " " + parts.map(part => part.y + part.height).join(" ");
+        const steady = described === _lastParts;
+        _lastParts = described;
+        return placed && steady;
+    }
+
+    // Stand-in networks in range, held in WifiManager while set: no scan replaces them
+    property var _heldNetworks: null
+    property var _unheldNetworks: null
+    function _holdNetworks(networks) {
+        if (networks !== null && _heldNetworks === null)
+            _unheldNetworks = WifiManager.wifiNetworks;
+        _heldNetworks = networks;
+        WifiManager.wifiNetworks = networks ?? _unheldNetworks ?? [];
+    }
+    property Connections _holdWifiNetworks: Connections {
+        target: WifiManager
+        enabled: suite._heldNetworks !== null
+        function onWifiNetworksChanged() {
+            if (WifiManager.wifiNetworks !== suite._heldNetworks)
+                WifiManager.wifiNetworks = suite._heldNetworks;
+        }
+    }
+    function _standInNetworks(count) {
+        const networks = [];
+        for (let i = 0; i < count; i++)
+            networks.push({ ssid: "Stand-in " + (i + 1), signal: 90 - i * 5, security: "WPA2", inUse: false, bands: ["5G"], band: "5G" });
+        return networks;
     }
 
     // The network popup in the pinned state: the VPN part (its header, two VPNs — the first
@@ -1008,7 +1073,8 @@ TestCase {
             assertEqual(_live("settings.general"), "settings.general:1", "… live once");
             Modules.host.load([fixtures + "/anchors-general"], {});
         });
-        _then("a module at the General page's end", () => _generalSettled() && _ready(_generalView.loader.item.appendHost, 2), () => {
+        _then("a module at the General page's end", () => _generalSettled() && _ready(_generalView.loader.item.appendHost, 2)
+              && _generalEndLaidOut(_generalView.loader), () => {
             const status = Modules.status("anchors-general");
             assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the fixture module: loaded in the shell's host, clean");
             assertEqual(status?.deprecations.join("|"),
@@ -1097,7 +1163,7 @@ TestCase {
             _openPopupView("network", "../panels/NetworkPanel.qml");
         });
         _then("the network popup is laid out", () => _networkPinned() && _popupView.loader.item
-              && _popupParts(_popupView.loader.item).length === _networkExpected(false).length, () => {
+              && _partsLaidOut(_popupView.loader.item, _networkExpected(false)), () => {
             const panel = _popupView.loader.item;
             const parts = _popupParts(panel);
             console.log("  INFO: the network popup's parts (x y width height): " + _describeParts(parts));
@@ -1112,7 +1178,7 @@ TestCase {
         });
         _then("a module's elements in the network popup", () => _generalSettled() && _networkPinned()
               && _ready(_blockAt(_popupView.loader.item, "popup.network.connections")?.appendHost ?? { items: [] }, 2)
-              && _popupParts(_popupView.loader.item).length === _networkExpected(true).length, () => {
+              && _partsLaidOut(_popupView.loader.item, _networkExpected(true)), () => {
             const status = Modules.status("anchors-popups");
             assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the popups fixture: loaded in the shell's host, clean");
             assertEqual(status?.deprecations.join("|"),
@@ -1143,12 +1209,35 @@ TestCase {
             _pinned = true;
             _pin();
             assertEqual(element.context.ethernetConnected, true, "… back in: so is the context");
+            // The same popup at a height that cuts the list: room for 150 of it
+            const listPart = parts.find(part => part.name === "WifiNetworkList");
+            const hiddenPart = parts.find(part => part.name === "HiddenNetworkRow");
+            _cutHeight = Math.round(listPart.y + 150 + 4 + hiddenPart.height);
             _closePopupView();
+            _holdNetworks(_standInNetworks(12));
+            _openPopupView("network", "../panels/NetworkPanel.qml", _cutHeight);
+        });
+        _then("the network popup at a height that cuts its list", () => _networkPinned() && _popupView.loader.item
+              && _ready(_blockAt(_popupView.loader.item, "popup.network.connections")?.appendHost ?? { items: [] }, 2)
+              && _partsLaidOut(_popupView.loader.item, _networkExpected(true)), () => {
+            const panel = _popupView.loader.item;
+            const parts = _popupParts(panel);
+            console.log("  INFO: … " + _cutHeight + " high, twelve networks: " + _describeParts(parts));
+            assertEqual(panel.height + " " + panel.availableHeight, _cutHeight + " " + _cutHeight, "the panel: as high as the popup lets it be");
+            assertEqual(_partsProblems(parts, _networkExpected(true), panel.width, _cutHeight).join("; "), "",
+                        "… its parts as before, the row under the list ending where the popup does");
+            const list = parts.find(part => part.name === "WifiNetworkList");
+            assertEqual(Math.round(list.height), 150, "… the list cut to the room left, not shorter");
+            const listView = _findListView(panel);
+            assert(listView !== null && listView.count === 12 && listView.contentHeight > listView.height + 1,
+                   "… holding all twelve networks, taller than it shows: it scrolls (" + listView?.count + ", " + listView?.contentHeight + " in " + listView?.height + ")");
+            _closePopupView();
+            _holdNetworks(null);
             _openPopupView("notifications", "../panels/NotificationPanel.qml", 600);
         });
         _then("the notifications popup is laid out, with the module's elements",
               () => _popupView.loader.item && _ready(_blockAt(_popupView.loader.item, "popup.notifications")?.prependHost ?? { items: [] }, 2)
-              && _popupParts(_popupView.loader.item).length === _notificationsExpected(true).length, () => {
+              && _partsLaidOut(_popupView.loader.item, _notificationsExpected(true)), () => {
             const panel = _popupView.loader.item;
             const host = _blockAt(panel, "popup.notifications").prependHost;
             assertEqual(_names(host), "anchors-popups:Element,anchors-popups:Slot", "the notifications popup: the module's element under the header, then the one through the old slot");
@@ -1164,7 +1253,7 @@ TestCase {
             Modules.host.unload();
         });
         _then("the notifications popup with no module", () => Modules.host.statuses.length === 0 && _popupView.loader.item
-              && _popupParts(_popupView.loader.item).length === _notificationsExpected(false).length, () => {
+              && _partsLaidOut(_popupView.loader.item, _notificationsExpected(false)), () => {
             const panel = _popupView.loader.item;
             assertEqual(_partsProblems(_popupParts(panel), _notificationsExpected(false), panel.width, 600).join("; "), "",
                         "… with no module: the list 8 under the header");
