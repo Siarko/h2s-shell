@@ -1938,3 +1938,10 @@ For the owner, from the autonomous run (2026-11-18 on):
   suites and lock bed passed on both machines. The Tailscale card is now built when it
   opens (it rechecks Tailscale then, not on page open).
 
+- **The Wi-Fi and Ethernet pages (U5)** — on `master` 2026-11-19, module API 1.24. Places
+  `settings.network_wifi.saved.card.settings` and `settings.network_ethernet.profiles.card.settings`
+  (append, any module, built only while the card is open), context `{ networkId, name, kind,
+  active }` (`ModuleRules.networkContext`); sections and cards named; `SettingsSection`'s
+  buttons in a RowLayout (whole pixels). Pages measured identical before and after (280
+  positions). Reviewed, no defect; `tests/run-all.sh` passed on both machines.
+
