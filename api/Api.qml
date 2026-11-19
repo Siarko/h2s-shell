@@ -261,11 +261,19 @@ import qs.singletons.network
 //                          ModuleManifestRules.qml): a glyph of the shell's icon font, drawn
 //                          in its place's text colour; an SVG file, painted in that colour (a
 //                          one-colour drawing follows the theme) or in its own colours with
-//                          "colors": "own"; a PNG or WebP picture, in its own colours. A file
-//                          lies inside the module's directory and passes the file check like
-//                          every file the manifest names (links not followed out of it; at
-//                          most 64 KiB for an SVG, 256 KiB for a picture; only its size is
-//                          read: it is drawn, never run). The shell draws it itself
+//                          "colors": "own"; a PNG or WebP picture, in its own colours. A glyph
+//                          is a private-use character (U+E000–U+F8FF, U+F0000–U+FFFFD,
+//                          U+100000–U+10FFFD) — no emoji, letter, combining mark or
+//                          variation selector — and none of the shell's status marks or the
+//                          font's other locks and no-entry signs. A file lies inside the
+//                          module's directory and passes the file check like every file the
+//                          manifest names (links not followed out of it; at most 64 KiB for an
+//                          SVG, 256 KiB for a picture). Its content is read only to refuse
+//                          external references: an SVG with an <image>, an href or url( not
+//                          starting with "#", a <!DOCTYPE>/<!ENTITY>, a style sheet
+//                          (<?xml-stylesheet>, @import), a <script> or <foreignObject>, or in
+//                          another encoding than UTF-8 is refused; so is a picture whose first
+//                          bytes are not its name's type (PNG, WebP). It is drawn, never run. The shell draws it itself
 //                          (components/ModuleIcon.qml): a square as tall as a line of body
 //                          text, the picture fitted inside. A wrong icon, or a file that
 //                          cannot be drawn, is an error in the module's status and null here;
@@ -278,9 +286,10 @@ import qs.singletons.network
 //                          (Api.anchors), `itemId` the item's id as in the card's context
 //                          (networkId); `label` what it stands for, shown as the icon's
 //                          tooltip and accessible name "<module's name>: <label>" — plain text,
-//                          one line, at most 40 characters ("Exit node: home"). setMark →
-//                          true when kept; false while the module is off, and — with one
-//                          warning in its status — for a path that takes no marks, an id that
+//                          one line, control and format characters dropped, at most 40
+//                          characters ("Exit node: home"). setMark → true when kept; false
+//                          while the module is off, and — with a warning in its status, one
+//                          line per kind of refusal with how often — for a path that takes no marks, an id that
 //                          is not a short text, a label that is not a text, or its 201st mark
 //                          on one path. Set again for the same item, the label is replaced. A
 //                          card shows the first three modules' marks, in module id order; a

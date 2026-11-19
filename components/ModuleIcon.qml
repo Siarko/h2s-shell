@@ -11,6 +11,8 @@ import qs.singletons
 //   an SVG        painted in `color` (a one-colour drawing follows the theme), or in its
 //                 own colours when the manifest says "colors": "own"
 //   a picture     (PNG, WebP) in its own colours
+// A file reaches the Image only once the host's check passed it, its content included (an
+// SVG that refers outside itself, a picture of another type than its name: refused there).
 // With none — none declared, a wrong one (an error in the module's status), one whose file
 // cannot be drawn (reported to the host once: an error, and every place shows the letter
 // from then on) — the first letter of the module's name, in the muted colour. No QML of the

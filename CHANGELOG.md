@@ -16,21 +16,25 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.27: the mark on a card — `module.setMark(path, itemId, label)` and
   `module.clearMark(path, itemId)`: the card of an item shows the module's icon at the end of its
   name's line, closed and open, after the name (cut first), with "<module's name>: <label>" as
-  its tooltip and accessible name (plain text, one line, 40 characters). The places that take
-  marks are `settings.network_wifi.saved.card` and `settings.network_ethernet.profiles.card`
-  (`Api.anchors`' `marks`; they take no element), the item being the card's `networkId`. A
-  card shows the first three modules' marks, in module id order; a mark does nothing on a click.
-  `setMark` → false, with one warning in the module's status, for a path that takes no marks,
-  an id or label that is no text, or a module's 201st mark on a path; false while the module
-  is off. The shell does not store marks: a module going off takes its marks with it, and sets
+  its tooltip and accessible name (plain text, one line, control and format characters dropped,
+  40 characters). The places that take marks are `settings.network_wifi.saved.card` and
+  `settings.network_ethernet.profiles.card` (`Api.anchors`' `marks`; they take no element), the
+  item being the card's `networkId`. A card shows the first three modules' marks, in module id
+  order; a mark does nothing on a click. `setMark` → false, with a warning in the module's status
+  (one line per kind of refusal, with how often), for a path that takes no marks, an id or label
+  that is no text, or a module's 201st mark on a path; false while the module is off. The shell does not store marks: a module going off takes its marks with it, and sets
   them again when it starts. A card's `before` and `after` hosts add their gap only for an
   element built and shown (one that failed takes no room).
 - 1.26: a module's icon — the manifest's `icon`: one glyph of the shell's icon font
-  (`{ "glyph": "…" }`, drawn in its place's text colour), an SVG file (`{ "svg": "icon.svg" }`,
+  (`{ "glyph": "…" }`, a private-use character, not a lock or no-entry sign; drawn in its
+  place's text colour), an SVG file (`{ "svg": "icon.svg" }`,
   painted in its place's text colour, or in its own colours with `"colors": "own"`) or a PNG or
   WebP picture (`{ "image": "icon.png" }`, in its own colours). A file lies inside the module's
-  directory and passes the file check (at most 64 KiB for an SVG, 256 KiB for a picture; only
-  its size is read). A wrong icon, or one whose file cannot be drawn, is an error in the
+  directory and passes the file check (at most 64 KiB for an SVG, 256 KiB for a picture). Its
+  content is read only to refuse what the renderer would follow out of the file — an SVG with
+  any external reference (`<image>`, an `href` or `url(` not starting with `#`, a document type,
+  a style sheet, `<script>`, `<foreignObject>`), a picture whose first bytes are not its name's
+  type (PNG, WebP). A wrong icon, or one whose file cannot be drawn, is an error in the
   module's status and no icon; with none the shell shows the first letter of the module's
   name. The handle's new read-only `icon` says what the shell draws:
   `{ kind, glyph, url, colors }`, or null.

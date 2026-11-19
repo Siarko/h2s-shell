@@ -1,0 +1,8 @@
+{
+    "id": "icon-sniff",
+    "name": "Sniff fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon a .png file holding an SVG: refused by its first bytes, never drawn as SVG (tests/ModuleIconTest.qml)",
+    "icon": { "image": "sniff.png" }
+}

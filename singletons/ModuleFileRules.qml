@@ -274,10 +274,12 @@ Singleton {
     // scanDepth, at most maxListedLines — each line "<index>:./<path relative to the directory>", then
     // "<index>:status <find's exit status>" (not 0: a directory it could not read), then
     // "<index>\tok"; a cap "h<n>" reads the first n bytes of a file of any size (the import
-    // scan needs only its header; no size asked); a cap "s<n>" checks a file of at most n
-    // bytes as every other and prints no text, only its answer (an icon: drawn by the
-    // shell, never read as text). The module's real directory is resolved once for its run
-    // of triples.
+    // scan needs only its header; no size asked); a cap "t<n>" reads a text file of at most n
+    // bytes as every other, refusing one that holds a NUL byte (an SVG icon: its text is
+    // read only to refuse external references); a cap "m<n>" checks a file of at most n
+    // bytes and prints, as its one line, its first ModuleManifestRules.iconMagicBytes bytes
+    // in hex (a picture icon: its real type). The module's real directory is resolved once
+    // for its run of triples.
     readonly property string fileCheckScript: "i=0; last_dir=; "
         + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
         + "if [ \"$cap\" = list ]; then "
@@ -285,7 +287,8 @@ Singleton {
         + " -name '.*' -prune -o -type f \\( -name '*.qml' -o -name '*.js' \\) -print; echo \"status $?\" ) 2>/dev/null "
         + "| head -n " + maxListedLines + " | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tcannot be listed\\n' $i; fi; i=$((i+1)); continue; fi; "
-        + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; s*) cap=${cap#s}; whole=2 ;; esac; "
+        + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; t*) cap=${cap#t}; whole=3 ;; "
+        + "m*) cap=${cap#m}; whole=4 ;; esac; "
         + "if [ \"$dir\" != \"$last_dir\" ]; then real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; last_dir=$dir; fi; "
         + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
         + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
@@ -293,7 +296,9 @@ Singleton {
         + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
         + "else if [ \"$whole\" = 0 ]; then size=0; else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; fi; "
         + "if [ \"$size\" -ge 0 ] && { [ \"$whole\" = 0 ] || [ \"$size\" -le \"$cap\" ]; }; then "
-        + "if [ \"$whole\" != 2 ]; then { head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; fi; printf '%s\\tok\\n' $i; "
+        + "if [ \"$whole\" = 3 ] && [ \"$(tr -d '\\000' < \"$real\" | wc -c)\" != \"$size\" ]; then printf '%s\\tis not text (it holds NUL bytes)\\n' $i; "
+        + "elif [ \"$whole\" = 4 ]; then printf '%s:%s\\n' $i \"$(od -An -tx1 -N " + ModuleManifestRules.iconMagicBytes + " -- \"$real\" | tr -d ' \\n')\"; printf '%s\\tok\\n' $i; "
+        + "else { head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; fi; "
         + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
         + "*) printf '%s\\tleaves the module directory through a link\\n' $i ;; esac; fi; "
         + "i=$((i+1)); done"
@@ -330,13 +335,30 @@ Singleton {
         return texts;
     }
 
-    // The manifest's icon file and the check's cap for it ("s<bytes>": its size checked, no
-    // text read), or null for an icon of no file (none, a glyph)
+    // The manifest's icon file and the check's cap for it — an SVG's "t<bytes>" (its text,
+    // for iconContentProblem), a picture's "m<bytes>" (its first bytes, for its real type) —
+    // or null for an icon of no file (none, a glyph)
     function iconCheck(manifest) {
         const icon = manifest?.icon;
         if (!icon || (icon.kind !== "svg" && icon.kind !== "image") || typeof icon.file !== "string" || icon.file === "")
             return null;
-        return { file: icon.file, cap: "s" + (icon.kind === "svg" ? ModuleManifestRules.maxSvgBytes : ModuleManifestRules.maxImageBytes) };
+        return { file: icon.file, cap: icon.kind === "svg" ? "t" + ModuleManifestRules.maxSvgBytes : "m" + ModuleManifestRules.maxImageBytes };
+    }
+
+    // The check's answers for a module's files with its icon's content judged: `answers` ({
+    // file: "ok" | why not }) and the texts read → the answers, the icon's "ok" replaced by
+    // why its content is refused (ModuleManifestRules.iconContentProblem) — then it is never
+    // handed to an Image
+    function withIconContent(manifest, answers, texts) {
+        const file = iconCheck(manifest)?.file;
+        if (file === undefined || answers?.[file] !== "ok")
+            return answers;
+        const problem = ModuleManifestRules.iconContentProblem(manifest.icon, texts?.[file]);
+        if (problem === "")
+            return answers;
+        const judged = Object.assign({}, answers);
+        judged[file] = problem;
+        return judged;
     }
 
     // A manifest without the entries whose files failed the check. `bad`: { file: why }.

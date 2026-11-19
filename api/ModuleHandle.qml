@@ -349,7 +349,7 @@ QtObject {
     // wired profiles' cards), `itemId` the item's id as in the card's context (`networkId`).
     // → true when kept; false while the module is off, and for a path that takes no marks,
     // an id that is not a text or a label that is not one, or the 201st mark on a path —
-    // then one warning in its status. Set again for the same item, the label is replaced. A
+    // then a warning in its status, one line per kind of refusal. Set again for the same item, the label is replaced. A
     // card shows the first three modules' marks, in module id order. A mark does nothing on
     // a click. The shell does not store marks: they go when the module goes off, and it sets
     // them again when it starts

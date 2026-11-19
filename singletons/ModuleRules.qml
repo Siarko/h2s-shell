@@ -456,33 +456,67 @@ Singleton {
     // A mark's label, in characters (code points)
     readonly property int maxMarkLabel: 40
 
-    // A module's mark set: { ok, marks (the list after), warning ("" none) }. `marks`:
+    // A module's mark set: { ok, marks (the list after), warning ("" none), kind (the
+    // warning's: "path", "item", "label" or "count"; "" none) }. `marks`:
     // [{ module, path, itemId, label }]. Refused (ok false, the list unchanged, a warning):
     // a path whose row takes no marks, an item id that is not a short text, a label that is
-    // no text, the module's 201st mark on the path. The label is made plain — one line,
-    // control characters as spaces, trimmed, cut at maxMarkLabel. Set again for the same
-    // item: the label replaced, counted once.
+    // no text, the module's 201st mark on the path. The label is made plain (_markText).
+    // Set again for the same item: the label replaced, counted once.
     function setMark(table, marks, module, path, itemId, label) {
         const list = Array.isArray(marks) ? marks : [];
-        const refuse = warning => ({ ok: false, marks: list, warning: warning });
+        const refuse = (kind, warning) => ({ ok: false, marks: list, warning: warning, kind: kind });
         const row = anchorRow(table, path);
         if (!row || row.marks !== true)
-            return refuse("marks: " + show(path) + " takes no marks");
+            return refuse("path", "marks: " + show(path) + " takes no marks");
         if (!isString(itemId, 200))
-            return refuse("marks: " + show(itemId) + " is not an item's id (a text of at most 200 characters)");
+            return refuse("item", "marks: " + show(itemId) + " is not an item's id (a text of at most 200 characters)");
         if (typeof label !== "string")
-            return refuse("marks: the label on " + show(path) + " is not a text");
-        const plain = codePoints(_plainLine(label, maxMarkLabel * 4).trim()).slice(0, maxMarkLabel).join("").trim();
+            return refuse("label", "marks: the label on " + show(path) + " is not a text");
+        const plain = _markText(label, maxMarkLabel);
         const mark = { module: String(module), path: path, itemId: itemId, label: plain };
         const index = list.findIndex(entry => entry.module === mark.module && entry.path === path && entry.itemId === itemId);
         if (index >= 0) {
             const next = list.slice();
             next[index] = mark;
-            return { ok: true, marks: next, warning: "" };
+            return { ok: true, marks: next, warning: "", kind: "" };
         }
         if (list.filter(entry => entry.module === mark.module && entry.path === path).length >= maxMarksPerPath)
-            return refuse("marks: more than " + maxMarksPerPath + " on " + show(path) + " (the others are not kept)");
-        return { ok: true, marks: list.concat([mark]), warning: "" };
+            return refuse("count", "marks: more than " + maxMarksPerPath + " on " + show(path) + " (the others are not kept)");
+        return { ok: true, marks: list.concat([mark]), warning: "", kind: "" };
+    }
+
+    // A mark's text (its label, the module's name in its tip) as plain as the shell's other
+    // text from outside (Notifier.plainText): one line (line breaks, tabs and U+2028/2029 as
+    // spaces), no control or format character (PrivilegedRules.unprintableCode: C0, DEL, C1,
+    // bidirectional controls, zero-width characters), trimmed, cut at `most` code points
+    function _markText(value, most) {
+        if (typeof value !== "string")
+            return "";
+        const folded = value.replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
+        const kept = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0))).join("");
+        return PrivilegedRules.characters(kept.trim()).slice(0, most).join("").trim();
+    }
+
+    // A module's refused marks, noted for its status: `noted` ({ <kind>: { text, count } },
+    // anything else: none) with one refusal of `kind` and `text` → { noted (a new object),
+    // publish }. One line per kind — its first text, and how often — so a module refusing
+    // the same call in a loop changes its status once (publish: true only for a kind not
+    // noted before); the count shows when the status is published next
+    function noteMarkWarning(noted, kind, text) {
+        const before = isObject(noted) ? noted : {};
+        const next = Object.assign({}, before);
+        const key = typeof kind === "string" && kind !== "" ? kind : "other";
+        const known = has(before, key) && isObject(before[key]);
+        next[key] = known ? { text: before[key].text, count: before[key].count + 1 } : { text: String(text ?? ""), count: 1 };
+        return { noted: next, publish: !known };
+    }
+
+    // The noted refusals as status lines: "<text>", "<text> (<n> times)" past the first
+    function markWarningLines(noted) {
+        if (!isObject(noted))
+            return [];
+        return Object.keys(noted).filter(key => isObject(noted[key]))
+            .map(key => noted[key].count > 1 ? noted[key].text + " (" + noted[key].count + " times)" : noted[key].text);
     }
 
     // The list without a module's mark on one item
@@ -510,7 +544,7 @@ Singleton {
     // A mark's accessible name and tooltip: "<module's name>: <label>", the name alone with
     // no label
     function markTip(name, label) {
-        const plainName = _plainLine(String(name ?? ""), 100).trim();
+        const plainName = _markText(String(name ?? ""), 100);
         return label ? plainName + ": " + label : plainName;
     }
 

@@ -68,9 +68,10 @@ import QtQuick
 //   tests         optional list of .qml test suites (tests/run-modules.sh runs them).
 //   icon          optional (API 1.26): the module's icon, one of
 //                   { "glyph": "…" }   one character (a code point) of the shell's icon
-//                                      font: neither white space nor a control or format
-//                                      character, not one of the shell's status marks
-//                                      (reservedGlyphs); drawn in its place's text colour
+//                                      font: a private-use character (glyphRanges), not
+//                                      one of the shell's status marks (reservedGlyphs) nor
+//                                      another lock or no-entry sign of the font
+//                                      (lookalikeGlyphs); drawn in its place's text colour
 //                   { "svg": "icon.svg", "colors": "theme" | "own" }   an SVG file of at
 //                                      most maxSvgBytes; painted in the place's text colour
 //                                      (a one-colour drawing follows the theme), or in its
@@ -78,8 +79,10 @@ import QtQuick
 //                   { "image": "icon.png" }   a PNG or WebP file of at most maxImageBytes,
 //                                      in its own colours
 //                 A file is a path inside the module's directory (iconPathProblem), taken
-//                 through the file check like every file the manifest names (only its size
-//                 is read, never its content: it is drawn, never run). A wrong icon is an
+//                 through the file check like every file the manifest names; its content is
+//                 read only to refuse external references (iconContentProblem: an SVG that
+//                 refers outside itself, a picture whose first bytes are not its name's
+//                 type). It is drawn, never run. A wrong icon is an
 //                 error in the module's status and no icon; with none the shell shows the
 //                 first letter of the module's name (components/ModuleIcon.qml).
 //   exports       optional (API 1.18): { version: "major.minor" } — the module offers other
@@ -148,12 +151,30 @@ Singleton {
     // The shell's own status marks, never a module's icon: PrivilegedMark's lock and no-entry
     // sign (tests/ModuleRulesTest.qml holds the two to it)
     readonly property var reservedGlyphs: ["\uf023", "\uf05e"]
+    // The other locks and no-entry signs of the shell's icon font (JetBrainsMono Nerd Font,
+    // Nerd Fonts 3.x): every glyph whose name in the font is a lock of its own ("…-lock",
+    // "…-lock_*", "…-unlock*") or a no-entry sign ("fa-ban", "oct-blocked", "oct-no_entry",
+    // "md-block_helper", "md-cancel"), read from the font's glyph names. A module's icon next
+    // to a control must not pass for the shell's mark that the control asks for a password.
+    // Glyphs that only carry a small lock (a folder with a lock) are not listed.
+    readonly property var lookalikeGlyphs: [
+        0xe672, 0xea75, 0xeb74, 0xebe7, 0xf09c, 0xf13e, 0xf2fc, 0xf456, 0xf479, 0xf4f4, 0xf52a,
+        0xf00ad, 0xf033e, 0xf033f, 0xf0340, 0xf0341, 0xf05fb, 0xf06ea, 0xf073a, 0xf0773, 0xf08b2,
+        0xf08ee, 0xf08ef, 0xf097f, 0xf0fc6, 0xf0fc7, 0xf139a, 0xf139b, 0xf139c, 0xf15d1, 0xf15d2,
+        0xf1671, 0xf1672, 0xf16a8, 0xf16a9, 0xf16aa, 0xf16ab, 0xf16ac, 0xf16ad, 0xf16ae, 0xf16af,
+        0xf16b0, 0xf16b1, 0xf16b2, 0xf16b3, 0xf16b4
+    ]
+    // Unicode's private-use ranges, where the icon font's glyphs lie: an icon is taken only
+    // from there. An ordinary character (a letter, an emoji — drawn in its own colours, deaf
+    // to the theme — a combining mark, a variation selector) is not an icon
+    readonly property var glyphRanges: [[0xe000, 0xf8ff], [0xf0000, 0xffffd], [0x100000, 0x10fffd]]
     // The file name endings each kind of file takes
     readonly property var iconEndings: ({ svg: [".svg"], image: [".png", ".webp"] })
 
     // Why `text` is not a glyph ("" when it is one): one code point (an icon above U+FFFF is
     // two UTF-16 units), not white space, not a control, format or lone surrogate
-    // character, not a status mark of the shell's
+    // character, a private-use character (glyphRanges), neither a status mark of the shell's
+    // nor a lock or no-entry sign of the icon font (lookalikeGlyphs)
     function glyphProblem(text) {
         if (typeof text !== "string" || text === "")
             return "not a character";
@@ -167,8 +188,12 @@ Singleton {
             return "is a control character";
         if ((code >= 0xd800 && code <= 0xdfff) || _formatCharacter(code))
             return "is a format character";
+        if (!glyphRanges.some(range => code >= range[0] && code <= range[1]))
+            return "is not an icon of the icon font (a private-use character)";
         if (reservedGlyphs.includes(text))
             return "is one of the shell's status marks";
+        if (lookalikeGlyphs.includes(code))
+            return "looks like one of the shell's status marks (a lock or a no-entry sign)";
         return "";
     }
 
@@ -198,6 +223,103 @@ Singleton {
         const endings = iconEndings[kind] ?? [];
         if (!endings.some(ending => path.toLowerCase().endsWith(ending)))
             return "not a " + endings.join(" or ") + " file";
+        return "";
+    }
+
+    // How many of a picture's first bytes the file check reads (its real type)
+    readonly property int iconMagicBytes: 16
+
+    // Why an icon file's content is refused ("" when it is fine): what the file check read
+    // of it (ModuleFileRules.iconCheck) — an SVG's text (svgProblem), a picture's first bytes
+    // in hex (pictureProblem). Not read: refused (a failed read is never "fine")
+    function iconContentProblem(icon, content) {
+        if (!icon || (icon.kind !== "svg" && icon.kind !== "image"))
+            return "";
+        if (typeof content !== "string")
+            return "could not be read";
+        return icon.kind === "svg" ? svgProblem(content) : pictureProblem(icon.file, content);
+    }
+
+    // A picture's first bytes (hex) against its name's ending: an image plugin is chosen by
+    // the content, so a ".png" holding an SVG, a TIFF or a PDF would be drawn as that
+    function pictureProblem(file, hex) {
+        const bytes = String(hex ?? "").trim().toLowerCase();
+        if (!/^[0-9a-f]*$/.test(bytes))
+            return "could not be read";
+        const name = String(file ?? "").toLowerCase();
+        if (name.endsWith(".png"))
+            return bytes.startsWith("89504e470d0a1a0a") ? "" : "is not a PNG picture";
+        if (name.endsWith(".webp"))
+            return bytes.startsWith("52494646") && bytes.slice(16, 24) === "57454250" ? "" : "is not a WebP picture";
+        return "is not a .png or .webp file";
+    }
+
+    // Why an SVG's text is refused ("" when it is fine). The SVG renderer follows references
+    // out of the file — an <image> by relative or absolute path, through any image plugin
+    // (a FIFO there blocks every asynchronous Image of the shell) — so a file with any
+    // external reference is refused; the text is read for nothing else. It must be UTF-8 text
+    // (an XML declaration naming another encoding is refused: a text in UTF-16 or UTF-7
+    // hides what it says from this check) starting, after an optional byte order mark, white
+    // space, the XML declaration and comments, with <svg; and it holds none of: a document
+    // type or entity declaration (<!DOCTYPE, <!ENTITY), a processing instruction other than
+    // the declaration (<?xml-stylesheet), an <image>, <foreignObject> or <script> element, an
+    // href not starting with "#", a url( not followed by "#", an @import, a backslash (a CSS
+    // escape could spell any of them). Character references (&#x75;) are decoded and the
+    // text checked again; matching ignores case. A harmless text that only looks like one
+    // ("url" in a title) is refused too: refusing is the safe side.
+    function svgProblem(text) {
+        if (typeof text !== "string")
+            return "could not be read";
+        if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffd]/.test(text))
+            return "is not UTF-8 text";
+        let rest = text.replace(/^\ufeff/, "").replace(/^\s+/, "");
+        const declaration = /^<\?xml(\s[^?>]*)?\?>/.exec(rest);
+        if (declaration) {
+            const encoding = /\bencoding\s*=\s*["']([^"']*)["']/i.exec(declaration[0]);
+            if (encoding && !/^utf-?8$/i.test(encoding[1]))
+                return "is not UTF-8 text (the XML declaration names " + ModuleRules.show(encoding[1].slice(0, 20)) + ")";
+            rest = rest.slice(declaration[0].length);
+        }
+        for (let comment = /^\s*<!--[\s\S]*?-->/.exec(rest); comment; comment = /^\s*<!--[\s\S]*?-->/.exec(rest))
+            rest = rest.slice(comment[0].length);
+        if (!/^\s*<svg[\s>\/]/.test(rest))
+            return "is not an SVG drawing (it does not start with <svg>)";
+        const decoded = rest.replace(/&#x([0-9a-f]+);?/gi, (whole, hex) => _fromCode(parseInt(hex, 16)))
+            .replace(/&#([0-9]+);?/g, (whole, decimal) => _fromCode(parseInt(decimal, 10)));
+        for (const body of [rest, decoded]) {
+            const problem = _svgReference(body);
+            if (problem !== "")
+                return "refers to something outside it (" + problem + ")";
+        }
+        return "";
+    }
+
+    function _fromCode(code) {
+        return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : "\ufffd";
+    }
+
+    // The first external reference in an SVG's text after its start, named ("" none)
+    function _svgReference(body) {
+        if (/<!(?!--|\[CDATA\[)/i.test(body))
+            return "a document type or entity declaration";
+        if (/<\?/.test(body))
+            return "a processing instruction";
+        const element = /<([\w.-]+:)?(image|foreignobject|script)(?=[\s>\/])/i.exec(body);
+        if (element)
+            return "<" + element[2].toLowerCase() + ">";
+        // What follows each "href", wherever it stands (an attribute's name, prefixed or not)
+        if (body.split(/href/i).slice(1).some(after => !/^\s*=\s*["']#/.test(after)))
+            return "an href not starting with #";
+        return _cssReference(body);
+    }
+
+    function _cssReference(body) {
+        if (body.includes("\\"))
+            return "a backslash";
+        if (/@import/i.test(body))
+            return "@import";
+        if (body.split(/url/i).slice(1).some(after => !/^\(\s*["']?#/.test(after)))
+            return "a url( not starting with #";
         return "";
     }
 

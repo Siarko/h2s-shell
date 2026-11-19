@@ -174,10 +174,13 @@ AnchorBlock {
                             Layout.alignment: Qt.AlignTop
                             spacing: 1
                             // The name, and after it the modules' marks: room is kept for
-                            // them on the right (the padding), so the name is cut first
+                            // them on the right (the padding), so the name is cut first. On
+                            // the left as the card is laid out, a right-to-left name too (Qt
+                            // would put it on the right, under the marks)
                             Text {
                                 id: _title
                                 Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
                                 text: root.title
                                 textFormat: Text.PlainText
@@ -191,8 +194,11 @@ AnchorBlock {
                                     id: _markRow
                                     readonly property real gap: 6
                                     // Right after the name as drawn: its whole width, or what is
-                                    // left of the line beside the marks
-                                    x: Math.max(0, Math.min(_title.implicitWidth, _title.width) - _title.rightPadding) + gap
+                                    // left of the line beside the marks — on its right end
+                                    // when it is drawn on the right after all (a mirrored layout)
+                                    x: (_title.effectiveHorizontalAlignment === Text.AlignLeft
+                                        ? Math.max(0, Math.min(_title.implicitWidth, _title.width) - _title.rightPadding)
+                                        : _title.width - _title.rightPadding) + gap
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: root.marks.length > 0
                                     spacing: 4

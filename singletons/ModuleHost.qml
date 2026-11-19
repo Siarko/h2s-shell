@@ -449,15 +449,18 @@ Scope {
     }
 
     // (1.27) A module marks an item's card (ModuleRules.setMark): → true when kept. Only
-    // while the module is on; a refusal is one warning in its status (each text once)
+    // while the module is on; a refusal is one warning in its status, one line per kind of
+    // refusal (ModuleRules.noteMarkWarning)
     function setMark(id, path, itemId, label) {
         const record = _record(id);
         if (!record || !activeIds.includes(id))
             return false;
         const result = ModuleRules.setMark(anchorTable, marks, id, path, itemId, label);
-        if (result.warning !== "" && !record.markWarnings.includes(result.warning)) {
-            record.markWarnings = record.markWarnings.concat([result.warning]).slice(-20);
-            Qt.callLater(_publish);
+        if (result.warning !== "") {
+            const noted = ModuleRules.noteMarkWarning(record.markWarnings, result.kind, result.warning);
+            record.markWarnings = noted.noted;
+            if (noted.publish)
+                Qt.callLater(_publish);
         }
         if (result.ok && JSON.stringify(result.marks) !== JSON.stringify(marks))
             marks = result.marks;
@@ -613,8 +616,9 @@ Scope {
             // incompatible, a bad qmldir — shows no icon file), and why it could not be
             // drawn ("" drawn, or not tried)
             iconChecked: false, iconError: "",
-            // (1.27) Why marks it set were refused, each once
-            markWarnings: [],
+            // (1.27) Why marks it set were refused: { <kind>: { text, count } }
+            // (ModuleRules.noteMarkWarning)
+            markWarnings: ({}),
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
             testVerdicts: null
         };
@@ -679,7 +683,8 @@ Scope {
                     continue;
                 const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
                 const scanned = ModuleFileRules.scanOnly(record.scanListing?.files, files);
-                // (1.26) Its icon's file: checked as the others, its size only, no text read
+                // (1.26) Its icon's file: checked as the others; of an SVG its text, of a
+                // picture its first bytes (ModuleFileRules.iconCheck)
                 const icon = ModuleFileRules.iconCheck(record.manifest);
                 // Nothing to check: settled at once
                 if (files.length === 0 && scanned.length === 0 && icon === null) {
@@ -747,10 +752,13 @@ Scope {
                 _manifestAnswered(record, answered.answers, answered.texts);
                 manifests = true;
             } else if (answered.stage === "files" && !record.filesChecked) {
+                // (1.26) An icon whose content is refused (an SVG with an external
+                // reference, a file of another type than its name's) fails as a bad file
+                const judged = ModuleFileRules.withIconContent(record.manifest, answered.answers, answered.texts);
                 const bad = {};
-                for (const file of Object.keys(answered.answers)) {
-                    if (answered.answers[file] !== "ok")
-                        bad[file] = answered.answers[file];
+                for (const file of Object.keys(judged)) {
+                    if (judged[file] !== "ok")
+                        bad[file] = judged[file];
                 }
                 _filesAnswered(record, bad, answered.texts);
             }
@@ -1404,7 +1412,7 @@ Scope {
                     console.warn(what + ": " + errors.join("; "));
             }
             const warnings = (record.shadowedBy === "" && _dataFailed(record.manifest.id)
-                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings).concat(record.markWarnings);
+                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings).concat(ModuleRules.markWarningLines(record.markWarnings));
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,

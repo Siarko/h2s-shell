@@ -1452,8 +1452,14 @@ TestCase {
             problems.push("not centred on the name's line (" + marks.top + "–" + marks.bottom + " against " + line.top + "–" + line.bottom + ")");
         if (marks.top < line.top - 0.5 || marks.bottom > line.bottom + 0.5)
             problems.push("taller than the name's line");
-        if (row.x < title.leftPadding + title.contentWidth - 0.5)
-            problems.push("over the name (at " + row.x + ", the name drawn " + title.contentWidth + " wide)");
+        // Where the name is drawn in its line: on the side its effective alignment says (a
+        // right-to-left name, unless aligned explicitly, is drawn on the right)
+        const room = title.width - title.leftPadding - title.rightPadding;
+        const drawnWidth = Math.min(title.contentWidth, room);
+        const drawnLeft = title.effectiveHorizontalAlignment === Text.AlignRight ? title.width - title.rightPadding - drawnWidth
+            : title.effectiveHorizontalAlignment === Text.AlignHCenter ? title.leftPadding + (room - drawnWidth) / 2 : title.leftPadding;
+        if (row.x < drawnLeft + drawnWidth - 0.5)
+            problems.push("over the name (at " + row.x + ", the name drawn from " + drawnLeft + ", " + drawnWidth + " wide)");
         if (marks.right > line.right + 0.5)
             problems.push("past the name's column (" + marks.right + " > " + line.right + ")");
         if (icons.some(icon => Math.abs(icon.width - title.height) > 0.5 || Math.abs(icon.height - title.height) > 0.5))
@@ -2869,6 +2875,15 @@ TestCase {
             assertEqual(_markProblems(_longNameCard).join("; "), "", "a long name: cut, the marks at the line's end, clear of the buttons");
             assertEqual(Math.round(_longNameCard.markRow.x + _longNameCard.markRow.width), Math.round(_longNameCard.titleText.width),
                         "… the marks end where the name's line ends");
+            // A right-to-left name: drawn on the left all the same, the marks after it
+            _longNameCard.title = "רשת המשרד";
+        });
+        _then("a right-to-left name", () => _longNameCard.titleText.text === "רשת המשרד" && !_longNameCard.titleText.truncated && _networkPagesSteady(), () => {
+            const title = _longNameCard.titleText;
+            assertEqual(_markProblems(_longNameCard).join("; "), "", "a Hebrew name: the marks after it, clear of it");
+            assertEqual(title.effectiveHorizontalAlignment, Text.AlignLeft, "… the name drawn on the left, as the card is laid out");
+            assert(Math.abs(_longNameCard.markRow.x - (title.leftPadding + title.contentWidth + _longNameCard.markRow.gap)) < 1,
+                   "… the marks right after the name's drawn end (" + _longNameCard.markRow.x + ", the name " + title.contentWidth + " wide)");
             const card = _longNameCard;
             card.title = Qt.binding(() => card.network.ssid + (card.network.name !== card.network.ssid ? "  (" + card.network.name + ")" : ""));
             _longNameCard = null;

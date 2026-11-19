@@ -537,10 +537,14 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   never imported statically (a broken one would fail the whole config). Every file the
   manifest names must be a regular file inside the directory (a link out of it, a FIFO, a
   file over 1 MiB: the entry is dropped, or the module fails for its main).
-- **A module's icon** (the manifest's `icon`, API 1.26): a glyph of the shell's icon font, an
-  SVG file (painted in its place's text colour unless `"colors": "own"`) or a PNG or WebP
-  picture. Its file passes the same check — an SVG at most 64 KiB, a picture at most 256 KiB,
-  only its size read: it is drawn, never run. One component draws it everywhere,
+- **A module's icon** (the manifest's `icon`, API 1.26): a glyph of the shell's icon font (a
+  private-use character, not a lock or no-entry sign), an SVG file (painted in its place's
+  text colour unless `"colors": "own"`) or a PNG or WebP picture. Its file passes the same
+  check — an SVG at most 64 KiB, a picture at most 256 KiB — and its content is read only to
+  refuse what the renderer would follow out of the file: an SVG with any external reference
+  (the renderer loads an `<image>` by path, through any image plugin; a FIFO there would stall
+  every asynchronous image of the shell), a picture whose first bytes are not its name's type
+  (`ModuleManifestRules.iconContentProblem`). It is drawn, never run. One component draws it everywhere,
   `components/ModuleIcon.qml` (a square as tall as a line of body text); a wrong icon, or a
   file that cannot be drawn, is an error in the module's status, and with none the first
   letter of the module's name stands in its place (`ModuleHost.icons`, the handle's `icon`).

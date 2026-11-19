@@ -896,6 +896,29 @@ TestCase {
         set("tailscale", "settings.saved.card", "uuid-3", "  two\nlines <b>and</b> a very long label that goes on and on  ");
         assertEqual(marks.find(entry => entry.itemId === "uuid-3").label, "two lines <b>and</b> a very long label t",
                     "… the label plain: one line, trimmed, cut at 40 characters (markup kept as text)");
+        assertEqual(set("tailscale", "settings.saved.card", "uuid-5", "a\u0085b\u0090c\u202ed\u2066e\u200bf\u200dg\u00adh\u061ci").marks.find(entry => entry.itemId === "uuid-5").label,
+                    "a bcdefghi", "… C1 controls dropped (NEL a space), bidirectional controls and other format characters dropped");
+        assertEqual(rules.markTip("Evil\u202eName", "x"), "EvilName: x", "markTip: the module's name made plain the same way");
+        assertEqual(set("tailscale", "settings.general", "uuid-1", "x").kind + " " + set("tailscale", "settings.saved.card", 7, "x").kind + " "
+                    + set("tailscale", "settings.saved.card", "uuid-1", 5).kind + " " + set("tailscale", "settings.saved.card", "uuid-1", "x").kind,
+                    "path item label ", "setMark: each refusal's kind (\"\" when kept)");
+        let noted = {};
+        const publishes = [];
+        for (let i = 0; i < 1000; i++) {
+            // Each refusal's text names the bad id: a new text every time
+            const refusal = set("tailscale", "settings.saved.card", i, "x");
+            const note = rules.noteMarkWarning(noted, refusal.kind, refusal.warning);
+            noted = note.noted;
+            publishes.push(note.publish);
+        }
+        const pathNote = rules.noteMarkWarning(noted, "path", "marks: \"settings.general\" takes no marks");
+        assertEqual(publishes.filter(publish => publish).length + " " + pathNote.publish + " " + rules.noteMarkWarning(pathNote.noted, "path", "other text").publish,
+                    "1 true false", "noteMarkWarning: a loop of the same kind of refusal publishes once; a new kind once more; a new text of a known kind not");
+        assertEqual(JSON.stringify(rules.markWarningLines(rules.noteMarkWarning(pathNote.noted, "path", "other text").noted)),
+                    JSON.stringify(["marks: 0 is not an item's id (a text of at most 200 characters) (1000 times)", "marks: \"settings.general\" takes no marks (2 times)"]),
+                    "markWarningLines: one line per kind, its first text, how often");
+        assertEqual(rules.markWarningLines(null).length + rules.markWarningLines({ x: 5 }).length + rules.noteMarkWarning(null, "", "t").noted.other.count, 1,
+                    "… garbage: none, no throw");
         assertEqual(rules.codePoints(set("tailscale", "settings.saved.card", "uuid-4", "\u{F0001}".repeat(45)).marks.find(entry => entry.itemId === "uuid-4").label).length,
                     40, "… 40 characters counted as code points");
         marks = [];
@@ -1729,6 +1752,15 @@ TestCase {
             [{ glyph: "\ud800" }, "is a format character", "a lone surrogate"],
             [{ glyph: "\uf023" }, "is one of the shell's status marks", "the lock of PrivilegedMark"],
             [{ glyph: "\uf05e" }, "is one of the shell's status marks", "its no-entry sign"],
+            [{ glyph: "x" }, "is not an icon of the icon font (a private-use character)", "an ordinary letter"],
+            [{ glyph: "\u{1F600}" }, "is not an icon of the icon font", "an emoji (drawn in its own colours)"],
+            [{ glyph: "\u2764" }, "is not an icon of the icon font", "a symbol that has an emoji form"],
+            [{ glyph: "\u0301" }, "is not an icon of the icon font", "a combining mark"],
+            [{ glyph: "\ufe0f" }, "is not an icon of the icon font", "a variation selector"],
+            [{ glyph: "\u{E0100}" }, "is not an icon of the icon font", "… a supplementary one"],
+            [{ glyph: "\uf456" }, "looks like one of the shell's status marks (a lock or a no-entry sign)", "another lock of the icon font (oct-lock)"],
+            [{ glyph: "\u{F033E}" }, "looks like one of the shell's status marks", "… md-lock, above U+FFFF"],
+            [{ glyph: "\uf4f4" }, "looks like one of the shell's status marks", "… a no-entry sign (oct-no_entry)"],
             [{ svg: "mark.gif" }, "icon: svg \"mark.gif\": not a .svg file (no icon)", "an SVG of another format"],
             [{ image: "mark.svg" }, "icon: image \"mark.svg\": not a .png or .webp file (no icon)", "a picture of another format"],
             [{ image: "mark.jpg" }, "not a .png or .webp file", "… a JPEG"],
@@ -1747,10 +1779,14 @@ TestCase {
             assert(read.valid && read.icon === null && read.errors.length === 1 && read.errors[0].includes(expected),
                    "icon refused, " + what + ": no icon, one error, the module valid — " + JSON.stringify(read.errors));
         }
-        assert(_has(icon({ glyph: "x", size: 3 }).warnings, "icon: unknown field \"size\" (ignored)") && icon({ glyph: "x", size: 3 }).icon !== null,
+        assertEqual(["\ue000", "\uf8ff", "\u{F0000}", "\u{FFFFD}", "\u{100000}", "\u{10FFFD}"].map(glyph => icon({ glyph: glyph }).icon?.glyph === glyph).join(","),
+                    "true,true,true,true,true,true", "icon: a glyph from each private-use range, its ends included");
+        assertEqual(["\udfff", "\uf900", "\u{EFFFF}", "\u{FFFFE}", "\u{10FFFF}"].map(glyph => icon({ glyph: glyph }).icon === null).join(","), "true,true,true,true,true",
+                    "… just outside them: refused");
+        assert(_has(icon({ glyph: "\uf0e8", size: 3 }).warnings, "icon: unknown field \"size\" (ignored)") && icon({ glyph: "\uf0e8", size: 3 }).icon !== null,
                "icon: an unknown field warned about, the icon kept");
-        assert(_has(icon({ glyph: "x", colors: "own" }).warnings, "icon: unknown field \"colors\""), "… colors on a glyph: unknown there");
-        const olderIcon = ModuleManifestRules.parseManifest(_manifest({ id: "iconic", api: "1.25", icon: { glyph: "x" } }));
+        assert(_has(icon({ glyph: "\uf0e8", colors: "own" }).warnings, "icon: unknown field \"colors\""), "… colors on a glyph: unknown there");
+        const olderIcon = ModuleManifestRules.parseManifest(_manifest({ id: "iconic", api: "1.25", icon: { glyph: "\uf0e8" } }));
         assert(olderIcon.icon !== null && _has(olderIcon.warnings, "icon: a field of API 1.26, the manifest asks for API 1.25 (read all the same)"),
                "icon with api 1.25: read all the same, with a warning");
         // PrivilegedMark's two marks are the reserved glyphs
@@ -1764,10 +1800,10 @@ TestCase {
         assertEqual(JSON.stringify(marks.slice().sort()), JSON.stringify(ModuleManifestRules.reservedGlyphs.slice().sort()),
                     "reservedGlyphs: PrivilegedMark's lock and no-entry sign");
         // The file check takes the icon's file: its size only, the cap its kind's
-        assertEqual(JSON.stringify(ModuleFileRules.iconCheck(icon({ svg: "mark.svg" }))), JSON.stringify({ file: "mark.svg", cap: "s65536" }),
-                    "iconCheck: an SVG at most 64 KiB, its size only (no text read)");
-        assertEqual(ModuleFileRules.iconCheck(icon({ image: "mark.png" })).cap, "s262144", "… a picture at most 256 KiB");
-        assertEqual(ModuleFileRules.iconCheck(icon({ glyph: "x" })) + " " + ModuleFileRules.iconCheck(icon({ glyph: "ab" })), "null null",
+        assertEqual(JSON.stringify(ModuleFileRules.iconCheck(icon({ svg: "mark.svg" }))), JSON.stringify({ file: "mark.svg", cap: "t65536" }),
+                    "iconCheck: an SVG at most 64 KiB, its text read (to refuse external references)");
+        assertEqual(ModuleFileRules.iconCheck(icon({ image: "mark.png" })).cap, "m262144", "… a picture at most 256 KiB, its first bytes read");
+        assertEqual(ModuleFileRules.iconCheck(icon({ glyph: "\uf0e8" })) + " " + ModuleFileRules.iconCheck(icon({ glyph: "ab" })), "null null",
                     "… a glyph, or no icon: no file");
         assert(!ModuleFileRules.filesToCheck(icon({ svg: "mark.svg" }), "").some(entry => entry.file === "mark.svg")
                && !ModuleFileRules.manifestFiles(icon({ svg: "mark.svg" })).includes("mark.svg"), "… never read as a QML file");
@@ -1775,7 +1811,77 @@ TestCase {
         assertEqual(badIcon.manifest.icon + " | " + badIcon.errors.join("") + " | " + badIcon.fatal, "null | icon mark.svg is larger than 65536 bytes (no icon) | ",
                     "withoutBadFiles: an icon whose file fails the check: none, said, the module loads");
         assertEqual(ModuleFileRules.withoutBadFiles(icon({ svg: "mark.svg" }), {}, "").manifest.icon?.file, "mark.svg", "… a good one kept");
-        assert(ModuleFileRules.fileCheckScript.includes("s*) cap=${cap#s}; whole=2"), "the check's script knows the size-only cap");
+        assert(ModuleFileRules.fileCheckScript.includes("t*) cap=${cap#t}; whole=3") && ModuleFileRules.fileCheckScript.includes("m*) cap=${cap#m}; whole=4"),
+               "the check's script knows the text and first-bytes caps");
+        // The icon's content (iconContentProblem): an SVG with no external reference, a
+        // picture whose first bytes are its name's type
+        const svgIcon = { kind: "svg", file: "mark.svg" };
+        const svgOf = body => ModuleManifestRules.iconContentProblem(svgIcon, body);
+        const clean = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 16 16">'
+            + '<defs><linearGradient id="g"><stop offset="0" stop-color="#000"/></linearGradient><path id="p" d="M0 0h16v16z"/></defs>'
+            + '<style>.a { fill: url(#g); }</style><use xlink:href="#p"/><use href="#p"/><rect class="a" style="fill: url( \'#g\')" width="4" height="4"/></svg>';
+        assertEqual(svgOf(clean), "", "iconContentProblem: a clean SVG (internal references only) is fine");
+        assertEqual(svgOf("\ufeff<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- made by hand -->\n<!-- twice -->\n<svg viewBox=\"0 0 1 1\"/>"), "",
+                    "… after a byte order mark, the XML declaration (UTF-8) and comments");
+        const svgRefusals = [
+            ['<svg><image xlink:href="/etc/passwd" width="1" height="1"/></svg>', "(<image>)", "an <image> by absolute path"],
+            ['<svg><image href="data:image/png;base64,AAAA"/></svg>', "(<image>)", "… even of embedded data"],
+            ['<svg><svg:image xmlns:svg="http://www.w3.org/2000/svg" href="x.png"/></svg>', "(<image>)", "… prefixed"],
+            ['<svg><IMAGE\nhref="x.png"/></svg>', "(<image>)", "… in another case"],
+            ['<svg><use xlink:href="other.svg#p"/></svg>', "an href not starting with #", "a <use> of another file"],
+            ['<svg><use href=" #p"/></svg>', "an href not starting with #", "… an href with a space before its #"],
+            ['<svg><a href="https://example.org/"><rect/></a></svg>', "an href not starting with #", "any other href"],
+            ['<svg><use h&#114;ef="x.svg"/></svg>', "an href not starting with #", "… one not in the raw text"],
+            ['<svg><use href="&#x2F;etc/x.svg#p"/></svg>', "an href not starting with #", "… one whose # is spelt as a reference"],
+            ['<!DOCTYPE svg [<!ENTITY e SYSTEM "file:///etc/passwd">]><svg>&e;</svg>', "is not an SVG drawing", "a document type before it"],
+            ['<svg><!ENTITY e "x"></svg>', "a document type or entity declaration", "an entity declaration inside"],
+            ['<?xml-stylesheet href="s.css"?><svg/>', "is not an SVG drawing", "a style sheet before it"],
+            ['<svg><?xml-stylesheet type="text/css" href="s.css"?></svg>', "a processing instruction", "… inside"],
+            ['<svg><style>@import "s.css";</style></svg>', "@import", "an @import"],
+            ['<svg><style>rect { fill: url(other.svg#g); }</style></svg>', "a url( not starting with #", "a style's url( out of the file"],
+            ['<svg><rect style="fill:url(/tmp/x.svg#g)"/></svg>', "a url( not starting with #", "… in a style attribute"],
+            ['<svg><rect fill="url(x.svg#g)"/></svg>', "a url( not starting with #", "… in a presentation attribute"],
+            ['<svg><rect style="fill:&#117;rl(x.svg#g)"/></svg>', "a url( not starting with #", "… spelt with a character reference"],
+            ['<svg><style>rect { fill: u\\72l(x.svg#g); }</style></svg>', "a backslash", "a CSS escape"],
+            ['<svg><foreignObject><div/></foreignObject></svg>', "(<foreignobject>)", "a <foreignObject>"],
+            ['<svg><script>x()</script></svg>', "(<script>)", "a <script>"],
+            ['<?xml version="1.0" encoding="UTF-16"?><svg/>', "is not UTF-8 text (the XML declaration names \"UTF-16\")", "another encoding declared"],
+            ['<?xml version="1.0" encoding="UTF-7"?><svg>+ADw-image href=+ACI-x+ACI-/+AD4-</svg>', "is not UTF-8 text", "… UTF-7, which hides an <image>"],
+            ['<svg>\ufffd</svg>', "is not UTF-8 text", "a byte that is not UTF-8 (read as U+FFFD)"],
+            ['<svg>\u0001</svg>', "is not UTF-8 text", "a control character"],
+            ['this is no picture', "is not an SVG drawing (it does not start with <svg>)", "no SVG at all"],
+            ['<html><svg/></html>', "is not an SVG drawing", "something else holding one"],
+            ['<svgx/>', "is not an SVG drawing", "an element only starting like it"]
+        ];
+        for (const [body, expected, what] of svgRefusals) {
+            const problem = svgOf(body);
+            assert(problem.includes(expected), "iconContentProblem refuses " + what + ": " + JSON.stringify(problem));
+        }
+        assertEqual(svgOf(undefined), "could not be read", "… an SVG not read: refused (never \"fine\")");
+        const pictureOf = (file, hex) => ModuleManifestRules.iconContentProblem({ kind: "image", file: file }, hex);
+        assertEqual(pictureOf("mark.png", "89504e470d0a1a0a0000000d49484452"), "", "… a PNG's first bytes in a .png: fine");
+        assertEqual(pictureOf("mark.webp", "524946462400000057454250565038"), "", "… a WebP's in a .webp: fine");
+        assertEqual(pictureOf("mark.png", "3c73766720786d6c6e733d2268747470"), "is not a PNG picture", "… an SVG in a .png: refused (Qt would draw it as SVG)");
+        assertEqual(pictureOf("mark.png", "49492a00080000000e00fe0004000100"), "is not a PNG picture", "… a TIFF in a .png: refused");
+        assertEqual(pictureOf("mark.webp", "89504e470d0a1a0a0000000d49484452"), "is not a WebP picture", "… a PNG in a .webp: refused");
+        assertEqual(pictureOf("mark.webp", "52494646240000004156492000000000"), "is not a WebP picture", "… a RIFF that is not WebP (AVI): refused");
+        assertEqual(pictureOf("mark.png", "") + " | " + pictureOf("mark.png", "garbage") + " | " + pictureOf("mark.png", null),
+                    "is not a PNG picture | could not be read | could not be read", "… an empty file, garbage, nothing read: refused");
+        assertEqual(ModuleManifestRules.iconContentProblem({ kind: "glyph", glyph: "\uf0e8" }, undefined) + ModuleManifestRules.iconContentProblem(null, ""), "",
+                    "… a glyph or no icon: nothing to judge");
+        // withIconContent: the host's answers with the content judged
+        const answers = { "Main.qml": "ok", "mark.svg": "ok" };
+        assertEqual(JSON.stringify(ModuleFileRules.withIconContent(icon({ svg: "mark.svg" }), answers, { "mark.svg": '<svg><image href="/x"/></svg>' })),
+                    JSON.stringify({ "Main.qml": "ok", "mark.svg": "refers to something outside it (<image>)" }),
+                    "withIconContent: a refused SVG fails as a bad file, the others as they were");
+        assertEqual(ModuleFileRules.withIconContent(icon({ svg: "mark.svg" }), answers, { "mark.svg": "<svg/>" }), answers, "… a clean one: the answers unchanged");
+        assertEqual(ModuleFileRules.withIconContent(icon({ svg: "mark.svg" }), answers, {})["mark.svg"], "could not be read", "… its text missing: refused");
+        assertEqual(ModuleFileRules.withIconContent(icon({ svg: "mark.svg" }), { "mark.svg": "is larger than 65536 bytes" }, {})["mark.svg"], "is larger than 65536 bytes",
+                    "… a file the check failed already: its answer kept");
+        const refusedIcon = ModuleFileRules.withoutBadFiles(icon({ image: "mark.png" }),
+                                                            { "mark.png": ModuleFileRules.withIconContent(icon({ image: "mark.png" }), { "mark.png": "ok" }, { "mark.png": "3c737667" })["mark.png"] }, "");
+        assertEqual(refusedIcon.manifest.icon + " | " + refusedIcon.errors.join(""), "null | icon mark.png is not a PNG picture (no icon)",
+                    "… and withoutBadFiles: no icon, said in the status");
         assertEqual(JSON.stringify(ModuleRules.iconShown({ kind: "svg", glyph: "", file: "icons/a b.svg", colors: "theme" }, "/m/iconic")),
                     JSON.stringify({ kind: "svg", glyph: "", url: "file:///m/iconic/icons/a b.svg", colors: "theme" }), "iconShown: a file by its URL");
         assertEqual(ModuleRules.iconShown(null, "/m"), null, "… none: null");
