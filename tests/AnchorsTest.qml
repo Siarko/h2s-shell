@@ -1105,6 +1105,15 @@ TestCase {
         return rows.length === count && rows.every(row => _ready(row.nameLine.appendHost, 2)) && _wiredName() !== null && _ready(_wiredName().appendHost, 1);
     }
 
+    // Every row's elements laid out on its name line: the place as wide as they are (up to its
+    // room), each given the line's height — a layout places them in its polish pass, after
+    // they are built
+    function _rowLinesLaidOut() {
+        const lines = _wifiRowList().map(row => row.nameLine).concat(_wiredName() ? [_wiredName()] : []);
+        return lines.length > 0 && lines.every(line => line.titleRegion.width > 0 && Math.abs(line.rightPadding - line.titleRegion.width - line.titleRegion.gap) < 0.01
+            && line.appendHost.items.every(item => !item.ready || Math.abs(item.item.height - line.height) < 0.5));
+    }
+
     // The fixture's Title elements standing now: "<anchor>|<networkId>|<name>:<count>"
     function _popupMainLive() {
         const main = Modules.host.mainObject("anchors-popup-rows");
@@ -3243,7 +3252,7 @@ TestCase {
             assertEqual(_wiredName().titleRegion.path, "popup.network.connections.wired.row.title", "… the wired row's popup.network.connections.wired.row.title");
             Modules.host.load([fixtures + "/anchors-popup-rows"], {});
         });
-        _then("the popup rows' fixture: its elements on every row", () => _generalSettled() && _rowElementsReady(4) && _popupRowsSteady(), () => {
+        _then("the popup rows' fixture: its elements on every row", () => _generalSettled() && _rowElementsReady(4) && _rowLinesLaidOut() && _popupRowsSteady(), () => {
             const status = Modules.status("anchors-popup-rows");
             assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the popup rows' fixture: loaded, clean");
             const rows = _wifiRows();
@@ -3293,7 +3302,7 @@ TestCase {
             const homeTitle = rows["Home"].nameLine.appendHost.items[0];
             _driver.mouseClick(homeTitle, homeTitle.width / 2, homeTitle.height / 2);
         });
-        _then("a click on an element that takes none opened its row", () => _keptRowElements.homeRow.expanded && _popupRowsSteady(), () => {
+        _then("a click on an element that takes none opened its row", () => _keptRowElements.homeRow.expanded && _rowLinesLaidOut() && _popupRowsSteady(), () => {
             assertEqual(_rowTitleProblems(_keptRowElements.homeRow, _keptRowElements.homeRow.nameLine).join("; "), "", "the row open: its elements still on its name's line");
             assertEqual(_keptRowElements.homeRow.nameLine.appendHost.items[0].item, _keptRowElements.home, "… the same element");
             _keptRowElements.homeRow.toggleRequested();
@@ -3301,7 +3310,7 @@ TestCase {
             _holdNetworks(_rowNetworks(["Office", "Home", "Street", _longSsid]));
             _holdProfiles(_rowProfiles());
         });
-        _then("the networks read anew, re-sorted", () => _wifiRowList()[0]?.ssid === "Office" && !_keptRowElements.homeRow.expanded && _rowElementsReady(4) && _popupRowsSteady(), () => {
+        _then("the networks read anew, re-sorted", () => _wifiRowList()[0]?.ssid === "Office" && !_keptRowElements.homeRow.expanded && _rowElementsReady(4) && _rowLinesLaidOut() && _popupRowsSteady(), () => {
             const rows = _wifiRows();
             assert(rows["Home"] === _keptRowElements.homeRow && rows["Office"] === _keptRowElements.officeRow, "re-sorted with new objects: the same rows");
             assert(rows["Home"].nameLine.appendHost.items[0].item === _keptRowElements.home && rows["Office"].nameLine.appendHost.items[0].item === _keptRowElements.office
@@ -3320,7 +3329,7 @@ TestCase {
                                             ["anchors-wired", "Wired", "ethernet", 30, ""], ["anchors-lab", "Lab", "ethernet", 20, "eth-anchors"]]));
             _holdNetworks(_rowNetworks(["Office", "Home", "Street", _longSsid], "Office"));
         });
-        _then("a network back, joined; another wired profile up", () => _rowElementsReady(4) && _popupMainLive().includes("anchors-office") && _popupRowsSteady()
+        _then("a network back, joined; another wired profile up", () => _rowElementsReady(4) && _rowLinesLaidOut() && _popupMainLive().includes("anchors-office") && _popupRowsSteady()
               && _wiredName().appendHost.items[0]?.item.context.networkId === "anchors-lab", () => {
             const rows = _wifiRows();
             assert(rows["Office"] !== _keptRowElements.officeRow, "back in range: a new row");
