@@ -904,3 +904,6 @@ For the owner, from the autonomous run (2026-11-18 on):
   called after the dependent is off — QML cannot stop it, `Api.qml` makes it the
   dependent's job; a provider whose main failed stays failed until turned off and on (its
   dependents `missing-module` meanwhile).
+- **Spacing of modules' elements in a settings page** (U1a, copied from today's General
+  slot): 16 px between the page and the hosts before and after it, 4 px between elements
+  in one host. Status texts quote paths in JSON quotes (the code's style), not backticks.
