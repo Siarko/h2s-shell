@@ -84,7 +84,8 @@ Rectangle {
                 required property string modelData
                 readonly property var option: _optionsModel.byKey[modelData] ?? ({})
                 readonly property bool picked: option.value === root.value
-                width: parent.width
+                // A row the Repeater lets go of while everything goes has no parent any more
+                width: parent ? parent.width : 0
                 height: Math.max(24, _optionLabel.implicitHeight + 6)
                 radius: Theme.listItem.radius
                 color: picked ? Theme.accentTint : (_optionArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear)

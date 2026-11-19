@@ -894,6 +894,7 @@ TestCase {
         _rows();
         _baseTypes();
         _progressAndTips();
+        _dropdownGoesWithItsParent();
 
         _window.visible = false;
         _secondWindow.visible = false;
@@ -1355,5 +1356,23 @@ TestCase {
         assert(_until(() => rowItems[2].x > 0), "the row laid out");
         assertEqual(rowItems[2].x, 40 + 6, "a tooltip loose in a layout takes no room in it");
         assertEqual(rowItems[1].width + " " + rowItems[1].visible, "0 false", "… no size, and nothing shown in its place");
+    }
+
+    // A dropdown with options destroyed together with its parent (a card closing with a
+    // module's dropdown in it): its options' rows lose their parent first, and must not read
+    // its width then — a TypeError printed fails the run (tests/run-unit.sh)
+    function _dropdownGoesWithItsParent() {
+        const holder = Qt.createQmlObject("import QtQuick\nimport qs.api\nItem { width: 200; height: 40\n"
+            + "    property var choices: [{ value: \"a\", label: \"A\" }, { value: \"b\", label: \"B\" }, { value: \"c\", label: \"C\" }]\n"
+            + "    property alias dropdown: _dropdown\n"
+            + "    Dropdown { id: _dropdown; width: 150; value: \"a\"; options: parent ? parent.choices.map(choice => choice) : [] }\n}",
+            _secondWindow.contentItem, "DropdownHolder.qml");
+        holder.y = 220;
+        assert(_until(() => holder.dropdown.width > 0), "a dropdown with options, laid out");
+        let gone = false;
+        holder.Component.destruction.connect(() => gone = true);
+        holder.destroy();
+        assert(_until(() => gone), "destroyed with its parent in one go, nothing read from a parent already gone");
+        driver.wait(20);
     }
 }
