@@ -2068,3 +2068,19 @@ For the owner, from the autonomous run (2026-11-18 on):
   stand-ins and lock bed passed on both machines. The module uses nothing the closing slice (Z)
   removes.
 
+
+## Notifications with a progress bar and Taildrop's list of transfers (2026-11-19 on)
+
+Plans: [plans/notification-progress.md](plans/notification-progress.md),
+[plans/taildrop-transfers.md](plans/taildrop-transfers.md).
+
+- **The card shows a sender's progress (N1)** — on `master` 2026-11-19. `NotificationRules.progress`
+  (the `value` hint 0–100 and a state; a string, NaN or none → no bar; over 100 full; below 0
+  unknown length; cancelled no bar); the bar on the card and, at "full" detail only, on the
+  lock/screensaver preview; an action on a resident notification (buttons, default action,
+  inline reply) keeps its entry. `shelltest.notificationState()`; lock-bed scenario
+  `notification-progress`. Quickshell 0.3.2, seen on the bed: `value` arrives in `hints` as a
+  number; a `replaces_id` keeps the object, emits `hintsChanged` and replaces `hints` whole;
+  `expireTimeout` is the sender's value in ms unchanged (-1, 0, 2000), updated with
+  `expireTimeoutChanged` on a replacement. Reviewed (nothing medium or higher);
+  `tests/run-all.sh` passed on both machines.
