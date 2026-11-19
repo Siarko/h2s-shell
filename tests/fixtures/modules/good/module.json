@@ -2,9 +2,10 @@
     "id": "good",
     "name": "Good fixture",
     "version": "1.2.3",
-    "api": "1.25",
+    "api": "1.26",
     "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
+    "icon": { "svg": "icon.svg" },
     "widgets": [
         { "type": "good", "name": "Good", "widget": "GoodWidget.qml", "popup": "good", "popupPanel": "GoodPanel.qml",
           "settings": "GoodWidgetSettings.qml", "presetDefaults": { "label": "G", "count": 3 } }

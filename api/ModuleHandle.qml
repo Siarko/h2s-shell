@@ -60,6 +60,15 @@ QtObject {
     readonly property string directory: status?.directory ?? ""
     readonly property string version: status?.version ?? ""
     readonly property string name: status?.name ?? ""
+    // (1.26) Its icon as the shell draws it, frozen: { kind: "glyph" | "svg" | "image", glyph,
+    // url (the file's file:// URL, "" for a glyph), colors: "theme" | "own" }, or null — none
+    // in the manifest, a wrong one, or one that could not be drawn (the error is in its
+    // status). The shell draws it itself (components/ModuleIcon.qml): the first letter of the
+    // name where there is none
+    readonly property var icon: {
+        const shown = host && ModuleRules.has(host.icons ?? {}, moduleId) ? host.icons[moduleId] : null;
+        return shown ? Object.freeze(Object.assign({}, shown)) : null;
+    }
     // Its manifest as the shell read and checked it (a frozen copy)
     readonly property var manifest: {
         const read = host && directory !== "" ? host.manifestOf(directory) : null;

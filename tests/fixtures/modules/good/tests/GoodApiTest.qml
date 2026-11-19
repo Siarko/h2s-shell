@@ -111,7 +111,14 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.25", "Api.version");
+        assertEqual(Api.version, "1.26", "Api.version");
+        // (1.26) Its icon, as the shell draws it
+        assertEqual(JSON.stringify(module.icon), JSON.stringify({ kind: "svg", glyph: "", url: Qt.resolvedUrl("../icon.svg").toString(), colors: "theme" }),
+                    "module.icon: its SVG, by its file's URL, painted in the theme's colour");
+        try {
+            module.icon = null;
+        } catch (error) {}
+        assert(module.icon !== null && Object.isFrozen(module.icon), "… read-only, frozen");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");

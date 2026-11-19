@@ -1,0 +1,7 @@
+{
+    "id": "icon-none",
+    "name": "None fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "No icon: the first letter of its name (tests/ModuleIconTest.qml)"
+}

@@ -114,7 +114,13 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.25 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.26 Good fixture", "good: version, API, name");
+            // (1.26) Its icon, an SVG painted in the theme's colour: on its handle as the shell draws it
+            assertEqual(JSON.stringify(host.handle("good").icon),
+                        JSON.stringify({ kind: "svg", glyph: "", url: "file://" + fixtures + "/good/icon.svg", colors: "theme" }),
+                        "good: its icon on its handle, the file by its URL");
+            assert(Object.isFrozen(host.handle("good").icon), "… frozen");
+            assertEqual(host.handle("broken-main").icon, null, "a module with no icon: null on its handle");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");

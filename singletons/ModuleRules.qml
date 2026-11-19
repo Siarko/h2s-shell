@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.25"
+    readonly property string apiVersion: "1.26"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -380,6 +380,52 @@ Singleton {
                 problems.push(where + ": since " + show(row.since) + " is not \"major.minor\"");
         });
         return problems;
+    }
+
+    // ---- A module's icon (API 1.26) ----
+
+    // A text's characters, each a code point: a surrogate pair (an icon above U+FFFF) is one,
+    // a lone surrogate one too. The engine's Array.from splits a text into UTF-16 units
+    function codePoints(text) {
+        const points = [];
+        const units = typeof text === "string" ? text : "";
+        for (let i = 0; i < units.length; i++) {
+            const unit = units.charCodeAt(i);
+            const next = i + 1 < units.length ? units.charCodeAt(i + 1) : 0;
+            if (unit >= 0xd800 && unit <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+                points.push(units.slice(i, i + 2));
+                i++;
+            } else {
+                points.push(units[i]);
+            }
+        }
+        return points;
+    }
+
+    // How the shell draws a module's checked icon (the manifest's, ModuleManifestRules
+    // .readIcon; its file in `directory`) → { kind, glyph, url, colors }: a glyph as text, an
+    // SVG or picture by its file:// URL
+    function iconShown(icon, directory) {
+        if (!isObject(icon))
+            return null;
+        const file = icon.kind === "svg" || icon.kind === "image";
+        return {
+            kind: String(icon.kind), glyph: icon.kind === "glyph" ? String(icon.glyph) : "",
+            url: file ? ModuleFileRules.fileUrl(String(directory), String(icon.file)) : "",
+            colors: icon.colors === "own" ? "own" : "theme"
+        };
+    }
+
+    // What stands in a module's icon's place when it has none (none declared, a wrong one,
+    // one that could not be drawn): the first letter of its name, upper case — of its id
+    // when the name has none; "?" when neither has one
+    function iconLetter(name, id) {
+        for (const text of [name, id]) {
+            const letter = codePoints(text).find(character => character.toLowerCase() !== character.toUpperCase());
+            if (letter !== undefined)
+                return letter.toUpperCase();
+        }
+        return "?";
     }
 
     // Ids a module cannot take: the core's own namespaces (settings groups and key prefixes,

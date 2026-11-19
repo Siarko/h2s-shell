@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.25" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.26" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -246,6 +246,22 @@ import qs.singletons.network
 //                          the user can write there. In module test mode it lies in a private
 //                          temporary directory the shell made, never in the user's data home,
 //                          and setSystem does not move it
+//   module.icon            (1.26, on its handle) the module's icon as the shell draws it,
+//                          frozen: { kind: "glyph" | "svg" | "image", glyph, url (its file's
+//                          file:// URL, "" for a glyph), colors: "theme" | "own" }, or null.
+//                          Declared once in the manifest ("icon", the format in
+//                          ModuleManifestRules.qml): a glyph of the shell's icon font, drawn
+//                          in its place's text colour; an SVG file, painted in that colour (a
+//                          one-colour drawing follows the theme) or in its own colours with
+//                          "colors": "own"; a PNG or WebP picture, in its own colours. A file
+//                          lies inside the module's directory and passes the file check like
+//                          every file the manifest names (links not followed out of it; at
+//                          most 64 KiB for an SVG, 256 KiB for a picture; only its size is
+//                          read: it is drawn, never run). The shell draws it itself
+//                          (components/ModuleIcon.qml): a square as tall as a line of body
+//                          text, the picture fitted inside. A wrong icon, or a file that
+//                          cannot be drawn, is an error in the module's status and null here;
+//                          with none the shell shows the first letter of the module's name
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:

@@ -1,0 +1,8 @@
+{
+    "id": "icon-svg",
+    "name": "Svg fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon a one-colour SVG, painted in the theme's colour (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg" }
+}

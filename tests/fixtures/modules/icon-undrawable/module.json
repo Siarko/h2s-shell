@@ -1,0 +1,8 @@
+{
+    "id": "icon-undrawable",
+    "name": "undrawable fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon file passes the check but is no SVG: the letter, and an error when it is first drawn (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg" }
+}

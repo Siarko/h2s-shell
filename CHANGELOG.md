@@ -13,6 +13,15 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.26: a module's icon — the manifest's `icon`: one glyph of the shell's icon font
+  (`{ "glyph": "…" }`, drawn in its place's text colour), an SVG file (`{ "svg": "icon.svg" }`,
+  painted in its place's text colour, or in its own colours with `"colors": "own"`) or a PNG or
+  WebP picture (`{ "image": "icon.png" }`, in its own colours). A file lies inside the module's
+  directory and passes the file check (at most 64 KiB for an SVG, 256 KiB for a picture; only
+  its size is read). A wrong icon, or one whose file cannot be drawn, is an error in the
+  module's status and no icon; with none the shell shows the first letter of the module's
+  name. The handle's new read-only `icon` says what the shell draws:
+  `{ kind, glyph, url, colors }`, or null.
 - 1.25: a card's buttons — `settings.network_vpn.vpns.card.actions` (own-provider),
   `settings.network_wifi.saved.card.actions` and `settings.network_ethernet.profiles.card.actions`,
   `append`: a button among the opened card's buttons, under the card's own, above "Forget" /

@@ -136,7 +136,7 @@ Singleton {
     // ---- The file check (part of the format, enforced before anything is loaded) ----
     //
     // Every file a module names — main, each entry's components, its tests, what its qmldir
-    // lists — must resolve, symlinks followed, to a regular file inside the module's canonical
+    // lists, its icon (iconCheck: at most its kind's size) — must resolve, symlinks followed, to a regular file inside the module's canonical
     // directory, of at most maxFileBytes. The host asks a process (a FIFO opened by
     // Qt.createComponent would block the GUI thread for as long as it has no writer; a link
     // can lead anywhere) before it reads or loads any of them. An entry whose file fails is
@@ -274,8 +274,10 @@ Singleton {
     // scanDepth, at most maxListedLines — each line "<index>:./<path relative to the directory>", then
     // "<index>:status <find's exit status>" (not 0: a directory it could not read), then
     // "<index>\tok"; a cap "h<n>" reads the first n bytes of a file of any size (the import
-    // scan needs only its header; no size asked). The module's real directory is resolved
-    // once for its run of triples.
+    // scan needs only its header; no size asked); a cap "s<n>" checks a file of at most n
+    // bytes as every other and prints no text, only its answer (an icon: drawn by the
+    // shell, never read as text). The module's real directory is resolved once for its run
+    // of triples.
     readonly property string fileCheckScript: "i=0; last_dir=; "
         + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
         + "if [ \"$cap\" = list ]; then "
@@ -283,7 +285,7 @@ Singleton {
         + " -name '.*' -prune -o -type f \\( -name '*.qml' -o -name '*.js' \\) -print; echo \"status $?\" ) 2>/dev/null "
         + "| head -n " + maxListedLines + " | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tcannot be listed\\n' $i; fi; i=$((i+1)); continue; fi; "
-        + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; esac; "
+        + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; s*) cap=${cap#s}; whole=2 ;; esac; "
         + "if [ \"$dir\" != \"$last_dir\" ]; then real_dir=$(realpath -e -- \"$dir\" 2>/dev/null) || real_dir=$dir; last_dir=$dir; fi; "
         + "if [ ! -e \"$dir/$file\" ] && [ ! -L \"$dir/$file\" ]; then printf '%s\\tdoes not exist\\n' $i; "
         + "elif ! real=$(realpath -e -- \"$dir/$file\" 2>/dev/null); then printf '%s\\tis a broken or looping link\\n' $i; "
@@ -291,7 +293,7 @@ Singleton {
         + "if [ ! -f \"$real\" ]; then printf '%s\\tis not a regular file\\n' $i; "
         + "else if [ \"$whole\" = 0 ]; then size=0; else size=$(stat -c %s -- \"$real\" 2>/dev/null) || size=-1; fi; "
         + "if [ \"$size\" -ge 0 ] && { [ \"$whole\" = 0 ] || [ \"$size\" -le \"$cap\" ]; }; then "
-        + "{ head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
+        + "if [ \"$whole\" != 2 ]; then { head -c \"$cap\" -- \"$real\"; echo; } | sed \"s/^/$i:/\"; fi; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tis larger than %s bytes\\n' $i \"$cap\"; fi; fi ;; "
         + "*) printf '%s\\tleaves the module directory through a link\\n' $i ;; esac; fi; "
         + "i=$((i+1)); done"
@@ -328,6 +330,15 @@ Singleton {
         return texts;
     }
 
+    // The manifest's icon file and the check's cap for it ("s<bytes>": its size checked, no
+    // text read), or null for an icon of no file (none, a glyph)
+    function iconCheck(manifest) {
+        const icon = manifest?.icon;
+        if (!icon || (icon.kind !== "svg" && icon.kind !== "image") || typeof icon.file !== "string" || icon.file === "")
+            return null;
+        return { file: icon.file, cap: "s" + (icon.kind === "svg" ? ModuleManifestRules.maxSvgBytes : ModuleManifestRules.maxImageBytes) };
+    }
+
     // A manifest without the entries whose files failed the check. `bad`: { file: why }.
     // → { manifest (a copy), errors, fatal: "" or why the module fails }
     function withoutBadFiles(manifest, bad, qmldirText) {
@@ -352,6 +363,12 @@ Singleton {
         copy.settingsPages = keep(manifest?.settingsPages, entry => [entry.component], entry => "settings page " + entry.id);
         copy.slots = keep(manifest?.slots, entry => [entry.component], entry => "slot " + entry.slot);
         copy.anchors = keep(manifest?.anchors, entry => [entry.component], entry => "anchors " + entry.at + ", " + entry.place);
+        // A bad icon file: no icon, an error (the shell shows the name's first letter)
+        const iconFile = iconCheck(manifest)?.file;
+        if (iconFile !== undefined && failing(iconFile)) {
+            errors.push("icon " + why(iconFile) + " (no icon)");
+            copy.icon = null;
+        }
         copy.tests = (manifest?.tests ?? []).filter(file => {
             if (failing(file))
                 errors.push("test " + why(file) + " (dropped)");

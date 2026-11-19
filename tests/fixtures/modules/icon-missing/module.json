@@ -1,0 +1,8 @@
+{
+    "id": "icon-missing",
+    "name": "Missing fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon names a file that is not there: an error, the letter (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg" }
+}

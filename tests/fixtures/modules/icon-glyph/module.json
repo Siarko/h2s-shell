@@ -1,0 +1,8 @@
+{
+    "id": "icon-glyph",
+    "name": "Glyph fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon a glyph of the icon font (tests/ModuleIconTest.qml)",
+    "icon": { "glyph": "\uf0e8" }
+}

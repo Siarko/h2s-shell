@@ -9,6 +9,7 @@ import qs.singletons.network
 // precedence, the state model, merging — on realistic and on hostile manifests. Nothing here
 // may throw.
 TestCase {
+    id: rulesSuite
     suiteName: "ModuleRules"
 
     property var _changelog: FileView {
@@ -462,9 +463,9 @@ TestCase {
         assert(_has(tooMany.errors, "only the first"), "… said so");
 
         // --- unknown fields: kept, warned ---
-        const newer = ModuleManifestRules.parseManifest(_manifest({ permissions: ["network"], icon: "vpn" }));
+        const newer = ModuleManifestRules.parseManifest(_manifest({ permissions: ["network"], badge: "vpn" }));
         assert(newer.valid, "a manifest with fields this shell does not know still loads");
-        assertEqual(JSON.stringify(newer.unknownFields), "[\"permissions\",\"icon\"]", "… their names listed");
+        assertEqual(JSON.stringify(newer.unknownFields), "[\"permissions\",\"badge\"]", "… their names listed");
         assertEqual(JSON.stringify(newer.raw.permissions), "[\"network\"]", "… their values kept in raw");
         assertEqual(newer.warnings.length, 2, "… one warning each");
         const unknownInEntry = ModuleManifestRules.parseManifest(_manifest({ facts: [{ fact: "tailscale.up", label: "Up", type: "bool", color: "red" }] }));
@@ -1637,6 +1638,87 @@ TestCase {
         assertEqual(ModuleFileRules.directoryIndexOf(["/m/a"], "file:///m/ab/X.qml"), -1, "… not a prefix of another name");
         assertEqual(ModuleFileRules.directoryIndexOf(["/m/a"], "file:///m/a/../b/X.qml"), -1, "… .. leaves it");
         assertEqual(ModuleFileRules.directoryIndexOf(["/m/a b"], "file:///m/a%20b/X.qml"), 0, "… escaped");
+
+        // --- a module's icon (API 1.26) ---
+        const icon = given => ModuleManifestRules.parseManifest(_manifest({ id: "iconic", api: "1.26", icon: given }));
+        assertEqual(JSON.stringify(icon({ glyph: "\uf0e8" }).icon), JSON.stringify({ kind: "glyph", glyph: "\uf0e8", file: "", colors: "theme" }),
+                    "icon: a glyph of the icon font");
+        assertEqual(icon({ glyph: "\u{F0001}" }).icon?.glyph, "\u{F0001}", "… one above U+FFFF (two UTF-16 units) is one character");
+        assertEqual(JSON.stringify(icon({ svg: "icons/mark.svg" }).icon), JSON.stringify({ kind: "svg", glyph: "", file: "icons/mark.svg", colors: "theme" }),
+                    "… an SVG, painted in the theme's colour by default");
+        assertEqual(icon({ svg: "mark.SVG", colors: "own" }).icon?.colors, "own", "… an SVG in its own colours");
+        assertEqual(JSON.stringify(icon({ image: "mark.png" }).icon), JSON.stringify({ kind: "image", glyph: "", file: "mark.png", colors: "own" }),
+                    "… a PNG picture, in its own colours");
+        assertEqual(icon({ image: "mark.webp" }).icon?.file, "mark.webp", "… a WebP picture");
+        const goodIcon = icon({ svg: "mark.svg" });
+        assert(goodIcon.valid && goodIcon.errors.length === 0 && goodIcon.warnings.length === 0, "… no error, no warning: " + goodIcon.errors.concat(goodIcon.warnings).join("; "));
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ id: "iconic", api: "1.0" })).icon, null, "no icon: null");
+        const refusals = [
+            [{ glyph: "ab" }, "icon: the glyph \"ab\" is 2 characters, not one (no icon)", "two characters"],
+            [{ glyph: "" }, "icon: the glyph \"\" is not a character (no icon)", "an empty glyph"],
+            [{ glyph: 7 }, "icon: the glyph 7 is not a character (no icon)", "a glyph that is no text"],
+            [{ glyph: " " }, "is white space", "white space"],
+            [{ glyph: "\u00a0" }, "is white space", "a no-break space"],
+            [{ glyph: "\n" }, "is white space", "a line break"],
+            [{ glyph: "\u0007" }, "is a control character", "a control character"],
+            [{ glyph: "\u200b" }, "is a format character", "a format character (zero width space)"],
+            [{ glyph: "\u202e" }, "is a format character", "… (right-to-left override)"],
+            [{ glyph: "\ud800" }, "is a format character", "a lone surrogate"],
+            [{ glyph: "\uf023" }, "is one of the shell's status marks", "the lock of PrivilegedMark"],
+            [{ glyph: "\uf05e" }, "is one of the shell's status marks", "its no-entry sign"],
+            [{ svg: "mark.gif" }, "icon: svg \"mark.gif\": not a .svg file (no icon)", "an SVG of another format"],
+            [{ image: "mark.svg" }, "icon: image \"mark.svg\": not a .png or .webp file (no icon)", "a picture of another format"],
+            [{ image: "mark.jpg" }, "not a .png or .webp file", "… a JPEG"],
+            [{ svg: "icons/../../other/mark.svg" }, "leaves the module's directory or is not a plain path", "outside the module"],
+            [{ svg: "../other/mark.svg" }, "has characters a module file name may not have", "… starting with \"..\""],
+            [{ svg: "/usr/share/icons/mark.svg" }, "an absolute path", "an absolute path"],
+            [{ svg: "a//mark.svg" }, "leaves the module's directory or is not a plain path", "an empty part"],
+            [{ svg: "mark\n.svg" }, "has characters a module file name may not have", "a line break in the name"],
+            [{ svg: "mark.svg", colors: "rainbow" }, "icon: colors \"rainbow\" is not \"theme\" or \"own\" (no icon)", "colours neither theme nor own"],
+            [{ glyph: "x", svg: "mark.svg" }, "icon: names glyph and svg of glyph, svg and image; one (no icon)", "two kinds"],
+            [{}, "icon: names none of glyph, svg and image; one (no icon)", "no kind"],
+            ["mark.svg", "icon: not an object", "a plain file name"]
+        ];
+        for (const [given, expected, what] of refusals) {
+            const read = icon(given);
+            assert(read.valid && read.icon === null && read.errors.length === 1 && read.errors[0].includes(expected),
+                   "icon refused, " + what + ": no icon, one error, the module valid — " + JSON.stringify(read.errors));
+        }
+        assert(_has(icon({ glyph: "x", size: 3 }).warnings, "icon: unknown field \"size\" (ignored)") && icon({ glyph: "x", size: 3 }).icon !== null,
+               "icon: an unknown field warned about, the icon kept");
+        assert(_has(icon({ glyph: "x", colors: "own" }).warnings, "icon: unknown field \"colors\""), "… colors on a glyph: unknown there");
+        const olderIcon = ModuleManifestRules.parseManifest(_manifest({ id: "iconic", api: "1.25", icon: { glyph: "x" } }));
+        assert(olderIcon.icon !== null && _has(olderIcon.warnings, "icon: a field of API 1.26, the manifest asks for API 1.25 (read all the same)"),
+               "icon with api 1.25: read all the same, with a warning");
+        // PrivilegedMark's two marks are the reserved glyphs
+        const mark = Qt.createQmlObject("import qs.components; PrivilegedMark {}", rulesSuite);
+        const marks = [];
+        for (const need of ["auth", "no"]) {
+            mark.need = need;
+            marks.push(mark.text);
+        }
+        mark.destroy();
+        assertEqual(JSON.stringify(marks.slice().sort()), JSON.stringify(ModuleManifestRules.reservedGlyphs.slice().sort()),
+                    "reservedGlyphs: PrivilegedMark's lock and no-entry sign");
+        // The file check takes the icon's file: its size only, the cap its kind's
+        assertEqual(JSON.stringify(ModuleFileRules.iconCheck(icon({ svg: "mark.svg" }))), JSON.stringify({ file: "mark.svg", cap: "s65536" }),
+                    "iconCheck: an SVG at most 64 KiB, its size only (no text read)");
+        assertEqual(ModuleFileRules.iconCheck(icon({ image: "mark.png" })).cap, "s262144", "… a picture at most 256 KiB");
+        assertEqual(ModuleFileRules.iconCheck(icon({ glyph: "x" })) + " " + ModuleFileRules.iconCheck(icon({ glyph: "ab" })), "null null",
+                    "… a glyph, or no icon: no file");
+        assert(!ModuleFileRules.filesToCheck(icon({ svg: "mark.svg" }), "").some(entry => entry.file === "mark.svg")
+               && !ModuleFileRules.manifestFiles(icon({ svg: "mark.svg" })).includes("mark.svg"), "… never read as a QML file");
+        const badIcon = ModuleFileRules.withoutBadFiles(icon({ svg: "mark.svg" }), { "mark.svg": "is larger than 65536 bytes" }, "");
+        assertEqual(badIcon.manifest.icon + " | " + badIcon.errors.join("") + " | " + badIcon.fatal, "null | icon mark.svg is larger than 65536 bytes (no icon) | ",
+                    "withoutBadFiles: an icon whose file fails the check: none, said, the module loads");
+        assertEqual(ModuleFileRules.withoutBadFiles(icon({ svg: "mark.svg" }), {}, "").manifest.icon?.file, "mark.svg", "… a good one kept");
+        assert(ModuleFileRules.fileCheckScript.includes("s*) cap=${cap#s}; whole=2"), "the check's script knows the size-only cap");
+        assertEqual(JSON.stringify(ModuleRules.iconShown({ kind: "svg", glyph: "", file: "icons/a b.svg", colors: "theme" }, "/m/iconic")),
+                    JSON.stringify({ kind: "svg", glyph: "", url: "file:///m/iconic/icons/a b.svg", colors: "theme" }), "iconShown: a file by its URL");
+        assertEqual(ModuleRules.iconShown(null, "/m"), null, "… none: null");
+        assertEqual(ModuleRules.iconLetter("tailscale VPN", "tailscale") + ModuleRules.iconLetter("  ëlan", "x") + ModuleRules.iconLetter("123 go", "x")
+                    + ModuleRules.iconLetter("日本", "nihon") + ModuleRules.iconLetter("", "") + ModuleRules.iconLetter(null, "zed"), "TËGN?Z",
+                    "iconLetter: the name's first letter, upper case; the id's when the name has none; ? for neither");
 
         // The file check
         const files = ModuleFileRules.filesToCheck(alpha, "singleton S 1.0 S.qml\n");

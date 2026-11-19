@@ -1,0 +1,8 @@
+{
+    "id": "icon-svg-own",
+    "name": "Own colours fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon an SVG in its own colours (red) (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg", "colors": "own" }
+}

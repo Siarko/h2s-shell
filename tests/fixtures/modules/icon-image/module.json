@@ -1,0 +1,8 @@
+{
+    "id": "icon-image",
+    "name": "Image fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon a PNG picture (green, twice as wide as tall: fitted, never stretched) (tests/ModuleIconTest.qml)",
+    "icon": { "image": "icon.png" }
+}

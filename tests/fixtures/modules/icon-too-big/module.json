@@ -1,0 +1,8 @@
+{
+    "id": "icon-too-big",
+    "name": "Too big fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon an SVG over 64 KiB: an error, the letter (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg" }
+}

@@ -537,6 +537,13 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   never imported statically (a broken one would fail the whole config). Every file the
   manifest names must be a regular file inside the directory (a link out of it, a FIFO, a
   file over 1 MiB: the entry is dropped, or the module fails for its main).
+- **A module's icon** (the manifest's `icon`, API 1.26): a glyph of the shell's icon font, an
+  SVG file (painted in its place's text colour unless `"colors": "own"`) or a PNG or WebP
+  picture. Its file passes the same check — an SVG at most 64 KiB, a picture at most 256 KiB,
+  only its size read: it is drawn, never run. One component draws it everywhere,
+  `components/ModuleIcon.qml` (a square as tall as a line of body text); a wrong icon, or a
+  file that cannot be drawn, is an error in the module's status, and with none the first
+  letter of the module's name stands in its place (`ModuleHost.icons`, the handle's `icon`).
 - **Discovery**: `scripts/launch.sh` (`discover_modules`, before every start of the shell)
   builds `H2S_SHELL_MODULES` (the shell's input; the launcher's output) — canonical module
   directories from `H2S_SHELL_MODULE_PATH` (the developer's list), then

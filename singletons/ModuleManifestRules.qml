@@ -66,6 +66,22 @@ import QtQuick
 //                 there, as a stand-in (ModuleRules.programSource); ignored otherwise.
 //   setupHints    optional list of strings: how to get the module working.
 //   tests         optional list of .qml test suites (tests/run-modules.sh runs them).
+//   icon          optional (API 1.26): the module's icon, one of
+//                   { "glyph": "…" }   one character (a code point) of the shell's icon
+//                                      font: neither white space nor a control or format
+//                                      character, not one of the shell's status marks
+//                                      (reservedGlyphs); drawn in its place's text colour
+//                   { "svg": "icon.svg", "colors": "theme" | "own" }   an SVG file of at
+//                                      most maxSvgBytes; painted in the place's text colour
+//                                      (a one-colour drawing follows the theme), or in its
+//                                      own colours with "colors": "own"
+//                   { "image": "icon.png" }   a PNG or WebP file of at most maxImageBytes,
+//                                      in its own colours
+//                 A file is a path inside the module's directory (iconPathProblem), taken
+//                 through the file check like every file the manifest names (only its size
+//                 is read, never its content: it is drawn, never run). A wrong icon is an
+//                 error in the module's status and no icon; with none the shell shows the
+//                 first letter of the module's name (components/ModuleIcon.qml).
 //   exports       optional (API 1.18): { version: "major.minor" } — the module offers other
 //                 modules an API object of its own: its main's `exports` property, a plain
 //                 QtObject. The version is the module's own API's, not the module's: a
@@ -82,7 +98,7 @@ import QtQuick
 //                 with a warning.
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
-// leading "/", ending in .qml. Any other field is kept (in `raw`) and reported as a warning,
+// leading "/", ending in .qml (an icon's in .svg, .png or .webp). Any other field is kept (in `raw`) and reported as a warning,
 // so a manifest written for a newer shell still loads on an older one.
 //
 // A required field missing or malformed, or a bad `main`: the module fails (state failed).
@@ -123,7 +139,113 @@ Singleton {
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
         "settingsPages", "settings", "facts", "slots", "anchors", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
-        "exports", "uses"]
+        "exports", "uses", "icon"]
+
+    // ---- The icon (API 1.26) ----
+
+    readonly property int maxSvgBytes: 64 * 1024
+    readonly property int maxImageBytes: 256 * 1024
+    // The shell's own status marks, never a module's icon: PrivilegedMark's lock and no-entry
+    // sign (tests/ModuleRulesTest.qml holds the two to it)
+    readonly property var reservedGlyphs: ["\uf023", "\uf05e"]
+    // The file name endings each kind of file takes
+    readonly property var iconEndings: ({ svg: [".svg"], image: [".png", ".webp"] })
+
+    // Why `text` is not a glyph ("" when it is one): one code point (an icon above U+FFFF is
+    // two UTF-16 units), not white space, not a control, format or lone surrogate
+    // character, not a status mark of the shell's
+    function glyphProblem(text) {
+        if (typeof text !== "string" || text === "")
+            return "not a character";
+        const points = ModuleRules.codePoints(text);
+        if (points.length !== 1)
+            return "is " + points.length + " characters, not one";
+        const code = points[0].codePointAt(0);
+        if (/^\s$/.test(text))
+            return "is white space";
+        if (code < 0x20 || (code >= 0x7f && code <= 0x9f))
+            return "is a control character";
+        if ((code >= 0xd800 && code <= 0xdfff) || _formatCharacter(code))
+            return "is a format character";
+        if (reservedGlyphs.includes(text))
+            return "is one of the shell's status marks";
+        return "";
+    }
+
+    // Unicode's format characters (category Cf), written out: the engine's expressions know
+    // no Unicode categories
+    function _formatCharacter(code) {
+        const ranges = [[0xad, 0xad], [0x600, 0x605], [0x61c, 0x61c], [0x6dd, 0x6dd], [0x70f, 0x70f], [0x890, 0x891],
+                        [0x8e2, 0x8e2], [0x180e, 0x180e], [0x200b, 0x200f], [0x202a, 0x202e], [0x2060, 0x2064],
+                        [0x2066, 0x206f], [0xfeff, 0xfeff], [0xfff9, 0xfffb], [0x110bd, 0x110bd], [0x110cd, 0x110cd],
+                        [0x13430, 0x1343f], [0x1bca0, 0x1bca3], [0x1d173, 0x1d17a], [0xe0001, 0xe0001], [0xe0020, 0xe007f]];
+        return ranges.some(range => code >= range[0] && code <= range[1]);
+    }
+
+    // An icon's file, as given in the manifest: "" when fine, else why not — a plain path
+    // inside the module's directory, as a QML file's, ending as its kind's (iconEndings)
+    function iconPathProblem(path, kind) {
+        if (typeof path !== "string" || path === "")
+            return "not a file name";
+        if (path.length > 300)
+            return "too long";
+        if (path.startsWith("/"))
+            return "an absolute path";
+        if (!/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(path))
+            return "has characters a module file name may not have";
+        if (path.split("/").some(part => part === ".." || part === "." || part === ""))
+            return "leaves the module's directory or is not a plain path";
+        const endings = iconEndings[kind] ?? [];
+        if (!endings.some(ending => path.toLowerCase().endsWith(ending)))
+            return "not a " + endings.join(" or ") + " file";
+        return "";
+    }
+
+    // The manifest's `icon`, checked → { kind: "glyph" | "svg" | "image", glyph, file,
+    // colors: "theme" | "own" } or null (none, or wrong: an error then)
+    function readIcon(raw, errors, warnings) {
+        const given = ModuleRules.get(raw, "icon");
+        if (given === undefined)
+            return null;
+        if (!ModuleRules.isObject(given)) {
+            errors.push("icon: not an object such as { \"glyph\": \"…\" }, { \"svg\": \"icon.svg\" } or { \"image\": \"icon.png\" } (no icon)");
+            return null;
+        }
+        const kinds = ["glyph", "svg", "image"].filter(kind => ModuleRules.get(given, kind) !== undefined);
+        if (kinds.length !== 1) {
+            errors.push("icon: " + (kinds.length === 0 ? "names none" : "names " + kinds.join(" and ")) + " of glyph, svg and image; one (no icon)");
+            return null;
+        }
+        const kind = kinds[0];
+        for (const key of Object.keys(given)) {
+            if (key !== kind && !(kind === "svg" && key === "colors"))
+                warnings.push("icon: unknown field " + ModuleRules.show(key) + " (ignored)");
+        }
+        const value = given[kind];
+        if (kind === "glyph") {
+            const problem = glyphProblem(value);
+            if (problem !== "") {
+                errors.push("icon: the glyph " + ModuleRules.show(value) + " " + (problem.startsWith("not ") ? "is " : "") + problem + " (no icon)");
+                return null;
+            }
+            return { kind: "glyph", glyph: value, file: "", colors: "theme" };
+        }
+        const problem = iconPathProblem(value, kind);
+        if (problem !== "") {
+            errors.push("icon: " + kind + " " + ModuleRules.show(value) + ": " + problem + " (no icon)");
+            return null;
+        }
+        let colors = kind === "svg" ? "theme" : "own";
+        if (kind === "svg" && ModuleRules.get(given, "colors") !== undefined) {
+            const asked = given.colors;
+            if (asked !== "theme" && asked !== "own") {
+                errors.push("icon: colors " + ModuleRules.show(asked) + " is not \"theme\" or \"own\" (no icon)");
+                return null;
+            }
+            colors = asked;
+        }
+        return { kind: kind, glyph: "", file: value, colors: colors };
+    }
 
     // A list field: its entries (at most maxEntries), or [] with an error when it is not a list
     function _list(raw, field, errors) {
@@ -408,6 +530,7 @@ Singleton {
     //   programs, optionalPrograms, testPrograms ("" for none, else without a trailing "/"),
     //   setupHints, tests
     //   exports      (1.18) { version } or null; uses (1.18) [{ id, version }]
+    //   icon         (1.26) { kind, glyph, file, colors } or null (readIcon)
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
     //   errors, warnings
@@ -417,7 +540,7 @@ Singleton {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [], anchors: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
-            exports: null, uses: [],
+            exports: null, uses: [], icon: null,
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -494,7 +617,7 @@ Singleton {
         // Fields of a newer API than the manifest asks for: read all the same, and said —
         // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
-        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20]]) {
+        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20], ["icon", 26]]) {
             if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < minor)) && ModuleRules.get(raw, field) !== undefined)
                 warnings.push(field + ": a field of API 1." + minor + ", the manifest asks for API " + result.api + " (read all the same)");
         }
@@ -516,6 +639,7 @@ Singleton {
                                 entry => _checkFact(moduleId, entry), errors, warnings);
         result.slots = _entries(raw, "slots", ["slot", "component"], entry => _checkSlot(entry), errors, warnings);
         result.anchors = readAnchors(raw, errors, warnings);
+        result.icon = readIcon(raw, errors, warnings);
         _dropRepeated(result.widgets, "type", "widgets", errors);
         _dropRepeated(result.widgets.filter(widget => widget.popup), "popup", "widgets", errors);
         _dropRepeated(result.settingsPages, "id", "settingsPages", errors);

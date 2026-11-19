@@ -1,0 +1,8 @@
+{
+    "id": "icon-link",
+    "name": "Link fixture",
+    "version": "1.0.0",
+    "api": "1.26",
+    "description": "Its icon a link out of its directory: never followed, an error, the letter (tests/ModuleIconTest.qml)",
+    "icon": { "svg": "icon.svg" }
+}

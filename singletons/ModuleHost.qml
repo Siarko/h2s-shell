@@ -150,6 +150,11 @@ Scope {
     // [{ module, at, place, component, context }] — their manifests' `anchors`, and their
     // slots read as anchors. What the anchor blocks' hosts show (anchorContent)
     property var anchors: []
+    // (1.26) Each module's icon as the shell draws it (components/ModuleIcon.qml), by id:
+    // { kind: "glyph" | "svg" | "image", glyph, url (the file's, "" for a glyph), colors:
+    // "theme" | "own" } — for a module whose manifest's icon passed the check and has not
+    // failed to draw (iconFailed); none for the others, which show their name's first letter
+    property var icons: ({})
     // The anchors offered: ModuleRules.anchorTable (a suite's host is given its own). A
     // manifest's anchor not in it is an error in the module's status; only its paths take
     // content. Set anew, the loaded modules' anchors and those errors are worked out again
@@ -428,6 +433,17 @@ Scope {
         return "";
     }
 
+    // (1.26) A module's icon file passed the check but could not be drawn: an error in its
+    // status, and no icon from now on (every place shows its name's first letter). Once per
+    // load of the module
+    function iconFailed(id, why) {
+        const record = _record(id);
+        if (!record || record.iconError !== "" || !record.manifest.icon)
+            return;
+        record.iconError = "icon " + record.manifest.icon.file + " " + String(why ?? "cannot be drawn").slice(0, 200);
+        Qt.callLater(_publish);
+    }
+
     // Something of a module that failed at run time (a slot contribution, a widget that did
     // not load): shown among its status's errors; the module stays loaded. Each text once,
     // at most 20.
@@ -566,6 +582,10 @@ Scope {
             // none when it declares exports, and why it does not load for the modules it uses
             exportsObject: null, exportsProblem: "", dependencyReasons: [],
             rootProperties: ({}),
+            // (1.26) Its icon's file passed the check (a module whose files are not checked —
+            // incompatible, a bad qmldir — shows no icon file), and why it could not be
+            // drawn ("" drawn, or not tried)
+            iconChecked: false, iconError: "",
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
             testVerdicts: null
         };
@@ -630,13 +650,17 @@ Scope {
                     continue;
                 const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
                 const scanned = ModuleFileRules.scanOnly(record.scanListing?.files, files);
+                // (1.26) Its icon's file: checked as the others, its size only, no text read
+                const icon = ModuleFileRules.iconCheck(record.manifest);
                 // Nothing to check: settled at once
-                if (files.length === 0 && scanned.length === 0) {
+                if (files.length === 0 && scanned.length === 0 && icon === null) {
                     _filesAnswered(record, {}, {});
                     settledAtOnce = true;
                 }
                 for (const entry of files)
                     asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleFileRules.maxFileBytes });
+                if (icon !== null)
+                    asked.push({ record: record, file: icon.file, stage: "files", cap: icon.cap });
                 // Only for the import scan: its header, whatever its size
                 for (const file of scanned)
                     asked.push({ record: record, file: file, stage: "files", cap: "h" + ModuleRules.maxHeaderBytes, optional: true });
@@ -720,6 +744,7 @@ Scope {
         record.errors.push(...checked.errors);
         record.mainFileError = checked.fatal;
         record.filesChecked = true;
+        record.iconChecked = true;
         if (checked.fatal !== "")
             return;
         const files = ModuleFileRules.manifestFiles(record.manifest);
@@ -1332,6 +1357,8 @@ Scope {
             if (record.state === "loaded" && record.exportsProblem)
                 errors.push("exports: " + record.exportsProblem);
             errors.push(...record.runtimeErrors);
+            if (record.iconError !== "")
+                errors.push(record.iconError);
             if (ModuleMergeRules.contributes(record.state))
                 loaded.push({ id: record.manifest.id, directory: record.directory, manifest: record.manifest });
             // One line per change of state, in the shell's log
@@ -1369,6 +1396,15 @@ Scope {
             slots = merged.slots;
         if (JSON.stringify(merged.anchors) !== JSON.stringify(anchors))
             anchors = merged.anchors;
+        const shownIcons = {};
+        for (const record of _records) {
+            const icon = record.manifest.icon;
+            // A file only once it has passed the check (withoutBadFiles takes a bad one away)
+            if (record.shadowedBy === "" && record.manifest.id && icon && (icon.kind === "glyph" || record.iconChecked) && record.iconError === "")
+                shownIcons[record.manifest.id] = ModuleRules.iconShown(icon, record.directory);
+        }
+        if (JSON.stringify(shownIcons) !== JSON.stringify(icons))
+            icons = shownIcons;
         const standIns = {};
         for (const record of _records) {
             if (record.shadowedBy === "" && record.manifest.id && record.testVerdicts && _fromStandIns(record))
