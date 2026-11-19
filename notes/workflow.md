@@ -124,6 +124,13 @@ command needs `H2S_SHELL_DIR=<live checkout>` in front, in step 4 too.
 After changing anything under `singletons/`, a full restart is needed; the automatic
 reload keeps the old singleton.
 
+## Notes
+
+- `notes/tracker.md` holds only what is open: the state, what remains, the owner's open
+  points, decisions and the backlog. A finished item moves to `notes/done.md` in full the
+  moment it is done; no "done" lines stay in the tracker.
+- Plan slices are named by what they are; their code (C1, U2 …) only in brackets.
+
 ## Git
 
 - Agents commit on work branches. The lead merges to `master` / `main` by fast-forward
