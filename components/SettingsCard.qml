@@ -12,15 +12,19 @@ import qs.singletons
 // Repeater's delegate; a card repeated per item is named by its kind (`anchor: "card"`), its
 // item in `context`.
 //
-// A card takes nothing inside itself: modules reach it through its two regions, blocks of
-// kind "region". `settings` (<card>.settings) is around its rows — `prepend` above them,
+// A card takes nothing inside itself: modules reach it through its regions, blocks of kind
+// "region". `settings` (<card>.settings) is around its rows — `prepend` above them,
 // `append` under them. `actions` (<card>.actions) is the stack of secondary buttons —
 // `prepend` above the card's own, `append` under them and above `lastButtons`; it takes the
 // public SmallButton only (the table's `takes`), each at its own width on the stack's right
 // edge, at most a third of the card (a longer label is cut), in the stack's size. A region's
 // elements exist only while the card is open: closing it destroys them, and what they showed
-// starts anew next time. They get the card's context, and on an own-provider place the card's
-// `scopeId`.
+// starts anew next time. `title` (<card>.title) is on the name's line, closed and open —
+// `append`, right after the name: its elements side by side in the one order, each as tall as
+// the line (given its height, cut to it), at most `titleMaxWidth` (a quarter of the card) all
+// together, cut on the right; room is kept for them, so the name is cut first, and they stay
+// inside the name's part of the header, never over the card's own parts. Regions get the card's
+// context, and on an own-provider place the card's `scopeId`.
 //
 // Repeated per item, it stands on a KeyedModel (its modelData the item's key), so that it
 // keeps its item — and its region's elements — while other items come and go:
@@ -45,12 +49,6 @@ import qs.singletons
 // The notice's button is available while `noticeAvailable`, bound to the page's busy state
 // (NetworkProfileCard: `noticeAvailable: !busy`).
 //
-// On a path whose row takes marks (ModuleRules.anchorTable's `marks`), the modules' marks on
-// the card's item (`markItem`, the id the card's context names: `networkId`) stand at the end
-// of the name's line, after the name, closed and open: each module's icon (ModuleIcon), the
-// first three in module id order (ModuleRules.cardMarks), the module's name and the mark's
-// label as its tooltip. The name is cut first; the icons keep their place. A mark takes no
-// click: the header keeps it.
 AnchorBlock {
     id: root
 
@@ -67,13 +65,6 @@ AnchorBlock {
     property bool noticeAvailable: true
     property real spacing: 6
     property real hostGap: 6
-    // The item the modules' marks name on this card's path ("" none: no marks)
-    property string markItem: ""
-    // The marks it shows: [{ module, label }] (none on a path that takes no marks)
-    readonly property var marks: {
-        const row = host && path !== "" ? ModuleRules.anchorRow(host.anchorTable, path) : null;
-        return row?.marks === true ? ModuleRules.cardMarks(host.marks ?? [], path, markItem) : [];
-    }
     // Its own rows, shown while open
     default property alias content: _rows.data
     // Right of the name, level with it
@@ -85,6 +76,9 @@ AnchorBlock {
     // The most a module's button in `actions` may be: a third of the card; a longer label is
     // cut
     readonly property real buttonMaxWidth: Math.floor(width / 3)
+    // The most the modules' elements on the name's line take, all together: a quarter of the
+    // card
+    readonly property real titleMaxWidth: Math.floor(width / 4)
     signal toggleRequested()
     signal noticeActionRequested()
 
@@ -92,13 +86,13 @@ AnchorBlock {
     // tests
     readonly property alias settingsRegion: _settings
     readonly property alias actionsRegion: _actions
+    readonly property alias titleRegion: _titleRegion
     readonly property alias buttonColumn: _buttons
     readonly property alias lastButtonColumn: _lastButtons
     readonly property alias beforeHost: _before
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
     readonly property alias titleText: _title
-    readonly property alias markRow: _markRow
 
     kind: "card"
     placements: ["before", "after"]
@@ -115,9 +109,6 @@ AnchorBlock {
     }
     implicitWidth: _column.implicitWidth
     implicitHeight: _column.implicitHeight
-
-    // The marks by module: one icon per module, kept while its mark stays
-    KeyedModel { id: _marks; values: root.marks; keyProp: "module" }
 
     ColumnLayout {
         id: _column
@@ -174,13 +165,14 @@ AnchorBlock {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignTop
                             spacing: 1
-                            // The name, and after it the modules' marks: room is kept for
-                            // them on the right (the padding), so the name is cut first. On
-                            // the left as the card is laid out, a right-to-left name too (Qt
-                            // would put it on the right, under the marks)
+                            // The name, and after it the region `title`: room is kept for
+                            // its elements on the right (the padding), so the name is cut
+                            // first. On the left as the card is laid out, a right-to-left name
+                            // too (Qt would put it on the right, under the elements)
                             Text {
                                 id: _title
                                 Layout.fillWidth: true
+                                Layout.minimumWidth: rightPadding
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
                                 text: root.title
@@ -189,33 +181,39 @@ AnchorBlock {
                                 font.pixelSize: Theme.fontSizeBody
                                 font.bold: root.active
                                 color: Theme.textPrimary
-                                rightPadding: _markRow.visible ? _markRow.width + _markRow.gap : 0
+                                rightPadding: _titleRegion.width > 0 ? _titleRegion.width + _titleRegion.gap : 0
 
-                                Row {
-                                    id: _markRow
+                                AnchorBlock {
+                                    id: _titleRegion
+
+                                    readonly property alias appendHost: _titleAppend
                                     readonly property real gap: 6
+
                                     // Right after the name as drawn: its whole width, or what is
-                                    // left of the line beside the marks — on its right end
+                                    // left of the line beside the elements — on its right end
                                     // when it is drawn on the right after all (a mirrored layout)
                                     x: (_title.effectiveHorizontalAlignment === Text.AlignLeft
                                         ? Math.max(0, Math.min(_title.implicitWidth, _title.width) - _title.rightPadding)
                                         : _title.width - _title.rightPadding) + gap
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: root.marks.length > 0
-                                    spacing: 4
+                                    // A quarter of the card at most; the name's part of the header
+                                    // is never narrower than the room kept for it (the name's
+                                    // minimum width), so it covers none of the card's own parts
+                                    width: Math.min(_titleAppend.implicitWidth, root.titleMaxWidth)
+                                    height: _title.height
+                                    clip: true
+                                    anchor: "title"
+                                    kind: "region"
+                                    placements: ["append"]
+                                    context: root.context
 
-                                    Repeater {
-                                        model: _marks.model
-
-                                        ModuleIcon {
-                                            required property string modelData
-                                            readonly property var mark: _marks.byKey[modelData] ?? ({})
-                                            objectName: "mark:" + modelData
-                                            moduleId: modelData
-                                            host: root.host
-                                            color: Theme.textPrimary
-                                            tip: ModuleRules.markTip(root.host?.status(modelData)?.name ?? modelData, mark.label ?? "")
-                                        }
+                                    AnchorContent {
+                                        id: _titleAppend
+                                        block: _titleRegion
+                                        placement: "append"
+                                        inline: true
+                                        elementHeight: _title.height
+                                        maxElementWidth: root.titleMaxWidth
+                                        height: _title.height
                                     }
                                 }
                             }

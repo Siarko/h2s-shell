@@ -644,7 +644,13 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   and in the size it sets, or, setting none, the stack's (`m`: the region sets the public
   button's `defaultSize` after it is made, which `size` follows until the module sets it —
   the module's own `size` replaces that binding, so it is never overridden); a button hidden (`visible:
-  false`) and an element refused take no room and no gap. A card made
+  false`) and an element refused take no room and no gap. Its name's line is its region
+  `title`, closed and open (`append`, after the name): the host lays its elements side by side
+  (`AnchorContent`'s `inline`), 4 apart, each given the line's height and cut to it, all of
+  them at most a quarter of the card (`titleMaxWidth`), cut on the right; the name's right
+  padding keeps their room and its minimum width is that room, so the name is cut first and
+  the elements never cover the card's own parts; the card measures the same with or without
+  them. A card made
   per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
   key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
   goes, and keeps them while other items come and go. A view's author writes only a block's
@@ -655,7 +661,7 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   or the popup's key, the base the window or popup gives the view's root (the first item up
   the parents with a string `anchorBase`); then the names of the enclosing blocks and its
   own; a block repeated per item is named by its kind (`card`, `row`), its item in the
-  element's context; a card's regions `actions` and `settings` last. A block with no anchor
+  element's context; a card's regions `actions`, `settings` and `title` last. A block with no anchor
   adds no level and has no path of its own — except the view's root, a block of a root kind
   (`ModuleRules.anchorRootKinds`: the settings page, the popup section) right at the base,
   whose path is the base itself; sections with no anchor straight under a plain item are not
@@ -706,33 +712,26 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `settings.network_vpn.vpns.card.actions` | `append` | as the VPN's row | the same VPN cards' buttons, under the card's own ("Settings…"); own-provider; a `SmallButton` only; built while the card is open | 1.25 |
   | `settings.network_wifi.saved.card.actions` | `append` | as the saved Wi-Fi network's `settings` | the same Wi-Fi cards' buttons, under "Edit connection…", above "Forget"; a `SmallButton` only; built while the card is open | 1.25 |
   | `settings.network_ethernet.profiles.card.actions` | `append` | as the wired profile's `settings` | the same wired profiles' cards' buttons, under "Edit connection…", above "Forget"; a `SmallButton` only; built while the card is open | 1.25 |
-  | `settings.network_wifi.saved.card` | — (marks) | as the saved Wi-Fi network's `settings` | each saved Wi-Fi network's card, closed and open: modules' marks at the end of the name's line; no element | 1.27 |
-  | `settings.network_ethernet.profiles.card` | — (marks) | as the wired profile's `settings` | each wired profile's card, the same | 1.27 |
+  | `settings.network_wifi.saved.card.title` | `append` | as the saved Wi-Fi network's `settings` | each saved Wi-Fi network's card, closed and open: its name's line, after the name — what a module adds to that network (any element, on theme tokens), as tall as the line, a quarter of the card at most for all | 1.28 |
+  | `settings.network_ethernet.profiles.card.title` | `append` | as the wired profile's `settings` | each wired profile's card, the same | 1.28 |
 
-  **Marks on a card** (API 1.27). A row with `marks` true is a card that shows modules'
-  marks: `module.setMark(path, itemId, label)` (`itemId` the item's id in the card's
-  context, `networkId`), `module.clearMark(path, itemId)`. The host holds them
-  (`ModuleHost.marks`, a module's dropped when it goes off; never stored), the pure rules
-  decide (`ModuleRules.setMark`: only a path whose row takes marks, at most 200 per module
-  and path, the label plain and cut at 40 characters; `cardMarks`: a card's item's marks, in
-  module id order, the first three). `SettingsCard` shows them while its path's row takes
-  marks, for its `markItem` (the pages set it to the network's id): a `ModuleIcon` each at
-  the end of the name's line, after the name — the name's right padding keeps their room, so
-  the name is cut first and the card measures the same with or without them — with
-  "<module's name>: <label>" as tooltip and accessible name; a mark takes no click. A card
-  row that takes marks may offer no placement (a module's element there is an error in its
-  status).
+  A module's icon (the manifest's `icon`) is its face in Settings → Modules; the shell puts
+  it on no card. The marks of API 1.27 (`module.setMark`, `clearMark`, a card row's `marks`)
+  were removed in 1.28, before any release: a module shows what it adds to a network in that
+  card's `title` place.
 
   A saved Wi-Fi network's card is a place only while `Api.networks` names its network
   (`ModuleRules.networkListed`): until its details are read it could be a hotspot, so its
-  card has no anchor and no module's element, button or mark is built in it.
+  card has no anchor and no module's element or button is built in it.
 
   Named but not places yet: `popup.network` (the network panel's root), its VPN part
   `popup.network.connections.vpn`, the VPN page's section of cards `settings.network_vpn.vpns`
-  and each card `….vpns.card`; the Wi-Fi page's sections `settings.network_wifi.saved` and
-  `settings.network_wifi.hotspots`, each hotspot's card `….hotspots.card` and its opened part
-  and buttons `….hotspots.card.settings`, `….hotspots.card.actions`; the Ethernet page's
-  section `settings.network_ethernet.profiles`.
+  and each card `….vpns.card` with its name's line `….vpns.card.title`; the Wi-Fi page's
+  sections `settings.network_wifi.saved` and `settings.network_wifi.hotspots`, each saved
+  network's card `….saved.card`, each hotspot's card `….hotspots.card` and its opened part,
+  buttons and name's line `….hotspots.card.settings`, `….hotspots.card.actions`,
+  `….hotspots.card.title`; the Ethernet page's section `settings.network_ethernet.profiles`
+  and each wired profile's card `….profiles.card`.
 
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's
   views against the table: every place in it live once they are built, and where the rows of

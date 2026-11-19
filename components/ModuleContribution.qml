@@ -37,6 +37,8 @@ Item {
     property string takes: ""
     property var context: null
     property var properties: ({})
+    // The element is given this wrapper's height as well as its width (a card's name line)
+    property bool givenHeight: false
 
     // Built and showing
     readonly property bool ready: _loader.status === Loader.Ready && _loader.item !== null
@@ -194,4 +196,5 @@ Item {
                 Qt.callLater(root._refuseWrongKind);
         }
     }
+    Binding { target: _loader; property: "height"; value: root.height; when: root.givenHeight }
 }

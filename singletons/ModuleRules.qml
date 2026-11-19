@@ -107,8 +107,8 @@ Singleton {
     //             where it stands or its title's words. A block repeated per item is named by
     //             its kind (card, row): all of them share one path, the item is in the
     //             element's context. A block with no anchor adds no level
-    //   region    "actions" or "settings": a card's two regions, only right after "card",
-    //             last; never a block's name
+    //   region    "actions", "settings" or "title": a card's regions, only right after
+    //             "card", last; never a block's name
     //
     // A module names a path, a placement and its element (the manifest's `anchors`):
     // `before` and `after` put it next to the block, outside it; `prepend` and `append`
@@ -117,7 +117,7 @@ Singleton {
     // Adding a row bumps the API's minor; tests/AnchorsTest.qml holds the views to the table.
     readonly property var anchorPlacements: ["before", "after", "prepend", "append"]
     readonly property var anchorSurfaces: ["settings", "popup"]
-    readonly property var anchorRegions: ["actions", "settings"]
+    readonly property var anchorRegions: ["actions", "settings", "title"]
     // The kinds of block: SettingsPage, SettingsSection, SettingsCard, SettingsRow (PopupRow in
     // a popup), PopupSection, and a card's region
     readonly property var anchorKinds: ["page", "section", "card", "row", "popupSection", "region"]
@@ -128,17 +128,14 @@ Singleton {
     readonly property var anchorTakes: ["", "SmallButton"]
     readonly property int maxAnchorPathLength: 200
 
-    // The anchors this shell offers: { path, kind, placements, takes, marks, context, scope,
-    // since, where, view } —
+    // The anchors this shell offers: { path, kind, placements, takes, context, scope, since,
+    // where, view } —
     //   kind        one of anchorKinds
     //   placements  the placements published for the path (a block can take more; one is
     //               published when a module needs it)
     //   takes       what an element there must be (anchorTakes: "" anything; "SmallButton" on
     //               a card's actions — another is refused when it is built, an error in its
     //               module's status: components/ModuleContribution.qml)
-    //   marks       (1.27) a card that shows the modules' marks (module.setMark): its
-    //               placements may then be none — a module marks the card, puts nothing in
-    //               it there (cardMarks)
     //   context     what an element's `context` holds besides { anchor, placement }
     //   scope       "" — every module's elements; "own-provider" — on an item of a VPN
     //               provider, only the elements of the module that is that provider (the
@@ -150,49 +147,49 @@ Singleton {
     //               a slot read as this place is no longer built as a slot there
     // Api.anchors is its frozen copy.
     readonly property var anchorTable: [
-        { path: "settings.general", kind: "page", placements: ["append"], takes: "", marks: false,
+        { path: "settings.general", kind: "page", placements: ["append"], takes: "",
           context: "{ editIndex: the profile being edited (for SettingEditor) }", scope: "", since: "1.21",
           where: "Settings → Behaviour → General, at the end of the page", view: "panels/settings/GeneralSettings.qml" },
-        { path: "popup.network.connections", kind: "popupSection", placements: ["append"], takes: "", marks: false,
+        { path: "popup.network.connections", kind: "popupSection", placements: ["append"], takes: "",
           context: "{ wifiEnabled: bool, wifiConnected: bool, ethernetConnected: bool }", scope: "", since: "1.22",
           where: "the network popup, under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list",
           view: "panels/NetworkPanel.qml" },
-        { path: "popup.notifications", kind: "popupSection", placements: ["prepend"], takes: "", marks: false,
+        { path: "popup.notifications", kind: "popupSection", placements: ["prepend"], takes: "",
           context: "{ count: the number of notifications in the list }", scope: "", since: "1.22",
           where: "the notifications popup, under its header, above the list", view: "panels/NotificationPanel.qml" },
-        { path: "popup.network.connections.vpn.row", kind: "row", placements: ["after"], takes: "", marks: false,
+        { path: "popup.network.connections.vpn.row", kind: "row", placements: ["after"], takes: "",
           context: "{ vpnId, entryId, vpn, provider: the provider object, otherVpnsUp: [names of the other VPNs up], otherVpns: [the same as Api.vpnsUp rows] }",
           scope: "own-provider", since: "1.23",
           where: "the network popup's VPN part, under the row of each VPN of the module's provider", view: "panels/network/VpnSection.qml" },
-        { path: "settings.network_vpn.vpns.card.settings", kind: "region", placements: ["prepend"], takes: "", marks: false,
+        { path: "settings.network_vpn.vpns.card.settings", kind: "region", placements: ["prepend"], takes: "",
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.23",
           where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows",
           view: "panels/settings/NetworkVpnSettings.qml" },
-        { path: "settings.network_wifi.saved.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
+        { path: "settings.network_wifi.saved.card.settings", kind: "region", placements: ["append"], takes: "",
           context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"wifi\", active: fully up }", scope: "", since: "1.24",
           where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password)",
           view: "panels/settings/NetworkWifiSettings.qml" },
-        { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
+        { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "",
           context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"ethernet\", active: fully up }", scope: "", since: "1.24",
           where: "Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows",
           view: "panels/settings/NetworkEthernetSettings.qml" },
-        { path: "settings.network_wifi.saved.card", kind: "card", placements: [], takes: "", marks: true,
-          context: "{ networkId, name, kind: \"wifi\", active } — the mark's item is networkId", scope: "", since: "1.27",
-          where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: a module's icon at the end of the name's line",
+        { path: "settings.network_wifi.saved.card.title", kind: "region", placements: ["append"], takes: "",
+          context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.28",
+          where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: on its name's line, after the name",
           view: "panels/settings/NetworkWifiSettings.qml" },
-        { path: "settings.network_ethernet.profiles.card", kind: "card", placements: [], takes: "", marks: true,
-          context: "{ networkId, name, kind: \"ethernet\", active } — the mark's item is networkId", scope: "", since: "1.27",
-          where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: a module's icon at the end of the name's line",
+        { path: "settings.network_ethernet.profiles.card.title", kind: "region", placements: ["append"], takes: "",
+          context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.28",
+          where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: on its name's line, after the name",
           view: "panels/settings/NetworkEthernetSettings.qml" },
-        { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+        { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.25",
           where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, its buttons under the card's own (\"Settings…\")",
           view: "panels/settings/NetworkVpnSettings.qml" },
-        { path: "settings.network_wifi.saved.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+        { path: "settings.network_wifi.saved.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.25",
           where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, its buttons under \"Edit connection…\", above \"Forget\"",
           view: "panels/settings/NetworkWifiSettings.qml" },
-        { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+        { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.25",
           where: "Settings → System → Network → Ethernet, the opened card of each wired profile, its buttons under \"Edit connection…\", above \"Forget\"",
           view: "panels/settings/NetworkEthernetSettings.qml" }
@@ -370,8 +367,8 @@ Singleton {
             seen.add(row.path);
             if (!anchorKinds.includes(row.kind))
                 problems.push(where + ": kind " + show(row.kind) + " is not one of " + anchorKinds.join(", "));
-            // None only on a card that takes marks: a row must offer something
-            if (!Array.isArray(row.placements) || (row.placements.length === 0 && row.marks !== true)
+            // A row must offer something
+            if (!Array.isArray(row.placements) || row.placements.length === 0
                     || !row.placements.every(place => anchorPlacements.includes(place))
                     || new Set(row.placements).size !== row.placements.length)
                 problems.push(where + ": placements are not some of " + anchorPlacements.join(", "));
@@ -383,10 +380,6 @@ Singleton {
                 problems.push(where + ": a card's actions take a SmallButton");
             if (typeof row.view !== "string" || !/^[a-z][a-zA-Z0-9_/]*\.qml$/.test(row.view) || row.view.includes("//"))
                 problems.push(where + ": view " + show(row.view) + " is not a file of the shell (\"panels/NetworkPanel.qml\")");
-            if (typeof row.marks !== "boolean")
-                problems.push(where + ": marks is true or false");
-            else if (row.marks && row.kind !== "card")
-                problems.push(where + ": only a card takes marks");
             if (!anchorScopes.includes(row.scope))
                 problems.push(where + ": scope " + show(row.scope) + " is not \"\" or \"own-provider\"");
             if (!parseApi(row.since))
@@ -439,113 +432,6 @@ Singleton {
                 return letter.toUpperCase();
         }
         return "?";
-    }
-
-    // ---- The marks on a card (API 1.27) ----
-    //
-    // A module marks an item's card (module.setMark(path, itemId, label)): the card shows the
-    // module's icon at the end of its name's line, closed and open, with `label` as its
-    // accessible name and tooltip ("Tailscale: Exit node: home"). Only on a path whose row
-    // takes marks; the host holds them while the module is on, and drops its marks when it
-    // goes off (they are not stored).
-
-    // Of one module on one path, at most this many marks are kept
-    readonly property int maxMarksPerPath: 200
-    // A card shows at most this many modules' marks
-    readonly property int maxCardMarks: 3
-    // A mark's label, in characters (code points)
-    readonly property int maxMarkLabel: 40
-
-    // A module's mark set: { ok, marks (the list after), warning ("" none), kind (the
-    // warning's: "path", "item", "label" or "count"; "" none) }. `marks`:
-    // [{ module, path, itemId, label }]. Refused (ok false, the list unchanged, a warning):
-    // a path whose row takes no marks, an item id that is not a short text, a label that is
-    // no text, the module's 201st mark on the path. The label is made plain (_markText).
-    // Set again for the same item: the label replaced, counted once.
-    function setMark(table, marks, module, path, itemId, label) {
-        const list = Array.isArray(marks) ? marks : [];
-        const refuse = (kind, warning) => ({ ok: false, marks: list, warning: warning, kind: kind });
-        const row = anchorRow(table, path);
-        if (!row || row.marks !== true)
-            return refuse("path", "marks: " + show(path) + " takes no marks");
-        if (!isString(itemId, 200))
-            return refuse("item", "marks: " + show(itemId) + " is not an item's id (a text of at most 200 characters)");
-        if (typeof label !== "string")
-            return refuse("label", "marks: the label on " + show(path) + " is not a text");
-        const plain = _markText(label, maxMarkLabel);
-        const mark = { module: String(module), path: path, itemId: itemId, label: plain };
-        const index = list.findIndex(entry => entry.module === mark.module && entry.path === path && entry.itemId === itemId);
-        if (index >= 0) {
-            const next = list.slice();
-            next[index] = mark;
-            return { ok: true, marks: next, warning: "", kind: "" };
-        }
-        if (list.filter(entry => entry.module === mark.module && entry.path === path).length >= maxMarksPerPath)
-            return refuse("count", "marks: more than " + maxMarksPerPath + " on " + show(path) + " (the others are not kept)");
-        return { ok: true, marks: list.concat([mark]), warning: "", kind: "" };
-    }
-
-    // A mark's text (its label, the module's name in its tip) as plain as the shell's other
-    // text from outside (Notifier.plainText): one line (line breaks, tabs and U+2028/2029 as
-    // spaces), no control or format character (PrivilegedRules.unprintableCode: C0, DEL, C1,
-    // bidirectional controls, zero-width characters), trimmed, cut at `most` code points
-    function _markText(value, most) {
-        if (typeof value !== "string")
-            return "";
-        const folded = value.replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
-        const kept = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0))).join("");
-        return PrivilegedRules.characters(kept.trim()).slice(0, most).join("").trim();
-    }
-
-    // A module's refused marks, noted for its status: `noted` ({ <kind>: { text, count } },
-    // anything else: none) with one refusal of `kind` and `text` → { noted (a new object),
-    // publish }. One line per kind — its first text, and how often — so a module refusing
-    // the same call in a loop changes its status once (publish: true only for a kind not
-    // noted before); the count shows when the status is published next
-    function noteMarkWarning(noted, kind, text) {
-        const before = isObject(noted) ? noted : {};
-        const next = Object.assign({}, before);
-        const key = typeof kind === "string" && kind !== "" ? kind : "other";
-        const known = has(before, key) && isObject(before[key]);
-        next[key] = known ? { text: before[key].text, count: before[key].count + 1 } : { text: String(text ?? ""), count: 1 };
-        return { noted: next, publish: !known };
-    }
-
-    // The noted refusals as status lines: "<text>", "<text> (<n> times)" past the first
-    function markWarningLines(noted) {
-        if (!isObject(noted))
-            return [];
-        return Object.keys(noted).filter(key => isObject(noted[key]))
-            .map(key => noted[key].count > 1 ? noted[key].text + " (" + noted[key].count + " times)" : noted[key].text);
-    }
-
-    // The list without a module's mark on one item
-    function clearMark(marks, module, path, itemId) {
-        return (Array.isArray(marks) ? marks : []).filter(entry => !(entry.module === module && entry.path === path && entry.itemId === itemId));
-    }
-
-    // The list without any of a module's marks (it went off)
-    function dropMarks(marks, module) {
-        return (Array.isArray(marks) ? marks : []).filter(entry => entry.module !== module);
-    }
-
-    // What one card shows: the marks on its path and item → [{ module, label }], in module
-    // id order, the first maxCardMarks
-    function cardMarks(marks, path, itemId) {
-        if (typeof path !== "string" || path === "" || typeof itemId !== "string" || itemId === "")
-            return [];
-        return (Array.isArray(marks) ? marks : [])
-            .filter(entry => isObject(entry) && entry.path === path && entry.itemId === itemId && typeof entry.module === "string")
-            .sort((first, second) => first.module < second.module ? -1 : first.module > second.module ? 1 : 0)
-            .slice(0, maxCardMarks)
-            .map(entry => ({ module: entry.module, label: String(entry.label ?? "") }));
-    }
-
-    // A mark's accessible name and tooltip: "<module's name>: <label>", the name alone with
-    // no label
-    function markTip(name, label) {
-        const plainName = _markText(String(name ?? ""), 100);
-        return label ? plainName + ": " + label : plainName;
     }
 
     // Ids a module cannot take: the core's own namespaces (settings groups and key prefixes,

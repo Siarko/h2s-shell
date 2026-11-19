@@ -20,7 +20,17 @@ The interface modules are written against (`qs.api`), versioned on its own
   A module's button in a card's `actions` keeps the size it sets; `m` (the card's own buttons')
   is only the default, for a button that sets none — the public `SmallButton`'s new
   `defaultSize`, which a place gives and `size` follows until the button sets it.
-- 1.27: the mark on a card — `module.setMark(path, itemId, label)` and
+  A card's name's line is a place: `settings.network_wifi.saved.card.title` and
+  `settings.network_ethernet.profiles.card.title` (`append`, closed and open, after the name;
+  context as the card's `settings`) — a module shows there what it adds to that network, with
+  any element on the theme's tokens. Each element is given the line's height and cut to it,
+  they stand side by side 4 apart in module id order, at most a quarter of the card all
+  together (cut on the right); the name is cut first, and they never cover the card's own
+  parts. A card's region may now be `title` too (`<card>.title`). Removed before any release:
+  1.27's marks — `module.setMark`, `module.clearMark` and the anchor rows' `marks` (and the
+  `settings.network_wifi.saved.card` and `settings.network_ethernet.profiles.card` rows that
+  took only marks); a module's icon is its face in Settings → Modules, not on cards.
+- 1.27 (its marks removed in 1.28, before any release): the mark on a card — `module.setMark(path, itemId, label)` and
   `module.clearMark(path, itemId)`: the card of an item shows the module's icon at the end of its
   name's line, closed and open, after the name (cut first), with "<module's name>: <label>" as
   its tooltip and accessible name (plain text, one line, control and format characters dropped,

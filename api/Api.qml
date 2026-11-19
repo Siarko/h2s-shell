@@ -29,14 +29,15 @@ import qs.singletons.network
 //                          element's context also carries `slot`) and listed in the
 //                          module's deprecations
 //   Api.anchors            (1.20) the places in the shell's views a module may put elements
-//                          at, frozen [{ path, kind, placements, takes, marks, context, scope,
-//                          since, where, view }] (ModuleRules.anchorTable, the reference;
-//                          `marks` (1.27): a card that shows modules' marks, module.setMark).
+//                          at, frozen [{ path, kind, placements, takes, context, scope, since,
+//                          where, view }] (ModuleRules.anchorTable, the reference; 1.28: no
+//                          `marks` any more).
 //                          A path is <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
 //                          "popup" (the bar has none, nor the lock screen); view a settings
 //                          page's id or a popup's key; block a block's name, what it holds
 //                          (a block repeated per item named by its kind, card or row: the item
-//                          is in the context); region a card's "actions" or "settings". A
+//                          is in the context); region a card's "actions", "settings" or
+//                          (1.28) "title". A
 //                          module names a path, a placement and its file in its manifest:
 //                            "anchors": [{ "at": "settings.general", "place": "append",
 //                                          "component": "GeneralRow.qml" }]
@@ -118,13 +119,25 @@ import qs.singletons.network
 //                                                     (1.28; "m", the card's own buttons'
 //                                                     size, when it sets none); any kind,
 //                                                     with or without confirm
-//                            settings.network_wifi.saved.card,
-//                            settings.network_ethernet.profiles.card (1.27)  the saved Wi-Fi
-//                                                     networks' and the wired profiles' cards
-//                                                     themselves, closed and open: no element
-//                                                     (no placement), only marks (`marks`
-//                                                     true): module.setMark(path, networkId,
-//                                                     label), below
+//                            settings.network_wifi.saved.card.title,
+//                            settings.network_ethernet.profiles.card.title (1.28)  the name's
+//                                                     line of the same cards, closed and open:
+//                                                     append, after the name; context as the
+//                                                     card's settings. For what a module adds
+//                                                     to that network (an exit node, a mark of
+//                                                     its own): any element — public elements
+//                                                     or its own, on theme tokens. Each is as
+//                                                     tall as the name's line (given that
+//                                                     height, cut to it) and at its own width;
+//                                                     all of them, side by side 4 apart in
+//                                                     module id order, at most a quarter of the
+//                                                     card wide (cut on the right). The name is
+//                                                     cut first: the elements keep their place,
+//                                                     right after the name, and never cover the
+//                                                     card's own parts. An element with
+//                                                     `visible: false` takes no room. A click
+//                                                     on an element that takes none opens or
+//                                                     closes the card, as on the name
 //                          A saved Wi-Fi network's card is a place only once its details are
 //                          read (until then Api.networks leaves it out: it could be a hotspot)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
@@ -281,24 +294,11 @@ import qs.singletons.network
 //                          text, the picture fitted inside. A wrong icon, or a file that
 //                          cannot be drawn, is an error in the module's status and null here;
 //                          with none the shell shows the first letter of the module's name
-//   module.setMark(path, itemId, label), module.clearMark(path, itemId)   (1.27, on its
-//                          handle) a mark on an item's card: the card shows the module's icon
-//                          (module.icon, or its name's first letter) at the end of its name's
-//                          line, after the name, closed and open; the name is cut first, the
-//                          icons keep their place. `path` a place whose `marks` is true
-//                          (Api.anchors), `itemId` the item's id as in the card's context
-//                          (networkId); `label` what it stands for, shown as the icon's
-//                          tooltip and accessible name "<module's name>: <label>" — plain text,
-//                          one line, control and format characters dropped, at most 40
-//                          characters ("Exit node: home"). setMark → true when kept; false
-//                          while the module is off, and — with a warning in its status, one
-//                          line per kind of refusal with how often — for a path that takes no marks, an id that
-//                          is not a short text, a label that is not a text, or its 201st mark
-//                          on one path. Set again for the same item, the label is replaced. A
-//                          card shows the first three modules' marks, in module id order; a
-//                          mark does nothing on a click (the card's header keeps it). Not
-//                          stored: a module going off takes its marks with it at once, and
-//                          sets them again when it starts
+//                          (1.28) The icon is the module's face in the list of modules
+//                          (Settings → Modules); the shell puts it on no card — a module
+//                          shows what it adds to a network in that card's title place
+//                          (above). module.setMark / clearMark (1.27) are gone: removed
+//                          before any release
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:

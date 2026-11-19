@@ -180,7 +180,6 @@ Item {
                         readonly property var _shown: root._shownPasswords[network.uuid]
                         anchor: ModuleRules.networkListed(network, NetworkProfiles.wifi) ? "card" : ""
                         context: ModuleRules.networkContext(network)
-                        markItem: context.networkId
                         Layout.fillWidth: true
                         Layout.bottomMargin: 6
                         profile: network

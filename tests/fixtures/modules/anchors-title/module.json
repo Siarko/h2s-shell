@@ -1,0 +1,12 @@
+{
+    "id": "anchors-title",
+    "name": "Anchors title fixture",
+    "version": "1.0.0",
+    "api": "1.28",
+    "description": "A wide element on the name's line of each saved network's and wired profile's card, beside anchors-networks' (tests/AnchorsTest.qml)",
+    "icon": { "glyph": "\uf0e8" },
+    "anchors": [
+        { "at": "settings.network_wifi.saved.card.title", "place": "append", "component": "Title.qml" },
+        { "at": "settings.network_ethernet.profiles.card.title", "place": "append", "component": "Title.qml" }
+    ]
+}

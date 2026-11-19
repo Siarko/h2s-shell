@@ -19,7 +19,7 @@ import qs.singletons
 // module is involved. A glyph the font lacks cannot be detected: it shows as the font's
 // empty box.
 //
-//   ModuleIcon { moduleId: "tailscale"; tip: "Tailscale: Exit node: home" }
+//   ModuleIcon { moduleId: "tailscale"; tip: "Tailscale" }   // in the list of modules
 Item {
     id: root
 

@@ -23,7 +23,11 @@ import qs.singletons
 //
 // `stacked`: each element at its own width on the host's right edge, at most `maxElementWidth`
 // wide — a card's buttons (SettingsCard's `actions`); otherwise each is as wide as the host.
-// Either way an element whose module hides it (`visible: false`) takes no room and no gap.
+// `inline`: side by side, left to right, 4 apart, each at its own width (at most
+// `maxElementWidth`) and given `elementHeight` as its height, cut to it — a card's name line
+// (SettingsCard's `title`); the host's own width may be less than its elements', and it cuts
+// them on the right. Either way an element whose module hides it (`visible: false`) takes no
+// room and no gap.
 // On a place whose row `takes` an element (a SmallButton), another is refused
 // (ModuleContribution). `elementProperties` are given to each element that declares them (the
 // stack's default button size: the public button's `defaultSize`, which a button's own
@@ -42,6 +46,9 @@ Item {
     // stacked buttons), instead of as wide as the host
     property bool stacked: false
     property real maxElementWidth: Infinity
+    // Side by side, each `elementHeight` tall (a card's name line), instead of top to bottom
+    property bool inline: false
+    property real elementHeight: 0
     // Given to each element that declares them ({ defaultSize: "m" })
     property var elementProperties: ({})
 
@@ -83,7 +90,48 @@ Item {
         id: _loader
         width: root.width
         active: root.count > 0
-        sourceComponent: root.stacked ? _stack : _column
+        sourceComponent: root.inline ? _inline : root.stacked ? _stack : _column
+    }
+
+    // Inline: a layout as the stack is, so a hidden element takes no gap either; each element
+    // given the line's height (ModuleContribution's `givenHeight`) and cut to it
+    Component {
+        id: _inline
+
+        RowLayout {
+            property alias repeater: _inlineRepeater
+            // The index of the first element shown (-1 none)
+            readonly property int firstShown: root.items.findIndex(item => item.elementShown)
+            height: root.elementHeight
+            spacing: 0
+
+            Repeater {
+                id: _inlineRepeater
+                model: _contributions.model
+
+                ModuleContribution {
+                    id: _inlined
+                    required property string modelData
+                    required property int index
+                    readonly property var contribution: _contributions.byKey[modelData] ?? ({})
+                    host: root.host
+                    moduleId: contribution.module ?? ""
+                    url: contribution.component ?? ""
+                    anchor: root.path
+                    placement: root.placement
+                    takes: root.takes
+                    properties: root.elementProperties
+                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
+                    givenHeight: true
+                    clip: true
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: root.elementHeight
+                    Layout.maximumHeight: elementShown ? root.elementHeight : 0
+                    Layout.maximumWidth: elementShown ? root.maxElementWidth : 0
+                    Layout.leftMargin: elementShown && index > _inlined.parent.firstShown ? root.spacing : 0
+                }
+            }
+        }
     }
 
     // The contributions' keys — "The Repeater crash" in docs/ARCHITECTURE.md: an element is

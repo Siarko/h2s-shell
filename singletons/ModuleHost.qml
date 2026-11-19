@@ -155,9 +155,6 @@ Scope {
     // "theme" | "own" } — for a module whose manifest's icon passed the check and has not
     // failed to draw (iconFailed); none for the others, which show their name's first letter
     property var icons: ({})
-    // (1.27) The marks the modules set on cards (setMark): [{ module, path, itemId, label }],
-    // only an active module's — one going off takes its marks with it; not stored
-    property var marks: []
     // The anchors offered: ModuleRules.anchorTable (a suite's host is given its own). A
     // manifest's anchor not in it is an error in the module's status; only its paths take
     // content. Set anew, the loaded modules' anchors and those errors are worked out again
@@ -285,7 +282,6 @@ Scope {
         directories = [];
         ignoredEntries = [];
         activeIds = [];
-        marks = [];
         _publish();
     }
 
@@ -448,32 +444,6 @@ Scope {
         Qt.callLater(_publish);
     }
 
-    // (1.27) A module marks an item's card (ModuleRules.setMark): → true when kept. Only
-    // while the module is on; a refusal is one warning in its status, one line per kind of
-    // refusal (ModuleRules.noteMarkWarning)
-    function setMark(id, path, itemId, label) {
-        const record = _record(id);
-        if (!record || !activeIds.includes(id))
-            return false;
-        const result = ModuleRules.setMark(anchorTable, marks, id, path, itemId, label);
-        if (result.warning !== "") {
-            const noted = ModuleRules.noteMarkWarning(record.markWarnings, result.kind, result.warning);
-            record.markWarnings = noted.noted;
-            if (noted.publish)
-                Qt.callLater(_publish);
-        }
-        if (result.ok && JSON.stringify(result.marks) !== JSON.stringify(marks))
-            marks = result.marks;
-        return result.ok;
-    }
-
-    // (1.27) A module takes its mark off an item's card
-    function clearMark(id, path, itemId) {
-        const next = ModuleRules.clearMark(marks, id, path, itemId);
-        if (next.length !== marks.length)
-            marks = next;
-    }
-
     // Something of a module that failed at run time (a slot contribution, a widget that did
     // not load): shown among its status's errors; the module stays loaded. Each text once,
     // at most 20.
@@ -616,9 +586,6 @@ Scope {
             // incompatible, a bad qmldir — shows no icon file), and why it could not be
             // drawn ("" drawn, or not tried)
             iconChecked: false, iconError: "",
-            // (1.27) Why marks it set were refused: { <kind>: { text, count } }
-            // (ModuleRules.noteMarkWarning)
-            markWarnings: ({}),
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
             testVerdicts: null
         };
@@ -1208,9 +1175,6 @@ Scope {
         if (!id || activeIds.includes(id) === active)
             return;
         activeIds = active ? activeIds.concat([id]) : activeIds.filter(entry => entry !== id);
-        // Off: its marks go at once (a module sets them again when it starts)
-        if (!active && marks.some(mark => mark.module === id))
-            marks = ModuleRules.dropMarks(marks, id);
     }
 
     function _createMain(record) {
@@ -1412,7 +1376,7 @@ Scope {
                     console.warn(what + ": " + errors.join("; "));
             }
             const warnings = (record.shadowedBy === "" && _dataFailed(record.manifest.id)
-                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings).concat(ModuleRules.markWarningLines(record.markWarnings));
+                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings);
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,
@@ -1476,7 +1440,6 @@ Scope {
         _records = [];
         hostError = String(error);
         activeIds = [];
-        marks = [];
         statuses = [];
         widgetEntries = [];
         settingsPages = [];

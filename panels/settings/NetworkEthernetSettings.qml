@@ -128,7 +128,6 @@ Item {
                         readonly property var ethernetProfile: _profilesModel.byKey[modelData] ?? ({})
                         anchor: "card"
                         context: ModuleRules.networkContext(ethernetProfile)
-                        markItem: context.networkId
                         Layout.fillWidth: true
                         Layout.bottomMargin: 6
                         profile: ethernetProfile
