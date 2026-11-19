@@ -590,7 +590,10 @@ import qs.singletons.network
 //                          object of its own, its main's `exports` property — a plain QtObject
 //                          (`readonly property QtObject exports: QtObject { … }`), read once
 //                          when the main is made. Not the main, nothing with a `parent` (an
-//                          Item): a dependent must not be able to climb to the main. The version
+//                          Item), not its handle (or any of the shell's objects): a dependent
+//                          must not be able to climb to the main or act as the provider. What
+//                          the object's own properties hand out (a handle put in one, a
+//                          function) is the provider's choice, and its responsibility. The version
 //                          is the provider's own API's, "major.minor"; what a minor of it may
 //                          change is the provider's rule. Declared and not given (no main, no
 //                          such property, the wrong kind): an error in the provider's status,
@@ -600,11 +603,18 @@ import qs.singletons.network
 //                          minor at least the one asked for. All are required. A dependent's
 //                          main is made after its providers' and destroyed before them.
 //   module.uses            (on its handle) frozen { <id>: that module's exports object } — the
-//                          object, nothing else of the provider. Set before the main is made;
-//                          it never changes under a live main and is never missing while the
-//                          module runs; empty while it is off. A provider turned off, failing
-//                          or reloaded turns its dependents off first (state missing-module),
-//                          and they come back after it. A dependent listens to the object
+//                          object, nothing else of the provider. Set just before the module is
+//                          turned on (before its main is made and its views built) and kept,
+//                          the same object, until it is turned on again: other modules coming
+//                          and going do not touch it, and while the module is off it still
+//                          holds what its last main had. Empty for a module never turned on. A
+//                          provider turned off, failing or reloaded turns its dependents off
+//                          first (state missing-module), and they come back after it; its main
+//                          is destroyed only once theirs are gone, so a dependent's main and
+//                          views can read module.uses — in bindings, in Component.onDestruction
+//                          — for as long as they live. The shell reloading: every main's
+//                          Component.onDestruction runs newest first, so dependents' before
+//                          their providers'. A dependent listens to the object
 //                          from what lives under its main (a `Connections` there goes with
 //                          it) and hands it no function to call later: the shell cannot see a
 //                          function held by the provider, which could then call into a module

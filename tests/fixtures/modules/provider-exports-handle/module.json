@@ -1,0 +1,9 @@
+{
+    "id": "provider",
+    "name": "Provider fixture exporting its handle",
+    "version": "2.0.0",
+    "api": "1.18",
+    "description": "Its main offers its own module handle as exports, refused (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "exports": { "version": "1.2" }
+}

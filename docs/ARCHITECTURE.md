@@ -549,7 +549,12 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   pending leaves it pending; a cycle of `uses` fails every module in it, the cycle named. The
   host destroys in the reverse of that order and makes in it: a provider turned off,
   failing or reloaded (`load()` again) takes its dependents off first, and they come back
-  after it, so `module.uses` never changes under a live main.
+  after it. `module.uses` is set just before the dependent is turned on and kept, the same
+  object, until it is turned on again; a provider's main is destroyed only once its
+  dependents' mains are gone (`ModuleHost._reap`, told by a watcher object inside each main),
+  so a dependent's main and views read it for as long as they live, `Component.onDestruction`
+  included. When the shell reloads, the engine runs every main's `Component.onDestruction`
+  newest first, and a dependent's main is always newer than its providers'.
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the

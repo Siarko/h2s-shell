@@ -1340,8 +1340,10 @@ Singleton {
     // What a provider's main offers as its `exports` (the manifest declares `exports`): the
     // object, or why there is none — and then its dependents count it as missing. A plain
     // QtObject of its own: not the main, nor anything with a `parent` (an Item), which would
-    // lead a dependent up to the main. → { object, problem ("" when fine) }
-    function exportsOf(main) {
+    // lead a dependent up to the main; nor one of the shell's objects in `refused` (the
+    // module handles, the host), which would hand a dependent the provider's own powers.
+    // → { object, problem ("" when fine) }
+    function exportsOf(main, refused) {
         if (!main)
             return { object: null, problem: "it declares exports but has no main to give them" };
         let value;
@@ -1356,6 +1358,8 @@ Singleton {
             return { object: null, problem: "its main's `exports` is null" };
         if (value === main)
             return { object: null, problem: "its main's `exports` is the main itself: it must be a QtObject of its own" };
+        if (Array.isArray(refused) && refused.includes(value))
+            return { object: null, problem: "its main's `exports` is the shell's (a module's handle?): it must be a QtObject of its own" };
         if (typeof value !== "object" || !_isQtObject(value))
             return { object: null, problem: "its main's `exports` is not a QtObject" };
         let hasParent = true;

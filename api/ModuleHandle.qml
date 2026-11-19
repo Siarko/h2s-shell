@@ -42,11 +42,14 @@ QtObject {
 
     // (API 1.18) The modules its manifest `uses`, each as the object that module offers
     // (its main's `exports`), frozen: { <id>: exports object } — `module.uses.tailscale`. Set
-    // before its main is made and kept while the module is active: a provider turned off or
-    // reloaded first turns this module off (missing-module), so the objects never change
-    // under a live main. Empty while the module is off. Nothing else of a provider is given.
-    // The host's to set (ModuleHost.usesOf): not writable through the handle.
-    readonly property var uses: host ? host.usesOf(moduleId, host.activeIds, host.mainsRevision) : Object.freeze({})
+    // just before the module is turned on (before its main is made and its views built) and
+    // kept, the same object, until it is turned on again: a provider turned off or reloaded
+    // first turns this module off (missing-module), and its main is destroyed only after this
+    // module's main is gone, so what this module's main and views read — bindings, their
+    // Component.onDestruction — is there for as long as they live. Empty for a module never
+    // turned on. Nothing else of a provider is given. The host's to set (ModuleHost.usesOf):
+    // not writable through the handle.
+    readonly property var uses: host ? host.usesOf(moduleId, host.usesRevision) : Object.freeze({})
 
     // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
     // the module is active: re-read what may have changed while it slept, restart what a

@@ -720,8 +720,14 @@ TestCase {
     // dependency plan (order, each reason, cycles, duplicates), what a main may offer
     function _dependencies(rules) {
         // --- the manifest ---
-        const provider = ModuleManifestRules.parseManifest(_manifest({ id: "prov", exports: { version: "1.2" } }));
+        const provider = ModuleManifestRules.parseManifest(_manifest({ id: "prov", api: "1.18", exports: { version: "1.2" } }));
         assert(provider.valid && provider.exports?.version === "1.2" && provider.warnings.length === 0, "exports: { version } read, no warning");
+        const olderApi = ModuleManifestRules.parseManifest(_manifest({ id: "prov", api: "1.17", exports: { version: "1.2" }, uses: { zeta: "1.0" } }));
+        assert(olderApi.valid && olderApi.exports?.version === "1.2" && olderApi.uses.length === 1, "exports and uses with api 1.17: read all the same");
+        assert(_has(olderApi.warnings, "exports: a field of API 1.18, the manifest asks for API 1.17")
+               && _has(olderApi.warnings, "uses: a field of API 1.18, the manifest asks for API 1.17"), "… each said in a warning: " + olderApi.warnings.join("; "));
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ api: "1.18", uses: { zeta: "1.0" } })).warnings.length, 0, "uses with api 1.18: no warning");
+        assertEqual(ModuleManifestRules.parseManifest(_manifest({ api: "1.17" })).warnings.length, 0, "api 1.17 without them: no warning");
         const plain = ModuleManifestRules.parseManifest(_manifest());
         assert(plain.exports === null && plain.uses.length === 0, "none given: exports null, uses []");
         for (const bad of [7, "1.0", [], { version: "1" }, { version: 1.2 }, {}]) {
@@ -862,6 +868,12 @@ TestCase {
         assert(_has([rules.exportsOf({ exports: { greet: () => "hi" } }).problem], "not a QtObject"), "plain data: refused");
         assert(_has([rules.exportsOf({ exports: qtObject({ parent: null }) }).problem], "`parent`"), "something with a parent (an Item): refused");
         assertEqual(rules.exportsOf({ exports: 7 }).object, null, "a number: nothing given");
+        const handleLike = qtObject({ moduleId: "provider" });
+        const hostLike = qtObject();
+        assert(_has([rules.exportsOf({ exports: handleLike }, [hostLike, handleLike]).problem], "the shell's"), "a module's handle: refused");
+        assertEqual(rules.exportsOf({ exports: handleLike }, [hostLike, handleLike]).object, null, "… nothing given");
+        assert(_has([rules.exportsOf({ exports: hostLike }, [hostLike, handleLike]).problem], "the shell's"), "the host: refused");
+        assertEqual(rules.exportsOf({ exports: offered }, [hostLike, handleLike]).object, offered, "an object of its own, beside the refused: given");
     }
 
     // API 1.3: Api.networks and Api.vpnsUp — the pure mappings, on realistic and hostile input

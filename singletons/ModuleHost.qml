@@ -328,24 +328,22 @@ Scope {
     }
 
     // (API 1.18) What a module gets of the modules its manifest `uses` (its handle's `uses`):
-    // frozen { <id>: that module's exports object }, while the module is active — its
-    // providers are then loaded, their mains made first, and stay until it is off — and an
-    // empty frozen object otherwise. Nothing else of a provider: not its main, not its
-    // handle. `active` and `revision` (activeIds, mainsRevision) only make a binding follow
-    function usesOf(id, active, revision) {
-        const record = _record(id);
-        if (!record || !activeIds.includes(id))
-            return _noUses;
-        const given = {};
-        for (const use of record.manifest.uses ?? []) {
-            const provider = _record(use.id);
-            if (provider?.exportsObject)
-                given[use.id] = provider.exportsObject;
-        }
-        return Object.freeze(given);
+    // frozen { <id>: that module's exports object }. Set just before the module is turned on
+    // (its main made, its views built) and kept, the same object, until it is turned on
+    // again: its main and views, while they go, still read what they had — and a provider's
+    // main is destroyed only after its dependents' mains are gone (_reap). Empty for a module
+    // never turned on. Nothing else of a provider: not its main, not its handle. `revision`
+    // (usesRevision) only makes a binding follow
+    function usesOf(id, revision) {
+        return _uses.get(id) ?? _noUses;
     }
 
+    // Counts every change of a module's `uses` (usesOf)
+    property int usesRevision: 0
+
     readonly property var _noUses: Object.freeze({})
+    // id → what usesOf gives; kept, like the handles, for the host's life
+    property var _uses: new Map()
 
     // The checked manifest (ModuleManifestRules.parseManifest, less what the file check dropped)
     // read from a directory, or null
@@ -1009,6 +1007,8 @@ Scope {
                 continue;
             }
             const manifest = record.manifest;
+            if (counted.includes(record))
+                _giveUses(record);
             _setActive(manifest.id, true);
             if (!record.main && record.mainError === "" && manifest.main !== "")
                 _createMain(record);
@@ -1033,6 +1033,26 @@ Scope {
         if (unknownData.length > 0)
             _makeDataDirectories(unknownData);
         _publish();
+    }
+
+    // (1.18) A module about to be turned on (or staying on): its `uses`, its providers'
+    // exports objects now (their mains made before, in this pass or earlier). A new object
+    // only when one of them is another object — never while it stays on, since a provider
+    // that goes turns it off first
+    function _giveUses(record) {
+        const id = record.manifest.id;
+        const given = {};
+        for (const use of record.manifest.uses ?? []) {
+            const provider = _record(use.id);
+            if (provider?.exportsObject)
+                given[use.id] = provider.exportsObject;
+        }
+        const before = _uses.get(id);
+        const keys = Object.keys(given);
+        if (before && Object.keys(before).length === keys.length && keys.every(key => before[key] === given[key]))
+            return;
+        _uses.set(id, Object.freeze(given));
+        usesRevision++;
     }
 
     // A module brought to a state other than loaded: off, its main destroyed, its facts gone
@@ -1114,10 +1134,13 @@ Scope {
         }
         record.component = component;
         record.main = object;
+        // Tells the host when this main is really gone (destroy() only asks for it): a child
+        // of the main, destroyed with it, after the main's own Component.onDestruction
+        _goneWatcher.createObject(object, { gone: () => root._mainGone(object) });
         // (1.18) Its exports object, read once: what its dependents get as module.uses.<id>
         // for as long as this main lives
         if (record.manifest.exports) {
-            const offered = ModuleRules.exportsOf(object);
+            const offered = ModuleRules.exportsOf(object, [root].concat(Array.from(_handles.values())));
             record.exportsObject = offered.object;
             record.exportsProblem = offered.problem;
         }
@@ -1125,22 +1148,74 @@ Scope {
         mainsRevision++;
     }
 
+    // Takes a module's main away: module.main and its exports cleared now, the object
+    // destroyed by _reap — at once, unless it is a provider whose dependents' mains are not
+    // gone yet
     function _destroyMain(record) {
         const main = record.main;
+        const offered = record.exportsObject;
         // module.main cleared before the main goes
         record.main = null;
         record.component = null;
         record.exportsObject = null;
         record.exportsProblem = "";
-        if (main) {
-            mainsRevision++;
+        if (!main)
+            return;
+        mainsRevision++;
+        _going.push({ id: record.manifest.id, main: main, offered: offered, uses: _uses.get(record.manifest.id) ?? _noUses, destroying: false });
+        _reap();
+    }
+
+    // (1.18) The mains asked to go and not gone yet: { id, main, offered (its exports object,
+    // or null), uses (what its module.uses held), destroying }
+    property var _going: []
+    // The host itself is being destroyed: nothing more is done for the mains going with it
+    property bool _dying: false
+
+    // Destroys each going main that nothing waits on: a provider's (its exports object) only
+    // once no going dependent's main holds it in its module.uses — so a dependent's main, and
+    // its views torn down meanwhile, can still use the provider's object while they go
+    function _reap() {
+        if (_dying)
+            return;
+        for (const entry of _going) {
+            if (entry.destroying)
+                continue;
+            if (entry.offered && _going.some(other => other !== entry && Object.values(other.uses).includes(entry.offered)))
+                continue;
+            entry.destroying = true;
             try {
-                main.destroy();
+                entry.main.destroy();
             } catch (error) {
-                console.error("[Modules] destroying the main of " + record.manifest.id + " threw:", error);
+                console.error("[Modules] destroying the main of " + entry.id + " threw:", error);
             }
         }
     }
+
+    // A main is gone (its watcher went with it): the providers waiting on it go next, one
+    // turn of the event loop later, after what was torn down with it
+    function _mainGone(main) {
+        if (_dying)
+            return;
+        const left = _going.filter(entry => entry.main !== main);
+        if (left.length === _going.length)
+            return;
+        _going = left;
+        Qt.callLater(root._reap);
+    }
+
+    property Component _goneWatcher: Component {
+        QtObject {
+            property var gone: null
+            Component.onDestruction: gone?.()
+        }
+    }
+
+    // The shell reloading (or a suite) destroys the host: the engine runs every main's
+    // Component.onDestruction, newest first — a dependent's main is always newer than its
+    // providers' (made after them, and gone before them) — and then deletes them. Nothing is
+    // asked of the modules here, and nothing more is scheduled
+    Component.onDestruction: _dying = true
 
     function _publish() {
         const loaded = [];

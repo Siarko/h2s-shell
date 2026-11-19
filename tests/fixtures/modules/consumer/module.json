@@ -5,5 +5,8 @@
     "api": "1.18",
     "description": "A module that uses the provider fixture's API (tests/fixtures/modules, ModulesTest)",
     "main": "Main.qml",
+    "settingsPages": [
+        { "id": "consumer", "label": "Consumer", "component": "ConsumerPage.qml", "tab": "system" }
+    ],
     "uses": { "provider": "1.1" }
 }

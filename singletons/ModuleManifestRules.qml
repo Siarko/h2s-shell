@@ -69,6 +69,8 @@ import QtQuick
 //                 each one's `exports` object as module.uses.<id>, nothing else of it. An id
 //                 that is not a module id (or a reserved one) or a version that is not
 //                 "major.minor": the module fails.
+//                 exports or uses in a manifest whose `api` is below 1.18: read all the same,
+//                 with a warning.
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
 // leading "/", ending in .qml. Any other field is kept (in `raw`) and reported as a warning,
@@ -447,6 +449,15 @@ Singleton {
         }
         _readExports(raw, result, errors, warnings);
         _readUses(raw, result, errors);
+        // Fields of API 1.18 in a manifest that asks for an older one: read all the same,
+        // and said — the module is written against an API that does not have them
+        const asked = ModuleRules.parseApi(result.api);
+        if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < 18))) {
+            for (const field of ["exports", "uses"]) {
+                if (ModuleRules.get(raw, field) !== undefined)
+                    warnings.push(field + ": a field of API 1.18, the manifest asks for API " + result.api + " (read all the same)");
+            }
+        }
         result.valid = errors.length === 0;
         // Without a usable id the namespaces cannot be checked: nothing more is read
         if (result.id === "")
