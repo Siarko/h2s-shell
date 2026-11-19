@@ -25,7 +25,8 @@ import qs.singletons
 //   watchdog, the only limit where one of the two programs is missing. Past the limit
 //   the command gets TERM, and KILL `killAfterMs` later.
 // - cancel(): TERM, KILL after `killAfterMs`; no chunk or line is handed over from that
-//   moment; `done` comes when the process is gone, with `cancelled: true`.
+//   moment; `done` comes when the process is gone, with `cancelled: true` — also for a
+//   run whose answer is still waiting to be handed over (refused, or unable to start).
 // - `done` is called exactly once per start(), never inside start() itself — and never
 //   once the runner is destroyed: its runs are then ended at once (KILL), nothing is called.
 // - Output is read in whole lines, each decoded as one piece (a character whose bytes
@@ -77,7 +78,8 @@ QtObject {
             // An answer is owed even where the options are what is wrong
             done: given.callbacks.done,
             state: CommandRules.fresh(given.timeoutMs, given.killAfterMs),
-            item: null, starting: false, muted: false, truncated: false,
+            // queued: done, its answer waiting in `_deferred` for the flush
+            item: null, starting: false, queued: false, muted: false, truncated: false,
             stdout: "", stderr: "", startedAt: 0,
             lineCount: { stdout: 0, stderr: 0 },
             refusal: problem !== "" ? problem : given.problem
@@ -87,8 +89,8 @@ QtObject {
                 return job.state.phase !== "done";
             },
             cancel: function () {
-                if (job.state.phase !== "done" && !root._gone)
-                    root._dispatch(job, { type: "cancel" });
+                if ((job.state.phase !== "done" || job.queued) && !root._gone)
+                    root._cancel(job);
             }
         };
         if (_gone) {
@@ -98,8 +100,7 @@ QtObject {
         _jobs = _jobs.concat([job]);
         if (job.refusal !== "") {
             job.state.phase = "done";
-            _deferred.push(job);
-            _flush.restart();
+            _defer(job);
         } else if (job.state.timeoutMs === 0 || _toolsKnown) {
             _launch(job);
         }
@@ -108,7 +109,12 @@ QtObject {
 
     function cancelAll() {
         for (const job of _jobs.slice())
-            _dispatch(job, { type: "cancel" });
+            _cancel(job);
+    }
+
+    // A run whose answer waits in `_deferred` is done already: cancelled, that answer says so
+    function _cancel(job) {
+        _dispatch(job, { type: "cancel", queued: job.queued });
     }
 
     on_ToolsKnownChanged: {
@@ -212,8 +218,7 @@ QtObject {
 
     function _answer(job) {
         if (job.starting) {
-            _deferred.push(job);
-            _flush.restart();
+            _defer(job);
             return;
         }
         _jobs = _jobs.filter(other => other !== job);
@@ -229,15 +234,22 @@ QtObject {
         _call(job, "done", result);
     }
 
+    function _defer(job) {
+        job.queued = true;
+        _deferred.push(job);
+        _flush.restart();
+    }
+
     function _flushDeferred() {
         const deferred = _deferred;
         _deferred = [];
         for (const job of deferred) {
             if (_gone)
                 return;
+            job.queued = false;
             if (job.refusal !== "") {
                 _jobs = _jobs.filter(other => other !== job);
-                _call(job, "done", CommandRules.refusal(job.refusal));
+                _call(job, "done", CommandRules.refusal(job.refusal, job.state.cancelled));
             } else {
                 _answer(job);
             }
@@ -291,6 +303,7 @@ QtObject {
         _gone = true;
         for (const job of _jobs) {
             job.muted = true;
+            job.queued = false;
             const wrapped = job.state.wrapped;
             job.state = Object.assign({}, job.state, { phase: "done" });
             const process = job.item?.process;

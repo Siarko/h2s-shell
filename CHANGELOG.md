@@ -698,6 +698,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A module's command run that is cancelled before its answer comes — one refused, or one
+  whose program cannot start — is now answered with `cancelled: true`, as any other
+  cancelled run is.
 - Turning a module on or off no longer rebuilds another module's element at the same place
   (losing what it held); adding a widget to a bar section no longer reloads the widgets
   after it, and the new one is the one that grows in.

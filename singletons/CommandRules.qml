@@ -246,7 +246,10 @@ Singleton {
     // → { state, effects, ignored }. `ignored` is "" when the event was taken, else why not
     // (the state is then the object passed in, no effects). Events: launch { wrapped },
     // cancel, watchdog (the runner's time limit), kill (its kill timer), exited { code,
-    // crashed }, stopped (the process is gone, with or without an exit). Effects, in order:
+    // crashed }, stopped (the process is gone, with or without an exit), and cancel {
+    // queued: true } for a run that is done but whose answer still waits to be handed over
+    // (a refused run, or a program reported as unable to start inside start()): that answer
+    // goes out as cancelled, so a cancel is never followed by `cancelled: false`. Effects, in order:
     // start | timer { name, ms } | stop { name } | signal { signal } | mute (no chunk or
     // line callback from here) | answer.
     function step(state, event) {
@@ -256,8 +259,11 @@ Singleton {
         const next = (changes, effects) => ({ state: Object.assign({}, state, changes), effects: effects, ignored: "" });
         if (typeof phase !== "string")
             return ignored("no state");
-        if (phase === "done")
-            return ignored("done");
+        if (phase === "done") {
+            if (type !== "cancel" || event.queued !== true)
+                return ignored("done");
+            return state.cancelled ? ignored("cancelled before") : next({ cancelled: true }, [{ type: "mute" }]);
+        }
         const live = phase === "running" || phase === "ending";
         switch (type) {
         case "launch": {
@@ -362,10 +368,11 @@ Singleton {
         });
     }
 
-    // The answer to a run that was never started: what was asked could not be run
-    function refusal(problem) {
+    // The answer to a run that was never started: what was asked could not be run.
+    // `cancelled`: the run was cancelled before that answer was handed over.
+    function refusal(problem, cancelled) {
         return Object.freeze({
-            ok: false, code: -1, stdout: "", stderr: "", timedOut: false, cancelled: false,
+            ok: false, code: -1, stdout: "", stderr: "", timedOut: false, cancelled: cancelled === true,
             failedToStart: false, truncated: false, durationMs: 0, error: problem
         });
     }

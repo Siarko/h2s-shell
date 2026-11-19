@@ -92,6 +92,37 @@ TestCase {
         Io.CommandRunner {}
     }
 
+    // A runner whose processes report, inside `running = true`, that they cannot start —
+    // as Quickshell may for a failure found before the program is forked (every argv tried
+    // here is reported later): the answer then waits for the runner's flush
+    property Component _unstartableRunner: Component {
+        Io.CommandRunner {
+            id: unstartable
+            tools: suite._noTimeout
+            _runComponent: Component {
+                QtObject {
+                    id: run
+                    property var job: null
+                    property QtObject process: QtObject {
+                        property var command: []
+                        property var environment: ({})
+                        property bool running: false
+                        property int processId: 0
+                        function signal(number) {}
+                        onRunningChanged: {
+                            if (running)
+                                running = false;
+                            else
+                                unstartable._dispatch(run.job, { type: "stopped" });
+                        }
+                    }
+                    property Timer watchdog: Timer {}
+                    property Timer kill: Timer {}
+                }
+            }
+        }
+    }
+
     property Io.CommandAction action: Io.CommandAction {}
     property Io.CommandQuery query: Io.CommandQuery {
         onDone: lines => suite._queried.push(lines)
@@ -105,6 +136,7 @@ TestCase {
 
     // name → { handle, result, answers, lines: [[line, stream]…], out: [chunk…], err: […] }
     property var _runs: ({})
+    property var _spareRunners: []
 
     function _start(name, runner, argv, options) {
         const record = { handle: null, result: null, answers: 0, lines: [], out: [], err: [], insideStart: true };
@@ -232,8 +264,27 @@ TestCase {
         _start("badLimit", wrapping, ["sh", "-c", "echo ran"], { timeoutMs: -1 });
         _start("badCallback", wrapping, ["sh", "-c", "echo ran"], { onLine: "print" });
         assert(!_runs.empty.handle.running && _runs.empty.result === null, "a command that cannot be one: no answer inside start()");
+        // Cancelled while their answers wait for the flush: refused, and a program reported
+        // as unable to start inside start()
+        _start("refusedCancelled", wrapping, []);
+        const missingOne = _unstartableRunner.createObject(suite);
+        _start("missingCancelled", missingOne, ["/nonexistent/h2s-test-program", "x"]);
+        assert(!_runs.refusedCancelled.handle.running && !_runs.missingCancelled.handle.running
+               && _runs.refusedCancelled.result === null && _runs.missingCancelled.result === null,
+               "a refused run and one that cannot start: done inside start(), their answers queued");
+        _runs.refusedCancelled.handle.cancel();
+        _runs.missingCancelled.handle.cancel();
+        // The same through cancelAll(), on a runner of their own
+        const refusedAll = _runnerComponent.createObject(suite);
+        const missingAll = _unstartableRunner.createObject(suite);
+        suite._spareRunners = [missingOne, refusedAll, missingAll];
+        _start("refusedCancelAll", refusedAll, ["sh", 1]);
+        _start("missingCancelAll", missingAll, ["/nonexistent/h2s-test-program"]);
+        refusedAll.cancelAll();
+        missingAll.cancelAll();
 
-        _then("the runs that cannot start answered", () => _answered("missingBare", "missingWrapped", "empty", "text", "number", "badLimit", "badCallback"), () => {
+        _then("the runs that cannot start answered", () => _answered("missingBare", "missingWrapped", "empty", "text", "number", "badLimit", "badCallback",
+                                                                 "refusedCancelled", "missingCancelled", "refusedCancelAll", "missingCancelAll"), () => {
             const missing = _runs.missingBare.result;
             assertEqual(missing.failedToStart + " " + missing.ok + " " + missing.code + " " + missing.timedOut, "true false -1 false", "a program that is not there, bare: failedToStart, once");
             assertEqual(_runs.missingBare.answeredInsideStart, false, "… answered after start() returned");
@@ -246,6 +297,20 @@ TestCase {
             }
             assertEqual(_runs.badLimit.lines.length + _runs.badCallback.out.length, 0, "… and nothing run");
             assertEqual(wrapping.running + bare.running, 0, "… none of them counted any more");
+            for (const name of ["refusedCancelled", "refusedCancelAll"]) {
+                const record = _runs[name];
+                assertEqual(record.result.cancelled + " " + record.result.ok + " " + (record.result.error !== "") + " " + record.answers + " " + record.answeredInsideStart,
+                            "true false true 1 false", name + ": refused, cancelled before its answer — answered once, cancelled, the reason kept");
+            }
+            for (const name of ["missingCancelled", "missingCancelAll"]) {
+                const record = _runs[name];
+                assertEqual(record.result.cancelled + " " + record.result.failedToStart + " " + record.result.ok + " " + record.answers + " " + record.answeredInsideStart,
+                            "true true false 1 false", name + ": cannot start, cancelled before its answer — answered once, cancelled");
+            }
+            assertEqual(_runs.missingBare.result.cancelled + " " + _runs.empty.result.cancelled, "false false", "… the ones not cancelled answer as before");
+            for (const runner of suite._spareRunners)
+                runner.destroy();
+            suite._spareRunners = [];
             _limits();
         });
     }

@@ -181,6 +181,17 @@ TestCase {
         assertEqual(stepped.state.phase + " " + _types(stepped.effects), "done stop:watchdog stop:kill answer", "the process gone: timers stopped, answered");
         for (const type of ["cancel", "watchdog", "kill", "exited", "stopped", "launch"])
             assert(rules.step(stepped.state, { type: type }).ignored !== "", "after the answer, " + type + ": ignored");
+        const answered = stepped.state;
+        stepped = rules.step(answered, { type: "cancel", queued: true });
+        assertEqual(stepped.state.phase + " " + stepped.state.cancelled + " " + _types(stepped.effects), "done true mute",
+                    "cancelled while its answer still waits to be handed over: that answer says cancelled, no second one");
+        assert(rules.step(stepped.state, { type: "cancel", queued: true }).ignored !== "", "… cancelled twice: ignored");
+        assert(rules.step(answered, { type: "cancel", queued: false }).ignored !== "", "a cancel after the answer was handed over: ignored");
+        const refused = Object.assign({}, waiting, { phase: "done" });
+        assertEqual(rules.step(refused, { type: "cancel", queued: true }).state.cancelled + " " + rules.step(refused, { type: "cancel", queued: true }).state.launched,
+                    "true false", "a refused run cancelled before its answer: cancelled, never started");
+        const unstartable = rules.result(_after(bare, [{ type: "stopped" }, { type: "cancel", queued: true }]), { stdout: "", stderr: "", truncated: false, durationMs: 1 });
+        assertEqual(unstartable.failedToStart + " " + unstartable.cancelled + " " + unstartable.ok, "true true false", "a program that cannot start, cancelled before its answer: both said");
         assert(rules.step(waiting, { type: "stopped" }).ignored !== "" && rules.step(waiting, { type: "exited", code: 0 }).ignored !== "", "an exit of a run never started: ignored");
         assert(rules.step(bare, { type: "explode" }).ignored !== "" && rules.step(null, { type: "cancel" }).ignored !== "", "an unknown event, no state: ignored");
 
@@ -225,6 +236,8 @@ TestCase {
         result = rules.refusal("the command is empty");
         assertEqual(result.ok + " " + result.code + " " + result.error + " " + Object.isFrozen(result), "false -1 the command is empty true", "a refusal: the reason in `error`, nothing else set");
         assertEqual(Object.keys(result).join(), Object.keys(rules.result(_after(bare, [exit(0), { type: "stopped" }]), facts(1))).join(), "… with the fields of any answer");
+        result = rules.refusal("the command is empty", true);
+        assertEqual(result.cancelled + " " + result.ok + " " + result.error, "true false the command is empty", "a refusal cancelled before it was handed over: cancelled, the reason kept");
 
         // --- the output ---
         assertEqual(JSON.stringify(rules.kept("abc", "de", 10)), "{\"text\":\"abcde\",\"truncated\":false}", "kept: under the cap");

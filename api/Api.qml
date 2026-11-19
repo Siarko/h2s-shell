@@ -520,9 +520,12 @@ import qs.singletons.network
 //                                            lines joined by line breaks, none after the
 //                                            last
 //                            maxOutputBytes  1048576: where each kept stream, and a single
-//                                            line, is cut (counted in characters)
+//                                            line, is cut (counted in characters). A cut
+//                                            sets `truncated` and leaves `ok` alone: a
+//                                            reader of the output checks `truncated`
 //                            done(result)    called once, after start() has returned
-//                          result, frozen: { ok (exit 0 and none of the rest), code (the
+//                          result, frozen: { ok (exit 0, and not timedOut, cancelled or
+//                          failedToStart; `truncated` does not change it), code (the
 //                          exit status; -1 without one), stdout, stderr, timedOut,
 //                          cancelled, failedToStart, truncated, durationMs, error }.
 //                          `failedToStart`: the program is not there or cannot run — where
@@ -532,7 +535,9 @@ import qs.singletons.network
 //                          option of the wrong kind); the result is the only place it shows
 //   cancel()               TERM, KILL after killAfterMs; no output is handed over from
 //                          that moment; done comes with `cancelled: true` when the process
-//                          is gone. A run that waits to be started is answered at once
+//                          is gone. A run that waits to be started is answered at once;
+//                          one already over whose answer is not handed over yet (refused,
+//                          or unable to start) is answered with `cancelled: true` too
 //   cancelAll()            cancel() for every run
 //                          The limit is kept by coreutils' `timeout` around the command
 //                          (with util-linux's `setpriv`, so that the command dies with
