@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.31"
+    readonly property string apiVersion: "1.32"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -108,7 +108,8 @@ Singleton {
     //             its kind (card, row): all of them share one path, the item is in the
     //             element's context. A block with no anchor adds no level
     //   region    "actions", "settings" or "title": a card's regions, only right after
-    //             "card", last; never a block's name
+    //             "card", last; "title" also a row's (a popup row's name line), right after
+    //             "row" (anchorRegionHolders); never a block's name
     //
     // A module names a path, a placement and its element (the manifest's `anchors`):
     // `before` and `after` put it next to the block, outside it; `prepend` and `append`
@@ -118,6 +119,8 @@ Singleton {
     readonly property var anchorPlacements: ["before", "after", "prepend", "append"]
     readonly property var anchorSurfaces: ["settings", "popup"]
     readonly property var anchorRegions: ["actions", "settings", "title"]
+    // The blocks a region stands right under, by their name, and the regions each has
+    readonly property var anchorRegionHolders: ({ card: ["actions", "settings", "title"], row: ["title"] })
     // The kinds of block: SettingsPage, SettingsSection, SettingsCard, SettingsRow (PopupRow in
     // a popup), PopupSection, and a card's region
     readonly property var anchorKinds: ["page", "section", "card", "row", "popupSection", "region"]
@@ -196,7 +199,17 @@ Singleton {
         { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.25",
           where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: in the row of buttons on its name's line, after \"Edit\", before \"Forget\"",
-          view: "panels/settings/NetworkEthernetSettings.qml" }
+          view: "panels/settings/NetworkEthernetSettings.qml" },
+        { path: "popup.network.wifi.row.title", kind: "region", placements: ["append"], takes: "",
+          context: "{ networkId: its saved profile's UUID, \"\" for a network not saved, name: the profile's, else the SSID, kind: \"wifi\", active }",
+          scope: "", since: "1.32",
+          where: "the network popup's list of Wi-Fi networks in range, each network's row, closed and open: on its name's line, after the name",
+          view: "panels/network/WifiNetworkRow.qml" },
+        { path: "popup.network.connections.wired.row.title", kind: "region", placements: ["append"], takes: "",
+          context: "{ networkId: the wired profile up's UUID, name, kind: \"ethernet\", active } (networkId and name \"\" with none up)",
+          scope: "", since: "1.32",
+          where: "the network popup's Ethernet part, the wired row: on its name's line, after the name",
+          view: "panels/NetworkPanel.qml" }
     ]
 
     // The kinds a view's root is: the one block with no name that is addressable, at the
@@ -207,7 +220,7 @@ Singleton {
     // (a network page's cards are NetworkProfileCards, built on SettingsCard)
     readonly property var anchorKindTypes: ({ page: ["SettingsPage"], section: ["SettingsSection"], card: ["SettingsCard", "NetworkProfileCard"],
                                               row: ["SettingsRow", "PopupRow"], popupSection: ["PopupSection"],
-                                              region: ["SettingsCard", "NetworkProfileCard"] })
+                                              region: ["SettingsCard", "NetworkProfileCard", "PopupRowTitle"] })
 
     // Today's slots, read as anchors once their view is converted (the alias's `at` in
     // anchorTable): a manifest's `slots` entry for one becomes that anchor's element, listed in
@@ -260,8 +273,10 @@ Singleton {
         for (let i = 2; i < parts.length; i++) {
             const part = parts[i];
             if (anchorRegions.includes(part)) {
-                if (i === 2 || parts[i - 1] !== "card" || i !== parts.length - 1)
-                    return show(path) + ": " + show(part) + " is a card's region: only last, right after \"card\"";
+                const holder = parts[i - 1];
+                if (i === 2 || i !== parts.length - 1 || !(anchorRegionHolders[holder] ?? []).includes(part))
+                    return show(path) + ": " + show(part) + " is a region: only last, right after a block that has it ("
+                        + Object.keys(anchorRegionHolders).filter(name => anchorRegionHolders[name].includes(part)).map(show).join(" or ") + ")";
                 continue;
             }
             const problem = anchorNameProblem(part);
@@ -279,8 +294,9 @@ Singleton {
     // page itself: settings.general) — anything else with no name at the base, a section
     // straight under a plain item, is not; a name that is not one makes it and everything
     // inside it unaddressable. A card's region (kind "region") is named by the region
-    // (anchorRegions), right under a card named "card", and nothing is under it; no other
-    // kind takes a region's name.
+    // (anchorRegions), right under a block that has it (a card named "card"; "title" under a
+    // row named "row" too: anchorRegionHolders), and nothing is under it; no other kind takes
+    // a region's name.
     function anchorBlockPaths(parentPath, parentIsBase, anchor, kind) {
         const none = { path: "", childPath: "" };
         if (typeof parentPath !== "string" || parentPath === "" || anchorPathProblem(parentPath) !== "")
@@ -1122,6 +1138,44 @@ Singleton {
     function networkContext(profile) {
         const network = networkRow(profile?.uuid ?? "", profile?.name, profile?.kind ?? "", profile?.state === "activated");
         return { networkId: network.id, name: network.name, kind: network.kind, active: network.active };
+    }
+
+    // What an element on a Wi-Fi network's row in the network popup gets as context
+    // (popup.network.wifi.row.title): the network as the saved networks' cards give it — the
+    // profile saved for the SSID that Api.networks lists (`wifiDetails` read, no hotspot); of
+    // several, the one up, else the one last used, else the first. A network not saved: no
+    // profile, `networkId` "" and its SSID as the name (plain, on one line), not up
+    function wifiRowContext(ssid, profiles, wifiDetails) {
+        const details = isObject(wifiDetails) ? wifiDetails : {};
+        let best = null;
+        for (const profile of Array.isArray(profiles) ? profiles : []) {
+            if (typeof ssid !== "string" || ssid === "" || !networkListed(profile, details) || profile.kind !== "wifi" || details[profile.uuid].ssid !== ssid)
+                continue;
+            const rank = [profile.state === "activated" ? 1 : 0, profile.active === true ? 1 : 0, typeof profile.lastUsed === "number" ? profile.lastUsed : 0];
+            if (best === null || rank[0] > best.rank[0] || (rank[0] === best.rank[0] && (rank[1] > best.rank[1] || (rank[1] === best.rank[1] && rank[2] > best.rank[2]))))
+                best = { profile: profile, rank: rank };
+        }
+        if (best !== null)
+            return networkContext(best.profile);
+        return { networkId: "", name: _plainLine(ssid, 200), kind: "wifi", active: false };
+    }
+
+    // What an element on the network popup's wired row gets as context
+    // (popup.network.connections.wired.row.title): the wired profile up on `device` (the
+    // Ethernet device the row is for), as its card gives it — fully up first. None up (or
+    // no device): `networkId` and `name` "", not up
+    function wiredRowContext(profiles, device) {
+        let best = null;
+        for (const profile of Array.isArray(profiles) ? profiles : []) {
+            if (typeof device !== "string" || device === "" || !_joinable(profile) || profile.kind !== "ethernet"
+                    || profile.active !== true || profile.device !== device)
+                continue;
+            if (best === null || (profile.state === "activated" && best.state !== "activated"))
+                best = profile;
+        }
+        if (best !== null)
+            return networkContext(best);
+        return { networkId: "", name: "", kind: "ethernet", active: false };
     }
 
     // Text from outside (a network's or a VPN's name) on one line: control characters

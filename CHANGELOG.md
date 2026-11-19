@@ -13,6 +13,13 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.32: the network popup's rows offer a name-line place, as the network cards do:
+  `popup.network.wifi.row.title` (each Wi-Fi network in range, closed and open) and
+  `popup.network.connections.wired.row.title` (the wired row), `append`, any module's; an
+  element there is as tall as the name's line, all of them a quarter of the row at most, the
+  name cut first. Context `{ networkId, name, kind, active }` as the cards give it; a Wi-Fi
+  network not saved has `networkId` `""` and its SSID as `name`, the wired row with no
+  profile up `networkId` and `name` `""`.
 - 1.31: two public elements — `ProgressBar` (`value` 0 to 1, below 0 a run of unknown
   length; `kind` `normal`, `success`, `warning`, `danger`) and `HoverTip` (a plain-text
   tooltip over its `target`, by default the item it is written in, taking no room); the

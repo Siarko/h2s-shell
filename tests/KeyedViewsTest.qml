@@ -185,6 +185,30 @@ TestCase {
                "Wi-Fi list: re-sorted by signal — the row moves with its network and shows it in use (not stale)");
         assert(list.itemAtIndex(0) === before["Office"], "… at the top");
 
+        // Each row's context (1.32): its network as the saved networks' cards give it — Home
+        // saved, Office not — following the row through new reads, re-sorts and a profile
+        // saved; outside the popup the row is no place
+        NetworkProfiles.wifi = _wifiDetails(["Home"]);
+        NetworkProfiles.profiles = _wifiProfiles(["Home"], "");
+        after = _rowsBySsid(list);
+        assertEqual(JSON.stringify([after["Office"].context, after["Home"].context]),
+                    JSON.stringify([{ networkId: "", name: "Office", kind: "wifi", active: false }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false }]),
+                    "Wi-Fi list: a row's context — a network not saved by its SSID, a saved one by its profile");
+        assert(after["Office"].path === "" && after["Office"].nameLine.titleRegion.path === "", "… in a list with no row name and no popup: no place");
+        WifiManager.wifiNetworks = _scan([["Home", 95], ["Office", 30]]);
+        list.forceLayout();
+        NetworkProfiles.wifi = _wifiDetails(["Home", "Office"]);
+        NetworkProfiles.profiles = _wifiProfiles(["Home", "Office"], "Office");
+        after = _rowsBySsid(list);
+        assert(after["Office"] === before["Office"] && after["Home"] === before["Home"] && list.itemAtIndex(0) === before["Home"],
+               "… re-sorted again: the same rows");
+        assertEqual(JSON.stringify([after["Office"].context, after["Home"].context]),
+                    JSON.stringify([{ networkId: "uuid-Office", name: "Office", kind: "wifi", active: false }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false }]),
+                    "… each with its own network's context, Office's now by its profile");
+        WifiManager.wifiNetworks = _scan([["Office", 90, true], ["Home", 70]]);
+        list.forceLayout();
+        after = _rowsBySsid(list);
+
         // Enter in a network's password field: what Connect does, while it says Connect and
         // can be pressed, and a password is typed. The connects go to a stand-in, never to
         // NetworkManager. Opened and typed into as the panel does (it keeps both per SSID)

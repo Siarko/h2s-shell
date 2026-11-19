@@ -76,6 +76,15 @@ import qs.singletons.network
 // Api.networks names it; the page otherwise unmoved; none in a closed card or a hotspot's;
 // networks read anew with new objects (reordered, one up, added, taken out) — the element
 // follows its network, its context handed once, and goes with it.
+//
+// The network popup's rows in that state (a fixture module, tests/fixtures/modules/anchors-
+// popup-rows, at popup.network.wifi.row.title and popup.network.connections.wired.row.title):
+// with no module the popup and its rows stand as before; with it, each Wi-Fi row's and the
+// wired row's elements on the name's line, as tall as it, a quarter of the row at most, the
+// name cut first, the network in their context (saved, not saved, the wired profile up); a
+// click on an element that takes none opens its row; networks read anew with new objects
+// (re-sorted, one gone, back and joined) — the elements follow their row; the popup opened and
+// closed five times.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -1021,7 +1030,8 @@ TestCase {
 
     // The popup places live under `prefix` against the table: each of its rows live, and
     // every live path not in it among those named, not published
-    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
+    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "popup.network.connections.wired",
+                                               "popup.network.connections.wired.row", "popup.network.wifi", "popup.network.wifi.row", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
                                                "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
                                                "settings.network_wifi.hotspots.card.actions", "settings.network_wifi.hotspots.card.title",
@@ -1037,6 +1047,116 @@ TestCase {
             if (!ModuleRules.anchorRow(ModuleRules.anchorTable, path) && !_namedNotPublished.includes(path))
                 problems.push(path + " is live but neither in the table nor named, not published");
         }
+        return problems;
+    }
+
+    // ---- The network popup's rows (popup.network.wifi.row.title, …wired.row.title) ----
+
+    readonly property string _longSsid: "A network with a very long name indeed"
+    property var _keptRowElements: null
+    property int _keptRowChanges: 0
+    property int _rowCycles: 0
+    property string _rowPartsBefore: ""
+
+    // Where the popup's parts stand still
+    property string _lastPopupParts: ""
+    function _popupPartsSteady() {
+        const parts = _describeParts(_popupParts(_popupView.loader.item));
+        const steady = parts === _lastPopupParts;
+        _lastPopupParts = parts;
+        return steady;
+    }
+
+    // Networks in range as a scan gives them, new objects at each call, the first strongest;
+    // `inUse` the one joined
+    function _rowNetworks(ssids, inUse) {
+        return ssids.map((ssid, index) => ({ ssid: ssid, signal: 80 - index * 10, security: "WPA2", inUse: ssid === (inUse ?? "Home"),
+                                            bands: ["5G"], band: "5G" }));
+    }
+
+    // The profiles the popup's rows are checked with, new objects at each call: Home up and
+    // saved, Office and Cafe saved, a hotspot, the wired profile up on the wired device, Lab
+    function _rowProfiles() {
+        return _networkProfiles([["anchors-home", "Home", "wifi", 30, "wlan0"], ["anchors-office", "Office", "wifi", 20, ""],
+                                 ["anchors-cafe", "Cafe", "wifi", 10, ""], ["anchors-spot", "Spot", "wifi", 5, ""],
+                                 ["anchors-wired", "Wired", "ethernet", 30, "eth-anchors"], ["anchors-lab", "Lab", "ethernet", 20, ""]]);
+    }
+
+    // The popup's Wi-Fi rows, top to bottom, and by SSID
+    function _wifiRowList() {
+        return _blocksAt(_popupView?.loader.item, "popup.network.wifi.row").sort((a, b) => a.mapToItem(null, 0, 0).y - b.mapToItem(null, 0, 0).y);
+    }
+    function _wifiRows() {
+        const rows = {};
+        for (const row of _wifiRowList())
+            rows[row.ssid] = row;
+        return rows;
+    }
+    function _wiredRow() {
+        return _blockAt(_popupView?.loader.item, "popup.network.connections.wired.row");
+    }
+    function _wiredName() {
+        return _blockChild(_wiredRow(), "wiredName");
+    }
+
+    // Each of the `count` Wi-Fi rows' two elements built, and the wired row's one
+    function _rowElementsReady(count) {
+        const rows = _wifiRowList();
+        return rows.length === count && rows.every(row => _ready(row.nameLine.appendHost, 2)) && _wiredName() !== null && _ready(_wiredName().appendHost, 1);
+    }
+
+    // The fixture's Title elements standing now: "<anchor>|<networkId>|<name>:<count>"
+    function _popupMainLive() {
+        const main = Modules.host.mainObject("anchors-popup-rows");
+        return main ? Object.keys(main.live).sort().map(key => key + ":" + main.live[key]).join(",") : "";
+    }
+
+    // Where the rows and their name lines stand still
+    property string _lastPopupRows: ""
+    function _popupRowsSteady() {
+        const parts = _wifiRowList().concat(_wiredRow() ? [_wiredRow()] : []).map(row => {
+            const line = row.nameLine ?? _wiredName();
+            const point = line.titleRegion.mapToItem(null, 0, 0);
+            return [row.mapToItem(null, 0, 0).y, row.height, point.x, point.y, line.titleRegion.width, line.width].map(Math.round).join(":");
+        }).join(" ");
+        const steady = parts === _lastPopupRows;
+        _lastPopupRows = parts;
+        return steady;
+    }
+
+    // What is wrong with where a row's name-line elements stand: on the name's line, each as
+    // tall as it, after the name as drawn, at most a quarter of the row all together, cut at
+    // that, inside the name's own width (so clear of the row's other parts)
+    function _rowTitleProblems(row, line) {
+        const problems = [];
+        const region = line.titleRegion;
+        const elements = region.appendHost.items.filter(item => item.ready && item.elementShown);
+        if (elements.length === 0)
+            return ["no element on the name's line"];
+        const rect = item => {
+            const point = item.mapToItem(row, 0, 0);
+            return { left: point.x, top: point.y, right: point.x + item.width, bottom: point.y + item.height };
+        };
+        const place = rect(region);
+        const name = rect(line);
+        if (Math.abs(place.top - name.top) > 0.5 || Math.abs(place.bottom - name.bottom) > 0.5)
+            problems.push("not the name's line (" + place.top + "–" + place.bottom + " against " + name.top + "–" + name.bottom + ")");
+        for (const element of elements) {
+            const shown = rect(element);
+            if (Math.abs(element.height - line.height) > 0.5 || Math.abs(element.item.height - line.height) > 0.5)
+                problems.push(element.item.objectName + " not as tall as the name's line (" + element.item.height + ", " + line.height + ")");
+            if (shown.top < name.top - 0.5 || shown.bottom > name.bottom + 0.5)
+                problems.push(element.item.objectName + " off the name's line");
+        }
+        if (region.width > Math.floor(row.width / 4) + 0.5)
+            problems.push("wider than a quarter of the row (" + region.width + ", " + row.width + ")");
+        if (!region.clip)
+            problems.push("its elements not cut at its width");
+        const drawnWidth = Math.min(line.contentWidth, line.width - line.leftPadding - line.rightPadding);
+        if (region.x < line.leftPadding + drawnWidth - 0.5)
+            problems.push("over the name (at " + region.x + ", the name " + drawnWidth + " wide)");
+        if (place.right > name.right + 0.5)
+            problems.push("past the name's own width (" + place.right + " > " + name.right + ")");
         return problems;
     }
 
@@ -2393,6 +2513,8 @@ TestCase {
             _fakeVpn.add("two", "Two");
             _fakeVpn.setStatus("one", "Via exit-1");
             _pinNetwork(true);
+            // Two networks in range: their rows' name lines live
+            _holdNetworks(_standInNetworks(2));
             _openPopupView("network", "../panels/NetworkPanel.qml");
         });
         _then("the network popup is laid out", () => _networkPinned() && _popupView.loader.item
@@ -2402,8 +2524,11 @@ TestCase {
             console.log("  INFO: the network popup's parts (x y width height): " + _describeParts(parts));
             assertEqual(_partsProblems(parts, _networkExpected(false), panel.width).join("; "), "",
                         "the network popup's parts: the VPN part 4 apart, the rest 6, all as wide as the panel");
-            assertEqual(_live("popup.network"), "popup.network:1,popup.network.connections:1,popup.network.connections.vpn:1,popup.network.connections.vpn.row:2",
-                        "the network popup's blocks: the panel, its connections, the VPN part and a row per VPN");
+            assertEqual(_live("popup.network"), "popup.network:1,popup.network.connections:1,popup.network.connections.vpn:1,popup.network.connections.vpn.row:2,"
+                        + "popup.network.connections.wired:1,popup.network.connections.wired.row:1,popup.network.connections.wired.row.title:1,"
+                        + "popup.network.wifi:1,popup.network.wifi.row:2,popup.network.wifi.row.title:2",
+                        "the network popup's blocks: the panel, its connections, the VPN part and a row per VPN, the wired part and its row with its name line, "
+                        + "the network list's part and a row per network with its name line");
             assertEqual(_popupLiveProblems("popup.network").join("; "), "", "… every place of the network popup in the table live, the rest named, not published");
             const connections = _blockAt(panel, "popup.network.connections");
             assertEqual(connections.appendHost.count + " " + connections.appendHost.built, "0 false", "… with no module: its end builds nothing");
@@ -2465,7 +2590,7 @@ TestCase {
             assert(listView !== null && listView.count === 12 && listView.contentHeight > listView.height + 1,
                    "… holding all twelve networks, taller than it shows: it scrolls (" + listView?.count + ", " + listView?.contentHeight + " in " + listView?.height + ")");
             _closePopupView();
-            _holdNetworks(null);
+            _holdNetworks(_standInNetworks(2));
             _openPopupView("notifications", "../panels/NotificationPanel.qml", 600);
         });
         _then("the notifications popup is laid out, with the module's elements",
@@ -2566,6 +2691,7 @@ TestCase {
             _dropPopup();
             Modules.host.unload();
             _pinNetwork(false);
+            _holdNetworks(null);
             _fakeVpn.destroy();
             _fakeVpn = null;
         });
@@ -2597,6 +2723,8 @@ TestCase {
                         "… no longer slot contributions");
             _setEntries("anchors-vpn-a", [["a1", "A one"], ["a2", "A two"]]);
             _setEntries("anchors-vpn-b", [["b1", "B one"]]);
+            // A network in range: every place of the popup live
+            _holdNetworks(_standInNetworks(1));
             _openPopupView("network", "../panels/NetworkPanel.qml");
             _vpnPage = _vpnPageViewComponent.createObject(suite);
             _views.push(_vpnPage);
@@ -2765,6 +2893,7 @@ TestCase {
             _ownVpn.destroy();
             _ownVpn = null;
             _holdProfiles(null);
+            _holdNetworks(null);
         });
 
         // The Wi-Fi and Ethernet pages: where their parts stand, with a card open and with a
@@ -3082,11 +3211,147 @@ TestCase {
         });
         _then("the network pages closed", () => _live("settings.network_wifi") === "" && _live("settings.network_ethernet") === "", () => {
             Modules.host.unload();
+        });
+
+        // The network popup's rows (1.32): the wired row's name line
+        // (popup.network.connections.wired.row.title) and each Wi-Fi network's
+        // (popup.network.wifi.row.title), with a fixture module (tests/fixtures/modules/
+        // anchors-popup-rows) — in the same held state: Home up and saved, Office saved, Street
+        // and a long-named network not saved, the wired profile up on the wired device. With no
+        // module the popup stands as before and each name has its whole line; with it, each
+        // row's elements on its name's line, as tall as it, at most a quarter of the row, the
+        // name cut first, the network in their context (a network not saved: no networkId, the
+        // SSID); networks read anew (new objects, reordered, one gone, back) — the elements
+        // follow their row; opened and closed over and over
+        _then("the network pages' fixtures gone", () => Modules.host.statuses.length === 0, () => {
+            _holdNetworks(_rowNetworks(["Home", "Office", "Street", _longSsid]));
+            _holdWifiDetails(_wifiDetailsHeld);
+            _holdProfiles(_rowProfiles());
+            _openPopupView("network", "../panels/NetworkPanel.qml");
+        });
+        _then("the network popup with its rows, no module", () => _networkPinned() && _popupView.loader.item
+              && Object.keys(_wifiRows()).length === 4 && _popupPartsSteady() && _popupRowsSteady(), () => {
+            const panel = _popupView.loader.item;
+            _rowPartsBefore = _describeParts(_popupParts(panel)) + " / " + _lastPopupRows;
+            console.log("  INFO: the network popup with its rows, no module: " + _rowPartsBefore);
+            const lines = Object.values(_wifiRows()).map(row => row.nameLine).concat([_wiredName()]);
+            assert(lines.every(line => line && !line.appendHost.built && line.titleRegion.width === 0 && line.rightPadding === 0 && line.Layout.minimumWidth === 0),
+                   "… no row's name line builds anything: each name has its whole line, as a plain name");
+            assertEqual(Object.keys(_wifiRows()).sort().map(ssid => ssid + " " + _wifiRows()[ssid].nameLine.titleRegion.path).join(", "),
+                        [_longSsid, "Home", "Office", "Street"].map(ssid => ssid + " popup.network.wifi.row.title").join(", "),
+                        "… each Wi-Fi row's name line the place popup.network.wifi.row.title");
+            assertEqual(_wiredName().titleRegion.path, "popup.network.connections.wired.row.title", "… the wired row's popup.network.connections.wired.row.title");
+            Modules.host.load([fixtures + "/anchors-popup-rows"], {});
+        });
+        _then("the popup rows' fixture: its elements on every row", () => _generalSettled() && _rowElementsReady(4) && _popupRowsSteady(), () => {
+            const status = Modules.status("anchors-popup-rows");
+            assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the popup rows' fixture: loaded, clean");
+            const rows = _wifiRows();
+            const wired = _wiredName();
+            assertEqual(Object.keys(rows).sort().map(ssid => ssid + ":" + _names(rows[ssid].nameLine.appendHost)).join(" ") + " | " + _names(wired.appendHost),
+                        [_longSsid, "Home", "Office", "Street"].map(ssid => ssid + ":anchors-popup-rows:Title,anchors-popup-rows:Wide").join(" ")
+                        + " | anchors-popup-rows:Title",
+                        "each Wi-Fi row's name line: the module's elements in its manifest's order; the wired row's: its element");
+            const context = line => JSON.stringify(line.appendHost.items[0].item.context);
+            assertEqual(_contextKeys(rows["Home"].nameLine.appendHost.items[0].item), "active,anchor,kind,name,networkId,placement",
+                        "the element's context: the network as the cards give it, anchor and placement");
+            assertEqual(["Home", "Office", "Street"].map(ssid => context(rows[ssid].nameLine)).join(" "),
+                        [{ networkId: "anchors-home", name: "Home", kind: "wifi", active: true },
+                         { networkId: "anchors-office", name: "Office", kind: "wifi", active: false },
+                         { networkId: "", name: "Street", kind: "wifi", active: false }]
+                        .map(network => JSON.stringify(Object.assign(network, { anchor: "popup.network.wifi.row.title", placement: "append" }))).join(" "),
+                        "… a saved network: its profile (Home up); a network not saved: no networkId, its SSID as the name");
+            assertEqual(context(wired), JSON.stringify({ networkId: "anchors-wired", name: "Wired", kind: "ethernet", active: true,
+                                                         anchor: "popup.network.connections.wired.row.title", placement: "append" }),
+                        "… the wired row: the wired profile up on the device");
+            assertEqual(rows["Home"].nameLine.appendHost.items[0].item.module, Modules.handle("anchors-popup-rows"), "… its module's handle");
+            for (const ssid of Object.keys(rows))
+                assertEqual(_rowTitleProblems(rows[ssid], rows[ssid].nameLine).join("; "), "", ssid + "'s row: its elements on the name's line, as tall as it, a quarter of the row at most, after the name");
+            assertEqual(_rowTitleProblems(_wiredRow(), wired).join("; "), "", "the wired row: the same");
+            const home = rows["Home"].nameLine;
+            const [own, wide] = home.appendHost.items;
+            assert(Math.abs(home.titleRegion.width - Math.floor(rows["Home"].width / 4)) < 0.01 && wide.width < wide.item.implicitWidth,
+                   "a wide element: the place a quarter of the row wide (" + home.titleRegion.width + ", the row " + rows["Home"].width + "), the element cut");
+            assertEqual(Math.round(own.width) + " " + Math.round(wide.x - own.x - own.width), "24 4", "… the first at its own width, the next 4 after it");
+            assertEqual(Math.round(wired.titleRegion.width), 24, "the wired row's one element: its own width");
+            const long = rows[_longSsid].nameLine;
+            assert(long.truncated && Math.abs(long.titleRegion.width - Math.floor(rows[_longSsid].width / 4)) < 0.01
+                   && Math.abs(long.titleRegion.x + long.titleRegion.width - long.width) < 1,
+                   "a long name: cut first, the elements at their whole room at the line's end (" + long.titleRegion.x + " + " + long.titleRegion.width + ", " + long.width + ")");
+            assertEqual(_popupMainLive(), [["popup.network.connections.wired.row.title", "anchors-wired", "Wired"], ["popup.network.wifi.row.title", "", _longSsid],
+                                           ["popup.network.wifi.row.title", "", "Street"], ["popup.network.wifi.row.title", "anchors-home", "Home"],
+                                           ["popup.network.wifi.row.title", "anchors-office", "Office"]].map(entry => entry.join("|") + ":1").sort().join(","),
+                        "… one element per row, each made once");
+            const panel = _popupView.loader.item;
+            assertEqual(_describeParts(_popupParts(panel)) + " / " + _lastPopupRows.replace(/:\d+:\d+:\d+:\d+(?= |$)/g, ""),
+                        _rowPartsBefore.replace(/:\d+:\d+:\d+:\d+(?= |$)/g, ""),
+                        "the popup's parts and its rows with the elements on the rows: where they stood without");
+            _keptRowElements = { home: rows["Home"].nameLine.appendHost.items[0].item, office: rows["Office"].nameLine.appendHost.items[0].item,
+                                 wired: wired.appendHost.items[0].item, homeRow: rows["Home"], officeRow: rows["Office"] };
+            _keptRowChanges = _keptRowElements.home.contextChanges + _keptRowElements.office.contextChanges + _keptRowElements.wired.contextChanges;
+            // A click on the element (it takes none) opens the row, as on the name
+            const homeTitle = rows["Home"].nameLine.appendHost.items[0];
+            _driver.mouseClick(homeTitle, homeTitle.width / 2, homeTitle.height / 2);
+        });
+        _then("a click on an element that takes none opened its row", () => _keptRowElements.homeRow.expanded && _popupRowsSteady(), () => {
+            assertEqual(_rowTitleProblems(_keptRowElements.homeRow, _keptRowElements.homeRow.nameLine).join("; "), "", "the row open: its elements still on its name's line");
+            assertEqual(_keptRowElements.homeRow.nameLine.appendHost.items[0].item, _keptRowElements.home, "… the same element");
+            _keptRowElements.homeRow.toggleRequested();
+            // A new scan: new objects, re-sorted (Office first), the profiles read anew
+            _holdNetworks(_rowNetworks(["Office", "Home", "Street", _longSsid]));
+            _holdProfiles(_rowProfiles());
+        });
+        _then("the networks read anew, re-sorted", () => _wifiRowList()[0]?.ssid === "Office" && !_keptRowElements.homeRow.expanded && _rowElementsReady(4) && _popupRowsSteady(), () => {
+            const rows = _wifiRows();
+            assert(rows["Home"] === _keptRowElements.homeRow && rows["Office"] === _keptRowElements.officeRow, "re-sorted with new objects: the same rows");
+            assert(rows["Home"].nameLine.appendHost.items[0].item === _keptRowElements.home && rows["Office"].nameLine.appendHost.items[0].item === _keptRowElements.office
+                   && _wiredName().appendHost.items[0].item === _keptRowElements.wired, "… the same elements, the wired row's too");
+            assertEqual(_keptRowElements.home.contextChanges + _keptRowElements.office.contextChanges + _keptRowElements.wired.contextChanges, _keptRowChanges,
+                        "… their contexts, the same values, not handed again");
+            assertEqual(_keptRowElements.office.context.networkId + " " + _keptRowElements.home.context.networkId, "anchors-office anchors-home", "… each still its own network's");
+            assertEqual(_rowTitleProblems(rows["Office"], rows["Office"].nameLine).join("; "), "", "… on their row's name line where it now stands");
+            // Office out of range
+            _holdNetworks(_rowNetworks(["Home", "Street", _longSsid]));
+        });
+        _then("a network gone", () => Object.keys(_wifiRows()).length === 3 && !_popupMainLive().includes("anchors-office"), () => {
+            assertEqual(_wifiRows()["Home"].nameLine.appendHost.items[0].item, _keptRowElements.home, "its element gone with its row, the others kept");
+            // Office back, and joined: a new row, a new element, its context up
+            _holdProfiles(_networkProfiles([["anchors-home", "Home", "wifi", 30, ""], ["anchors-office", "Office", "wifi", 40, "wlan0"],
+                                            ["anchors-wired", "Wired", "ethernet", 30, ""], ["anchors-lab", "Lab", "ethernet", 20, "eth-anchors"]]));
+            _holdNetworks(_rowNetworks(["Office", "Home", "Street", _longSsid], "Office"));
+        });
+        _then("a network back, joined; another wired profile up", () => _rowElementsReady(4) && _popupMainLive().includes("anchors-office") && _popupRowsSteady()
+              && _wiredName().appendHost.items[0]?.item.context.networkId === "anchors-lab", () => {
+            const rows = _wifiRows();
+            assert(rows["Office"] !== _keptRowElements.officeRow, "back in range: a new row");
+            assertEqual(JSON.stringify(rows["Office"].nameLine.appendHost.items[0].item.context.active) + " " + rows["Home"].nameLine.appendHost.items[0].item.context.active,
+                        "true false", "… Office's element up, Home's no longer");
+            assertEqual(_wiredName().appendHost.items[0].item, _keptRowElements.wired, "the wired row's element the same, with Lab in its context");
+            assertEqual(_keptRowElements.wired.context.name, "Lab", "… its name");
+            _rowCycles = 0;
+            _closePopupView();
+        });
+        const rowCycle = number => {
+            _then("the popup's rows closed (" + number + ")", () => _popupView === null && _live("popup") === "" && _popupMainLive() === "", () => {
+                _openPopupView("network", "../panels/NetworkPanel.qml");
+            });
+            _then("the popup's rows open (" + number + ")", () => _popupView?.loader.item && _rowElementsReady(4), () => {
+                _rowCycles++;
+                _closePopupView();
+            });
+        };
+        for (let i = 1; i <= 5; i++)
+            rowCycle(i);
+        _then("the popup's rows opened and closed five times", () => _popupView === null && _live("popup") === "" && _popupMainLive() === "", () => {
+            assertEqual(_rowCycles, 5, "opened and closed five times, the elements built each time");
+            assertEqual(Modules.status("anchors-popup-rows")?.errors.length, 0, "no element failed meanwhile");
+            Modules.host.unload();
             _holdProfiles(null);
             _holdWifiDetails(null);
             _holdDevices(null);
             _holdNetworks(null);
             _pinNetwork(false);
+            _keptRowElements = null;
         });
 
         // A card's buttons (settings.cards.saved.card.actions, append; the fixture view's cards

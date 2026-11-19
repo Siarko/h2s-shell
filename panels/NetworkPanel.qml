@@ -16,7 +16,9 @@ import qs.panels.network
 // Built on the popup blocks: the panel's root a popup section (popup.network), the VPN,
 // Ethernet and Wi-Fi parts one named "connections" — the place popup.network.connections:
 // modules' elements at its end, above the divider over the network list, given whether Wi-Fi
-// is on and joined and whether the cable is (ModuleRules.anchorTable).
+// is on and joined and whether the cable is (ModuleRules.anchorTable). The wired row's name
+// line (popup.network.connections.wired.row.title) and each Wi-Fi network's in the list
+// (popup.network.wifi.row.title) are places too, with the network in their context.
 Item {
     id: root
 
@@ -55,55 +57,64 @@ Item {
             }
 
             // ---- Ethernet section (visible whenever ethernet device is present) ----
-            RowLayout {
+            // A section named "wired" (named, not a place): the wired row — a row block
+            // ("row") whose name line is the place popup.network.connections.wired.row.title,
+            // with the wired profile up in its elements' context (ModuleRules.wiredRowContext)
+            // —, the link's details and the divider under them
+            PopupSection {
+                anchor: "wired"
                 visible: NetworkManager.ethernetDevice !== ""
                 width: parent.width
-                spacing: 8
+                spacing: 6
+                divider: true
 
-                Text {
-                    text: "󰈀"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeTitle
-                    color: EthernetManager.ethernetConnected ? Theme.textPrimary : Theme.textDisabled
+                PopupRow {
+                    id: _wiredRow
+                    anchor: "row"
+                    width: parent.width
+                    context: ModuleRules.wiredRowContext(NetworkProfiles.profiles, NetworkManager.ethernetDevice)
+
+                    RowLayout {
+                        width: parent.width
+                        spacing: 8
+
+                        Text {
+                            text: "󰈀"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeTitle
+                            color: EthernetManager.ethernetConnected ? Theme.textPrimary : Theme.textDisabled
+                        }
+
+                        PopupRowTitle {
+                            objectName: "wiredName"
+                            text: EthernetManager.ethernetConnected
+                                ? (NetworkManager.ethernetConnection || "Ethernet")
+                                : "Ethernet"
+                            font.pixelSize: Theme.fontSizeSection
+                            Layout.fillWidth: true
+                            maxElementWidth: Math.floor(_wiredRow.width / 4)
+                            context: _wiredRow.context
+                        }
+
+                        ToggleSwitch {
+                            implicitWidth: 44
+                            implicitHeight: 24
+                            offColor: Theme.textDisabled
+                            checked: EthernetManager.ethernetConnected
+                            onToggled: EthernetManager.ethernetConnected
+                                ? EthernetManager.disconnect()
+                                : EthernetManager.connect()
+                        }
+                    }
                 }
 
-                Text {
-                    text: EthernetManager.ethernetConnected
-                        ? (NetworkManager.ethernetConnection || "Ethernet")
-                        : "Ethernet"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSection
-                    color: Theme.textPrimary
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
+                LinkInfo {
+                    visible: EthernetManager.ethernetConnected
+                    width: parent.width
+                    speeds: EthernetManager
+                    address: IpManager.ethernetAddress
+                    dns: IpManager.ethernetDns
                 }
-
-                ToggleSwitch {
-                    implicitWidth: 44
-                    implicitHeight: 24
-                    offColor: Theme.textDisabled
-                    checked: EthernetManager.ethernetConnected
-                    onToggled: EthernetManager.ethernetConnected
-                        ? EthernetManager.disconnect()
-                        : EthernetManager.connect()
-                }
-            }
-
-            LinkInfo {
-                visible: EthernetManager.ethernetConnected
-                width: parent.width
-                speeds: EthernetManager
-                address: IpManager.ethernetAddress
-                dns: IpManager.ethernetDns
-            }
-
-            // Divider below ethernet section
-            Rectangle {
-                visible: NetworkManager.ethernetDevice !== ""
-                width: parent.width
-                height: 1
-                color: Theme.textDisabled
-                opacity: 0.3
             }
 
             // ---- WiFi header: icon + "WiFi" label + toggle (hidden when no adapter) ----
@@ -241,8 +252,11 @@ Item {
         }
 
         // ---- Available networks section ----
-        Column {
+        // A section named "wifi" (named, not a place): each network's row a row block
+        // ("row"), its name line the place popup.network.wifi.row.title (WifiNetworkRow)
+        PopupSection {
             id: _wifiSection
+            anchor: "wifi"
             visible: WifiManager.mode === "connected" || WifiManager.mode === "disconnected"
             width: parent.width
             spacing: 4
@@ -286,7 +300,8 @@ Item {
             WifiNetworkList {
                 id: networkList
                 width: parent.width
-                maximumHeight: root.availableHeight - _panel.contentTop - _wifiSection.y - networkList.y
+                rowAnchor: "row"
+                maximumHeight: root.availableHeight - _panel.contentTop - _wifiSection.y - _wifiSection.contentTop - networkList.y
                     - (_wifiSection.spacing + _hiddenRow.height) - (_hotspotRow.visible ? _wifiSection.spacing + _hotspotRow.height : 0)
             }
 

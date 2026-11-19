@@ -12,6 +12,10 @@ Item {
     id: root
 
     property real maximumHeight: Infinity
+    // The name of each network's row block ("" none): "row" in the network popup, where
+    // their name lines are the place popup.network.wifi.row.title (WifiNetworkRow); none in
+    // Settings, which offers no place there
+    property string rowAnchor: ""
 
     // The network row that is open, by SSID; the passwords typed, by SSID; whether the
     // open row shows its password
@@ -61,6 +65,7 @@ Item {
         delegate: WifiNetworkRow {
             required property string modelData
             network: _networks.byKey[modelData] ?? ({})
+            anchor: root.rowAnchor
             width: _list.width
             expanded: root._expandedSsid === ssid
             passwordText: root._passwords[ssid] ?? ""

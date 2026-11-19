@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.31" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.32" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -161,6 +161,24 @@ import qs.singletons.network
 //                                                     A click
 //                                                     on an element that takes none opens or
 //                                                     closes the card, as on the name
+//                            popup.network.wifi.row.title,
+//                            popup.network.connections.wired.row.title (1.32)  the name's
+//                                                     line of the network popup's rows: each
+//                                                     Wi-Fi network in range's, closed and open,
+//                                                     and the wired row's — append, after the
+//                                                     name, the same rules as the cards' (as
+//                                                     tall as the line, a quarter of the row at
+//                                                     most, the name cut first; a click on an
+//                                                     element that takes none opens or closes
+//                                                     the Wi-Fi row). Context as the cards':
+//                                                     { networkId, name, kind, active } — a
+//                                                     Wi-Fi network saved: its profile's (of
+//                                                     several, the one up, else the one last
+//                                                     used); not saved: networkId "" and its
+//                                                     SSID as name. The wired row: the wired
+//                                                     profile up on the device; none up:
+//                                                     networkId and name "". Not in Settings →
+//                                                     Wi-Fi's own list of networks in range
 //                          A saved Wi-Fi network's card is a place only once its details are
 //                          read (until then Api.networks leaves it out: it could be a hotspot)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated

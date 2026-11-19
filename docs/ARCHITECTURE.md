@@ -706,7 +706,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   or the popup's key, the base the window or popup gives the view's root (the first item up
   the parents with a string `anchorBase`); then the names of the enclosing blocks and its
   own; a block repeated per item is named by its kind (`card`, `row`), its item in the
-  element's context; a card's regions `actions`, `settings` and `title` last. A block with no anchor
+  element's context; a card's regions `actions`, `settings` and `title` last, and a row's
+  region `title` (a popup row's name line, `components/PopupRowTitle.qml`) right after `row`
+  (`ModuleRules.anchorRegionHolders`). A block with no anchor
   adds no level and has no path of its own — except the view's root, a block of a root kind
   (`ModuleRules.anchorRootKinds`: the settings page, the popup section) right at the base,
   whose path is the base itself; sections with no anchor straight under a plain item are not
@@ -760,6 +762,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `settings.network_wifi.saved.card.title` | `append` | as the saved Wi-Fi network's `settings` | each saved Wi-Fi network's card, closed and open: its name's line, after the name — what a module adds to that network (any element, on theme tokens), as tall as the line, a quarter of the card at most for all | 1.28 |
   | `settings.network_ethernet.profiles.card.title` | `append` | as the wired profile's `settings` | each wired profile's card, the same | 1.28 |
   | `settings.network_vpn.vpns.card.title` | `append` | as the VPN's row | each VPN's card, whatever its provider (not own-provider), the same | 1.29 |
+  | `popup.network.wifi.row.title` | `append` | as the saved Wi-Fi network's `settings`; a network not saved (no profile) has `networkId` `""` and its SSID as `name`; of several profiles for one SSID the one up, else the one last used (`ModuleRules.wifiRowContext`) | the network popup's list of Wi-Fi networks in range, each network's row, closed and open: its name's line, after the name, as on the cards (`panels/network/WifiNetworkRow.qml`, a quarter of the row at most); not the same list in Settings → Wi-Fi | 1.32 |
+  | `popup.network.connections.wired.row.title` | `append` | as the wired profile's `settings`, for the wired profile up on the Ethernet device; with none up `networkId` and `name` `""` (`ModuleRules.wiredRowContext`) | the network popup's Ethernet part, the wired row's name line, the same (`panels/NetworkPanel.qml`) | 1.32 |
 
   A module's icon (the manifest's `icon`) is its face in Settings → Modules; the shell puts
   it on no card. The marks of API 1.27 (`module.setMark`, `clearMark`, a card row's `marks`)
@@ -771,7 +775,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   card has no anchor and no module's element or button is built in it.
 
   Named but not places yet: `popup.network` (the network panel's root), its VPN part
-  `popup.network.connections.vpn`, the VPN page's section of cards `settings.network_vpn.vpns`
+  `popup.network.connections.vpn`, its Ethernet part `popup.network.connections.wired` and
+  the wired row `….wired.row`, the network list's part `popup.network.wifi` and each
+  network's row `popup.network.wifi.row`, the VPN page's section of cards `settings.network_vpn.vpns`
   and each card `….vpns.card` with its name's line `….vpns.card.title`; the Wi-Fi page's
   sections `settings.network_wifi.saved` and `settings.network_wifi.hotspots`, each saved
   network's card `….saved.card`, each hotspot's card `….hotspots.card` and its opened part,

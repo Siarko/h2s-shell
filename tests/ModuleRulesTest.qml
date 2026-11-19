@@ -840,9 +840,15 @@ TestCase {
                     + "settings.network_vpn.vpns.card.title region append panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_vpn.vpns.card.actions region append panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_wifi.saved.card.actions region append panels/settings/NetworkWifiSettings.qml; "
-                    + "settings.network_ethernet.profiles.card.actions region append panels/settings/NetworkEthernetSettings.qml",
+                    + "settings.network_ethernet.profiles.card.actions region append panels/settings/NetworkEthernetSettings.qml; "
+                    + "popup.network.wifi.row.title region append panels/network/WifiNetworkRow.qml; "
+                    + "popup.network.connections.wired.row.title region append panels/NetworkPanel.qml",
                     "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards; "
-                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards; 1.28: their name's line; 1.29: the VPN cards' name line)");
+                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards; 1.28: their name's line; 1.29: the VPN cards' name line; "
+                    + "1.32: the network popup's Wi-Fi and wired rows' name line)");
+        assertEqual(rules.anchorTable.filter(entry => entry.path.endsWith(".row.title")).map(entry => entry.path + " " + entry.placements.join("/") + " " + entry.scope + " " + entry.since).join(","),
+                    "popup.network.wifi.row.title append  1.32,popup.network.connections.wired.row.title append  1.32",
+                    "… the popup's network rows' name lines take any module's elements, appended (1.32)");
         assertEqual(rules.anchorTable.filter(entry => entry.path.endsWith(".card.title")).map(entry => entry.path + " " + entry.placements.join("/") + " " + entry.since).join(","),
                     "settings.network_wifi.saved.card.title append 1.28,settings.network_ethernet.profiles.card.title append 1.28,settings.network_vpn.vpns.card.title append 1.29",
                     "… the saved Wi-Fi networks' and wired profiles' name lines take elements, appended (1.28), and the VPN cards' (1.29)");
@@ -886,12 +892,13 @@ TestCase {
         // --- the path rule ---
         for (const good of ["settings.general", "popup.network.connections", "popup.network.connections.vpn.row", "popup.tray-menu",
                             "settings.network_vpn.vpns.card.settings", "settings.network_wifi.saved.card.actions", "settings.network_ethernet.profiles.card.title",
-                            "settings.general.box2.deep"])
+                            "settings.general.box2.deep", "popup.network.wifi.row.title", "popup.network.connections.wired.row.title"])
             assertEqual(rules.anchorPathProblem(good), "", "a place's name: " + good);
         for (const bad of ["", null, 5, {}, "settings", "bar.clock", "lockscreen.password", "screensaver.clock", "Settings.general",
                            "settings.General", "settings.general.Top", "settings.general.top-x", "settings.general.1a", "settings..x",
                            "settings.general.", "settings.general.settings", "settings.general.actions", "settings.general.title", "settings.x.card.title.more", "settings.x.saved.settings",
                            "settings.x.card.settings.more", "settings.x.card.actions.row", "settings.card.settings",
+                           "popup.network.wifi.row.settings", "popup.network.wifi.row.actions", "popup.network.wired.title", "popup.network.wifi.row.title.more", "popup.row.title",
                            "settings.general." + "a".repeat(65), "settings.g" + ".abcdefgh".repeat(25)])
             assert(rules.anchorPathProblem(bad) !== "", "not a place's name: " + JSON.stringify(bad));
         assertEqual(rules.anchorNameProblem("saved") + rules.anchorNameProblem("connections2"), "", "a block's name: a word");
@@ -926,6 +933,10 @@ TestCase {
                     + JSON.stringify({ path: "settings.general.saved.card.actions", childPath: "" })
                     + JSON.stringify({ path: "settings.general.saved.card.title", childPath: "" }),
                     "a card's region: the card's path and the region's name; nothing addressable inside it");
+        assertEqual(paths("popup.network.wifi.row", false, "title", "region") + paths("popup.network.wifi.row", false, "settings", "region")
+                    + paths("popup.network.wired", false, "title", "region"),
+                    JSON.stringify({ path: "popup.network.wifi.row.title", childPath: "" }) + JSON.stringify({ path: "", childPath: "" }).repeat(2),
+                    "a row's region (1.32): only `title`, right under a row named \"row\"");
         assertEqual([paths("settings.general.saved", false, "settings", "region"), paths("settings.general.saved.card.actions", false, "settings", "region"),
                      paths("settings.general.saved.card", false, "box", "region"), paths("settings.general.saved.card", false, "", "region"),
                      paths("settings.general.saved.card", true, undefined, "region"), paths("", false, "settings", "region")].join(""),
@@ -1376,6 +1387,39 @@ TestCase {
         assertEqual(JSON.stringify([undefined, null, {}].map(rules.networkContext)),
                     JSON.stringify([0, 1, 2].map(() => ({ networkId: "", name: "", kind: "", active: false }))),
                     "networkContext: no profile (a card being made) — empty fields, not up");
+        // The context on the network popup's rows (1.32): the profile as the cards give it
+        const used = (entry, lastUsed, device) => Object.assign(entry, { lastUsed: lastUsed, device: device ?? "" });
+        const rowProfiles = [used(profile("u-home", "Home", "wifi", ""), 30), used(profile("u-home2", "Home (old)", "wifi", ""), 50),
+                             used(profile("u-cafe", "Cafe", "wifi", "activated"), 10, "wlan0"), used(profile("u-cafe2", "Cafe 2", "wifi", ""), 90),
+                             used(profile("u-hotspot", "Hotspot", "wifi", ""), 99), used(profile("u-unread", "Unread", "wifi", ""), 99),
+                             used(profile("u-wired", "Wired", "ethernet", "activated"), 5, "eth0"), used(profile("u-lab", "Lab", "ethernet", ""), 50),
+                             used(profile("u-port", "Port", "ethernet", "activated", "br0"), 60, "eth1"),
+                             used(profile("u-dock", "Dock", "ethernet", "activating"), 1, "eth2")];
+        const rowWifi = { "u-home": { ssid: "Home", mode: "infrastructure" }, "u-home2": { ssid: "Home", mode: "infrastructure" },
+                          "u-cafe": { ssid: "Cafe", mode: "infrastructure" }, "u-cafe2": { ssid: "Cafe", mode: "infrastructure" },
+                          "u-hotspot": { ssid: "Mine", mode: "ap" } };
+        assertEqual(JSON.stringify(["Home", "Cafe", "Mine", "Street\nnet", "", undefined].map(ssid => rules.wifiRowContext(ssid, rowProfiles, rowWifi))),
+                    JSON.stringify([{ networkId: "u-home2", name: "Home (old)", kind: "wifi", active: false },
+                                    { networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true },
+                                    { networkId: "", name: "Mine", kind: "wifi", active: false },
+                                    { networkId: "", name: "Street net", kind: "wifi", active: false },
+                                    { networkId: "", name: "", kind: "wifi", active: false },
+                                    { networkId: "", name: "", kind: "wifi", active: false }]),
+                    "wifiRowContext: of the profiles saved for the SSID, the one up, else the last used; a hotspot's or an unread one's none — "
+                    + "not saved: no networkId, the SSID on one line as the name");
+        assertEqual(JSON.stringify([rules.wifiRowContext("Home", null, null), rules.wifiRowContext("Home", [5, null, { uuid: "u-home" }], { "u-home": "junk" })]),
+                    JSON.stringify([0, 1].map(() => ({ networkId: "", name: "Home", kind: "wifi", active: false }))),
+                    "… garbage: as not saved, no throw");
+        assertEqual(JSON.stringify(["eth0", "eth1", "eth2", "eth9", "", null].map(device => rules.wiredRowContext(rowProfiles, device))),
+                    JSON.stringify([{ networkId: "u-wired", name: "Wired", kind: "ethernet", active: true },
+                                    { networkId: "", name: "", kind: "ethernet", active: false },
+                                    { networkId: "u-dock", name: "Dock", kind: "ethernet", active: false },
+                                    { networkId: "", name: "", kind: "ethernet", active: false },
+                                    { networkId: "", name: "", kind: "ethernet", active: false },
+                                    { networkId: "", name: "", kind: "ethernet", active: false }]),
+                    "wiredRowContext: the wired profile up on the device (coming up: not active yet); a port, none up or no device: no networkId, no name");
+        assertEqual(JSON.stringify(rules.wiredRowContext("junk", "eth0")), JSON.stringify({ networkId: "", name: "", kind: "ethernet", active: false }),
+                    "… garbage: none, no throw");
         assertEqual(rules.apiNetworks([profile("u-unread", "New", "wifi", "")], {}).length, 0,
                     "apiNetworks: a Wi-Fi profile whose details are not read yet is left out (it could be a hotspot)");
         // Whether a saved network's card is a place: as Api.networks lists it

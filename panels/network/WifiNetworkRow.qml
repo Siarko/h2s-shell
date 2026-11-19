@@ -11,7 +11,15 @@ import qs.singletons.network
 // Whether it is open, its password and whether that shows are the panel's, kept under
 // the network's SSID, and come in through `expanded`, `passwordText` and `showPassword`:
 // they outlive the row (a network that drops out of range and comes back finds them).
-Rectangle {
+//
+// A row block (components/PopupRow.qml) named `anchor` — "row" in the network popup
+// (WifiNetworkList's rowAnchor), none in Settings — whose name line is its region `title`
+// (PopupRowTitle): the place popup.network.wifi.row.title, closed and open, with the network
+// in its elements' context as the saved networks' cards give it — a network not saved with
+// no networkId and its SSID as the name (ModuleRules.wifiRowContext). The click area lies
+// under the line, so an element takes its own clicks; a click on one that takes none opens
+// or closes the row, as on the name.
+PopupRow {
     id: root
 
     // The network shown (WifiManager.wifiNetworks), looked up by the list by SSID
@@ -46,172 +54,182 @@ Rectangle {
         return Theme.textDisabled
     }
 
+    context: ModuleRules.wifiRowContext(ssid, NetworkProfiles.profiles, NetworkProfiles.wifi)
+    // The name with its line's region, for the core's tests
+    readonly property alias nameLine: _name
+
     // The info row, and with it the action row when open: as tall as they are
-    height: expanded ? _networkColumn.implicitHeight : _infoRow.height
-    radius: Theme.row.radius
-    color: root.network.inUse ? Theme.accentTint : Theme.surface
-    clip: true
+    Rectangle {
+        width: parent.width
+        height: root.expanded ? _networkColumn.implicitHeight : _infoRow.height
+        radius: Theme.row.radius
+        color: root.network.inUse ? Theme.accentTint : Theme.surface
+        clip: true
 
-    Behavior on height {
-        NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
-    }
-
-    Column {
-        id: _networkColumn
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
-            leftMargin: Theme.row.horizontalPadding
-            rightMargin: Theme.row.horizontalPadding
-        }
-        spacing: 4
-
-        // Main info row — always click to expand
-        Item {
-            id: _infoRow
-            width: parent.width
-            height: Math.max(36, _infoContent.implicitHeight + 8)
-
-            RowLayout {
-                id: _infoContent
-                anchors.fill: parent
-                spacing: 6
-
-                Rectangle {
-                    width: 8
-                    height: 8
-                    radius: width / 2
-                    Layout.alignment: Qt.AlignVCenter
-                    color: root._signalColor(root.network.signal)
-                }
-
-                Text {
-                    text: root.network.ssid
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBodyLarge
-                    color: root.network.inUse ? Theme.accent : Theme.textPrimary
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                SignalBars {
-                    strength: root.network.signal
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textSecondary
-                }
-
-                Text {
-                    visible: root.network.band !== "" && root.network.band !== undefined
-                    text: root.network.band ?? ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeXSmall
-                    color: (root.network.band === "5G") ? Theme.accent : Theme.textMuted
-                }
-
-                Text {
-                    visible: root.network.security !== "--" && root.network.security !== ""
-                    text: root.network.security !== "--" ? root.network.security : ""
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeXSmall
-                    color: Theme.textMuted
-                }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.toggleRequested()
-            }
+        Behavior on height {
+            NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
         }
 
-        // Action row (revealed when expanded)
-        Item {
-            width: parent.width
-            height: Math.max(36, _actionContent.implicitHeight + 8)
+        Column {
+            id: _networkColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                leftMargin: Theme.row.horizontalPadding
+                rightMargin: Theme.row.horizontalPadding
+            }
+            spacing: 4
 
-            RowLayout {
-                id: _actionContent
-                anchors.fill: parent
-                spacing: 6
+            // Main info row — always click to expand
+            Item {
+                id: _infoRow
+                width: parent.width
+                height: Math.max(36, _infoContent.implicitHeight + 8)
 
-                // Password field — only for unsaved secured networks
-                InputField {
-                    id: pwInput
-                    visible: root.needsPassword
-                    Layout.fillWidth: true
-                    fieldColor: Theme.popupBackground
-                    outlined: true
-                    placeholder: "Password"
-                    password: true
-                    // Shown or not per network, kept by the panel (see above)
-                    ownsReveal: false
-                    revealed: root.showPassword
-                    onRevealToggled: root.revealToggled()
-                    onTextEdited: root.passwordEdited(text)
-                    objectName: "wifiPasswordField"
-                    // Enter: what Connect beside it does, while it says Connect and can be
-                    // pressed — not while the row is closed (closing only clips it, and the
-                    // field keeps its focus)
-                    onAccepted: if (root.expanded && visible && _connectButton.available
-                                    && NetworkRules.wifiEnterConnects(text, root.network.inUse === true, _connectButton._busy)) _connectButton.clicked()
+                // Under the line: an element on it that takes clicks gets them
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleRequested()
                 }
 
-                // Spacer for saved/open networks (no password field)
-                Item {
-                    visible: !root.needsPassword
-                    Layout.fillWidth: true
-                }
+                RowLayout {
+                    id: _infoContent
+                    anchors.fill: parent
+                    spacing: 6
 
-                // A password that cannot be one, or why connecting failed, from nmcli's error
-                // (WifiManager.failedKind)
-                Text {
-                    objectName: "wifiRowProblem"
-                    visible: text !== ""
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    textFormat: Text.PlainText
-                    text: root._passwordWrong ? "8 to 63 characters."
-                        : !(root.wifi.connectFailed && root.wifi.failedSsid === root.network.ssid) ? ""
-                        : root.wifi.failedKind === "password" ? "Wrong password"
-                        : root.wifi.failedKind === "notFound" ? "The network is out of range"
-                        : root.wifi.failedKind === "auth" ? "Not allowed to connect"
-                        : (root.wifi.failedMessage ?? "") !== "" ? root.wifi.failedMessage : "Could not connect"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.warning
-                    Layout.alignment: Qt.AlignVCenter
-                }
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: width / 2
+                        Layout.alignment: Qt.AlignVCenter
+                        color: root._signalColor(root.network.signal)
+                    }
 
-                // Connect / Cancel button
-                SmallButton {
-                    id: _connectButton
-                    objectName: "wifiConnect"
-                    visible: !root.network.inUse
-                    readonly property bool _busy: root.wifi.connecting && root.wifi.connectingTo === root.network.ssid
-                    label: _busy ? "Cancel" : "Connect"
-                    kind: _busy ? "cancel" : "save"
-                    available: _busy || !root._passwordWrong
-                    onClicked: {
-                        if (!available)
-                            return;
-                        if (_busy)
-                            root.wifi.cancelConnect()
-                        else
-                            root.wifi.connectToWifi(root.network.ssid, root.needsPassword ? root.passwordText : "")
+                    PopupRowTitle {
+                        id: _name
+                        objectName: "wifiName"
+                        text: root.network.ssid ?? ""
+                        font.pixelSize: Theme.fontSizeBodyLarge
+                        color: root.network.inUse ? Theme.accent : Theme.textPrimary
+                        Layout.fillWidth: true
+                        maxElementWidth: Math.floor(root.width / 4)
+                        context: root.context
+                    }
+
+                    SignalBars {
+                        strength: root.network.signal
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textSecondary
+                    }
+
+                    Text {
+                        visible: root.network.band !== "" && root.network.band !== undefined
+                        text: root.network.band ?? ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXSmall
+                        color: (root.network.band === "5G") ? Theme.accent : Theme.textMuted
+                    }
+
+                    Text {
+                        visible: root.network.security !== "--" && root.network.security !== ""
+                        text: root.network.security !== "--" ? root.network.security : ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeXSmall
+                        color: Theme.textMuted
                     }
                 }
+            }
 
-                // Forget button — only for saved networks
-                // Asks first, like every delete (DeleteButton)
-                DeleteButton {
-                    objectName: "wifiForget"
-                    visible: root.isSaved
-                    label: "Forget"
-                    confirmLabel: "Forget?"
-                    fontSize: Theme.fontSizeBody
-                    cancelTip: "Keep the network"
-                    onConfirmed: root.wifi.forgetNetwork(root.network.ssid)
+            // Action row (revealed when expanded)
+            Item {
+                width: parent.width
+                height: Math.max(36, _actionContent.implicitHeight + 8)
+
+                RowLayout {
+                    id: _actionContent
+                    anchors.fill: parent
+                    spacing: 6
+
+                    // Password field — only for unsaved secured networks
+                    InputField {
+                        id: pwInput
+                        visible: root.needsPassword
+                        Layout.fillWidth: true
+                        fieldColor: Theme.popupBackground
+                        outlined: true
+                        placeholder: "Password"
+                        password: true
+                        // Shown or not per network, kept by the panel (see above)
+                        ownsReveal: false
+                        revealed: root.showPassword
+                        onRevealToggled: root.revealToggled()
+                        onTextEdited: root.passwordEdited(text)
+                        objectName: "wifiPasswordField"
+                        // Enter: what Connect beside it does, while it says Connect and can be
+                        // pressed — not while the row is closed (closing only clips it, and the
+                        // field keeps its focus)
+                        onAccepted: if (root.expanded && visible && _connectButton.available
+                                        && NetworkRules.wifiEnterConnects(text, root.network.inUse === true, _connectButton._busy)) _connectButton.clicked()
+                    }
+
+                    // Spacer for saved/open networks (no password field)
+                    Item {
+                        visible: !root.needsPassword
+                        Layout.fillWidth: true
+                    }
+
+                    // A password that cannot be one, or why connecting failed, from nmcli's error
+                    // (WifiManager.failedKind)
+                    Text {
+                        objectName: "wifiRowProblem"
+                        visible: text !== ""
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        textFormat: Text.PlainText
+                        text: root._passwordWrong ? "8 to 63 characters."
+                            : !(root.wifi.connectFailed && root.wifi.failedSsid === root.network.ssid) ? ""
+                            : root.wifi.failedKind === "password" ? "Wrong password"
+                            : root.wifi.failedKind === "notFound" ? "The network is out of range"
+                            : root.wifi.failedKind === "auth" ? "Not allowed to connect"
+                            : (root.wifi.failedMessage ?? "") !== "" ? root.wifi.failedMessage : "Could not connect"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.warning
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    // Connect / Cancel button
+                    SmallButton {
+                        id: _connectButton
+                        objectName: "wifiConnect"
+                        visible: !root.network.inUse
+                        readonly property bool _busy: root.wifi.connecting && root.wifi.connectingTo === root.network.ssid
+                        label: _busy ? "Cancel" : "Connect"
+                        kind: _busy ? "cancel" : "save"
+                        available: _busy || !root._passwordWrong
+                        onClicked: {
+                            if (!available)
+                                return;
+                            if (_busy)
+                                root.wifi.cancelConnect()
+                            else
+                                root.wifi.connectToWifi(root.network.ssid, root.needsPassword ? root.passwordText : "")
+                        }
+                    }
+
+                    // Forget button — only for saved networks
+                    // Asks first, like every delete (DeleteButton)
+                    DeleteButton {
+                        objectName: "wifiForget"
+                        visible: root.isSaved
+                        label: "Forget"
+                        confirmLabel: "Forget?"
+                        fontSize: Theme.fontSizeBody
+                        cancelTip: "Keep the network"
+                        onConfirmed: root.wifi.forgetNetwork(root.network.ssid)
+                    }
                 }
             }
         }
