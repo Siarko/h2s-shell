@@ -1918,3 +1918,12 @@ For the owner, from the autonomous run (2026-11-18 on):
   calendar + id in every view; GPU cards fed to their Instantiator by key; `KeyedViewsTest`
   restores the network singletons on any exit. Quick set passed on both machines.
 
+- **The network profile card on the settings card (U4b)** — on `master` 2026-11-19, no API
+  change. `NetworkProfileCard` built on `SettingsCard` (header slot: lock + main button;
+  stacked Settings…, Edit connection…, Forget; page rows as `pageRows`; objectNames kept);
+  `SettingsCard`'s stacked buttons in a ColumnLayout, put on the right edge unless they name
+  an alignment. `tests/NetworkCardGeometryTest.qml` written on the old card: identical numbers
+  for a Wi-Fi, wired, hotspot and provider card, closed and open. Reviewed, no defect (test
+  gaps left for the VPN page slice); `tests/run-all.sh` and the Tailscale lock bed passed on
+  both machines.
+

@@ -21,7 +21,6 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the network profile card on the settings card (U4b)
 - [ ] the VPN page (U4c); it also publishes `popup.network.connections.vpn.row` (named in
       U2, not published: it needs the per-VPN context)
 - [ ] the Wi-Fi and Ethernet pages (U5); the card's button place (U6)
