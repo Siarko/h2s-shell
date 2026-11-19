@@ -2143,3 +2143,12 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   arrive. A first version made `setpriv` the default for unlimited runs; its review found it
   wrapped `pkexec`, turned "cannot start" into a silent "dismissed" and killed programs modules
   launch on every restart — hence the opt-in. `tests/run-all.sh` passed on both machines.
+- **The popup on transfers, in two panels (D5)** — on the module's `main` 2026-11-19. More than
+  2 files across all devices (sends from the page and the popup, saves; refused files not
+  counted) → the popup becomes the existing panel, a rule and `TaildropFilesPanel.qml` (a header
+  per device with Cancel / Clear, its file rows, "Received files", its own scroll); otherwise
+  one line per device under its row (`TaildropPopupState.qml`), with the stall line and Skip /
+  "Send now" / "Fetch now". A second send queued to a device shows on its line, Cancel stops
+  both; a send to a device no longer listed gets a header under its last known name. Fits half
+  of a 1366-px screen. Shared `TaildropFileRow.qml`. Reviewed (page sends were missing from the
+  popup), fixed; module suites and stand-ins on both machines, the module's lock bed on NixOS.
