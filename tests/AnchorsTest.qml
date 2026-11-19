@@ -1102,7 +1102,7 @@ TestCase {
     // Each of the `count` Wi-Fi rows' two elements built, and the wired row's one
     function _rowElementsReady(count) {
         const rows = _wifiRowList();
-        return rows.length === count && rows.every(row => _ready(row.nameLine.appendHost, 2)) && _wiredName() !== null && _ready(_wiredName().appendHost, 1);
+        return rows.length === count && rows.every(row => _ready(row.nameLine.appendHost, 3)) && _wiredName() !== null && _ready(_wiredName().appendHost, 1);
     }
 
     // Every row's elements laid out on its name line: the place as wide as they are (up to its
@@ -2989,10 +2989,11 @@ TestCase {
             assertEqual(_regionElementProblems(wired).join("; "), "", "Wired's element: under the card's rows, 6 apart, last, as wide");
             const homeElement = home.settingsRegion.appendHost.items[0];
             const wiredElement = wired.settingsRegion.appendHost.items[0];
-            assertEqual(_contextKeys(homeElement.item), "active,anchor,kind,name,networkId,placement", "the element's context: the network, with anchor and placement");
+            assertEqual(_contextKeys(homeElement.item), "active,anchor,kind,name,networkId,placement,ssid", "the element's context: the network, its SSID, with anchor and placement");
             assertEqual([homeElement.item.context.anchor, homeElement.item.context.placement, homeElement.item.context.networkId, homeElement.item.context.name,
-                         homeElement.item.context.kind, homeElement.item.context.active].join(" "),
-                        "settings.network_wifi.saved.card.settings append anchors-home Home wifi true", "… Home, as Api.networks names it");
+                         homeElement.item.context.kind, homeElement.item.context.active, homeElement.item.context.ssid].join(" "),
+                        "settings.network_wifi.saved.card.settings append anchors-home Home wifi true Home", "… Home, as Api.networks names it, its SSID");
+            assertEqual(_contextKeys(wiredElement.item), "active,anchor,kind,name,networkId,placement", "… a wired profile's: no SSID");
             assertEqual([wiredElement.item.context.anchor, wiredElement.item.context.networkId, wiredElement.item.context.name, wiredElement.item.context.kind,
                          wiredElement.item.context.active].join(" "),
                         "settings.network_ethernet.profiles.card.settings anchors-wired Wired ethernet true", "… Wired, on its page's path");
@@ -3053,7 +3054,7 @@ TestCase {
             assert(spot && spot.titleRegion.appendHost.count === 0 && spot.titleRegion.width === 0 && spot.titleText.rightPadding === 0,
                    "a hotspot's card: no place on its name's line, the name has the whole line");
             const [ownTitle, wideTitle] = _titleElements(office);
-            assertEqual(_contextKeys(ownTitle.item), "active,anchor,kind,name,networkId,placement", "an element's context: the card's, with anchor and placement");
+            assertEqual(_contextKeys(ownTitle.item), "active,anchor,kind,name,networkId,placement,ssid", "an element's context: the card's, with anchor and placement");
             assertEqual([ownTitle.item.context.anchor, ownTitle.item.context.placement, ownTitle.item.context.networkId, ownTitle.item.context.name,
                          ownTitle.item.context.kind, ownTitle.item.context.active].join(" "),
                         "settings.network_wifi.saved.card.title append anchors-office Office wifi false", "… Office's, at the place's path");
@@ -3258,16 +3259,16 @@ TestCase {
             const rows = _wifiRows();
             const wired = _wiredName();
             assertEqual(Object.keys(rows).sort().map(ssid => ssid + ":" + _names(rows[ssid].nameLine.appendHost)).join(" ") + " | " + _names(wired.appendHost),
-                        [_longSsid, "Home", "Office", "Street"].map(ssid => ssid + ":anchors-popup-rows:Title,anchors-popup-rows:Wide").join(" ")
+                        [_longSsid, "Home", "Office", "Street"].map(ssid => ssid + ":anchors-popup-rows:Title,anchors-popup-rows:Clicker,anchors-popup-rows:Wide").join(" ")
                         + " | anchors-popup-rows:Title",
                         "each Wi-Fi row's name line: the module's elements in its manifest's order; the wired row's: its element");
             const context = line => JSON.stringify(line.appendHost.items[0].item.context);
-            assertEqual(_contextKeys(rows["Home"].nameLine.appendHost.items[0].item), "active,anchor,kind,name,networkId,placement",
-                        "the element's context: the network as the cards give it, anchor and placement");
+            assertEqual(_contextKeys(rows["Home"].nameLine.appendHost.items[0].item), "active,anchor,kind,name,networkId,placement,ssid",
+                        "the element's context: the network as the cards give it, its SSID, anchor and placement");
             assertEqual(["Home", "Office", "Street"].map(ssid => context(rows[ssid].nameLine)).join(" "),
-                        [{ networkId: "anchors-home", name: "Home", kind: "wifi", active: true },
-                         { networkId: "anchors-office", name: "Office", kind: "wifi", active: false },
-                         { networkId: "", name: "Street", kind: "wifi", active: false }]
+                        [{ networkId: "anchors-home", name: "Home", kind: "wifi", active: true, ssid: "Home" },
+                         { networkId: "anchors-office", name: "Office", kind: "wifi", active: false, ssid: "Office" },
+                         { networkId: "", name: "Street", kind: "wifi", active: false, ssid: "Street" }]
                         .map(network => JSON.stringify(Object.assign(network, { anchor: "popup.network.wifi.row.title", placement: "append" }))).join(" "),
                         "… a saved network: its profile (Home up); a network not saved: no networkId, its SSID as the name");
             assertEqual(context(wired), JSON.stringify({ networkId: "anchors-wired", name: "Wired", kind: "ethernet", active: true,
@@ -3278,10 +3279,11 @@ TestCase {
                 assertEqual(_rowTitleProblems(rows[ssid], rows[ssid].nameLine).join("; "), "", ssid + "'s row: its elements on the name's line, as tall as it, a quarter of the row at most, after the name");
             assertEqual(_rowTitleProblems(_wiredRow(), wired).join("; "), "", "the wired row: the same");
             const home = rows["Home"].nameLine;
-            const [own, wide] = home.appendHost.items;
+            const [own, clicker, wide] = home.appendHost.items;
             assert(Math.abs(home.titleRegion.width - Math.floor(rows["Home"].width / 4)) < 0.01 && wide.width < wide.item.implicitWidth,
                    "a wide element: the place a quarter of the row wide (" + home.titleRegion.width + ", the row " + rows["Home"].width + "), the element cut");
-            assertEqual(Math.round(own.width) + " " + Math.round(wide.x - own.x - own.width), "24 4", "… the first at its own width, the next 4 after it");
+            assertEqual([own.width, clicker.x - own.x - own.width, clicker.width, wide.x - clicker.x - clicker.width].map(Math.round).join(" "), "24 4 16 4",
+                        "… each at its own width, the next 4 after it");
             assertEqual(Math.round(wired.titleRegion.width), 24, "the wired row's one element: its own width");
             const long = rows[_longSsid].nameLine;
             assert(long.truncated && Math.abs(long.titleRegion.width - Math.floor(rows[_longSsid].width / 4)) < 0.01
@@ -3298,14 +3300,23 @@ TestCase {
             _keptRowElements = { home: rows["Home"].nameLine.appendHost.items[0].item, office: rows["Office"].nameLine.appendHost.items[0].item,
                                  wired: wired.appendHost.items[0].item, homeRow: rows["Home"], officeRow: rows["Office"] };
             _keptRowChanges = _keptRowElements.home.contextChanges + _keptRowElements.office.contextChanges + _keptRowElements.wired.contextChanges;
-            // A click on the element (it takes none) opens the row, as on the name
+            // A click on an element that takes clicks: its own, the row stays closed (the row's
+            // click area lies under the name's line)
+            const main = Modules.host.mainObject("anchors-popup-rows");
+            _driver.mouseClick(clicker, clicker.width / 2, clicker.height / 2);
+            assertEqual(JSON.stringify(main.clicks) + " " + rows["Home"].expanded, JSON.stringify({ Home: 1 }) + " false",
+                        "a click on an element that takes clicks: the element's (its handler ran), the row not opened");
+            // A click on the element that takes none opens the row, as on the name
             const homeTitle = rows["Home"].nameLine.appendHost.items[0];
             _driver.mouseClick(homeTitle, homeTitle.width / 2, homeTitle.height / 2);
         });
         _then("a click on an element that takes none opened its row", () => _keptRowElements.homeRow.expanded && _rowLinesLaidOut() && _popupRowsSteady(), () => {
             assertEqual(_rowTitleProblems(_keptRowElements.homeRow, _keptRowElements.homeRow.nameLine).join("; "), "", "the row open: its elements still on its name's line");
             assertEqual(_keptRowElements.homeRow.nameLine.appendHost.items[0].item, _keptRowElements.home, "… the same element");
-            _keptRowElements.homeRow.toggleRequested();
+            assertEqual(JSON.stringify(Modules.host.mainObject("anchors-popup-rows").clicks), JSON.stringify({ Home: 1 }), "… the element that takes clicks got none of it");
+            // A click on the name closes it again
+            const name = _keptRowElements.homeRow.nameLine;
+            _driver.mouseClick(name, 4, name.height / 2);
             // A new scan: new objects, re-sorted (Office first), the profiles read anew
             _holdNetworks(_rowNetworks(["Office", "Home", "Street", _longSsid]));
             _holdProfiles(_rowProfiles());

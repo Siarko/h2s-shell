@@ -48,8 +48,10 @@ Singleton {
     // popup, the bar, the summary say so)
     readonly property var activeHotspot: hotspots.find(hotspot => hotspot.active) ?? null
 
-    // The SSIDs some profile is saved for
-    readonly property var savedSsids: Array.from(new Set(Object.values(ssids).filter(ssid => ssid !== "")))
+    // The SSIDs some saved Wi-Fi network is for — the profiles listed now whose details are
+    // read and are no hotspot (ModuleRules.savedWifiSsids: the rule the network popup's rows'
+    // context keeps too)
+    readonly property var savedSsids: ModuleRules.savedWifiSsids(profiles, wifi)
 
     // The profiles saved for the network named `ssid`
     function profilesForSsid(ssid: string): var {

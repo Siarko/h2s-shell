@@ -16,9 +16,9 @@ import qs.singletons.network
 // (WifiNetworkList's rowAnchor), none in Settings — whose name line is its region `title`
 // (PopupRowTitle): the place popup.network.wifi.row.title, closed and open, with the network
 // in its elements' context as the saved networks' cards give it — a network not saved with
-// no networkId and its SSID as the name (ModuleRules.wifiRowContext). The click area lies
-// under the line, so an element takes its own clicks; a click on one that takes none opens
-// or closes the row, as on the name.
+// no networkId and its SSID as the name, `ssid` the scanned SSID either way
+// (ModuleRules.wifiRowContext). The click area lies under the line, so an element takes its
+// own clicks; a click on one that takes none opens or closes the row, as on the name.
 PopupRow {
     id: root
 
@@ -41,6 +41,8 @@ PopupRow {
     readonly property string ssid: root.network.ssid ?? ""
     // The field follows the password kept for this row's network
     onPasswordTextChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
+    // Saved: the Wi-Fi's savedSsids (WifiManager: ModuleRules.savedWifiSsids, the rule the
+    // context below keeps too — a hotspot's SSID is no saved network)
     readonly property bool isSaved: (root.wifi.savedSsids ?? []).includes(root.network.ssid)
     readonly property bool needsPassword: root.network.security !== "--" && root.network.security !== "" && !isSaved
     // A password typed that the network cannot take (too short for WPA): Connect is not

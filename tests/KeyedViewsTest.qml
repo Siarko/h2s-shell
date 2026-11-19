@@ -192,7 +192,7 @@ TestCase {
         NetworkProfiles.profiles = _wifiProfiles(["Home"], "");
         after = _rowsBySsid(list);
         assertEqual(JSON.stringify([after["Office"].context, after["Home"].context]),
-                    JSON.stringify([{ networkId: "", name: "Office", kind: "wifi", active: false }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false }]),
+                    JSON.stringify([{ networkId: "", name: "Office", kind: "wifi", active: false, ssid: "Office" }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false, ssid: "Home" }]),
                     "Wi-Fi list: a row's context — a network not saved by its SSID, a saved one by its profile");
         assert(after["Office"].path === "" && after["Office"].nameLine.titleRegion.path === "", "… in a list with no row name and no popup: no place");
         WifiManager.wifiNetworks = _scan([["Home", 95], ["Office", 30]]);
@@ -203,8 +203,30 @@ TestCase {
         assert(after["Office"] === before["Office"] && after["Home"] === before["Home"] && list.itemAtIndex(0) === before["Home"],
                "… re-sorted again: the same rows");
         assertEqual(JSON.stringify([after["Office"].context, after["Home"].context]),
-                    JSON.stringify([{ networkId: "uuid-Office", name: "Office", kind: "wifi", active: false }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false }]),
+                    JSON.stringify([{ networkId: "uuid-Office", name: "Office", kind: "wifi", active: false, ssid: "Office" }, { networkId: "uuid-Home", name: "Home", kind: "wifi", active: false, ssid: "Home" }]),
                     "… each with its own network's context, Office's now by its profile");
+        assert(after["Office"].isSaved && after["Home"].isSaved, "… both saved for the row too: no password asked, Forget offered");
+        // "Saved" is one rule for the row and its context (ModuleRules.savedWifiSsids): Office's
+        // profile a hotspot, Home's details not read yet (just saved) — neither row offers
+        // Forget, neither context has a profile
+        const hotspotDetails = _wifiDetails(["Office"]);
+        hotspotDetails["uuid-Office"].mode = "ap";
+        NetworkProfiles.wifi = hotspotDetails;
+        assertEqual([after["Office"], after["Home"]].map(row => row.isSaved + " " + row.context.networkId + " " + (_find(row, "wifiForget")?.visible ?? "none")).join(", "),
+                    "false  false, false  false",
+                    "a hotspot's SSID, a profile whose details are not read: not saved — no Forget, no profile in the context");
+        // Details left from a profile gone: not saved either
+        NetworkProfiles.wifi = _wifiDetails(["Home", "Office"]);
+        NetworkProfiles.profiles = _wifiProfiles(["Home"], "");
+        assertEqual([after["Office"], after["Home"]].map(row => row.isSaved + " " + row.context.networkId).join(", "), "false , true uuid-Home",
+                    "details of a profile gone: not saved for the row nor its context; Home saved for both");
+        NetworkProfiles.profiles = _wifiProfiles(["Home", "Office"], "Office");
+        // A name with a line break: one line all the same
+        WifiManager.wifiNetworks = _scan([["Home", 95], ["Office", 30], ["Two\nlines", 20]]);
+        list.forceLayout();
+        const twoLines = _rowsBySsid(list)["Two\nlines"];
+        assert(twoLines && twoLines.nameLine.lineCount === 1 && twoLines.context.ssid === "Two lines" && twoLines.context.name === "Two lines",
+               "an SSID with a line break: its name on one line (" + twoLines?.nameLine.lineCount + "), its context's ssid and name too");
         WifiManager.wifiNetworks = _scan([["Office", 90, true], ["Home", 70]]);
         list.forceLayout();
         after = _rowsBySsid(list);

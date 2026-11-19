@@ -1380,10 +1380,16 @@ TestCase {
         // names it, under the key networkId
         assertEqual(JSON.stringify([profile("u-cafe", "Cafe", "wifi", "activated"), profile("u-train", "Train\nnow", "wifi", "activating"),
                                     profile("u-office", "Office LAN", "ethernet", "")].map(rules.networkContext)),
-                    JSON.stringify([{ networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true },
-                                    { networkId: "u-train", name: "Train now", kind: "wifi", active: false },
+                    JSON.stringify([{ networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true, ssid: "" },
+                                    { networkId: "u-train", name: "Train now", kind: "wifi", active: false, ssid: "" },
                                     { networkId: "u-office", name: "Office LAN", kind: "ethernet", active: false }]),
-                    "networkContext: the profile's UUID, its name on one line, its kind, up only when \"activated\"");
+                    "networkContext: the profile's UUID, its name on one line, its kind, up only when \"activated\"; a Wi-Fi one's ssid \"\" when the profile has none");
+        assertEqual(JSON.stringify(rules.networkContext(Object.assign(profile("u-cafe", "Cafe", "wifi", ""), { ssid: "Cafe\u202e\nfree" }))),
+                    JSON.stringify({ networkId: "u-cafe", name: "Cafe", kind: "wifi", active: false, ssid: "Cafe free" }),
+                    "networkContext (1.32): a Wi-Fi network's ssid, plain, on one line, no bidi override (a settings card's row has it)");
+        assertEqual(JSON.stringify(["a\u202ab\u202bc\u202cd\u202de\u202ef", "g\u2066h\u2067i\u2068j\u2069k", "l\u200em\u2028n"].map(name => rules.networkRow("id", name, "wifi", true).name)),
+                    JSON.stringify(["abcdef", "ghijk", "l\u200em n"]),
+                    "a name from outside: bidi embeddings, overrides and isolates (U+202A–U+202E, U+2066–U+2069) go, a line separator becomes a space, a plain mark stays");
         assertEqual(JSON.stringify([undefined, null, {}].map(rules.networkContext)),
                     JSON.stringify([0, 1, 2].map(() => ({ networkId: "", name: "", kind: "", active: false }))),
                     "networkContext: no profile (a card being made) — empty fields, not up");
@@ -1399,17 +1405,38 @@ TestCase {
                           "u-cafe": { ssid: "Cafe", mode: "infrastructure" }, "u-cafe2": { ssid: "Cafe", mode: "infrastructure" },
                           "u-hotspot": { ssid: "Mine", mode: "ap" } };
         assertEqual(JSON.stringify(["Home", "Cafe", "Mine", "Street\nnet", "", undefined].map(ssid => rules.wifiRowContext(ssid, rowProfiles, rowWifi))),
-                    JSON.stringify([{ networkId: "u-home2", name: "Home (old)", kind: "wifi", active: false },
-                                    { networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true },
-                                    { networkId: "", name: "Mine", kind: "wifi", active: false },
-                                    { networkId: "", name: "Street net", kind: "wifi", active: false },
-                                    { networkId: "", name: "", kind: "wifi", active: false },
-                                    { networkId: "", name: "", kind: "wifi", active: false }]),
+                    JSON.stringify([{ networkId: "u-home2", name: "Home (old)", kind: "wifi", active: false, ssid: "Home" },
+                                    { networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true, ssid: "Cafe" },
+                                    { networkId: "", name: "Mine", kind: "wifi", active: false, ssid: "Mine" },
+                                    { networkId: "", name: "Street net", kind: "wifi", active: false, ssid: "Street net" },
+                                    { networkId: "", name: "", kind: "wifi", active: false, ssid: "" },
+                                    { networkId: "", name: "", kind: "wifi", active: false, ssid: "" }]),
                     "wifiRowContext: of the profiles saved for the SSID, the one up, else the last used; a hotspot's or an unread one's none — "
-                    + "not saved: no networkId, the SSID on one line as the name");
+                    + "not saved: no networkId, the SSID on one line as the name; ssid the scanned SSID either way");
         assertEqual(JSON.stringify([rules.wifiRowContext("Home", null, null), rules.wifiRowContext("Home", [5, null, { uuid: "u-home" }], { "u-home": "junk" })]),
-                    JSON.stringify([0, 1].map(() => ({ networkId: "", name: "Home", kind: "wifi", active: false }))),
+                    JSON.stringify([0, 1].map(() => ({ networkId: "", name: "Home", kind: "wifi", active: false, ssid: "Home" }))),
                     "… garbage: as not saved, no throw");
+        // Of several, fully up beats coming up beats last used
+        const ranked = [used(profile("u-r-old", "Old", "wifi", ""), 90), used(Object.assign(profile("u-r-coming", "Coming", "wifi", "activating"), { active: true }), 10),
+                        used(profile("u-r-up", "Up", "wifi", "activated"), 5)];
+        const rankedWifi = { "u-r-old": { ssid: "R", mode: "infrastructure" }, "u-r-coming": { ssid: "R", mode: "infrastructure" }, "u-r-up": { ssid: "R", mode: "infrastructure" } };
+        assertEqual([ranked, ranked.slice(0, 2), ranked.slice(0, 1)].map(list => rules.wifiRowContext("R", list, rankedWifi).networkId).join(" "), "u-r-up u-r-coming u-r-old",
+                    "wifiRowContext: of several, the one fully up, else the one coming up, else the one last used");
+        assertEqual(rules.wifiRowContext("Bad\u2067name\u202e", [], {}).ssid + "|" + rules.wifiRowContext("x".repeat(300), [], {}).ssid.length, "Badname|200",
+                    "… ssid plain: no bidi isolate or override, capped");
+        // "Saved" is one rule for the row (its Forget, its password field: savedSsids) and its
+        // context: a hotspot's SSID, a profile whose details are not read yet, details left from
+        // a profile gone — not saved on either side
+        const savedProfiles = rowProfiles.concat([used(profile("u-lan", "Lan", "wifi", ""), 1)]);
+        const savedWifi = Object.assign({}, rowWifi, { "u-gone": { ssid: "Gone", mode: "infrastructure" }, "u-unread-lan": { ssid: "Unread", mode: "infrastructure" } });
+        assertEqual(JSON.stringify(rules.savedWifiSsids(savedProfiles, savedWifi)), JSON.stringify(["Home", "Cafe"]),
+                    "savedWifiSsids: the listed client profiles' SSIDs, each once — no hotspot, no unread profile, no details of a profile gone");
+        const ssidsTried = ["Home", "Cafe", "Mine", "Gone", "Unread", "Lan", "Street"];
+        assertEqual(ssidsTried.map(ssid => rules.savedWifiSsids(savedProfiles, savedWifi).includes(ssid) === (rules.wifiRowContext(ssid, savedProfiles, savedWifi).networkId !== "")).join(","),
+                    ssidsTried.map(() => "true").join(","),
+                    "… and the row's context has a profile exactly for those SSIDs");
+        assertEqual(JSON.stringify([rules.savedWifiSsids(null, null), rules.savedWifiSsids([5, { uuid: "u-x", kind: "wifi" }], { "u-x": { ssid: "", mode: "infrastructure" } })]), "[[],[]]",
+                    "… garbage or an empty SSID: none, no throw");
         assertEqual(JSON.stringify(["eth0", "eth1", "eth2", "eth9", "", null].map(device => rules.wiredRowContext(rowProfiles, device))),
                     JSON.stringify([{ networkId: "u-wired", name: "Wired", kind: "ethernet", active: true },
                                     { networkId: "", name: "", kind: "ethernet", active: false },

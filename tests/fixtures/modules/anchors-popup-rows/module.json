@@ -3,11 +3,12 @@
     "name": "Anchors popup rows fixture",
     "version": "1.0.0",
     "api": "1.32",
-    "description": "An element on the name's line of the network popup's wired row and of each Wi-Fi network's row, and a wide one on the Wi-Fi rows (tests/AnchorsTest.qml)",
+    "description": "An element on the name's line of the network popup's wired row and of each Wi-Fi network's row, and on the Wi-Fi rows one that takes clicks and a wide one (tests/AnchorsTest.qml)",
     "main": "Main.qml",
     "anchors": [
         { "at": "popup.network.wifi.row.title", "place": "append", "component": "Title.qml" },
         { "at": "popup.network.connections.wired.row.title", "place": "append", "component": "Title.qml" },
+        { "at": "popup.network.wifi.row.title", "place": "append", "component": "Clicker.qml" },
         { "at": "popup.network.wifi.row.title", "place": "append", "component": "Wide.qml" }
     ]
 }

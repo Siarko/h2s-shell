@@ -169,7 +169,7 @@ Singleton {
           where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows",
           view: "panels/settings/NetworkVpnSettings.qml" },
         { path: "settings.network_wifi.saved.card.settings", kind: "region", placements: ["append"], takes: "",
-          context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"wifi\", active: fully up }", scope: "", since: "1.24",
+          context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"wifi\", active: fully up, ssid (1.32) }", scope: "", since: "1.24",
           where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password)",
           view: "panels/settings/NetworkWifiSettings.qml" },
         { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "",
@@ -177,7 +177,7 @@ Singleton {
           where: "Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows",
           view: "panels/settings/NetworkEthernetSettings.qml" },
         { path: "settings.network_wifi.saved.card.title", kind: "region", placements: ["append"], takes: "",
-          context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.28",
+          context: "{ networkId, name, kind: \"wifi\", active, ssid (1.32) }", scope: "", since: "1.28",
           where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: on its name's line, after the name",
           view: "panels/settings/NetworkWifiSettings.qml" },
         { path: "settings.network_ethernet.profiles.card.title", kind: "region", placements: ["append"], takes: "",
@@ -193,7 +193,7 @@ Singleton {
           where: "Settings → System → Network → VPN, the card of each VPN of the module's provider, closed and open: in the row of buttons on its name's line, after the card's own (\"Settings…\", \"Edit\"), before \"Delete\"",
           view: "panels/settings/NetworkVpnSettings.qml" },
         { path: "settings.network_wifi.saved.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
-          context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.25",
+          context: "{ networkId, name, kind: \"wifi\", active, ssid (1.32) }", scope: "", since: "1.25",
           where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: in the row of buttons on its name's line, after \"Edit\", before \"Forget\"",
           view: "panels/settings/NetworkWifiSettings.qml" },
         { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
@@ -201,7 +201,7 @@ Singleton {
           where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: in the row of buttons on its name's line, after \"Edit\", before \"Forget\"",
           view: "panels/settings/NetworkEthernetSettings.qml" },
         { path: "popup.network.wifi.row.title", kind: "region", placements: ["append"], takes: "",
-          context: "{ networkId: its saved profile's UUID, \"\" for a network not saved, name: the profile's, else the SSID, kind: \"wifi\", active }",
+          context: "{ networkId: its saved profile's UUID, \"\" for a network not saved, name: the profile's, else the SSID, kind: \"wifi\", active, ssid: the SSID scanned }",
           scope: "", since: "1.32",
           where: "the network popup's list of Wi-Fi networks in range, each network's row, closed and open: on its name's line, after the name",
           view: "panels/network/WifiNetworkRow.qml" },
@@ -1134,30 +1134,60 @@ Singleton {
 
     // What an element in a saved network's opened card gets as context (the Wi-Fi and
     // Ethernet pages' places): the network as Api.networks names it — { networkId: the
-    // profile's UUID, name, kind ("wifi" | "ethernet"), active: fully up }
+    // profile's UUID, name, kind ("wifi" | "ethernet"), active: fully up }, and a Wi-Fi
+    // network's `ssid` (the profile's, plain, on one line; "" when not known)
     function networkContext(profile) {
         const network = networkRow(profile?.uuid ?? "", profile?.name, profile?.kind ?? "", profile?.state === "activated");
-        return { networkId: network.id, name: network.name, kind: network.kind, active: network.active };
+        const context = { networkId: network.id, name: network.name, kind: network.kind, active: network.active };
+        if (network.kind === "wifi")
+            context.ssid = _plainLine(profile?.ssid, 200);
+        return context;
+    }
+
+    // Whether `profile` is a saved Wi-Fi network — one this computer joins: listed in
+    // Api.networks (its details read, no hotspot) and of kind "wifi". The one rule for
+    // "saved" in the network popup's rows: whether a row offers Forget and asks no password
+    // (NetworkProfiles.savedSsids) and the profile in its elements' context (wifiRowContext).
+    // A profile just saved is not one until its details are read, a moment after the list
+    // (NetworkProfiles): the row and its context both say "not saved" until then
+    function savedWifiProfile(profile, wifiDetails) {
+        return networkListed(profile, wifiDetails) && profile.kind === "wifi";
+    }
+
+    // The SSIDs some saved Wi-Fi network (savedWifiProfile) is for, each once, none ""
+    function savedWifiSsids(profiles, wifiDetails) {
+        const details = isObject(wifiDetails) ? wifiDetails : {};
+        const ssids = [];
+        for (const profile of Array.isArray(profiles) ? profiles : []) {
+            if (!savedWifiProfile(profile, details))
+                continue;
+            const ssid = details[profile.uuid].ssid;
+            if (typeof ssid === "string" && ssid !== "" && !ssids.includes(ssid))
+                ssids.push(ssid);
+        }
+        return ssids;
     }
 
     // What an element on a Wi-Fi network's row in the network popup gets as context
     // (popup.network.wifi.row.title): the network as the saved networks' cards give it — the
-    // profile saved for the SSID that Api.networks lists (`wifiDetails` read, no hotspot); of
-    // several, the one up, else the one last used, else the first. A network not saved: no
-    // profile, `networkId` "" and its SSID as the name (plain, on one line), not up
+    // profile saved for the SSID (savedWifiProfile: the same rule as the row's Forget); of
+    // several, the one fully up, else the one coming up, else the one last used, else the
+    // first. A network not saved: no profile, `networkId` "" and its SSID as the name, not
+    // up. `ssid` always the scanned SSID (plain, on one line, capped), saved or not
     function wifiRowContext(ssid, profiles, wifiDetails) {
         const details = isObject(wifiDetails) ? wifiDetails : {};
+        const shownSsid = _plainLine(ssid, 200);
         let best = null;
         for (const profile of Array.isArray(profiles) ? profiles : []) {
-            if (typeof ssid !== "string" || ssid === "" || !networkListed(profile, details) || profile.kind !== "wifi" || details[profile.uuid].ssid !== ssid)
+            if (typeof ssid !== "string" || ssid === "" || !savedWifiProfile(profile, details) || details[profile.uuid].ssid !== ssid)
                 continue;
             const rank = [profile.state === "activated" ? 1 : 0, profile.active === true ? 1 : 0, typeof profile.lastUsed === "number" ? profile.lastUsed : 0];
             if (best === null || rank[0] > best.rank[0] || (rank[0] === best.rank[0] && (rank[1] > best.rank[1] || (rank[1] === best.rank[1] && rank[2] > best.rank[2]))))
                 best = { profile: profile, rank: rank };
         }
         if (best !== null)
-            return networkContext(best.profile);
-        return { networkId: "", name: _plainLine(ssid, 200), kind: "wifi", active: false };
+            return Object.assign(networkContext(best.profile), { ssid: shownSsid });
+        return { networkId: "", name: shownSsid, kind: "wifi", active: false, ssid: shownSsid };
     }
 
     // What an element on the network popup's wired row gets as context
@@ -1179,9 +1209,11 @@ Singleton {
     }
 
     // Text from outside (a network's or a VPN's name) on one line: control characters
-    // become spaces, cut at `most`
+    // become spaces, bidi embeddings, overrides and isolates (U+202A–U+202E, U+2066–U+2069)
+    // go — a name must not turn the text after it around —, cut at `most`
     function _plainLine(value, most) {
-        return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ").slice(0, most) : "";
+        return typeof value === "string"
+            ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ").replace(/[\u202a-\u202e\u2066-\u2069]/g, "").slice(0, most) : "";
     }
 
     // Api.vpnsUp: the VPNs up now (VpnManager.activeVpns) with their details (VpnManager

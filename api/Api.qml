@@ -91,14 +91,15 @@ import qs.singletons.network
 //                                                     page's rows (the password), while the
 //                                                     card is open: append; context { networkId:
 //                                                     the profile's UUID (Api.networks' id),
-//                                                     name, kind: "wifi", active: fully up }.
-//                                                     Not on a hotspot's card
+//                                                     name, kind: "wifi", active: fully up,
+//                                                     (1.32) ssid: the network's SSID, plain,
+//                                                     on one line }. Not on a hotspot's card
 //                            settings.network_ethernet.profiles.card.settings (1.24)  the same
 //                                                     in the opened card of each wired profile
 //                                                     on Settings → System → Network →
 //                                                     Ethernet, under the card's rows: append;
 //                                                     context as the Wi-Fi network's (kind
-//                                                     "ethernet")
+//                                                     "ethernet", no ssid)
 //                            settings.network_vpn.vpns.card.actions,
 //                            settings.network_wifi.saved.card.actions,
 //                            settings.network_ethernet.profiles.card.actions (1.25)  the
@@ -171,14 +172,26 @@ import qs.singletons.network
 //                                                     most, the name cut first; a click on an
 //                                                     element that takes none opens or closes
 //                                                     the Wi-Fi row). Context as the cards':
-//                                                     { networkId, name, kind, active } — a
-//                                                     Wi-Fi network saved: its profile's (of
-//                                                     several, the one up, else the one last
-//                                                     used); not saved: networkId "" and its
-//                                                     SSID as name. The wired row: the wired
-//                                                     profile up on the device; none up:
-//                                                     networkId and name "". Not in Settings →
-//                                                     Wi-Fi's own list of networks in range
+//                                                     { networkId, name, kind, active, ssid } —
+//                                                     a Wi-Fi network saved: its profile's (of
+//                                                     several, the one fully up, else the one
+//                                                     coming up, else the one last used); not
+//                                                     saved: networkId "" and its SSID as name.
+//                                                     ssid: the SSID scanned, saved or not —
+//                                                     to tell networks not saved apart and to
+//                                                     match saved ones by SSID. Saved as the row
+//                                                     has it (it offers Forget then): a hotspot
+//                                                     profile is none, and a profile just saved
+//                                                     is one a moment later, once its details
+//                                                     are read. The wired row (no ssid): the
+//                                                     wired profile up on the device; none up:
+//                                                     networkId and name "". A long list builds
+//                                                     only the rows in view: a row scrolled out
+//                                                     goes with its elements and comes back
+//                                                     anew, so an element keeps no state of its
+//                                                     own there (its module keeps it, by the
+//                                                     context). Not in Settings → Wi-Fi's own
+//                                                     list of networks in range
 //                          A saved Wi-Fi network's card is a place only once its details are
 //                          read (until then Api.networks leaves it out: it could be a hotspot)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated

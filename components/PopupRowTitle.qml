@@ -34,6 +34,8 @@ Text {
     Layout.minimumWidth: rightPadding
     elide: Text.ElideRight
     textFormat: Text.PlainText
+    // A name from outside (an SSID) may hold a line break: one line all the same
+    maximumLineCount: 1
     font.family: Theme.fontFamily
     color: Theme.textPrimary
     rightPadding: _region.width > 0 ? _region.width + _region.gap : 0

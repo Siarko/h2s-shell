@@ -17,9 +17,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   `popup.network.wifi.row.title` (each Wi-Fi network in range, closed and open) and
   `popup.network.connections.wired.row.title` (the wired row), `append`, any module's; an
   element there is as tall as the name's line, all of them a quarter of the row at most, the
-  name cut first. Context `{ networkId, name, kind, active }` as the cards give it; a Wi-Fi
-  network not saved has `networkId` `""` and its SSID as `name`, the wired row with no
-  profile up `networkId` and `name` `""`. The public `Pill` takes a `textSize`: `"small"`
+  name cut first. Context `{ networkId, name, kind, active }` as the cards give it, and on
+  a Wi-Fi row `ssid`, the SSID scanned; a Wi-Fi network not saved has `networkId` `""` and
+  its SSID as `name`, the wired row with no profile up `networkId` and `name` `""`. The
+  saved Wi-Fi networks' cards give `ssid` in their context too. Names in a network context
+  lose bidi override characters. The public `Pill` takes a `textSize`: `"small"`
   (the default, as before) or `"body"`, the theme's type sizes.
 - 1.31: two public elements — `ProgressBar` (`value` 0 to 1, below 0 a run of unknown
   length; `kind` `normal`, `success`, `warning`, `danger`) and `HoverTip` (a plain-text
