@@ -86,7 +86,6 @@ TestCase {
         assert(!ModuleTestKit.chooserOpen, "… and dropped the file chooser GoodState left open");
         // --- the handle ---
         assert(module !== null, "Api.moduleAt(Qt.resolvedUrl(\".\")) finds the module's handle from any of its files");
-        assert(module === Api.module("good"), "… the same object as Api.module(id)");
         assertEqual(module?.moduleId + " " + module?.version + " " + module?.name, "good 1.2.3 Good fixture", "id, version, name");
         assert(module.active, "active while loaded");
         assertEqual(module.url("tests/x.qml"), "file://" + module.directory + "/tests/x.qml", "url(): a file of the module");
@@ -103,10 +102,16 @@ TestCase {
         } catch (error) {}
         assert(module.main !== null, "… read-only");
         assertEqual(Api.moduleAt("file:///etc/passwd"), null, "a file of no module: no handle");
-        assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
+        // (1.19) A module's plain state, as another module sees it
+        const own = Api.moduleStatus("good");
+        assertEqual(JSON.stringify(own), JSON.stringify({ id: "good", name: "Good fixture", version: "1.2.3", state: "loaded", active: true }),
+                    "Api.moduleStatus(id): id, name, version, state, active");
+        assert(Object.isFrozen(own), "… frozen");
+        assertEqual(Api.moduleStatus("no-such-module"), null, "… null for an unknown id");
+        assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.18", "Api.version");
+        assertEqual(Api.version, "1.19", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
@@ -114,12 +119,6 @@ TestCase {
             Api.testMode = false;
         } catch (error) {}
         assert(Api.testMode, "… read-only");
-        // A module cannot switch it: not through what its handle reaches either
-        try {
-            module.host.testMode = false;
-        } catch (error) {}
-        assertEqual(module.host.setTestMode(false), false, "… setTestMode from a module: refused");
-        assert(Api.testMode && module.host.testMode, "… still on");
         assertEqual(ModuleTestKit.status("good")?.deprecations.length, 0, "a 1.10 module: no test-mode gate in its deprecations");
         // Its programs (API 1.9): pkexec, from its testPrograms in test mode, never from PATH
         assertEqual(JSON.stringify(module.programs),

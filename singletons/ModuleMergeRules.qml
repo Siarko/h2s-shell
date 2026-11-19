@@ -369,6 +369,22 @@ Singleton {
         };
     }
 
+    // (API 1.19) What one module may know of another (Api.moduleStatus): from its status
+    // (statusOf; null — no such module) and whether it is active (`activeIds`), frozen
+    // { id, name, version, state, active }. Plain facts only: no directory, errors or
+    // anything the module computed. Null for no status or one without an id.
+    function moduleStatusFacts(status, activeIds) {
+        if (!status || typeof status.id !== "string" || status.id === "")
+            return null;
+        return Object.freeze({
+            id: status.id,
+            name: String(status.name ?? ""),
+            version: String(status.version ?? ""),
+            state: String(status.state ?? ""),
+            active: Array.isArray(activeIds) && activeIds.includes(status.id)
+        });
+    }
+
     // A manifest's slot contributions to slots this shell does not offer: one warning each
     function unknownSlotWarnings(manifest) {
         return (manifest?.slots ?? []).filter(entry => !ModuleRules.slotNames.includes(entry.slot)).map(entry =>

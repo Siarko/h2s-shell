@@ -587,7 +587,7 @@ TestCase {
                     "[\"Ts.qml\",\"Helper.qml\",\"Hidden.qml\"]", "the files a qmldir names, inside the directory");
         assertEqual(ModuleFileRules.qmldirFiles(null).length, 0, "no qmldir: none");
 
-        // --- the import check: warnings, never a refusal ---
+        // --- the import check: warnings and errors, never a refusal ---
         const header = "// A comment\n/* import qs.singletons in a block comment */\npragma Singleton\n"
             + "import QtQuick\nimport QtQuick.Layouts 1.15\nimport QtQml.Models\nimport Quickshell\nimport Quickshell.Io\n"
             + "import qs.api\nimport qs.components\nimport \".\"\nimport \"sub\" as Sub\nimport \"Rules.js\" as Rules\n"
@@ -595,26 +595,38 @@ TestCase {
             + "QtObject {\n    // import qs.panels after the header is not an import\n}\nimport qs.panels\n";
         assertEqual(ModuleSourceRules.importsOf(header).length, 14, "the imports of the header, block comments skipped, two on one line");
         const warnings = ModuleSourceRules.importWarnings("Main.qml", header);
-        assertEqual(warnings.length, 4, "outside the allowlist: qs.singletons, Quickshell.Hyprland, ../core, a file URL");
-        assert(_has(warnings, "Main.qml imports qs.singletons"), "… each names the file and the import");
+        assertEqual(warnings.length, 1, "outside the allowlist: Quickshell.Hyprland a warning: " + JSON.stringify(warnings));
+        assert(_has(warnings, "Main.qml imports Quickshell.Hyprland"), "… naming the file and the import");
+        // (1.19) What reaches into the shell or another module: an error, not a warning
+        const reaching = ModuleSourceRules.importErrors("Main.qml", header);
+        assertEqual(reaching.length, 3, "qs.singletons, ../core, a file URL: errors: " + JSON.stringify(reaching));
+        assert(_has(reaching, "Main.qml imports qs.singletons, the shell's own") && _has(reaching, "Main.qml imports \"../core\", outside the module's directory")
+               && _has(reaching, "\"file:///etc\", outside"), "… each names the file and the import");
+        assert(!warnings.some(line => reaching.includes(line)) && !_has(warnings, "qs.singletons"), "… and is no warning too");
+        assertEqual(ModuleSourceRules.importErrors("A.qml", "import qs.singletons.io as Io\nimport qs.singletonsX\nimport qs.api\nimport \"sub\"\nItem {}").join("|"),
+                    "A.qml imports qs.singletons.io, the shell's own: a module reaches the shell through qs.api",
+                    "below qs.singletons too; not a longer name, not qs.api, not its own directory");
+        assertEqual(ModuleSourceRules.importErrors("A.qml", null).length, 0, "no text: no error, no throw");
         assert(!_has(warnings, "qs.panels"), "… nothing after the header counts");
         assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nQtObject {}").length, 0, "an allowed file: no warning");
         assertEqual(ModuleSourceRules.importWarnings("A.qml", null).length, 0, "no text: no warning, no throw");
         assert(Array.isArray(ModuleSourceRules.importWarnings("A.qml", "import ".repeat(100000))), "a huge garbage header: no throw");
-        const repeated = ModuleSourceRules.importWarnings("A.qml", "import qs.singletons\n".repeat(3000) + "Item {}");
-        assertEqual(repeated.length, ModuleSourceRules.maxImportWarningsPerFile + 1, "a header of 3000 forbidden imports: maxImportWarningsPerFile warnings and a count");
+        const repeated = ModuleSourceRules.importErrors("A.qml", "import qs.singletons\n".repeat(3000) + "Item {}");
+        assertEqual(repeated.length, ModuleSourceRules.maxImportWarningsPerFile + 1, "a header of 3000 forbidden imports: maxImportWarningsPerFile errors and a count");
+        const repeatedWarnings = ModuleSourceRules.importWarnings("A.qml", "import Quickshell.Hyprland\n".repeat(3000) + "Item {}");
+        assertEqual(repeatedWarnings.length, ModuleSourceRules.maxImportWarningsPerFile + 1, "… warnings the same");
         assertEqual(repeated[repeated.length - 1], "… and " + (3000 - ModuleSourceRules.maxImportWarningsPerFile) + " more", "… the count of the rest");
         assertEqual(JSON.stringify(ModuleSourceRules.cappedLines(["a", "b"], 2)), "[\"a\",\"b\"]", "cappedLines: up to the cap, as it is");
         assertEqual(JSON.stringify(ModuleSourceRules.cappedLines(["a", "b", "c"], 1)), "[\"a\",\"… and 2 more\"]", "… past it, the first and the count");
         const longName = "d/".repeat(500) + "A.qml";
-        const longWarning = ModuleSourceRules.importWarnings(longName, "import qs.singletons\nItem {}")[0];
+        const longWarning = ModuleSourceRules.importErrors(longName, "import qs.singletons\nItem {}")[0];
         assert(longWarning.startsWith("d/d/") && longWarning.indexOf("… imports qs.singletons") === 79 && longWarning.length < 300,
                "a listed file's long path is cut at 80 characters in its warning: " + longWarning.slice(0, 100));
-        assert(ModuleSourceRules.importWarnings("A.qml", "import \"/" + "x".repeat(5000) + "\"\nItem {}")[0].length < 300, "… and so is a long quoted import");
+        assert(ModuleSourceRules.importErrors("A.qml", "import \"/" + "x".repeat(5000) + "\"\nItem {}")[0].length < 300, "… and so is a long quoted import");
         assert(!ModuleSourceRules.importAllowed({ name: "QtQuickX", directory: false }), "QtQuickX is not under QtQuick");
         assertEqual(JSON.stringify(ModuleSourceRules.importsOf("import qs.components; Item {}")), JSON.stringify([{ name: "qs.components", directory: false }]),
                     "an import on the line with the first \"{\" is read before stopping");
-        assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nimport qs.singletons; Item {\n}").length, 1,
+        assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nimport Quickshell.Hyprland; Item {\n}").length, 1,
                     "… so one outside the allowlist there is warned about");
         assertEqual(ModuleSourceRules.importsOf("import QtQuick\nItem { import qs.panels }").length, 1, "what follows the \"{\" is not an import");
 
@@ -635,6 +647,34 @@ TestCase {
                     + ModuleSourceRules.importDeprecations({ "A.qml": null }).length, 0, "no files, no text: none, no throw");
         assert(Object.keys(ModuleSourceRules.deprecatedImports).every(name => ModuleSourceRules.allowedImports.includes(name)),
                "every deprecated import is still an allowed one: listed, not warned about");
+
+        // --- (1.19) reaching another module or the host in code: listed among the deprecations ---
+        const tightening = " (goes with the shell's next tightening)";
+        assertEqual(JSON.stringify(ModuleSourceRules.codeDeprecations({ "Main.qml": "import qs.api\nQtObject {\n    property var other: Api.module(\"good\")\n}\n" })),
+                    JSON.stringify(["Api.module(id) (in Main.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening]),
+                    "Api.module(id): listed, with the file and what to use");
+        assertEqual(JSON.stringify(ModuleSourceRules.codeDeprecations({ "Page.qml": "Item {\n    property var module: null\n    readonly property bool t: module.host.testMode\n}\n" })),
+                    JSON.stringify(["module.host (in Page.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening]),
+                    "module.host: listed");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "Item { readonly property var h: root.module . host; property var t: module?.host?.testMode }",
+                                                         "B.qml": "Item { readonly property var h: Api.moduleAt(Qt.resolvedUrl(\".\")).host }" }).join("|"),
+                    "module.host (in 2 files): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening,
+                    "… through a property named module, spaced, optional, or straight from Api.moduleAt: one line, how many files");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "Both.qml": "QtObject { property var a: Api.module(\"x\"); property var b: module.host }" }).length, 2,
+                    "both in one file: two lines");
+        assertEqual(ModuleSourceRules.codeDeprecations({
+                        "Comments.qml": "// Api.module(\"x\") and module.host in a line comment\n/* Api.module(\"x\")\n module.host */\nQtObject {}",
+                        "Strings.qml": "QtObject {\n    property string a: \"Api.module(x)\"\n    property string b: 'module.host'\n    property string c: `${\"\"} module.host`\n}",
+                        "Regex.qml": "QtObject {\n    property var r: /Api.module\\(/\n}",
+                        "Others.qml": "QtObject {\n    property var a: Api.moduleAt(Qt.resolvedUrl(\".\"))\n    property var b: Api.moduleStatus(\"x\")\n"
+                                      + "    property var c: parsed.host\n    property var d: module.hostName\n    property var e: mymodule.host\n    property var f: Api.modules\n}"
+                    }).length, 0,
+                    "not counted: comments, strings, template literals, a regex literal, moduleAt, moduleStatus, another object's host, a longer name");
+        assertEqual(ModuleSourceRules.codeDeprecations(null).length + ModuleSourceRules.codeDeprecations({}).length
+                    + ModuleSourceRules.codeDeprecations({ "A.qml": null, "B.qml": 5 }).length, 0, "no files, no text: none, no throw");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject { property var a: Api.module(\"x\") }", "tests/T.qml": "Item { property var a: Api.module(\"x\") }" }).join("|"),
+                    "Api.module(id) (in 2 files): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening,
+                    "a suite counts too");
 
         // --- precedence: the first id wins ---
         const order = ModuleMergeRules.precedence([{ directory: "/home/m/ts", id: "tailscale" }, { directory: "/sys/m/x", id: "" },
@@ -679,6 +719,15 @@ TestCase {
         assertEqual(deprecated.deprecations.join("|"), "slots: use `anchors` (goes with the shell's next tightening)", "the old ways a module uses are listed in its status");
         assert(deprecated.deprecations !== oldWays, "… as a copy");
         assertEqual(deprecated.warnings.length, 0, "… and are no warnings");
+        // (1.19) What another module may know of one (Api.moduleStatus)
+        const statusFacts = ModuleMergeRules.moduleStatusFacts(status, ["good", "tailscale"]);
+        assertEqual(JSON.stringify(statusFacts), JSON.stringify({ id: "tailscale", name: tailscale.name, version: tailscale.version, state: "missing-program", active: true }),
+                    "moduleStatusFacts: id, name, version, state, active — nothing else of the status");
+        assert(Object.isFrozen(statusFacts), "… frozen");
+        assertEqual(ModuleMergeRules.moduleStatusFacts(status, ["good"]).active + " " + ModuleMergeRules.moduleStatusFacts(status, null).active, "false false",
+                    "… active only when its id is among the active ones");
+        assertEqual(ModuleMergeRules.moduleStatusFacts(null, []) + " " + ModuleMergeRules.moduleStatusFacts({ id: "" }, [""]) + " " + ModuleMergeRules.moduleStatusFacts(5, []),
+                    "null null null", "… null for no status, no id, not a status");
 
         // --- merging ---
         const zeta = ModuleManifestRules.parseManifest(JSON.stringify({ id: "zeta", name: "Z", version: "1", api: "1.0",
@@ -1368,7 +1417,8 @@ TestCase {
         // The import check: qs.tests only in a module's tests
         assertEqual(ModuleSourceRules.importWarnings("tests/T.qml", "import qs.tests\nItem {}", true).length, 0, "a test suite may import qs.tests");
         assertEqual(ModuleSourceRules.importWarnings("tests/T.qml", "import \"..\"\nItem {}", true).length, 0, "a suite in tests/ importing \"..\": the module's own directory");
-        assertEqual(ModuleSourceRules.importWarnings("tests/T.qml", "import \"../..\"\nItem {}", true).length, 1, "… \"../..\" leaves it");
+        assertEqual(ModuleSourceRules.importErrors("tests/T.qml", "import \"../..\"\nItem {}").length + " " + ModuleSourceRules.importWarnings("tests/T.qml", "import \"../..\"\nItem {}", true).length,
+                    "1 0", "… \"../..\" leaves it: an error");
         assertEqual(ModuleSourceRules.importWarnings("Main.qml", "import qs.tests\nItem {}", false).length, 1, "… a module's own file may not (the shell has no qs.tests)");
 
         // Reserved ids: every core IPC target and settings page id shaped like a module id

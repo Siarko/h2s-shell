@@ -16,6 +16,23 @@ Singleton {
     // Allowed imports that are an old way: the name → what a module uses instead. Listed
     // among the module's `deprecations` (importDeprecations), never a warning.
     readonly property var deprecatedImports: ({ "qs.components": "the elements of qs.api" })
+    // (API 1.19) Imports that reach into the shell or another module: the shell's singletons
+    // (`qs.singletons` and below) and a directory outside the module's own. An error in the
+    // module's status (importErrors), not a warning; the module still loads.
+    readonly property var reachingImportPrefixes: ["qs.singletons"]
+
+    // (API 1.19) The old ways of reaching another module or the shell's host in a module's
+    // code, each listed among its `deprecations` (codeDeprecations) and removed with the
+    // shell's next tightening: { what, pattern (matched against _codeText: comments and
+    // strings do not count), use }. `module.host` is found where the handle is named
+    // `module` (or a handle comes straight from Api.moduleAt): QML cannot notice a read of a
+    // property, so a handle kept under another name is not found.
+    readonly property var deprecatedCode: [
+        { what: "Api.module(id)", pattern: /\bApi\s*\.\s*module\s*\(/,
+          use: "`Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" },
+        { what: "module.host", pattern: /(?:\bmodule|\bmoduleAt\s*\((?:[^()]|\([^()]*\))*\))\s*\??\.\s*host\b/,
+          use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)" }
+    ]
 
     // ---- What a module file's root object declares ----
     //
@@ -76,80 +93,12 @@ Singleton {
     }
 
     // The text of a QML file's root object at depth 1: comments, strings and regex literals
-    // blanked, nested objects reduced to ";"
+    // blanked (_codeText), nested objects reduced to ";"
     function _rootText(text) {
-        if (typeof text !== "string")
-            return "";
-        const source = text.slice(0, ModuleFileRules.maxFileBytes);
+        const code = _codeText(text);
         let depth = 0;
         let rootText = "";
-        // The last significant character outside comments and strings, and the word before
-        // it: where a "/" starts a regex literal rather than divides
-        let last = "";
-        let lastWord = "";
-        for (let i = 0; i < source.length; i++) {
-            const character = source[i];
-            const next = source[i + 1];
-            if (/\s/.test(character)) {
-                if (depth === 1)
-                    rootText += character;
-                continue;
-            }
-            // Comments and strings are skipped whole
-            if (character === "/" && next !== "/" && next !== "*"
-                    && (last === "" || "(,=:[!&|?{};".includes(last) || lastWord === "return")) {
-                let j = i + 1;
-                let inClass = false;
-                while (j < source.length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
-                    if (source[j] === "\\")
-                        j++;
-                    else if (source[j] === "[")
-                        inClass = true;
-                    else if (source[j] === "]")
-                        inClass = false;
-                    j++;
-                }
-                i = j;
-                last = "/";
-                lastWord = "";
-                if (depth === 1)
-                    rootText += " ";
-                continue;
-            }
-            const wordMatch = /[A-Za-z_$]/.test(character) ? /^[A-Za-z_$][\w$]*/.exec(source.slice(i, i + 64)) : null;
-            if (wordMatch) {
-                if (depth === 1)
-                    rootText += wordMatch[0];
-                i += wordMatch[0].length - 1;
-                last = "a";
-                lastWord = wordMatch[0];
-                continue;
-            }
-            lastWord = "";
-            if (character === "/" && next === "/") {
-                const end = source.indexOf("\n", i);
-                i = end < 0 ? source.length : end - 1;
-                continue;
-            }
-            if (character === "/" && next === "*") {
-                const end = source.indexOf("*/", i + 2);
-                i = end < 0 ? source.length : end + 1;
-                continue;
-            }
-            if (character === "\"" || character === "'" || character === "`") {
-                let j = i + 1;
-                while (j < source.length && source[j] !== character) {
-                    if (source[j] === "\\")
-                        j++;
-                    j++;
-                }
-                i = j;
-                last = "a";
-                if (depth === 1)
-                    rootText += " ";
-                continue;
-            }
-            last = character;
+        for (const character of code) {
             if (character === "{") {
                 depth++;
                 if (depth === 2)
@@ -166,6 +115,82 @@ Singleton {
         return rootText;
     }
 
+    // A QML file's text without what is not code: a line comment dropped, each block comment,
+    // string, template literal and regular-expression literal one space (so their braces and words do not
+    // count). Never throws; "" for anything but a string.
+    function _codeText(text) {
+        if (typeof text !== "string")
+            return "";
+        const source = text.slice(0, ModuleFileRules.maxFileBytes);
+        let code = "";
+        // The last significant character outside comments and strings, and the word before
+        // it: where a "/" starts a regex literal rather than divides
+        let last = "";
+        let lastWord = "";
+        for (let i = 0; i < source.length; i++) {
+            const character = source[i];
+            const next = source[i + 1];
+            if (/\s/.test(character)) {
+                code += character;
+                continue;
+            }
+            if (character === "/" && next !== "/" && next !== "*"
+                    && (last === "" || "(,=:[!&|?{};".includes(last) || lastWord === "return")) {
+                let j = i + 1;
+                let inClass = false;
+                while (j < source.length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
+                    if (source[j] === "\\")
+                        j++;
+                    else if (source[j] === "[")
+                        inClass = true;
+                    else if (source[j] === "]")
+                        inClass = false;
+                    j++;
+                }
+                i = j;
+                last = "/";
+                lastWord = "";
+                code += " ";
+                continue;
+            }
+            const wordMatch = /[A-Za-z_$]/.test(character) ? /^[A-Za-z_$][\w$]*/.exec(source.slice(i, i + 64)) : null;
+            if (wordMatch) {
+                code += wordMatch[0];
+                i += wordMatch[0].length - 1;
+                last = "a";
+                lastWord = wordMatch[0];
+                continue;
+            }
+            lastWord = "";
+            if (character === "/" && next === "/") {
+                const end = source.indexOf("\n", i);
+                i = end < 0 ? source.length : end - 1;
+                continue;
+            }
+            if (character === "/" && next === "*") {
+                const end = source.indexOf("*/", i + 2);
+                i = end < 0 ? source.length : end + 1;
+                code += " ";
+                continue;
+            }
+            if (character === "\"" || character === "'" || character === "`") {
+                let j = i + 1;
+                while (j < source.length && source[j] !== character) {
+                    if (source[j] === "\\")
+                        j++;
+                    j++;
+                }
+                i = j;
+                last = "a";
+                code += " ";
+                continue;
+            }
+            last = character;
+            code += character;
+        }
+        return code;
+    }
+
     // Of `wanted` ({ name: value }), the ones the root object declares (`declared`, from
     // rootProperties)
     function initialProperties(declared, wanted) {
@@ -177,7 +202,7 @@ Singleton {
         return result;
     }
 
-    // ---- The import check (a warning, never a refusal) ----
+    // ---- The import check (a warning or an error, never a refusal) ----
 
     // The imports at the top of a QML file: [{ name, directory }] — `name` a module name
     // (QtQuick.Layouts) or, for a quoted import, the quoted text with `directory` true. Read
@@ -248,16 +273,52 @@ Singleton {
         return list.slice(0, cap).concat(["… and " + (list.length - cap) + " more"]);
     }
 
-    // The warnings for one file of a module: one per import outside the allowlist, at most
+    // The warnings for one file of a module: one per import outside the allowlist (those that
+    // reach into the shell or another module are errors instead: importErrors), at most
     // maxImportWarningsPerFile. A test suite (`isTest`: listed in the manifest's tests) may
     // also import qs.tests — the shell's TestCase, which tests/run-modules.sh provides and the
     // running shell does not: a module's own file importing it would pass its suites and fail
     // in the shell.
     function importWarnings(file, text, isTest) {
-        return cappedLines(importsOf(text).filter(entry => !importAllowed(entry, file) && !(isTest === true && !entry.directory && entry.name === "qs.tests")).map(entry =>
+        return cappedLines(importsOf(text).filter(entry => !importAllowed(entry, file) && !importReaches(entry, file)
+                                                   && !(isTest === true && !entry.directory && entry.name === "qs.tests")).map(entry =>
             nameLabel(file) + " imports " + (entry.directory ? "\"" + nameLabel(entry.name) + "\"" : nameLabel(entry.name))
             + ", outside what modules may import (" + allowedImports.concat(allowedImportPrefixes.map(prefix => prefix + "*")).join(", ")
             + ", the module's own directory)"), maxImportWarningsPerFile);
+    }
+
+    // An import that reaches into the shell or another module (reachingImportPrefixes, or a
+    // directory outside the module's own: importAllowed refuses it)
+    function importReaches(entry, file) {
+        if (entry.directory)
+            return !importAllowed(entry, file);
+        return reachingImportPrefixes.some(prefix => entry.name === prefix || entry.name.startsWith(prefix + "."));
+    }
+
+    // The errors for one file of a module: one per import that reaches into the shell or
+    // another module (importReaches), at most maxImportWarningsPerFile
+    function importErrors(file, text) {
+        return cappedLines(importsOf(text).filter(entry => importReaches(entry, file)).map(entry =>
+            nameLabel(file) + " imports " + (entry.directory
+                ? "\"" + nameLabel(entry.name) + "\", outside the module's directory: another module is used through `uses`"
+                : nameLabel(entry.name) + ", the shell's own: a module reaches the shell through qs.api")), maxImportWarningsPerFile);
+    }
+
+    // The deprecations for a module's code (`texts`: { file: text }): one line per old way of
+    // deprecatedCode it uses, saying where — the file, or how many files. In the order of
+    // deprecatedCode.
+    function codeDeprecations(texts) {
+        const lines = [];
+        const codes = {};
+        for (const file of Object.keys(texts ?? {}))
+            codes[file] = _codeText(texts[file]);
+        for (const old of deprecatedCode) {
+            const files = Object.keys(codes).filter(file => old.pattern.test(codes[file]));
+            if (files.length === 0)
+                continue;
+            lines.push(ModuleRules.deprecation(old.what + " (in " + (files.length === 1 ? nameLabel(files[0]) : files.length + " files") + ")", old.use));
+        }
+        return lines;
     }
 
     // The deprecations for a module's files (`texts`: { file: text }): one line per

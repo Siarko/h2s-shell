@@ -114,7 +114,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.18 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.19 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
@@ -183,13 +183,18 @@ TestCase {
             assertEqual(fields?.id, "bad-manifest-fields", "bad-manifest-fields: its id still shown");
 
             const forbidden = _expectState("forbidden-import", "loaded");
-            assert(_has(forbidden?.warnings, "imports qs.singletons"), "forbidden-import: loaded, with a warning naming the import");
-            assertEqual(forbidden?.errors.length, 0, "forbidden-import: a warning, not an error");
+            assertEqual(JSON.stringify(forbidden?.errors), JSON.stringify(["Main.qml imports qs.singletons, the shell's own: a module reaches the shell through qs.api"]),
+                        "forbidden-import: loaded, the shell's singletons imported an error naming the file and the import");
+            assert(!_has(forbidden?.warnings, "qs.singletons"), "… not a warning");
             assert(_has(forbidden?.warnings, "sections/deeper/Deeper.qml imports Quickshell.Hyprland"),
                    "forbidden-import: a QML file in a subdirectory, named nowhere, is scanned too: " + JSON.stringify(forbidden?.warnings));
             assert(_has(forbidden?.deprecations, "qs.components (in sections/Section.qml)"),
                    "… and its deprecated import listed: " + JSON.stringify(forbidden?.deprecations));
             assert(!_has(forbidden?.warnings, "qs.panels"), "… but not one in a hidden directory");
+            assertEqual(JSON.stringify(forbidden?.deprecations.filter(line => !line.startsWith("import "))),
+                        JSON.stringify(["Api.module(id) (in sections/OldWays.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses` (goes with the shell's next tightening)",
+                                        "module.host (in sections/OldWays.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit) (goes with the shell's next tightening)"]),
+                        "… and the old ways of reaching another module and the host, from its code: " + JSON.stringify(forbidden?.deprecations));
 
             _expectState("duplicate-id", "loaded");
             const second = _expectState("duplicate-id-2", "duplicate");
@@ -835,6 +840,41 @@ TestCase {
             assert(host.handle("consumer").uses !== suite._oldUses, "module.uses is a new object, set before the new main was made");
             assertEqual(_providerProbe.state.log.join("|"), "provider up|hello consumer up", "the provider first, then the consumer");
             assertEqual(_consumerPage.item.greeting, "hello from the provider", "the page again, bound to the new object");
+            // The provider turned off and on in one turn of the event loop: the consumer's going
+            // main still reads the old provider's object, and no new main of either comes
+            // before the old one of the same module is gone
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", false);
+            host.setEnabled("provider", true);
+        });
+        _then("the provider off and on in one turn settles", () => _status("consumer")?.state === "loaded" && _consumerPage.ready
+              && _providerProbe.state.log.includes("hello consumer up"), () => {
+            const log = _providerProbe.state.log;
+            const consumerGone = log.indexOf("hello consumer gone: same uses, hello from the provider");
+            assert(consumerGone >= 0, "off and on in one turn: the consumer's going main read module.uses as it was: " + log.join("|"));
+            assert(consumerGone < log.indexOf("provider gone") && log.indexOf("provider gone") < log.indexOf("provider up")
+                   && log.indexOf("provider up") < log.indexOf("hello consumer up"),
+                   "… the old consumer main, then the old provider main went before the new provider main, then the new consumer main: " + log.join("|"));
+            assertEqual(log.filter(line => line === "provider up").length + " " + log.filter(line => line === "provider gone").length, "1 1",
+                        "… one provider main went, one came");
+            assert(host.mainObject("consumer")?.usesAtStart?.provider === host.mainObject("provider")?.exports, "… the new consumer main has the new provider's exports");
+            // A dependent's main destroyed by something other than the host: its provider is
+            // not kept waiting for it
+            _providerProbe.state.log = [];
+            host.mainObject("consumer").destroy();
+        });
+        _then("the consumer's main is destroyed from outside", () => _providerProbe.state.log.some(line => line.startsWith("hello consumer gone")), () => {
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", false);
+        });
+        _then("the provider goes all the same", () => _status("provider")?.state === "disabled" && _providerProbe.state.log.includes("provider gone"), () => {
+            assertEqual(host._going.length, 0, "a dependent's main destroyed from outside: nothing left waiting");
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", true);
+        });
+        _then("the provider and the consumer come back", () => _status("consumer")?.state === "loaded" && _consumerPage.ready
+              && _providerProbe.state.log.includes("hello consumer up"), () => {
+            assertEqual(_providerProbe.state.log.join("|"), "provider up|hello consumer up", "… a new consumer main made after the provider's");
             _providerProbe.state.log = [];
             // A reload of the modules rebuilds everything in the same order
             host.load(_dirs(["consumer", "provider"]), {});
@@ -896,6 +936,27 @@ TestCase {
             const consumerStatus = _expectState("consumer", "missing-module");
             assert(_has(consumerStatus?.errors, "needs module provider 1.1: not installed"), "a provider not installed: said: " + consumerStatus?.errors.join("; "));
             assertEqual(host.mainObject("consumer"), null, "… no main");
+            // A dependent with no main, only a view: the provider's main waits for the view too
+            host.load(_dirs(["consumer-views", "provider"]), {});
+        });
+        _then("the views-only consumer loads", () => _settled() && _status("consumer-views")?.state === "loaded", () => {
+            const page = host.settingsPages.find(entry => entry.module === "consumer-views" || entry.id === "consumer-views");
+            suite._consumerPage = _contributionComponent.createObject(suite, { host: host, moduleId: "consumer-views", url: page?.component ?? "" });
+            _created.push(_consumerPage);
+        });
+        _then("the views-only consumer's page is built", () => _consumerPage?.ready, () => {
+            assertEqual(_consumerPage.item.greeting, "hello from the provider", "a page of a module without a main, bound to module.uses");
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", false);
+        });
+        _then("the provider goes after the views-only consumer's page", () => _providerProbe.state.log.includes("provider gone"), () => {
+            assertEqual(_providerProbe.state.log.join("|"), "hello views page gone: hello from the provider|provider gone",
+                        "a dependent with only views: its page went reading module.uses, before the provider's main");
+            host.setEnabled("provider", true);
+        });
+        _then("the views-only consumer is back", () => _status("consumer-views")?.state === "loaded" && _consumerPage.ready, () => {
+            _consumerPage.destroy();
+            suite._consumerPage = null;
             host.unload();
         });
         _clock.start();

@@ -1,0 +1,11 @@
+{
+    "id": "consumer-views",
+    "name": "Views-only consumer fixture",
+    "version": "1.0.0",
+    "api": "1.18",
+    "description": "A module without a main whose page uses the provider fixture's API (tests/fixtures/modules, ModulesTest)",
+    "settingsPages": [
+        { "id": "consumer-views", "label": "Consumer views", "component": "ViewsPage.qml", "tab": "system" }
+    ],
+    "uses": { "provider": "1.1" }
+}

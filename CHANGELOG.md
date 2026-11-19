@@ -13,6 +13,15 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.19: reach closed, the old ways listed — `Api.moduleStatus(id)` gives another module's
+  plain state, frozen `{ id, name, version, state, active }` (null for no such module).
+  `Api.module(id)` and the handle's `host` still work and are listed in the module's
+  `deprecations` where its code uses them (comments and strings do not count); both go with
+  the shell's next tightening. Importing `qs.singletons` (and below) or a directory outside
+  the module's own is now an error in its status instead of a warning; the module still
+  loads. A module turned off and on again before its old main is gone waits for it, so the
+  old main reads its own `module.uses` to the end; a dependent's main deleted by something
+  other than the shell no longer keeps its provider waiting.
 - 1.18: a module's API for other modules — `"exports": { "version": "1.0" }` in a provider's
   manifest offers its main's `exports` property (a plain `QtObject`) to other modules;
   `"uses": { "<id>": "1.0" }` in a dependent's (same major, the provider's minor at least

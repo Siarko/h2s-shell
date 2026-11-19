@@ -186,7 +186,8 @@ Scope {
 
     // Internal, per directory: { directory, manifest, compatible, errors (from the
     // manifest, API and files), warnings, deprecations, shadowedBy, qmldirText, filesChecked,
-    // mainFileError, main, component, mainError, state, facts, runtimeErrors }
+    // mainFileError, main, component, mainError, state, facts, runtimeErrors, mainDeleted (its
+    // main deleted by something other than the host) }
     property var _records: []
     // What the program look-up found: name → verdict (ModuleRules.programVerdict); the ones
     // it did not answer in time; the ones a module asked to look up again while it ran
@@ -538,7 +539,7 @@ Scope {
             // Every QML file under its directory, for the import scan: ModuleFileRules.listing's
             // answer ({ files, skipped, more, failed })
             scanListing: null,
-            main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
+            main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [], mainDeleted: false,
             // (1.18) Its main's exports object while the main lives (null: none), why there is
             // none when it declares exports, and why it does not load for the modules it uses
             exportsObject: null, exportsProblem: "", dependencyReasons: [],
@@ -707,6 +708,8 @@ Scope {
         const read = {};
         // Capped per file (importWarnings) and per module: added after the loops
         const importLines = [];
+        // (1.19) Imports that reach into the shell or another module: errors, capped the same way
+        const reachLines = [];
         for (const name of files.concat(record.manifest.tests ?? [])) {
             const text = texts?.[name];
             if (typeof text !== "string") {
@@ -724,6 +727,7 @@ Scope {
             if (openerWarning !== "")
                 record.warnings.push(openerWarning);
             importLines.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
+            reachLines.push(...ModuleSourceRules.importErrors(name, text));
         }
         // Its other QML files, in subdirectories or built by a Loader, for their imports
         // alone; one that could not be read is not an error (nothing loads it by name), but
@@ -740,13 +744,15 @@ Scope {
             read[name] = text;
             // Under tests/: a suite's helper, which runs under the runner as the suites do
             importLines.push(...ModuleSourceRules.importWarnings(name, text, name.startsWith("tests/")));
+            reachLines.push(...ModuleSourceRules.importErrors(name, text));
         }
         record.warnings.push(...ModuleSourceRules.cappedLines(importLines, ModuleSourceRules.maxImportWarnings));
+        record.errors.push(...ModuleSourceRules.cappedLines(reachLines, ModuleSourceRules.maxImportWarnings));
         const scanWarning = ModuleFileRules.scanWarning(record.scanListing, unread);
         if (scanWarning !== "")
             record.warnings.push(scanWarning);
         // The old ways its files still use: listed in its status, the module loads as before
-        record.deprecations = ModuleSourceRules.importDeprecations(read);
+        record.deprecations = ModuleSourceRules.importDeprecations(read).concat(ModuleSourceRules.codeDeprecations(read));
     }
 
     // ---- The stores' directory ----
@@ -947,6 +953,7 @@ Scope {
         const unknownPrograms = [];
         const unknownStandIns = [];
         const unknownData = [];
+        let waitingForGoing = false;
         // Each module's own state, from its own checks: record → { base (before its main),
         // state (a main that failed counted), facts }
         const own = new Map();
@@ -970,8 +977,15 @@ Scope {
             if (base === "pending" && !facts.dataDirectoryKnown
                     && ModuleMergeRules.stateOf(Object.assign({}, facts, { dataDirectoryKnown: true })) === "loaded")
                 unknownData.push(manifest.id);
-            // Its main failed before: failed until it is turned off and on, or reloaded
-            own.set(record, { base: base, state: base === "loaded" && record.mainError !== "" ? "failed" : base, facts: facts });
+            // Its main failed before: failed until it is turned off and on, or reloaded.
+            // Turned off and on again before its old main is gone (in one turn of the event
+            // loop): pending until it is, so a new main never lives beside the old one — and
+            // the old one, going, reads its own module.uses to the end (the handle's `uses` is
+            // one per module: a new main would have replaced it)
+            const going = base === "loaded" && record.mainError === "" && !record.main && _going.some(entry => entry.id === manifest.id);
+            if (going)
+                waitingForGoing = true;
+            own.set(record, { base: base, state: going ? "pending" : base === "loaded" && record.mainError !== "" ? "failed" : base, facts: facts });
             if (base === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown) {
                 if (!_fromStandIns(record))
                     unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
@@ -1032,8 +1046,12 @@ Scope {
             _checkTestPrograms(unknownStandIns);
         if (unknownData.length > 0)
             _makeDataDirectories(unknownData);
+        _waitingForGoing = waitingForGoing;
         _publish();
     }
+
+    // A module waits for an old main of its own to go (_apply): applied again when one goes
+    property bool _waitingForGoing: false
 
     // (1.18) A module about to be turned on (or staying on): its `uses`, its providers'
     // exports objects now (their mains made before, in this pass or earlier). A new object
@@ -1159,9 +1177,16 @@ Scope {
         record.component = null;
         record.exportsObject = null;
         record.exportsProblem = "";
+        const deleted = record.mainDeleted === true;
+        record.mainDeleted = false;
         if (!main)
             return;
         mainsRevision++;
+        // Already deleted by something other than the host: nothing to wait for
+        if (deleted) {
+            Qt.callLater(root._reap);
+            return;
+        }
         _going.push({ id: record.manifest.id, main: main, offered: offered, uses: _uses.get(record.manifest.id) ?? _noUses, destroying: false });
         _reap();
     }
@@ -1178,18 +1203,39 @@ Scope {
     function _reap() {
         if (_dying)
             return;
+        // Entries whose main is already gone without its watcher telling (deleted by
+        // something other than the host, whose destroy() then throws): dropped, or the
+        // providers would wait for them forever
+        const dropped = [];
         for (const entry of _going) {
             if (entry.destroying)
                 continue;
-            if (entry.offered && _going.some(other => other !== entry && Object.values(other.uses).includes(entry.offered)))
+            if (entry.offered && _going.some(other => other !== entry && !dropped.includes(other) && Object.values(other.uses).includes(entry.offered)))
                 continue;
             entry.destroying = true;
+            if (!entry.main) {
+                dropped.push(entry);
+                continue;
+            }
             try {
                 entry.main.destroy();
             } catch (error) {
                 console.error("[Modules] destroying the main of " + entry.id + " threw:", error);
+                dropped.push(entry);
             }
         }
+        if (dropped.length > 0)
+            _goneEntries(dropped);
+    }
+
+    // Going entries done with: the providers waiting on them go next, one turn of the event
+    // loop later, after what was torn down with them; a module waiting for its old main is
+    // applied again
+    function _goneEntries(entries) {
+        _going = _going.filter(entry => !entries.includes(entry));
+        Qt.callLater(root._reap);
+        if (_waitingForGoing)
+            Qt.callLater(root._applyGuarded);
     }
 
     // A main is gone (its watcher went with it): the providers waiting on it go next, one
@@ -1197,11 +1243,17 @@ Scope {
     function _mainGone(main) {
         if (_dying)
             return;
-        const left = _going.filter(entry => entry.main !== main);
-        if (left.length === _going.length)
+        const gone = _going.filter(entry => entry.main === main);
+        if (gone.length > 0) {
+            _goneEntries(gone);
             return;
-        _going = left;
-        Qt.callLater(root._reap);
+        }
+        // Not asked to go: deleted by something other than the host. Marked, so taking the
+        // module off later does not wait for it (its destroy() would throw)
+        for (const record of _records) {
+            if (record.main === main)
+                record.mainDeleted = true;
+        }
     }
 
     property Component _goneWatcher: Component {

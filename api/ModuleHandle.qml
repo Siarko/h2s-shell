@@ -23,7 +23,9 @@ QtObject {
     id: root
 
     // Set by the host when it makes the handle, read-only from then on: a module cannot
-    // turn another's handle into its own
+    // turn another's handle into its own. `host` is the shell's and deprecated for modules
+    // (API 1.19): a module's code reading `module.host` has it listed in its `deprecations`
+    // (ModuleSourceRules.codeDeprecations); it becomes `_host` with the shell's next tightening
     readonly property string moduleId: ""
     readonly property var host: null
 

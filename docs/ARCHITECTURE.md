@@ -553,17 +553,33 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   object, until it is turned on again; a provider's main is destroyed only once its
   dependents' mains are gone (`ModuleHost._reap`, told by a watcher object inside each main),
   so a dependent's main and views read it for as long as they live, `Component.onDestruction`
-  included. When the shell reloads, the engine runs every main's `Component.onDestruction`
-  newest first, and a dependent's main is always newer than its providers'.
+  included. A module turned on again before its old main is gone (off and on in one turn of
+  the event loop) stays pending until it is: a new main never lives beside the old one, and
+  the old one reads its own `module.uses` to the end. A main deleted by something other than
+  the host keeps nothing waiting. The host waits for mains, not views: the views of a
+  dependent without a main are taken down by the core as it goes off and are gone before the
+  provider's main (a suite checks it), but nothing in the host holds the provider for them. When the shell reloads, the engine runs every main's
+  `Component.onDestruction` newest first, and a dependent's main is always newer than its
+  providers'.
+- **Reaching another module or the host**: a module knows of another only its plain state,
+  `Api.moduleStatus(id)` (frozen `{ id, name, version, state, active }`, or null), and its
+  `exports` through `uses`. The old ways still work and are listed among the module's
+  `deprecations`, found in its code by `ModuleSourceRules.codeDeprecations` (comments and
+  strings do not count): `Api.module(id)`, and `module.host` (where the handle is named
+  `module` or comes straight from `Api.moduleAt`: QML cannot notice a property read, so a
+  handle under another name is not found). Both go with the shell's next tightening.
+  Importing `qs.singletons` (and below) or a directory outside the module's own is an error
+  in its status; the module still loads.
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
   components they build, transitively: `tests/lock-closure.sh`).
 
 Writing a module, from the author's side (everything through `import qs.api`; nothing from
-`qs.singletons`, and `qs.components` — the shell's internal components, which may change
+`qs.singletons` — importing it, or a directory outside the module's own, is an error in its
+status — and `qs.components` — the shell's internal components, which may change
 in any release — only for a module not yet moved off it: the import still works and is
-listed among the module's `deprecations` in `qs ipc call modules list`; an import
+listed among the module's `deprecations` in `qs ipc call modules list`; any other import
 outside those, `Quickshell`, `Quickshell.Io`, `QtQuick…`, `QtQml…` and the module's own
 directory is a warning there. Every QML file under
 the module's directory is read for its imports, in subdirectories too — up to 100 files,

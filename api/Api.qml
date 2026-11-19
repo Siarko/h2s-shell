@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.18" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.19" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -24,7 +24,16 @@ import qs.singletons.network
 //                          listed the thing as deprecated.
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
 //   Api.slots              the slots the core offers: [{ name, where, context, since }]
-//   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null
+//   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
+//                          (1.19): a module keeps to its own handle — another module is
+//                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose
+//                          code calls it has it listed in its `deprecations`; it goes with the
+//                          shell's next tightening
+//   Api.moduleStatus(id)   (1.19) another module's plain state, frozen { id, name, version,
+//                          state (as in `modules list`: "loaded", "disabled", "missing-module",
+//                          …), active (true while it is enabled and loaded) }, or null for an
+//                          id no module has. Nothing else of it: no handle, no directory, no
+//                          errors. It follows the module in a binding
 //   Api.moduleAt(url)      the handle of the module whose directory holds `url` — in any file
 //                          of a module: Api.moduleAt(Qt.resolvedUrl("."))
 //   module.main            (1.15, on its handle) the object made from the manifest's `main`
@@ -612,9 +621,14 @@ import qs.singletons.network
 //                          first (state missing-module), and they come back after it; its main
 //                          is destroyed only once theirs are gone, so a dependent's main and
 //                          views can read module.uses — in bindings, in Component.onDestruction
-//                          — for as long as they live. The shell reloading: every main's
-//                          Component.onDestruction runs newest first, so dependents' before
-//                          their providers'. A dependent listens to the object
+//                          — for as long as they live. A module turned off and on again
+//                          before its old main is gone (in one turn of the event loop) is
+//                          pending until it is, so its old main reads its own module.uses to
+//                          the end. The shell waits for a dependent's main, not for its views:
+//                          a dependent without a main has its views taken down as it goes off,
+//                          before the provider's main goes, but not held for. The shell
+//                          reloading: every main's Component.onDestruction runs newest first,
+//                          so dependents' before their providers'. A dependent listens to the object
 //                          from what lives under its main (a `Connections` there goes with
 //                          it) and hands it no function to call later: the shell cannot see a
 //                          function held by the provider, which could then call into a module
@@ -626,14 +640,23 @@ import qs.singletons.network
 //                          (a module using itself too): each module in it fails, the cycle
 //                          named ("uses form a cycle: a → b → a", "uses itself").
 //
+// Reaching into another module or the shell (1.19): a module uses its own handle, qs.api,
+// Api.moduleStatus(id) and the exports it `uses`. `Api.module(id)` and the handle's `host`
+// still work and are listed in the module's `deprecations` where its code uses them (read
+// from its QML files, comments and strings left out: `Api.module(`, and `.host` on `module`
+// or straight on Api.moduleAt(…) — a handle kept under another name is not found, QML cannot
+// notice a property read); both go with the shell's next tightening (`host` then becomes
+// `_host`). Importing the shell's singletons (`qs.singletons` and below) or a directory
+// outside the module's own is an error in its status; the module still loads.
+//
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any
 // release. A module that still imports it loads as before, and the import is listed in
 // its status (`deprecations`, in `modules list`); it becomes an error with the change
 // that raises the floor. The imports are read from every QML file under the module's
 // directory — in subdirectories too, and ones only a Loader builds — up to 100 files, 8
-// directories deep, hidden directories, links and other file systems skipped; an import
-// outside what modules may import is a warning in the status (at most 5 per file, 50 per
+// directories deep, hidden directories, links and other file systems skipped; any other
+// import outside what modules may import is a warning in the status (at most 5 per file, 50 per
 // module, the rest counted). Files the scan left out or could not read are one warning
 // ("imports not checked in N files"), never a silent "no warnings".
 Singleton {
@@ -723,8 +746,15 @@ Singleton {
     property var _testNetworkGiven: null
     readonly property var _testNetworkFacts: ModuleRules.testNetworkFacts(_testNetworkGiven).facts
 
+    // Deprecated (1.19): listed in the calling module's `deprecations` (found in its code),
+    // removed with the shell's next tightening
     function module(id) {
         return Modules.handle(id);
+    }
+
+    // (1.19) Another module's plain state (above)
+    function moduleStatus(id) {
+        return ModuleMergeRules.moduleStatusFacts(typeof id === "string" ? Modules.status(id) : null, Modules.activeIds);
     }
 
     function moduleAt(url) {
