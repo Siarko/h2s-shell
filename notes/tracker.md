@@ -23,12 +23,12 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
 - [ ] the closing slice (Z), after the module is released
 
-### Next: planned, waiting for the owner's answers
+### Next: planned and answered, to implement in a new session
 
 - [ ] Notifications with a progress bar (core, module API 1.33):
-      [plans/notification-progress.md](plans/notification-progress.md) — open question Q5 (a toast that stays, in "One at a time").
+      [plans/notification-progress.md](plans/notification-progress.md) — answered, ready.
 - [ ] Taildrop's list of transfers (module; its last slice needs the notification handle):
-      [plans/taildrop-transfers.md](plans/taildrop-transfers.md) — answered; its default notification mode follows Q5.
+      [plans/taildrop-transfers.md](plans/taildrop-transfers.md) — answered, ready.
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
       review of each area's first slices
