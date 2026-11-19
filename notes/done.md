@@ -2097,3 +2097,17 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `TS_FAKE_SEND_STALL`. Reviewed, fixed; module suites and stand-ins on both machines, the
   module's lock bed on NixOS. Only on stand-ins: one file per `file cp`, a kill of one file,
   two devices at once, the bus's per-peer entries (D6 checks them for real).
+- **Toasts follow the sender's display time (N5)** — on `master` 2026-11-19. `ToastRules.timing`
+  / `duration` (-1, none, NaN → the user's time; 0 stays until taken away; a positive time
+  with a 1 s floor; critical stays; `notifications.followSenderTime` off → the user's time),
+  `slots` / `nextToast` / `stackOrder`: toasts that stay take none of the layout's slots and
+  stack above them, at most `notifications.maxStayingToasts` (1–5, default 3), more wait,
+  counted; critical toasts stack the same way in both layouts (they held the slot before).
+  `isPersistent` split into `isCritical` (red border) and the timing; a toast's countdown
+  restarts or stops when its sender replaces it with another time. A slot takes a toast
+  through `Notifications.takeHudNotification()` (on the shown list before the queue changes,
+  so a draining backlog never exceeds the room); a notification closed while shown or waiting
+  leaves (its `closed` and `tracked` signals). The lock bed's `notify` helper sends -1.
+  `CommandRunnerTest`'s bare-run bounds allow Qt's coarse timers 5% early (the known flaky
+  check failed steadily on the NixOS machine). Reviewed twice (a high each time), fixed;
+  `tests/run-all.sh` passed on both machines.
