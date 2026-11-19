@@ -9,7 +9,7 @@ import qs.singletons
 //   start(argv, options) → handle { running, cancel() }
 //   options = { timeoutMs: 30000 (0: no limit), killAfterMs: 3000, environment,
 //               onStdout(text), onStderr(text), onLine(line, stream), keepOutput: true,
-//               maxOutputBytes: 1048576, done(result) }
+//               outputAfterCancel: false, maxOutputBytes: 1048576, done(result) }
 //   result  = { ok, code, stdout, stderr, timedOut, cancelled, failedToStart, truncated,
 //               durationMs, error }   — frozen (CommandRules.result says what each is)
 //
@@ -24,8 +24,12 @@ import qs.singletons
 //   with `timeout` when the shell's own end kills that; and the runner has its own
 //   watchdog, the only limit where one of the two programs is missing. Past the limit
 //   the command gets TERM, and KILL `killAfterMs` later.
+// - A run without a time limit (or without `timeout`) is started behind `setpriv
+//   --pdeathsig KILL` alone, so that it dies with the shell. Every run waits for the
+//   look-up of the two programs: one started before it would go without `setpriv`.
 // - cancel(): TERM, KILL after `killAfterMs`; no chunk or line is handed over from that
-//   moment; `done` comes when the process is gone, with `cancelled: true` — also for a
+//   moment (with `outputAfterCancel`: they still are, and kept, until the process is
+//   gone); `done` comes when the process is gone, with `cancelled: true` — also for a
 //   run whose answer is still waiting to be handed over (refused, or unable to start).
 // - `done` is called exactly once per start(), never inside start() itself — and never
 //   once the runner is destroyed: its runs are then ended at once (KILL), nothing is called.
@@ -77,10 +81,10 @@ QtObject {
             onLine: given.callbacks.onLine,
             // An answer is owed even where the options are what is wrong
             done: given.callbacks.done,
-            state: CommandRules.fresh(given.timeoutMs, given.killAfterMs),
+            state: CommandRules.fresh(given.timeoutMs, given.killAfterMs, given.outputAfterCancel),
             // queued: done, its answer waiting in `_deferred` for the flush
             item: null, starting: false, queued: false, muted: false, truncated: false,
-            stdout: "", stderr: "", startedAt: 0,
+            stdout: "", stderr: "", lastStderr: "", startedAt: 0,
             lineCount: { stdout: 0, stderr: 0 },
             refusal: problem !== "" ? problem : given.problem
         };
@@ -101,7 +105,7 @@ QtObject {
         if (job.refusal !== "") {
             job.state.phase = "done";
             _defer(job);
-        } else if (job.state.timeoutMs === 0 || _toolsKnown) {
+        } else if (_toolsKnown) {
             _launch(job);
         }
         return handle;
@@ -126,7 +130,7 @@ QtObject {
 
     function _launch(job) {
         if (job.state.phase === "waiting")
-            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools, job.state.timeoutMs) });
+            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools, job.state.timeoutMs), guarded: CommandRules.guards(tools) });
     }
 
     function _dispatch(job, event) {
@@ -200,6 +204,9 @@ QtObject {
     function _line(job, stream, line) {
         if (job.muted || job.state.phase === "done" || _gone)
             return;
+        // Enough to know setpriv's own message (CommandRules.result)
+        if (stream === "stderr")
+            job.lastStderr = line.slice(0, 64);
         const limit = job.options.maxOutputBytes;
         if (job.options.keepOutput) {
             const kept = CommandRules.keptLine(job[stream], job.lineCount[stream], line, limit);
@@ -225,7 +232,7 @@ QtObject {
         if (_gone)
             return;
         const result = CommandRules.result(job.state, {
-            stdout: job.stdout, stderr: job.stderr, truncated: job.truncated,
+            stdout: job.stdout, stderr: job.stderr, truncated: job.truncated, lastStderr: job.lastStderr,
             durationMs: job.startedAt > 0 ? Date.now() - job.startedAt : 0
         });
         const item = job.item;

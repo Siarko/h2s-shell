@@ -17,11 +17,12 @@ Singleton {
     // `timeout` wraps: they are only there for a `timeout` that does not do its work
     readonly property int backstopMs: 1000
 
-    // The programs put around a run with a time limit, in this order, and the arguments
-    // each must run with, exit 0, to count. CommandTools takes each from PATH, and only a
-    // match that only root can change (ModuleRules.programVerdict): what ends a run is not
-    // taken from a place the user can write. `timeout` (coreutils) ends the command;
-    // `setpriv` (util-linux) is there for its --pdeathsig alone (commandLine).
+    // The programs put around a run, in this order, and the arguments each must run with,
+    // exit 0, to count. CommandTools takes each from PATH, and only a match that only root
+    // can change (ModuleRules.programVerdict): what ends a run is not taken from a place
+    // the user can write. `timeout` (coreutils) ends a command with a time limit;
+    // `setpriv` (util-linux) is there for its --pdeathsig alone, in front of every run
+    // (commandLine).
     readonly property var wrapperTools: [
         { name: "timeout", probe: ["--version"] },
         { name: "setpriv", probe: ["--pdeathsig", "KILL", "--version"] }
@@ -104,15 +105,15 @@ Singleton {
         return typeof value === "number" && isFinite(value) && value >= least;
     }
 
-    // → { problem, timeoutMs, killAfterMs, keepOutput, maxOutputBytes, environment,
-    // callbacks }: what was given, with the defaults for what was not, every field read once
+    // → { problem, timeoutMs, killAfterMs, keepOutput, outputAfterCancel, maxOutputBytes,
+    // environment, callbacks }: what was given, with the defaults for what was not, every field read once
     // (`callbacks`: { onStdout, onStderr, onLine, done } as read, each a function or null —
     // `done` even when `problem` is set, as an answer is owed). `problem` is "" when
     // everything given is of its kind; a wrong one is never replaced by a default silently.
     function options(given) {
         const result = {
             problem: "", timeoutMs: defaultTimeoutMs, killAfterMs: defaultKillAfterMs,
-            keepOutput: true, maxOutputBytes: defaultMaxOutputBytes, environment: {},
+            keepOutput: true, outputAfterCancel: false, maxOutputBytes: defaultMaxOutputBytes, environment: {},
             callbacks: { onStdout: null, onStderr: null, onLine: null, done: null }
         };
         if (given === undefined || given === null)
@@ -121,7 +122,7 @@ Singleton {
             result.problem = "the options are not an object";
             return result;
         }
-        const read = readOnce(given, ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "environment"].concat(_callbackNames));
+        const read = readOnce(given, ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "outputAfterCancel", "environment"].concat(_callbackNames));
         const has = name => read[name] !== undefined && read[name] !== null;
         if (has("timeoutMs")) {
             if (!_wholeNumber(read.timeoutMs, 0))
@@ -146,6 +147,12 @@ Singleton {
                 result.problem = "keepOutput is not true or false";
             else
                 result.keepOutput = read.keepOutput;
+        }
+        if (has("outputAfterCancel")) {
+            if (typeof read.outputAfterCancel !== "boolean")
+                result.problem = "outputAfterCancel is not true or false";
+            else
+                result.outputAfterCancel = read.outputAfterCancel;
         }
         if (has("environment")) {
             const snapshot = environmentSnapshot(read.environment);
@@ -209,49 +216,72 @@ Singleton {
     // found (`tools`: { timeout, setpriv }). Without `setpriv` it is not: the shell's end
     // would then leave the command running, with nothing to end it.
     function wraps(tools, timeoutMs) {
-        const found = path => typeof path === "string" && path !== "";
-        return found(tools?.timeout) && found(tools?.setpriv) && timeoutMs > 0;
+        return _found(tools?.timeout) && guards(tools) && timeoutMs > 0;
+    }
+
+    // Whether `setpriv` stands in front of a run (`tools` as for wraps): whenever it was
+    // found, with a limit or without
+    function guards(tools) {
+        return _found(tools?.setpriv);
+    }
+
+    function _found(path) {
+        return typeof path === "string" && path !== "";
     }
 
     // The words actually started. With a limit:
     //   timeout -k <kill after> <limit> setpriv --pdeathsig KILL -- <argv…>
-    // `timeout` ends the command at the limit, also when the shell is gone. `setpriv` only
-    // asks the kernel to send the command a KILL when its parent — `timeout` — dies, and
-    // then becomes the command: the shell's own end kills its child, `timeout`, with a
-    // KILL that cannot be passed on, and the command would go on without a limit. (The
-    // kernel drops that request when the command is a setuid program.) `timeout` stops
+    // without one (or with `timeout` missing):
+    //   setpriv --pdeathsig KILL -- <argv…>
+    // `setpriv` only asks the kernel to send the command a KILL when its parent dies, and
+    // then becomes the command. Inside `timeout` that parent is `timeout`, which ends the
+    // command at the limit, also when the shell is gone: the shell's own end kills its
+    // child, `timeout`, with a KILL that cannot be passed on, and without `setpriv` the
+    // command would go on without a limit. Without `timeout` the parent is the shell
+    // itself, so a run with no limit ends with the shell (a crash, a restart) instead of
+    // running for ever. (The kernel drops that request when the command is a setuid
+    // program, and what the command starts itself does not inherit it.) `timeout` stops
     // reading options at the limit and `setpriv` at "--", so the command's own words are
     // never taken for theirs. A kill-after of 0 would switch `timeout`'s KILL off: 1 ms.
+    // Without `setpriv` the command is started as it is.
     function commandLine(argv, tools, timeoutMs, killAfterMs) {
         const words = Array.from(argv);
-        if (!wraps(tools, timeoutMs))
+        if (!guards(tools))
             return words;
-        return [tools.timeout, "-k", seconds(Math.max(killAfterMs, 1)), seconds(timeoutMs),
-                tools.setpriv, "--pdeathsig", "KILL", "--"].concat(words);
+        const guarded = [tools.setpriv, "--pdeathsig", "KILL", "--"].concat(words);
+        if (!wraps(tools, timeoutMs))
+            return guarded;
+        return [tools.timeout, "-k", seconds(Math.max(killAfterMs, 1)), seconds(timeoutMs)].concat(guarded);
     }
 
     // ---- A run's life ----
     //
-    // waiting (for the look-up of `timeout`) → running → ending (told to stop: by cancel()
-    // or by the runner's own time limit) → done. A wrapped run is ended by `timeout` itself
-    // (its limit, and after a TERM its own KILL); the runner's timers for it are a backstop.
+    // waiting (for the look-up of `timeout` and `setpriv`, which every run waits for: one
+    // started before it would miss `setpriv` and could outlive the shell) → running →
+    // ending (told to stop: by cancel() or by the runner's own time limit) → done. A
+    // wrapped run is ended by `timeout` itself (its limit, and after a TERM its own KILL);
+    // the runner's timers for it are a backstop. `outputAfterCancel`: a cancel does not
+    // mute the run — what it still prints is handed over and kept, the answer says
+    // `cancelled` all the same.
 
-    function fresh(timeoutMs, killAfterMs) {
+    function fresh(timeoutMs, killAfterMs, outputAfterCancel) {
         return {
-            phase: "waiting", launched: false, wrapped: false, timeoutMs: timeoutMs, killAfterMs: killAfterMs,
+            phase: "waiting", launched: false, wrapped: false, guarded: false, timeoutMs: timeoutMs, killAfterMs: killAfterMs,
+            outputAfterCancel: outputAfterCancel === true,
             timedOut: false, cancelled: false, exited: false, code: -1, crashed: false
         };
     }
 
     // → { state, effects, ignored }. `ignored` is "" when the event was taken, else why not
-    // (the state is then the object passed in, no effects). Events: launch { wrapped },
+    // (the state is then the object passed in, no effects). Events: launch { wrapped,
+    // guarded (`setpriv` in front, wraps and guards) },
     // cancel, watchdog (the runner's time limit), kill (its kill timer), exited { code,
     // crashed }, stopped (the process is gone, with or without an exit), and cancel {
     // queued: true } for a run that is done but whose answer still waits to be handed over
     // (a refused run, or a program reported as unable to start inside start()): that answer
     // goes out as cancelled, so a cancel is never followed by `cancelled: false`. Effects, in order:
     // start | timer { name, ms } | stop { name } | signal { signal } | mute (no chunk or
-    // line callback from here) | answer.
+    // line callback from here; left out for a run with `outputAfterCancel`) | answer.
     function step(state, event) {
         const phase = state?.phase;
         const type = event?.type;
@@ -259,10 +289,11 @@ Singleton {
         const next = (changes, effects) => ({ state: Object.assign({}, state, changes), effects: effects, ignored: "" });
         if (typeof phase !== "string")
             return ignored("no state");
+        const mute = state.outputAfterCancel === true ? [] : [{ type: "mute" }];
         if (phase === "done") {
             if (type !== "cancel" || event.queued !== true)
                 return ignored("done");
-            return state.cancelled ? ignored("cancelled before") : next({ cancelled: true }, [{ type: "mute" }]);
+            return state.cancelled ? ignored("cancelled before") : next({ cancelled: true }, mute);
         }
         const live = phase === "running" || phase === "ending";
         switch (type) {
@@ -273,17 +304,17 @@ Singleton {
             const effects = [{ type: "start" }];
             if (state.timeoutMs > 0)
                 effects.push({ type: "timer", name: "watchdog", ms: state.timeoutMs + (wrapped ? state.killAfterMs + backstopMs : 0) });
-            return next({ phase: "running", launched: true, wrapped: wrapped }, effects);
+            return next({ phase: "running", launched: true, wrapped: wrapped, guarded: wrapped || event.guarded === true }, effects);
         }
         case "cancel":
             if (phase === "waiting")
-                return next({ phase: "done", cancelled: true }, [{ type: "mute" }, { type: "answer" }]);
+                return next({ phase: "done", cancelled: true }, mute.concat([{ type: "answer" }]));
             if (phase === "ending")
-                return state.cancelled ? ignored("cancelled before") : next({ cancelled: true }, [{ type: "mute" }]);
-            return next({ phase: "ending", cancelled: true }, [
-                { type: "mute" }, { type: "stop", name: "watchdog" }, { type: "signal", signal: 15 },
+                return state.cancelled ? ignored("cancelled before") : next({ cancelled: true }, mute);
+            return next({ phase: "ending", cancelled: true }, mute.concat([
+                { type: "stop", name: "watchdog" }, { type: "signal", signal: 15 },
                 { type: "timer", name: "kill", ms: state.killAfterMs + (state.wrapped ? backstopMs : 0) }
-            ]);
+            ]));
         case "watchdog":
             if (phase !== "running")
                 return ignored("not running");
@@ -339,18 +370,24 @@ Singleton {
 
     // ---- The answer ----
 
-    // `state` at the end; `facts`: { stdout, stderr, truncated, durationMs }. Frozen.
+    // `state` at the end; `facts`: { stdout, stderr, truncated, durationMs, lastStderr (the
+    // last line read on stderr, whether or not the output is kept) }. Frozen.
     //   failedToStart  the process ended without an exit status (Quickshell reports a
     //                  program that cannot start so) — or, inside `timeout`, with 126 or
-    //                  127, the two codes it and `setpriv` give for a command not run
-    //                  (a command that exits with one of them itself reads the same)
+    //                  127, the two codes it and `setpriv` give for a command not run (a
+    //                  command that exits with one of them itself reads the same). Behind
+    //                  `setpriv` alone the codes are not enough: a command run without a
+    //                  limit may well exit with them (pkexec does, for a dismissed or a
+    //                  refused prompt), so there the last stderr line must also be
+    //                  setpriv's own ("setpriv: …", its name is not translated)
     //   timedOut       the runner's own limit ended it, or `timeout` did: the run took at
     //                  least the limit and ended with 124, or by the KILL that follows
     //   code           the exit status; -1 without one (never started, or ended by a signal)
     function result(state, facts) {
         const code = state.exited && !state.crashed ? state.code : -1;
+        const setprivFailed = state.guarded && String(facts.lastStderr ?? "").startsWith("setpriv: ");
         const failedToStart = state.launched
-            && (!state.exited || (state.wrapped && !state.cancelled && !state.timedOut && (code === 126 || code === 127)));
+            && (!state.exited || ((state.wrapped || setprivFailed) && !state.cancelled && !state.timedOut && (code === 126 || code === 127)));
         const limitReached = state.wrapped && state.exited && facts.durationMs >= state.timeoutMs
             && (state.crashed || state.code === 124);
         const timedOut = state.timedOut || (limitReached && !state.cancelled);

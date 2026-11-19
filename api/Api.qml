@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.32" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.33" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -595,6 +595,12 @@ import qs.singletons.network
 //                            keepOutput      true: the result holds both streams, the
 //                                            lines joined by line breaks, none after the
 //                                            last
+//                            outputAfterCancel  false (1.33); true: cancel() does not
+//                                            stop the output — the lines the command
+//                                            still prints until it is gone are handed
+//                                            over and kept, as before the cancel (for a
+//                                            run whose last words matter even when
+//                                            stopped)
 //                            maxOutputBytes  1048576: where each kept stream, and a single
 //                                            line, is cut (counted in characters). A cut
 //                                            sets `truncated` and leaves `ok` alone: a
@@ -610,8 +616,8 @@ import qs.singletons.network
 //                          reads the same. `error`: "" — or why nothing was run (argv or an
 //                          option of the wrong kind); the result is the only place it shows
 //   cancel()               TERM, KILL after killAfterMs; no output is handed over from
-//                          that moment; done comes with `cancelled: true` when the process
-//                          is gone. A run that waits to be started is answered at once;
+//                          that moment (with `outputAfterCancel` it still is, and kept);
+//                          done comes with `cancelled: true` when the process is gone. A run that waits to be started is answered at once;
 //                          one already over whose answer is not handed over yet (refused,
 //                          or unable to start) is answered with `cancelled: true` too
 //   cancelAll()            cancel() for every run
@@ -620,7 +626,14 @@ import qs.singletons.network
 //                          it), both taken from PATH, and only where only root can change
 //                          them (as a handle's `programs` judge it) — so a run ends even
 //                          when the shell is gone — and by the shell's own timer where one
-//                          of the two is missing. What a command prints is text from
+//                          of the two is missing. A run without a limit (1.33) is started
+//                          behind `setpriv` alone, so that it ends with the shell (a crash,
+//                          a restart) instead of running on; what it starts itself does not
+//                          end with it. Every run waits for the look-up of the two (once,
+//                          as the shell starts). There a program that cannot run is
+//                          `failedToStart` when it exits 126 or 127 with setpriv's own
+//                          message last on stderr ("setpriv: …"), which is in `stderr` and
+//                          the callbacks too. What a command prints is text from
 //                          outside: show it as plain text, never put it on a command line
 //                          unquoted. A callback that throws is logged; the run goes on.
 //                          CommandAction and CommandQuery are run by it, without a limit.

@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 
 // The command runner's decisions (singletons/CommandRules.qml): what may be run, the
-// command line with `timeout`, a run's life, the output's cuts, the answer
+// command line with `timeout` and `setpriv`, a run's life, the output's cuts, the answer
 TestCase {
     suiteName: "CommandRules"
 
@@ -78,7 +78,7 @@ TestCase {
         // Options: each field read once
         const optionReads = {};
         const counted = {};
-        for (const name of ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "environment", "onStdout", "onStderr", "onLine", "done"]) {
+        for (const name of ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "outputAfterCancel", "environment", "onStdout", "onStderr", "onLine", "done"]) {
             optionReads[name] = 0;
             Object.defineProperty(counted, name, { get() { optionReads[name]++; return undefined; }, enumerable: true });
         }
@@ -96,9 +96,12 @@ TestCase {
 
         // --- the options ---
         const defaults = rules.options(undefined);
-        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, maxOutputBytes: 1048576, environment: {},
+        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, outputAfterCancel: false, maxOutputBytes: 1048576, environment: {},
                                                        callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
-                    "none given: 30 s, KILL 3 s after, the output kept, 1 MiB");
+                    "none given: 30 s, KILL 3 s after, the output kept, none after a cancel, 1 MiB");
+        assertEqual(rules.options({ outputAfterCancel: true }).outputAfterCancel + " " + rules.options({ outputAfterCancel: false }).outputAfterCancel, "true false",
+                    "outputAfterCancel taken as given");
+        assert(rules.options({ outputAfterCancel: 1 }).problem !== "", "outputAfterCancel not true or false: a problem");
         assertEqual(JSON.stringify(rules.options(null)), JSON.stringify(defaults), "null: the same");
         const given = rules.options({ timeoutMs: 0, killAfterMs: 250.4, keepOutput: false, maxOutputBytes: 10, environment: { A: "1", B: null }, done: () => {} });
         assertEqual(given.problem + "|" + given.timeoutMs + "|" + given.killAfterMs + "|" + given.keepOutput + "|" + given.maxOutputBytes + "|" + JSON.stringify(given.environment),
@@ -128,12 +131,17 @@ TestCase {
                     "with a limit: inside timeout -k, which the command dies with (setpriv --pdeathsig), the words untouched");
         assertEqual(JSON.stringify(rules.commandLine(["-n", "x"], tools, 500, 0).slice(0, 4)),
                     JSON.stringify(["/usr/bin/timeout", "-k", "0.001", "0.5"]), "a kill-after of 0 would switch timeout's KILL off: 1 ms");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], tools, 0, 3000)), "[\"ls\"]", "no limit: the command as it is");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000)), "[\"ls\"]", "no timeout found: the command as it is");
+        assertEqual(JSON.stringify(rules.commandLine(["ls", "--", "-l"], tools, 0, 3000)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls", "--", "-l"]),
+                    "no limit: behind setpriv alone, which the shell is then the parent of — the command dies with the shell");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls"]),
+                    "a limit but no timeout found: behind setpriv alone, the watchdog keeps the limit");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 0, 3000)), "[\"ls\"]", "no limit, no setpriv found: the command as it is");
         assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 30000, 3000)), "[\"ls\"]",
                     "no setpriv found: the command as it is — never inside a timeout it would outlive");
         assert(!rules.wraps(undefined, 30000) && !rules.wraps({}, 30000) && !rules.wraps({ timeout: "/usr/bin/timeout" }, 30000)
                && !rules.wraps(tools, 0) && rules.wraps(tools, 1), "wrapped: a limit and both programs");
+        assert(rules.guards(tools) && rules.guards({ setpriv: "/usr/bin/setpriv" }) && !rules.guards({ timeout: "/usr/bin/timeout", setpriv: "" }) && !rules.guards(undefined),
+               "guarded (setpriv in front): whenever setpriv was found");
         assertEqual(rules.wrapperTools.map(tool => tool.name).join(), "timeout,setpriv", "the two programs looked for");
         assert(rules.wrapperTools.every(tool => tool.probe.length > 0 && tool.candidates === undefined),
                "… each with a probe, and no directory of its own: found on PATH and judged (ModuleRules.programVerdict)");
@@ -147,8 +155,11 @@ TestCase {
         stepped = rules.step(waiting, { type: "launch", wrapped: false });
         assertEqual(stepped.state.wrapped + " " + _types(stepped.effects), "false start timer:watchdog:1000", "launched bare: the watchdog at the limit");
         const bare = stepped.state;
-        stepped = rules.step(rules.fresh(0, 300), { type: "launch", wrapped: true });
-        assertEqual(stepped.state.wrapped + " " + _types(stepped.effects), "false start", "no limit: never wrapped, no watchdog");
+        assertEqual(String(stepped.state.guarded), "false", "… not guarded where the launch says so");
+        stepped = rules.step(rules.fresh(0, 300), { type: "launch", wrapped: true, guarded: true });
+        assertEqual(stepped.state.wrapped + " " + stepped.state.guarded + " " + _types(stepped.effects), "false true start", "no limit: never wrapped, no watchdog; guarded when setpriv is in front");
+        const unlimited = stepped.state;
+        assertEqual(String(rules.step(waiting, { type: "launch", wrapped: true }).state.guarded), "true", "wrapped: guarded too");
         assert(rules.step(wrapped, { type: "launch", wrapped: true }).ignored !== "", "launched twice: ignored");
 
         stepped = rules.step(waiting, { type: "cancel" });
@@ -161,6 +172,18 @@ TestCase {
         stepped = rules.step(wrapped, { type: "cancel" });
         assertEqual(_types(stepped.effects), "mute stop:watchdog signal:15 timer:kill:1300", "… inside timeout: its own KILL comes first, the runner's a margin later");
         assert(rules.step(cancelledBare, { type: "cancel" }).ignored !== "", "cancelled twice: ignored");
+        // outputAfterCancel: the same steps, never muted
+        const talkative = rules.step(rules.fresh(1000, 300, true), { type: "launch", wrapped: false }).state;
+        stepped = rules.step(talkative, { type: "cancel" });
+        assertEqual(stepped.state.phase + " " + stepped.state.cancelled + " " + _types(stepped.effects), "ending true stop:watchdog signal:15 timer:kill:300",
+                    "outputAfterCancel, cancelled while running: TERM and KILL as ever, not muted");
+        assertEqual(_types(rules.step(rules.step(talkative, { type: "watchdog" }).state, { type: "cancel" }).effects), "", "… cancelled while being ended by the limit: not muted");
+        stepped = rules.step(rules.fresh(1000, 300, true), { type: "cancel" });
+        assertEqual(stepped.state.phase + " " + _types(stepped.effects), "done answer", "… cancelled while waiting: answered at once");
+        const talkativeDone = _after(talkative, [{ type: "exited", code: 0 }, { type: "stopped" }]);
+        stepped = rules.step(talkativeDone, { type: "cancel", queued: true });
+        assertEqual(stepped.state.cancelled + " " + _types(stepped.effects), "true ", "… cancelled while its answer waits: cancelled, not muted");
+        assertEqual(rules.fresh(1000, 300).outputAfterCancel + " " + rules.fresh(1000, 300, "yes").outputAfterCancel, "false false", "fresh: outputAfterCancel only when true");
         stepped = rules.step(cancelledBare, { type: "kill" });
         assertEqual(stepped.state.phase + " " + _types(stepped.effects), "ending signal:9", "the kill timer: KILL");
         assert(rules.step(bare, { type: "kill" }).ignored !== "", "a kill timer on a run not told to end: ignored");
@@ -210,6 +233,14 @@ TestCase {
         assertEqual(result.failedToStart + " " + result.code, "true 127", "127 from timeout: it could not start the command");
         assert(rules.result(_after(wrapped, [exit(126), { type: "stopped" }]), facts(1)).failedToStart, "… 126 too");
         assert(!rules.result(_after(bare, [exit(127), { type: "stopped" }]), facts(1)).failedToStart, "127 from a bare command is its own exit status");
+        const setprivSaid = { lastStderr: "setpriv: failed to execute x: No such file or directory" };
+        result = rules.result(_after(unlimited, [exit(127), { type: "stopped" }]), facts(1, setprivSaid));
+        assertEqual(result.failedToStart + " " + result.code, "true 127", "127 from setpriv alone (no limit), its message last on stderr: it could not start the command");
+        assert(rules.result(_after(unlimited, [exit(126), { type: "stopped" }]), facts(1, setprivSaid)).failedToStart, "… 126 too");
+        result = rules.result(_after(unlimited, [exit(126), { type: "stopped" }]), facts(1, { lastStderr: "Error executing command as another user: Request dismissed" }));
+        assertEqual(result.failedToStart + " " + result.code, "false 126", "126 behind setpriv alone, without its message: the command's own (pkexec's dismissed prompt)");
+        assert(!rules.result(_after(unlimited, [exit(127), { type: "stopped" }]), facts(1)).failedToStart, "… 127 with nothing on stderr too");
+        assert(!rules.result(_after(unlimited, [{ type: "cancel" }, exit(127), { type: "stopped" }]), facts(1, setprivSaid)).failedToStart, "… and never once cancelled");
         result = rules.result(_after(bare, [exit(9, true), { type: "stopped" }]), facts(5));
         assertEqual(result.ok + " " + result.code + " " + result.failedToStart, "false -1 false", "ended by a signal: no exit status, not ok");
 

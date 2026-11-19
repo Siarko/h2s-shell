@@ -4,14 +4,16 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 
-// The two programs the command runner puts around a run with a time limit
-// (CommandRules.wrapperTools): coreutils' `timeout`, which ends the command, and
-// util-linux's `setpriv`, which makes the command die with `timeout`. Each is looked for
+// The two programs the command runner puts around a run (CommandRules.wrapperTools):
+// coreutils' `timeout`, which ends a command with a time limit, and util-linux's
+// `setpriv`, which makes the command die with `timeout`, or with the shell where there is
+// no `timeout` around it. Each is looked for
 // once, on PATH, and only a trusted match is taken (ModuleRules.programVerdict: only root
 // can change it) — the first, in PATH order, that also runs its probe with exit 0: no
 // shell, and a file that cannot run, or a `setpriv` without --pdeathsig, is not taken.
-// Until `known`, runs with a limit wait (singletons/io/CommandRunner.qml); with one of the
-// two missing, they run bare, under the runner's own watchdog alone.
+// Until `known`, runs wait (singletons/io/CommandRunner.qml); with `timeout` missing, a
+// limit is kept by the runner's own watchdog alone, and with `setpriv` missing runs are
+// started bare.
 Singleton {
     id: root
 

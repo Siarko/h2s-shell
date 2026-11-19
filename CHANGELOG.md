@@ -17,6 +17,13 @@ Settings → Notifications → "Apps choose how long", off, keeps the old behavi
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.33: a command runner's run without a time limit (`timeoutMs: 0`) is started behind
+  util-linux's `setpriv --pdeathsig KILL` where that was found, so it ends with the shell
+  (a crash, a restart) instead of running on; every run now waits for the shell's look-up
+  of `timeout` and `setpriv`. Such a run that cannot start is `failedToStart`, its code
+  setpriv's 127 (or 126) and setpriv's message in `stderr`. A run option
+  `outputAfterCancel` (default false): with it, after `cancel()` the lines the command
+  still prints are handed to the callbacks and kept in the result, which says `cancelled`.
 - 1.32: the network popup's rows offer a name-line place, as the network cards do:
   `popup.network.wifi.row.title` (each Wi-Fi network in range, closed and open) and
   `popup.network.connections.wired.row.title` (the wired row), `append`, any module's; an

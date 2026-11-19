@@ -970,13 +970,22 @@ life as `step`, the cuts, the result); the runner starts processes and keeps tim
   that reaches `timeout` (the shell's child) cannot be passed on, and the command would
   go on without a limit. `singletons/CommandTools.qml` looks for both programs once, on
   `PATH`, and takes the first match that is trusted (the program lookup below: only root
-  can change it); runs with a limit wait for its answer. With either missing a run is
-  started bare, and the watchdog is its only limit.
+  can change it); every run waits for its answer. A run without a limit, or with
+  `timeout` missing, is started behind `setpriv --pdeathsig KILL` alone: its parent is
+  then the shell, and it ends with the shell (a crash, a restart) instead of running for
+  ever. There 126 and 127 count as `failedToStart` only with `setpriv`'s own message last
+  on stderr, since a command may exit with them itself (pkexec, for a dismissed or refused
+  prompt). With `setpriv` missing a run is started bare; with `timeout` missing the
+  watchdog is its only limit.
   - NixOS: `/run/current-system/sw/bin/timeout` and `setpriv` there, which lead into the
     Nix store.
   - Arch: `/usr/bin/timeout`, `/usr/bin/setpriv`.
 - Past the limit, and on `cancel()`, the command gets TERM, and KILL `killAfterMs` later.
   From a `cancel()` on no output is handed over; `done` comes when the process is gone.
+  A run started with `outputAfterCancel: true` still gets, and keeps, the lines the
+  command prints until it is gone — for a command whose last words matter even when it
+  is stopped (whether a file was already moved into place); its answer says `cancelled`
+  all the same.
 - A program that cannot start is `failedToStart`. Quickshell reports it as a process that
   ends without an exit status; inside `timeout` it is that program's exit status 126 or 127.
 - When the runner is destroyed (a module turned off) nothing is called any more and its
