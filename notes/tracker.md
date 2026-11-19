@@ -259,6 +259,7 @@ All by the owner, 2026-11-17.
   code; a module may choose among the theme's sizes (small, body). M10 keeps to it.
 - Two bar entries of one widget type (2026-11-19): a click on the second switches the popup
   to it, as hover does (a fix to make).
+- No data migrations while the shell is in development (2026-11-19): a module does not move or convert data left by its earlier versions (e.g. the Tailscale module's certificates start fresh in its data directory).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
