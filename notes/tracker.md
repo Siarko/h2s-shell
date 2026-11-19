@@ -25,8 +25,34 @@ installed shell into a test tree (below). Module test mode (A3), privileged star
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
 with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
-B1, D1 and E1 are on `master` (below): the facts lane is done. Next: P1/P2 (a module's
-API for others), the places lane, the remaining module slices.
+B1, D1 and E1 are on `master` (below): the facts lane is done. P1 is on `master`. Next:
+P2 (reach closed), a look at the lock bed's restart scenarios, then the places lane and the
+remaining module slices.
+
+- [x] **API plan, P1 `exports` and `uses`**: on `master` (2026-11-19; module API 1.18;
+      reviewed by a second agent on the diff, fixed by another author with cases that fail
+      before, the lifecycle fix reviewed once more — low findings only; `tests/run-all.sh`
+      passes on Arch, tools from `PATH`, and on NixOS, tools from nix, apart from one
+      lock-bed scenario each time that passed alone; the Tailscale module's suites pass).
+      Manifest `exports` `{ version }` with the main's `readonly property QtObject exports`
+      (refused: the main, a non-QtObject, an object with a parent, a handle, the host);
+      manifest `uses` `{ id: "major.minor" }` (same major, minor at least); `module.uses`
+      frozen per module id, set before the module turns on, kept until it next turns on;
+      state `missing-module` with reasons; cycles fail their members;
+      `ModuleMergeRules.dependencyPlan`; the host creates providers first and destroys a
+      provider only after its dependents' mains are gone (a watcher in each main,
+      `_reap`). Fixtures `provider`, `consumer`, `provider-no-exports`,
+      `provider-failing-main`, `provider-exports-handle`. Left open (low, for P2):
+  - A dependent turned off and on in one event-loop turn: its going main reads the new
+    `module.uses` (its clean-up acts on the new provider), and the old provider main lives
+    one turn beside the new one.
+  - A dependent's main deleted by something other than the host (or whose `destroy()`
+    throws) leaves its provider waiting forever; the `catch` should drop the entry.
+  - A dependent with no main and only views is not waited for (one turn).
+  - A consumer's own suites under `tests/run-modules.sh` need the provider's directory too;
+    the test kit is unchanged. The choices for the owner are under "Open points".
+  - Lock-bed restart scenarios (`restart-crash-locked`, `restart-kill-locked`) fail now and
+    then in full runs on both machines and pass alone: to look into next.
 
 - [x] **API plan, E1 the file chooser**: on `master` (2026-11-19; module API 1.17; reviewed
       by a second agent on the diff, fixed by another author with cases that fail before;
