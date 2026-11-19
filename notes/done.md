@@ -1977,3 +1977,13 @@ For the owner, from the autonomous run (2026-11-18 on):
   run whose answer was still queued answers `cancelled: true`. Reviewed; the module's suites,
   stand-ins and lock bed and the core's full set passed on both machines.
 
+- **The module's helpers and facts (M5) and its row and card onto anchors (M6)** — on the
+  module's `main` 2026-11-19 (manifest `api` 1.23). `Api.system`, `Api.localNetworks`,
+  `Api.format`, `Api.address`, `Api.minuteNow`, `module.log`, plain notifications replace the
+  module's own copies and reads; certificates in `<module.dataDirectory>/certs` (no move:
+  the owner's decision, the old folder existed on neither machine); "another VPN" warnings
+  from `Api.vpnsUp` (full tunnel, own DNS, overlapping routes); the provider reports
+  `fullTunnel` / `setsDns` / `routes` (null when unknown). Manifest `slots` → `anchors`: the
+  status lists only the `qs.components` import now. Reviewed, fixed; suites, stand-ins and
+  lock bed passed on both machines.
+
