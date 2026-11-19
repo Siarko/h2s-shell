@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.23" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.24" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -83,6 +83,20 @@ import qs.singletons.network
 //                                                     open: prepend; own-provider; context as
 //                                                     the row's. The slot network.vpn.card is
 //                                                     read as it (its context adds open: true)
+//                            settings.network_wifi.saved.card.settings (1.24)  in the opened
+//                                                     card of each saved network on Settings →
+//                                                     System → Network → Wi-Fi, under the
+//                                                     page's rows (the password), while the
+//                                                     card is open: append; context { networkId:
+//                                                     the profile's UUID (Api.networks' id),
+//                                                     name, kind: "wifi", active: fully up }.
+//                                                     Not on a hotspot's card
+//                            settings.network_ethernet.profiles.card.settings (1.24)  the same
+//                                                     in the opened card of each wired profile
+//                                                     on Settings → System → Network →
+//                                                     Ethernet, under the card's rows: append;
+//                                                     context as the Wi-Fi network's (kind
+//                                                     "ethernet")
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
 //                          (1.19): a module keeps to its own handle — another module is
 //                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose

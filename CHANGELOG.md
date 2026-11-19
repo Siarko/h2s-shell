@@ -13,6 +13,12 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.24: the saved networks' places — `settings.network_wifi.saved.card.settings` and
+  `settings.network_ethernet.profiles.card.settings`, `append`: an element in the opened card
+  of each saved Wi-Fi network on Settings → System → Network → Wi-Fi and of each wired profile
+  on its Ethernet page, under the page's rows, built while the card is open (not on a
+  hotspot's card). Their context is the network as `Api.networks` names it:
+  `{ networkId, name, kind, active }`.
 - 1.23: the VPN places, own-provider (only the elements of the module that is the VPN's
   provider) — `popup.network.connections.vpn.row`, `after`: an element under the row of each
   of the provider's VPNs in the network popup; `settings.network_vpn.vpns.card.settings`,
