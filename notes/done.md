@@ -2038,3 +2038,13 @@ For the owner, from the autonomous run (2026-11-18 on):
   lock; `Dropdown` option width guarded. Reviewed, fixed; `tests/run-all.sh` passed on both
   machines.
 
+- **The exit node per network on the cards (M7) and "for now" (M9)** — on the module's `main`
+  2026-11-19 (manifest `api` 1.31). On an opened saved Wi-Fi / wired card a "Tailscale exit
+  node" row (Not set / No exit node / Automatic / a node); on the name line a mark for a
+  network routing through an exit node (none for "No exit node"); the page's table gone. A pick
+  in the chooser is "for now" once it succeeds (in memory); "Default" goes back to the
+  network's choice or turns the exit node off; a wake drops it (with a 30 s hold so a network
+  coming back applies its own choice); joining a network keeps the pick. The module's progress
+  bar and tooltip are the public `ProgressBar` / `HoverTip`. Reviewed, fixed (a flaky wait in
+  `NetworkExitTest` too); suites, stand-ins and lock bed passed on both machines.
+
