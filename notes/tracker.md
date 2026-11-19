@@ -64,6 +64,11 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **Tailscale module on the shell's runner** (M1): saving received Taildrop files keeps
+  coreutils `timeout` per file (600 s each; the runner limits only the whole script, so one
+  hung file would change behaviour) — keep? A run that cannot start now shows "The program
+  could not be started." / "It could not be run: …" (was "Tailscale exited with status -1.").
+
 - **A module's icon and marks on closed cards** (U7a, U7b, the agent's looks): 6 px between a
   card's name and the first mark, 4 px between marks; icons in the name's colour, also on an
   active card; a module without an icon shows the first letter of its name, upper case,
