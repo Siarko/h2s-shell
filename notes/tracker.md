@@ -64,10 +64,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
-- **A question in the confirm colour**: "Connect" on a network card and "Turn on" for a
-  hotspot ask in dark green on the surface, hard to read. Keep, or another colour?
-- **The public pill's text** (before M10): small font at every size, as the shell's pills;
-  the module's pills get smaller text than today when it moves. Keep?
 - **The Tailscale module's texts since M3** (the agent's words):
   - "Authorization" lines: Connect, Disconnect, Log in, Add an account, Log out; Change
     the exit node; Allow / Block the local network; Accept / Ignore routes; Use / Ignore
@@ -86,8 +82,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
     administrator are not offered: pkexec is still being looked for." (just after start).
   - Funnel left public after a wait: "Port N is public with something else on it." with
     "Turn off Funnel", and the notice "… Turn Funnel off on Tailscale's page."
-- **Two bar entries of one widget type share one popup**: a click on the second closes the
-  first's popup (only hover re-targets). Should the click switch to the second?
 - **Network facts** (D1): `Api.localNetworks` includes Docker and libvirt bridges — leave
   them out? The `kind` words (wifi, ethernet, bridge, modem, other); left out: loopback,
   tun, wireguard, vpn, ip-tunnel, wifi-p2p. `setsDns` = "has DNS servers of its own while
@@ -259,6 +253,12 @@ All by the owner, 2026-11-17.
   default. The module's author keeps it consistent.
 - An opened card ends as far under its last line as its first line is under the top (the
   6 px left by an empty page-rows column go).
+- A question asked in the confirm colour (dark green on the surface): left for the themes'
+  rework, with the hover contrast.
+- Pills (2026-11-19): their text size always comes from the theme's tokens, never pixels in
+  code; a module may choose among the theme's sizes (small, body). M10 keeps to it.
+- Two bar entries of one widget type (2026-11-19): a click on the second switches the popup
+  to it, as hover does (a fix to make).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
