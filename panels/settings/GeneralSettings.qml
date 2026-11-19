@@ -5,27 +5,18 @@ import qs.singletons
 import qs.components
 
 // Every setting in the schema's "general" and "appearance" groups, edited in the profile
-// picked in the settings window. The debug switches are always global.
-ColumnLayout {
+// picked in the settings window. The debug switches are always global. A settings page
+// block, the place settings.general: modules' elements come at its end, given the profile
+// being edited as `editIndex` (ModuleRules.anchorTable).
+SettingsPage {
     id: root
 
     // The profile being edited, picked in the settings window
     property int editIndex: -1
 
-    anchors {
-        fill: parent
-        margins: Theme.settings.pageMargin
-    }
-    spacing: 0
-
-    Text {
-        text: "General"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
-        Layout.bottomMargin: 8
-    }
+    anchors.fill: parent
+    title: "General"
+    context: ({ editIndex: root.editIndex })
 
     Repeater {
         // ScriptModel, never a bare array — see "The Repeater crash"
@@ -68,18 +59,5 @@ ColumnLayout {
             key: modelData
             editIndex: root.editIndex
         }
-    }
-
-    // Modules' sections of this page (slot settings.general.bottom, ModuleRules.slotTable),
-    // editing the same profile
-    ModuleSlot {
-        Layout.fillWidth: true
-        Layout.topMargin: count > 0 ? 16 : 0
-        name: "settings.general.bottom"
-        context: ({ editIndex: root.editIndex })
-    }
-
-    Item {
-        Layout.fillHeight: true
     }
 }

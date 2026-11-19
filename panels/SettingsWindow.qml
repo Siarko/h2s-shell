@@ -100,7 +100,10 @@ FloatingWindow {
     // window going away takes its ids with it.
     readonly property var _pageIds: pages.map(page => page.id)
     on_PageIdsChanged: Shell.settingsPageIds = _pageIds
-    Component.onCompleted: Shell.settingsPageIds = _pageIds
+    Component.onCompleted: {
+        Shell.settingsPageIds = _pageIds;
+        _showPage();
+    }
     Component.onDestruction: {
         if (JSON.stringify(Shell.settingsPageIds) === JSON.stringify(_pageIds))
             Shell.settingsPageIds = [];
@@ -118,6 +121,23 @@ FloatingWindow {
     property string selectedPage: "general"
     // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
     readonly property var _currentPage: _pageOf(selectedPage)
+    on_CurrentPageChanged: _showPage()
+
+    // Shows the open page in the page loader, and gives a core page's root the base of its
+    // place, settings.<page id> (components/AnchorBlock.qml); a module's page gets "", which
+    // stops the walk up: views a module builds are no places. Imperative, in this order, so
+    // the page going never sees the new base and the page coming never the old one — two
+    // bindings would follow the selection in no set order. The same component (a module's
+    // page after another module's) is kept, as a Loader keeps it.
+    function _showPage() {
+        const component = _currentPage.component ?? (_currentPage.url ? _modulePageComp : null);
+        const base = _currentPage.component ? "settings." + _currentPage.id : "";
+        if (component === _page.sourceComponent && base === _page.anchorBase)
+            return;
+        _page.sourceComponent = null;
+        _page.anchorBase = base;
+        _page.sourceComponent = component;
+    }
     readonly property string _tab: _currentPage.tab
     readonly property bool _onAppearance: _tab === "appearance"
 
@@ -493,13 +513,14 @@ FloatingWindow {
                 width: parent.width - root._sidebarWidth - 1
                 height: parent.height
 
-                // A new page fades in, rising a little
+                // A new page fades in, rising a little. Its root takes its place's base from
+                // here (anchorBase, root._showPage)
                 Loader {
                     id: _page
+                    property string anchorBase: ""
                     anchors.fill: parent
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
-                    sourceComponent: root._currentPage.component ?? (root._currentPage.url ? _modulePageComp : null)
                 }
 
                 ParallelAnimation {

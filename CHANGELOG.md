@@ -13,6 +13,10 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.21: the first place — `settings.general`, `append`: an element at the end of Settings →
+  Behaviour → General, its context `{ editIndex }` (the profile being edited). The slot
+  `settings.general.bottom` is read as it (listed in the module's `deprecations`), where it
+  showed before.
 - 1.20: anchors — the manifest's `"anchors": [{ "at", "place", "component" }]` puts a module's
   element at a place in the shell's views: `at` a path, `<surface>.<view>[.<block>]…`
   (`settings` or `popup`, a page's id or a popup's key, the names of the blocks around it),

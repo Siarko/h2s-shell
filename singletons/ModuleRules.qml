@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.20"
+    readonly property string apiVersion: "1.21"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -141,7 +141,11 @@ Singleton {
     //               ("panels/NetworkPanel.qml"): what tests/AnchorsTest.qml reads to check that
     //               a slot read as this place is no longer built as a slot there
     // Api.anchors is its frozen copy.
-    readonly property var anchorTable: []
+    readonly property var anchorTable: [
+        { path: "settings.general", kind: "page", placements: ["append"], takes: "", marks: false,
+          context: "{ editIndex: the profile being edited (for SettingEditor) }", scope: "", since: "1.21",
+          where: "Settings → Behaviour → General, at the end of the page", view: "panels/settings/GeneralSettings.qml" }
+    ]
 
     // The kinds a view's root is: the one block with no name that is addressable, at the
     // base its window or popup gives it (settings.general). Any other block with no name adds

@@ -154,6 +154,7 @@ TestCase {
             view?.destroy();
         _views = [];
         host.unload();
+        Modules.host.unload();
         Config.disabledModules = _savedDisabled;
         finish();
     }
@@ -342,6 +343,43 @@ TestCase {
         }
     }
     property var _generalView: null
+    property var _settingsWindow: null
+    property int _windowCycles: 0
+
+    // The anchor block at `path` under `item` (the first found), or null
+    function _blockAt(item, path) {
+        for (const child of item?.children ?? []) {
+            if (child.isAnchorBlock === true && child.path === path)
+                return child;
+            const found = _blockAt(child, path);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function _windowPage() {
+        return _settingsWindow ? _blockAt(_settingsWindow.contentItem, "settings.general") : null;
+    }
+
+    function _openSettingsWindow() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/SettingsWindow.qml"), Component.PreferSynchronous);
+        _settingsWindow = component.status === Component.Ready ? component.createObject(suite, { visible: false }) : null;
+        if (_settingsWindow)
+            _views.push(_settingsWindow);
+        else
+            fail("the settings window can be made (" + component.errorString() + ")");
+    }
+
+    function _closeSettingsWindow() {
+        _close(_settingsWindow);
+        _settingsWindow = null;
+    }
+
+    function _generalSettled() {
+        const statuses = Modules.host.statuses;
+        return statuses.length > 0 && !statuses.some(status => status.state === "pending") && !Modules.host.checkingFiles;
+    }
 
     // The General page's rows top to bottom, as { name, x, y, width, height } in the loader's
     // coordinates: its headings and hint (the texts outside a setting's editor) and each
@@ -685,8 +723,87 @@ TestCase {
                         + rows.map(row => row.name + " " + [row.x, row.y, row.width, row.height].map(Math.round).join(" ")).join(" · "));
             assertEqual(_generalLayoutProblems(rows, _generalView.loader.width).join("; "), "",
                         "the General page's rows: headings, hint and settings at the page's margin, 8, 16 and 2 apart as before");
+            const page = _generalView.loader.item;
+            assertEqual(page.path + " " + page.appendHost.count + " " + page.appendHost.built, "settings.general 0 false",
+                        "the page is the place settings.general, its base the page loader's; no module: its end builds nothing");
+            assertEqual(_live("settings.general"), "settings.general:1", "… live once");
+            Modules.host.load([fixtures + "/anchors-general"], {});
+        });
+        _then("a module at the General page's end", () => _generalSettled() && _ready(_generalView.loader.item.appendHost, 2), () => {
+            const status = Modules.status("anchors-general");
+            assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the fixture module: loaded in the shell's host, clean");
+            assertEqual(status?.deprecations.join("|"),
+                        "slots (\"settings.general.bottom\"): use `anchors`: \"settings.general\", \"append\" (goes with the shell's next tightening)",
+                        "its General slot: read as the place, listed among the deprecations");
+            assertEqual(Modules.host.slotContributions("settings.general.bottom").length, 0, "… no longer a slot contribution");
+            const page = _generalView.loader.item;
+            assertEqual(_names(page.appendHost), "anchors-general:Element,anchors-general:Slot",
+                        "its element at the page's end, then the one through the old slot (manifest order: anchors, then slots read as anchors)");
+            assertEqual(JSON.stringify(page.appendHost.items[0].item.context), JSON.stringify({ editIndex: -1, anchor: "settings.general", placement: "append" }),
+                        "the element's context: the profile being edited, anchor and placement");
+            assertEqual(JSON.stringify(page.appendHost.items[1].item.context),
+                        JSON.stringify({ editIndex: -1, slot: "settings.general.bottom", anchor: "settings.general", placement: "append" }),
+                        "… through the old slot: also the slot's name, editIndex as the slot gave it");
+            const rows = _generalRows(_generalView.loader).filter(row => row.name.startsWith("setting "));
+            const last = rows[rows.length - 1];
+            const element = page.appendHost.items[0].mapToItem(_generalView.loader, 0, 0);
+            const margin = Theme.settings.pageMargin;
+            assertEqual([element.x, element.y, page.appendHost.width].join(" "), [margin, last.y + last.height + 16, _generalView.loader.width - 2 * margin].join(" "),
+                        "… 16 under the last setting, at the margin, as wide as the page inside it (as the slot stood)");
             _close(_generalView);
             _generalView = null;
+            _openSettingsWindow();
+        });
+
+        // The General page in the settings window: built with the place, the modules' elements
+        // at its end; another page and back, the window closed and opened, over and over
+        _then("the settings window shows the General page with the module's elements", () => _ready(_windowPage()?.appendHost ?? { items: [] }, 2), () => {
+            const page = _windowPage();
+            assertEqual(_names(page.appendHost), "anchors-general:Element,anchors-general:Slot", "the settings window's General page: the module's elements at its end");
+            assertEqual(page.appendHost.items[0].item.context.editIndex, _settingsWindow.editIndex, "… given the profile the window edits");
+            const live = Object.keys(Anchors.live).filter(path => path.startsWith("settings.") || path.startsWith("popup.")).sort();
+            assertEqual(live.join(","), ModuleRules.anchorTable.map(row => row.path).sort().join(","),
+                        "every place in the table is live with the shell's views built, and nothing else is (none named, not published)");
+            _settingsWindow.selectedPage = "calendar";
+        });
+        const pageCycle = number => {
+            _then("another page (" + number + ")", () => _live("settings.general") === "" && _windowPage() === null, () => {
+                _settingsWindow.selectedPage = "general";
+            });
+            _then("the General page again (" + number + ")", () => _ready(_windowPage()?.appendHost ?? { items: [] }, 2), () => {
+                _windowCycles++;
+                assertEqual(_live("settings.general"), "settings.general:1", "the General page shown again: live once (" + number + ")");
+                if (number < 5)
+                    _settingsWindow.selectedPage = "calendar";
+                else
+                    _closeSettingsWindow();
+            });
+        };
+        for (let i = 1; i <= 5; i++)
+            pageCycle(i);
+        const windowCycle = number => {
+            _then("the settings window closed (" + number + ")", () => _live("settings.general") === "", () => {
+                _openSettingsWindow();
+            });
+            _then("the settings window open again (" + number + ")", () => _ready(_windowPage()?.appendHost ?? { items: [] }, 2), () => {
+                _windowCycles++;
+                _closeSettingsWindow();
+            });
+        };
+        for (let i = 1; i <= 5; i++)
+            windowCycle(i);
+        _then("the settings window closed after the cycles", () => _live("settings.general") === "", () => {
+            assertEqual(_windowCycles, 10, "the General page shown and left five times, the window opened and closed five times, built each time");
+            for (let i = 0; i < 5; i++) {
+                _openSettingsWindow();
+                _closeSettingsWindow();
+            }
+            _waitUntil = Date.now() + 300;
+        });
+        _then("windows closed at once leave nothing live", () => Date.now() >= _waitUntil && _live("settings.general") === "", () => {
+            const status = Modules.status("anchors-general");
+            assertEqual(status?.state + " " + status?.errors.length, "loaded 0", "no element failed meanwhile");
+            Modules.host.unload();
         });
         _clock.start();
     }

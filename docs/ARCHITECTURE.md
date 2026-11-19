@@ -598,8 +598,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   outside it; `prepend` and `append` inside it, first and last of its content, under its
   frame. Top to bottom, for a block B holding c1 … cn: B.before · B's frame · B.prepend ·
   c1.before · c1 · c1.after · … · B.append · B.after. Only the paths in
-  `ModuleRules.anchorTable` take content (`Api.anchors` is its frozen copy; empty until the
-  first view is converted): naming a block does not publish it, and a place not in the table
+  `ModuleRules.anchorTable` take content (`Api.anchors` is its frozen copy): naming a block
+  does not publish it, and a place not in the table
   or a placement it does not take is an error in the module's status, the rest of the module
   loading. Each placement a kind has is a host, `components/AnchorContent.qml` — the slot's
   machinery: a `Repeater` on a `ScriptModel` keyed by module and file, each element in a
@@ -619,7 +619,17 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   builds its block (`view`); `tests/AnchorsTest.qml` checks, for every alias whose place is
   published, that no file outside the tests still names the slot and that the view builds
   the block and names those keys (`ModuleRules.slotAliasProblems`).
-  `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view.
+  The settings window's page loader gives a core page's root its base, `settings.<page id>`
+  (`anchorBase`, set before the page is built, so a page never sees another's base); a
+  module's page gets none. The places offered so far:
+
+  | Path | Placements | Context | Where | Since |
+  |---|---|---|---|---|
+  | `settings.general` | `append` | `editIndex` (the profile being edited) | Settings → Behaviour → General, at the end of the page (`panels/settings/GeneralSettings.qml`); the slot `settings.general.bottom` is read as it | 1.21 |
+
+  `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's
+  views against the table: every place in it live once they are built, and where the rows of
+  a converted page stand.
 
 Writing a module, from the author's side (everything through `import qs.api`; nothing from
 `qs.singletons` — importing it, or a directory outside the module's own, is an error in its

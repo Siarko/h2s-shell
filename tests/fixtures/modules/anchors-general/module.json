@@ -1,0 +1,13 @@
+{
+    "id": "anchors-general",
+    "name": "Anchors fixture General",
+    "version": "1.0.0",
+    "api": "1.21",
+    "description": "Puts an element at the end of the shell's own General page, and one through the old slot there, read as that place",
+    "anchors": [
+        { "at": "settings.general", "place": "append", "component": "Element.qml" }
+    ],
+    "slots": [
+        { "slot": "settings.general.bottom", "component": "Slot.qml" }
+    ]
+}

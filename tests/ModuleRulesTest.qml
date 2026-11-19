@@ -825,7 +825,8 @@ TestCase {
     // slots read as anchors, which elements a host shows and in what order
     function _anchors(rules) {
         // --- the table ---
-        assertEqual(rules.anchorTable.length, 0, "the anchor table: empty until a view is converted");
+        assertEqual(rules.anchorTable.map(entry => entry.path + " " + entry.kind + " " + entry.placements.join("/") + " " + entry.view).join("; "),
+                    "settings.general page append panels/settings/GeneralSettings.qml", "the anchor table: the views converted so far (1.21: the General page)");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
         const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
                                                                  context: "{ editIndex }", scope: "", since: "1.20", where: "a page",
@@ -964,7 +965,10 @@ TestCase {
         assertEqual(ModuleMergeRules.anchorErrors(manifest, table).join("|"),
                     "anchors: \"settings.general\" does not take \"prepend\" (it takes: append)|anchors: \"settings.nowhere\" is not a place this shell offers (module API "
                     + rules.apiVersion + ")", "anchorErrors: a placement the place does not take, a place not offered");
-        assertEqual(ModuleMergeRules.anchorErrors(manifest, rules.anchorTable).length, 4, "… on this shell's empty table: every anchor is an error");
+        assertEqual(ModuleMergeRules.anchorErrors(manifest, rules.anchorTable).join("|"),
+                    "anchors: \"settings.general\" does not take \"prepend\" (it takes: append)|anchors: \"settings.nowhere\" is not a place this shell offers (module API "
+                    + rules.apiVersion + ")|anchors: \"settings.fixture.box\" is not a place this shell offers (module API " + rules.apiVersion + ")",
+                    "… on this shell's table: General's append taken, the rest errors");
         assertEqual(ModuleMergeRules.anchorErrors(null, table).length + ModuleMergeRules.anchorErrors({}, null).length, 0, "… nothing to check: none, no throw");
         const asAnchors = ModuleMergeRules.slotsAsAnchors(manifest, table);
         assertEqual(asAnchors.map(entry => entry.slot + ">" + entry.at + "," + entry.place + "," + entry.component).join("|"),
@@ -973,7 +977,9 @@ TestCase {
         assertEqual(JSON.stringify(asAnchors[0].context) + JSON.stringify(asAnchors[2].context),
                     JSON.stringify({ slot: "settings.general.bottom" }) + JSON.stringify({ open: true, slot: "network.vpn.card" }),
                     "… each one's context carrying its slot, the card's open: true");
-        assertEqual(ModuleMergeRules.slotsAsAnchors(manifest, rules.anchorTable).length, 0, "… on this shell's table: none, every slot stays a slot");
+        assertEqual(ModuleMergeRules.slotsAsAnchors(manifest, rules.anchorTable).map(entry => entry.slot + ">" + entry.at + "," + entry.component).join("|"),
+                    "settings.general.bottom>settings.general,Bottom.qml|settings.general.bottom>settings.general,Row.qml",
+                    "… on this shell's table: the General slot's, the VPN slots stay slots");
         assertEqual(ModuleMergeRules.slotDeprecations(manifest, table)[0],
                     "slots (\"settings.general.bottom\"): use `anchors`: \"settings.general\", \"append\" (goes with the shell's next tightening)",
                     "slotDeprecations: a slot read as an anchor is an old way, listed");
@@ -1033,8 +1039,8 @@ TestCase {
                     "merge with a table: the anchors it takes and the slots read as anchors, by URL, naming the module");
         assertEqual(Object.keys(mergedAnchors.slots).join(","), "network.vpn.row", "… a slot read as an anchor leaves the slots");
         const mergedHere = ModuleMergeRules.merge([{ id: "anch", directory: "/m/anch", manifest: anchored }]);
-        assertEqual(mergedHere.anchors.length + " " + Object.keys(mergedHere.slots).join(","), "0 settings.general.bottom,network.vpn.row",
-                    "merge on this shell's table: no anchor taken, every slot a slot");
+        assertEqual(mergedHere.anchors.map(entry => entry.component.replace("file:///m/anch/", "")).join(",") + " " + Object.keys(mergedHere.slots).join(","),
+                    "Row.qml,Bottom.qml network.vpn.row", "merge on this shell's table: the General page's anchor and its slot read as one; the VPN slot a slot");
     }
 
     // API 1.18: a module's API for other modules — `exports` and `uses` in the manifest, the
