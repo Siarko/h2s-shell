@@ -601,6 +601,15 @@ import qs.singletons.network
 //                                            over and kept, as before the cancel (for a
 //                                            run whose last words matter even when
 //                                            stopped)
+//                            endWithShell    false (1.33); true: the command ends with
+//                                            the shell (a crash, a restart) even without
+//                                            a limit — started behind util-linux's
+//                                            `setpriv --pdeathsig KILL` where that was
+//                                            found, after the shell's look-up of it. What
+//                                            the command starts itself does not end with
+//                                            it. Without it a run with no limit is
+//                                            started as it is, at once, and outlives the
+//                                            shell (a program a launcher opens)
 //                            maxOutputBytes  1048576: where each kept stream, and a single
 //                                            line, is cut (counted in characters). A cut
 //                                            sets `truncated` and leaves `ok` alone: a
@@ -626,14 +635,13 @@ import qs.singletons.network
 //                          it), both taken from PATH, and only where only root can change
 //                          them (as a handle's `programs` judge it) — so a run ends even
 //                          when the shell is gone — and by the shell's own timer where one
-//                          of the two is missing. A run without a limit (1.33) is started
-//                          behind `setpriv` alone, so that it ends with the shell (a crash,
-//                          a restart) instead of running on; what it starts itself does not
-//                          end with it. Every run waits for the look-up of the two (once,
-//                          as the shell starts). There a program that cannot run is
-//                          `failedToStart` when it exits 126 or 127 with setpriv's own
-//                          message last on stderr ("setpriv: …"), which is in `stderr` and
-//                          the callbacks too. What a command prints is text from
+//                          of the two is missing. A run with `endWithShell` and no limit
+//                          (or no `timeout`) is started behind `setpriv` alone: a program
+//                          that cannot run is then `failedToStart` when it exits 126 or
+//                          127 with setpriv's own message last on stderr ("setpriv: …"),
+//                          which is in `stderr` and the callbacks too. Runs with a limit
+//                          or `endWithShell` wait for the look-up of the two (once, as the
+//                          shell starts). What a command prints is text from
 //                          outside: show it as plain text, never put it on a command line
 //                          unquoted. A callback that throws is logged; the run goes on.
 //                          CommandAction and CommandQuery are run by it, without a limit.

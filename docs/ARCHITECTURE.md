@@ -970,13 +970,16 @@ life as `step`, the cuts, the result); the runner starts processes and keeps tim
   that reaches `timeout` (the shell's child) cannot be passed on, and the command would
   go on without a limit. `singletons/CommandTools.qml` looks for both programs once, on
   `PATH`, and takes the first match that is trusted (the program lookup below: only root
-  can change it); every run waits for its answer. A run without a limit, or with
-  `timeout` missing, is started behind `setpriv --pdeathsig KILL` alone: its parent is
-  then the shell, and it ends with the shell (a crash, a restart) instead of running for
-  ever. There 126 and 127 count as `failedToStart` only with `setpriv`'s own message last
-  on stderr, since a command may exit with them itself (pkexec, for a dismissed or refused
-  prompt). With `setpriv` missing a run is started bare; with `timeout` missing the
-  watchdog is its only limit.
+  can change it); runs with a limit wait for its answer. With either missing a run is
+  started bare, and the watchdog is its only limit.
+- A run without a limit is started as it is, at once, and outlives the shell: what it
+  starts may be meant to (a program a launcher opens), and nothing is put around pkexec.
+  A run started with `endWithShell: true` waits for the look-up instead and, without a
+  limit (or with `timeout` missing), is started behind `setpriv --pdeathsig KILL` alone:
+  its parent is then the shell, and it ends with the shell (a crash, a restart) instead of
+  running for ever. There 126 and 127 count as `failedToStart` only with `setpriv`'s own
+  message last on stderr, since a command may exit with them itself. A privileged run
+  (below) ignores the option.
   - NixOS: `/run/current-system/sw/bin/timeout` and `setpriv` there, which lead into the
     Nix store.
   - Arch: `/usr/bin/timeout`, `/usr/bin/setpriv`.

@@ -9,7 +9,8 @@ import qs.singletons
 //   start(argv, options) → handle { running, cancel() }
 //   options = { timeoutMs: 30000 (0: no limit), killAfterMs: 3000, environment,
 //               onStdout(text), onStderr(text), onLine(line, stream), keepOutput: true,
-//               outputAfterCancel: false, maxOutputBytes: 1048576, done(result) }
+//               outputAfterCancel: false, endWithShell: false, maxOutputBytes: 1048576,
+//               done(result) }
 //   result  = { ok, code, stdout, stderr, timedOut, cancelled, failedToStart, truncated,
 //               durationMs, error }   — frozen (CommandRules.result says what each is)
 //
@@ -24,9 +25,10 @@ import qs.singletons
 //   with `timeout` when the shell's own end kills that; and the runner has its own
 //   watchdog, the only limit where one of the two programs is missing. Past the limit
 //   the command gets TERM, and KILL `killAfterMs` later.
-// - A run without a time limit (or without `timeout`) is started behind `setpriv
-//   --pdeathsig KILL` alone, so that it dies with the shell. Every run waits for the
-//   look-up of the two programs: one started before it would go without `setpriv`.
+// - A run without a time limit is started bare and at once: what it starts may be meant
+//   to outlive the shell. With `endWithShell` it is started behind `setpriv --pdeathsig
+//   KILL` alone (also where `timeout` is missing), so that it dies with the shell. Runs
+//   that take the two programs (a limit, or `endWithShell`) wait for their look-up.
 // - cancel(): TERM, KILL after `killAfterMs`; no chunk or line is handed over from that
 //   moment (with `outputAfterCancel`: they still are, and kept, until the process is
 //   gone); `done` comes when the process is gone, with `cancelled: true` — also for a
@@ -81,7 +83,7 @@ QtObject {
             onLine: given.callbacks.onLine,
             // An answer is owed even where the options are what is wrong
             done: given.callbacks.done,
-            state: CommandRules.fresh(given.timeoutMs, given.killAfterMs, given.outputAfterCancel),
+            state: CommandRules.fresh(given.timeoutMs, given.killAfterMs, given.outputAfterCancel, given.endWithShell),
             // queued: done, its answer waiting in `_deferred` for the flush
             item: null, starting: false, queued: false, muted: false, truncated: false,
             stdout: "", stderr: "", lastStderr: "", startedAt: 0,
@@ -105,7 +107,7 @@ QtObject {
         if (job.refusal !== "") {
             job.state.phase = "done";
             _defer(job);
-        } else if (_toolsKnown) {
+        } else if (!CommandRules.waitsForTools(job.state.timeoutMs, job.state.endWithShell) || _toolsKnown) {
             _launch(job);
         }
         return handle;
@@ -130,7 +132,7 @@ QtObject {
 
     function _launch(job) {
         if (job.state.phase === "waiting")
-            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools, job.state.timeoutMs), guarded: CommandRules.guards(tools) });
+            _dispatch(job, { type: "launch", wrapped: CommandRules.wraps(tools, job.state.timeoutMs), guarded: CommandRules.guards(tools, job.state.timeoutMs, job.state.endWithShell) });
     }
 
     function _dispatch(job, event) {
@@ -175,7 +177,7 @@ QtObject {
         const item = _runComponent.createObject(root);
         item.job = job;
         job.item = item;
-        item.process.command = CommandRules.commandLine(job.argv, tools, job.state.timeoutMs, job.state.killAfterMs);
+        item.process.command = CommandRules.commandLine(job.argv, tools, job.state.timeoutMs, job.state.killAfterMs, job.state.endWithShell);
         item.process.environment = CommandRules.mergedEnvironment(root.environment, job.options.environment);
         job.startedAt = Date.now();
         // A program that cannot start may be reported inside the next line: its answer

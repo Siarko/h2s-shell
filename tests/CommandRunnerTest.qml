@@ -259,7 +259,8 @@ TestCase {
         _start("missingBare", bare, ["/nonexistent/h2s-test-program", "x"]);
         _start("missingWrapped", wrapping, ["/nonexistent/h2s-test-program", "x"]);
         _start("missingNoLimit", wrapping, ["/nonexistent/h2s-test-program", "x"], { timeoutMs: 0 });
-        _start("ownCodeNoLimit", wrapping, ["sh", "-c", "echo 'Request dismissed' >&2; exit 126"], { timeoutMs: 0 });
+        _start("missingEndWithShell", wrapping, ["/nonexistent/h2s-test-program", "x"], { timeoutMs: 0, endWithShell: true });
+        _start("ownCodeEndWithShell", wrapping, ["sh", "-c", "echo 'Request dismissed' >&2; exit 126"], { timeoutMs: 0, endWithShell: true });
         _start("empty", wrapping, []);
         _start("text", wrapping, "ls -l");
         _start("number", wrapping, ["sleep", 1]);
@@ -285,7 +286,7 @@ TestCase {
         refusedAll.cancelAll();
         missingAll.cancelAll();
 
-        _then("the runs that cannot start answered", () => _answered("missingBare", "missingWrapped", "missingNoLimit", "ownCodeNoLimit", "empty", "text", "number", "badLimit", "badCallback",
+        _then("the runs that cannot start answered", () => _answered("missingBare", "missingWrapped", "missingNoLimit", "missingEndWithShell", "ownCodeEndWithShell", "empty", "text", "number", "badLimit", "badCallback",
                                                                  "refusedCancelled", "missingCancelled", "refusedCancelAll", "missingCancelAll"), () => {
             const missing = _runs.missingBare.result;
             assertEqual(missing.failedToStart + " " + missing.ok + " " + missing.code + " " + missing.timedOut, "true false -1 false", "a program that is not there, bare: failedToStart, once");
@@ -294,11 +295,14 @@ TestCase {
             const wrapped = _runs.missingWrapped.result;
             assertEqual(wrapped.failedToStart + " " + wrapped.ok + " " + wrapped.code, "true false 127", "… inside timeout: failedToStart, timeout's 127");
             const noLimit = _runs.missingNoLimit.result;
-            assertEqual(noLimit.failedToStart + " " + noLimit.ok + " " + noLimit.code, "true false 127",
-                        "… without a limit: started behind setpriv (its 127), so that it dies with the shell — failedToStart");
-            const ownCode = _runs.ownCodeNoLimit.result;
+            assertEqual(noLimit.failedToStart + " " + noLimit.ok + " " + noLimit.code + " " + noLimit.stderr, "true false -1 ",
+                        "… without a limit: started bare, as it is (no setpriv's 127) — failedToStart");
+            const endWithShell = _runs.missingEndWithShell.result;
+            assertEqual(endWithShell.failedToStart + " " + endWithShell.ok + " " + endWithShell.code, "true false 127",
+                        "… without a limit, endWithShell: started behind setpriv (its 127), so that it dies with the shell — failedToStart");
+            const ownCode = _runs.ownCodeEndWithShell.result;
             assertEqual(ownCode.failedToStart + " " + ownCode.code + " " + ownCode.stderr, "false 126 Request dismissed",
-                        "… a command behind setpriv that exits 126 itself (as pkexec for a dismissed prompt): its own code, it did start");
+                        "… a command behind setpriv that exits 126 itself: its own code, it did start");
             for (const name of ["empty", "text", "number", "badLimit", "badCallback"]) {
                 const result = _runs[name].result;
                 assert(result.error !== "" && !result.ok && !result.failedToStart && result.code === -1 && result.stdout === "", name + ": refused with `error` set — " + result.error);
@@ -363,17 +367,19 @@ TestCase {
         _start("cancelStubbornBare", bare, ["sh", "-c", _stubborn], { killAfterMs: 200 });
         _start("cancelWaiting", waiting, ["sh", "-c", "echo ran"]);
         _start("launchedLater", waiting, ["sh", "-c", "echo ran"]);
-        _start("noLimitWaits", waiting, ["sh", "-c", "echo ran"], { timeoutMs: 0 });
+        _start("noLimitNoWait", waiting, ["sh", "-c", "echo ran"], { timeoutMs: 0 });
+        _start("endWithShellWaits", waiting, ["sh", "-c", "echo ran"], { timeoutMs: 0, endWithShell: true });
         // outputAfterCancel: what the script says after the TERM is still handed over
         _start("keepWrapped", wrapping, ["sh", "-c", polite], { outputAfterCancel: true });
         _start("keepNoLimit", wrapping, ["sh", "-c", polite], { timeoutMs: 0, outputAfterCancel: true });
-        assertEqual(waiting.running, 3, "runs wait for the look-up of timeout and setpriv, with a limit or without");
+        assertEqual(waiting.running, 4, "runs with a limit or endWithShell wait for the look-up of timeout and setpriv");
 
         _then("the runs to cancel are running", () => _has("cancelWrapped", "ready") && _has("cancelBare", "ready")
               && _has("keepWrapped", "ready") && _has("keepNoLimit", "ready")
-              && _runs.cancelStubbornWrapped.lines.length === 1 && _runs.cancelStubbornBare.lines.length === 1, () => {
+              && _runs.cancelStubbornWrapped.lines.length === 1 && _runs.cancelStubbornBare.lines.length === 1 && _answered("noLimitNoWait"), () => {
+            assertEqual(_runs.noLimitNoWait.result.stdout, "ran", "a run without a limit (nor endWithShell) does not wait for the look-up");
             assert(_runs.cancelWaiting.handle.running && _runs.cancelWaiting.result === null && _runs.launchedLater.out.length === 0
-                   && _runs.noLimitWaits.result === null && _runs.noLimitWaits.out.length === 0, "the runs of the runner still looking up wait, the one without a limit too");
+                   && _runs.endWithShellWaits.result === null && _runs.endWithShellWaits.out.length === 0, "the others still wait, the one with endWithShell too");
             for (const name of ["cancelWrapped", "cancelBare", "cancelStubbornWrapped", "cancelStubbornBare", "cancelWaiting", "keepWrapped", "keepNoLimit"]) {
                 _runs[name].handle.cancel();
                 _runs[name].handle.cancel();
@@ -383,7 +389,7 @@ TestCase {
             _lookingUp.known = true;
         });
         _then("the cancelled runs answered", () => _answered("cancelWrapped", "cancelBare", "cancelStubbornWrapped", "cancelStubbornBare", "cancelWaiting", "launchedLater",
-                                                         "noLimitWaits", "keepWrapped", "keepNoLimit"), () => {
+                                                         "endWithShellWaits", "keepWrapped", "keepNoLimit"), () => {
             for (const name of ["keepWrapped", "keepNoLimit"]) {
                 const record = _runs[name];
                 assertEqual(record.result.cancelled + " " + record.result.ok + " " + record.answers, "true false 1", name + ": outputAfterCancel — still cancelled, answered once");
@@ -408,7 +414,7 @@ TestCase {
             assertEqual(waited.result.cancelled + " " + waited.result.failedToStart + " " + waited.result.stdout + " " + waited.result.durationMs + " " + waited.answers,
                         "true false  0 1", "cancelled while waiting: answered, never started");
             assertEqual(_runs.launchedLater.result.stdout + " " + _runs.launchedLater.result.ok, "ran true", "the look-up answered: the run that waited is started");
-            assertEqual(_runs.noLimitWaits.result.stdout + " " + _runs.noLimitWaits.result.ok, "ran true", "… the one without a limit too");
+            assertEqual(_runs.endWithShellWaits.result.stdout + " " + _runs.endWithShellWaits.result.ok, "ran true", "… the one with endWithShell too");
             _cancelAll();
         });
     }
@@ -552,8 +558,8 @@ TestCase {
             assertEqual(JSON.stringify(_actions[0]), JSON.stringify({ ok: false, code: 4, lines: ["first", " second "], error: "Error: no" }),
                         "CommandAction: { ok, code, lines (non-empty, as printed), error (stderr, trimmed) }");
             assertEqual(JSON.stringify(_actions[1]), JSON.stringify({ ok: true, code: 0, lines: ["s3cret"], error: "" }), "… one after another, in order; the environment handed over");
-            assertEqual(_actions[2].ok + " " + _actions[2].code + " " + _actions[2].lines.length + " " + (_actions[2].error !== ""), "false 127 0 true",
-                        "… a program that cannot start is answered, with an error (setpriv's 127: runs without a limit start behind it)");
+            assertEqual(_actions[2].ok + " " + _actions[2].code + " " + _actions[2].lines.length + " " + (_actions[2].error !== ""), "false -1 0 true",
+                        "… a program that cannot start is answered, with an error");
             assertEqual(JSON.stringify(_actions[3].lines), "[\"after\"]", "… and the queue goes on after it");
             assertEqual(JSON.stringify(_queried), "[[\"x\",\"y\"],[\"x\",\"y\"]]", "CommandQuery: its non-empty stdout lines; requests while it ran: one more run, not two");
             _latestQuery();

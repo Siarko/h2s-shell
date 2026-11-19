@@ -43,6 +43,8 @@ TestCase {
         assertEqual(JSON.stringify(rules.options(good)), JSON.stringify({ problem: "", what: "Connect", timeoutMs: 30000, notifyFailures: true,
                                                                         environment: {}, callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
                     "options: what and timeoutMs, notifyFailures true by default");
+        assertEqual(JSON.stringify(rules.options({ what: "Connect", timeoutMs: 30000, endWithShell: true })), JSON.stringify(rules.options(good)),
+                    "options: the command runner's endWithShell is ignored — a privileged run never has setpriv put around its pkexec");
         for (const given of [undefined, null, "x", [1]])
             assert(rules.options(given).problem !== "", "options: not an object (" + JSON.stringify(given) + ") → a problem");
         for (const limit of [undefined, 999, 3600001, NaN, Infinity, "30000"])

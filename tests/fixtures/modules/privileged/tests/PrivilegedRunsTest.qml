@@ -204,7 +204,13 @@ TestCase {
         _start("environment", [talk, "env", "PRIVILEGED_FIXTURE"], { environment: { PRIVILEGED_FIXTURE: "given here" } });
         _start("no environment", [talk, "env", "PRIVILEGED_FIXTURE"]);
         _start("bad environment", [talk, "env", "PRIVILEGED_FIXTURE"], { environment: { "A=B": "x" } });
-        _then("the runs with an environment are answered", () => _done("environment", "no environment", "bad environment"), () => {
+        // The command runner's endWithShell (1.33) is not a privileged run's option: ignored,
+        // the run started as any other — nothing is put around pkexec
+        _start("end with shell", [talk, "env", "PRIVILEGED_FIXTURE"], { endWithShell: true });
+        _then("the runs with an environment are answered", () => _done("environment", "no environment", "bad environment", "end with shell"), () => {
+            const ignored = _runs["end with shell"].result;
+            assert(ignored.ok && ignored.error === "" && (_pkexecWords(ignored)[0] ?? "").endsWith("/timeout"),
+                   "endWithShell given to a privileged run: ignored, pkexec started as ever, the shell's timeout its first word: " + JSON.stringify(ignored));
             const given = _runs.environment.result;
             assert(given.ok && given.stderr.split("\n").includes("pkexec-env:given here"), "the stand-in pkexec has it: " + JSON.stringify(given));
             assertEqual(given.stdout, "PRIVILEGED_FIXTURE=given here", "… and the command it ran, through the shell's timeout");

@@ -78,7 +78,7 @@ TestCase {
         // Options: each field read once
         const optionReads = {};
         const counted = {};
-        for (const name of ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "outputAfterCancel", "environment", "onStdout", "onStderr", "onLine", "done"]) {
+        for (const name of ["timeoutMs", "killAfterMs", "maxOutputBytes", "keepOutput", "outputAfterCancel", "endWithShell", "environment", "onStdout", "onStderr", "onLine", "done"]) {
             optionReads[name] = 0;
             Object.defineProperty(counted, name, { get() { optionReads[name]++; return undefined; }, enumerable: true });
         }
@@ -96,9 +96,11 @@ TestCase {
 
         // --- the options ---
         const defaults = rules.options(undefined);
-        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, outputAfterCancel: false, maxOutputBytes: 1048576, environment: {},
+        assertEqual(JSON.stringify(defaults), JSON.stringify({ problem: "", timeoutMs: 30000, killAfterMs: 3000, keepOutput: true, outputAfterCancel: false, endWithShell: false, maxOutputBytes: 1048576, environment: {},
                                                        callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
-                    "none given: 30 s, KILL 3 s after, the output kept, none after a cancel, 1 MiB");
+                    "none given: 30 s, KILL 3 s after, the output kept, none after a cancel, not ended with the shell, 1 MiB");
+        assertEqual(rules.options({ endWithShell: true }).endWithShell + " " + rules.options({ endWithShell: false }).endWithShell, "true false", "endWithShell taken as given");
+        assert(rules.options({ endWithShell: "yes" }).problem !== "", "endWithShell not true or false: a problem");
         assertEqual(rules.options({ outputAfterCancel: true }).outputAfterCancel + " " + rules.options({ outputAfterCancel: false }).outputAfterCancel, "true false",
                     "outputAfterCancel taken as given");
         assert(rules.options({ outputAfterCancel: 1 }).problem !== "", "outputAfterCancel not true or false: a problem");
@@ -131,17 +133,26 @@ TestCase {
                     "with a limit: inside timeout -k, which the command dies with (setpriv --pdeathsig), the words untouched");
         assertEqual(JSON.stringify(rules.commandLine(["-n", "x"], tools, 500, 0).slice(0, 4)),
                     JSON.stringify(["/usr/bin/timeout", "-k", "0.001", "0.5"]), "a kill-after of 0 would switch timeout's KILL off: 1 ms");
-        assertEqual(JSON.stringify(rules.commandLine(["ls", "--", "-l"], tools, 0, 3000)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls", "--", "-l"]),
-                    "no limit: behind setpriv alone, which the shell is then the parent of — the command dies with the shell");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls"]),
-                    "a limit but no timeout found: behind setpriv alone, the watchdog keeps the limit");
-        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 0, 3000)), "[\"ls\"]", "no limit, no setpriv found: the command as it is");
+        assertEqual(JSON.stringify(rules.commandLine(["ls", "-l"], tools, 0, 3000)), "[\"ls\",\"-l\"]",
+                    "no limit: the command as it is (what it starts may outlive the shell; nothing around pkexec)");
+        assertEqual(JSON.stringify(rules.commandLine(["ls", "-l"], tools, 0, 3000, false)), "[\"ls\",\"-l\"]", "… endWithShell false: the same");
+        assertEqual(JSON.stringify(rules.commandLine(["ls", "--", "-l"], tools, 0, 3000, true)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls", "--", "-l"]),
+                    "no limit, endWithShell: behind setpriv alone, which the shell is then the parent of — the command dies with the shell");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], tools, 30000, 3000, true)), JSON.stringify(rules.commandLine(["ls"], tools, 30000, 3000)),
+                    "… with a limit: inside timeout as any run with one");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000)), "[\"ls\"]", "a limit but no timeout found: the command as it is");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "", setpriv: "/usr/bin/setpriv" }, 30000, 3000, true)), JSON.stringify(["/usr/bin/setpriv", "--pdeathsig", "KILL", "--", "ls"]),
+                    "… with endWithShell: behind setpriv alone, the watchdog keeps the limit");
+        assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 0, 3000, true)), "[\"ls\"]", "endWithShell, no setpriv found: the command as it is");
         assertEqual(JSON.stringify(rules.commandLine(["ls"], { timeout: "/usr/bin/timeout", setpriv: "" }, 30000, 3000)), "[\"ls\"]",
                     "no setpriv found: the command as it is — never inside a timeout it would outlive");
         assert(!rules.wraps(undefined, 30000) && !rules.wraps({}, 30000) && !rules.wraps({ timeout: "/usr/bin/timeout" }, 30000)
                && !rules.wraps(tools, 0) && rules.wraps(tools, 1), "wrapped: a limit and both programs");
-        assert(rules.guards(tools) && rules.guards({ setpriv: "/usr/bin/setpriv" }) && !rules.guards({ timeout: "/usr/bin/timeout", setpriv: "" }) && !rules.guards(undefined),
-               "guarded (setpriv in front): whenever setpriv was found");
+        assert(rules.guards(tools, 1) && !rules.guards(tools, 0) && rules.guards(tools, 0, true) && rules.guards({ setpriv: "/usr/bin/setpriv" }, 1, true)
+               && !rules.guards({ setpriv: "/usr/bin/setpriv" }, 1) && !rules.guards({ timeout: "/usr/bin/timeout", setpriv: "" }, 0, true) && !rules.guards(undefined, 0, true),
+               "guarded (setpriv in front): wrapped, or endWithShell where setpriv was found");
+        assert(!rules.waitsForTools(0) && !rules.waitsForTools(0, false) && rules.waitsForTools(1) && rules.waitsForTools(0, true),
+               "waits for the look-up: a run with a limit or with endWithShell; one without either starts at once");
         assertEqual(rules.wrapperTools.map(tool => tool.name).join(), "timeout,setpriv", "the two programs looked for");
         assert(rules.wrapperTools.every(tool => tool.probe.length > 0 && tool.candidates === undefined),
                "… each with a probe, and no directory of its own: found on PATH and judged (ModuleRules.programVerdict)");
@@ -157,7 +168,10 @@ TestCase {
         const bare = stepped.state;
         assertEqual(String(stepped.state.guarded), "false", "… not guarded where the launch says so");
         stepped = rules.step(rules.fresh(0, 300), { type: "launch", wrapped: true, guarded: true });
-        assertEqual(stepped.state.wrapped + " " + stepped.state.guarded + " " + _types(stepped.effects), "false true start", "no limit: never wrapped, no watchdog; guarded when setpriv is in front");
+        assertEqual(stepped.state.wrapped + " " + stepped.state.guarded + " " + _types(stepped.effects), "false false start", "no limit: never wrapped, no watchdog, not guarded without endWithShell");
+        const unlimitedBare = stepped.state;
+        stepped = rules.step(rules.fresh(0, 300, false, true), { type: "launch", wrapped: false, guarded: true });
+        assertEqual(stepped.state.wrapped + " " + stepped.state.guarded + " " + _types(stepped.effects), "false true start", "… with endWithShell: guarded when setpriv is in front");
         const unlimited = stepped.state;
         assertEqual(String(rules.step(waiting, { type: "launch", wrapped: true }).state.guarded), "true", "wrapped: guarded too");
         assert(rules.step(wrapped, { type: "launch", wrapped: true }).ignored !== "", "launched twice: ignored");
@@ -241,6 +255,8 @@ TestCase {
         assertEqual(result.failedToStart + " " + result.code, "false 126", "126 behind setpriv alone, without its message: the command's own (pkexec's dismissed prompt)");
         assert(!rules.result(_after(unlimited, [exit(127), { type: "stopped" }]), facts(1)).failedToStart, "… 127 with nothing on stderr too");
         assert(!rules.result(_after(unlimited, [{ type: "cancel" }, exit(127), { type: "stopped" }]), facts(1, setprivSaid)).failedToStart, "… and never once cancelled");
+        assert(!rules.result(_after(unlimitedBare, [exit(127), { type: "stopped" }]), facts(1, setprivSaid)).failedToStart,
+               "a run without endWithShell: 127 is its own, whatever stderr says (as before)");
         result = rules.result(_after(bare, [exit(9, true), { type: "stopped" }]), facts(5));
         assertEqual(result.ok + " " + result.code + " " + result.failedToStart, "false -1 false", "ended by a signal: no exit status, not ok");
 

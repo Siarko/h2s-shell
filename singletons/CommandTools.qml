@@ -6,14 +6,14 @@ import QtQuick
 
 // The two programs the command runner puts around a run (CommandRules.wrapperTools):
 // coreutils' `timeout`, which ends a command with a time limit, and util-linux's
-// `setpriv`, which makes the command die with `timeout`, or with the shell where there is
-// no `timeout` around it. Each is looked for
+// `setpriv`, which makes the command die with `timeout`, or with the shell for a run that
+// asks to (`endWithShell`) where there is no `timeout` around it. Each is looked for
 // once, on PATH, and only a trusted match is taken (ModuleRules.programVerdict: only root
 // can change it) — the first, in PATH order, that also runs its probe with exit 0: no
 // shell, and a file that cannot run, or a `setpriv` without --pdeathsig, is not taken.
-// Until `known`, runs wait (singletons/io/CommandRunner.qml); with `timeout` missing, a
-// limit is kept by the runner's own watchdog alone, and with `setpriv` missing runs are
-// started bare.
+// Until `known`, runs that take them wait (singletons/io/CommandRunner.qml); with
+// `timeout` missing, a limit is kept by the runner's own watchdog alone, and with
+// `setpriv` missing every run is started bare.
 Singleton {
     id: root
 
@@ -105,7 +105,8 @@ Singleton {
         const missing = CommandRules.wrapperTools.filter(tool => !_found[tool.name]);
         if (missing.length > 0)
             console.warn("[Commands] " + missing.map(tool => "no trusted `" + tool.name + "` on PATH").join("; ")
-                         + ": time limits are kept by the shell alone, and end with it");
+                         + ": runs are started bare — time limits are kept by the shell's own timer, and a run"
+                         + " goes on when the shell ends");
     }
 
     property Process _lookup: Process {
