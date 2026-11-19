@@ -24,6 +24,20 @@ The interface modules are written against (`qs.api`), versioned on its own
   setpriv's message in `stderr`. Runs without it are started as before. A privileged run
   ignores it. `outputAfterCancel` (default false): after `cancel()` the lines the command
   still prints are handed to the callbacks and kept in the result, which says `cancelled`.
+  Progress notifications: `notify(summary, options)` (`module.notify`, `Api.notify`) with
+  `options.progress` (a number, 0–100, or -1 for a run of unknown length) returns a handle
+  — `open`, `state` (`"starting"`, `"running"`, `"done"`, `"failed"`, `"cancelled"`,
+  `"closed"`, `"unknown"`), `update({ summary, body, progress, actions, state, announce })`
+  (an end state ends the job; `announce: true` brings its toast back once), `close()` —
+  else `null` as before; `options.toast` `"brief"` (the default, also for any other value)
+  or `"whileRunning"` (the toast stays while the job runs); actions stay after a click;
+  `onDismissed` runs once when the user closes it. A module's open handles are closed when
+  it is turned off; while it is off, `module.notify` with a progress shows nothing. Every
+  hint key starting with `x-qs-` is dropped from a module's notification, plain ones too.
+  `options.expireTime` is now followed by the shell's toasts (0 stays until closed) unless
+  the user turned that off. Module test mode records each show, update and close of a
+  progress notification, and `ModuleTestKit.dismissNotification(handle)` and
+  `pressNotificationAction(handle, actionId)` act as the user.
 - 1.32: the network popup's rows offer a name-line place, as the network cards do:
   `popup.network.wifi.row.title` (each Wi-Fi network in range, closed and open) and
   `popup.network.connections.wired.row.title` (the wired row), `append`, any module's; an
@@ -384,6 +398,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   the toast, the notification panel, and on the screensaver and lock screen where they show
   a notification's text. An action on a notification that asks to stay (resident) no
   longer takes it out of the panel.
+- Modules can show a job's progress in a notification: its bar moves as the job goes, its
+  toast can stay on screen while the job runs, and comes back when the job's status changes
+  (started, stalled, done); turning a module off takes its progress notifications away.
 - Settings → Appearance → Controls: "Progress bars", their thickness and corner radius; the
   hardware popup's bars follow them.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the

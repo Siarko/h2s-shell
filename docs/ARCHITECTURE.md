@@ -948,8 +948,27 @@ once, not once per attempt) and notifications with `format: "plain"` (`Notifier.
 the summary on one line, the body keeping its line breaks — at most 20 lines
 (`Notifier.plainBodyLines`) — control and format characters dropped, capped, the body's
 `&`, `<`, `>` shown as written) for any text from outside. A module's notification never
-carries the shell's own category (`x-qs-shell`, the toast at the bottom of the screen:
-`ModuleRules.moduleNotifyOptions`).
+carries the shell's own category (`x-qs-shell`, the toast at the bottom of the screen) nor
+any hint whose key starts with `x-qs-` (the shell's own sender's: the progress state, the
+announce count), judged as the server would receive the key
+(`ModuleRules.moduleNotifyOptions`).
+
+**Progress notifications** (API 1.33): `notify` with `options.progress` (0–100, -1 for a
+run of unknown length) returns a handle — `open`, `state`, `update({ summary, body,
+progress, actions, state, announce })`, `close()` — for any long job (a transfer, a backup,
+a sync), else `null`. It is a thin object over Notifier's own handle
+(`singletons/io/NotificationHandle.qml`, made by `Notifier.send`; what a module gets:
+`Api._notification`), which sends with one-shot `gdbus` calls to the notification server,
+replaces the notification in place by its id, coalesces updates, retries, and learns a
+click or a dismissal from the shell's own server in-process; every decision is in
+`NotificationRules`. `options.toast` chooses how long its toast shows: `"brief"` (the
+user's time) or `"whileRunning"` (it stays while the job runs); `announce: true` brings the
+toast back once for a change of status. The module's handle (`api/ModuleHandle.qml`) keeps
+its open handles and closes them in its teardown, when the module is turned off — the same
+place its runs end; while it is off a progress notification is not shown. In module test
+mode nothing is sent: each show, update and close is recorded (`ModuleTestKit.notified`),
+and a suite dismisses one or presses its action through `ModuleTestKit`. The lock bed's
+`modules-notify` scenario runs the real path with the `good` fixture, on its private bus.
 
 **The command runner** (`api/CommandRunner.qml`; inside it and in the shell's own code
 `singletons/io/CommandRunner.qml`): `start(argv, options)` starts a command — a list of

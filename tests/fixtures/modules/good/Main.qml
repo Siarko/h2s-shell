@@ -12,6 +12,8 @@ QtObject {
     property var goodState: GoodState
     // What module.active was while it was being built
     property bool activeAtStart: false
+    // Its progress notification (`progress` over IPC), null before
+    property var job: null
 
     // Its IPC target is its id (a module's targets are <id> or <id>.<name>)
     property IpcHandler ipc: IpcHandler {
@@ -27,6 +29,19 @@ QtObject {
 
         function widgetHandle(): string {
             return String(GoodState.widgetSawHandle);
+        }
+
+        // (API 1.33) A progress notification, kept by the main: its state
+        function progress(): string {
+            main.job = main.module.notify("Good job", {
+                body: "the fixture's progress", format: "plain", progress: 30, toast: "whileRunning",
+                actions: [{ id: "stop", label: "Stop", onTriggered: () => main.job?.update({ state: "cancelled" }) }]
+            });
+            return main.job ? main.job.state : "none";
+        }
+
+        function progressState(): string {
+            return main.job ? main.job.state : "none";
         }
     }
 

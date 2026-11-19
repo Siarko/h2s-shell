@@ -1731,21 +1731,37 @@ Singleton {
         return typeof ms === "number" && Number.isFinite(ms) ? Math.floor(ms / 60000) * 60000 : 0;
     }
 
-    // A module's notification options as the core sends them (pure): a category in the
-    // shell's own namespace ("x-qs-…", the shell's toast is "x-qs-shell"), given as the
-    // category or as a hint, is dropped — a module's notification never looks like the
-    // shell's. Everything else as given; not an object: {}
+    // A module's notification options as the core sends them (pure). The shell's own
+    // namespace is the shell's: a category "x-qs-…" (the shell's toast is "x-qs-shell"),
+    // given as the category or as a hint, and (1.33) every hint whose key starts with
+    // "x-qs-" (the progress state, the run, the announce count) are dropped — a module's
+    // notification never looks like the shell's, nor sets what the shell's sender sets. Key
+    // and category are judged as the server receives them (NotificationRules.gvariantText:
+    // a NUL or a lone surrogate in front does not hide the prefix), white space in front and
+    // case ignored. (1.33) `progress` is kept only as a finite number (else dropped: a plain
+    // notification); with it `toast` is "brief" or "whileRunning" (anything else: "brief"),
+    // without it `toast` is dropped. Everything else as given; not an object: {}
     function moduleNotifyOptions(options) {
         if (options === null || typeof options !== "object")
             return {};
-        const isShells = value => typeof value === "string" && /^\s*x-qs-/i.test(value);
+        const isShells = value => (typeof value === "string" || typeof value === "number")
+            && /^\s*x-qs-/i.test(NotificationRules.gvariantText(value));
         const result = Object.assign({}, options);
         if (isShells(result.category))
             delete result.category;
-        if (result.hints !== null && typeof result.hints === "object" && isShells(result.hints.category)) {
-            const hints = Object.assign({}, result.hints);
-            delete hints.category;
+        if (result.hints !== null && typeof result.hints === "object") {
+            const hints = {};
+            for (const key of Object.keys(result.hints)) {
+                if (!isShells(key) && !(key === "category" && isShells(result.hints[key])))
+                    hints[key] = result.hints[key];
+            }
             result.hints = hints;
+        }
+        if (typeof result.progress !== "number" || !Number.isFinite(result.progress)) {
+            delete result.progress;
+            delete result.toast;
+        } else {
+            result.toast = result.toast === "whileRunning" ? "whileRunning" : "brief";
         }
         return result;
     }

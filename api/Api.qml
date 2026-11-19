@@ -229,7 +229,58 @@ import qs.singletons.network
 //                          starts with "-" is safe either way. Without it the body is markup,
 //                          as the notification spec has it. A category of the shell's own
 //                          ("x-qs-…", its toast's "x-qs-shell"), as an option or a hint, is
-//                          dropped: a module's notification never looks like the shell's
+//                          dropped: a module's notification never looks like the shell's;
+//                          (1.33) so is every hint whose key starts with "x-qs-" (case and
+//                          white space in front ignored, judged as the server receives it).
+//                          → null, or, (1.33) with options.progress, a handle (below).
+//                          (1.33) options.expireTime (ms; 0 stays until closed; absent: the
+//                          user's time) is followed by the shell's toasts, unless the user
+//                          turned that off (Settings → Notifications, "Apps choose how long")
+//                          — how long the toast shows; the entry stays in the notification
+//                          panel until dismissed, as every notification's does.
+//                          Progress (1.33): options.progress, a number 0–100 (-1: a run of
+//                          unknown length; anything not a finite number: a plain
+//                          notification, null), makes a notification with a bar, and notify
+//                          returns its handle:
+//                            open      bool: shown or being shown, not closed
+//                            state     "starting" (until the server answered) | "running" |
+//                                      "done" | "failed" | "cancelled" | "closed" | "unknown"
+//                                      (the shell's own notification server does not hold
+//                                      it — another daemon owns the name, or it stopped
+//                                      answering: nothing more is known, no callbacks)
+//                            update({ summary?, body?, progress?, actions?, state?, announce? })
+//                                      → true when taken. The texts follow the first call's
+//                                      format; state "running", or "done" | "failed" |
+//                                      "cancelled", which end the job: after an end state only
+//                                      close() is taken. announce: true brings its toast back
+//                                      once (or, on screen, starts its time again) — for a
+//                                      change of status the user should see (started,
+//                                      stalled, done); not with toasts off, no toast screen,
+//                                      or the notification panel open. Updates are coalesced:
+//                                      a progress-only change at most once a second, the
+//                                      newest content wins, an end state always goes
+//                            close()   takes it away (an ended job's entry stays until then,
+//                                      or until the user dismisses it); no onDismissed
+//                          options.toast "brief" (the default; anything else is "brief"): the
+//                          toast shows for the user's time, the entry stays with its moving
+//                          bar; "whileRunning": the toast stays on screen while the job runs,
+//                          and from the update that ends it shows for the user's time. Taken
+//                          away by the user, it comes back only by an announce.
+//                          options.actions stay after a click (the notification is resident);
+//                          options.onDismissed runs once when the user closes it (the job
+//                          goes on; send no more updates: none would be shown). Its own
+//                          expireTime and x-qs- hints are not used. Not for critical urgency.
+//                          A module's own handle's notify keeps its open handles and closes
+//                          them when the module is turned off; while it is off a progress
+//                          notify shows nothing and returns null. Api.notify's handle
+//                          belongs to no module: nothing closes it but close(). Example:
+//                            let job = module.notify("Sending photo.jpg", { body: "to laptop",
+//                                format: "plain", progress: 0, toast: "whileRunning",
+//                                actions: [{ id: "cancel", label: "Cancel", onTriggered: cancelSend }],
+//                                onDismissed: () => job = null });
+//                            job.update({ progress: 40 });
+//                            job.update({ state: "done", summary: "Sent photo.jpg", actions: [],
+//                                         announce: true });
 //   Api.openUrl(url, options)  opens a link in the user's programs (xdg-open, no shell): only
 //                          http:, https:, mailto: — file: with { allowFile: true }; anything
 //                          else (no scheme, a bare path, another scheme) refused, logged, false
@@ -677,7 +728,10 @@ import qs.singletons.network
 //     leads out of the module through a link — never a program on PATH. Without test mode
 //     `testPrograms` is ignored;
 //   - Api.openUrl and Notifier's notifications (Api.notify, module.notify) are recorded,
-//     not opened or sent; the module's suites read them from ModuleTestKit (qs.tests);
+//     not opened or sent; the module's suites read them from ModuleTestKit (qs.tests).
+//     (1.33) A progress notification's handle acts as if the server answered at once, each
+//     show, update and close is recorded, and a suite dismisses it or presses one of its
+//     actions through ModuleTestKit (dismissNotification, pressNotificationAction);
 //   - no command a module starts (CommandRunner, CommandAction, CommandQuery,
 //     PrivilegedAction) holds a pkexec — as the program or any later word, as handed to
 //     env, timeout or setsid — other than a module's `<testPrograms>/pkexec` (pkexec named
@@ -1051,7 +1105,30 @@ Singleton {
     }
 
     function notify(summary, options) {
-        Notifier.send(String(summary), ModuleRules.moduleNotifyOptions(options));
+        return _notification(Notifier.send(String(summary), ModuleRules.moduleNotifyOptions(options)));
+    }
+
+    // What a module gets of Notifier's progress handle (io/NotificationHandle.qml): its
+    // state, update() and close() — nothing of how it is sent (its id, its runner, its
+    // content). Made without a parent: the module's reference keeps it. null for null
+    function _notification(handle) {
+        return handle ? _notificationComponent.createObject(null, { _handle: handle }) : null;
+    }
+
+    property Component _notificationComponent: Component {
+        QtObject {
+            property var _handle: null
+            readonly property bool open: _handle?.open === true
+            readonly property string state: _handle ? _handle.state : "closed"
+
+            function update(changes) {
+                return _handle ? _handle.update(changes) === true : false;
+            }
+
+            function close() {
+                _handle?.close();
+            }
+        }
     }
 
     // A link, given to xdg-open as one argument (no shell). Only with a scheme, and only

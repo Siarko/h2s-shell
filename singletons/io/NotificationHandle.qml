@@ -17,7 +17,8 @@ import qs.singletons
 // and the dismissal come from the shell's own server (Notifications: actionInvoked,
 // notificationClosed, tracks), so no process waits for them. In test mode (recordOnly)
 // nothing runs: each show, update and close is recorded (Notifier.recorded) and the
-// server answers at once with a made-up id.
+// server answers at once with a made-up id; a suite dismisses it or presses an action
+// through ModuleTestKit (testDismiss, testPress).
 //
 // A failed update is tried again (NotificationRules.retryDelay), the newest content each
 // time; past the last try the handle is "unknown". Whatever the handle made on a server
@@ -94,6 +95,24 @@ QtObject {
             return;
         }
         _pump();
+    }
+
+    // Module test mode (recordOnly; ModuleTestKit): the user dismissed it, or pressed one of
+    // its actions — as the server would tell it. → true when taken (open, and an action of
+    // its own); outside test mode nothing, false
+    function testDismiss() {
+        if (!recordOnly || _ended)
+            return false;
+        _closedBy(NotificationCloseReason.Dismissed);
+        return true;
+    }
+
+    function testPress(identifier) {
+        const name = String(identifier ?? "");
+        if (!recordOnly || _ended || _closeWanted || !(callbacks.actions ?? []).some(action => String(action?.id ?? "") === name))
+            return false;
+        _onAction(id, name);
+        return true;
     }
 
     function _pump() {

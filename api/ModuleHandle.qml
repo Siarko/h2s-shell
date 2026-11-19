@@ -172,6 +172,7 @@ QtObject {
         if (!active) {
             _logWritten.clear();
             FileChooser.ownerGone(root);
+            _closeNotifications();
         }
     }
 
@@ -300,9 +301,32 @@ QtObject {
     // ---- The shell ----
 
     // A notification under the module's name (Notifier.send's options; API 1.12: format
-    // "plain" for text from outside, Api.qml says what it does)
+    // "plain" for text from outside, Api.qml says what it does). (1.33) With a `progress`
+    // (a number) → a handle (Api._notification: open, state, update(), close()), else null.
+    // The open handles are kept here and closed when the module is turned off; while it is
+    // off a progress notification is not shown (null)
     function notify(summary, options) {
-        Notifier.send(String(summary), Object.assign({ appName: name || moduleId }, ModuleRules.moduleNotifyOptions(options)));
+        const checked = ModuleRules.moduleNotifyOptions(options);
+        if (checked.progress !== undefined && !active)
+            return null;
+        const handle = Notifier.send(String(summary), Object.assign({ appName: name || moduleId }, checked));
+        if (!handle)
+            return null;
+        if (handle.open) {
+            _notifications = _notifications.concat([handle]);
+            handle.finished.connect(() => root._notifications = root._notifications.filter(live => live !== handle));
+        }
+        return Api._notification(handle);
+    }
+
+    // Its progress notifications not yet ended (Notifier's handles)
+    property var _notifications: []
+
+    function _closeNotifications() {
+        const open = _notifications;
+        _notifications = [];
+        for (const handle of open)
+            handle.close();
     }
 
     // (API 1.12) A line in the shell's log, "[<id>] <text>": level "debug" (written only

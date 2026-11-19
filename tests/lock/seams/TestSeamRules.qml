@@ -26,6 +26,7 @@ Singleton {
         { name: "H2S_SHELL_TEST_MODULE_GUARD_MS", what: "the module start guard's window in ms (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_CHECK_PATH", what: "a directory put first on the module file check's PATH (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_CHECK_MS", what: "the module host's checks' deadline in ms (Modules)" },
+        { name: "H2S_SHELL_TEST_MODULE_NOTIFY", what: "1: in module test mode the shell's notifications are sent all the same, not only recorded (Modules)" },
         { name: "H2S_FAKE_VPN_PROVIDER", what: "1: the stand-in VPN provider of tests/FakeVpnProvider.qml (VpnManager)" }
     ]
     readonly property var names: seams.map(seam => seam.name)
@@ -44,7 +45,7 @@ Singleton {
     //   lockTools, systemPamDirectory, ledsDirectory   "" when not given
     //   lockSystem       "nixos" | "other" | "" (only with systemPamDirectory)
     //   timings          the overrides given ({} for none), timingsProblem ("" or why not)
-    //   reloadIpc, fakeVpnProvider   booleans
+    //   reloadIpc, moduleNotify, fakeVpnProvider   booleans
     //   moduleGuardMs, moduleCheckMs   > 0, or 0 for none
     //   moduleCheckPath  an absolute directory, or ""
     //   inForce          the names that change something, in `names`' order
@@ -79,6 +80,7 @@ Singleton {
             moduleGuardMs: _positive(text("H2S_SHELL_TEST_MODULE_GUARD_MS")),
             moduleCheckPath: checkPath.startsWith("/") ? checkPath : "",
             moduleCheckMs: _positive(text("H2S_SHELL_TEST_MODULE_CHECK_MS")),
+            moduleNotify: text("H2S_SHELL_TEST_MODULE_NOTIFY") === "1",
             fakeVpnProvider: text("H2S_FAKE_VPN_PROVIDER") === "1"
         };
         const taken = {
@@ -91,6 +93,7 @@ Singleton {
             H2S_SHELL_TEST_MODULE_GUARD_MS: values.moduleGuardMs > 0,
             H2S_SHELL_TEST_MODULE_CHECK_PATH: values.moduleCheckPath !== "",
             H2S_SHELL_TEST_MODULE_CHECK_MS: values.moduleCheckMs > 0,
+            H2S_SHELL_TEST_MODULE_NOTIFY: values.moduleNotify,
             H2S_FAKE_VPN_PROVIDER: values.fakeVpnProvider
         };
         values.inForce = Object.freeze(names.filter(name => taken[name]));

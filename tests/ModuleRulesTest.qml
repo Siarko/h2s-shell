@@ -2108,5 +2108,24 @@ TestCase {
         rules.moduleNotifyOptions(hinted);
         assertEqual(hinted.hints.category, "x-qs-shell", "moduleNotifyOptions: the module's own object untouched");
         assertEqual(JSON.stringify(rules.moduleNotifyOptions(null)) + JSON.stringify(rules.moduleNotifyOptions("x")), "{}{}", "moduleNotifyOptions: not an object → {}");
+        // (1.33) Every hint key of the shell's own namespace dropped, in plain notifications too,
+        // however it is disguised: what the server would receive is judged
+        const disguised = rules.moduleNotifyOptions({ hints: {
+            "x-qs-announce": "9", "X-QS-progress-state": "done", " x-qs-progress-run": "r", "\u0000x-qs-progress-handle": "1",
+            "\ud800x-qs-announce": "2", "\udc00\u0000X-Qs-progress-run": "3", "x-qsnot": 1, "a-x-qs-": 2, "urgency": 1
+        } });
+        assertEqual(JSON.stringify(disguised), JSON.stringify({ hints: { "x-qsnot": 1, "a-x-qs-": 2, "urgency": 1 } }),
+                    "moduleNotifyOptions: every x-qs- hint key dropped (case, white space, a NUL or lone surrogate in front), others kept");
+        assertEqual(rules.moduleNotifyOptions({ category: "\u0000x-qs-shell" }).category, undefined, "… a category behind a NUL too");
+        // (1.33) progress and toast
+        const job = rules.moduleNotifyOptions({ progress: 40, toast: "forever" });
+        assertEqual(JSON.stringify(job), JSON.stringify({ progress: 40, toast: "brief" }), "moduleNotifyOptions: a bad toast → \"brief\"");
+        assertEqual(rules.moduleNotifyOptions({ progress: -1 }).toast, "brief", "… none given → \"brief\"");
+        assertEqual(rules.moduleNotifyOptions({ progress: 0, toast: "whileRunning" }).toast, "whileRunning", "… \"whileRunning\" kept");
+        for (const bad of ["40", NaN, Infinity, null, true]) {
+            const plain = rules.moduleNotifyOptions({ progress: bad, toast: "whileRunning", body: "b" });
+            assertEqual(JSON.stringify(plain), "{\"body\":\"b\"}", "moduleNotifyOptions: progress " + String(bad) + " is not a number: dropped, and its toast");
+        }
+        assertEqual(JSON.stringify(rules.moduleNotifyOptions({ toast: "whileRunning" })), "{}", "… a toast without progress dropped");
     }
 }

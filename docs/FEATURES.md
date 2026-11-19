@@ -147,6 +147,16 @@ action, by the spec) leaves it in the panel; a toast still slides away.
 notifications, with actions and dismiss callbacks (no inline reply: notify-send cannot
 ask for one).
 
+Modules can show a long job (a transfer, a backup) as a notification with a progress bar
+that moves as the job goes. Its toast either shows for "Show each toast for" and leaves the
+entry with its moving bar in the panel, or stays on screen while the job runs (until taken
+away by its "×" or a swipe) and shows the end for the usual time. When the job's status
+changes in a way worth seeing — it started, stalled, finished or failed — the module can
+bring the toast back once (not with toasts off or the panel open). Its buttons ("Cancel")
+stay after a click. Dismissing it in the panel takes it away for good; the job goes on.
+Turning a module off takes its progress notifications away; one left from before a reload
+of the shell, whose sender is gone, is dismissed.
+
 ## Dictation
 
 A client for `pttd`, an external dictation daemon driven by Whisper. The shell is
@@ -459,7 +469,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `systemctl` | restart, shutdown |
 | `gdbus`, `systemd-inhibit` (logind) | the lock screen: lock requests, sleep and wake, holding the sleep until locked |
 | `gdbus` (fprintd), `timeout`; PAM (`pam_unix`, `pam_fprintd`, `pam_u2f`) | unlocking: which methods there are (`scripts/lock-auth-methods.sh`), and the checks themselves (fprintd and pam_u2f optional) |
-| `notify-send` | the shell's own outbound notifications |
+| `notify-send`, `gdbus` | the shell's own outbound notifications (`gdbus` for those with a progress bar, a module's among them) |
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `flock`, `setsid` (util-linux) | `scripts/launch.sh`: one supervisor per session (without `flock` it warns and goes on unguarded), the detached restart |
 | `timeout` (coreutils), `setpriv` (util-linux) | time limits of the commands the shell and modules run through the command runner, taken from the system's directory (NixOS: `/run/current-system/sw/bin`; Arch: `/usr/bin`), never from `PATH` (optional — without both, a limit is kept by the shell alone and ends with it) |

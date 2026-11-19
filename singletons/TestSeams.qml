@@ -26,6 +26,7 @@ Singleton {
     readonly property int moduleGuardMs: 0
     readonly property string moduleCheckPath: ""
     readonly property int moduleCheckMs: 0
+    readonly property bool moduleNotify: false
     readonly property bool fakeVpnProvider: false
     // Module test mode (ModuleHost.testMode): off
     readonly property bool moduleTestMode: false

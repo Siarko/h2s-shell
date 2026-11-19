@@ -38,8 +38,9 @@ import qs.singletons.io as Io
 // a caller's own expireTime and x-qs-… hints are not used there.
 //
 // In module test mode (Modules binds `recordOnly` to ModuleHost.testMode) nothing is sent: each
-// call is recorded in `recorded` instead, and no callback ever runs — a suite must not reach
-// a real notification daemon.
+// call is recorded in `recorded` instead — a suite must not reach a real notification
+// daemon. A plain notification's callbacks never run then; a progress notification's run
+// only when a suite dismisses it or presses an action (ModuleTestKit, testHandle).
 Singleton {
     id: root
 
@@ -47,7 +48,10 @@ Singleton {
     property bool recordOnly: false
     // What send() was asked while recordOnly, oldest first, at most maxRecorded: frozen
     // { summary, body, appName, urgency, actions (the labels), format ("plain" or ""),
-    // command (notify-send's argv) } — summary and body as sent (plain: made plain)
+    // command (notify-send's argv) } — summary and body as sent (plain: made plain); a
+    // progress notification's show, update and close: { kind "show" | "update" | "close",
+    // handle (its number), summary, body, progress, state, toast, expireTime, announce,
+    // actions (the labels), format }
     property var recorded: []
     readonly property int maxRecorded: 200
 
@@ -315,6 +319,11 @@ Singleton {
             handle.finished.connect(() => root._liveHandles = root._liveHandles.filter(live => live !== handle));
         }
         return handle;
+    }
+
+    // Test mode: the open handle of that number (the `handle` of its records), or null
+    function testHandle(number) {
+        return recordOnly ? (_liveHandles.find(live => live.number === number && live.recordOnly) ?? null) : null;
     }
 
     // A handle's show, update or close in test mode, as recorded

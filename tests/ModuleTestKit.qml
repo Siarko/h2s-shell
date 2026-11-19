@@ -19,7 +19,24 @@ import qs.api
 //   notified               the notifications asked for (Api.notify, module.notify, the
 //                          shell's own), oldest first: [{ summary, body, appName, urgency,
 //                          actions (the labels), format ("plain" or ""; 1.12), command
-//                          (notify-send's words) }] — summary and body as they would be sent
+//                          (notify-send's words) }] — summary and body as they would be sent.
+//                          (1.33) A progress notification (notify with `progress`) records
+//                          each show, update and close instead: { kind "show" | "update" |
+//                          "close", handle (its number, the same in all its records),
+//                          summary, body, progress, state, toast, expireTime (0: its toast
+//                          stays, -1: the user's time), announce (how many so far), actions
+//                          (the labels), format }; its handle acts as if the server answered
+//                          at once
+//   dismissNotification(handle)
+//                          (1.33) the user closed the progress notification whose records
+//                          carry `handle` (the number): its onDismissed runs, its handle is
+//                          closed (no "close" record: the user closed it) → "" when done,
+//                          else why not (no such open notification, outside test mode)
+//   pressNotificationAction(handle, actionId)
+//                          (1.33) the user pressed one of its actions: its onTriggered runs,
+//                          the notification stays (a progress notification is resident) →
+//                          "" when done, else why not (no such open notification, no such
+//                          action)
 //   setNow(ms)             (1.12) the shell's clock for Api.minuteNow (the start of that
 //                          minute); 0: the real clock again. Reset before each suite
 //   setSystem(facts)       (1.13) what Api.system tells: the fields given ({ ready, userName,
@@ -113,6 +130,24 @@ Singleton {
     function setChooserLocked(on) {
         if (Modules.host.testMode)
             FileChooser.testLocked = on === true;
+    }
+
+    function dismissNotification(handle) {
+        if (!Modules.host.testMode)
+            return "module test mode is off";
+        const live = Notifier.testHandle(handle);
+        if (live === null)
+            return "no open progress notification " + JSON.stringify(handle ?? null);
+        return live.testDismiss() ? "" : "it is closed";
+    }
+
+    function pressNotificationAction(handle, actionId) {
+        if (!Modules.host.testMode)
+            return "module test mode is off";
+        const live = Notifier.testHandle(handle);
+        if (live === null)
+            return "no open progress notification " + JSON.stringify(handle ?? null);
+        return live.testPress(actionId) ? "" : "it has no action " + JSON.stringify(String(actionId ?? ""));
     }
 
     function setEnabled(id, on) {

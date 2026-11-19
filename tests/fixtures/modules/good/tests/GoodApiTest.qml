@@ -72,6 +72,9 @@ TestCase {
     // module is turned off, and the busy one
     property var _chosen: []
     property var _afterOff: null
+    // A progress notification left open when the module is turned off (API 1.33)
+    property var _leftOpen: null
+    property var _leftOpenNumber: 0
     property var _busy: null
 
     // The store is read by a process (API 1.2): everything starts once it has answered
@@ -167,6 +170,69 @@ TestCase {
         Api.notify("So does this", { hints: { category: "x-qs-shell" } });
         assert(ModuleTestKit.notified.length === 2 && !ModuleTestKit.notified.some(entry => entry.command.some(word => word.includes("x-qs-shell"))),
                "notify: the category x-qs-shell dropped, as an option and as a hint");
+        ModuleTestKit.clearRecords();
+        // (1.33) Every x-qs- hint key dropped, in a plain notification too
+        module.notify("Hinted", { hints: { "x-qs-announce": "3", "\u0000x-qs-progress-state": "done", "x-other": "kept" } });
+        const hinted = ModuleTestKit.notified[0]?.command ?? [];
+        assert(!hinted.some(word => /x-qs-/i.test(word)) && hinted.includes("--hint=string:x-other:kept"),
+               "notify: x-qs- hint keys dropped, another kept: " + JSON.stringify(hinted));
+        ModuleTestKit.clearRecords();
+
+        // --- a progress notification (API 1.33): notify returns its handle ---
+        const handleRecords = number => ModuleTestKit.notified.filter(entry => entry.handle === number);
+        const lastShown = () => ModuleTestKit.notified.filter(entry => entry.kind === "show").slice(-1)[0]?.handle;
+        let pressed = 0;
+        let dismissed = 0;
+        const job = module.notify("Copying a.txt", {
+            body: "to <backup>", format: "plain", progress: 0, toast: "whileRunning", expireTime: 3000,
+            hints: { "x-qs-announce": "7" },
+            actions: [{ id: "stop", label: "Stop", onTriggered: () => pressed++ }], onDismissed: () => dismissed++
+        });
+        assertEqual(module.notify("Plain", { body: "no progress" }), null, "notify without progress: null");
+        assert(job !== null && job.open && job.state === "running", "notify with progress: a handle, open, running (the server answers at once in test mode)");
+        assertEqual(job.id + "|" + job.wanted + "|" + job.runner, "undefined|undefined|undefined", "… nothing of how it is sent");
+        const jobNumber = lastShown();
+        const shown = handleRecords(jobNumber)[0];
+        assertEqual(JSON.stringify([shown?.kind, shown?.summary, shown?.body, shown?.progress, shown?.state, shown?.toast, shown?.expireTime, shown?.announce, shown?.actions]),
+                    JSON.stringify(["show", "Copying a.txt", "to &lt;backup&gt;", 0, "running", "whileRunning", 0, 0, ["Stop"]]),
+                    "its show recorded: plain texts, whileRunning (its toast stays: 0, the module's expireTime not used), its action, no announce (the module's x-qs-announce dropped)");
+        assert(job.update({ progress: 40 }), "update(): taken");
+        assert(job.update({ summary: "Copying b.txt", announce: true }), "update() with announce: taken");
+        const updates = handleRecords(jobNumber).filter(entry => entry.kind === "update");
+        assertEqual(updates.map(entry => entry.progress + "|" + entry.summary + "|" + entry.announce).join(","), "40|Copying a.txt|0,40|Copying b.txt|1",
+                    "… each update recorded: the progress, then the text with the announce count raised");
+        assertEqual(ModuleTestKit.pressNotificationAction(jobNumber, "stop"), "", "ModuleTestKit.pressNotificationAction");
+        assertEqual(pressed + "|" + job.open + "|" + dismissed, "1|true|0", "… its onTriggered ran, the notification stays (resident)");
+        assert(ModuleTestKit.pressNotificationAction(jobNumber, "other") !== "", "… an action it does not have: refused");
+        assert(job.update({ state: "done", summary: "Copied", actions: [], announce: true }), "update() to done: taken");
+        const ended = handleRecords(jobNumber).slice(-1)[0];
+        assertEqual([job.state, job.open, ended?.state, ended?.expireTime, ended?.announce, ended?.actions.length].join("|"), "done|true|done|-1|2|0",
+                    "done: still open, its toast takes the user's time (-1), announced");
+        assert(!job.update({ progress: 50 }), "after an end state update() is refused");
+        job.close();
+        assertEqual([job.state, job.open, dismissed, handleRecords(jobNumber).slice(-1)[0]?.kind].join("|"), "closed|false|0|close",
+                    "close(): closed, recorded, no onDismissed");
+        assert(ModuleTestKit.dismissNotification(jobNumber) !== "", "a closed one cannot be dismissed");
+        // Dismissed by the user (through the kit), a bad toast taken as "brief"
+        let secondDismissed = 0;
+        const second = module.notify("Syncing", { progress: -1, toast: "forever", onDismissed: () => secondDismissed++ });
+        const secondNumber = lastShown();
+        assertEqual(handleRecords(secondNumber)[0]?.toast + "|" + handleRecords(secondNumber)[0]?.expireTime + "|" + handleRecords(secondNumber)[0]?.progress,
+                    "brief|-1|-1", "a bad toast → brief (the user's time), a run of unknown length");
+        assertEqual(ModuleTestKit.dismissNotification(secondNumber), "", "ModuleTestKit.dismissNotification");
+        assertEqual([second.state, second.open, secondDismissed].join("|"), "closed|false|1", "… closed, its onDismissed once");
+        const afterDismissal = ModuleTestKit.notified.length;
+        assert(!second.update({ progress: 10 }), "… a later update refused");
+        assertEqual(ModuleTestKit.notified.length, afterDismissal, "… and nothing recorded");
+        assert(ModuleTestKit.dismissNotification(9999999) !== "" && ModuleTestKit.pressNotificationAction("x", "stop") !== "", "the kit: no such notification, refused");
+        // Through Api.notify too (no module: not closed with one)
+        const fromApi = Api.notify("From the API", { progress: 5 });
+        assert(fromApi !== null && fromApi.open, "Api.notify with progress: a handle");
+        fromApi.close();
+        // Left open: closed when the module is turned off (below)
+        _leftOpen = module.notify("Left open", { progress: 1 });
+        _leftOpenNumber = lastShown();
+        assert(_leftOpen.open, "a handle left open");
         ModuleTestKit.clearRecords();
 
         // --- helpers (API 1.12) ---
@@ -476,6 +542,10 @@ TestCase {
             assert(!ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "off: its widget is gone");
             assert(!ModuleTestKit.chooserOpen, "off: its chooser closed");
             assertEqual(ModuleTestKit.answerChooser("good", ["/srv/late"]), "no chooser is open", "… nothing left to answer");
+            assertEqual(_leftOpen.state + "|" + _leftOpen.open, "closed|false", "off: its progress notification left open is closed");
+            const closed = ModuleTestKit.notified.filter(entry => entry.handle === _leftOpenNumber && entry.kind === "close");
+            assert(closed.length === 1 || ModuleTestKit.notified.length === 0, "… and its close recorded (unless another suite cleared the records)");
+            assertEqual(module.notify("While off", { progress: 3 }), null, "off: a progress notification is not shown");
             assert(ModuleTestKit.setEnabled("good", true), "ModuleTestKit.setEnabled(good, true)");
         });
         _then("it is on again", () => module.active && ModuleTestKit.status("good")?.state === "loaded", () => {

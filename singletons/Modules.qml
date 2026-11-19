@@ -104,8 +104,9 @@ Singleton {
     Binding { target: ModuleLists; property: "factTypes"; value: _host.factTypes }
     Binding { target: ModuleLists; property: "factValues"; value: _host.factValues }
     Binding { target: ModuleLists; property: "settled"; value: _host.settled }
-    // Module test mode: notifications are recorded, never sent (Notifier.recorded)
-    Binding { target: Notifier; property: "recordOnly"; value: _host.testMode }
+    // Module test mode: notifications are recorded, never sent (Notifier.recorded) — except
+    // in a test tree that asks for them on its private bus (TestSeams.moduleNotify)
+    Binding { target: Notifier; property: "recordOnly"; value: _host.testMode && !TestSeams.moduleNotify }
 
     // Entering safe mode, once: a notification says so (`modules list` says why)
     property bool _safeModeNotified: false

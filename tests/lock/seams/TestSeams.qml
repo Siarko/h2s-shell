@@ -38,6 +38,7 @@ Singleton {
     readonly property int moduleGuardMs: _read.moduleGuardMs
     readonly property string moduleCheckPath: _read.moduleCheckPath
     readonly property int moduleCheckMs: _read.moduleCheckMs
+    readonly property bool moduleNotify: _read.moduleNotify
     readonly property bool fakeVpnProvider: _read.fakeVpnProvider
     // Module test mode (ModuleHost.testMode): on in every test tree, whatever the
     // environment holds — it is the tree, not a variable, that makes a run a test
