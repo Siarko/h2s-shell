@@ -707,6 +707,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - A notification from a module that sends plain text keeps the line breaks of its
   body instead of running every line into one.
+- An opened wired profile's or hotspot's card no longer leaves extra space under its last
+  row: it ends as far under it as its name is under the top.
 - A VPN's failure notification shows the provider's reason as written: a "<" or "&" in it
   is no longer read as markup.
 - A module's command run that is cancelled before its answer comes — one refused, or one

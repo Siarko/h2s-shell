@@ -1361,9 +1361,9 @@ TestCase {
             expect("Save's right", at(save).right, width - 8);
             expect("the field's right", at(field).right, at(save).x - 6);
             expect("the field at x", at(field).x, 8);
-        } else {
-            bottom += 6;
         }
+        // No row of the page's: nothing left under the card's own (an opened card ends 8
+        // under its last line)
         if (element) {
             expect("the module's element at y", at(element).y, bottom + 6);
             bottom = at(element).bottom;

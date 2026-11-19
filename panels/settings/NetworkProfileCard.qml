@@ -6,8 +6,10 @@ import qs.singletons.network
 
 // A saved connection profile on its kind's page (System → Network → Wi-Fi, Ethernet): its
 // name and a line about it, connect or disconnect at once, and, opened, edit connection and
-// forget (under that button), connect automatically and priority — plus what the page adds (its children, `pageRows`:
-// the Wi-Fi password). Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
+// forget (under that button), connect automatically and priority — plus what the page adds (its
+// children, the card's `content` after its own rows: the Wi-Fi password). The page's rows are
+// the card's rows, not a column of their own: with none, or none shown, nothing is left under
+// the card's own. Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
 // page offers ("" when there is none: out of range, no cable); disconnecting takes the
 // device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
 // entry (VpnManager) uses it too, as `external`: the page connects it, no editor, no delete.
@@ -54,8 +56,6 @@ SettingsCard {
     property string need: ""
     // Offer to connect at all (false: something else must be done first — `noticeAction`)
     property bool canUse: true
-    // The page's own settings, under the shared ones
-    default property alias pageRows: _extra.data
     signal forgotten()
     // Its addresses, DNS and the rest: the page opens NetworkConnectionEditor
     signal editRequested()
@@ -149,6 +149,10 @@ SettingsCard {
     // ── Its settings: the card's own rows, then the page's ──
     content: [
         SwitchRow {
+            id: _autoconnect
+            // Its 6 below only with a row under it: last, the card ends 8 under it, as its
+            // first line is 8 under the top
+            Layout.bottomMargin: parent && parent.visibleChildren[parent.visibleChildren.length - 1] === _autoconnect ? 0 : 6
             visible: root.showAutoconnect
             label: root.autoconnectLabel
             hint: root.autoconnectHint
@@ -197,13 +201,6 @@ SettingsCard {
                 available: !NetworkProfiles.busy && root.profile.priority < 999
                 onClicked: NetworkProfiles.setPriority(root.profile.uuid, root.profile.priority + 1)
             }
-        },
-
-        // The page's rows. Shown with none too: its place keeps 6 under the card's own rows
-        ColumnLayout {
-            id: _extra
-            Layout.fillWidth: true
-            spacing: 6
         }
     ]
 }

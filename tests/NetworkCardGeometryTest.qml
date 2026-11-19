@@ -89,6 +89,13 @@ TestCase {
                 autoconnectHint: "When the computer starts"
                 showPriority: false
                 editTooltip: "Name, password, band, and the addresses handed out"
+                // A row of the page's that is hidden (an open hotspot's password): no room
+                Rectangle {
+                    objectName: "hiddenPageRow"
+                    visible: false
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                }
             }
 
             // A VPN provider's entry, connected: its page's "Settings…", a notice with its
@@ -301,8 +308,8 @@ TestCase {
         }
 
         // Opened, the rows: each across the card, 6 under the one above (12 under the
-        // switch, which keeps 6 under itself); with no row of the page's, the place for them
-        // still keeps 6 under the card's own
+        // switch, which keeps 6 under itself while a row follows); with no row of the page's,
+        // nothing more under the card's own: the card ends 8 under its last line
         const rows = ["autoconnect", "priority", "pageRow"].filter(name => parts[name]);
         if (!open)
             assertEqual(rows.length, 0, where + ": no rows");
@@ -323,11 +330,9 @@ TestCase {
                 expectNear(parts[name].x, 8, name + " at the margin");
                 expectNear(parts[name].width, width - 16, name + " across the card");
                 expectNear(parts[name].y, bottom + 6, name + " 6 under what is above it");
-                bottom = parts[name].bottom + (name === "autoconnect" ? 6 : 0);
+                bottom = parts[name].bottom + (name === "autoconnect" && name !== rows[rows.length - 1] ? 6 : 0);
             }
         }
-        if (open && !parts.pageRow)
-            bottom += 6;
         expectNear(parts.card.width, width, "the card as wide as given");
         expectNear(parts.card.height, bottom + 8, "the card 8 under its last part");
     }
