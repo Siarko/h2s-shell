@@ -66,6 +66,11 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **A module's icon and marks on closed cards** (U7a, U7b, the agent's looks): 6 px between a
+  card's name and the first mark, 4 px between marks; icons in the name's colour, also on an
+  active card; a module without an icon shows the first letter of its name, upper case,
+  muted. Marks are on saved Wi-Fi and wired cards only (as the plan's table) — VPN cards too?
+
 - **A module's buttons in a card** (U6): the region forces size `m` (a module's `size: "s"`
   is overridden), reading the plan's "the size is m"; the alternative is `m` as the default
   and the module's choice kept. A long label is cut at a third of the card's width.
