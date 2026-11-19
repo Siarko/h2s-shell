@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import qs.api
 import qs.components
 import qs.singletons
+import qs.singletons.network
 
 // The anchor blocks and their hosts (components/AnchorBlock.qml, AnchorContent.qml,
 // SettingsPage.qml) on a fixture view, with a host of the suite's own (ModuleHost) and a
@@ -33,11 +34,16 @@ import qs.singletons
 // the last setting, their context; the settings window's General page with them, every place
 // in the table live and nothing else; another page and back, the window closed and opened,
 // over and over.
+//
+// The network and notifications popups as the popup's content loader holds them: where
+// their parts stand, with no module and with a fixture module's elements
+// (tests/fixtures/modules/anchors-popups) — the network popup in a network state the suite
+// holds (an Ethernet link up, Wi-Fi on and joined to nothing, a stand-in provider's two VPNs).
 TestCase {
     id: suite
     suiteName: "Anchors"
     asynchronous: true
-    timeLimitMs: 40000
+    timeLimitMs: 90000
 
     // A suite that must be done first
     property var after: null
@@ -155,6 +161,8 @@ TestCase {
     }
 
     function _end() {
+        _pinNetwork(false);
+        _fakeVpn?.destroy();
         for (const view of _views)
             view?.destroy();
         _views = [];
@@ -435,6 +443,206 @@ TestCase {
                 problems.push(row.name + " has no height");
         });
         return problems;
+    }
+
+    // ---- The popups: where their parts stand ----
+
+    // A popup's panel as the popup's content loader holds it (panels/Popup.qml: the panel's
+    // width its own, the base of its place given), in a layer surface in a corner
+    property Component _popupViewComponent: Component {
+        PanelWindow {
+            id: popupWindow
+
+            property string key: "network"
+            property url source
+            property real panelHeight: 0
+            property alias loader: popupContent
+
+            anchors {
+                top: true
+                right: true
+            }
+            implicitWidth: 420
+            implicitHeight: 1000
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Loader {
+                id: popupContent
+                property string anchorBase: "popup." + popupWindow.key
+                width: item ? item.implicitWidth : 0
+                height: popupWindow.panelHeight > 0 ? popupWindow.panelHeight : (item ? item.implicitHeight : 0)
+                source: popupWindow.source
+                onLoaded: {
+                    if (popupWindow.panelHeight > 0 && typeof item.availableHeight !== "undefined")
+                        item.availableHeight = popupWindow.panelHeight;
+                }
+            }
+        }
+    }
+    property var _popupView: null
+    property var _fakeVpn: null
+    // The network state the popup is measured in, held while _pinned: an Ethernet link up,
+    // Wi-Fi on but joined to nothing — what the panel would show with no NetworkManager
+    // gives way (its polls, with no bus here, keep resetting it)
+    property bool _pinned: false
+    property var _unpinned: null
+    readonly property var _pinnedState: ({ wifiAvailable: true, ethernetDevice: "eth-anchors", ethernetState: "connected",
+                                           ethernetConnection: "Wired test", wifiEnabled: true })
+
+    function _pin() {
+        if (!_pinned)
+            return;
+        for (const key of ["wifiAvailable", "ethernetDevice", "ethernetState", "ethernetConnection"]) {
+            if (NetworkManager[key] !== _pinnedState[key])
+                NetworkManager[key] = _pinnedState[key];
+        }
+        if (WifiManager.wifiEnabled !== _pinnedState.wifiEnabled)
+            WifiManager.wifiEnabled = _pinnedState.wifiEnabled;
+    }
+
+    function _pinNetwork(on) {
+        if (on && !_pinned) {
+            _unpinned = { wifiAvailable: NetworkManager.wifiAvailable, ethernetDevice: NetworkManager.ethernetDevice,
+                          ethernetState: NetworkManager.ethernetState, ethernetConnection: NetworkManager.ethernetConnection,
+                          wifiEnabled: WifiManager.wifiEnabled };
+            _pinned = true;
+            _pin();
+        } else if (!on && _pinned) {
+            _pinned = false;
+            for (const key of ["wifiAvailable", "ethernetDevice", "ethernetState", "ethernetConnection"])
+                NetworkManager[key] = _unpinned[key];
+            WifiManager.wifiEnabled = _unpinned.wifiEnabled;
+        }
+    }
+
+    function _networkPinned() {
+        return Object.keys(_pinnedState).every(key => (key === "wifiEnabled" ? WifiManager[key] : NetworkManager[key]) === _pinnedState[key]);
+    }
+
+    property Connections _pinNetworkManager: Connections {
+        target: NetworkManager
+        enabled: suite._pinned
+        function onWifiAvailableChanged() { suite._pin(); }
+        function onEthernetDeviceChanged() { suite._pin(); }
+        function onEthernetStateChanged() { suite._pin(); }
+        function onEthernetConnectionChanged() { suite._pin(); }
+    }
+    property Connections _pinWifiManager: Connections {
+        target: WifiManager
+        enabled: suite._pinned
+        function onWifiEnabledChanged() { suite._pin(); }
+    }
+
+    function _openPopupView(key, file, panelHeight) {
+        _popupView = _popupViewComponent.createObject(suite, { key: key, source: Qt.resolvedUrl(file), panelHeight: panelHeight ?? 0 });
+        _views.push(_popupView);
+    }
+
+    function _closePopupView() {
+        _close(_popupView);
+        _popupView = null;
+    }
+
+    // A popup panel's parts top to bottom, as { name, x, y, width, height } in the panel's
+    // coordinates: what stands in its columns, looked into through the columns, plain items,
+    // loaders and blocks that hold them (and the VPN part, a file of its own), never into a
+    // part. A part is named by its objectName, "modules" for a place modules fill, "list" for
+    // a list view, its file's
+    // type for a part in a file of its own, "divider" for a line, else its first text with a
+    // letter
+    function _popupParts(panel) {
+        const parts = [];
+        const typeOf = item => String(item).replace(/\(.*$/, "").replace(/_QML(TYPE)?_\d+$/, "");
+        const opens = item => item.isAnchorBlock === true || typeOf(item) === "VpnSection"
+            || /^QQuick(Column|ColumnLayout|Item|Loader)(_QML_\d+)?\(/.test(String(item));
+        const firstText = item => {
+            if (!item.visible)
+                return "";
+            if (typeof item.text === "string" && item.font !== undefined && /[A-Za-z]/.test(item.text))
+                return item.text;
+            for (const child of item.children ?? []) {
+                const text = firstText(child);
+                if (text !== "")
+                    return text;
+            }
+            return "";
+        };
+        const nameOf = item => {
+            if (item.contributions !== undefined)
+                return "modules";
+            if (item.objectName !== "")
+                return item.objectName;
+            if (item.model !== undefined && item.contentY !== undefined)
+                return "list";
+            if (/_QMLTYPE_\d+\(/.test(String(item)))
+                return typeOf(item);
+            if (item.border !== undefined && item.radius !== undefined && item.height === 1)
+                return "divider";
+            return "text " + firstText(item).slice(0, 18);
+        };
+        const walk = item => {
+            for (const child of item.children ?? []) {
+                if (!child.visible || child.width <= 0 || child.height <= 0)
+                    continue;
+                if (opens(child) && child.contributions === undefined) {
+                    walk(child);
+                    continue;
+                }
+                const point = child.mapToItem(panel, 0, 0);
+                parts.push({ name: nameOf(child), x: point.x, y: point.y, width: child.width, height: child.height });
+            }
+        };
+        walk(panel);
+        return parts.sort((a, b) => a.y - b.y || a.x - b.x);
+    }
+
+    // What is wrong with where the parts stand: `expected` [[name, the gap above it (from
+    // the top for the first), its inset from the sides]], each part as wide as the panel less
+    // its insets, the last reaching `bottom` when given — measured from each part's own
+    // height, so no font changes it
+    function _partsProblems(parts, expected, width, bottom) {
+        if (parts.map(part => part.name).join("|") !== expected.map(entry => entry[0]).join("|"))
+            return ["the parts: " + parts.map(part => part.name).join("|")];
+        const problems = [];
+        parts.forEach((part, index) => {
+            const [name, gap, inset] = expected[index];
+            const top = index === 0 ? gap : parts[index - 1].y + parts[index - 1].height + gap;
+            if (Math.abs(part.y - top) > 0.01)
+                problems.push(name + " at y " + part.y + ", not " + top);
+            if (Math.abs(part.x - inset) > 0.01)
+                problems.push(name + " at x " + part.x + ", not " + inset);
+            if (Math.abs(part.width - (width - 2 * inset)) > 0.01)
+                problems.push(name + " " + part.width + " wide, not " + (width - 2 * inset));
+        });
+        const last = parts[parts.length - 1];
+        if (bottom !== undefined && last && Math.abs(last.y + last.height - bottom) > 0.01)
+            problems.push(last.name + " ends at " + (last.y + last.height) + ", not " + bottom);
+        return problems;
+    }
+
+    function _describeParts(parts) {
+        return parts.map(part => part.name + " " + [part.x, part.y, part.width, part.height].map(Math.round).join(" ")).join(" · ");
+    }
+
+    // The network popup in the pinned state: the VPN part (its header, two VPNs — the first
+    // with its status line — each with the provider's extras under it, and its divider), the
+    // Ethernet link (its line, its details, a divider), the Wi-Fi line, modules' elements
+    // when there are some, the divider over the network list, and the list's header and rows
+    function _networkExpected(withModules) {
+        return [["text VPN", 0, 0], ["vpnRow", 4, 0], ["VpnExtras", 2, 0], ["vpnRow", 4, 0], ["VpnExtras", 2, 0], ["divider", 4, 0],
+                ["text Wired test", 6, 0], ["LinkInfo", 6, 0], ["divider", 6, 0], ["text WiFi", 6, 0]]
+            .concat(withModules ? [["modules", 6, 0]] : [])
+            .concat([["divider", 6, 0], ["text Available Networks", 6, 0], ["WifiNetworkList", 4, 0], ["HiddenNetworkRow", 4, 0]]);
+    }
+
+    // The notifications popup: its header 8 in from the sides, modules' elements under it as
+    // far in, the list under them to the panel's end
+    function _notificationsExpected(withModules) {
+        return [["text Notifications", 0, 8]].concat(withModules ? [["modules", 8, 8]] : [], [["list", 8, 0]]);
     }
 
     function _open(base) {
@@ -809,6 +1017,56 @@ TestCase {
             const status = Modules.status("anchors-general");
             assertEqual(status?.state + " " + status?.errors.length, "loaded 0", "no element failed meanwhile");
             Modules.host.unload();
+        });
+
+        // The popups: where their parts stand, with no module and with a module's elements
+        // (the same before and after they were built on the popup blocks)
+        _then("the shell's host is empty", () => Modules.host.statuses.length === 0, () => {
+            const component = Qt.createComponent("FakeVpnProvider.qml");
+            _fakeVpn = component.createObject(suite, { providerId: "anchors-vpn", withExtras: true });
+            _fakeVpn.add("one", "One");
+            _fakeVpn.add("two", "Two");
+            _fakeVpn.setStatus("one", "Via exit-1");
+            _pinNetwork(true);
+            _openPopupView("network", "../panels/NetworkPanel.qml");
+        });
+        _then("the network popup is laid out", () => _networkPinned() && _popupView.loader.item
+              && _popupParts(_popupView.loader.item).length === _networkExpected(false).length, () => {
+            const panel = _popupView.loader.item;
+            const parts = _popupParts(panel);
+            console.log("  INFO: the network popup's parts (x y width height): " + _describeParts(parts));
+            assertEqual(_partsProblems(parts, _networkExpected(false), panel.width).join("; "), "",
+                        "the network popup's parts: the VPN part 4 apart, the rest 6, all as wide as the panel");
+            Modules.host.load([fixtures + "/anchors-popups"], {});
+        });
+        _then("a module's elements in the network popup", () => _generalSettled() && _networkPinned()
+              && _popupParts(_popupView.loader.item).length === _networkExpected(true).length, () => {
+            const panel = _popupView.loader.item;
+            const parts = _popupParts(panel);
+            console.log("  INFO: … with a module's elements: " + _describeParts(parts));
+            assertEqual(_partsProblems(parts, _networkExpected(true), panel.width).join("; "), "",
+                        "… with a module's elements: under the Wi-Fi line, above the divider over the list, 6 apart");
+            _closePopupView();
+            _openPopupView("notifications", "../panels/NotificationPanel.qml", 600);
+        });
+        _then("the notifications popup is laid out, with the module's elements",
+              () => _popupView.loader.item && _popupParts(_popupView.loader.item).length === _notificationsExpected(true).length, () => {
+            const panel = _popupView.loader.item;
+            const parts = _popupParts(panel);
+            console.log("  INFO: the notifications popup's parts: " + _describeParts(parts));
+            assertEqual(_partsProblems(parts, _notificationsExpected(true), panel.width, 600).join("; "), "",
+                        "the notifications popup's parts: the header and the module's elements 8 in from the sides, 8 apart, the list to the end");
+            Modules.host.unload();
+        });
+        _then("the notifications popup with no module", () => Modules.host.statuses.length === 0 && _popupView.loader.item
+              && _popupParts(_popupView.loader.item).length === _notificationsExpected(false).length, () => {
+            const panel = _popupView.loader.item;
+            assertEqual(_partsProblems(_popupParts(panel), _notificationsExpected(false), panel.width, 600).join("; "), "",
+                        "… with no module: the list 8 under the header");
+            _closePopupView();
+            _pinNetwork(false);
+            _fakeVpn.destroy();
+            _fakeVpn = null;
         });
         _clock.start();
     }

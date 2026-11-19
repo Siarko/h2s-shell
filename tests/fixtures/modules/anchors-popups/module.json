@@ -1,0 +1,11 @@
+{
+    "id": "anchors-popups",
+    "name": "Anchors fixture popups",
+    "version": "1.0.0",
+    "api": "1.21",
+    "description": "Puts an element in the shell's network and notifications popups through their old slots",
+    "slots": [
+        { "slot": "network.popup.sections", "component": "Slot.qml" },
+        { "slot": "notifications.popup.top", "component": "Slot.qml" }
+    ]
+}
