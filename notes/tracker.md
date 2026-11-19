@@ -21,7 +21,7 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the module: off the shell's internals (M10), the last (M11)
+- [ ] the module: off the shell's internals (M10: done but the widget settings' pills, waiting for the public Pill's text size in core 1.32; then its mark on the popup's network rows), the last (M11)
 - [ ] the closing slice (Z), after the module is released
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
