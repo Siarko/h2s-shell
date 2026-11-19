@@ -775,3 +775,7 @@ For the owner, from the autonomous run (2026-11-18 on):
   silent). A Funnel left public after a wait now shows "Port N is public with something
   else on it." with a "Turn off Funnel" button, and a notice "Port N is public with
   something else on it. Turn Funnel off on Tailscale's page."
+- **Two bar entries of one widget type share one popup** (B1): clicking the second entry
+  while the first's popup is open closes it instead of switching to it (only hover
+  re-targets an open popup). Older than B1. Should a click on another entry switch the
+  popup?
