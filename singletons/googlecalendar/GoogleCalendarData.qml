@@ -201,20 +201,54 @@ Singleton {
         return result;
     }
 
+    // An event's key in a list: its calendar and its id. An id alone is not unique — an
+    // invitation is in each guest's calendar under the same id — and a repeated key would
+    // be told apart only by its place in the list (ListKeyRules), which changes.
+    function eventKey(event) {
+        return JSON.stringify([event?.calendarId ?? "", event?.id ?? ""]);
+    }
+
+    // The events with one key each: the first of each kept, in order (a multi-day event is
+    // listed on each of its days)
+    function uniqueEvents(events) {
+        const seen = Object.create(null);
+        return (events ?? []).filter(event => {
+            const key = eventKey(event);
+            if (seen[key])
+                return false;
+            seen[key] = true;
+            return true;
+        });
+    }
+
     // Where an edit is saved: `started` is { id, calendarId } of the event the edit was
     // started on, `eventsByDay` GoogleCalendar.events ({ dateKey: [event] }). → { eventId,
-    // calendarId, refusal }: the event the edit started on and nothing else, and only while
-    // that event is still in the calendar as loaded — gone (deleted elsewhere, or the
-    // calendar emptied), the save is refused with words for the form, refusal "" otherwise.
+    // calendarId, refusal }: the event the edit started on and nothing else (never another
+    // id), and only while that event is still in the calendar as loaded. In its own calendar
+    // it is saved there; moved to exactly one other calendar, it is saved there; found in
+    // several others, or not at all (deleted elsewhere, the calendar emptied), the save is
+    // refused with words for the form. refusal "" otherwise.
     function editSaveTarget(started, eventsByDay) {
         const refused = refusal => ({ eventId: "", calendarId: "", refusal: refusal });
         if (!started?.id)
             return refused("This event cannot be saved");
+        const startedCalendar = started.calendarId ?? "";
+        const otherCalendars = [];
         for (const dateKey in (eventsByDay ?? {})) {
-            const found = (eventsByDay[dateKey] ?? []).find(event => event?.id === started.id);
-            if (found)
-                return { eventId: started.id, calendarId: started.calendarId || found.calendarId || "", refusal: "" };
+            for (const event of (eventsByDay[dateKey] ?? [])) {
+                if (event?.id !== started.id)
+                    continue;
+                const calendarId = event.calendarId ?? "";
+                if (calendarId === startedCalendar)
+                    return { eventId: started.id, calendarId: calendarId, refusal: "" };
+                if (!otherCalendars.includes(calendarId))
+                    otherCalendars.push(calendarId);
+            }
         }
+        if (otherCalendars.length === 1)
+            return { eventId: started.id, calendarId: otherCalendars[0], refusal: "" };
+        if (otherCalendars.length > 1)
+            return refused("This event is now in more than one calendar");
         return refused("This event is no longer in the calendar");
     }
 }

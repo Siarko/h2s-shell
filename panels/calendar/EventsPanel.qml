@@ -47,14 +47,10 @@ Item {
     }
     property string viewMode: Config.gcal.viewMode
 
-    function _dedupById(events) {
-        let seen = {};
-        return events.filter(e => { if (seen[e.id]) return false; seen[e.id] = true; return true; });
-    }
-
     readonly property var _displayedEvents: {
         const events = _eventsOfView;
-        if (_editingEvent && !events.some(event => event.id === _editingEvent.id))
+        const editingKey = _editingEvent ? GoogleCalendarData.eventKey(_editingEvent) : "";
+        if (_editingEvent && !events.some(event => GoogleCalendarData.eventKey(event) === editingKey))
             return [_editingEvent].concat(events);
         return events;
     }
@@ -62,7 +58,9 @@ Item {
     KeyedModel {
         id: _eventsModel
         values: root._displayedEvents
-        keyProp: "id"
+        // The calendar with the id: one event id can be in two calendars (an invitation),
+        // and keys made unique by their place would follow the order, not the event
+        keyOf: event => GoogleCalendarData.eventKey(event)
     }
 
     readonly property var _eventsOfView: {
@@ -77,16 +75,16 @@ Item {
                 let key = CalendarDates.dateKey(d.getFullYear(), d.getMonth(), d.getDate());
                 result.push(...(root.calendar.events[key] ?? []));
             }
-            return _dedupById(result);
+            return GoogleCalendarData.uniqueEvents(result);
         }
         if (viewMode === "mon") {
             let days = new Date(displayYear, displayMonth + 1, 0).getDate();
             let result = [];
             for (let d = 1; d <= days; d++)
                 result.push(...(root.calendar.events[CalendarDates.dateKey(displayYear, displayMonth, d)] ?? []));
-            return _dedupById(result);
+            return GoogleCalendarData.uniqueEvents(result);
         }
-        return root.calendar.events[CalendarDates.dateKey(displayYear, displayMonth, selectedDay)] ?? [];
+        return GoogleCalendarData.uniqueEvents(root.calendar.events[CalendarDates.dateKey(displayYear, displayMonth, selectedDay)] ?? []);
     }
 
     // One banner at a time: switched off, not signed in, or the last load failed — each
@@ -311,7 +309,7 @@ Item {
             Layout.fillHeight: true
             clip: true
             spacing: 6
-            // Keyed by the event's id (GoogleCalendar builds new objects on every fetch): a
+            // Keyed by the event's calendar and id (GoogleCalendar builds new objects on every fetch): a
             // card keeps its event — an open edit with it — while events before it come
             // and go
             model: _eventsModel.model

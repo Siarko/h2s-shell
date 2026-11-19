@@ -60,6 +60,12 @@ TestCase {
         const odd = ListKeyRules.keyed([{ id: "constructor" }, { id: "toString" }], "id");
         assertEqual(odd.byKey["constructor"]?.id, "constructor", "byKey has no prototype: \"constructor\" is an item");
         assertEqual(ListKeyRules.keyed([{ id: "a" }], "id").byKey["toString"], undefined, "… and an absent key finds nothing");
+        const proto = ListKeyRules.keyed([{ id: "__proto__", name: "P" }, { id: "__proto__", name: "P2" }, { id: "constructor" }], "id");
+        assertEqual(JSON.stringify(proto.keys), "[\"__proto__\",\"__proto__#2\",\"constructor\"]", "\"__proto__\" is a key like any other, made unique when repeated");
+        assert(proto.byKey["__proto__"]?.name === "P" && proto.byKey["__proto__#2"]?.name === "P2" && Object.keys(proto.byKey).length === 3,
+               "… and byKey holds it as an item, not as a prototype");
+        const protoMerged = ListKeyRules.union(proto.byKey, ListKeyRules.keyed([{ id: "__proto__", name: "P3" }], "id").byKey);
+        assert(protoMerged["__proto__"]?.name === "P3" && protoMerged["constructor"]?.id === "constructor", "union: \"__proto__\" merged as an item");
         const merged = ListKeyRules.union({ a: 1, b: 2 }, { b: 3, c: 4 });
         assertEqual(JSON.stringify([merged.a, merged.b, merged.c]), "[1,3,4]", "union: both, the newer winning");
 

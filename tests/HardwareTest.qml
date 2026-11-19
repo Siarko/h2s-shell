@@ -46,5 +46,35 @@ TestCase {
         assertEqual(Hardware.displayLabel(labels, "ram"), " ", "a blank label stays blank");
         assertEqual(Hardware.displayLabel(labels, "disk"), "Disk", "no label: the source's own");
         assertEqual(Hardware.displayLabel(undefined, "disk"), "Disk", "no labels at all");
+
+        // --- a card's sources, keyed by slot ---
+        const savedCards = GpuDevices.cards;
+        try {
+            _cardSources();
+        } finally {
+            GpuDevices.cards = savedCards;
+        }
+    }
+
+    // Stand-in cards (paths that do not exist): nothing is read from a real card
+    function _card(number, slot, name) {
+        return { number: number, path: "/nonexistent/card" + number, slot: slot, name: name,
+                 vramTotal: 0, dedicated: false, tempPath: "" };
+    }
+
+    function _gpuLoad(slot) {
+        return Hardware.sources.find(source => source.sourceId === "gpu@" + slot) ?? null;
+    }
+
+    function _cardSources() {
+        GpuDevices.cards = [_card(0, "0000:11:00.0", "Integrated"), _card(1, "0000:03:00.0", "Dedicated")];
+        const integrated = _gpuLoad("0000:11:00.0");
+        const dedicated = _gpuLoad("0000:03:00.0");
+        assert(integrated !== null && dedicated !== null, "a card's sources per card");
+        // Read anew, the first card gone: new objects, the other card's data changed
+        GpuDevices.cards = [_card(1, "0000:03:00.0", "Dedicated, renamed")];
+        assert(_gpuLoad("0000:03:00.0") === dedicated && _gpuLoad("0000:11:00.0") === null,
+               "cards read anew: a card that stays keeps its sources, a card gone takes its own");
+        assertEqual(dedicated.label, "GPU 1 (Dedicated, renamed)", "… which show the card's new data");
     }
 }

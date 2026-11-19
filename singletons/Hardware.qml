@@ -2,6 +2,7 @@ pragma Singleton
 
 import Quickshell
 import QtQuick
+import qs.components
 import qs.singletons.hardware
 
 Singleton {
@@ -50,14 +51,19 @@ Singleton {
         return custom !== "" ? custom : (sourceForId(id)?.label ?? id)
     }
 
-    // Cards are found once, so this runs once, after GpuDevices has finished
+    // Cards are found once, so this runs once, after GpuDevices has finished. Keyed by PCI
+    // slot (the slot names the sources too): a card read anew keeps its sources.
+    KeyedModel {
+        id: _gpuCards
+        values: GpuDevices.cards
+        keyProp: "slot"
+    }
+
     Instantiator {
-        model: ScriptModel {
-            values: GpuDevices.cards
-        }
+        model: _gpuCards.model
         delegate: GpuCard {
-            required property var modelData
-            card: modelData
+            required property string modelData
+            card: _gpuCards.byKey[modelData]
         }
         onObjectAdded: (index, object) => {
             root._gpuSources = root._gpuSources.concat(object.sources)

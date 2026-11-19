@@ -307,16 +307,27 @@ Singleton {
         });
     }
 
-    // event: as for createEvent, with eventId
-    function updateEvent(event) {
+    // event: as for createEvent, with eventId. onDone(saved), when given, is called once
+    // with whether Google took the change: the form stays open on a failure.
+    function updateEvent(event, onDone) {
         const calendarId = event.calendarId || "primary";
         const body = _eventBody(event);
+        let reported = false;
+        const report = saved => {
+            if (reported)
+                return;
+            reported = true;
+            if (typeof onDone === "function")
+                onDone(saved);
+        };
         GoogleCalendarAuth.ensureAuthorized(() => {
             return GoogleCalendarApi.updateEvent(calendarId, event.eventId, body);
         }).then(() => {
+            report(true);
             _refreshMonthsOf(event);
         }).catch(e => {
             logger.error("updateEvent failed:", e);
+            report(false);
         });
     }
 

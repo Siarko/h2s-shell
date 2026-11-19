@@ -72,6 +72,10 @@ Rectangle {
     // The event an edit saves to, taken when the edit starts: the save never goes to
     // another one, whatever the card shows by then (GoogleCalendarData.editSaveTarget)
     property var _editStartedOn: null
+    // The save sent last, and whether its answer is awaited: the edit closes only once
+    // Google has taken the change. A new edit (or its end) makes an older answer stale.
+    property int _saveAttempt: 0
+    property bool _savePending: false
 
     // The summary row: as tall as its two lines need, never less than 50 px
     readonly property real _summaryHeight: Math.max(50, _summaryLines.implicitHeight + 12)
@@ -227,18 +231,33 @@ Rectangle {
                 _editForm.message = target.refusal;
                 return;
             }
+            // One save at a time: a second click while Google answers sends nothing
+            if (root._savePending)
+                return;
+            const attempt = ++root._saveAttempt;
+            root._savePending = true;
             root.calendar.updateEvent(Object.assign(event, {
                 year: root.displayYear, month: root.displayMonth,
                 eventId: target.eventId, calendarId: target.calendarId,
                 colorId: _editForm.selectedColorId || null,
-                rrule: _editForm.rrule || null }))
-            root.editing = false
+                rrule: _editForm.rrule || null }), saved => {
+                // An answer to an edit since cancelled or started anew changes nothing
+                if (attempt !== root._saveAttempt)
+                    return;
+                root._savePending = false;
+                if (saved)
+                    root.editing = false;
+                else
+                    _editForm.message = "Couldn't save the event";
+            })
         }
         onCancelled: root.editing = false
     }
 
     // Pre-fill edit form when editing begins
     onEditingChanged: {
+        root._saveAttempt++;
+        root._savePending = false;
         root._editStartedOn = editing ? { id: root.calendarEvent?.id, calendarId: root.calendarEvent?.calendarId } : null;
         if (editing) {
             _editForm.populate({

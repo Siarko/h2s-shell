@@ -655,6 +655,14 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Editing a calendar event while the calendar refreshes no longer moves the edit to another
   event's card, and Save no longer changes another event: an edit saves only to the event
   it was started on, and says so when that event has been deleted meanwhile.
+- Calendar: an event that Google refuses to save keeps its edit open with "Couldn't save the
+  event"; the edit closes only once the change is saved.
+- Calendar: an event moved to another calendar while it is edited is saved in the calendar
+  it is in now, not the old one; found in more than one other calendar, the save is refused
+  and the form says so.
+- Calendar: the same event in two calendars (an invitation) shows as two cards that no
+  longer swap when one of them is removed or the order changes — an open edit stays with
+  its own event and calendar.
 - A Wi-Fi password typed into a saved network's card in Settings stays with that network
   when the list is read again; it no longer moves to another network's card (and was saved
   there). A network that connects shows as connected at the top of the list.

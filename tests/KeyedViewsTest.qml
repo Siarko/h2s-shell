@@ -68,13 +68,29 @@ TestCase {
         return cards;
     }
 
-    function _savedNetworks() {
+    // The singletons' lists as they were before a check, put back after it however it ends
+    // (a check that stops early, or throws, included): later suites see them untouched
+    function _withSources(check) {
         const savedProfiles = NetworkProfiles.profiles;
         const savedWifi = NetworkProfiles.wifi;
+        const savedNetworks = WifiManager.wifiNetworks;
+        let view = null;
+        try {
+            check(created => view = created);
+        } finally {
+            if (view)
+                view.destroy();
+            NetworkProfiles.profiles = savedProfiles;
+            NetworkProfiles.wifi = savedWifi;
+            WifiManager.wifiNetworks = savedNetworks;
+        }
+    }
+
+    function _savedNetworks(keep) {
         const names = ["Home", "Cafe", "Office"];
         NetworkProfiles.wifi = _wifiDetails(names);
         NetworkProfiles.profiles = _wifiProfiles(names, "");
-        const page = _create("../panels/settings/NetworkWifiSettings.qml");
+        const page = keep(_create("../panels/settings/NetworkWifiSettings.qml"));
         if (!page)
             return;
         const before = _savedCards(page);
@@ -106,10 +122,6 @@ TestCase {
         after = _savedCards(page);
         assert(after["uuid-Office"] === office && after["uuid-Airport"] !== undefined && _find(after["uuid-Airport"], "wifiPassword").text === "",
                "Wi-Fi: one added — a new card for it, Office's kept");
-
-        page.destroy();
-        NetworkProfiles.profiles = savedProfiles;
-        NetworkProfiles.wifi = savedWifi;
     }
 
     // --- The network popup: the networks in range ---
@@ -127,10 +139,9 @@ TestCase {
         return rows;
     }
 
-    function _networksInRange() {
-        const savedNetworks = WifiManager.wifiNetworks;
+    function _networksInRange(keep) {
         WifiManager.wifiNetworks = _scan([["Home", 80], ["Cafe", 60], ["Office", 40]]);
-        const view = _create("../panels/network/WifiNetworkList.qml", { width: 300, maximumHeight: 600 });
+        const view = keep(_create("../panels/network/WifiNetworkList.qml", { width: 300, maximumHeight: 600 }));
         if (!view)
             return;
         const list = _find(view, "wifiNetworks");
@@ -152,13 +163,20 @@ TestCase {
         assert(after["Office"] === before["Office"] && after["Office"].network.inUse === true && after["Office"].network.signal === 90,
                "Wi-Fi list: re-sorted by signal — the row moves with its network and shows it in use (not stale)");
         assert(list.itemAtIndex(0) === before["Office"], "… at the top");
-
-        view.destroy();
-        WifiManager.wifiNetworks = savedNetworks;
     }
 
     function run() {
-        _savedNetworks();
-        _networksInRange();
+        _withSources(keep => _savedNetworks(keep));
+        _withSources(keep => _networksInRange(keep));
+        // The restore itself: a check that throws half-way still leaves the lists as they were
+        const before = NetworkProfiles.profiles;
+        try {
+            _withSources(() => {
+                NetworkProfiles.profiles = [{ uuid: "stand-in" }];
+                throw new Error("stopped early");
+            });
+        } catch (error) {
+        }
+        assert(NetworkProfiles.profiles === before, "a check that stops early: the sources are put back");
     }
 }
