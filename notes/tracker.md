@@ -23,8 +23,37 @@ four batches were not reviewed by a second agent and ran on the Arch machine onl
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
 installed shell into a test tree (below). Module test mode (A3), privileged start (A4) and
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
-with helpers (C1) and the notification (A6). Next: system facts (C2), then the module's
-M2 and M3 (privileged runs with a `what`, so the full prompt shows on a real run).
+with helpers (C1) and the notification (A6). System facts (C2) are on `master`. Next: the
+module's M2 and M3 (privileged runs with a `what`, so the full prompt shows on a real run).
+
+- [x] **API plan, C2 system facts and the data directory**: on `master` (2026-11-19; module
+      API 1.13; reviewed by a second agent on the diff, fixed by another author with cases
+      that fail before; `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS,
+      tools from nix — one lock-bed failure there, the whole bed passed twice on rerun; the
+      Tailscale module's suites pass; on the Arch machine the live shell made
+      `~/.local/share/h2s-shell/module-data/tailscale`, 700). `Api.system` (user name,
+      uid, host, home, XDG directories, runtime and download directory, `readIpForwarding()`,
+      `refresh()`; `SystemFactsRules`, `io/SystemFactsReader`, `SystemFacts`; a failed read
+      is `""` / `null`); `module.dataDirectory` made by the host before load: every part
+      from the data home down checked (owner user or root, not group/other-writable unless
+      root's and sticky, no links below the data home), `cd -P` then `chmod 700 .`; a root
+      or module directory others could write before is refused (the module loads with
+      `dataDirectory ""` and a warning); retried at each load and when a module is turned
+      on. `ModuleTestKit.setSystem`, a private temporary data home in test mode. C2's own
+      refusal of a privileged program inside the data root was removed (the owner's
+      decision: the shell does not judge commands); the docs say nothing there may run as
+      root. Left open:
+  - When the data directory cannot be made the module still loads (`dataDirectory ""`, a
+    warning); unknown uid is `null`; an unreadable `user-dirs.dirs` gives `""`, a missing
+    one `~/Downloads` (the agent's reading of "a failed read is unknown").
+  - No OS fact (NixOS/Arch) in `Api.system` (§3.7 lists none); the core's own
+    `Quickshell.env("HOME")` uses were not moved onto `SystemFacts`.
+  - The module's existing certificates live in `h2s-shell/tailscale/certs`; moving them to
+    the data directory is module work (M5).
+  - The test-mode temporary home is not removed by the shell (the runners remove their
+    private runtime directory).
+  - The lock scenario `restart-crash-locked` failed in three full runs today (Arch twice,
+    NixOS once probably), each time passing alone: a flaky scenario to look into.
 
 - [x] **API plan, C1 helpers and A6 the notification**: on `master` (2026-11-19; module API
       1.12; each reviewed by a second agent on the diff, fixed by other authors with cases
@@ -476,7 +505,7 @@ test queue; review what carries risk, look at one-line fixes yourself.
    - [x] privileged start (A4), the prompt says who and what for (A5)
    - [ ] shared module object
    - [x] helpers (C1)
-   - [ ] system and network facts
+   - [x] system facts (C2); network facts (D1) open
 4. UI anchors; today's slots (`components/ModuleSlot.qml`, `Api.slots`) moved onto them — open
 5. A module's public API for other modules, basic version — open
 6. Tailscale module migration — open
