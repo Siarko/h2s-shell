@@ -1996,3 +1996,22 @@ For the owner, from the autonomous run (2026-11-18 on):
   quarter of the card, the name cut first). Reviewed (low findings left for the next round);
   `tests/run-all.sh` passed on both machines.
 
+- **The owner's answers, second round (core)** — on `master` 2026-11-19, module API 1.29 and 1.30.
+  The Wi-Fi switch in the Wi-Fi page's heading (the "Off" row gone); a network card's buttons
+  in one row on the name line (main, Settings…/Edit — "Edit connection…" became "Edit" —,
+  the modules' actions, Forget/Delete), closed and open, moving under the name when they do
+  not fit and the main alone on a line when wider than the card; a long question wraps; the
+  actions region built while closed; `settings.network_vpn.vpns.card.title`; an element's own
+  width on a name line, full width elsewhere. 1.30: soft dependencies (`uses` entry
+  `{ version, optional: true }`; the dependent restarts when its provider comes or goes, its
+  users going first); the file chooser's title is the module's name when none, a lock answers
+  `blocked: "locked"`; a click on the other bar entry of one widget type switches the popup;
+  plain notification bodies trimmed and blank runs folded; toasts cut at six laid-out lines,
+  long words wrap. Each reviewed twice where the first review found something high;
+  `tests/run-all.sh` passed on both machines.
+- **"Send file…" from the popup (M8)** — on the module's `main` 2026-11-19. Picking files in
+  the shell's chooser leaves a row under the device with Send / ×, a progress bar and Cancel,
+  the result; the settings window does not open; one choice per device; a busy chooser says
+  so; both Taildrop dialogs through `module.chooseFiles`. Reviewed, fixed; suites, stand-ins
+  and lock bed passed on both machines (the lock bed against the core's new card row).
+

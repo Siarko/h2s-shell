@@ -21,8 +21,7 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the module: exit node per network on the cards (M7), "Send file…" through
-      the chooser (M8), the "for now" override (M9), off the shell's internals (M10), the
+- [ ] the module: exit node per network on the cards (M7), the "for now" override (M9), off the shell's internals (M10), the
       last (M11)
 - [ ] the closing slice (Z), after the module is released
 - [ ] a short independent review of what changed in the plan after its last review
