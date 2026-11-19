@@ -239,6 +239,11 @@ All by the owner, 2026-11-17.
   the same for several files. The settings window does not open (M8).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
+- Exit node "for now", details (2026-11-19): with no per-network choice for the networks up,
+  "Default" and a wake turn the exit node off; joining a network with its own choice while
+  "for now" lasts keeps the pick (only Default, restart or wake end it); only a pick in the
+  shell's chooser is "for now" (a change from the `tailscale` command is not); a network set
+  to "No exit node" shows no mark on its card.
 - No terminal setting of its own: a global "default programs" setting later.
 - (Temporary, see "Module authors" and "Trust" below.) Modules closed for now = the trust model written down honestly (a module runs in the shell's process, which also handles the lock screen's password and the polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a repository), the safe-mode banner. Later: NixOS option for modules, signatures.
 - Coding is done by strong models only; no weaker models for mechanical moves.
