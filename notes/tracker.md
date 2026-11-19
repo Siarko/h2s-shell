@@ -23,12 +23,21 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
 - [ ] the closing slice (Z), after the module is released
 
-### Next: planned and answered, to implement in a new session
+### In progress: notifications with a progress bar, Taildrop's list of transfers
 
-- [ ] Notifications with a progress bar (core, module API 1.33):
-      [plans/notification-progress.md](plans/notification-progress.md) — answered, ready.
-- [ ] Taildrop's list of transfers (module; its last slice needs the notification handle):
-      [plans/taildrop-transfers.md](plans/taildrop-transfers.md) — answered, ready.
+Done slices are in [done.md](done.md), "Notifications with a progress bar and Taildrop's
+list of transfers". Work branches: core `notif-progress`, module `taildrop-transfers`.
+
+- [ ] Notifications with a progress bar (core, module API 1.33,
+      [plans/notification-progress.md](plans/notification-progress.md)): left the progress
+      handle (N2), an announce brings the toast back (N4), `notify` returns the handle (N3).
+      Before N2: the runner's unlimited runs under `setpriv --pdeathsig` and an opt-in for
+      output after `cancel()` (found by D3; API 1.33).
+- [ ] Taildrop's list of transfers (module,
+      [plans/taildrop-transfers.md](plans/taildrop-transfers.md)): left the list on the page
+      (D4), several devices from the page (D8), the popup in two panels (D5), docs and the
+      real machine (D6), progress notifications (D7, after N3); after the core's
+      output-after-cancel: a save stopped after its rename reports "saved".
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
       review of each area's first slices
@@ -55,6 +64,23 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   value right-aligned, at most 220 px; no hover on the opening line; content not indented.
 
 **To decide**
+
+- **Taildrop words and choices not in the plan** (D1, agent's choice stands): a queued file
+  "Queued"; a running file of unknown size "Sending…" / "Saving…"; a failure without a reason
+  "Failed"; save reasons "Bad name", "Not fetched", "No free name"; a one-file title
+  "To laptop · 1 file". A file held back because the same name is already going to that
+  device waits while the files behind it may start (the plan says only "in order").
+- **Progress on a card** (N1, agent's choice stands): an action on a resident notification
+  keeps its entry for the default action and the inline reply too, not only the buttons.
+- **Taildrop sends, choices not in the plan** (D2, agent's choice stands): files the check
+  refuses become failed files with the reason ("Sent 2 of 6 to peer4"); request refusals
+  ("Needs the operator", "Device is offline") get their own line; the page's Cancel stops
+  every send and Clear removes all ended ones.
+- **Toasts and the sender's time, choices not in the plan** (N5, agent's choice stands): with
+  the limit of staying toasts reached, a staying toast at the head of the queue waits and later
+  ordinary toasts may show past it; in "One at a time" a toast with the app's own time takes the
+  one slot (it waits behind a shown ordinary toast); changing "Show each toast for" while a
+  toast counts restarts its count from full; the release holding it is a minor.
 
 ## Left open by done work
 
@@ -107,6 +133,29 @@ Still work or a known risk; the detail is in [done.md](done.md).
   (keep `LOCKTEST_KEEP=1` artifacts); QtTest's `'windowShown' of null` once.
 - The test tree's by-hand recipe (`tests/lock/README.md`) never run; `TestSeamsShapeTest`
   finds literal names only; O6 (lock tools from the trusted lookup) not built.
+
+**Notifications with a progress bar**
+- `shelltest.notificationState()` (N1) is live in the production shell like the other
+  `shelltest` functions and returns the summaries of held notifications to any process of
+  the user, also while locked; ids and progress only, or a gate, would be tighter.
+- A `value` below 0 gives a bar of unknown length for any sender; the plan meant that for
+  the shell's own sender only (other daemons clamp it).
+- No test drives the toast (`NotificationHudItem`) through `actionInvoked`.
+
+**Taildrop's list of transfers**
+- The popup row shows only the newest popup send per device: a second popup send queued
+  behind the first, Cancel stops the second, the first runs on unseen (until D5/D6's panels).
+- `TaildropLiveTest` "two-devices: both sent" timed out once (agents' tests side by side).
+- (notifications) A slot taking its next toast from `slideOut.onStopped` still holds its old
+  notification, so `nudge` and `slideIn` animate `x` at once (cosmetic, older than N5).
+- (notifications) That Quickshell emits `closed` before freeing a notification is assumed
+  (the slot's release on close is tested on stand-in objects only).
+- A save stopped (Skip, Cancel, logout) after its rename shows "Skipped" though the file was
+  saved: the runner passes no output after `cancel()` (core opt-in being added; then the
+  module wires it). A DELETE already sent to the daemon when an account switch starts cannot
+  be called back.
+- Unlimited runs (sends, saves) are not wrapped in `setpriv --pdeathsig`: a shell crash leaves
+  them running (core fix in progress).
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
