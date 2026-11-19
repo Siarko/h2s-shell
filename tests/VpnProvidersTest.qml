@@ -599,7 +599,7 @@ TestCase {
         const walk = node => {
             if (!node || found !== null)
                 return;
-            if (node.modelData !== undefined && node.modelData?.uuid === id && node.lockdownNote !== undefined) {
+            if (node.vpn !== undefined && node.vpn?.uuid === id && node.lockdownNote !== undefined) {
                 found = node;
                 return;
             }

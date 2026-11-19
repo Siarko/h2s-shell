@@ -52,16 +52,16 @@ PanelWindow {
     // Widgets are loaded by URL from WidgetRegistry, so what used to be declared on each
     // Component is set here, only where the widget has the property.
     //
-    // The preset binding must read through the delegate, not a captured modelData: the
-    // section is built before the config has loaded, and ScriptModel then updates the
-    // existing delegate's modelData in place rather than recreating it. A captured object
-    // keeps the empty profile from that first pass.
+    // The preset binding must read through the delegate, not a captured entry: the section
+    // is built before the config has loaded, and the delegate's `entry` then follows the new
+    // entry under the same key rather than being recreated. A captured object keeps the
+    // empty profile from that first pass.
     function _wireWidget(item, delegate) {
         if (typeof item.popup !== "undefined")
             item.popup = popupLoader
         if (typeof item.preset !== "undefined")
-            item.preset = Qt.binding(() => delegate.modelData.preset)
-        if (delegate.modelData.type === "notifications")
+            item.preset = Qt.binding(() => delegate.entry.preset)
+        if (delegate.entry.type === "notifications")
             bar.notifWidget = item
     }
 
@@ -110,8 +110,12 @@ PanelWindow {
     // One widget of a section, loaded by type
     component SectionWidget: Loader {
         id: widgetLoader
-        required property var modelData
-        readonly property bool leaving: modelData.leaving ?? false
+        // The entry's key, and the section's keyed entries it is looked up in: a widget
+        // stays with its entry while others are added or dropped before it
+        required property string modelData
+        property var entries: null
+        readonly property var entry: entries?.byKey[modelData] ?? ({})
+        readonly property bool leaving: entry.leaving ?? false
         // 0 to 1 as it grows in, back to 0 as it goes; drawn at full size meanwhile and
         // clipped, so its content does not squeeze
         property real _shown: bar._contentAnimated ? 0 : 1
@@ -141,21 +145,21 @@ PanelWindow {
         // By URL from WidgetRegistry; a module's widget gets its module's handle as `module`
         // before it completes. A type that is gone (its module turned off, uninstalled) leaves
         // the entry in its section and shows nothing; back, it shows again.
-        readonly property string _url: WidgetRegistry.widgetUrl(modelData.type)
+        readonly property string _url: WidgetRegistry.widgetUrl(entry.type ?? "")
         on_UrlChanged: _load()
         // The module looked up here, not bound: a binding of its own may not have caught up
         // when the URL changes
         function _load() {
-            const owner = WidgetRegistry.moduleOf(modelData.type)
+            const owner = WidgetRegistry.moduleOf(entry.type)
             if (_url === "")
                 source = ""
             else
                 setSource(_url, owner !== "" ? Modules.initialProperties(_url) : {})
         }
         onStatusChanged: {
-            const owner = WidgetRegistry.moduleOf(modelData.type)
+            const owner = WidgetRegistry.moduleOf(entry.type)
             if (status === Loader.Error && owner !== "")
-                Modules.reportError(owner, "widget " + modelData.type + ": " + _url + " could not be loaded")
+                Modules.reportError(owner, "widget " + entry.type + ": " + _url + " could not be loaded")
         }
         onLoaded: bar._wireWidget(item, widgetLoader)
     }
@@ -296,14 +300,11 @@ PanelWindow {
                 anchors.left: parent.left
                 anchors.top: parent.top
 
+                // Keyed by the entries' keys — "The Repeater crash" in docs/ARCHITECTURE.md
+                KeyedModel { id: _leftEntries; values: bar._leftShown; keyProp: "key" }
                 Repeater {
-                    // ScriptModel, never the bare array — see "The Repeater crash"
-                    // in docs/ARCHITECTURE.md
-                    model: ScriptModel {
-                        objectProp: "key"
-                        values: bar._leftShown
-                    }
-                    delegate: SectionWidget {}
+                    model: _leftEntries.model
+                    delegate: SectionWidget { entries: _leftEntries }
                 }
             }
 
@@ -311,14 +312,11 @@ PanelWindow {
             WidgetSection {
                 anchors.centerIn: parent
 
+                // Keyed by the entries' keys — "The Repeater crash" in docs/ARCHITECTURE.md
+                KeyedModel { id: _centerEntries; values: bar._centerShown; keyProp: "key" }
                 Repeater {
-                    // ScriptModel, never the bare array — see "The Repeater crash"
-                    // in docs/ARCHITECTURE.md
-                    model: ScriptModel {
-                        objectProp: "key"
-                        values: bar._centerShown
-                    }
-                    delegate: SectionWidget {}
+                    model: _centerEntries.model
+                    delegate: SectionWidget { entries: _centerEntries }
                 }
             }
 
@@ -327,14 +325,11 @@ PanelWindow {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
 
+                // Keyed by the entries' keys — "The Repeater crash" in docs/ARCHITECTURE.md
+                KeyedModel { id: _rightEntries; values: bar._rightShown; keyProp: "key" }
                 Repeater {
-                    // ScriptModel, never the bare array — see "The Repeater crash"
-                    // in docs/ARCHITECTURE.md
-                    model: ScriptModel {
-                        objectProp: "key"
-                        values: bar._rightShown
-                    }
-                    delegate: SectionWidget {}
+                    model: _rightEntries.model
+                    delegate: SectionWidget { entries: _rightEntries }
                 }
             }
         }

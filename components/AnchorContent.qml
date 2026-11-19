@@ -17,7 +17,8 @@ import qs.singletons
 // host has no size and builds nothing, not even its Repeater; a module turned off takes its
 // elements with it, turned on brings them back; `active` false (a closed card's region) does
 // the same. An element is the same delegate while its
-// module and file stay (ScriptModel keyed by ModuleMergeRules.contributionKey).
+// module and file stay, whatever comes and goes before it (a KeyedModel of
+// ModuleMergeRules.contributionKey).
 Item {
     id: root
 
@@ -54,6 +55,8 @@ Item {
     }
     readonly property var repeaterModel: _loader.item?.repeater.model ?? null
 
+    KeyedModel { id: _contributions; values: root.contributions; keyProp: "key" }
+
     visible: count > 0
     implicitWidth: count > 0 && _loader.item ? _loader.item.implicitWidth : 0
     implicitHeight: count > 0 && _loader.item ? _loader.item.implicitHeight : 0
@@ -69,22 +72,19 @@ Item {
 
             Repeater {
                 id: _repeater
-                // ScriptModel, never the bare array — "The Repeater crash" in
-                // docs/ARCHITECTURE.md; an element is the same delegate while its module and
-                // file stay
-                model: ScriptModel {
-                    objectProp: "key"
-                    values: root.contributions
-                }
+                // The contributions' keys — "The Repeater crash" in docs/ARCHITECTURE.md: an
+                // element is the same delegate while its module and file stay
+                model: _contributions.model
 
                 ModuleContribution {
-                    required property var modelData
+                    required property string modelData
+                    readonly property var contribution: _contributions.byKey[modelData] ?? ({})
                     host: root.host
-                    moduleId: modelData.module
-                    url: modelData.component
+                    moduleId: contribution.module ?? ""
+                    url: contribution.component ?? ""
                     anchor: root.path
                     placement: root.placement
-                    context: Object.assign({}, root.block?.context ?? {}, modelData.context ?? {}, { anchor: root.path, placement: root.placement })
+                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
                     width: root.width
                 }
             }

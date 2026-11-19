@@ -8,6 +8,8 @@ TestCase {
     suiteName: "SettingsPages"
 
     readonly property var _files: [
+        "Bar.qml",
+        "components/KeyedModel.qml",
         "components/ArrowButton.qml",
         "components/AudioChannelRow.qml",
         "components/BarWidget.qml",

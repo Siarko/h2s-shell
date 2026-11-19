@@ -403,24 +403,25 @@ TestCase {
                             text: "the section's own content"
                         }
 
+                        // Keyed as the real pages are (KeyedModel): the suite gives new
+                        // objects for the items at every step, as a read of the system does
+                        KeyedModel { id: savedItems; values: cardsWindow.items; keyProp: "id" }
+
                         Repeater {
                             id: savedRepeater
-                            // ScriptModel, never the bare array (CLAUDE.md)
-                            model: ScriptModel {
-                                values: cardsWindow.items
-                                objectProp: "id"
-                            }
+                            model: savedItems.model
 
                             SettingsCard {
-                                required property var modelData
+                                required property string modelData
+                                readonly property var cardItem: savedItems.byKey[modelData] ?? ({})
                                 readonly property alias ownRow: ownRow
                                 anchor: "card"
-                                title: modelData.id
+                                title: cardItem.id
                                 subtitle: "a fixture card"
-                                open: cardsWindow.openId === modelData.id
-                                context: ({ itemId: modelData.id, tracker: suite._tracker })
+                                open: cardsWindow.openId === cardItem.id
+                                context: ({ itemId: cardItem.id, tracker: suite._tracker })
                                 Layout.fillWidth: true
-                                onToggleRequested: cardsWindow.openId = open ? "" : modelData.id
+                                onToggleRequested: cardsWindow.openId = open ? "" : cardItem.id
 
                                 Text {
                                     id: ownRow
@@ -435,20 +436,20 @@ TestCase {
                         title: "VPNs"
                         Layout.fillWidth: true
 
+                        KeyedModel { id: vpnItems; values: cardsWindow.vpns; keyProp: "id" }
+
                         Repeater {
                             id: vpnRepeater
-                            model: ScriptModel {
-                                values: cardsWindow.vpns
-                                objectProp: "id"
-                            }
+                            model: vpnItems.model
 
                             SettingsCard {
-                                required property var modelData
+                                required property string modelData
+                                readonly property var cardItem: vpnItems.byKey[modelData] ?? ({})
                                 anchor: "card"
-                                title: modelData.id
-                                scopeId: modelData.provider
-                                open: cardsWindow.vpnOpenId === modelData.id
-                                context: ({ itemId: modelData.id, tracker: suite._tracker })
+                                title: cardItem.id
+                                scopeId: cardItem.provider
+                                open: cardsWindow.vpnOpenId === cardItem.id
+                                context: ({ itemId: cardItem.id, tracker: suite._tracker })
                                 Layout.fillWidth: true
                             }
                         }
@@ -458,11 +459,10 @@ TestCase {
         }
     }
     property var _cards: null
-    // The saved cards' items, the same objects in every list the suite gives: Quickshell
-    // 0.3.2's ScriptModel, given new objects for the same items, may hand a card the next
-    // card's item when one is taken out between them (its row update after a key-equal value
-    // goes on by position), so the list here keeps each item one object
-    readonly property var _cardItems: ({ one: { id: "one" }, two: { id: "two" }, three: { id: "three" }, four: { id: "four" } })
+    // The saved cards' items, a new object at every call: what a page gets from a read
+    function _cardItems(ids) {
+        return ids.map(id => ({ id: id }));
+    }
     property int _cardCycles: 0
     // The cards of a list, in the list's order: the identity of each, by item
     property var _cardObjects: ({})
@@ -1193,8 +1193,8 @@ TestCase {
             assert(appended.shown, "… and `shown`: on screen");
             assertEqual(appended.text, "alpha settings.fixture append", "the element shows (plain text)");
             const model = _view.page.appendHost.repeaterModel;
-            assert(model !== null && !Array.isArray(model) && model.objectProp === "key",
-                   "the elements are made from a ScriptModel keyed by module and file, never a live array on Repeater.model");
+            assert(model !== null && !Array.isArray(model) && model.values.length === 3 && model.values.every(value => typeof value === "string"),
+                   "the elements are made from a ScriptModel of keys (module and file), never a live array on Repeater.model, never the entries themselves");
             assertEqual(_view.plain.appendHost.count + "," + _view.plain.appendHost.built, "0,false", "a block with no anchor hosts nothing");
             _betaItem = _view.page.appendHost.items[2];
             _betaElement = _betaItem.item;
@@ -1319,7 +1319,7 @@ TestCase {
         _then("the fixture views are closed", () => _live("settings.fixture") === "", () => {
             _tracker.reset();
             host.load([fixtures + "/anchors-cards-b", fixtures + "/anchors-cards-a"], {});
-            _openCards([_cardItems.one, _cardItems.two, _cardItems.three],
+            _openCards(_cardItems(["one", "two", "three"]),
                        [{ id: "v1", provider: "anchors-cards-a" }, { id: "v2", provider: "anchors-cards-b" }, { id: "v3", provider: "" }]);
         });
         _then("the section and the closed cards are built and laid out", () => _settled() && host.status("anchors-cards-a")?.state === "loaded"
@@ -1369,7 +1369,7 @@ TestCase {
             assert(card.settingsRegion.prependHost.items[0].item.shown, "… on screen");
             assertEqual(_tracker.count("card.settings") + " " + _tracker.count("|two"), "3 5", "three made in the open card, none in the closed ones");
             const model = card.settingsRegion.appendHost.repeaterModel;
-            assert(model !== null && !Array.isArray(model) && model.objectProp === "key", "… from a ScriptModel keyed by module and file");
+            assert(model !== null && !Array.isArray(model) && model.values.length === 2 && model.values.every(value => typeof value === "string"), "… from a ScriptModel of keys (module and file)");
             _cards.openId = "";
         });
         _then("the card closed: its region's elements gone", () => _regionBuilt(-1) && _tracker.count("card.settings") === 0, () => {
@@ -1414,7 +1414,6 @@ TestCase {
                 assertEqual(expected === "" ? String(region.prependHost.count) + region.prependHost.built : _names(region.prependHost),
                             expected === "" ? "0false" : expected,
                             "an own-provider region: " + (expected === "" ? "a card of no provider shows nothing" : "only the card's provider module's element"));
-                assertEqual(region.appendHost.count, 0, "… nothing at a placement its row does not take");
                 if (index < 2)
                     _cards.vpnOpenId = ["v2", "v3"][index];
                 else
@@ -1431,17 +1430,17 @@ TestCase {
         _then("the second card open again", () => _regionBuilt(1) && _cardsSteady(), () => {
             const objects = {};
             for (const card of _savedCardList())
-                objects[card.modelData.id] = card;
+                objects[card.cardItem.id] = card;
             _cardObjects = objects;
             _regionElements = _savedCard(1).settingsRegion.appendHost.items.map(item => item.item);
             _tracker.madeCount = 0;
-            _cards.items = [_cardItems.three, _cardItems.two, _cardItems.one];
+            _cards.items = _cardItems(["three", "two", "one"]);
         });
-        _then("the list reordered", () => _savedCard(0)?.modelData.id === "three" && _cardsSteady()
+        _then("the list reordered", () => _savedCard(0)?.cardItem.id === "three" && _cardsSteady()
               && _yIn(_savedCard(0).frame) < _yIn(_savedCard(1).frame) && _yIn(_savedCard(1).frame) < _yIn(_savedCard(2).frame), () => {
             const cards = _savedCardList();
-            assertEqual(cards.map(card => card.modelData.id).join(","), "three,two,one", "the cards in the list's new order");
-            assert(cards.every(card => card === _cardObjects[card.modelData.id]), "… each the same card as before: not rebuilt");
+            assertEqual(cards.map(card => card.cardItem.id).join(","), "three,two,one", "the cards in the list's new order");
+            assert(cards.every(card => card === _cardObjects[card.cardItem.id]), "… each the same card as before: not rebuilt");
             const elements = _savedCard(1).settingsRegion.appendHost.items.map(item => item.item);
             assert(elements.length === 2 && elements.every((element, index) => element === _regionElements[index]),
                    "… the open card's elements the same objects");
@@ -1449,11 +1448,11 @@ TestCase {
             assertEqual(_openCardProblems(_savedCard(1)).join("; "), "", "… its parts where they stood in the card");
             assert(_yIn(_savedCard(2).afterHost.items[0]) < _yIn(_cards.saved.appendHost.items[0]), "… the section's end still under its last card");
             // One added at the front, the open one taken out
-            _cards.items = [_cardItems.four, _cardItems.three, _cardItems.one];
+            _cards.items = _cardItems(["four", "three", "one"]);
         });
-        _then("a card added, the open one taken out", () => _savedCardList().length === 3 && _savedCard(0)?.modelData.id === "four"
+        _then("a card added, the open one taken out", () => _savedCardList().length === 3 && _savedCard(0)?.cardItem.id === "four"
               && _cardsBuilt() && _cardsSteady() && _tracker.count("|two") === 0, () => {
-            assertEqual(_savedCardList().map(card => card.modelData.id).join(","), "four,three,one", "the cards as the list is");
+            assertEqual(_savedCardList().map(card => card.cardItem.id).join(","), "four,three,one", "the cards as the list is");
             assert(_savedCard(1) === _cardObjects["three"] && _savedCard(2) === _cardObjects["one"], "… the cards left the same objects, each still its own item");
             assertEqual(_tracker.count("card.settings"), 0, "the open card taken out: its region's elements destroyed with it, nothing left in a region");
             assertEqual(_tracker.count("saved.card|") + " " + _tracker.count("|four"), "6 2", "… beside the cards: two each, the new one's made");

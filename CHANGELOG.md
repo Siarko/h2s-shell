@@ -649,6 +649,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Turning a module on or off no longer rebuilds another module's element at the same place
+  (losing what it held); adding a widget to a bar section no longer reloads the widgets
+  after it, and the new one is the one that grows in.
 - Editing a calendar event while the calendar refreshes no longer moves the edit to another
   event's card, and Save no longer changes another event: an edit saves only to the event
   it was started on, and says so when that event has been deleted meanwhile.

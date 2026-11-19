@@ -41,6 +41,8 @@ Item {
     readonly property var _model: contributions.map(entry => Object.assign({ key: ModuleMergeRules.contributionKey(entry) }, entry))
     readonly property var _context: Object.assign({}, context ?? {}, { slot: name })
 
+    KeyedModel { id: _contributions; values: root._model; keyProp: "key" }
+
     visible: count > 0
     implicitWidth: count > 0 ? _grid.implicitWidth : 0
     implicitHeight: count > 0 ? _grid.implicitHeight : 0
@@ -53,18 +55,16 @@ Item {
 
         Repeater {
             id: _repeater
-            // ScriptModel, never the bare array — "The Repeater crash" in docs/ARCHITECTURE.md;
-            // a contribution is the same delegate while its module and file stay
-            model: ScriptModel {
-                objectProp: "key"
-                values: root._model
-            }
+            // The contributions' keys — "The Repeater crash" in docs/ARCHITECTURE.md: a
+            // contribution is the same delegate while its module and file stay
+            model: _contributions.model
 
             ModuleContribution {
-                required property var modelData
+                required property string modelData
+                readonly property var contribution: _contributions.byKey[modelData] ?? ({})
                 host: root.host
-                moduleId: modelData.module
-                url: modelData.component
+                moduleId: contribution.module ?? ""
+                url: contribution.component ?? ""
                 slot: root.name
                 context: root._context
                 width: root.orientation === Qt.Vertical ? _grid.width : implicitWidth
