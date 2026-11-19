@@ -2111,3 +2111,13 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `CommandRunnerTest`'s bare-run bounds allow Qt's coarse timers 5% early (the known flaky
   check failed steadily on the NixOS machine). Reviewed twice (a high each time), fixed;
   `tests/run-all.sh` passed on both machines.
+- **Saves per file, with progress, outside the lock (D3)** — on the module's `main` 2026-11-19.
+  One run per received file through `schedule` (`saveFileArgv`, `timeoutMs: 0`), progress from
+  the script's own lines, stall, Skip (left in the inbox, never auto-retried; Save by hand
+  still can), "Fetch now"; files arriving during a save join it. Save is off during an
+  account switch, login, logout or added account (`saveOffer`), saves are cancelled when one
+  starts and `waiting` is re-read after it. The inbox DELETE runs under `curl --max-time` 30 s
+  (on timeout `saved-kept`); the progress watcher ends the fetch and removes the staging
+  folder when its script is killed. The old whole-inbox `saveScript` and `timeLimits.save` are
+  gone. Reviewed, fixed; module suites and stand-ins on both machines, the module's lock bed on
+  NixOS. Only on stand-ins (no real curl / LocalAPI).
