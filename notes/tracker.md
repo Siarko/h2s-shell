@@ -64,6 +64,10 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **An opened network card with no page rows** (wired, hotspot) keeps 6 px of empty space at the
+  bottom, inherited from the old card and kept so the rebuilt card measures the same (U4b).
+  Remove it?
+
 - **Hover on warning and success buttons**: white text on `#e8a854` / `#44d47a`, about 2:1
   contrast (text wants 4.5:1). Dark text, or darker fills?
 - **A question in the confirm colour**: "Connect" on a network card and "Turn on" for a
