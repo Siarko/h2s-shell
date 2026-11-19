@@ -14,7 +14,10 @@ import qs.singletons
 // buttons stacked 4 apart under them on one right edge, the arrow at the right) and from
 // the sizes of the parts themselves, so they hold whatever the fonts; each card's numbers
 // are also printed ("geometry: …"), for comparing two versions of the card on one machine.
-// Then the header: a click asks to toggle, the pointer over it tints the card.
+// The card's wiring: the name is the profile's, one in use bold with the accent's border, the
+// notice's button waiting while busy; the shared card's stacked buttons on one right edge, one
+// that names only a vertical alignment too. Then the header: a click asks to toggle, the
+// pointer over it tints the card.
 TestCase {
     id: suite
     suiteName: "NetworkCardGeometry"
@@ -111,6 +114,18 @@ TestCase {
                     implicitHeight: 30
                     color: "transparent"
                 }
+            }
+
+            // The shared card with stacked buttons, one naming only a vertical alignment
+            SettingsCard {
+                id: alignedCard
+                width: suite.cardWidth
+                title: "Aligned"
+                primary: SmallButton { objectName: "alignedPrimary"; label: "Go" }
+                buttons: [
+                    SmallButton { objectName: "alignedTop"; label: "Top"; Layout.alignment: Qt.AlignTop },
+                    SmallButton { objectName: "alignedPlain"; label: "Plain" }
+                ]
             }
         }
     }
@@ -324,6 +339,16 @@ TestCase {
         assert(_settle(cards), "closed: the cards stand still");
         cards.forEach((card, index) => _check(card, kinds[index], false));
 
+        // The card's wiring (NetworkProfileCard on SettingsCard): the name is the profile's, a
+        // profile in use has its name bold and the border in the accent's colour
+        const wiredTitle = _find(wiredCard, item => item.text === "Wired" && item.label === undefined);
+        assert(wiredCard.title === "Wired" && wiredTitle !== null, "wiring: the wired card's name is its profile's (" + wiredCard.title + ")");
+        assert(wiredTitle !== null && wiredTitle.font.bold && Qt.colorEqual(wiredCard.frame.border.color, Theme.accent),
+               "wiring: a profile in use — its name bold, the border in the accent's colour");
+        const wifiTitle = _find(wifiCard, item => item.text === "Home" && item.label === undefined);
+        assert(wifiTitle !== null && !wifiTitle.font.bold && Qt.colorEqual(wifiCard.frame.border.color, Theme.outline),
+               "wiring: a profile not in use — its name plain, the border the outline's");
+
         // What each kind shows: the Wi-Fi network Connect, Edit connection… and Forget; the
         // wired profile in use Disconnect; the hotspot its asking Turn on; the provider
         // Disconnect, Settings…, the lock and the notice, no Edit connection… or Forget
@@ -339,6 +364,35 @@ TestCase {
                "hotspot open: its asking Turn on, Edit connection…, Forget, no priority");
         assert(provider.primary && provider.settings && !provider.edit && !provider.forget && provider.mark && provider.notice
                && !provider.autoconnect && provider.pageRow, "provider open: Disconnect, Settings…, the lock, the notice, the page's row");
+
+        // The notice's button waits while the card is busy, as its primary button does
+        const noticeButton = _find(providerCard, item => item.label === providerCard.noticeAction && typeof item.clicked === "function");
+        assert(noticeButton !== null && noticeButton.available, "wiring: the notice's button available while the card is not busy");
+        providerCard.busy = true;
+        assert(!noticeButton.available, "wiring: … unavailable while it is busy");
+        providerCard.busy = false;
+
+        // The shared card's stacked buttons: each on the primary controls' right edge, also one
+        // that names only a vertical alignment of its own
+        alignedCard.open = true;
+        let alignedLast = "";
+        const alignedSteady = () => {
+            _driver.wait(30);
+            const named = ["alignedPrimary", "alignedTop", "alignedPlain"].map(name => _rect(alignedCard, _find(alignedCard, item => item.objectName === name)));
+            const described = JSON.stringify(named);
+            const steady = named.every(rect => rect !== null) && described === alignedLast;
+            alignedLast = described;
+            return steady;
+        };
+        assert(_until(alignedSteady), "the shared card open, standing still");
+        const alignedPrimary = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedPrimary"));
+        const alignedTop = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedTop"));
+        const alignedPlain = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedPlain"));
+        assert(Math.abs(alignedPlain.right - alignedPrimary.right) < 0.6,
+               "a stacked button naming no alignment: on the primary's right edge (" + alignedPlain.right + ", " + alignedPrimary.right + ")");
+        assert(Math.abs(alignedTop.right - alignedPrimary.right) < 0.6,
+               "a stacked button naming only a vertical alignment: on the right edge too (" + alignedTop.right + ", " + alignedPrimary.right + ")");
+        alignedCard.open = false;
 
         // The header: a click on the name asks to toggle; the pointer over it tints the card
         cards.forEach(card => card.open = false);

@@ -178,7 +178,8 @@ AnchorBlock {
                             // edge; the gap above only when a button shows, so hidden
                             // ones take no room. A layout, not a positioner: it gives each
                             // button a whole width, so its edges stand on whole pixels. A
-                            // button that names no alignment of its own goes on the right.
+                            // button that names no horizontal alignment of its own goes on
+                            // the right (a vertical one it names is kept).
                             ColumnLayout {
                                 id: _buttons
                                 visible: root.open
@@ -188,8 +189,8 @@ AnchorBlock {
 
                                 onChildrenChanged: {
                                     for (const child of children) {
-                                        if (!child.Layout.alignment)
-                                            child.Layout.alignment = Qt.AlignRight;
+                                        if ((child.Layout.alignment & Qt.AlignHorizontal_Mask) === 0)
+                                            child.Layout.alignment = child.Layout.alignment | Qt.AlignRight;
                                     }
                                 }
                             }
