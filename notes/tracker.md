@@ -23,8 +23,39 @@ four batches were not reviewed by a second agent and ran on the Arch machine onl
 fifth and sixth were reviewed and ran on both machines. The test seams moved out of the
 installed shell into a test tree (below). Module test mode (A3), privileged start (A4) and
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
-with helpers (C1) and the notification (A6). System facts (C2) are on `master`. Next: the
-module's M2 and M3 (privileged runs with a `what`, so the full prompt shows on a real run).
+with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
+module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
+Next: B1, D1, E1 (facts lane), then P1/P2, the places lane, the remaining module slices.
+
+- [x] **Module M2 programs and test mode, M3 privileged with a `what`; core: an environment
+      for privileged runs in test mode**: on the module's `main` and core `master`
+      (2026-11-19; core module API 1.14, the module's manifest `api` 1.14, version still
+      0.6.0, nothing released; M2/M3 reviewed by a second agent on the diff — no high or
+      medium finding, fixes by another author with cases that fail before; the core slice
+      reviewed by the lead; core `tests/run-all.sh` passes on both machines; the module's
+      suites, `tools/test.sh` and its lock bed pass on Arch, tools from `PATH`, and on NixOS,
+      tools from nix). The module declares `optionalPrograms` and `testPrograms`
+      (stand-ins moved to `module/tests/stand-in`), takes paths and trust from
+      `module.programs`, uses `Api.system` for forwarding and the download folder, drops its
+      `H2S_*` reads and the transitional gate; every run as administrator goes through
+      `module.privileged.start` with a `what` (the words are under "Open points"),
+      `tailscale` must be trusted, results mapped by `TR.privilegedOutcome`, `blocked`
+      reasons in plain words. Older defects fixed on the way: the Funnel check after a wait
+      could ask for a password without a click (now it never prompts; a "Turn off Funnel"
+      button does), and a dismissed prompt there notified. A login cancelled before it ran
+      as root says "Login cancelled." Core: `options.environment` for
+      `module.privileged.start`, taken in module test mode only (refused outside). Left open:
+  - **For the core's `ModuleTestKit` (a later slice):** the module still has two test
+    helpers the kit should replace — `module/tests/ScenarioHandle.qml` (per-scenario
+    `module.programs` and "privileged unavailable", recording calls to the real
+    `privileged.start`) and `module/tests/liveSuites.js` (the live suites register so the
+    host suite waits before switching the polkit agent or turning the module off). Wanted:
+    per-suite program overrides and suites that run alone or after the others.
+  - The module's existing certificates stay in `h2s-shell/tailscale/certs` until M5.
+  - Only `tailscale` must be trusted now; a user-writable `timeout` no longer marks the
+    module "Not trusted" (the shell's own trusted `timeout` is used).
+  - The full prompt on a real Tailscale run has not been seen yet (to look at on both
+    machines).
 
 - [x] **API plan, C2 system facts and the data directory**: on `master` (2026-11-19; module
       API 1.13; reviewed by a second agent on the diff, fixed by another author with cases
@@ -738,3 +769,9 @@ For the owner, from the autonomous run (2026-11-18 on):
   "Changes that need an administrator are not offered: pkexec is still being looked for.";
   a user-writable `timeout` no longer marks the module "Not trusted" (the shell's own
   trusted `timeout` is used).
+- **Tailscale module, plain words for a refused run** (M3 review fixes): "It was not run as
+  administrator: the command holds characters that can't be shown" (unprintable), "… it
+  doesn't say what it is for" (no purpose), "… the screen is locked" (locked; normally
+  silent). A Funnel left public after a wait now shows "Port N is public with something
+  else on it." with a "Turn off Funnel" button, and a notice "Port N is public with
+  something else on it. Turn Funnel off on Tailscale's page."
