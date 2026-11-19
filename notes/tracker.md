@@ -82,17 +82,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
     administrator are not offered: pkexec is still being looked for." (just after start).
   - Funnel left public after a wait: "Port N is public with something else on it." with
     "Turn off Funnel", and the notice "… Turn Funnel off on Tailscale's page."
-- **Network facts** (D1): `Api.localNetworks` includes Docker and libvirt bridges — leave
-  them out? The `kind` words (wifi, ethernet, bridge, modem, other); left out: loopback,
-  tun, wireguard, vpn, ip-tunnel, wifi-p2p. `setsDns` = "has DNS servers of its own while
-  up", not "takes over DNS".
-- **The file chooser** (E1): whichever dialog the platform theme gives, not forced to Qt's
-  own (the lead's reading of "the system's dialog"); an empty title shows Qt's default —
-  the module's name instead?; a lock reads as `cancelled`, like the user cancelling.
-- **Dependencies between modules** (P1): a malformed `exports` / `uses` fails the whole
-  module; a function a dependent handed its provider may be called after the dependent is
-  off (the dependent's job, says `Api.qml`); a provider whose main failed stays failed
-  until turned off and on.
 - **Spacing in a settings page** (U1a, from the old General slot): 16 px between the page
   and the module hosts before and after it, 4 px between elements in a host. Status texts
   quote paths in JSON quotes, not backticks.
@@ -259,7 +248,20 @@ All by the owner, 2026-11-17.
   code; a module may choose among the theme's sizes (small, body). M10 keeps to it.
 - Two bar entries of one widget type (2026-11-19): a click on the second switches the popup
   to it, as hover does (a fix to make).
-- No data migrations while the shell is in development (2026-11-19): a module does not move or convert data left by its earlier versions (e.g. the Tailscale module's certificates start fresh in its data directory).
+- Data migrations while the shell is in development (2026-11-19): before writing one, check whether the feature is in use (on both machines, as was done for the Tailscale certificates: no old folder anywhere). Not in use → no migration. In use → ask the owner.
+- The module API is agnostic (2026-11-19): it is not built for the Tailscale module; it
+  gives modules as wide an access as it can, and Tailscale is one user of it. So network
+  facts keep Docker/libvirt bridges (`kind: "bridge"`), the kinds and left-out types as built,
+  `setsDns` = "has DNS servers of its own while up".
+- The file chooser (2026-11-19): the platform theme's dialog (as built); an empty title shows
+  the module's name; a lock closing it answers `blocked: "locked"`, told apart from the user
+  cancelling (a change to make).
+- Dependencies between modules (2026-11-19): soft and hard. Hard = a requirement (today's
+  `uses`: missing → `missing-module`). Soft = the module loads anyway, after the provider when
+  it is there, and integrates with it optionally (its `uses` entry is null without it). Soft
+  dependencies are to be added. P1's other choices stand (a malformed entry fails the module;
+  a function handed to a provider is the dependent's job; a failed provider stays failed
+  until turned off and on).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
