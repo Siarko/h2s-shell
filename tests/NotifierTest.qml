@@ -44,6 +44,19 @@ TestCase {
         assertEqual(Notifier.plainText(Array(20).fill("x").join("\n"), 1000, 20).split("\n").length + " " + Notifier.plainText(Array(20).fill("x").join("\n"), 1000, 20).endsWith("…"),
                     "20 false", "plainText (lines): 20 lines, kept whole");
         assertEqual(Notifier.plainText("ab\nc", 2, 1), "a…", "plainText (lines): a line cut that meets the character cap stays within it");
+        assertEqual(JSON.stringify(Notifier.plainText("error: x\n", 1000, 20)), JSON.stringify("error: x"), "plainText (lines): a closing line break makes no empty line");
+        assertEqual(JSON.stringify(Notifier.plainText(" \n\t\r\n  a\n  b  \n \n\n", 1000, 20)), JSON.stringify("a\n  b"),
+                    "plainText (lines): white space and line breaks at the start and end dropped, an inner line's indent kept, its trailing spaces dropped");
+        assertEqual(JSON.stringify(Notifier.plainText("a\n\n\n \n\t\nb\n\nc", 1000, 20)), JSON.stringify("a\n\nb\n\nc"),
+                    "plainText (lines): a run of blank lines (white space only too) kept as one");
+        assertEqual(JSON.stringify(Notifier.plainText("a\n\u0007\nb", 1000, 20)), JSON.stringify("a\n\nb"),
+                    "plainText (lines): a line of only a control character is blank once it is dropped");
+        const twentyAndBreak = Array.from({ length: 20 }, (_, i) => "line" + (i + 1)).join("\n") + "\n";
+        assertEqual(Notifier.plainText(twentyAndBreak, 1000, 20).split("\n").length + " " + Notifier.plainText(twentyAndBreak, 1000, 20).endsWith("…"), "20 false",
+                    "plainText (lines): exactly 20 lines and a closing \"\\n\": kept whole, no …");
+        const blanksBetween = Array.from({ length: 20 }, (_, i) => "line" + (i + 1)).join("\n\n\n");
+        assertEqual(JSON.stringify(Notifier.plainText(blanksBetween, 1000, 20).split("\n").slice(-2)), JSON.stringify(["", "line10…"]),
+                    "plainText (lines): folded blank lines still count, one each; a cut on a blank line puts the … on the line before");
         assertEqual(Notifier.plainText("a\nb", 100, 0) + "|" + Notifier.plainText("a\nb", 100), "a b|a b", "plainText: no lines given, one line");
 
         // --- prepared: format "plain" ---

@@ -753,7 +753,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   open switches the popup to it, as hovering does, instead of closing it; only the entry
   that opened the popup shows as active.
 - A notification from a module that sends plain text keeps the line breaks of its
-  body instead of running every line into one.
+  body instead of running every line into one; empty lines at its start and end are dropped
+  and a run of empty lines shows as one.
 - An opened wired profile's or hotspot's card no longer leaves extra space under its last
   row: it ends as far under it as its name is under the top.
 - A VPN's failure notification shows the provider's reason as written: a "<" or "&" in it

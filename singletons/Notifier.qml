@@ -61,8 +61,10 @@ Singleton {
     // (PrivilegedRules.unprintableCode: C0, DEL, C1, a right-to-left override, a zero-width
     // joiner), at most `cap` characters, counted by code point. With `lines` 0 or absent one
     // line (line breaks, tabs, U+2028/2029 as spaces); with `lines` > 0 line breaks kept as
-    // "\n" (CR, CRLF, NEL, U+2028/2029), tabs as spaces, at most `lines` lines (cut with "…").
-    // Not a string or a number: ""
+    // "\n" (CR, CRLF, NEL, U+2028/2029), tabs as spaces, at most `lines` lines (cut with "…"),
+    // counted after the text is tidied: white space at its start and end dropped (so a
+    // command's closing "\n" makes no empty line), each line's trailing spaces dropped, and a
+    // run of blank lines kept as one. Not a string or a number: ""
     function plainText(value, cap, lines) {
         if (typeof value !== "string" && typeof value !== "number")
             return "";
@@ -73,10 +75,17 @@ Singleton {
         let characters = PrivilegedRules.characters(folded).filter(character => character === "\n" || !PrivilegedRules.unprintableCode(character.codePointAt(0)));
         let cut = false;
         if (maxLines > 0) {
+            const tidied = characters.join("").split("\n").map(line => line.replace(/\s+$/, ""))
+                .filter((line, index, all) => line !== "" || (index > 0 && all[index - 1] !== ""))
+                .join("\n").trim();
+            characters = PrivilegedRules.characters(tidied);
             let breaks = 0;
             const end = characters.findIndex(character => character === "\n" && ++breaks === maxLines);
             if (end >= 0) {
                 characters = characters.slice(0, end);
+                // The "…" goes on the last line with text, not alone on a blank one
+                while (characters.length > 0 && characters[characters.length - 1] === "\n")
+                    characters.pop();
                 cut = true;
             }
         }
