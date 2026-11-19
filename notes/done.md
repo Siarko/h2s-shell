@@ -1891,3 +1891,13 @@ For the owner, from the autonomous run (2026-11-18 on):
   hotspot"; notifications popup — header and "Clear all" 8 px in, the list filling to the
   bottom and scrolling, cards sliding in and out, "All caught up" after Clear all then the
   popup closing; moving the pointer between bar cells with a popup open.
+
+- **The section and the card, on a fixture view (U4a)** — on `master` 2026-11-19, no API
+  change. `components/SettingsSection.qml` (before, title + buttons, prepend, content,
+  append, after), `components/SettingsCard.qml` (frame ported from `NetworkProfileCard`; a
+  `settings` region shown only while open; scope from the card), `AnchorContent.active`,
+  region paths in `ModuleRules.anchorBlockPaths`. Reviewed on the diff; `tests/run-all.sh`
+  passed on both machines. The review confirmed a Quickshell 0.3.2 `ScriptModel` defect
+  (rows replaced by position for rebuilt objects) exposing several of the shell's lists;
+  fixed separately (string-key models).
+
