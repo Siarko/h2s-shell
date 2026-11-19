@@ -7,7 +7,7 @@ import qs.components
 // animations, and auto-dismiss timer. Hud stacks several of them: those that count down
 // newest on top, as many as the layout has slots ("notifications.toastLayout"), and the
 // toasts that stay above them; every free slot takes the next notification that has room
-// from the shared queue (Notifications.dequeueHudNotification), and Hud works out its
+// from the shared queue (Notifications.takeHudNotification), and Hud works out its
 // place (stackY).
 Item {
     id: root
@@ -63,7 +63,7 @@ Item {
     // Consume the next item from the shared queue and start the slide-in
     function showNext() {
         // Taking one changes the queue, which asks every free slot — this one too — to take
-        // one: this slot is busy with the first
+        // one: this slot is busy with the first (Notifications counts it as shown already)
         if (_taking)
             return;
         if (Notifications.hudPanelOpen || !slotEnabled) {
@@ -71,7 +71,7 @@ Item {
             return;
         }
         _taking = true;
-        const notif = Notifications.dequeueHudNotification();
+        const notif = Notifications.takeHudNotification();
         _taking = false;
         if (!notif) {
             currentNotif = null;
@@ -82,7 +82,6 @@ Item {
         remaining = 1.0;
         _shownId = notif.id;
         _generation++;
-        Notifications.toastShown(notif.id, Notifications.toastTiming(notif));
         Qt.callLater(() => root._placing = false);
         slideIn.start();
     }
@@ -115,6 +114,19 @@ Item {
     onCurrentNotifChanged: {
         if (currentNotif === null)
             _leave();
+    }
+
+    // Its notification closed while shown (its sender closed it, or it was dismissed in the
+    // centre): Quickshell then frees the object, and a var holding it reads null with no
+    // change signal — so the toast goes now, or one waiting behind it would never count
+    Connections {
+        target: root.currentNotif?.closed !== undefined ? root.currentNotif : null
+        ignoreUnknownSignals: true
+
+        function onClosed() {
+            if (root._shownId >= 0)
+                root.dismiss();
+        }
     }
 
     // Gone without leaving — a reload rebuilding the HUD — it must still come off the list,

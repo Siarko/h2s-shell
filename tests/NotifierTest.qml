@@ -286,6 +286,49 @@ TestCase {
                "setting off: expire 0 counts the user's time; 30 s waits its turn like any other");
         clear();
 
+        // --- a notification closed while its toast waits its turn: the next still counts ---
+        settings({ "notifications.toastLayout": "column", "notifications.toastColumnSize": 3 });
+        const counter = show(standIn(-1));
+        const closedOne = show(standIn(-1));
+        const behind = show(standIn(-1));
+        const closedId = closedOne.currentNotif.id;
+        closedOne.currentNotif.closed(1);
+        assert(!Notifications.shownToasts.includes(closedId), "closed by its sender: off the list of shown toasts");
+        counter.dismiss();
+        assert(counting(behind), "the counting one leaving: the one behind the closed one counts");
+        clear();
+
+        // --- a backlog draining at once (each take makes every free slot take): never past the room ---
+        const drain = (change, queue, check, message) => {
+            settings(change);
+            const drainSlots = [];
+            for (let i = 0; i < 15; i++) {
+                // On the toasts' screen (none here, ""), so a change of the queue reaches them
+                const slot = _slot.createObject(suite, { screenModelData: { name: Notifications.toastScreen } });
+                slot.slotEnabled = Qt.binding(() => i < Notifications.toastRoom.total);
+                made.push(slot);
+                drainSlots.push(slot);
+            }
+            Notifications.hudQueue = queue.map(expire => standIn(expire));
+            const onScreen = drainSlots.filter(slot => slot.currentNotif !== null && slot._shownId >= 0).length;
+            const staying = Notifications.stayingToasts.length;
+            const others = Notifications.shownToasts.length - staying;
+            assert(check(others, staying) && onScreen === Notifications.shownToasts.length,
+                   message + " (" + others + " counting, " + staying + " staying, " + onScreen + " slots showing, "
+                   + Notifications.hudQueue.length + " waiting)");
+            clear();
+            // This round's free slots take nothing in the next
+            for (const slot of drainSlots)
+                slot.slotEnabled = false;
+        };
+        drain({}, [-1, -1, -1], (others, staying) => others === 1 && staying === 0, "one at a time: three at once, one shows");
+        drain({ "notifications.toastLayout": "column", "notifications.toastColumnSize": 3 }, [-1, -1, -1, -1, -1],
+              (others, staying) => others === 3, "a column of 3: five at once, three show");
+        drain({ "notifications.maxStayingToasts": 1 }, [0, 0, 0, -1], (others, staying) => others === 1 && staying === 1,
+              "at most 1 that stays: three that stay and one more, one of each shows");
+        drain({ "notifications.followSenderTime": false }, [0, 3000, -1], (others, staying) => others === 1 && staying === 0,
+              "\"Apps choose how long\" off: one at a time, one shows");
+
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();
@@ -354,6 +397,7 @@ TestCase {
             property bool resident: false
             property bool tracked: true
             property int dismissCalls: 0
+            signal closed(int reason)
             function dismiss() {
                 dismissCalls++;
                 tracked = false;

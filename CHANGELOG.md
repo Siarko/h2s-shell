@@ -689,6 +689,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A critical notification's toast no longer holds the layout's place (in "One at a time" it
+  held back every later toast until dismissed): it stacks above the toasts that count down,
+  in both layouts, with the other toasts that stay.
 - Settings → System → Network → Wi-Fi: the Wi-Fi switch is on the page's heading; the
   "Wi-Fi" row under it is gone.
 - Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand

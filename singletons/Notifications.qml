@@ -238,13 +238,16 @@ Singleton {
     }
 
     // The next toast a free slot shows: the oldest waiting that has room on screen
-    // (ToastRules.nextToast) — or null, and those waiting go on waiting
-    function dequeueHudNotification() {
-        const index = ToastRules.nextToast(hudQueue.map(notification => toastTiming(notification).kind),
-            shownToasts.length - stayingToasts.length, toastRoom);
+    // (ToastRules.nextToast) — or null, and those waiting go on waiting. Taken and put on
+    // the list of shown toasts in one step, before the queue changes: a change of the
+    // queue makes every other free slot take one at once, and each must count this one.
+    function takeHudNotification() {
+        const kinds = hudQueue.map(notification => toastTiming(notification).kind);
+        const index = ToastRules.nextToast(kinds, shownToasts.length - stayingToasts.length, toastRoom);
         if (index < 0)
             return null;
         const item = hudQueue[index];
+        toastShown(item.id, toastTiming(item));
         hudQueue = hudQueue.slice(0, index).concat(hudQueue.slice(index + 1));
         return item;
     }
