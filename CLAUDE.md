@@ -112,10 +112,14 @@ ticks, cells respond to clicks, and popups toggle.
   Loop indices (`i`, `j`) are the exception.
 - **Comments in English**, explaining *why* rather than restating the code.
 - **Never bind a live reactive array directly to `Repeater.model`** — it crashes
-  Quickshell. Use `ScriptModel { values: … }`, with `objectProp` as the identity key
-  where delegates should be reused. This and the rule that popup content is created via
+  Quickshell. Use a `ScriptModel`. This and the rule that popup content is created via
   `Qt.callLater` in `Popup.qml` are the fix for months of random SIGSEGVs — read "The
   Repeater crash" in `docs/ARCHITECTURE.md` before touching either.
+- **A `ScriptModel` takes strings (or QObjects), never JS objects built anew on each
+  read**: for a list of records use `components/KeyedModel.qml` (a ScriptModel of string
+  keys) and let the delegate look its item up by key (`list.byKey[modelData]`). Quickshell
+  0.3.2 puts rebuilt objects into rows by position — even with `objectProp` — so a
+  delegate's state ends up with another item (`notes/upstream/quickshell-scriptmodel-replace.md`).
 - **Never start a `Process` with a declarative `running: true`** — Quickshell writes
   `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
   `Timer`.

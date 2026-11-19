@@ -207,8 +207,8 @@ The bar is three sections, each a profile setting — `bar.left`, `bar.center`,
 ```
 
 `ProfileRules.sectionModel()` gives each entry a key that only changes with the entry, a
-`Repeater` over a `ScriptModel { objectProp: "key" }` drives a `Loader` per entry (so a
-profile change elsewhere keeps the widgets), and the `Loader` gets the widget's file from
+`Repeater` over a `KeyedModel` of those keys drives a `Loader` per entry (so a profile
+change elsewhere, or a widget added before it, keeps the widgets), and the `Loader` gets the widget's file from
 `WidgetRegistry.widgetUrl(type)`. Geometry is `bar.layout.*`, popup mode is
 `widgets.<type>.popupMode`.
 
@@ -256,10 +256,35 @@ they only deferred *setting the model*, not *creating the Repeater*.
 `_ready` guard set via `Qt.callLater`, as a second line of defence.
 
 **Rule 2 — never bind a live array straight to `Repeater.model`.** Every reassignment of
-the array resets the model and runs `regenerate()`, the crashing path. Wrap it in
-`ScriptModel { values: … }`, with `objectProp` as the identity key where delegates should
-be reused; ScriptModel diffs the values instead of resetting. A literal constant array
+the array resets the model and runs `regenerate()`, the crashing path. Wrap it in a
+`ScriptModel`, which diffs the values instead of resetting. A literal constant array
 (`model: ["Day", "Week", "Mon"]`) never changes and is fine.
+
+**Rule 3 — a ScriptModel's values are strings or QObjects, never rebuilt JS objects.**
+ScriptModel (Quickshell 0.3.2) finds inserts, removals and moves only among values that
+are strictly equal. JS objects built anew on each read — a refetch, a rescan, a re-sort,
+`map()` — are not: with `objectProp`, or the default structural comparison, it overwrites
+every row after the first changed one by position. A removal in the middle then destroys
+the *last* delegate and moves the later items into the earlier ones, each keeping its
+state: text typed into one card's field ends up in the next item's card, an open edit form
+saves to another record. A list of records goes through `components/KeyedModel.qml`:
+
+```qml
+KeyedModel { id: _networks; values: root._saved; keyProp: "uuid" }   // or keyOf: item => …
+Repeater {
+    model: _networks.model                     // a ScriptModel of string keys
+    delegate: Card {
+        required property string modelData     // the key
+        readonly property var network: _networks.byKey[modelData] ?? null
+    }
+}
+```
+
+Each delegate keeps its item for its whole life, and a changed item reaches it through the
+binding (`ListKeyRules` makes the keys, unique, and the map). Strings (`keysInGroup()`,
+names) and QObjects (`SystemTray.items`, Bluetooth devices) compare strictly and go into a
+ScriptModel as they are. `tests/QuickshellPinTest.qml` (g) pins the bug, so an upgrade that
+fixes it is noticed.
 
 **If it comes back:** look for a new `Repeater` whose `model` is a live expression,
 especially inside anything a popup loads, and for any path that builds popup content
@@ -589,8 +614,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   its opened part is its region `settings`, a block of kind `region` around its rows
   (`prepend` above them, `append` under them), whose elements are built only while the card
   is open and destroyed when it closes; they get the card's context and scope. A card made
-  per item by a `Repeater` on a `ScriptModel` keyed by the item takes its elements with it
-  when its item goes. A view's author writes only a block's
+  per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
+  key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
+  goes, and keeps them while other items come and go. A view's author writes only a block's
   `anchor`, a word for what it holds (`saved`, `vpns`), never where it stands or its title's
   words. The block's path follows from where it stands, found by walking up `parent` (a
   binding: a block moved has the new path):
@@ -1070,9 +1096,10 @@ Logger { id: logger; prefix: "[STT]"; enabled: Config.stt.debug }
   Loop indices (`i`, `j`) are the exception.
 - **Comments in English**, explaining *why* rather than restating the code.
 - **Never bind a live reactive array straight to `Repeater.model`** — it crashes
-  Quickshell. Wrap it in `ScriptModel { values: … }`, optionally with `objectProp` as
-  the identity key so only changed delegates are rebuilt. The history and the second
-  rule that goes with it are in [The Repeater crash](#the-repeater-crash).
+  Quickshell. Wrap it in a `ScriptModel`; a list of JS objects goes through
+  `components/KeyedModel.qml` (a ScriptModel of string keys, the delegate looking its item
+  up by key), never into a ScriptModel as objects. The history and the rules that go with
+  it are in [The Repeater crash](#the-repeater-crash).
 - **`ShapePath` has no `visible` property.**
 - **A control that looks different under the pointer uses `components/PointerArea.qml`**
   and its `lit`, not a `MouseArea` and `containsMouse`. The same for a mouse and a finger:

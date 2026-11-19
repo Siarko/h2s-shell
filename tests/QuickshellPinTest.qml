@@ -110,6 +110,38 @@ TestCase {
         tree.direct.parent = tree.other;
         assert(tree.direct.enclosing === tree.other, "(f) the walk is a binding: an item moved under another parent finds the new enclosing one — if not, a moved block keeps a stale path");
 
+        // (g) ScriptModel given objects built anew at each step (a refetch) and an objectProp
+        // replaces rows BY POSITION after the first key-equal one: a removal in the middle
+        // destroys the LAST delegate and shifts the later items into the earlier delegates.
+        // Views give it string keys instead (components/KeyedModel.qml); strings compare
+        // strictly and go to the right rows. notes/upstream/quickshell-scriptmodel-replace.md
+        const rows = values => Qt.createQmlObject("import QtQuick\nimport Quickshell\nItem {\n"
+            + "    property alias model: model\n    property alias repeater: repeater\n"
+            + "    Column { Repeater { id: repeater; model: ScriptModel { id: model" + values + " }\n"
+            + "        Item { required property var modelData } } }\n"
+            + "}", suite, "ScriptModelPin.qml");
+        const objects = rows("; objectProp: \"id\"");
+        _held.push(objects);
+        objects.model.values = ["A", "B", "C", "D"].map(id => ({ id: id }));
+        const objectRows = [0, 1, 2, 3].map(i => objects.repeater.itemAt(i));
+        objects.model.values = ["A", "C", "D"].map(id => ({ id: id }));
+        const wrongDelegate = objects.repeater.itemAt(1) === objectRows[1] && objects.repeater.itemAt(2) === objectRows[2];
+        console.log("  INFO: ScriptModel with rebuilt objects, B removed from A,B,C,D: "
+            + (wrongDelegate ? "B's delegate shows C and D's delegate went (the bug is there)" : "C and D keep their delegates (the bug is fixed)"));
+        assert(wrongDelegate && objects.repeater.itemAt(1).modelData.id === "C",
+               "(g) ScriptModel still overwrites rows by position for rebuilt objects — if this fails after an upgrade, Quickshell fixed it: KeyedModel is no longer needed for correctness, and the Repeater rule in CLAUDE.md can be relaxed");
+        const keys = rows("");
+        _held.push(keys);
+        keys.model.values = ["A", "B", "C", "D"];
+        const keyRows = [0, 1, 2, 3].map(i => keys.repeater.itemAt(i));
+        keys.model.values = ["A", "C", "D"];
+        assert(keys.repeater.itemAt(1) === keyRows[2] && keys.repeater.itemAt(2) === keyRows[3],
+               "(g) … string values go to the right rows: B's delegate went, C and D kept theirs — if not, KeyedModel's keys are no fix");
+        keys.model.values = ["D", "A", "X", "C"];
+        assert(keys.repeater.itemAt(0) === keyRows[3] && keys.repeater.itemAt(1) === keyRows[0]
+               && keys.repeater.itemAt(3) === keyRows[2] && keys.repeater.itemAt(2).modelData === "X",
+               "(g) … and through a move and an insert");
+
         for (const object of _held)
             object.destroy();
         _held = [];
