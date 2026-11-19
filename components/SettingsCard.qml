@@ -103,8 +103,9 @@ AnchorBlock {
     kind: "card"
     placements: ["before", "after"]
 
-    // A module's button in `actions` is the stack's size, as the card's own are
-    readonly property var _buttonProperties: ({ size: "m" })
+    // A module's button in `actions` that sets no size of its own is the stack's size, as
+    // the card's own are (the public SmallButton's `defaultSize`); one that sets `size` keeps it
+    readonly property var _buttonProperties: ({ defaultSize: "m" })
 
     function _alignRight(items) {
         for (const child of items) {

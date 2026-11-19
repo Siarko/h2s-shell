@@ -24,7 +24,7 @@ TestCase {
 
     // What a module can rely on, per element: properties and signals, sorted
     readonly property var pinned: ({
-        "SmallButton": ["apiElement", "asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "kind", "label", "size", "tooltip"],
+        "SmallButton": ["apiElement", "asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "defaultSize", "kind", "label", "size", "tooltip"],
         "Dropdown": ["options", "picked", "placeholder", "size", "value"],
         "InputField": ["accepted", "editingFinished", "password", "placeholder", "problem", "revealToggled", "revealed", "size", "text", "textEdited"],
         "Pill": ["clicked", "label", "picked", "size", "tooltip"],
@@ -681,6 +681,16 @@ TestCase {
             "secondary m false true false false  Cancel", "a button's defaults: secondary, m, does not ask, available");
         assertEqual(plain.confirmLabel, "Plain?", "the question is the label and \"?\" unless given");
         assertEqual(asksInWords.confirmLabel, "Really <b>on</b>?", "… or the one given");
+        // (1.28) A place's default size reaches only a button that sets none
+        const unsized = Qt.createQmlObject("import QtQuick\nimport qs.api\nSmallButton { label: \"a\" }", bare, "Unsized.qml");
+        const sized = Qt.createQmlObject("import QtQuick\nimport qs.api\nSmallButton { label: \"a\"; size: \"s\" }", bare, "Sized.qml");
+        unsized.defaultSize = "xs";
+        sized.defaultSize = "xs";
+        assertEqual(unsized.size + " " + _inside(unsized).fontSize + " " + sized.size + " " + _inside(sized).fontSize,
+                    "xs " + Theme[ApiElementRules.textSize("xs").value] + " s " + Theme[ApiElementRules.textSize("s").value],
+                    "defaultSize: a button with no size takes it, one that sets its size keeps it");
+        unsized.destroy();
+        sized.destroy();
 
         // --- each kind and size, read from the button inside ---
         for (const entry of kinds) {

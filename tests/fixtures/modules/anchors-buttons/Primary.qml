@@ -14,7 +14,7 @@ SmallButton {
     objectName: "anchors-buttons:Primary"
     label: "Go"
     kind: "primary"
-    // The region makes it the stack's size
+    // Its own size: kept in a card, whose stack gives "m" only to a button that sets none
     size: "s"
     onClicked: _main?.clicked("Primary", context)
     Component.onCompleted: {

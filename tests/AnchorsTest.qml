@@ -3009,8 +3009,8 @@ TestCase {
         // A card's buttons (settings.cards.saved.card.actions, append; the fixture view's cards
         // have "Edit" and, last, "Forget") with a fixture module (tests/fixtures/modules/
         // anchors-buttons): a button of each kind under the card's own, in its manifest's
-        // order, above "Forget", 4 apart on one right edge, at most a third of the card, in the
-        // stack's size; one element that is no button refused; built only while the card is
+        // order, above "Forget", 4 apart on one right edge, at most a third of the card, in its
+        // own size or the stack's; one element that is no button refused; built only while the card is
         // open; a click reaching the module; the cards reordered, the open one taken out; an
         // own-provider card's buttons only its provider module's
         const cardButtons = card => card?.actionsRegion.appendHost.items.filter(item => item.ready) ?? [];
@@ -3048,7 +3048,10 @@ TestCase {
             assertEqual(buttons.map(button => _child(button, "QQuickLoader").item.kind).join(","),
                         ["primary", "secondary", "danger", "warning", "success", "secondary"].map(kind => ApiElementRules.buttonKind(kind).value).join(","),
                         "… each drawn as its kind");
-            assertEqual(buttons.map(button => button.size).join(","), "m,m,m,m,m,m", "… each in the stack's size (the one that asked for s too)");
+            assertEqual(buttons.map(button => button.size).join(","), "s,m,m,m,m,m", "… the one that sets its size: s; the others, setting none: the stack's m");
+            assertEqual(buttons.map(button => _child(button, "QQuickLoader").item.fontSize).join(","),
+                        [Theme[ApiElementRules.textSize("s").value]].concat(Array(5).fill(Theme[ApiElementRules.textSize("m").value])).join(","),
+                        "… and drawn so");
             const long = buttons[5];
             const most = Math.floor(card.width / 3);
             assert(long.implicitWidth > most && Math.abs(long.width - most) < 0.01 && _child(_child(long, "QQuickLoader").item, "QQuickText").truncated,

@@ -114,9 +114,10 @@ import qs.singletons.network
 //                                                     button at its
 //                                                     own width on the stack's right edge, at
 //                                                     most a third of the card wide (a longer
-//                                                     label is cut), in size "m" whatever it
-//                                                     asks for; any kind, with or without
-//                                                     confirm
+//                                                     label is cut), in the size it sets
+//                                                     (1.28; "m", the card's own buttons'
+//                                                     size, when it sets none); any kind,
+//                                                     with or without confirm
 //                            settings.network_wifi.saved.card,
 //                            settings.network_ethernet.profiles.card (1.27)  the saved Wi-Fi
 //                                                     networks' and the wired profiles' cards
@@ -388,7 +389,9 @@ import qs.singletons.network
 //                          kind: "primary" (performs the action) | "secondary" (the default:
 //                          a step in between, opens something, "Cancel") | "danger" (stops
 //                          or removes) | "warning" (goes on, but think) | "success" (a good
-//                          outcome to take); size: "xs" | "s" | "m";
+//                          outcome to take); size: "xs" | "s" | "m"; (1.28) defaultSize —
+//                          the size of a button that sets no `size`: "m", or what its place
+//                          gives (a card's actions: "m"); a module sets `size`, which stays;
 //                          confirm (false; true: the first click only turns the button into
 //                          the question, with a "×" that takes it back, the second acts),
 //                          confirmLabel (the question; the label and "?" unless given),

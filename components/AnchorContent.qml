@@ -26,7 +26,8 @@ import qs.singletons
 // Either way an element whose module hides it (`visible: false`) takes no room and no gap.
 // On a place whose row `takes` an element (a SmallButton), another is refused
 // (ModuleContribution). `elementProperties` are given to each element that declares them (the
-// stack's button size).
+// stack's default button size: the public button's `defaultSize`, which a button's own
+// `size` overrides).
 Item {
     id: root
 
@@ -41,7 +42,7 @@ Item {
     // stacked buttons), instead of as wide as the host
     property bool stacked: false
     property real maxElementWidth: Infinity
-    // Given to each element that declares them ({ size: "m" })
+    // Given to each element that declares them ({ defaultSize: "m" })
     property var elementProperties: ({})
 
     readonly property string path: block?.path ?? ""

@@ -17,6 +17,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   become one, at most 20 lines, the last kept one ending in "…"; the summary stays one line.
   A VPN provider's `failed(entryId, what, reason)` is sent as such a plain notification: a
   provider need not clean its texts of markup.
+  A module's button in a card's `actions` keeps the size it sets; `m` (the card's own buttons')
+  is only the default, for a button that sets none — the public `SmallButton`'s new
+  `defaultSize`, which a place gives and `size` follows until the button sets it.
 - 1.27: the mark on a card — `module.setMark(path, itemId, label)` and
   `module.clearMark(path, itemId)`: the card of an item shows the module's icon at the end of its
   name's line, closed and open, after the name (cut first), with "<module's name>: <label>" as

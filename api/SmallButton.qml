@@ -10,8 +10,11 @@ import qs.singletons
 //
 // `kind`: "primary" (performs the action), "secondary" (the default: a step in between,
 // opens something, "Cancel"), "danger" (stops or removes), "warning" (goes on, but think),
-// "success" (a good outcome to take). `size`: "xs", "s", "m" (the default). A word it does
-// not know shows as the default and is logged once (ApiElements).
+// "success" (a good outcome to take). `size`: "xs", "s", "m". A word it does not know shows
+// as "m" and is logged once (ApiElements). A button that sets no `size` takes
+// `defaultSize` (1.28): "m", unless the place it stands in gives another (a card's
+// `actions` give "m"). A module sets `size`, never `defaultSize`: the size it sets stays,
+// wherever the button stands.
 //
 // `confirm`: the first click only turns the button into the question, `confirmLabel`,
 // with a "×" that takes it back (`cancelTip`); `asked()` says so and `asking` is true
@@ -38,7 +41,10 @@ Item {
     property bool checked: false
     property string tooltip: ""
     property string kind: "secondary"
-    property string size: "m"
+    // Until the button sets its own `size`, it follows this binding; setting `size`
+    // replaces the binding, so the place's default never overrides the module's choice
+    property string defaultSize: "m"
+    property string size: defaultSize
     property bool confirm: false
     property string confirmLabel: label + "?"
     property string cancelTip: "Cancel"
