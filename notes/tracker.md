@@ -720,3 +720,21 @@ For the owner, from the autonomous run (2026-11-18 on):
   "received several files" body, which lists one name per line today, reads
   "a.txt b.txt". Alternative: keep line breaks in a plain body only. Caps chosen by the
   agent: summary 200, body 1000 characters, a `module.log` line 1000.
+- **The Tailscale module's "Authorization" words** (M3, the agent's choice; shown in the
+  password prompt): Connect, Disconnect, Log in, Add an account, Log out; Change the exit
+  node; Allow / Block the local network; Accept / Ignore routes; Use / Ignore Tailscale
+  DNS; Block / Allow incoming connections; Start / Stop the SSH server; Start / Stop the
+  web interface; Offer an exit node / Stop offering an exit node; Turn on / off automatic
+  updates, source NAT, stateful filtering; Offer an app connector / Stop the app
+  connector; Report device posture / Stop posture reports; Run a peer relay / Turn off the
+  peer relay; Check for updates / Stop update checks; Rename this device, Change offered
+  routes, Name the account; Become the operator / Give up the operator role; List
+  accounts, Switch account, Remove an account; Stop every share, Stop Funnel; Share a
+  port, Share a port on the internet, Stop a share, Turn on / off Funnel.
+- **What else changes for the user with M3**: a refused run is announced by the shell
+  ("<what> — not allowed"), the module's entry reads "Not allowed." (was "No
+  authentication agent answered."); with no way to run as administrator the status reads
+  "Can't ask for the password."; for a moment after the shell starts the card may say
+  "Changes that need an administrator are not offered: pkexec is still being looked for.";
+  a user-writable `timeout` no longer marks the module "Not trusted" (the shell's own
+  trusted `timeout` is used).
