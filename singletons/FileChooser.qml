@@ -20,6 +20,8 @@ import QtQuick.Dialogs
 // - The session locked: nothing opens (`blocked: "locked"`); a lock while one is open closes
 //   it (`cancelled`). A portal's window belongs to another process and stays on screen; its
 //   answer is dropped all the same.
+// - The shell going (a reload, the end): the dialog is closed at once, `done` is not called —
+//   destroyed while open, Qt Quick's own would stay on screen.
 // - In module test mode no dialog is made: each call is recorded (`testCalls`) and waits for
 //   the test kit's answer (tests/ModuleTestKit.qml: answerChooser, cancelChooser), and the
 //   lock is the kit's (`testLocked`).
@@ -108,21 +110,39 @@ Singleton {
 
     // ---- Module test mode (tests/ModuleTestKit.qml) ----
 
-    // Answers the open recorded call with these paths → "" or why not (nothing answered)
-    function testAnswer(paths) {
+    // "" when the open recorded call is module `moduleId`'s, else why it cannot be answered
+    function _testProblem(moduleId) {
         if (_current === null || !_current.test)
             return "no chooser is open";
-        const checked = FileChooserRules.testAnswer(paths, _current.mode);
-        if (checked.problem !== "")
-            return checked.problem;
-        _finish(checked.result);
+        const owner = String(_current.handle?.moduleId ?? "");
+        if (owner !== String(moduleId ?? ""))
+            return "the open chooser is module " + ModuleRules.show(owner) + "'s, not " + ModuleRules.show(moduleId);
         return "";
     }
 
-    // Cancels the open recorded call, as the user closing the dialog → "" or why not
-    function testCancel() {
-        if (_current === null || !_current.test)
-            return "no chooser is open";
+    // Answers module `moduleId`'s open recorded call with these paths → "" or why not
+    // (nothing answered). Never throws into the suite.
+    function testAnswer(moduleId, paths) {
+        try {
+            const problem = _testProblem(moduleId);
+            if (problem !== "")
+                return problem;
+            const checked = FileChooserRules.testAnswer(paths, _current.mode);
+            if (checked.problem !== "")
+                return checked.problem;
+            _finish(checked.result);
+            return "";
+        } catch (error) {
+            return "the answer could not be taken: " + error;
+        }
+    }
+
+    // Cancels module `moduleId`'s open recorded call, as the user closing the dialog → "" or
+    // why not
+    function testCancel(moduleId) {
+        const problem = _testProblem(moduleId);
+        if (problem !== "")
+            return problem;
         _finish(FileChooserRules.result({ cancelled: true }));
         return "";
     }
@@ -131,7 +151,44 @@ Singleton {
         testCalls = [];
     }
 
+    // Before each suite (tests-modules.qml): a recorded call another suite left open is
+    // dropped unanswered, and the session is unlocked
+    function testReset() {
+        if (_current !== null && _current.test) {
+            _current.answered = true;
+            _current = null;
+        }
+        testLocked = false;
+    }
+
     // ---- Inside ----
+
+    Component.onDestruction: _shutDown()
+
+    // The shell is going: the open call ends unanswered, and its dialog is closed and its
+    // window hidden now, not after the event loop turns
+    function _shutDown() {
+        _openingLimit.stop();
+        _deliver.stop();
+        _outbox = [];
+        if (_current !== null) {
+            _current.answered = true;
+            _current = null;
+        }
+        const dialog = _dialog;
+        const window = _window;
+        _dialog = null;
+        _window = null;
+        try {
+            if (dialog?.visible)
+                dialog.close();
+        } catch (error) {}
+        dialog?.destroy();
+        if (window) {
+            window.visible = false;
+            window.destroy();
+        }
+    }
 
     onLockedChanged: {
         if (locked && _current !== null)
@@ -285,7 +342,7 @@ Singleton {
         FolderDialog {
             id: folderDialog
 
-            onAccepted: root._accepted(folderDialog, [selectedFolder])
+            onAccepted: root._accepted(folderDialog, [FileChooserRules.folderChosen(selectedFolder, currentFolder)])
             onRejected: root._rejected(folderDialog)
         }
     }

@@ -88,6 +88,8 @@ QtObject {
             ModuleTestKit.setSystem(null);
             // … nor the network facts (ModuleTestKit.setNetworks)
             ModuleTestKit.setNetworks(null);
+            // … nor a file chooser it left open, nor the chooser's lock it set
+            FileChooser.testReset();
             let suite = null;
             try {
                 suite = component.createObject(root);

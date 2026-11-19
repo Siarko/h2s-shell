@@ -47,21 +47,29 @@ import qs.api
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)
 //   clearRecords()         empties `opened`, `notified` and `chooserCalls`, and sets the
-//                          real clock and the default system and network facts again
+//                          real clock and the default system and network facts again. The
+//                          records are shared by every module's suites (they run side by
+//                          side): it clears theirs too
 //   (1.17, the file chooser: module.chooseFiles opens no dialog in test mode — each call
 //   that would open one is recorded and waits for the suite's answer; the lock is the one
-//   setSessionLocked sets)
+//   setSessionLocked or setChooserLocked sets. A chooser a suite left open and the chooser's
+//   lock are reset before each suite)
 //   chooserCalls           the calls that opened, oldest first: [{ moduleId, mode, title,
 //                          startDirectory }] as the shell took them (the title cleaned, the
 //                          directory absolute: the system's home, Api.system.home, when none
 //                          was given)
 //   chooserOpen            a chooser is open, waiting for an answer
-//   answerChooser(paths)   the user chose these (absolute paths; one for "open" and
-//                          "folder") → "" when answered, else why not (no chooser open, a
-//                          wrong answer: nothing answered); `done` gets { paths, cancelled:
+//   answerChooser(moduleId, paths)
+//                          the user chose these (absolute paths; one for "open" and
+//                          "folder") in module `moduleId`'s open chooser → "" when answered,
+//                          else why not (no chooser open, another module's open, a wrong
+//                          answer: nothing answered); `done` gets { paths, cancelled:
 //                          false, blocked: "", error: "" }
-//   cancelChooser()        the user closed the dialog → "" or why not; `done` gets
-//                          cancelled: true
+//   cancelChooser(moduleId)
+//                          the user closed module `moduleId`'s dialog → "" or why not;
+//                          `done` gets cancelled: true
+//   setChooserLocked(on)   the session is locked, or not, for the file chooser alone: runs
+//                          as administrator are left alone (setSessionLocked locks both)
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
@@ -94,12 +102,17 @@ Singleton {
     readonly property var chooserCalls: FileChooser.testCalls
     readonly property bool chooserOpen: Modules.host.testMode && FileChooser.open
 
-    function answerChooser(paths) {
-        return Modules.host.testMode ? FileChooser.testAnswer(paths) : "module test mode is off";
+    function answerChooser(moduleId, paths) {
+        return Modules.host.testMode ? FileChooser.testAnswer(moduleId, paths) : "module test mode is off";
     }
 
-    function cancelChooser() {
-        return Modules.host.testMode ? FileChooser.testCancel() : "module test mode is off";
+    function cancelChooser(moduleId) {
+        return Modules.host.testMode ? FileChooser.testCancel(moduleId) : "module test mode is off";
+    }
+
+    function setChooserLocked(on) {
+        if (Modules.host.testMode)
+            FileChooser.testLocked = on === true;
     }
 
     function setEnabled(id, on) {

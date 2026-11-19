@@ -18,9 +18,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   blocked, error }`, absolute paths): the system's dialog, hosted by the shell so a popup can
   ask and close, one at a time for the whole shell (`blocked: "busy"`), refused while the
   session is locked (`blocked: "locked"`) and closed by a lock (`cancelled`), closed with no
-  answer when the module is turned off. In module test mode no dialog opens: the calls are
-  recorded and answered by the suite (`ModuleTestKit.chooserCalls`, `chooserOpen`,
-  `answerChooser`, `cancelChooser`).
+  answer when the module is turned off or the shell reloads. In module test mode no dialog
+  opens: the calls are recorded and answered by the module's own suite
+  (`ModuleTestKit.chooserCalls`, `chooserOpen`, `answerChooser(moduleId, paths)`,
+  `cancelChooser(moduleId)`, `setChooserLocked`).
 - 1.16: network facts — `Api.networksReady` (the profiles and every Wi-Fi profile's details
   read; a failed reading of either leaves it false), `Api.networks` lists a Wi-Fi network only
   once its details are read (a hotspot no longer shows for a moment), `Api.vpnsUp` rows gain

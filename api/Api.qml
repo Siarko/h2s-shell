@@ -551,7 +551,8 @@ import qs.singletons.network
 //                            mode            "open" (the default: one file) | "openMany"
 //                                            (several files) | "folder"
 //                            title           plain text: one line, control and format
-//                                            characters dropped, at most 60 characters
+//                                            characters and "<", ">", "&" dropped, at
+//                                            most 60 characters
 //                            startDirectory  an absolute path; none or "": the home
 //                                            directory (Api.system.home)
 //                            done(result)    called once, after chooseFiles has returned —
@@ -567,14 +568,21 @@ import qs.singletons.network
 //                          The dialog is the system's: Qt's file dialog, which the user's Qt
 //                          platform theme makes the portal's or GTK's, else Qt Quick's own.
 //                          Qt Quick's own returns one file even for "openMany"; take
-//                          `paths` as one or more. It is hosted by the shell, not by the
+//                          `paths` as one or more. Its folder dialog selects the first
+//                          sub-folder as it opens, as if the user had picked it: Open with
+//                          nothing else picked gives that sub-folder, and the folder shown
+//                          only when it has none (Qt tells the two apart in no way the shell
+//                          can see). It is hosted by the shell, not by the
 //                          caller's window: a popup can ask and close. The module turned
 //                          off: the dialog closes and done is not called. A portal's dialog
 //                          is another program's window: the shell cannot close it (on a lock,
 //                          the module turned off), and what is chosen in it then is dropped.
+//                          The shell reloading closes the dialog; done is not called.
 //                          In module test mode no dialog opens: the call is recorded and the
-//                          suite answers it (ModuleTestKit.chooserCalls, answerChooser,
-//                          cancelChooser); the lock is the test kit's (setSessionLocked).
+//                          module's suite answers it (ModuleTestKit.chooserCalls,
+//                          answerChooser(moduleId, paths), cancelChooser(moduleId)); the
+//                          lock is the test kit's (setSessionLocked, or setChooserLocked for
+//                          the chooser alone).
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

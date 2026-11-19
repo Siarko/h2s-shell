@@ -20,8 +20,8 @@ Singleton {
     // module.chooseFiles's options, read once → { mode, title, startDirectory, problem }.
     // `home`: the directory a chooser starts in when none is given ("" when not known: then
     // the dialog's own). Missing options are the defaults: mode "open", no title. `title`
-    // is plain text on one line: control and format characters dropped, white space folded,
-    // at most titleMaxLength characters. `startDirectory`: an absolute path ("/" ends
+    // is plain text on one line: control and format characters and "<", ">", "&" dropped,
+    // white space folded, at most titleMaxLength characters. `startDirectory`: an absolute path ("/" ends
     // dropped), or "" for `home`. `problem`: "" or what was asked wrongly — then nothing
     // opens and the result's `error` says it.
     function options(given, home) {
@@ -69,11 +69,12 @@ Singleton {
     }
 
     // A title as the dialog shows it: one line, no control or format characters, at most
-    // titleMaxLength characters (by code point, an emoji never cut in half)
+    // titleMaxLength characters (by code point, an emoji never cut in half). "<", ">" and "&"
+    // are dropped: Qt Quick's own dialog may show the title in a label that reads markup.
     function cleanTitle(text) {
         if (typeof text !== "string")
             return "";
-        const kept = PrivilegedRules.characters(text.replace(/\s+/g, " "))
+        const kept = PrivilegedRules.characters(text.replace(/[<>&]/g, " ").replace(/\s+/g, " "))
             .filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0))).join("");
         return PrivilegedRules.characters(kept.trim()).slice(0, titleMaxLength).join("").trim();
     }
@@ -86,12 +87,20 @@ Singleton {
         return trimmed === "" ? "/" : trimmed;
     }
 
-    // "" for a path the shell takes, else why not: too long, or a control character in it
+    // "" for a path the shell takes, else why not: too long, a control character in it, or
+    // half of a character (a lone surrogate, which no file name can hold)
     function pathProblem(path) {
+        if (typeof path !== "string")
+            return "not text";
         if (path.length > pathMaxLength)
             return "longer than " + pathMaxLength + " characters";
         if (/[\u0000-\u001f\u007f]/.test(path))
             return "it holds a control character";
+        try {
+            encodeURIComponent(path);
+        } catch (error) {
+            return "it holds a broken character";
+        }
         return "";
     }
 
@@ -123,26 +132,50 @@ Singleton {
         });
     }
 
-    // A local directory as the URL a dialog starts in ("" for none): each part of the path
-    // percent-encoded, so a "#" or "?" in a name stays part of it
+    // A local directory as the URL a dialog starts in ("" for none, or for a path the shell
+    // does not take): each part of the path percent-encoded, so a "#" or "?" in a name stays
+    // part of it
     function folderUrl(path) {
-        if (typeof path !== "string" || !path.startsWith("/"))
+        if (typeof path !== "string" || !path.startsWith("/") || pathProblem(path) !== "")
             return "";
         return "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
     }
 
     // A file: URL as an absolute path, or "" when it is not a local file
     function pathOf(url) {
+        return localPath(url).path;
+    }
+
+    // A file: URL → { path, problem }: the absolute path, or "" and why not (the words an
+    // accepted dialog's error uses)
+    function localPath(url) {
+        const notLocal = { path: "", problem: "the dialog returned something that is not a local file" };
         const text = String(url ?? "");
         if (!text.startsWith("file:///"))
-            return "";
+            return notLocal;
         let path;
         try {
             path = decodeURIComponent(text.slice("file://".length));
         } catch (error) {
-            return "";
+            return notLocal;
         }
-        return path.startsWith("/") && pathProblem(path) === "" ? path : "";
+        if (!path.startsWith("/"))
+            return notLocal;
+        if (/[\u0000-\u001f\u007f]/.test(path))
+            return { path: "", problem: "the name chosen holds a line break or another control character" };
+        if (pathProblem(path) !== "")
+            return { path: "", problem: "the dialog returned a path the shell does not take: " + pathProblem(path) };
+        return { path: path, problem: "" };
+    }
+
+    // What a folder dialog's Open gives (`selected`: its selectedFolder, `shown`: its
+    // currentFolder) → the URL chosen. Qt Quick's own dialog has no folder selected when the
+    // one shown has no sub-folders: Open means the folder shown. When it has some, the first
+    // is selected as the dialog opens — the same as the user picking it — and is what Open
+    // gives until another is picked.
+    function folderChosen(selected, shown) {
+        const text = String(selected ?? "");
+        return text !== "" ? text : String(shown ?? "");
     }
 
     // What an accepted dialog chose (`urls`: its selected URLs) → a result. A mode that
@@ -153,11 +186,11 @@ Singleton {
         const list = Array.from(urls ?? []).map(url => String(url));
         const paths = [];
         for (const url of list) {
-            const path = pathOf(url);
-            if (path === "")
-                return result({ error: "the dialog returned something that is not a local file" });
-            if (!paths.includes(path))
-                paths.push(path);
+            const local = localPath(url);
+            if (local.problem !== "")
+                return result({ error: local.problem });
+            if (!paths.includes(local.path))
+                paths.push(local.path);
         }
         if (paths.length === 0)
             return result({ error: "the dialog returned nothing" });
@@ -167,15 +200,24 @@ Singleton {
     // A test kit's answer (ModuleTestKit.answerChooser) for the open call's mode →
     // { result, problem }: absolute paths as strings, one for "open" and "folder", at least
     // one. A wrong answer is the suite's mistake: `problem` says it and nothing is answered.
+    // Never throws: the list is copied once, and anything odd in it is a problem.
     function testAnswer(paths, mode) {
-        if (!Array.isArray(paths) || paths.length === 0)
-            return { result: null, problem: "the answer must be a list of at least one path" };
-        if (mode !== "openMany" && paths.length > 1)
-            return { result: null, problem: "mode \"" + mode + "\" chooses one path, not " + paths.length };
-        for (const path of paths) {
-            if (typeof path !== "string" || !path.startsWith("/") || pathProblem(path) !== "")
-                return { result: null, problem: "not an absolute path: " + ModuleRules.show(path) };
+        let list;
+        try {
+            list = Array.isArray(paths) ? Array.from(paths) : null;
+        } catch (error) {
+            return { result: null, problem: "the answer could not be read: " + error };
         }
-        return { result: accepted(paths.map(path => folderUrl(path)), mode), problem: "" };
+        if (list === null || list.length === 0)
+            return { result: null, problem: "the answer must be a list of at least one path" };
+        if (mode !== "openMany" && list.length > 1)
+            return { result: null, problem: "mode \"" + mode + "\" chooses one path, not " + list.length };
+        for (const path of list) {
+            if (typeof path !== "string" || !path.startsWith("/"))
+                return { result: null, problem: "not an absolute path: " + ModuleRules.show(path) };
+            if (pathProblem(path) !== "")
+                return { result: null, problem: "not a path the shell takes (" + pathProblem(path) + "): " + ModuleRules.show(path) };
+        }
+        return { result: accepted(list.map(path => folderUrl(path)), mode), problem: "" };
     }
 }

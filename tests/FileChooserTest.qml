@@ -1,21 +1,27 @@
 import QtQuick
 import QtTest as QT
 import Quickshell
+import Quickshell.Wayland
 import qs.singletons
 
 // The file chooser's real path (singletons/FileChooser.qml): a real dialog in a real window
 // of the shell — in the runner's private headless compositor (tests/run-unit.sh), never on
 // the user's screen. The dialog is Qt Quick's own there (no platform theme), driven from code:
 // it opens inside the shell's one-pixel window, in the directory asked for, and answers a
-// choice and a cancel; a second call while it is open is busy; a lock closes it (cancelled)
-// and refuses the next; the module turned off closes it with no answer. After each, the
-// dialog and its window are gone. Asynchronous: the window is mapped by the compositor.
+// choice and a cancel; a second call while it is open is busy; a folder dialog's Open with
+// nothing picked; a lock closes it (cancelled) and refuses the next; the shell going and the
+// module turned off close it with no answer. After each, the dialog, the shell's window and
+// the dialog's own window are gone — the last as the compositor lists its windows
+// (ToplevelManager), each dialog by its title. Asynchronous: windows are mapped by the
+// compositor.
 TestCase {
     id: suite
     suiteName: "FileChooser"
     asynchronous: true
 
     readonly property string _directory: Quickshell.shellDir + "/tests/fixtures/device-address-reading"
+    readonly property string _folders: Quickshell.shellDir + "/tests/fixtures/file-chooser/folders"
+    readonly property string _noFolders: Quickshell.shellDir + "/tests/fixtures/file-chooser/no-folders"
 
     // A module's handle as FileChooser sees it
     property QtObject owner: QtObject {
@@ -23,10 +29,20 @@ TestCase {
         property bool active: true
     }
 
-    // The suites to wait for before a dialog opens (tests.qml: the other asynchronous ones)
+    // The suites to wait for before a dialog opens (tests.qml: the other asynchronous ones),
+    // and for how long at most (tests.qml: its limit less ownTimeMs) — then this suite fails
+    // without opening a dialog
     property var waitFor: []
+    property int waitLimitMs: 60000
+    // What this suite needs once it starts, at most
+    readonly property int ownTimeMs: 25000
     property var _answers: []
     property var _call: null
+    // The open dialog, the shell's window it was made in, and its title, kept while it is
+    // shown: guarded, they become null once destroyed
+    property QtObject _seenDialog: null
+    property QtObject _seenWindow: null
+    property string _seenTitle: ""
     property Item _driverHolder: Item {
         QT.TestCase {
             id: driver
@@ -50,12 +66,27 @@ TestCase {
         }
     }
 
-    function _shown() {
-        return FileChooser._dialog !== null && FileChooser._dialog.visible === true;
+    // The compositor lists a window with this title (the dialog's own)
+    function _listed(title) {
+        return ToplevelManager.toplevels.values.some(toplevel => toplevel.title === title);
     }
 
+    // The dialog titled `title` is shown, and the compositor has its window; it is kept
+    // for _gone()
+    function _shown(title) {
+        if (FileChooser._dialog === null || FileChooser._dialog.visible !== true || !_listed(title))
+            return false;
+        _seenDialog = FileChooser._dialog;
+        _seenWindow = FileChooser._window;
+        _seenTitle = title;
+        return true;
+    }
+
+    // Nothing open, the dialog and the shell's window destroyed, and the dialog's own window
+    // no longer listed by the compositor
     function _gone() {
-        return FileChooser._dialog === null && FileChooser._window === null && !FileChooser.open;
+        return FileChooser._dialog === null && FileChooser._window === null && !FileChooser.open
+            && _seenDialog === null && _seenWindow === null && !_listed(_seenTitle);
     }
 
     // ---- A tiny scheduler: each step waits for its condition (or its deadline), then runs ----
@@ -103,7 +134,16 @@ TestCase {
     }
 
     function runAsync() {
-        _then("the other asynchronous suites are done", () => waitFor.every(other => other.done), () => _run(), 55000);
+        _then("the other asynchronous suites are done", () => waitFor.every(other => other.done), () => {
+            const pending = waitFor.filter(other => !other.done);
+            if (pending.length > 0) {
+                // Not opened: a dialog now could take keys another suite sends
+                fail("not run: " + pending.map(other => other.suiteName).join(", ") + " still running");
+                _steps = [];
+                return;
+            }
+            _run();
+        }, waitLimitMs);
         _clock.start();
     }
 
@@ -115,7 +155,7 @@ TestCase {
         _call = _choose({ mode: "open", title: "Pick\none", startDirectory: _directory + "/" });
         assert(_call.open, "the call's handle: open");
         assert(FileChooser.open, "FileChooser.open");
-        _then("the dialog is shown", () => _shown(), () => {
+        _then("the dialog is shown", () => _shown("Pick one"), () => {
             const dialog = FileChooser._dialog;
             assert(FileChooser._window.backingWindowVisible, "inside the shell's window, mapped");
             assertEqual(dialog.title, "Pick one", "its title, on one line");
@@ -143,10 +183,10 @@ TestCase {
         _then("the dialog and its window are gone", () => _gone(), () => {
             _answers = [];
             // --- busy, then a cancel ---
-            _call = _choose({ mode: "openMany" });
+            _call = _choose({ mode: "openMany", title: "Chooser two" });
             _choose({ mode: "folder" });
         });
-        _then("the second call is answered busy", () => _answers.length === 1 && _shown(), () => {
+        _then("the second call is answered busy", () => _answers.length === 1 && _shown("Chooser two"), () => {
             assertEqual(JSON.stringify(_answers[0]), "{\"paths\":[],\"cancelled\":false,\"blocked\":\"busy\",\"error\":\"\"}",
                         "a second chooser while one is open: blocked busy, the first stays");
             assertEqual(FileChooser._dialog.fileMode, 1, "openMany: several files (FileDialog.OpenFiles)");
@@ -157,13 +197,39 @@ TestCase {
         });
         _then("gone after the cancel", () => _gone(), () => {
             _answers = [];
-            // --- a folder; then a lock while it is open ---
-            _choose({ mode: "folder", startDirectory: _directory });
+            // --- a folder dialog's Open with nothing picked: in a folder with sub-folders the
+            // first is selected as it opens (Qt Quick's own; api/Api.qml says so) ---
+            _choose({ mode: "folder", title: "Folder three", startDirectory: _folders });
         });
-        _then("the folder dialog is shown", () => _shown(), () => {
+        _then("the folder dialog with sub-folders lists them", () => _shown("Folder three") && String(FileChooser._dialog.selectedFolder) !== "", () => {
+            assertEqual(String(FileChooser._dialog.selectedFolder), "file://" + _folders + "/alpha", "… the first sub-folder selected, nothing picked");
+            FileChooser._dialog.accept();
+        });
+        _then("Open with sub-folders", () => _answers.length === 1, () => {
+            assertEqual(JSON.stringify(_answers[0].paths), JSON.stringify([_folders + "/alpha"]), "Open, nothing picked: the first sub-folder");
+        });
+        _then("gone after Open", () => _gone(), () => {
+            _answers = [];
+            _choose({ mode: "folder", title: "Folder four", startDirectory: _noFolders });
+        });
+        _then("the folder dialog without sub-folders is shown", () => _shown("Folder four"), () => {
+            assertEqual(String(FileChooser._dialog.selectedFolder), "", "no sub-folders: none selected");
+            FileChooser._dialog.accept();
+        });
+        _then("Open without sub-folders", () => _answers.length === 1, () => {
+            assertEqual(JSON.stringify(_answers[0]), JSON.stringify({ paths: [_noFolders], cancelled: false, blocked: "", error: "" }),
+                        "Open, nothing selected: the folder shown");
+        });
+        _then("gone after the second Open", () => _gone(), () => {
+            _answers = [];
+            // --- a folder; then a lock while it is open ---
+            _choose({ mode: "folder", title: "Folder five", startDirectory: _directory });
+        });
+        _then("the folder dialog is shown", () => _shown("Folder five"), () => {
             assertEqual(String(FileChooser._dialog.currentFolder), "file://" + _directory, "a folder dialog, in startDirectory");
             assert(FileChooser._dialog.selectedFolder !== undefined && FileChooser._dialog.fileMode === undefined, "… a FolderDialog");
             Profiles.screenLocked = true;
+            assert(_seenDialog !== null && !_seenDialog.visible, "a lock: the dialog closed at once, before it is destroyed (else its window stays)");
         });
         _then("the lock cancels it", () => _answers.length === 1, () => {
             assertEqual(JSON.stringify(_answers[0]), "{\"paths\":[],\"cancelled\":true,\"blocked\":\"\",\"error\":\"\"}", "a lock while open: cancelled");
@@ -173,12 +239,23 @@ TestCase {
             assertEqual(_answers[1].blocked, "locked", "locked: blocked, nothing opened");
             Profiles.screenLocked = false;
             _answers = [];
-            // --- the module turned off while it is open ---
-            _choose({});
+            // --- the shell going while it is open (FileChooser's Component.onDestruction) ---
+            _choose({ title: "Chooser six" });
         });
-        _then("shown again", () => _shown(), () => {
+        _then("shown before the shell goes", () => _shown("Chooser six"), () => {
+            FileChooser._shutDown();
+            assert(!FileChooser.open, "the shell going: nothing open");
+            assert(_seenDialog === null || !_seenDialog.visible, "… the dialog closed at once, not after the event loop turns");
+        });
+        _then("closed as the shell goes", () => _gone() && !FileChooser._deliver.running, () => {
+            assertEqual(_answers.length, 0, "the shell going: done never called");
+            // --- the module turned off while it is open ---
+            _choose({ title: "Chooser seven" });
+        });
+        _then("shown again", () => _shown("Chooser seven"), () => {
             owner.active = false;
             FileChooser.ownerGone(owner);
+            assert(_seenDialog !== null && !_seenDialog.visible, "the module off: the dialog closed at once, before it is destroyed");
         });
         _then("closed with the module", () => _gone() && !FileChooser._deliver.running, () => {
             assertEqual(_answers.length, 0, "the module off: closed, done never called");

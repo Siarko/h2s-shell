@@ -836,7 +836,8 @@ and a trusted `timeout` are found.
 **The file chooser** (`module.chooseFiles(options, done)` on the handle;
 `singletons/FileChooser.qml`, its decisions in `singletons/FileChooserRules.qml`): asks the
 user for files or a folder. `options`: `mode` (`"open"`, the default: one file; `"openMany"`;
-`"folder"`), `title` (plain text, one line, at most 60 characters), `startDirectory` (an
+`"folder"`), `title` (plain text, one line, `<`, `>` and `&` dropped, at most 60
+characters), `startDirectory` (an
 absolute path; none: the home directory, `Api.system.home`). `done(result)`, called once
 after the call has returned: frozen `{ paths (absolute paths, never URLs), cancelled,
 blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
@@ -847,12 +848,15 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   says so, else Qt Quick's own. Qt Quick's own opens only with a visible window of the shell
   as its parent: the shell shows a window of one transparent pixel, which takes no input, while
   a dialog is open, and makes the dialog in it. Qt Quick's own returns one file even in
-  `openMany`; the portal's can return several.
+  `openMany`; the portal's can return several. Qt Quick's own folder dialog selects the
+  first sub-folder as it opens: Open with nothing else picked returns it, and the folder
+  shown only when it has no sub-folders.
 - **The session locked**: nothing opens (`blocked: "locked"`); a lock while one is open closes
   it (`cancelled`). **The module turned off**: its dialog is closed and `done` is never
   called. A portal's window belongs to another process and stays on screen in both cases;
   what is chosen in it then is dropped. The dialog is closed before it is destroyed:
-  destroyed while open, Qt Quick's own leaves its window behind.
+  destroyed while open, Qt Quick's own leaves its window behind. **The shell going** (a
+  reload): the dialog is closed at once, `done` is not called.
 - The lock screen never depends on it (`tests/lock-closure.sh`).
 - NixOS and Arch: the same; which dialog appears follows the user's Qt platform theme on
   either.
@@ -866,7 +870,8 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `tests/PolkitRulesTest.qml` (the prompt's texts and the matching of a request to a run),
   `tests/FileChooserRulesTest.qml` (the chooser's rules), `tests/FileChooserTest.qml` (the
   real dialog in the runner's headless compositor, driven by keys: a file chosen, a cancel,
-  busy, a lock, the module turned off),
+  busy, a folder's Open with nothing picked, a lock, the shell going, the module turned
+  off; each time the dialog's window gone from the compositor's list),
   `tests/AuthPromptViewTest.qml` (the prompt's Module, Authorization and Command lines),
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
@@ -918,7 +923,9 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
   (the facts `Api.system` tells; never moves `module.dataDirectory`), `setNetworks` (the
   network facts: by default read and empty), `dataHome`, `chooserCalls`, `chooserOpen`,
-  `answerChooser`, `cancelChooser` (the file chooser), `clearRecords`, and for runs as
+  `answerChooser(moduleId, paths)`, `cancelChooser(moduleId)`, `setChooserLocked` (the
+  file chooser; an open call and its lock are reset before each suite), `clearRecords`
+  (shared by every module's suites), and for runs as
   administrator
   `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
   its message written by the kit from pkexec's algorithm, not the shell's),
@@ -1036,7 +1043,8 @@ failed, not as missing.
 
 A suite that needs the event loop sets `asynchronous: true`, does its work in
 `runAsync()` and calls `finish()`; `tests.qml` lists it in `_asyncSuites` and waits for it
-(60 s at most, for all of them together). A module's suites (`tests/run-modules.sh`,
+(90 s at most, for all of them together; `FileChooserTest`, which opens a real dialog,
+starts after the others and fails without opening one if they leave it too little of that). A module's suites (`tests/run-modules.sh`,
 `tests-modules.qml`) each get their own limit, counted from the start of the suites:
 `TestCase.timeLimitMs`, 20 s by default, capped at 60 s — a suite with many concurrent
 scenarios declares more. Of the shell's own, `PointerInputTest.qml` is one asynchronous suite: it puts real components (`BarWidget`,

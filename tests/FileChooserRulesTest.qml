@@ -25,6 +25,8 @@ TestCase {
         assertEqual(options({ startDirectory: "file:///tmp" }).problem, "startDirectory must be an absolute path", "… a URL is not a path");
         assertEqual(options({ startDirectory: "/tmp/a\nb" }).problem, "startDirectory: it holds a control character", "… a line break in it");
         assertEqual(options({ startDirectory: "/" + "a".repeat(4096) }).problem, "startDirectory: longer than 4096 characters", "… too long");
+        assertEqual(options({ startDirectory: "/tmp/\ud800x" }).problem, "startDirectory: it holds a broken character", "… half a character (a lone surrogate): refused, not thrown");
+        assertEqual(shown(options({}, "/home/\udc00")), "open|||", "… a home holding one is not known");
         assertEqual(options("open").problem, "the options are not an object", "options that are not an object");
         assertEqual(options(["open"]).problem, "the options are not an object", "… an array neither");
         const throwing = {};
@@ -34,7 +36,8 @@ TestCase {
         // --- the title: plain text, one line, at most 60 characters ---
         assertEqual(FileChooserRules.cleanTitle("  Send\n\tfiles  "), "Send files", "white space folded, trimmed");
         assertEqual(FileChooserRules.cleanTitle("Evil‮elif"), "Evilelif", "a right-to-left override dropped");
-        assertEqual(FileChooserRules.cleanTitle("<b>bold</b>"), "<b>bold</b>", "markup kept as written (shown as plain text)");
+        assertEqual(FileChooserRules.cleanTitle("<b>Bold</b> & <i>co</i>"), "b Bold /b i co /i", "\"<\", \">\" and \"&\" dropped: never read as markup");
+        assertEqual(FileChooserRules.cleanTitle("&lt;x&gt;"), "lt;x gt;", "… nor as an entity");
         assertEqual(FileChooserRules.cleanTitle("x".repeat(80)).length, 60, "cut at 60");
         assertEqual(PrivilegedRules.characters(FileChooserRules.cleanTitle("x".repeat(59) + "😀😀")).join("|"), "x|".repeat(59) + "😀", "… by code point: an emoji is never cut in half");
         assertEqual(FileChooserRules.cleanTitle(null), "", "not text: none");
@@ -57,6 +60,7 @@ TestCase {
         assertEqual(FileChooserRules.folderUrl("/home/a b/#1?x"), "file:///home/a%20b/%231%3Fx", "a directory as a URL: each part encoded");
         assertEqual(FileChooserRules.folderUrl("/"), "file:///", "… the root");
         assertEqual(FileChooserRules.folderUrl(""), "", "… none: \"\"");
+        assertEqual(FileChooserRules.folderUrl("/tmp/\ud800"), "", "… half a character: \"\", not thrown");
         assertEqual(FileChooserRules.pathOf("file:///home/a%20b/%231%3Fx"), "/home/a b/#1?x", "a file: URL as a path, decoded");
         assertEqual(FileChooserRules.pathOf("file:///tmp/%E2%82%AC.txt"), "/tmp/€.txt", "… UTF-8 decoded");
         assertEqual(FileChooserRules.pathOf("https://example.org/a"), "", "… another scheme: not a local file");
@@ -76,6 +80,14 @@ TestCase {
         assertEqual(FileChooserRules.accepted(["file:///tmp/a", "sftp://host/b"], "openMany").paths.length, 0, "… and no paths: never half a choice");
         assertEqual(FileChooserRules.accepted([], "open").error, "the dialog returned nothing", "nothing chosen: an error");
         assertEqual(FileChooserRules.accepted([""], "folder").error, "the dialog returned something that is not a local file", "… an empty URL too");
+        assertEqual(FileChooserRules.accepted(["file:///tmp/a%0Ab"], "open").error, "the name chosen holds a line break or another control character",
+                    "a name with a line break: said so");
+        assertEqual(FileChooserRules.accepted(["file:///" + "a".repeat(4100)], "open").error,
+                    "the dialog returned a path the shell does not take: longer than 4096 characters", "… a path too long: said so");
+        // Qt Quick's own folder dialog: nothing selected in a folder without sub-folders
+        assertEqual(FileChooserRules.folderChosen("", "file:///srv"), "file:///srv", "folder: nothing selected is the folder shown");
+        assertEqual(FileChooserRules.folderChosen("file:///srv/a", "file:///srv"), "file:///srv/a", "… one selected is that one");
+        assertEqual(FileChooserRules.folderChosen(undefined, undefined), "", "… neither known: nothing (an error follows)");
 
         // --- the test kit's answer ---
         const answer = (paths, mode) => FileChooserRules.testAnswer(paths, mode);
@@ -85,5 +97,10 @@ TestCase {
         assertEqual(answer("/tmp/a", "open").problem, "the answer must be a list of at least one path", "… not a list");
         assertEqual(answer(["tmp/a"], "folder").problem, "not an absolute path: \"tmp/a\"", "… a relative path");
         assertEqual(answer([5], "open").problem, "not an absolute path: 5", "… not text");
+        assertEqual(answer(["/tmp/\ud800"], "open").problem, "not a path the shell takes (it holds a broken character): \"/tmp/\ud800\"",
+                    "… half a character: refused, not thrown");
+        const throwing2 = ["/tmp/a"];
+        Object.defineProperty(throwing2, 0, { get() { throw new Error("no"); } });
+        assert(answer(throwing2, "open").problem.startsWith("the answer could not be read"), "… a list that throws when read: a problem, not an exception");
     }
 }

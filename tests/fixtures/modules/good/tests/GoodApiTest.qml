@@ -83,6 +83,7 @@ TestCase {
     function _run() {
         const standIn = module.directory + "/tests/stand-in.sh";
         assert(Math.abs(Date.now() - Api.minuteNow) < 61000, "the runner reset the clock GoodState left set (ModuleTestKit.setNow)");
+        assert(!ModuleTestKit.chooserOpen, "… and dropped the file chooser GoodState left open");
         // --- the handle ---
         assert(module !== null, "Api.moduleAt(Qt.resolvedUrl(\".\")) finds the module's handle from any of its files");
         assert(module === Api.module("good"), "… the same object as Api.module(id)");
@@ -370,8 +371,18 @@ TestCase {
                     "ModuleTestKit.chooserCalls: the call as the shell took it — the title on one line, the directory without its /");
         module.chooseFiles({ mode: "folder" }, result => suite._busy = result);
         assertEqual(ModuleTestKit.chooserCalls.length, 1, "… a second call while one is open is not recorded");
-        assert(ModuleTestKit.answerChooser(["relative"]) !== "" && ModuleTestKit.chooserOpen, "answerChooser: a relative path refused, still open");
-        assertEqual(ModuleTestKit.answerChooser(["/srv/share/a b.txt", "/srv/share/c"]), "", "answerChooser: two files");
+        assert(ModuleTestKit.answerChooser("good", ["relative"]) !== "" && ModuleTestKit.chooserOpen, "answerChooser: a relative path refused, still open");
+        assertEqual(ModuleTestKit.answerChooser("legacy-elevate", ["/srv/share/c"]), "the open chooser is module \"good\"'s, not \"legacy-elevate\"",
+                    "answerChooser: another module's suite cannot answer it");
+        assertEqual(ModuleTestKit.cancelChooser("legacy-elevate"), "the open chooser is module \"good\"'s, not \"legacy-elevate\"",
+                    "… nor cancel it");
+        const oddList = ["/srv/a"];
+        Object.defineProperty(oddList, 0, { get() { throw new Error("odd"); } });
+        assert(ModuleTestKit.answerChooser("good", oddList).startsWith("the answer could not be read") && ModuleTestKit.chooserOpen,
+               "answerChooser: a list that throws when read is a problem, not an exception");
+        assert(ModuleTestKit.answerChooser("good", ["/srv/\ud800"]).startsWith("not a path the shell takes (it holds a broken character)") && ModuleTestKit.chooserOpen,
+               "answerChooser: half a character (a lone surrogate) refused, not thrown");
+        assertEqual(ModuleTestKit.answerChooser("good", ["/srv/share/a b.txt", "/srv/share/c"]), "", "answerChooser: two files");
         assert(!chooser.open && !ModuleTestKit.chooserOpen, "… closed");
         assertEqual(_chosen.length + " " + (_busy === null), "0 true", "… done is called after, never inside the call");
         _then("the chooser answered", () => _chosen.length === 1 && _busy !== null, () => {
@@ -382,27 +393,29 @@ TestCase {
                         "a second chooser while one was open: blocked busy");
             module.chooseFiles({ mode: "folder" }, result => suite._chosen = suite._chosen.concat([result]));
             assertEqual(ModuleTestKit.chooserCalls[1]?.startDirectory, Api.system.home, "no startDirectory: the home directory (Api.system.home)");
-            assertEqual(ModuleTestKit.answerChooser(["/a", "/b"]), "mode \"folder\" chooses one path, not 2", "answerChooser: two for a folder refused");
-            assertEqual(ModuleTestKit.cancelChooser(), "", "cancelChooser()");
+            assertEqual(ModuleTestKit.answerChooser("good", ["/a", "/b"]), "mode \"folder\" chooses one path, not 2", "answerChooser: two for a folder refused");
+            assertEqual(ModuleTestKit.cancelChooser("good"), "", "cancelChooser()");
         });
         _then("the chooser cancelled", () => _chosen.length === 2, () => {
             assertEqual(JSON.stringify(_chosen[1]), JSON.stringify({ paths: [], cancelled: true, blocked: "", error: "" }), "cancelled");
-            assertEqual(ModuleTestKit.cancelChooser(), "no chooser is open", "… none open now");
-            ModuleTestKit.setSessionLocked(true);
+            assertEqual(ModuleTestKit.cancelChooser("good"), "no chooser is open", "… none open now");
+            ModuleTestKit.setChooserLocked(true);
+            // The chooser's lock alone: a run as administrator started now is not refused
+            admin.run(["/bin/sh", standIn, "as root"], "During the chooser's lock", result => suite._results.duringChooserLock = result);
             module.chooseFiles({}, result => suite._chosen = suite._chosen.concat([result]));
             assert(!ModuleTestKit.chooserOpen && ModuleTestKit.chooserCalls.length === 2, "locked: nothing opens, nothing recorded");
         });
         _then("the chooser refused while locked", () => _chosen.length === 3, () => {
             assertEqual(JSON.stringify(_chosen[2]), JSON.stringify({ paths: [], cancelled: false, blocked: "locked", error: "" }), "locked: blocked");
-            ModuleTestKit.setSessionLocked(false);
+            ModuleTestKit.setChooserLocked(false);
             module.chooseFiles({ mode: "open" }, result => suite._chosen = suite._chosen.concat([result]));
             assert(ModuleTestKit.chooserOpen, "unlocked: it opens");
-            ModuleTestKit.setSessionLocked(true);
+            ModuleTestKit.setChooserLocked(true);
         });
         _then("a lock closes the chooser", () => _chosen.length === 4, () => {
             assertEqual(JSON.stringify(_chosen[3]), JSON.stringify({ paths: [], cancelled: true, blocked: "", error: "" }), "a lock while open: cancelled");
             assert(!ModuleTestKit.chooserOpen, "… closed");
-            ModuleTestKit.setSessionLocked(false);
+            ModuleTestKit.setChooserLocked(false);
             module.chooseFiles({ mode: "save" }, result => suite._chosen = suite._chosen.concat([result]));
         });
         _then("the chooser refused a wrong mode", () => _chosen.length === 5, () => {
@@ -414,7 +427,9 @@ TestCase {
         _then("the data directory is looked at", () => _dataMode !== null, () => {
             assert(_dataMode.ok && _dataMode.stdout.startsWith("700 "), "module.dataDirectory: there, mode 700: " + _dataMode.stdout);
         });
-        _then("the commands answered", () => Object.keys(_results).length === 16 && _queried !== null, () => {
+        _then("the commands answered", () => Object.keys(_results).length === 17 && _queried !== null, () => {
+            assert(_results.duringChooserLock.ok && _results.duringChooserLock.lines[0] === "as root",
+                   "ModuleTestKit.setChooserLocked locks the chooser alone: a run as administrator still runs: " + JSON.stringify(_results.duringChooserLock));
             assert(!_results.defaultElevate.ok && _results.defaultElevate.error.startsWith("test mode:") && !_results.defaultElevate.refused,
                    "PrivilegedAction in test mode: the default pkexec refused, nothing run: " + JSON.stringify(_results.defaultElevate));
             assert(!_results.runnerPkexec.ok && _results.runnerPkexec.error.startsWith("test mode:"),
@@ -452,7 +467,7 @@ TestCase {
         _then("it is turned off", () => !module.active && ModuleTestKit.status("good")?.state === "disabled", () => {
             assert(!ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "off: its widget is gone");
             assert(!ModuleTestKit.chooserOpen, "off: its chooser closed");
-            assertEqual(ModuleTestKit.answerChooser(["/srv/late"]), "no chooser is open", "… nothing left to answer");
+            assertEqual(ModuleTestKit.answerChooser("good", ["/srv/late"]), "no chooser is open", "… nothing left to answer");
             assert(ModuleTestKit.setEnabled("good", true), "ModuleTestKit.setEnabled(good, true)");
         });
         _then("it is on again", () => module.active && ModuleTestKit.status("good")?.state === "loaded", () => {

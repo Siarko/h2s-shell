@@ -9,6 +9,8 @@ import qs.tests
 // given, from these lines (tests/count-suites.sh). With suites named to the runner, the
 // others are built and do not run (TestCase.selected).
 QtObject {
+    id: root
+
     // First, before any suite runs: the suites use the real Config singleton, whose
     // file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
@@ -70,10 +72,15 @@ QtObject {
 
     // The suites that run on the event loop (TestCase.asynchronous)
     readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _fileChooser]
+    // How long the asynchronous suites may take, all together (then they fail as timed out)
+    readonly property int _asyncLimitMs: 90000
     // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other
-    // asynchronous suites are done, so that no key they send reaches it, nor its keys them
+    // asynchronous suites are done, so that no key they send reaches it, nor its keys them.
+    // It waits for them until the time it needs itself is all that is left of the limit, then
+    // fails without opening a dialog.
     readonly property bool _chooserLast: {
         _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser);
+        _fileChooser.waitLimitMs = _asyncLimitMs - _fileChooser.ownTimeMs;
         return true;
     }
 
@@ -88,7 +95,7 @@ QtObject {
         onTriggered: {
             _waited += interval;
             const pending = _asyncSuites.filter(suite => !suite.done);
-            if (pending.length > 0 && _waited < 60000)
+            if (pending.length > 0 && _waited < root._asyncLimitMs)
                 return;
             pending.forEach(suite => {
                 suite.fail("timed out");

@@ -1,4 +1,5 @@
 import QtQuick
+import qs.api
 import qs.tests
 import ".."
 
@@ -15,5 +16,8 @@ TestCase {
         assert(GoodState.ticking, "the singleton's timer runs while the module is active");
         // Left set on purpose: the runner resets it before the next suite (GoodApiTest checks)
         ModuleTestKit.setNow(1731400012345);
+        // … and so is a file chooser left open (module API 1.17)
+        Api.moduleAt(Qt.resolvedUrl(".")).chooseFiles({ title: "Left open" }, result => {});
+        assert(ModuleTestKit.chooserOpen, "a chooser left open for the next suite");
     }
 }
