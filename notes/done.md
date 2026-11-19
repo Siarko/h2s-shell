@@ -2158,3 +2158,9 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `saved` line after a Skip / Cancel / logout reaches `answerCounts`. Live scenario
   `skip-after-rename`; a recording runner checks the options. Read by the lead (small); module
   suites and stand-ins on both machines, the module's lock bed on NixOS.
+- **Taildrop docs against the code (D6, the docs part)** — on the module's `main` 2026-11-20.
+  The save script's steps in `docs/architecture.md`, the IPC shapes and stops in `docs/ipc.md`,
+  `docs/privileges.md`, `docs/features.md`, the stand-in `TS_FAKE_DELETE_HANG`; the Unreleased
+  CHANGELOG merged into a short set ("Needs … 1.33" kept, no version bump). No text names a time
+  limit on sends or saves. Read by the lead; module suites on both machines. Left to the owner:
+  the real tailnet checks and the 0.7.0 release (tracker).
