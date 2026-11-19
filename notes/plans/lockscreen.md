@@ -82,7 +82,9 @@ never went through a real `WlSessionLock`.
   passed on) — unless it crashed within 10 s of starting: then it exits with 255. Observed
   once in four full harness runs: the relaunched process came back with an EMPTY config
   path (`Launching config: ""`, "Could not open config file") and exited with 255 — the
-  launcher's restart then took over (`restart-crash-locked` accepts both). SIGKILL,
+  launcher's restart then took over (`restart-crash-locked` accepts both, in both of its
+  crashes). The cause is a race in Quickshell, the relaunch and its crash reporter reading the
+  instance info through one file offset (`notes/upstream/`, finding 5). SIGKILL,
   SIGTERM and the OOM killer are not caught. `qs kill` quits cleanly (exit 0); SIGTERM has
   no handler (death by signal). Either way the `WlSessionLock` is destroyed, not unlocked:
   the session stays locked, and Hyprland shows "lockscreen app died".

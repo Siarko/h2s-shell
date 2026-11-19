@@ -34,7 +34,9 @@ start_lock_watch crash
 signal_shell SEGV
 check_within 15 "Quickshell's handler restarts it" lines_more_than "$crashes_before" "Quickshell has been restarted" "$WORK/shell.log"
 # Quickshell 0.3.2's in-place relaunch sometimes comes back without its config path
-# (observed: `Launching config: ""`, "Could not open config file", exit 255); then the
+# (`Launching config: ""`, "Could not open config file", exit 255): the relaunched process
+# and the crash reporter it forked read the instance info through one shared file offset,
+# and the one that reads second finds nothing (notes/upstream/, finding 5). Then the
 # launcher starts a fresh shell. Either way: one shell, and it locks again
 sleep 2
 if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then
@@ -70,11 +72,20 @@ signal_shell KILL
 wait_for_new_shell "$old_shell" 10 || fail "the launcher did not start a new shell"
 check_within 10 "the new shell locks (the marker)" state_is phase locked
 old_shell=$SHELL_PID
+failed_relaunches_before=$(shell_log_count 'Launching config: ""')
+exits_before=$(shell_log_count "the shell exited (status 255) while the screen was locked")
 signal_shell SEGV
 check_within 15 "a crash within 10 s of starting is not restarted in place: the launcher starts a new shell" \
     wait_for_new_shell "$old_shell" 15
-check "Quickshell said it would not restart" grep -aq "crashed within 10 seconds of launching. Not restarting" "$WORK/shell.log"
-check "the launcher saw it exit with 255" grep -aq "the shell exited (status 255) while the screen was locked" "$WORK/shell.log"
+# The same race as above can take Quickshell's own decision from it: reading no instance
+# info, it misses the launch time and relaunches with an empty config path, which exits
+# with 255 as well. What the shell relies on holds either way: the launcher starts the next
+if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then
+    log "Quickshell's relaunch read no instance info (its config path empty): the launcher's restart took over"
+else
+    check "Quickshell said it would not restart" grep -aq "crashed within 10 seconds of launching. Not restarting" "$WORK/shell.log"
+fi
+check "the launcher saw it exit with 255" lines_more_than "$exits_before" "the shell exited (status 255) while the screen was locked" "$WORK/shell.log"
 check_within 10 "the new shell locks (the marker)" state_is phase locked
 check_within 5 "confirmed" state_is secure true
 sleep 1

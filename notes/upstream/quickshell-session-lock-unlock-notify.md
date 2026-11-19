@@ -1,6 +1,6 @@
 # Draft: Quickshell bug reports (not filed)
 
-Four findings from h2s-shell's lock screen rework, against **Quickshell 0.3.2** (revision
+Five findings from h2s-shell's lock screen rework, against **Quickshell 0.3.2** (revision
 4f508be500dea6e5732cc3d50382a0048b17e7b1, the `v0.3.2` tag). File:line references are into
 that release's `src/`. Status checked 2026-11-14 against
 `https://git.outfoxxed.me/quickshell/quickshell` (master, last commit 2026-10-21):
@@ -11,6 +11,7 @@ that release's `src/`. Status checked 2026-11-14 against
 | 2 | a failed `fork()` in `PamContext.start()` ends in `kill(-1, SIGKILL)` | not fixed (`subprocess.cpp`, `conversation.cpp` identical to 0.3.2) |
 | 3 | `locked = false` before the compositor's `locked` sends `unlock_and_destroy` (a protocol error) | not fixed (`session_lock/lock.cpp` identical) |
 | 4 | `qs ipc call` exits 0 when the call was not delivered ("Not ready to accept queries yet.") | not checked against master |
+| 5 | a crash's in-place relaunch sometimes reads no instance info: wrong 10 s decision, empty config path | not checked against master |
 
 So issue 1 only needs a release (a 0.3.3 would let distributions pick it up: nixpkgs
 unstable carries 0.3.2, nixos-26.05 0.3.0). Issues 2, 3 and 4 are worth filing as they stand (4 was found after the master check above).
@@ -241,3 +242,37 @@ Return the callback's status from `IpcClient::connect` (make the callback return
 Possibly also hold queries arriving during a reload until the new generation is current,
 rather than refusing them. (Clients can work around it by matching the message and trying
 again, as h2s-shell's launcher now does: `scripts/launch.sh ipc`.)
+
+---
+
+## 5. A crash's in-place relaunch sometimes reads no instance info
+
+### What happens
+
+Now and then, after a crash the handler catches (SIGSEGV), the relaunched process prints
+its lines without timestamps, says "Quickshell has been restarted." even when the crash came
+0.5 s after launch, and goes on with `Launching config: ""`, "Could not open config file",
+exit 255. Seen in h2s-shell's lock test bed about once in five full runs (several shells
+starting and crashing at once on the machine), never in a run of the scenario alone: four
+times out of four failures of its `restart-crash-locked` (2026-11-19, Arch, 0.3.2).
+
+### Cause
+
+`CrashHandlerPrivate::signalHandler` (`src/crash/handler.cpp:105-155`) puts
+`__QUICKSHELL_CRASH_INFO_FD=<dup(infoFd)>` in the environment it builds, then forks the
+crash reporter: the child inherits that descriptor and execs, and the parent execs itself
+with the same environment. Both now hold one open file description of the instance-info
+memfd, so **one file offset**. Each reads it with `file.seek(0); ds >> info;` — the
+reporter in `qsCheckCrash` (`src/crash/main.cpp:210-221`), the relaunched process in
+`checkCrashRelaunch` (`src/launch/main.cpp:29-46`). When the two overlap, the second read
+starts where the first left the offset (or mid-way) and gets nothing or a part:
+`noColor`/`timestamp` default (hence no timestamps), `launchTime` is not the launch time
+(hence the wrong 10 s decision), `configPath` empty (hence the failed launch). The
+reporter's own report can come out the same way.
+
+### Fix
+
+Read with `pread` from offset 0 instead of seek-then-read (or give each process its own
+description: the reporter a fresh `memfd` copy, or reopen `/proc/self/fd/<n>`, which makes a
+new description with its own offset). (Clients can only survive it: h2s-shell's launcher
+starts a fresh shell when the relaunch exits, and its test accepts either ending.)
