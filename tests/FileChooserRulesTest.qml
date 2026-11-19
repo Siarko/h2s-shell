@@ -41,6 +41,10 @@ TestCase {
         assertEqual(FileChooserRules.cleanTitle("x".repeat(80)).length, 60, "cut at 60");
         assertEqual(PrivilegedRules.characters(FileChooserRules.cleanTitle("x".repeat(59) + "😀😀")).join("|"), "x|".repeat(59) + "😀", "… by code point: an emoji is never cut in half");
         assertEqual(FileChooserRules.cleanTitle(null), "", "not text: none");
+        assertEqual(FileChooserRules.shownTitle("Send files", "Tailscale"), "Send files", "shownTitle: the module's own title");
+        assertEqual(FileChooserRules.shownTitle("", "Tail<b>scale\n</b>"), "Tail b scale /b", "… none: the module's name, cleaned like a title");
+        assertEqual(FileChooserRules.shownTitle(" \n ", "x".repeat(80)).length, 60, "… a title of only white space is none; the name capped");
+        assertEqual(FileChooserRules.shownTitle("", undefined), "", "… no name either: none");
 
         // --- whether it may open ---
         const refusal = request => FileChooserRules.refusal(request);

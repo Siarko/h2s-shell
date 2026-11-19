@@ -746,15 +746,16 @@ import qs.singletons.network
 //                                            (several files) | "folder"
 //                            title           plain text: one line, control and format
 //                                            characters and "<", ">", "&" dropped, at
-//                                            most 60 characters
+//                                            most 60 characters; none or "": the
+//                                            module's name (1.30)
 //                            startDirectory  an absolute path; none or "": the home
 //                                            directory (Api.system.home)
 //                            done(result)    called once, after chooseFiles has returned —
 //                                            never while the module is off
 //                          result, frozen: { paths (absolute paths, never URLs; frozen),
-//                          cancelled (the user closed it, cancel() was called, or the
-//                          session locked while it was open), blocked ("" | "locked": the
-//                          session is locked, nothing opened | "busy": a chooser is open
+//                          cancelled (the user closed it, or cancel() was called), blocked
+//                          ("" | "locked": the session is locked — nothing opened, or (1.30)
+//                          the lock closed the open dialog | "busy": a chooser is open
 //                          already — one at a time for the whole shell, any module's),
 //                          error (options of the wrong kind; the dialog could not be opened
 //                          or returned something that is not a local file — never half a

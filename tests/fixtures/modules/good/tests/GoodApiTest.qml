@@ -399,6 +399,7 @@ TestCase {
                         "a second chooser while one was open: blocked busy");
             module.chooseFiles({ mode: "folder" }, result => suite._chosen = suite._chosen.concat([result]));
             assertEqual(ModuleTestKit.chooserCalls[1]?.startDirectory, Api.system.home, "no startDirectory: the home directory (Api.system.home)");
+            assertEqual(ModuleTestKit.chooserCalls[1]?.title, "Good fixture", "no title: the module's name");
             assertEqual(ModuleTestKit.answerChooser("good", ["/a", "/b"]), "mode \"folder\" chooses one path, not 2", "answerChooser: two for a folder refused");
             assertEqual(ModuleTestKit.cancelChooser("good"), "", "cancelChooser()");
         });
@@ -419,7 +420,8 @@ TestCase {
             ModuleTestKit.setChooserLocked(true);
         });
         _then("a lock closes the chooser", () => _chosen.length === 4, () => {
-            assertEqual(JSON.stringify(_chosen[3]), JSON.stringify({ paths: [], cancelled: true, blocked: "", error: "" }), "a lock while open: cancelled");
+            assertEqual(JSON.stringify(_chosen[3]), JSON.stringify({ paths: [], cancelled: false, blocked: "locked", error: "" }),
+                        "a lock while open: blocked locked, told apart from the user cancelling");
             assert(!ModuleTestKit.chooserOpen, "… closed");
             ModuleTestKit.setChooserLocked(false);
             module.chooseFiles({ mode: "save" }, result => suite._chosen = suite._chosen.concat([result]));

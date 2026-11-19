@@ -1066,7 +1066,8 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   first sub-folder as it opens: Open with nothing else picked returns it, and the folder
   shown only when it has no sub-folders.
 - **The session locked**: nothing opens (`blocked: "locked"`); a lock while one is open closes
-  it (`cancelled`). **The module turned off**: its dialog is closed and `done` is never
+  it, answered the same (`blocked: "locked"`; `cancelled` is only the user's or the module's
+  `cancel()`). **No title**: the dialog shows the module's name. **The module turned off**: its dialog is closed and `done` is never
   called. A portal's window belongs to another process and stays on screen in both cases;
   what is chosen in it then is dropped. The dialog is closed before it is destroyed:
   destroyed while open, Qt Quick's own leaves its window behind. **The shell going** (a

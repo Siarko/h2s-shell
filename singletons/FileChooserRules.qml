@@ -79,6 +79,13 @@ Singleton {
         return PrivilegedRules.characters(kept.trim()).slice(0, titleMaxLength).join("").trim();
     }
 
+    // The title the dialog shows: the module's own, else the module's name (its manifest's,
+    // cleaned the same way), so a dialog never opens with no word on whose it is
+    function shownTitle(title, moduleName) {
+        const own = cleanTitle(title);
+        return own !== "" ? own : cleanTitle(moduleName);
+    }
+
     // An absolute path without its trailing "/" ("/" stays); anything else ""
     function cleanDirectory(path) {
         if (typeof path !== "string" || !path.startsWith("/") || pathProblem(path) !== "")
@@ -121,7 +128,9 @@ Singleton {
 
     // ---- The answer ----
 
-    // The result handed to `done`, frozen, `paths` too: { paths, cancelled, blocked, error }
+    // The result handed to `done`, frozen, `paths` too: { paths, cancelled, blocked, error }.
+    // `cancelled` is the user's (or the module's cancel()); a lock that closes an open chooser
+    // is `blocked: "locked"`, as when it refuses to open one, so a module can tell the two apart.
     function result(fields) {
         const paths = Array.isArray(fields?.paths) ? fields.paths.map(path => String(path)) : [];
         return Object.freeze({

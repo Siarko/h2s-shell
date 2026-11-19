@@ -26,6 +26,7 @@ TestCase {
     // A module's handle as FileChooser sees it
     property QtObject owner: QtObject {
         property string moduleId: "chooser-test"
+        property string name: "Chooser\ntest"
         property bool active: true
     }
 
@@ -231,18 +232,21 @@ TestCase {
             Profiles.screenLocked = true;
             assert(_seenDialog !== null && !_seenDialog.visible, "a lock: the dialog closed at once, before it is destroyed (else its window stays)");
         });
-        _then("the lock cancels it", () => _answers.length === 1, () => {
-            assertEqual(JSON.stringify(_answers[0]), "{\"paths\":[],\"cancelled\":true,\"blocked\":\"\",\"error\":\"\"}", "a lock while open: cancelled");
+        _then("the lock closes it", () => _answers.length === 1, () => {
+            assertEqual(JSON.stringify(_answers[0]), "{\"paths\":[],\"cancelled\":false,\"blocked\":\"locked\",\"error\":\"\"}",
+                        "a lock while open: blocked locked, not cancelled (that is the user's)");
             _choose({});
         });
         _then("refused while locked", () => _answers.length === 2 && _gone(), () => {
             assertEqual(_answers[1].blocked, "locked", "locked: blocked, nothing opened");
             Profiles.screenLocked = false;
             _answers = [];
-            // --- the shell going while it is open (FileChooser's Component.onDestruction) ---
-            _choose({ title: "Chooser six" });
+            // --- the shell going while it is open (FileChooser's Component.onDestruction); no
+            // title: the module's name shows ---
+            _choose({});
         });
-        _then("shown before the shell goes", () => _shown("Chooser six"), () => {
+        _then("shown before the shell goes", () => _shown("Chooser test"), () => {
+            assertEqual(FileChooser._dialog.title, "Chooser test", "no title: the module's name, on one line");
             FileChooser._shutDown();
             assert(!FileChooser.open, "the shell going: nothing open");
             assert(_seenDialog === null || !_seenDialog.visible, "… the dialog closed at once, not after the event loop turns");

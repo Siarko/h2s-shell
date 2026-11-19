@@ -18,8 +18,9 @@ import QtQuick.Dialogs
 //
 // - The module turned off (ownerGone): its dialog is closed, `done` is never called.
 // - The session locked: nothing opens (`blocked: "locked"`); a lock while one is open closes
-//   it (`cancelled`). A portal's window belongs to another process and stays on screen; its
-//   answer is dropped all the same.
+//   it, answered as the same `blocked: "locked"` — not `cancelled`, which is the user's. A
+//   portal's window belongs to another process and stays on screen; its answer is dropped
+//   all the same.
 // - The shell going (a reload, the end): the dialog is closed at once, `done` is not called —
 //   destroyed while open, Qt Quick's own would stay on screen.
 // - In module test mode no dialog is made: each call is recorded (`testCalls`) and waits for
@@ -35,7 +36,7 @@ Singleton {
     // A chooser is open (anyone's)
     readonly property bool open: _current !== null
     // Module test mode: the calls that opened, oldest first, frozen { moduleId, mode, title,
-    // startDirectory } as the shell took them; at most 200 kept
+    // startDirectory } as the shell took them (`title` as the dialog would show it); at most 200 kept
     property var testCalls: []
 
     // The open call: { id, handle, mode, title, startDirectory, done, test }
@@ -81,7 +82,7 @@ Singleton {
             return callHandle;
         }
         call.mode = parsed.mode;
-        call.title = parsed.title;
+        call.title = FileChooserRules.shownTitle(parsed.title, handle?.name);
         call.startDirectory = parsed.startDirectory;
         _current = call;
         if (call.test) {
@@ -192,7 +193,7 @@ Singleton {
 
     onLockedChanged: {
         if (locked && _current !== null)
-            _finish(FileChooserRules.result({ cancelled: true }));
+            _finish(FileChooserRules.result({ blocked: "locked" }));
     }
 
     // The open call ends with `result`
