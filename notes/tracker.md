@@ -820,3 +820,11 @@ For the owner, from the autonomous run (2026-11-18 on):
   a VPN means "has DNS servers of its own while up", not "takes over DNS" (priority, split
   DNS). Unchecked on a machine: a plugin VPN taking the default route shows `IP4.GATEWAY`
   or a /0 route; WireGuard's `ip4-auto-default-route` and `peer-routes` are not read.
+- **The file chooser for modules** (E1, to check by hand on a real screen, both machines):
+  open a chooser from a module popup and close the popup — the dialog stays, has the
+  keyboard, opens in the folder asked for, returns the file / folder picked; locking the
+  screen closes it; with `QT_QPA_PLATFORMTHEME=xdgdesktopportal` "several files" returns
+  several (Qt's own dialog returns one even then; Ctrl/Shift+click untested). Choices to
+  confirm: the dialog is whichever the platform theme gives (not forced to Qt's own); an
+  empty title shows Qt's default (put the module's name there?); a lock closing it reads
+  as `cancelled`, so a module cannot tell it from the user cancelling.
