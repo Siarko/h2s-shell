@@ -33,7 +33,9 @@ TestCase {
         "PrivilegedMark": ["need"],
         "SettingsRow": ["controls", "hint", "label", "value"],
         "ExpandingRow": ["content", "hint", "label", "open"],
-        "Notice": ["kind", "text"]
+        "Notice": ["kind", "text"],
+        "ProgressBar": ["kind", "value"],
+        "HoverTip": ["target", "text"]
     })
 
     // The base types: a module's object is the internal one itself, so only these names
@@ -52,6 +54,14 @@ TestCase {
         { kind: "warning", inside: "warning" },
         { kind: "danger", inside: "error" },
         { kind: "success", inside: "success" }
+    ]
+
+    // A progress bar's kinds, and the theme's colour its fill is drawn in
+    readonly property var progressKinds: [
+        { kind: "normal", inside: "accent" },
+        { kind: "success", inside: "success" },
+        { kind: "warning", inside: "warning" },
+        { kind: "danger", inside: "error" }
     ]
 
     // A public pill's sizes, and what each is inside
@@ -84,6 +94,69 @@ TestCase {
         { size: "s", inside: "fontSizeSmall" },
         { size: "m", inside: "fontSizeBody" }
     ]
+
+    // The progress bar and the tooltip, in a window of their own in the other corner
+    property var _secondWindow: PanelWindow {
+        anchors { top: true; right: true }
+        implicitWidth: 360
+        implicitHeight: 260
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "h2s-tests"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+        Item { id: tipHolder; Public.HoverTip { id: bareTip } }
+
+        Item {
+            id: elsewhere
+            x: 320; y: 220
+            width: 30; height: 30
+        }
+
+        ColumnLayout {
+            id: progressColumn
+            x: 10; y: 10
+            width: 200
+            spacing: 6
+            Public.ProgressBar { id: progress; value: 0.5 }
+            Public.ProgressBar { id: mistypedProgress; kind: "blue"; value: 0.25 }
+            Public.ProgressBar { id: unknownLength; value: -1 }
+            Public.ProgressBar { visible: false }
+        }
+
+        Rectangle {
+            id: tipped
+            x: 10; y: 120
+            width: 60; height: 24
+            color: Theme.surface
+            Public.HoverTip { id: tip; text: "<b>x</b>" }
+        }
+        Public.SmallButton {
+            id: tippedButton
+            property int clicks: 0
+            x: 100; y: 120
+            label: "Tip"
+            onClicked: clicks++
+            Public.HoverTip { id: buttonTip; text: "On the button" }
+        }
+        Rectangle {
+            id: aimed
+            x: 200; y: 120
+            width: 40; height: 24
+            color: Theme.surface
+        }
+        Public.HoverTip { id: aimedTip; target: aimed; text: "Aimed" }
+
+        RowLayout {
+            id: tipRow
+            x: 10; y: 180
+            spacing: 6
+            Rectangle { implicitWidth: 40; implicitHeight: 20; color: Theme.surface; Public.HoverTip { text: "First" } }
+            Public.HoverTip { text: "Loose in the row" }
+            Rectangle { implicitWidth: 40; implicitHeight: 20; color: Theme.surface }
+        }
+    }
 
     property var _window: PanelWindow {
         anchors { top: true; left: true }
@@ -820,8 +893,10 @@ TestCase {
         _controls();
         _rows();
         _baseTypes();
+        _progressAndTips();
 
         _window.visible = false;
+        _secondWindow.visible = false;
         finish();
     }
 
@@ -1185,5 +1260,100 @@ TestCase {
         const stretched = _items(publicStretched);
         for (let i = 0; i < stretched.length; i++)
             assert(stretched[i].width > stretched[i].implicitWidth, "stretched, the " + types[i] + " is wider than it needs");
+    }
+
+    // The internal tooltip a public one shows: it lives in the window's top item
+    function _tipOf(publicTip) {
+        const top = publicTip.Window.window?.contentItem;
+        return top ? Array.from(top.children).find(child => child.toString().startsWith("HoverTip") && child.target === publicTip.target) ?? null : null;
+    }
+
+    // ProgressBar and HoverTip (1.31)
+    function _progressAndTips() {
+        const rules = ApiElementRules;
+
+        // --- the words ---
+        for (const entry of progressKinds)
+            assertEqual(JSON.stringify(rules.progressKind(entry.kind)), JSON.stringify({ value: entry.inside, known: true }), "a progress bar's kind " + entry.kind + " is the theme's " + entry.inside);
+        assertEqual(Object.keys(rules.progressKinds).sort().join(" "), progressKinds.map(entry => entry.kind).sort().join(" "), "and those are all a progress bar's kinds");
+        for (const word of ["accent", "", "primary", "error", "toString", undefined, 3])
+            assertEqual(JSON.stringify(rules.progressKind(word)), JSON.stringify({ value: "accent", known: false }), "a progress bar's kind " + JSON.stringify(word) + " is not one: the default, normal");
+        assertEqual(rules.tipText("a\nb"), "a b", "a tooltip's text: line breaks as spaces");
+        const long = rules.tipText("y".repeat(300));
+        assert(Array.from(long).length === rules.tipCap && long.endsWith("…"), "… cut with \"…\" at " + rules.tipCap + " characters");
+        assertEqual(rules.tipText("y".repeat(rules.tipCap)), "y".repeat(rules.tipCap), "… one of exactly that length whole");
+        assertEqual(rules.tipText(null) + rules.tipText({}), "", "… nothing that is not a text");
+        assertEqual(rules.oneLine("y".repeat(100)).length, rules.textCap, "a label still cut at " + rules.textCap);
+
+        // --- the names ---
+        assertEqual(JSON.stringify(_names(progress)), JSON.stringify(pinned.ProgressBar), "ProgressBar's public properties and signals are the pinned ones");
+        assertEqual(JSON.stringify(_names(tip)), JSON.stringify(pinned.HoverTip), "HoverTip's public properties and signals are the pinned ones");
+        assertEqual(progress.kind + " " + bareTip.text + "|" + (bareTip.target === tipHolder), "normal |true", "defaults: a normal bar, a tooltip with no text on the item it is written in");
+
+        // --- the progress bar ---
+        assert(_secondWindow.visible && _until(() => progress.width > 0), "the second window shows, the bars laid out");
+        const inner = _within(progress);
+        const track = inner.children[0];
+        const fill = inner.children[1];
+        assertEqual(progress.width + " " + progress.height, progressColumn.width + " " + Theme.progress.thickness, "a bar fills its layout's width, as thick as the theme says");
+        assertEqual(track.radius, Math.min(Theme.progress.radius, Theme.progress.thickness / 2), "its ends rounded by the theme's radius, at most half its thickness");
+        assert(Qt.colorEqual(track.color, Theme.track), "its track in the theme's track colour");
+        assert(_until(() => Math.abs(fill.width - progress.width / 2) < 0.5), "value 0.5: half of it filled (" + fill.width + ")");
+        for (const entry of progressKinds) {
+            progress.kind = entry.kind;
+            assert(Qt.colorEqual(fill.color, Theme[entry.inside]), "a " + entry.kind + " bar is filled in the theme's " + entry.inside);
+        }
+        progress.kind = "normal";
+        assert(Qt.colorEqual(_within(mistypedProgress).children[1].color, Theme.accent), "a kind that does not exist shows as normal");
+        assertEqual(ApiElements.warned.filter(key => key === "ProgressBar.kind=blue").length, 1, "… warned about once");
+        assert(!ApiElements.warned.some(key => /^ProgressBar\.kind=(normal|success|warning|danger)$/.test(key)), "a kind it knows is not warned about");
+        for (const [value, share, what] of [[2, 1, "above 1: full"], [0, 0, "0: empty"], [NaN, 0, "not a number: empty"], [1, 1, "1: full"]]) {
+            progress.value = value;
+            assert(_until(() => Math.abs(fill.width - progress.width * share) < 0.5), "value " + what + " (" + fill.width + ")");
+        }
+        const piece = _within(unknownLength).children[1];
+        assert(Math.abs(piece.width - unknownLength.width * 0.3) < 0.5 && piece.x >= 0 && piece.x + piece.width <= unknownLength.width + 0.5,
+               "a value below 0: a piece of the fill along the track (" + piece.x + ", " + piece.width + ")");
+        if (!Theme.reduceMotion) {
+            const firstPlace = piece.x;
+            assert(_until(() => Math.abs(piece.x - firstPlace) > 2), "… sliding");
+        }
+        assertEqual(progressColumn.children[3].height, Theme.progress.thickness, "a hidden bar keeps its thickness");
+        assertEqual(progressColumn.implicitHeight, 3 * Theme.progress.thickness + 2 * 6, "… and takes no room in a layout");
+        assertEqual(Public.Api.theme.progress.thickness + " " + Public.Api.theme.progress.radius, Theme.progress.thickness + " " + Theme.progress.radius, "the thickness and radius are offered to modules (Api.theme.progress)");
+
+        // --- the tooltip ---
+        driver.mouseMove(elsewhere, 5, 5);
+        const shown = _tipOf(tip);
+        assert(shown !== null && !shown.visible, "a tooltip shows nothing before the pointer comes");
+        driver.mouseMove(tipped, 10, 10);
+        assert(_until(() => shown.visible), "the pointer over its item: the tooltip shows");
+        assert(_asWritten(_texts(shown)[0]) && _texts(shown)[0].text === "<b>x</b>", "its text with markup in it as written");
+        assert(shown.y + shown.height <= tipped.mapToItem(shown.parent, 0, 0).y + 0.5, "above the item");
+        tip.text = "y".repeat(300);
+        assertEqual(Array.from(_texts(shown)[0].text).length, ApiElementRules.tipCap, "a long text cut");
+        tip.text = "<b>x</b>";
+        driver.mouseMove(elsewhere, 5, 5);
+        assert(_until(() => !shown.visible), "the pointer gone: the tooltip goes");
+
+        const onButton = _tipOf(buttonTip);
+        driver.mouseMove(tippedButton, 5, 5);
+        assert(_until(() => onButton.visible) && _texts(onButton)[0].text === "On the button", "a tooltip inside a button shows over it");
+        assert(_inside(tippedButton).hovered, "… the button lit all the same");
+        driver.mouseClick(tippedButton, 5, 5);
+        assertEqual(tippedButton.clicks, 1, "… and takes its clicks");
+        driver.mouseMove(elsewhere, 5, 5);
+        assert(_until(() => !onButton.visible), "… gone with the pointer");
+
+        driver.mouseMove(aimed, 5, 5);
+        assert(_until(() => _tipOf(aimedTip)?.visible === true), "a tooltip given a target shows over that item");
+        driver.mouseMove(elsewhere, 5, 5);
+        aimed.visible = false;
+        assert(_until(() => !_tipOf(aimedTip).visible), "… gone with the pointer");
+
+        const rowItems = _items(tipRow);
+        assert(_until(() => rowItems[2].x > 0), "the row laid out");
+        assertEqual(rowItems[2].x, 40 + 6, "a tooltip loose in a layout takes no room in it");
+        assertEqual(rowItems[1].width + " " + rowItems[1].visible, "0 false", "… no size, and nothing shown in its place");
     }
 }

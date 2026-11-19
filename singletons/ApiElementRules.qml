@@ -28,20 +28,32 @@ Singleton {
     readonly property var noticeKinds: ({ warning: "warning", danger: "error", success: "success" })
     readonly property string noticeKindDefault: "warning"
 
+    // (1.31) A public progress bar's kind → the colour of its fill, by its name in Theme
+    readonly property var progressKinds: ({ normal: "accent", success: "success", warning: "warning", danger: "error" })
+    readonly property string progressKindDefault: "normal"
+
     // The longest a text a module hands a public element for one line may be, in
     // characters, before it is cut
     readonly property int textCap: 80
+    // (1.31) The longest a public tooltip's text may be; it wraps at the tooltip's width
+    readonly property int tipCap: 200
 
     // A text from a module as a public element shows it on one line: line breaks and
-    // tabs folded into spaces, and longer than `textCap` cut, "…" at the end. Anything not
+    // tabs folded into spaces, and longer than `cap` (`textCap` unless given) cut, "…" at the end. Anything not
     // a string or a number is "". Characters are counted as code points, so a cut never
     // splits one.
-    function oneLine(text) {
+    function oneLine(text, cap) {
         if (typeof text !== "string" && typeof text !== "number")
             return "";
+        const longest = cap ?? textCap;
         const folded = String(text).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
         const characters = PrivilegedRules.characters(folded);
-        return characters.length > textCap ? characters.slice(0, textCap - 1).join("") + "…" : folded;
+        return characters.length > longest ? characters.slice(0, longest - 1).join("") + "…" : folded;
+    }
+
+    // A public tooltip's text: as oneLine, cut at `tipCap` (the tooltip wraps it)
+    function tipText(text) {
+        return oneLine(text, tipCap);
     }
 
     // A public dropdown's options as the internal one is given them: { value, label } of
@@ -78,6 +90,10 @@ Singleton {
 
     function noticeKind(kind) {
         return pick(noticeKinds, kind, noticeKindDefault);
+    }
+
+    function progressKind(kind) {
+        return pick(progressKinds, kind, progressKindDefault);
     }
 
     // Whether a mark with this need shows anything: the lock, or "not allowed"

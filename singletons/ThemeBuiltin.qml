@@ -113,6 +113,8 @@ Singleton {
         // The shell's message pill; a radius of -1 rounds its ends fully
         "osdMessage": { "radius": -1, "borderWidth": 0 },
         "tooltip": { "radius": 4, "horizontalPadding": 8, "verticalPadding": 6 },
+        // Progress bars: how thick, and their ends' radius (never more than half the thickness)
+        "progress": { "thickness": 4, "radius": 2 },
         "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
         "calendar": { "dayRadius": 4 },
         "checkbox": { "radius": 3 },

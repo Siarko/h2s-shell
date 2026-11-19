@@ -91,22 +91,12 @@ Item {
                                 Layout.alignment: Qt.AlignVCenter
                                 spacing: 3
 
-                                Rectangle {
+                                ProgressBar {
                                     visible: _row.modelData.showProgressBar
                                     width: parent.width
-                                    height: visible ? 4 : 0
-                                    radius: height / 2
-                                    color: Theme.track
-
-                                    Rectangle {
-                                        width: parent.width * Math.max(0, Math.min(1,
-                                            (_row.modelData.value - _row.modelData.minValue) /
-                                            Math.max(1, _row.modelData.maxValue - _row.modelData.minValue)))
-                                        height: parent.height
-                                        radius: parent.radius
-                                        color: Theme.accent
-                                        Behavior on width { NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") } }
-                                    }
+                                    height: visible ? implicitHeight : 0
+                                    value: Math.max(0, (_row.modelData.value - _row.modelData.minValue) /
+                                        Math.max(1, _row.modelData.maxValue - _row.modelData.minValue))
                                 }
 
                                 Text {

@@ -492,6 +492,7 @@ Singleton {
     readonly property var osdVolume: values.osdVolume
     readonly property var osdMessage: values.osdMessage
     readonly property var tooltip: values.tooltip
+    readonly property var progress: values.progress
     readonly property var settings: values.settings
     readonly property var calendar: values.calendar
     readonly property var checkbox: values.checkbox

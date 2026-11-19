@@ -13,6 +13,11 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.31: two public elements — `ProgressBar` (`value` 0 to 1, below 0 a run of unknown
+  length; `kind` `normal`, `success`, `warning`, `danger`) and `HoverTip` (a plain-text
+  tooltip over its `target`, by default the item it is written in, taking no room); the
+  theme's new `progress` group (`thickness`, `radius`; Settings → Appearance → Controls) is
+  offered as `Api.theme.progress`.
 - 1.30: soft dependencies between modules — a `uses` entry may be
   `{ "version": "1.2", "optional": true }`: the module loads with or without that provider,
   after it when it is there, and `module.uses.<id>` is null without it (a provider there that
@@ -348,6 +353,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Settings → Appearance → Controls: "Progress bars", their thickness and corner radius; the
+  hardware popup's bars follow them.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the
   network popup), or saves the new password, as Save does (a saved network's card in
   Settings) — only when that button could be pressed: never with the field empty.

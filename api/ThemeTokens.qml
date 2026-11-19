@@ -4,7 +4,8 @@ import qs.singletons
 // The theme as a module reads it (Api.theme): the tokens the core's own widgets use, every
 // one read-only and following the theme in use (a profile switch, a theme edited live). The
 // groups (capsule, popup, row, …) are deep frozen copies of the theme's values (curve() too): reading
-// `Api.theme.row.radius` works, writing does nothing. Part of the module API 1.0 — a token
+// `Api.theme.row.radius` works, writing does nothing (1.31: `progress`, a progress bar's
+// thickness and radius). Part of the module API 1.0 — a token
 // added is a minor bump; the names are the core Theme's (singletons/Theme.qml).
 QtObject {
     // ---- Colours ----
@@ -69,6 +70,8 @@ QtObject {
     readonly property var field: _frozen(Theme.field)
     readonly property var checkbox: _frozen(Theme.checkbox)
     readonly property var tooltip: _frozen(Theme.tooltip)
+    // (1.31) thickness, radius of a progress bar
+    readonly property var progress: _frozen(Theme.progress)
     readonly property var border: _frozen(Theme.border)
     // pageMargin, cardRadius, sidebarItemRadius, … of the settings window
     readonly property var settings: _frozen(Theme.settings)

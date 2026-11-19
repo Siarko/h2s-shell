@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.30"
+    readonly property string apiVersion: "1.31"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a

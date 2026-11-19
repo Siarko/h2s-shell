@@ -41,7 +41,7 @@ Singleton {
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "warningButton",
         "successButton", "iconButton", "pill", "field",
-        "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "settings", "calendar",
+        "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "progress", "settings", "calendar",
         "checkbox", "lock", "border", "target", "popupWidth"]
 
     // A pill's least height for its `size`, from the theme's `pill` group: "s", "m" or
@@ -306,6 +306,8 @@ Singleton {
             tooltip: [radius("Tooltips", 20),
                 { token: "horizontalPadding", label: "Padding across", hint: "Between a tooltip's edge and its text", from: 0, to: 30, suffix: px },
                 { token: "verticalPadding", label: "Padding down", hint: "Above and below a tooltip's text", from: 0, to: 30, suffix: px }],
+            progress: [radius("A progress bar's ends; at most half its thickness", 10),
+                { token: "thickness", label: "Thickness", hint: "Progress bars: the hardware popup's, a module's", from: 1, to: 20, suffix: px }],
             border: [
                 { token: "width", label: "Outline width", hint: "Ordinary outlines: fields, lists, pills, tooltips", from: 0, to: 6, suffix: px },
                 { token: "selectedWidth", label: "Selection width", hint: "Selection rings: colour swatches, curve handles, an event's colour edge", from: 0, to: 8, suffix: px }],

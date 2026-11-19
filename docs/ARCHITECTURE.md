@@ -848,7 +848,11 @@ for a file that imports both. Rows and texts: `SettingsRow` (a label, a hint und
 value, and its children as the controls on the right), `ExpandingRow` (a line that opens;
 its child is held as a `Component`, so nothing of it exists while the row is closed) and
 `Notice` (a small line of kind `warning`, `danger` or `success`); inside the first two are
-`components/SettingsRow.qml` and `components/ExpandingRow.qml`. The base types —
+`components/SettingsRow.qml` and `components/ExpandingRow.qml`. `ProgressBar` (API 1.31;
+`value` 0 to 1, below 0 a run of unknown length; `kind` `normal`, `success`, `warning` or
+`danger`; inside, `components/ProgressBar.qml`, as thick as the theme's
+`progress.thickness`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
+it is written inside by default, taking no room; inside, `components/HoverTip.qml`). The base types —
 `PopupWidget`, `BarText`, `BarRow`, `PointerArea`, `VpnProvider` — are the shell's own
 types under their public names, not wrappers: the bar, the pointer and `VpnManager` need
 the object itself, and only the names listed in `api/Api.qml` are promised. Every element's properties and signals are pinned in

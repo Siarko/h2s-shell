@@ -15,7 +15,7 @@ TestCase {
     readonly property var typeSizes: ["fontSizeTiny", "fontSizeXSmall", "fontSizeSmall", "fontSizeBody", "fontSizeBodyLarge", "fontSizeMedium", "fontSizeSection", "fontSizeHeading", "fontSizeTitle", "fontSizeDisplay"]
 
     // Frozen copies of the theme's groups
-    readonly property var groups: ["capsule", "popup", "row", "listItem", "button", "iconButton", "pill", "field", "checkbox", "tooltip", "border", "settings"]
+    readonly property var groups: ["capsule", "popup", "row", "listItem", "button", "iconButton", "pill", "field", "checkbox", "tooltip", "progress", "border", "settings"]
 
     // Plain values that are neither a colour nor a type size
     readonly property var values: ["fontFamily", "fontScale", "reduceMotion", "animationSpeed"]
