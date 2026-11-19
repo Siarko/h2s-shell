@@ -168,7 +168,7 @@ TestCase {
         assertEqual(JSON.stringify(WidgetPresets.defaults), JSON.stringify(WidgetPresets.coreDefaults), when + ": WidgetPresets.defaults the core's");
         assert(!Object.keys(Profiles.facts).some(fact => fact.startsWith("good.")), when + ": no module fact in Profiles.facts");
         assert(_window.pages === _window.corePages, when + ": the settings window's pages are the core's list");
-        assertEqual(Modules.host.slotContributions("network.vpn.card").length, 0, when + ": no slot contribution");
+        assertEqual(Modules.host.slotContributions("network.vpn.page").filter(entry => entry.module === "good").length, 0, when + ": no slot contribution of good's");
     }
 
     function runAsync() {
@@ -252,13 +252,13 @@ TestCase {
             _main = Modules.host.mainObject("good");
             _goodState = _main.goodState;
             assert(_goodState.ticking && _goodState.registrations.length === 1, "good's timer runs, its registration is in");
-            // Slots
-            const sections = _slot("network.vpn.card", { wifiEnabled: false });
-            assertEqual(sections.count, 1, "a slot: good's contribution");
-            const built = sections.items[0];
+            // Slots: the one left a slot (the page's), filled by good and by broken-slot
+            const sections = _slot("network.vpn.page", { wifiEnabled: false });
+            assertEqual(sections.count, 2, "a slot: good's contribution and broken-slot's");
+            const built = sections.items.find(item => item.moduleId === "good");
             assert(built?.ready, "… built");
             assertEqual(built?.item.module, handle, "… with its module's handle");
-            assertEqual(built?.item.context.slot + "," + built?.item.context.wifiEnabled, "network.vpn.card,false", "… with the context, slot added");
+            assertEqual(built?.item.context.slot + "," + built?.item.context.wifiEnabled, "network.vpn.page,false", "… with the context, slot added");
             assert(built.implicitHeight > 0, "… with its size (the slot's follows when laid out)");
             const changes = built.item.contextChanges;
             sections.context = { wifiEnabled: false };
@@ -266,17 +266,17 @@ TestCase {
             sections.context = { wifiEnabled: true };
             assertEqual(built.item.contextChanges, changes + 1, "… a changed one: passed");
             assertEqual(built.item.context.wifiEnabled, true, "… and current");
-            const broken = _slot("network.vpn.row");
-            assertEqual(broken.count, 1, "a contribution that does not compile: counted");
-            assert(broken.items.length === 1 && !broken.items[0].ready, "… not shown");
-            assertEqual(broken.implicitHeight, 0, "… the slot takes no room for it");
+            const broken = sections.items.find(item => item.moduleId === "broken-slot");
+            assert(broken !== undefined, "a contribution that does not compile: counted");
+            assert(!broken.ready, "… not shown");
+            assertEqual(broken.implicitHeight, 0, "… it takes no room");
             assertEqual(Modules.status("broken-slot")?.state, "loaded", "… which stays loaded");
             // The VPN seam after the merge: a Component per module for a slot
-            assert(Modules.slotComponent("network.vpn.card", "good") !== null, "slotComponent: good's contribution as a Component");
-            assert(Modules.slotComponent("network.vpn.card", "good") === Modules.slotComponent("network.vpn.card", "good"), "… the same Component while it stays");
-            assertEqual(Modules.slotComponent("network.vpn.card", "broken-slot"), null, "… none for a module without one");
-            assertEqual(Modules.slotUrl("network.vpn.card", "good"), "file://" + fixtures + "/good/GoodSlot.qml", "slotUrl");
-            const wrapped = Modules.slotComponent("network.vpn.card", "good").createObject(suite, { context: { slot: "x", n: 1 } });
+            assert(Modules.slotComponent("network.vpn.page", "good") !== null, "slotComponent: good's contribution as a Component");
+            assert(Modules.slotComponent("network.vpn.page", "good") === Modules.slotComponent("network.vpn.page", "good"), "… the same Component while it stays");
+            assertEqual(Modules.slotComponent("network.vpn.page", "not-loaded"), null, "… none for a module without one");
+            assertEqual(Modules.slotUrl("network.vpn.page", "good"), "file://" + fixtures + "/good/GoodSlot.qml", "slotUrl");
+            const wrapped = Modules.slotComponent("network.vpn.page", "good").createObject(suite, { context: { slot: "x", n: 1 } });
             assert(wrapped?.ready && wrapped.item.context.n === 1 && wrapped.item.module === handle, "… built, with the handle and the context set on it");
             wrapped?.destroy();
             // API 1.2: `shown` passed to a contribution that declares it, following where it sits
@@ -405,9 +405,9 @@ TestCase {
             _goodState.widgetSawMain = null;
             SystemSleep.reportResumed();
             assertEqual(_resumes, 1, "resumed(): not told while the module is off");
-            assert(_has(Modules.status("broken-slot")?.errors, "slot network.vpn.row"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
-            assertEqual(_slots["network.vpn.card"].count, 0, "its slot contribution gone");
-            assertEqual(_slots["network.vpn.card"].implicitHeight, 0, "… the slot empty again");
+            assert(_has(Modules.status("broken-slot")?.errors, "slot network.vpn.page"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
+            assertEqual(_slots["network.vpn.page"].count, 1, "its slot contribution gone (broken-slot's left)");
+            assertEqual(_slots["network.vpn.page"].implicitHeight, 0, "… the slot empty again (broken-slot's shows nothing)");
             assert(!_goodState.ticking, "its singleton's timer stopped (it follows module.active)");
             assertEqual(_goodState.registrations.length, 0, "its registration removed with the main");
             assertEqual(handle.setFact("ready", true) !== "", true, "setFact refused while off");
@@ -430,7 +430,7 @@ TestCase {
             assert(main.goodState.ticking, "… its timer running again");
             assertEqual(Profiles.facts["good.ready"], true, "… its fact back");
             assertEqual(WidgetRegistry.entry("good")?.module, "good", "… its widget back");
-            assertEqual(_slots["network.vpn.card"].count, 1, "… its slot contribution back");
+            assertEqual(_slots["network.vpn.page"].count, 2, "… its slot contribution back");
             assert(_window.pages.some(each => each.id === "good"), "… its settings page back");
             Modules.host.unload();
         });
@@ -511,18 +511,28 @@ TestCase {
             assertEqual(status?.state, "loaded", "vpn-slots: loaded (api 1.1)");
             assertEqual(JSON.stringify(status?.warnings ?? null), "[]", "… no warning: its main extends VpnProvider from qs.components, its slots are offered");
             assertEqual(JSON.stringify(status?.deprecations ?? null),
-                        JSON.stringify(["import qs.components (in Main.qml): use the elements of qs.api (goes with the shell's next tightening)"]),
-                        "… but that import is listed among its deprecations, and it loaded all the same");
+                        JSON.stringify(["import qs.components (in Main.qml): use the elements of qs.api (goes with the shell's next tightening)",
+                                        "slots (\"network.vpn.row\"): use `anchors`: \"popup.network.connections.vpn.row\", \"after\" (goes with the shell's next tightening)",
+                                        "slots (\"network.vpn.card\"): use `anchors`: \"settings.network_vpn.vpns.card.settings\", \"prepend\" (goes with the shell's next tightening)"]),
+                        "… but that import and its row's and card's slots, read as their places, are listed among its deprecations, and it loaded all the same");
             assertEqual(JSON.stringify(Modules.host.describe().modules.find(module => module.id === "vpn-slots")?.deprecations ?? null), JSON.stringify(status.deprecations),
                         "… as `modules list` prints them");
             assertEqual(JSON.stringify(Modules.status("vpn-page")?.deprecations ?? null) + " " + Modules.status("vpn-page")?.state, "[] loaded",
                         "vpn-page, whose provider extends VpnProvider from qs.api: loaded, nothing deprecated");
             const vpn = VpnManager.vpns.find(each => each.uuid === "vpn-slots:one") ?? null;
             assert(vpn !== null, "its provider's entry is among the VPNs");
-            const row = VpnManager.extrasFor(VpnManager.slots.row, vpn);
-            assert(row !== null && row === Modules.slotComponent("network.vpn.row", "vpn-slots"), "extrasFor(row): the module's contribution (Modules.slotComponent)");
-            assert(VpnManager.extrasFor(VpnManager.slots.card, vpn) === Modules.slotComponent("network.vpn.card", "vpn-slots"), "extrasFor(card): the module's");
-            assertEqual(VpnManager.extrasFor(VpnManager.slots.page, vpn), null, "extrasFor(page): none (the page is loaded by URL)");
+            // Its row's and card's slots are read as their places: elements of the VPN's
+            // provider module's (own-provider), no longer slot contributions
+            assertEqual(Modules.slotComponent("network.vpn.row", "vpn-slots") + " " + Modules.slotComponent("network.vpn.card", "vpn-slots"), "null null",
+                        "the row's and the card's slots: no slot contributions any more");
+            assertEqual(Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "vpn-slots").map(entry => entry.component.replace(/^.*\//, "") + " " + entry.context.slot).join(","),
+                        "VpnRow.qml network.vpn.row", "… the row's an element under the provider's rows, its context naming the slot");
+            assertEqual(Modules.host.anchorContent("settings.network_vpn.vpns.card.settings", "prepend", "vpn-slots").map(entry => entry.component.replace(/^.*\//, "") + " " + entry.context.open).join(","),
+                        "VpnCard.qml true", "… the card's one in its opened card, with open: true");
+            assertEqual(Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "vpn-page").length
+                        + Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "").length, 0,
+                        "… none on another provider's rows, none on NetworkManager's");
+            assertEqual(VpnManager.ownExtrasOf("row", vpn), null, "ownExtrasOf: none (its provider has no extras of its own)");
             assertEqual(VpnManager.pageOf(vpn), "file://" + fixtures + "/vpn-slots/VpnPage.qml", "pageOf: the module's page (Modules.slotUrl)");
             assertEqual(VpnManager.settingsPageOf(vpn), "", "settingsPageOf: none — vpn-slots names no settings page (the frame is its way)");
             // A provider whose page is a regular settings page (settingsPage, no page slot):
@@ -540,18 +550,15 @@ TestCase {
             const navigated = VpnManager.openSettingsPageOf(paged);
             Shell.openSettings.disconnect(go);
             assert(navigated && _window.selectedPage === "vpn-page", "Settings… on its card: the window's selected page is the module's (" + _window.selectedPage + ")");
-            const context = VpnManager.contextFor(VpnManager.slots.row, vpn);
+            const context = VpnManager.contextFor(VpnManager.slots.page, vpn);
             assert(context.provider === VpnManager.providerOf(vpn).object && Array.isArray(context.otherVpnsUp), "contextFor: the provider, otherVpnsUp");
-            const built = row.createObject(suite, { context: context });
-            assert(built?.ready && built.item.text === "Row of vpn-slots:one by vpn-slots", "… built in the module's guard, with its handle and the context: " + built?.item?.text);
-            built?.destroy();
             // A provider that is no module's: its own extras
             const fakeComponent = Qt.createComponent(Qt.resolvedUrl("FakeVpnProvider.qml"), Component.PreferSynchronous);
             const fake = fakeComponent.createObject(suite, { providerId: "vpt-own", withExtras: true, withPage: true });
             fake.add("x", "Own extras");
             const own = VpnManager.vpns.find(each => each.uuid === "vpt-own:x") ?? null;
-            assert(own !== null && VpnManager.extrasFor(VpnManager.slots.row, own) === fake.rowExtras
-                   && VpnManager.extrasFor(VpnManager.slots.card, own) === fake.cardExtras, "a provider that is no module's: its own rowExtras and cardExtras");
+            assert(own !== null && VpnManager.ownExtrasOf("row", own) === fake.rowExtras
+                   && VpnManager.ownExtrasOf("card", own) === fake.cardExtras, "a provider that is no module's: its own rowExtras and cardExtras");
             assert(VpnManager.pageOf(own).endsWith("/tests/FakeVpnProviderPage.qml"), "… and its own pageUrl");
             fake.destroy();
             // The page in the core's frame, given its module's handle
@@ -571,7 +578,7 @@ TestCase {
             assert(!Shell.settingsPageIds.includes("vpn-page"), "… and its page left Shell.settingsPageIds");
             assertEqual(VpnManager.providerOf("vpn-page:one"), null, "… its provider with it");
             assertEqual(VpnManager.providerOf("vpn-slots:one"), null, "its provider left with its main");
-            assertEqual(Modules.slotComponent("network.vpn.row", "vpn-slots"), null, "… its slot contributions with the module");
+            assertEqual(Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "vpn-slots").length, 0, "… its elements with the module");
             Modules.setEnabled("vpn-slots", true);
             Modules.setEnabled("vpn-page", true);
             _frame?.destroy();

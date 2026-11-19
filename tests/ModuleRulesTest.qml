@@ -795,8 +795,10 @@ TestCase {
                       { type: "alpha.two", name: "A2", widget: "A2.qml" }],
             settingsPages: [{ id: "alpha", label: "A", component: "Page.qml" }],
             slots: [{ slot: "network.vpn.row", component: "Row.qml" }] }));
+        // Merged with no table: every slot a slot (on this shell's table the VPN row's is read as
+        // its anchor)
         const merged = ModuleMergeRules.merge([{ id: "zeta", directory: "/z", manifest: zeta }, { id: "alpha", directory: "/a/", manifest: alpha },
-                                    null, { id: 5 }]);
+                                    null, { id: 5 }], []);
         assertEqual(merged.widgetEntries.map(entry => entry.type).join(","), "alpha,alpha.two,zeta",
                     "merged by module id, then manifest order — not search order");
         assertEqual(merged.widgetEntries[0].widget, "file:///a/A1.qml", "files become absolute file:// URLs");
@@ -810,7 +812,7 @@ TestCase {
         assertEqual(ModuleMergeRules.slotContributions(merged.slots, "toString").length, 0, "a slot nobody fills: none (not the prototype's)");
         assertEqual(ModuleMergeRules.slotContributions(merged.slots, "hasOwnProperty").length, 0, "… none");
         assertEqual(ModuleMergeRules.slotContributions(null, "x").length, 0, "no slots: none");
-        const again = ModuleMergeRules.merge([{ id: "alpha", directory: "/a", manifest: alpha }, { id: "zeta", directory: "/z", manifest: zeta }]);
+        const again = ModuleMergeRules.merge([{ id: "alpha", directory: "/a", manifest: alpha }, { id: "zeta", directory: "/z", manifest: zeta }], []);
         assertEqual(JSON.stringify(again.widgetEntries), JSON.stringify(merged.widgetEntries), "stable: the input order does not matter");
         assertEqual(ModuleMergeRules.merge(null).widgetEntries.length, 0, "nothing to merge: empty lists");
 
@@ -827,8 +829,12 @@ TestCase {
         // --- the table ---
         assertEqual(rules.anchorTable.map(entry => entry.path + " " + entry.kind + " " + entry.placements.join("/") + " " + entry.view).join("; "),
                     "settings.general page append panels/settings/GeneralSettings.qml; popup.network.connections popupSection append panels/NetworkPanel.qml; "
-                    + "popup.notifications popupSection prepend panels/NotificationPanel.qml",
-                    "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups)");
+                    + "popup.notifications popupSection prepend panels/NotificationPanel.qml; "
+                    + "popup.network.connections.vpn.row row after panels/network/VpnSection.qml; "
+                    + "settings.network_vpn.vpns.card.settings region prepend panels/settings/NetworkVpnSettings.qml",
+                    "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards)");
+        assertEqual(rules.anchorTable.filter(entry => entry.scope === "own-provider").map(entry => entry.path).join(","),
+                    "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings", "… the VPN places own-provider, the others not");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
         const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
                                                                  context: "{ editIndex }", scope: "", since: "1.20", where: "a page",
@@ -993,8 +999,9 @@ TestCase {
                     JSON.stringify({ slot: "settings.general.bottom" }) + JSON.stringify({ open: true, slot: "network.vpn.card" }),
                     "… each one's context carrying its slot, the card's open: true");
         assertEqual(ModuleMergeRules.slotsAsAnchors(manifest, rules.anchorTable).map(entry => entry.slot + ">" + entry.at + "," + entry.component).join("|"),
-                    "settings.general.bottom>settings.general,Bottom.qml|settings.general.bottom>settings.general,Row.qml",
-                    "… on this shell's table: the General slot's, the VPN slots stay slots");
+                    "settings.general.bottom>settings.general,Bottom.qml|network.vpn.row>popup.network.connections.vpn.row,VpnRow.qml|"
+                    + "settings.general.bottom>settings.general,Row.qml|network.vpn.card>settings.network_vpn.vpns.card.settings,Card.qml",
+                    "… on this shell's table: the General slot's and the VPN row's and card's, never the page");
         assertEqual(ModuleMergeRules.slotDeprecations(manifest, table)[0],
                     "slots (\"settings.general.bottom\"): use `anchors`: \"settings.general\", \"append\" (goes with the shell's next tightening)",
                     "slotDeprecations: a slot read as an anchor is an old way, listed");
@@ -1055,7 +1062,7 @@ TestCase {
         assertEqual(Object.keys(mergedAnchors.slots).join(","), "network.vpn.row", "… a slot read as an anchor leaves the slots");
         const mergedHere = ModuleMergeRules.merge([{ id: "anch", directory: "/m/anch", manifest: anchored }]);
         assertEqual(mergedHere.anchors.map(entry => entry.component.replace("file:///m/anch/", "")).join(",") + " " + Object.keys(mergedHere.slots).join(","),
-                    "Row.qml,Bottom.qml network.vpn.row", "merge on this shell's table: the General page's anchor and its slot read as one; the VPN slot a slot");
+                    "Row.qml,Bottom.qml,VpnRow.qml ", "merge on this shell's table: the General page's anchor, its slot and the VPN row's slot read as anchors");
     }
 
     // API 1.18: a module's API for other modules — `exports` and `uses` in the manifest, the

@@ -221,8 +221,8 @@ TestCase {
             assertEqual(host.settingEntries.map(entry => entry.key).join(","), "mod.good.greeting,mod.good.loud,mod.key-collision.fine", "settingEntries");
             assertEqual(host.factTypes.map(entry => entry.fact).join(","), "good.ready,good.level,key-collision.fine", "factTypes");
             assertEqual(host.settingsPages.map(entry => entry.id).join(","), "good", "settingsPages");
-            assertEqual(host.slotContributions("network.vpn.card").map(entry => entry.module).join(","), "good", "slotContributions");
-            assertEqual(host.slotContributions("network.vpn.page").length, 0, "… none for an empty slot");
+            assertEqual(host.slotContributions("network.vpn.page").map(entry => entry.module).join(","), "broken-slot,good", "slotContributions, by module id");
+            assertEqual(host.slotContributions("network.vpn.row").length, 0, "… none for a slot nobody fills as a slot (read as its anchor)");
 
             // A module file the core will load from those URLs shares the module's singleton
             const component = Qt.createComponent(host.widgetEntries[0].widget, Component.PreferSynchronous);
@@ -246,7 +246,7 @@ TestCase {
             assertEqual(host.handle("good")._logWritten.size, 0, "disabled: its log keys forgotten");
             assertEqual(_goodState.mains, 0, "disabled: its main was destroyed (its onDestruction ran)");
             assertEqual(host.widgetEntries.map(entry => entry.module).join(","), "key-collision", "disabled: its widget gone");
-            assertEqual(host.slotContributions("network.vpn.card").length, 0, "disabled: its slot contribution gone");
+            assertEqual(host.slotContributions("network.vpn.page").map(entry => entry.module).join(","), "broken-slot", "disabled: its slot contribution gone");
             assertEqual(_status("broken-main")?.state, "loaded", "the others untouched");
             assert(host.setEnabled("good", true), "setEnabled(good, true)");
         });

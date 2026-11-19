@@ -57,6 +57,15 @@ import qs.singletons.network
 // from a ScriptModel reordered (the same cards and elements), added, and taken out while open
 // (their elements gone with them); the view closed with a card open — nothing left, no
 // element running after its card went.
+//
+// The VPN page and the network popup's VPN rows (own-provider places), with two provider
+// modules (tests/fixtures/modules/anchors-vpn-a through `anchors`, anchors-vpn-b through the
+// old slots read as them), a provider that is no module's and a NetworkManager VPN held in
+// NetworkProfiles: under each row and in each opened card only the VPN's provider module's
+// element, with the VPN in its context (through the old slots every key they gave); none for
+// the others; VPNs reordered, added and taken out with new objects at each read — the
+// elements follow their VPN, a context handed again only when it changed, an element gone
+// with its VPN.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -110,12 +119,13 @@ TestCase {
     }
 
     // The files outside the tests that still name a slot read as an anchor: a quoted slot
-    // name on a line that is not a comment, beside the rules that list them
+    // name on a line that is not a comment, beside the rules that list them — and the page's
+    // slot, still a slot, so that the guard is seen finding one
     property Process _slotGrep: Process {
         command: ["sh", "-c", "cd \"$1\" && shift && for slot; do grep -rnF --include=*.qml \"\\\"$slot\\\"\" . | grep -v '^\\./tests/' "
                   + "| grep -v '^\\./singletons/ModuleRules\\.qml:' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' | cut -d: -f1 | sort -u "
                   + "| sed \"s|^\\./|$slot\\t|\"; done; echo END",
-                  "sh", Quickshell.shellDir].concat(ModuleRules.slotAliases.map(alias => alias.slot))
+                  "sh", Quickshell.shellDir].concat(ModuleRules.slotAliases.map(alias => alias.slot), ["network.vpn.page"])
         stdout: StdioCollector {
             onStreamFinished: {
                 const uses = {};
@@ -184,7 +194,9 @@ TestCase {
 
     function _end() {
         _pinNetwork(false);
+        _holdProfiles(null);
         _fakeVpn?.destroy();
+        _ownVpn?.destroy();
         _dropPopup();
         for (const view of _views)
             view?.destroy();
@@ -981,7 +993,7 @@ TestCase {
 
     // The popup places live under `prefix` against the table: each of its rows live, and
     // every live path not in it among those named, not published
-    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "popup.network.connections.vpn.row"]
+    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card"]
     function _popupLiveProblems(prefix) {
         const problems = [];
         const live = Object.keys(Anchors.live).filter(path => path === prefix || path.startsWith(prefix + "."));
@@ -994,6 +1006,173 @@ TestCase {
                 problems.push(path + " is live but neither in the table nor named, not published");
         }
         return problems;
+    }
+
+    // ---- The VPN page and the popup's VPN rows (own-provider places) ----
+
+    // The VPN page as the settings window's page loader holds it, in a layer surface in a
+    // corner
+    property Component _vpnPageViewComponent: Component {
+        PanelWindow {
+            property alias loader: vpnPageLoader
+
+            anchors {
+                top: true
+                left: true
+            }
+            implicitWidth: 520
+            implicitHeight: 1000
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Loader {
+                id: vpnPageLoader
+                property string anchorBase: "settings.network_vpn"
+                anchors.fill: parent
+                source: Qt.resolvedUrl("../panels/settings/NetworkVpnSettings.qml")
+            }
+        }
+    }
+    property var _vpnPage: null
+    // A provider that is no module's (its own extras, no module's elements)
+    property var _ownVpn: null
+    // Elements kept to see that they stay the same objects
+    property var _keptRow: null
+    property var _keptCard: null
+    property int _keptChanges: 0
+
+    // Stand-in NetworkManager profiles, held in NetworkProfiles while set: no read replaces
+    // them (with no NetworkManager here, its reads keep resetting the list)
+    property var _heldProfiles: null
+    property var _unheldProfiles: null
+    function _holdProfiles(profiles) {
+        if (profiles !== null && _heldProfiles === null)
+            _unheldProfiles = NetworkProfiles.profiles;
+        if (profiles === null && _heldProfiles === null)
+            return;
+        _heldProfiles = profiles;
+        NetworkProfiles.profiles = profiles ?? _unheldProfiles ?? [];
+    }
+    property Connections _holdNetworkProfiles: Connections {
+        target: NetworkProfiles
+        enabled: suite._heldProfiles !== null
+        function onProfilesChanged() {
+            if (NetworkProfiles.profiles !== suite._heldProfiles)
+                NetworkProfiles.profiles = suite._heldProfiles;
+        }
+    }
+    readonly property var _nmVpnProfile: ({ uuid: "nm-anchors", name: "Office", type: "wireguard", kind: "vpn", autoconnect: false,
+                                           priority: 0, lastUsed: 5, active: false, port: "", device: "" })
+
+    // Every anchor block at `path` under `item`, top to bottom in the tree
+    function _blocksAt(item, path, found) {
+        const blocks = found ?? [];
+        for (const child of item?.children ?? []) {
+            if (child.isAnchorBlock === true && child.path === path)
+                blocks.push(child);
+            _blocksAt(child, path, blocks);
+        }
+        return blocks;
+    }
+
+    // The popup's VPN rows, by VPN id
+    function _vpnRows() {
+        const rows = {};
+        for (const row of _blocksAt(_popupView?.loader.item, "popup.network.connections.vpn.row"))
+            rows[row.vpn?.uuid ?? ""] = row;
+        return rows;
+    }
+
+    // The VPN page's cards, by VPN id, and in the page's order
+    function _vpnCards() {
+        const cards = {};
+        for (const card of _blocksAt(_vpnPage?.loader.item, "settings.network_vpn.vpns.card"))
+            cards[card.vpn?.uuid ?? ""] = card;
+        return cards;
+    }
+
+    function _vpnCardOrder() {
+        return _blocksAt(_vpnPage?.loader.item, "settings.network_vpn.vpns.card").filter(card => card.visible)
+            .sort((a, b) => a.mapToItem(null, 0, 0).y - b.mapToItem(null, 0, 0).y).map(card => card.vpn?.uuid ?? "");
+    }
+
+    function _setEntries(moduleId, entries) {
+        Modules.host.mainObject(moduleId).provider.entries = entries.map(entry => ({ id: entry[0], name: entry[1], state: entry[2] ?? "",
+                                                                                     attention: null, detail: {} }));
+    }
+
+    function _vpnLive(moduleId) {
+        const main = Modules.host.mainObject(moduleId);
+        return main ? Object.keys(main.live).sort().map(key => key + ":" + main.live[key]).join(",") : "?";
+    }
+
+    // The texts shown under `item`
+    function _texts(item, found) {
+        const texts = found ?? [];
+        for (const child of item?.children ?? []) {
+            if (!child.visible)
+                continue;
+            if (typeof child.text === "string" && child.font !== undefined)
+                texts.push(child.text);
+            _texts(child, texts);
+        }
+        return texts;
+    }
+
+    // The first shown text item under `item` reading `text`, or null
+    function _textItem(item, text) {
+        for (const child of item?.children ?? []) {
+            if (!child.visible)
+                continue;
+            if (child.text === text && child.font !== undefined)
+                return child;
+            const found = _textItem(child, text);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // The first item under `item` with that objectName, or null
+    function _blockChild(item, name) {
+        for (const child of item?.children ?? []) {
+            if (child.objectName === name)
+                return child;
+            const found = _blockChild(child, name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // The keys of an element's context, sorted, with what each holds for the checks
+    function _contextKeys(element) {
+        return Object.keys(element?.context ?? {}).sort().join(",");
+    }
+
+    // Where the popup's rows and the page's cards stand still (a layout places its children in
+    // its polish pass, after they are built)
+    property string _lastVpnViews: ""
+    function _vpnViewsSteady() {
+        const parts = [];
+        const add = item => parts.push(Math.round(item.mapToItem(null, 0, 0).y * 100) / 100 + ":" + Math.round(item.height * 100) / 100);
+        const rows = _vpnRows();
+        for (const id of Object.keys(rows).sort()) {
+            add(rows[id]);
+            rows[id].afterHost.items.forEach(add);
+        }
+        const cards = _vpnCards();
+        for (const id of Object.keys(cards).sort()) {
+            add(cards[id]);
+            cards[id].settingsRegion.prependHost.items.forEach(add);
+        }
+        const described = parts.join(" ");
+        const steady = described === _lastVpnViews;
+        _lastVpnViews = described;
+        return steady;
     }
 
     // The suite's bar (two cells) and a popup on its screen, as the bar opens it
@@ -1116,13 +1295,16 @@ TestCase {
             _slotGrep.running = true;
         }, 80000);
         _then("the slot guard has read the shell's files", () => _slotUses !== null, () => {
-            assertEqual(JSON.stringify(_slotUses["network.popup.sections"] ?? null) + " " + JSON.stringify(_slotUses["network.vpn.row"]),
-                        "null [\"singletons/network/VpnManager.qml\"]",
-                        "the slot guard finds what still builds a slot (not comments, not the rules, not the tests): the VPN row's, not the popup's any more");
+            assertEqual(["network.popup.sections", "network.vpn.row", "network.vpn.card", "network.vpn.page"].map(slot => JSON.stringify(_slotUses[slot] ?? null)).join(" "),
+                        "null null null [\"singletons/network/VpnManager.qml\"]",
+                        "the slot guard finds what still builds a slot (not comments, not the rules, not the tests): the page's, still a slot; not the popup's, the VPN row's or card's any more");
             assertEqual(ModuleRules.slotAliasProblems(ModuleRules.anchorTable, ModuleRules.slotAliases, _slotUses, _viewTextsOf(ModuleRules.anchorTable)).join("; "), "",
                         "every slot read as its anchor in this shell's table: no longer built as a slot, its view builds the block and gives what the slot gave");
             const published = [_row("popup.network.connections.vpn.row", "row", ["after"], "{ vpnId }", "own-provider", "panels/network/VpnSection.qml")];
-            const problems = ModuleRules.slotAliasProblems(published, ModuleRules.slotAliases, _slotUses, _viewTextsOf(published));
+            // A view as the VPN part was before it gave the row its context, the slot still built
+            // in VpnManager
+            const problems = ModuleRules.slotAliasProblems(published, ModuleRules.slotAliases, { "network.vpn.row": ["singletons/network/VpnManager.qml"] },
+                                                           { "panels/network/VpnSection.qml": "delegate: PopupRow {\n    readonly property var vpn: ({})\n    anchor: \"row\"\n}" });
             assert(_has(problems, "network.vpn.row → popup.network.connections.vpn.row: the slot is still built in singletons/network/VpnManager.qml"),
                    "a table publishing a place whose slot is still built: caught — " + problems.join("; "));
             assert(_has(problems, "gives no vpnId") && _has(problems, "gives no otherVpns") && !_has(problems, "gives no vpn "),
@@ -1533,8 +1715,8 @@ TestCase {
             assertEqual(_names(page.appendHost), "anchors-general:Element,anchors-general:Slot", "the settings window's General page: the module's elements at its end");
             assertEqual(page.appendHost.items[0].item.context.editIndex, _settingsWindow.editIndex, "… given the profile the window edits");
             const live = Object.keys(Anchors.live).filter(path => path.startsWith("settings.")).sort();
-            assertEqual(live.join(","), ModuleRules.anchorTable.map(row => row.path).filter(path => path.startsWith("settings.")).sort().join(","),
-                        "every settings place in the table is live with the settings window built, and nothing else is (none named, not published)");
+            assertEqual(live.join(","), ModuleRules.anchorTable.map(row => row.path).filter(path => path.startsWith("settings.general")).sort().join(","),
+                        "the settings window on the General page: its places in the table live, and nothing else (no other page is built)");
             _settingsWindow.selectedPage = "calendar";
         });
         const pageCycle = number => {
@@ -1761,6 +1943,174 @@ TestCase {
             _pinNetwork(false);
             _fakeVpn.destroy();
             _fakeVpn = null;
+        });
+
+        // The popup's VPN rows and the VPN page's cards: own-provider places. Two provider
+        // modules — anchors-vpn-a through `anchors`, anchors-vpn-b through the old slots — each
+        // row and opened card shows only its own provider module's element; a provider that is
+        // no module's and a NetworkManager VPN none; VPNs added, removed and reordered with new
+        // objects each read: the elements follow their VPN and go with it
+        _then("the popups are gone", () => Modules.host.statuses.length === 0 && _live("popup") === "", () => {
+            _holdProfiles([_nmVpnProfile]);
+            const component = Qt.createComponent("FakeVpnProvider.qml");
+            _ownVpn = component.createObject(suite, { providerId: "anchors-own", withExtras: true });
+            _ownVpn.add("x", "Own");
+            Modules.host.load([fixtures + "/anchors-vpn-b", fixtures + "/anchors-vpn-a"], {});
+        });
+        _then("the VPN fixtures loaded, their providers registered", () => _generalSettled() && Modules.host.mainObject("anchors-vpn-a") !== null
+              && Modules.host.mainObject("anchors-vpn-b") !== null, () => {
+            for (const id of ["anchors-vpn-a", "anchors-vpn-b"]) {
+                const status = Modules.status(id);
+                assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", id + ": loaded, clean");
+            }
+            assertEqual(Modules.status("anchors-vpn-a").deprecations.length, 0, "anchors-vpn-a, through anchors: nothing deprecated");
+            assertEqual(Modules.status("anchors-vpn-b").deprecations.join("|"),
+                        "slots (\"network.vpn.row\"): use `anchors`: \"popup.network.connections.vpn.row\", \"after\" (goes with the shell's next tightening)|"
+                        + "slots (\"network.vpn.card\"): use `anchors`: \"settings.network_vpn.vpns.card.settings\", \"prepend\" (goes with the shell's next tightening)",
+                        "anchors-vpn-b: its row's and card's slots read as the places, listed among the deprecations");
+            assertEqual(Modules.host.slotContributions("network.vpn.row").length + Modules.host.slotContributions("network.vpn.card").length, 0,
+                        "… no longer slot contributions");
+            _setEntries("anchors-vpn-a", [["a1", "A one"], ["a2", "A two"]]);
+            _setEntries("anchors-vpn-b", [["b1", "B one"]]);
+            _openPopupView("network", "../panels/NetworkPanel.qml");
+            _vpnPage = _vpnPageViewComponent.createObject(suite);
+            _views.push(_vpnPage);
+        });
+        const vpnIds = ["nm-anchors", "anchors-own:x", "anchors-vpn-a:a1", "anchors-vpn-a:a2", "anchors-vpn-b:b1"];
+        _then("the popup's VPN rows built, each provider module's under its own", () => {
+            const rows = _vpnRows();
+            return vpnIds.every(id => rows[id]) && _ready(rows["anchors-vpn-a:a1"].afterHost, 1) && _ready(rows["anchors-vpn-a:a2"].afterHost, 1)
+                && _ready(rows["anchors-vpn-b:b1"].afterHost, 1) && Object.keys(_vpnCards()).length === 5 && _vpnViewsSteady();
+        }, () => {
+            const rows = _vpnRows();
+            assertEqual(vpnIds.map(id => _names(rows[id].afterHost) || "-").join(" "),
+                        "- - anchors-vpn-a:Row anchors-vpn-a:Row anchors-vpn-b:Row",
+                        "under each row its provider module's element only: none under NetworkManager's or a provider's that is no module's");
+            assertEqual(rows["nm-anchors"].afterHost.built + " " + rows["anchors-own:x"].afterHost.built, "false false", "… those build nothing at all");
+            assert(_texts(rows["anchors-own:x"]).includes("Fake row extras for x"), "… the provider that is no module's shows its own extras");
+            assertEqual(vpnIds.map(id => rows[id].scopeId).join(","), ",anchors-own,anchors-vpn-a,anchors-vpn-a,anchors-vpn-b",
+                        "each row's scope: its provider's id (none for NetworkManager's)");
+            const a1 = rows["anchors-vpn-a:a1"].afterHost.items[0].item;
+            const b1 = rows["anchors-vpn-b:b1"].afterHost.items[0].item;
+            assertEqual(_contextKeys(a1), "anchor,entryId,otherVpns,otherVpnsUp,placement,provider,vpn,vpnId",
+                        "the element's context: the VPN as the old slot gave it, with anchor and placement");
+            assertEqual([a1.context.anchor, a1.context.placement, a1.context.vpnId, a1.context.entryId, a1.context.vpn.name].join(" "),
+                        "popup.network.connections.vpn.row after anchors-vpn-a:a1 a1 A one", "… its VPN, at the row's path");
+            assert(a1.context.provider === VpnManager.providerOf("anchors-vpn-a:a1").object && a1.context.provider === Modules.host.mainObject("anchors-vpn-a").provider,
+                   "… the provider object itself");
+            assertEqual(JSON.stringify(a1.context.otherVpnsUp) + " " + JSON.stringify(a1.context.otherVpns), "[] []", "… no other VPN up");
+            assertEqual(a1.module, Modules.handle("anchors-vpn-a"), "… its module's handle");
+            assertEqual(_contextKeys(b1), "anchor,entryId,otherVpns,otherVpnsUp,placement,provider,slot,vpn,vpnId",
+                        "through the old slot: every key the slot gave, and its name");
+            assertEqual(b1.context.slot + " " + b1.context.vpnId + " " + (b1.context.provider === Modules.host.mainObject("anchors-vpn-b").provider),
+                        "network.vpn.row anchors-vpn-b:b1 true", "… the slot's name, its VPN, its provider");
+            const row = rows["anchors-vpn-a:a1"];
+            const body = row.afterHost.items[0].mapToItem(row, 0, 0);
+            const vpnRow = _blockChild(row, "vpnRow");
+            assertEqual([body.x, body.y, row.afterHost.items[0].width].join(" "),
+                        [0, vpnRow.mapToItem(row, 0, 0).y + vpnRow.height + 2, row.width].join(" "),
+                        "… right under its row, 2 apart, as wide as the row (where the slot stood)");
+            assertEqual(_popupLiveProblems("popup.network").join("; "), "", "the network popup's places: every one in the table live, the rest named, not published");
+            assertEqual(_live("settings.network_vpn"), "settings.network_vpn.vpns:1,settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.settings:5",
+                        "the VPN page: its section, a card and its opened part per VPN");
+            assertEqual(_popupLiveProblems("settings.network_vpn").join("; "), "", "… its place in the table live, the rest named, not published");
+            const cards = _vpnCards();
+            assert(vpnIds.every(id => !cards[id].settingsRegion.prependHost.built), "closed cards: no element built in them");
+            assertEqual(vpnIds.map(id => cards[id].scopeId).join(","), ",anchors-own,anchors-vpn-a,anchors-vpn-a,anchors-vpn-b", "each card's scope: its provider's id");
+            assertEqual(_vpnLive("anchors-vpn-a") + " " + _vpnLive("anchors-vpn-b"),
+                        "Row|popup.network.connections.vpn.row|anchors-vpn-a:a1:1,Row|popup.network.connections.vpn.row|anchors-vpn-a:a2:1 "
+                        + "Row|popup.network.connections.vpn.row|anchors-vpn-b:b1:1", "the elements standing: one under each of their provider's rows");
+            _vpnPage.loader.item._open = "anchors-vpn-a:a1";
+        });
+        // Each card opened in turn: its provider module's element only, first in its opened
+        // part; none in the others
+        const vpnCardOpen = (id, expected, next) => {
+            _then("the card of " + id + " open", () => _vpnCards()[id]?.settingsRegion.visible
+                  && (expected === "-" ? true : _ready(_vpnCards()[id].settingsRegion.prependHost, 1)) && _vpnViewsSteady(), () => {
+                const cards = _vpnCards();
+                const region = cards[id].settingsRegion;
+                assertEqual(_names(region.prependHost) || "-", expected, "the opened card of " + id + ": " + (expected === "-" ? "no module's element" : "its provider module's element"));
+                assert(vpnIds.filter(other => other !== id).every(other => !cards[other].settingsRegion.prependHost.built), "… none built in the closed cards");
+                if (expected !== "-") {
+                    const element = region.prependHost.items[0];
+                    const comesUpWith = _textItem(cards[id], "Comes up with");
+                    assert(comesUpWith !== null && element.mapToItem(cards[id], 0, 0).y + element.height <= comesUpWith.mapToItem(cards[id], 0, 0).y,
+                           "… above the card's own rows");
+                    assertEqual(Math.round(element.mapToItem(region, 0, 0).y) + " " + element.width, "0 " + region.width, "… first in its opened part, as wide");
+                }
+                if (id === "anchors-vpn-a:a1") {
+                    const card = region.prependHost.items[0].item;
+                    assertEqual(_contextKeys(card), "anchor,entryId,otherVpns,otherVpnsUp,placement,provider,vpn,vpnId", "the card's element: the VPN in its context");
+                    assertEqual(card.context.anchor + " " + card.context.placement + " " + card.context.vpnId, "settings.network_vpn.vpns.card.settings prepend anchors-vpn-a:a1",
+                                "… at the region's path");
+                }
+                if (id === "anchors-vpn-b:b1") {
+                    const card = region.prependHost.items[0].item;
+                    assertEqual(_contextKeys(card), "anchor,entryId,open,otherVpns,otherVpnsUp,placement,provider,slot,vpn,vpnId",
+                                "through the old slot: every key the slot gave");
+                    assertEqual(card.context.slot + " " + card.context.open + " " + (card.context.provider === Modules.host.mainObject("anchors-vpn-b").provider),
+                                "network.vpn.card true true", "… its name, open: true (it stands only while the card is open), its provider");
+                }
+                if (id === "anchors-own:x")
+                    assert(_texts(cards[id]).includes("Fake card extras for x (open)"), "… the provider that is no module's shows its own extras");
+                _vpnPage.loader.item._open = next;
+            });
+        };
+        vpnCardOpen("anchors-vpn-a:a1", "anchors-vpn-a:Card", "anchors-vpn-b:b1");
+        vpnCardOpen("anchors-vpn-b:b1", "anchors-vpn-b:Card", "anchors-own:x");
+        vpnCardOpen("anchors-own:x", "-", "nm-anchors");
+        vpnCardOpen("nm-anchors", "-", "anchors-vpn-a:a1");
+        _then("the card of anchors-vpn-a:a1 open again", () => _ready(_vpnCards()["anchors-vpn-a:a1"].settingsRegion.prependHost, 1)
+              && !_vpnCards()["nm-anchors"].settingsRegion.visible && _vpnViewsSteady(), () => {
+            assertEqual(_vpnLive("anchors-vpn-b").includes("Card|"), false, "the cards closed: their elements gone");
+            _keptRow = _vpnRows()["anchors-vpn-a:a2"].afterHost.items[0].item;
+            _keptCard = _vpnCards()["anchors-vpn-a:a1"].settingsRegion.prependHost.items[0].item;
+            _keptChanges = _keptRow.contextChanges;
+            // A new read: new objects, a2 before a1, a3 added
+            _setEntries("anchors-vpn-a", [["a2", "A two"], ["a3", "A three"], ["a1", "A one"]]);
+        });
+        _then("the VPNs reordered, one added", () => VpnManager.vpns.findIndex(vpn => vpn.uuid === "anchors-vpn-a:a2") < VpnManager.vpns.findIndex(vpn => vpn.uuid === "anchors-vpn-a:a1")
+              && _vpnRows()["anchors-vpn-a:a3"] && _ready(_vpnRows()["anchors-vpn-a:a3"].afterHost, 1) && _vpnViewsSteady(), () => {
+            const rows = _vpnRows();
+            assertEqual(rows["anchors-vpn-a:a2"].afterHost.items[0].item, _keptRow, "the rows reordered: a VPN's element the same object");
+            assertEqual(_keptRow.context.vpnId + " " + (_keptRow.contextChanges - _keptChanges), "anchors-vpn-a:a2 0",
+                        "… still its own VPN's, its context not handed again (nothing in it changed)");
+            assertEqual(_vpnCards()["anchors-vpn-a:a1"].settingsRegion.prependHost.items[0]?.item, _keptCard, "the open card's element the same object");
+            assertEqual(rows["anchors-vpn-a:a3"].afterHost.items[0].item.context.vpnId, "anchors-vpn-a:a3", "the VPN added: its own element, its own VPN");
+            const order = _vpnCardOrder();
+            assert(order.indexOf("anchors-vpn-a:a2") < order.indexOf("anchors-vpn-a:a1"), "the cards in the new order: " + order.join(","));
+            // a2 comes up: the others' otherVpnsUp follows, handed once
+            _keptChanges = _keptCard.contextChanges;
+            _setEntries("anchors-vpn-a", [["a2", "A two", "activated"], ["a3", "A three"], ["a1", "A one"]]);
+        });
+        _then("a VPN up", () => (_keptCard.context?.otherVpnsUp ?? []).length === 1, () => {
+            assertEqual(JSON.stringify(_keptCard.context.otherVpnsUp) + " " + _keptCard.context.otherVpns.map(vpn => vpn.name).join(","), "[\"A two\"] A two",
+                        "another VPN up: the element's otherVpnsUp and otherVpns say so");
+            assertEqual(_keptCard.contextChanges - _keptChanges, 1, "… handed once");
+            // The open card's VPN taken out
+            _setEntries("anchors-vpn-a", [["a2", "A two", "activated"], ["a3", "A three"]]);
+        });
+        _then("the open card's VPN gone", () => !_vpnCards()["anchors-vpn-a:a1"] && !_vpnRows()["anchors-vpn-a:a1"]
+              && !_vpnLive("anchors-vpn-a").includes("anchors-vpn-a:a1"), () => {
+            assertEqual(_vpnLive("anchors-vpn-a"),
+                        "Row|popup.network.connections.vpn.row|anchors-vpn-a:a2:1,Row|popup.network.connections.vpn.row|anchors-vpn-a:a3:1",
+                        "a VPN gone: its card's and its row's elements gone with it, the others' left");
+            assertEqual(_vpnRows()["anchors-vpn-a:a2"].afterHost.items[0].item, _keptRow, "… the others the same objects");
+            assertEqual(_live("settings.network_vpn.vpns.card"), "settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.settings:5",
+                        "… Anchors.live: its card gone, the added one's in (five)");
+            _keptRow = null;
+            _keptCard = null;
+            _close(_vpnPage);
+            _vpnPage = null;
+            _closePopupView();
+        });
+        _then("the VPN views closed", () => _live("settings.network_vpn") === "" && _live("popup") === "" && _vpnLive("anchors-vpn-a") === ""
+              && _vpnLive("anchors-vpn-b") === "", () => {
+            assertEqual(Modules.status("anchors-vpn-a")?.errors.length + " " + Modules.status("anchors-vpn-b")?.errors.length, "0 0", "no element failed meanwhile");
+            Modules.host.unload();
+            _ownVpn.destroy();
+            _ownVpn = null;
+            _holdProfiles(null);
         });
         _clock.start();
     }

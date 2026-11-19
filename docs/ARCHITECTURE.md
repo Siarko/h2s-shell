@@ -151,8 +151,14 @@ dropped and logged, never shown). `VpnManager.vpns`, `details`, `interfaceOf` an
 are the merged model the popup, the bar, the overview, the VPN page and the connection
 editor read; with no provider registered they are NetworkManager's lists themselves. The
 kill switch (`VpnLockdown`) reads `nmDetails`/`nmInterfaceNames` only — it does not support
-provider VPNs, and says so on their cards (and rows, while up) while blocking. Providers fill the slots named in
-`VpnManager.slots` (`network.vpn.row`, `.card`, `.page`) through `VpnManager.extrasFor`.
+provider VPNs, and says so on their cards (and rows, while up) while blocking. A provider's
+module puts its elements under its VPNs' rows in the network popup and in their opened cards
+through the own-provider places `popup.network.connections.vpn.row` and
+`settings.network_vpn.vpns.card.settings` ("Modules", below; the old slots `network.vpn.row`
+and `network.vpn.card` are read as them); its page is its `settingsPage`, else the slot
+`network.vpn.page` (`VpnManager.pageOf`). A provider that is no module's (the stand-in) hands
+over its own `rowExtras` and `cardExtras` (`VpnManager.ownExtrasOf`, built by
+`components/VpnExtras.qml` beside the hosts) and `pageUrl`.
 The contract is in `components/VpnProvider.qml`; the stand-in provider
 for tests is `tests/FakeVpnProvider.qml` (by hand: a test tree started with
 `H2S_FAKE_VPN_PROVIDER=1`, "The test tree" under "Testing"; IPC target `fakevpn`).
@@ -669,10 +675,12 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `settings.general` | `append` | `editIndex` (the profile being edited) | Settings → Behaviour → General, at the end of the page (`panels/settings/GeneralSettings.qml`); the slot `settings.general.bottom` is read as it | 1.21 |
   | `popup.network.connections` | `append` | `wifiEnabled`, `wifiConnected`, `ethernetConnected` | the network popup, under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list (`panels/NetworkPanel.qml`); the slot `network.popup.sections` is read as it | 1.22 |
   | `popup.notifications` | `prepend` | `count` (the notifications in the list) | the notifications popup, under its header, above the list (`panels/NotificationPanel.qml`); the slot `notifications.popup.top` is read as it | 1.22 |
+  | `popup.network.connections.vpn.row` | `after` | `vpnId`, `entryId`, `vpn`, `provider` (the provider object), `otherVpnsUp`, `otherVpns` | the network popup's VPN part, under the row of each VPN of the module's provider (`panels/network/VpnSection.qml`); own-provider; the slot `network.vpn.row` is read as it | 1.23 |
+  | `settings.network_vpn.vpns.card.settings` | `prepend` | as the VPN's row | Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows (`panels/settings/NetworkVpnSettings.qml`); own-provider; built while the card is open; the slot `network.vpn.card` is read as it (its context adds `open: true`) | 1.23 |
 
   Named but not places yet: `popup.network` (the network panel's root), its VPN part
-  `popup.network.connections.vpn` and each VPN's row in it, `….vpn.row` (the VPN slots
-  `network.vpn.row` and `network.vpn.card` stay slots for now).
+  `popup.network.connections.vpn`, the VPN page's section of cards `settings.network_vpn.vpns`
+  and each card `….vpns.card`.
 
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's
   views against the table: every place in it live once they are built, and where the rows of
@@ -820,7 +828,7 @@ VPN's is what NetworkManager set up, read while it is activated (a gateway, a `/
 the two halves of the addresses is a full tunnel); a provider's is what its
 entry reports (`components/VpnProvider.qml`). A field an older nmcli does not know
 (`wireguard.peer-routes`, `GENERAL.IP-IFACE`…) is asked again without when nmcli names it.
-The VPN slots' context has the other VPNs up
+The context of the VPN places (and of the page's slot) has the other VPNs up
 as such rows too (`otherVpns`).
 
 Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`

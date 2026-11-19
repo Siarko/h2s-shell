@@ -1,8 +1,8 @@
 import QtQuick
 import qs.api
 
-// The fixture's contribution to a slot (network.vpn.card: a slot that stays one, so the
-// slot machinery is tested on it; "good" is no VPN provider, so no card shows it)
+// The fixture's contribution to a slot (network.vpn.page: the one slot that stays one, so the
+// slot machinery is tested on it; "good" is no VPN provider, so no card opens it)
 Item {
     id: slotItem
     objectName: "goodSlot"

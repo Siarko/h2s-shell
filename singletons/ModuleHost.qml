@@ -471,8 +471,8 @@ Scope {
     // ModuleContribution — the guard ModuleSlot uses: built inside its own Loader, given the
     // module's handle, a failure recorded in the module's status — that forwards the
     // `context` set on it. For a core place that takes one Component per module rather than
-    // a ModuleSlot (VpnManager.extrasFor after the merge). The same Component while the
-    // contribution stays.
+    // a ModuleSlot; no view of the shell takes one any more (the VPN row's and card's slots
+    // are read as their anchors). The same Component while the contribution stays.
     function slotComponent(slot, id) {
         const url = slotUrl(slot, id);
         if (url === "")

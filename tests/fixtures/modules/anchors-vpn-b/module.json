@@ -1,0 +1,12 @@
+{
+    "id": "anchors-vpn-b",
+    "name": "Anchors VPN fixture B",
+    "version": "1.0.0",
+    "api": "1.22",
+    "description": "A VPN provider of its own (providerId = its id) that puts its elements under its VPNs' rows and in their opened cards through the old slots, read as the anchors (tests/AnchorsTest.qml)",
+    "main": "Main.qml",
+    "slots": [
+        { "slot": "network.vpn.row", "component": "Row.qml" },
+        { "slot": "network.vpn.card", "component": "Card.qml" }
+    ]
+}

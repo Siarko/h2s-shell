@@ -462,23 +462,26 @@ TestCase {
                     JSON.stringify(["Fake VPN", ""]), "kinds: each provider once, by its type name, \"\" for one away; none for NetworkManager's");
         assertEqual(VpnManager.providerKindsAmong([]).length + VpnManager.providerKindsAmong(undefined).length, 0, "kinds: none picked — none");
 
-        // Slots
-        assert(VpnManager.extrasFor(VpnManager.slots.row, _vpn("vpt:one")) === null, "slots: none offered — none");
+        // A provider's own extras and the context of its places
+        assert(VpnManager.ownExtrasOf("row", _vpn("vpt:one")) === null, "own extras: none offered — none");
         fake.withExtras = true;
-        assert(VpnManager.extrasFor(VpnManager.slots.row, _vpn("vpt:one")) !== null && VpnManager.extrasFor(VpnManager.slots.card, _vpn("vpt:one")) !== null
-               && VpnManager.extrasFor(VpnManager.slots.page, _vpn("vpt:one")) === null, "slots: the row's and the card's");
-        assert(VpnManager.extrasFor(VpnManager.slots.row, { uuid: "u", type: "wireguard" }) === null, "slots: none for NetworkManager's");
-        assert(VpnManager.slots.row === "network.vpn.row" && VpnManager.slots.card === "network.vpn.card" && VpnManager.slots.page === "network.vpn.page",
-               "slots: their names");
-        const rowContext = VpnManager.contextFor(VpnManager.slots.row, _vpn("vpt:one"));
+        assert(VpnManager.ownExtrasOf("row", _vpn("vpt:one")) === fake.rowExtras && VpnManager.ownExtrasOf("card", _vpn("vpt:one")) === fake.cardExtras
+               && VpnManager.ownExtrasOf("page", _vpn("vpt:one")) === null, "own extras: the row's and the card's, nothing else");
+        assert(VpnManager.ownExtrasOf("row", { uuid: "u", type: "wireguard" }) === null, "own extras: none for NetworkManager's");
+        assertEqual(JSON.stringify(VpnManager.slots), JSON.stringify({ page: "network.vpn.page" }),
+                    "slots: only the page's (the row's and the card's are anchors, ModuleRules.slotAliases)");
+        const rowContext = VpnManager.contextFor("network.vpn.row", _vpn("vpt:one"));
         const pageContext = VpnManager.contextFor(VpnManager.slots.page, _vpn("vpt:one"), { close: () => {} });
         assert(rowContext.provider === fake && rowContext.vpnId === "vpt:one" && rowContext.entryId === "one" && rowContext.slot === "network.vpn.row"
                && pageContext.provider === fake && typeof pageContext.close === "function",
                "slots: a contribution's context carries the provider object itself");
-        assert(VpnManager.contextFor(VpnManager.slots.row, { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
+        assert(VpnManager.contextFor("network.vpn.row", { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
         assert(Object.isFrozen(rowContext.otherVpns) && JSON.stringify(rowContext.otherVpns.map(vpn => vpn.name)) === JSON.stringify(rowContext.otherVpnsUp)
                && rowContext.otherVpns.every(vpn => Object.isFrozen(vpn) && "fullTunnel" in vpn && "setsDns" in vpn && "routes" in vpn),
                "slots: otherVpns — the other VPNs up as Api.vpnsUp's rows, beside their names");
+        const others = VpnManager.othersUp(_vpn("vpt:one"));
+        assertEqual(JSON.stringify(others.names) + JSON.stringify(others.rows), JSON.stringify(rowContext.otherVpnsUp) + JSON.stringify(rowContext.otherVpns),
+                    "othersUp: what the views give a VPN's blocks, the same as the slots' context");
         fake.withExtras = false;
 
         // The card's "Settings…": the provider's own settings page when the settings window has
@@ -629,7 +632,7 @@ TestCase {
         const walk = node => {
             if (!node || found !== null)
                 return;
-            if (node.slot !== undefined && node.extra !== undefined && node.item !== undefined) {
+            if (node.place !== undefined && node.vpnContext !== undefined && node.item !== undefined) {
                 found = node;
                 return;
             }

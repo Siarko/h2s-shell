@@ -79,10 +79,13 @@ import qs.singletons.network
 //               ("" for the shell's own sentence): on the VPN page's card whenever blocking
 //               is on, in the popup's row while the VPN is up or coming up. The blocking does
 //               not support provider VPNs (tailscale.md §8).
-//   rowExtras   Component or null — slot "network.vpn.row": under the entry's row in the
-//               network popup (an exit-node chooser)
-//   cardExtras  Component or null — slot "network.vpn.card": on the entry's card in
-//               Settings → System → Network → VPN, while the card is open
+//   rowExtras   Component or null — under the entry's row in the network popup, for a
+//               provider that is no module's (a module puts its elements there through the
+//               place popup.network.connections.vpn.row, own-provider; its old slot
+//               "network.vpn.row" is read as it)
+//   cardExtras  Component or null — on the entry's card in Settings → System → Network →
+//               VPN, while the card is open, for a provider that is no module's (a module's:
+//               settings.network_vpn.vpns.card.settings; its old slot "network.vpn.card")
 //   settingsPage string ("" none) — the id of the provider's own page among the settings
 //               window's pages (a module: the id its manifest's `settingsPages` declares,
 //               "<module id>" or "<module id>.<name>", as Api.openSettings takes it). The
@@ -97,11 +100,12 @@ import qs.singletons.network
 //               implicitHeight; it must not scroll itself. Unused while settingsPage is
 //               there. Neither: no "Settings…".
 //   A contribution's root item may declare `property var context`; the core sets it to
-//   { slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns } — `provider` this
-//   object, to call its functions and read its state; `otherVpnsUp` the other VPNs up by
-//   name, `otherVpns` as Api.vpnsUp's rows — (the card's adds `open`; the page's adds `close`, a function that
-//   goes back to the VPN page), and again only when its value changes. See
-//   VpnManager.slots, VpnManager.contextFor.
+//   { vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns } — `provider` this object, to
+//   call its functions and read its state; `otherVpnsUp` the other VPNs up by name,
+//   `otherVpns` as Api.vpnsUp's rows — (the card's adds `open`; a module's element adds
+//   `anchor` and `placement`, through an old slot `slot`; the page's adds `slot` and `close`,
+//   a function that goes back to the VPN page), and again only when its value changes. See
+//   VpnManager.othersUp, VpnManager.contextFor.
 //
 // The core calls (always with an entry id the provider reported; inside a guard — a throw
 // is logged, not passed on):

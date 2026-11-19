@@ -10,9 +10,12 @@ import qs.singletons.network
 // VPNs by id (VpnManager): NetworkManager's by UUID, a provider's (components/VpnProvider
 // .qml) by "<provider>:<entry>" — a provider's row adds what needs the user (its attention,
 // with the action's button), its status line, the kill switch's note (while it is up or
-// coming up), and the provider's extras (slot network.vpn.row). A NetworkManager VPN's row
-// is only the row. A popup section block named "vpn", each VPN's row a row block ("row"):
-// named, not places yet (ModuleRules.anchorTable).
+// coming up), and the provider's own extras (VpnExtras: a provider that is no module's). A
+// NetworkManager VPN's row is only the row. A popup section block named "vpn" (named, not a
+// place), each VPN's row a row block ("row"): the place popup.network.connections.vpn.row,
+// whose `after` shows the elements of the VPN's provider module only (scope own-provider:
+// the row's scopeId), with the VPN in their context — where the module's old slot
+// network.vpn.row stood.
 PopupSection {
     id: root
 
@@ -71,8 +74,14 @@ PopupSection {
             // A provider's lasting "needs the user" ({ reason, action }), else null
             readonly property var attention: VpnManager.attentionOf(vpn)
             readonly property string lockdownNote: VpnLockdown.noteFor(vpn)
+            readonly property var _others: VpnManager.othersUp(vpn)
 
             anchor: "row"
+            // Its provider's module shows its elements under it (none for NetworkManager's)
+            scopeId: VpnManager.providerOf(vpn)?.providerId ?? ""
+            // What the elements under it get: the VPN, as the old slot gave it
+            context: ({ vpnId: vpn.uuid ?? "", entryId: vpn.entryId ?? "", vpn: vpn, provider: VpnManager.providerOf(vpn)?.object ?? null,
+                        otherVpnsUp: _others.names, otherVpns: _others.rows })
             width: root.width
             spacing: 2
 
@@ -195,11 +204,13 @@ PopupSection {
                 color: Theme.warning
             }
 
-            // The provider's extras under its row (slot network.vpn.row)
+            // A provider's own extras under its row (one that is no module's); a module's
+            // elements stand in the row's `after` host, right under this
             VpnExtras {
                 width: parent.width
-                slot: VpnManager.slots.row
+                place: "row"
                 vpn: _vpn.vpn
+                vpnContext: _vpn.context
             }
         }
     }

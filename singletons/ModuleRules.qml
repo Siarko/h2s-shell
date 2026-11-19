@@ -73,11 +73,12 @@ Singleton {
         { name: "settings.general.bottom", since: "1.0",
           where: "Settings → Behaviour → General, at the end of the page",
           context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" },
-        // The VPN provider seam's three (notes/plans/tailscale.md §3; VpnManager.extrasFor and
-        // pageOf ask here first): one contribution per provider, the one of the module whose
-        // id is the provider's providerId — a module's provider uses its module id
-        // (`VpnProvider { providerId: module.moduleId }`). A provider that is no module's keeps
-        // its own rowExtras, cardExtras and pageUrl.
+        // The VPN provider seam's three (notes/plans/tailscale.md §3): one contribution per
+        // provider, the one of the module whose id is the provider's providerId — a module's
+        // provider uses its module id (`VpnProvider { providerId: module.moduleId }`). The row's
+        // and the card's are read as their anchors since 1.23 (slotAliases: own-provider places);
+        // the page's is still a slot (VpnManager.pageOf asks here first). A provider that is no
+        // module's keeps its own rowExtras, cardExtras and pageUrl.
         { name: "network.vpn.row", since: "1.1",
           where: "the network popup's VPN section (panels/network/VpnSection.qml), under the row of each VPN of the module's provider",
           context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp: [names of the other VPNs up], otherVpns: [the same as Api.vpnsUp rows] (1.16) }" },
@@ -151,7 +152,15 @@ Singleton {
           view: "panels/NetworkPanel.qml" },
         { path: "popup.notifications", kind: "popupSection", placements: ["prepend"], takes: "", marks: false,
           context: "{ count: the number of notifications in the list }", scope: "", since: "1.22",
-          where: "the notifications popup, under its header, above the list", view: "panels/NotificationPanel.qml" }
+          where: "the notifications popup, under its header, above the list", view: "panels/NotificationPanel.qml" },
+        { path: "popup.network.connections.vpn.row", kind: "row", placements: ["after"], takes: "", marks: false,
+          context: "{ vpnId, entryId, vpn, provider: the provider object, otherVpnsUp: [names of the other VPNs up], otherVpns: [the same as Api.vpnsUp rows] }",
+          scope: "own-provider", since: "1.23",
+          where: "the network popup's VPN part, under the row of each VPN of the module's provider", view: "panels/network/VpnSection.qml" },
+        { path: "settings.network_vpn.vpns.card.settings", kind: "region", placements: ["prepend"], takes: "", marks: false,
+          context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.23",
+          where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows",
+          view: "panels/settings/NetworkVpnSettings.qml" }
     ]
 
     // The kinds a view's root is: the one block with no name that is addressable, at the
@@ -159,8 +168,10 @@ Singleton {
     // block with no name adds no level and is not addressable.
     readonly property var anchorRootKinds: ["page", "popupSection"]
     // The block each kind is, as a view's file names it (slotAliasProblems)
-    readonly property var anchorKindTypes: ({ page: ["SettingsPage"], section: ["SettingsSection"], card: ["SettingsCard"],
-                                              row: ["SettingsRow", "PopupRow"], popupSection: ["PopupSection"], region: ["SettingsCard"] })
+    // (a network page's cards are NetworkProfileCards, built on SettingsCard)
+    readonly property var anchorKindTypes: ({ page: ["SettingsPage"], section: ["SettingsSection"], card: ["SettingsCard", "NetworkProfileCard"],
+                                              row: ["SettingsRow", "PopupRow"], popupSection: ["PopupSection"],
+                                              region: ["SettingsCard", "NetworkProfileCard"] })
 
     // Today's slots, read as anchors once their view is converted (the alias's `at` in
     // anchorTable): a manifest's `slots` entry for one becomes that anchor's element, listed in

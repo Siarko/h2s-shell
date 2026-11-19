@@ -5,6 +5,6 @@
     "api": "1.0",
     "description": "Loads; its contribution to a slot does not compile — the slot shows nothing of it, its status says why",
     "slots": [
-        { "slot": "network.vpn.row", "component": "Broken.qml" }
+        { "slot": "network.vpn.page", "component": "Broken.qml" }
     ]
 }
