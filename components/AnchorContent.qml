@@ -15,7 +15,8 @@ import qs.singletons
 // `{ …the block's context, anchor: the path, placement }` as `context` (a slot read as an
 // anchor adds `slot`) — passed again only when that changes by value. With no element the
 // host has no size and builds nothing, not even its Repeater; a module turned off takes its
-// elements with it, turned on brings them back. An element is the same delegate while its
+// elements with it, turned on brings them back; `active` false (a closed card's region) does
+// the same. An element is the same delegate while its
 // module and file stay (ScriptModel keyed by ModuleMergeRules.contributionKey).
 Item {
     id: root
@@ -24,6 +25,9 @@ Item {
     property var block: null
     property string placement: ""
     property real spacing: 4
+    // Whether it shows its elements at all: false builds none and destroys those built (a
+    // card's region while the card is closed)
+    property bool active: true
 
     readonly property string path: block?.path ?? ""
     readonly property var host: block?.host ?? null
@@ -31,7 +35,7 @@ Item {
     readonly property string scopeId: block?.scopeId ?? ""
     // [{ module, at, place, component, context, key }], in the one order: none unless the
     // block is of its row's kind and has this placement (ModuleRules.anchorBlockFits)
-    readonly property var contributions: host && path !== "" && placement !== ""
+    readonly property var contributions: active && host && path !== "" && placement !== ""
         && ModuleRules.anchorBlockFits(ModuleRules.anchorRow(host.anchorTable, path), block.kind, block.placements, placement)
         ? host.anchorContent(path, placement, scopeId) : []
     readonly property int count: contributions.length

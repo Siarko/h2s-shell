@@ -1,0 +1,11 @@
+{
+    "id": "anchors-cards-b",
+    "name": "Anchors cards fixture B",
+    "version": "1.0.0",
+    "api": "1.20",
+    "description": "A second module in AnchorsTest's fixture cards: after the first module's element in a card's opened part, and in the opened part of its own provider's card",
+    "anchors": [
+        { "at": "settings.cards.saved.card.settings", "place": "append", "component": "Element.qml" },
+        { "at": "settings.cards.vpns.card.settings", "place": "prepend", "component": "Element.qml" }
+    ]
+}

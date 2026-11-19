@@ -1,0 +1,18 @@
+{
+    "id": "anchors-cards-a",
+    "name": "Anchors cards fixture A",
+    "version": "1.0.0",
+    "api": "1.20",
+    "description": "Puts elements at every placement of AnchorsTest's fixture section, beside its cards, in their opened part, and in the opened part of a provider's card",
+    "anchors": [
+        { "at": "settings.cards.saved", "place": "before", "component": "Element.qml" },
+        { "at": "settings.cards.saved", "place": "after", "component": "Element.qml" },
+        { "at": "settings.cards.saved", "place": "prepend", "component": "Element.qml" },
+        { "at": "settings.cards.saved", "place": "append", "component": "Element.qml" },
+        { "at": "settings.cards.saved.card", "place": "before", "component": "Element.qml" },
+        { "at": "settings.cards.saved.card", "place": "after", "component": "Element.qml" },
+        { "at": "settings.cards.saved.card.settings", "place": "prepend", "component": "Element.qml" },
+        { "at": "settings.cards.saved.card.settings", "place": "append", "component": "Element.qml" },
+        { "at": "settings.cards.vpns.card.settings", "place": "prepend", "component": "Element.qml" }
+    ]
+}

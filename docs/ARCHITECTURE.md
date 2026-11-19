@@ -581,8 +581,16 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   (it scrolls, keeps the page's margins, draws the heading and a banner, then the content),
   the popup section, `components/PopupSection.qml` (a group in a popup panel: its header
   line, its content in a column, its closing divider; a panel's root is one too), and the
-  popup row, `components/PopupRow.qml` (one line of a popup, with what goes under it); the
-  settings section, card and row follow. A view's author writes only a block's
+  popup row, `components/PopupRow.qml` (one line of a popup, with what goes under it), the
+  settings section, `components/SettingsSection.qml` (a titled group on a page: its title's
+  line with its buttons, then its content), and the settings card,
+  `components/SettingsCard.qml` (a framed item that opens: its header and notice line, then,
+  opened, its own rows); the settings row follows. A card takes no element inside itself:
+  its opened part is its region `settings`, a block of kind `region` around its rows
+  (`prepend` above them, `append` under them), whose elements are built only while the card
+  is open and destroyed when it closes; they get the card's context and scope. A card made
+  per item by a `Repeater` on a `ScriptModel` keyed by the item takes its elements with it
+  when its item goes. A view's author writes only a block's
   `anchor`, a word for what it holds (`saved`, `vpns`), never where it stands or its title's
   words. The block's path follows from where it stands, found by walking up `parent` (a
   binding: a block moved has the new path):

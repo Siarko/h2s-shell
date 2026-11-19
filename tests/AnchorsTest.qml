@@ -46,6 +46,17 @@ import qs.singletons.network
 // closed, five times; opened and closed at once, closed while the content is being made,
 // moved twice before it is made, a hover close called off — nothing left live, no element
 // failed.
+//
+// Sections and cards on a fixture view (settings.cards, components/SettingsSection.qml,
+// SettingsCard.qml) with two fixture modules (tests/fixtures/modules/anchors-cards-a,
+// anchors-cards-b) whose elements tell a tracker in their context when they are made, run and
+// go: a section's four placements and its cards' before and after in the one order; a card's
+// region `settings` built only while the card is open, its elements above and under the
+// card's own rows inside the frame, gone when it closes, opened and closed ten times; an
+// own-provider region showing each provider's card only its module's element; cards made
+// from a ScriptModel reordered (the same cards and elements), added, and taken out while open
+// (their elements gone with them); the view closed with a card open — nothing left, no
+// element running after its card went.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -60,7 +71,11 @@ TestCase {
         _row("settings.fixture", "page", ["prepend", "append"], "{ editIndex }"),
         _row("settings.fixture.box", "section", ["before", "after", "prepend", "append"], "{ boxed }"),
         _row("settings.general", "page", ["append"], "{ editIndex }"),
-        _row("settings.fixture.vpn", "row", ["append"], "{ vpnId }", "own-provider")
+        _row("settings.fixture.vpn", "row", ["append"], "{ vpnId }", "own-provider"),
+        _row("settings.cards.saved", "section", ["before", "after", "prepend", "append"], "{ tracker }"),
+        _row("settings.cards.saved.card", "card", ["before", "after"], "{ itemId, tracker }"),
+        _row("settings.cards.saved.card.settings", "region", ["prepend", "append"], "{ itemId, tracker }"),
+        _row("settings.cards.vpns.card.settings", "region", ["prepend"], "{ itemId, tracker }", "own-provider")
     ]
 
     property ModuleHost host: ModuleHost {
@@ -333,6 +348,252 @@ TestCase {
                 }
             }
         }
+    }
+
+    // The view of sections and cards: a page (settings.cards) holding a section of cards made
+    // from a list (saved: settings.cards.saved, its cards …saved.card, their opened part
+    // …saved.card.settings) and a section of providers' cards (vpns: …vpns.card.settings,
+    // own-provider), one card of each open at most
+    property Component _cardsViewComponent: Component {
+        PanelWindow {
+            id: cardsWindow
+
+            property var items: []
+            property string openId: ""
+            property var vpns: []
+            property string vpnOpenId: ""
+            property alias page: cardsPage
+            property alias saved: savedSection
+            property alias intro: savedIntro
+            property alias savedCards: savedRepeater
+            property alias vpnCards: vpnRepeater
+
+            anchors {
+                top: true
+                left: true
+            }
+            implicitWidth: 400
+            implicitHeight: 1000
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Item {
+                property string anchorBase: "settings.cards"
+                anchors.fill: parent
+
+                SettingsPage {
+                    id: cardsPage
+                    anchors.fill: parent
+                    host: suite.host
+
+                    SettingsSection {
+                        id: savedSection
+                        anchor: "saved"
+                        title: "Saved"
+                        spacing: 6
+                        context: ({ tracker: suite._tracker })
+                        Layout.fillWidth: true
+                        buttons: SmallButton { label: "Find" }
+
+                        Text {
+                            id: savedIntro
+                            text: "the section's own content"
+                        }
+
+                        Repeater {
+                            id: savedRepeater
+                            // ScriptModel, never the bare array (CLAUDE.md)
+                            model: ScriptModel {
+                                values: cardsWindow.items
+                                objectProp: "id"
+                            }
+
+                            SettingsCard {
+                                required property var modelData
+                                readonly property alias ownRow: ownRow
+                                anchor: "card"
+                                title: modelData.id
+                                subtitle: "a fixture card"
+                                open: cardsWindow.openId === modelData.id
+                                context: ({ itemId: modelData.id, tracker: suite._tracker })
+                                Layout.fillWidth: true
+                                onToggleRequested: cardsWindow.openId = open ? "" : modelData.id
+
+                                Text {
+                                    id: ownRow
+                                    text: "the card's own row"
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsSection {
+                        anchor: "vpns"
+                        title: "VPNs"
+                        Layout.fillWidth: true
+
+                        Repeater {
+                            id: vpnRepeater
+                            model: ScriptModel {
+                                values: cardsWindow.vpns
+                                objectProp: "id"
+                            }
+
+                            SettingsCard {
+                                required property var modelData
+                                anchor: "card"
+                                title: modelData.id
+                                scopeId: modelData.provider
+                                open: cardsWindow.vpnOpenId === modelData.id
+                                context: ({ itemId: modelData.id, tracker: suite._tracker })
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    property var _cards: null
+    // The saved cards' items, the same objects in every list the suite gives: Quickshell
+    // 0.3.2's ScriptModel, given new objects for the same items, may hand a card the next
+    // card's item when one is taken out between them (its row update after a key-equal value
+    // goes on by position), so the list here keeps each item one object
+    readonly property var _cardItems: ({ one: { id: "one" }, two: { id: "two" }, three: { id: "three" }, four: { id: "four" } })
+    property int _cardCycles: 0
+    // The cards of a list, in the list's order: the identity of each, by item
+    property var _cardObjects: ({})
+    property var _regionElements: []
+
+    // What the fixture cards' elements tell: made, a beat while they run, gone. A beat from an
+    // element counted gone is late (it ran after its card took it)
+    property QtObject _tracker: QtObject {
+        property var live: ({})
+        property int madeCount: 0
+        property int goneCount: 0
+        property int beats: 0
+        property int late: 0
+
+        function key(name, context) {
+            return [name, context?.anchor, context?.placement, context?.itemId ?? ""].join("|");
+        }
+        function made(name, context) {
+            const at = key(name, context);
+            live[at] = (live[at] ?? 0) + 1;
+            madeCount++;
+        }
+        function gone(name, context) {
+            const at = key(name, context);
+            live[at] = (live[at] ?? 0) - 1;
+            if (live[at] <= 0)
+                delete live[at];
+            goneCount++;
+        }
+        function beat(name, context) {
+            beats++;
+            if (!(live[key(name, context)] > 0))
+                late++;
+        }
+        function count(prefix) {
+            return Object.keys(live).filter(at => prefix === undefined || at.includes(prefix)).reduce((sum, at) => sum + live[at], 0);
+        }
+        function reset() {
+            live = {};
+            madeCount = goneCount = beats = late = 0;
+        }
+    }
+
+    function _savedCard(index) {
+        return _cards?.savedCards.itemAt(index) ?? null;
+    }
+
+    function _savedCardList() {
+        const cards = [];
+        for (let i = 0; _cards && i < _cards.savedCards.count; i++)
+            cards.push(_cards.savedCards.itemAt(i));
+        return cards;
+    }
+
+    function _vpnCard(index) {
+        return _cards?.vpnCards.itemAt(index) ?? null;
+    }
+
+    function _yIn(item) {
+        return item.mapToItem(_cards.page, 0, 0).y;
+    }
+
+    // Whether the cards view stands still: every card and every element where it stood at the
+    // last look (a layout places its children in its polish pass, after they are built)
+    property string _lastCards: ""
+    function _cardsSteady() {
+        const parts = [];
+        const add = item => parts.push(Math.round(_yIn(item) * 100) / 100 + ":" + Math.round(item.height * 100) / 100);
+        const section = _cards.saved;
+        for (const host of [section.beforeHost, section.prependHost, section.appendHost, section.afterHost])
+            host.items.forEach(add);
+        for (const card of _savedCardList().concat([_vpnCard(0), _vpnCard(1), _vpnCard(2)]).filter(card => card)) {
+            add(card.frame);
+            for (const host of [card.beforeHost, card.afterHost, card.settingsRegion.prependHost, card.settingsRegion.appendHost])
+                host.items.forEach(add);
+        }
+        const described = parts.join(" ");
+        const steady = described === _lastCards;
+        _lastCards = described;
+        return steady;
+    }
+
+    // The section's elements and every saved card's beside it built
+    function _cardsBuilt() {
+        const section = _cards.saved;
+        return _ready(section.beforeHost, 1) && _ready(section.prependHost, 1) && _ready(section.appendHost, 1) && _ready(section.afterHost, 1)
+            && _savedCardList().length === _cards.items.length
+            && _savedCardList().every(card => _ready(card.beforeHost, 1) && _ready(card.afterHost, 1));
+    }
+
+    // The opened saved card's region built, every closed card's empty
+    function _regionBuilt(openIndex) {
+        return _savedCardList().every((card, index) => index === openIndex
+            ? _ready(card.settingsRegion.prependHost, 1) && _ready(card.settingsRegion.appendHost, 2)
+            : !card.settingsRegion.prependHost.built && !card.settingsRegion.appendHost.built);
+    }
+
+    // What is wrong with where an opened card's parts stand: its before element above its
+    // frame, the region's prepend element under the header and above its own row, the append
+    // elements under it, all inside the frame, its after element under the frame
+    function _openCardProblems(card) {
+        const problems = [];
+        const frameTop = _yIn(card.frame);
+        const frameBottom = frameTop + card.frame.height;
+        const prepend = card.settingsRegion.prependHost.items[0];
+        const appended = card.settingsRegion.appendHost.items;
+        const ownRow = card.ownRow;
+        if (_yIn(card.beforeHost.items[0]) + card.beforeHost.items[0].height > frameTop + 0.01)
+            problems.push("the before element is not above the frame");
+        if (_yIn(card.afterHost.items[0]) < frameBottom - 0.01)
+            problems.push("the after element is not under the frame");
+        if (_yIn(card.settingsRegion) < frameTop + 8 || _yIn(prepend) < _yIn(card.settingsRegion) - 0.01)
+            problems.push("the region does not start under the header");
+        if (_yIn(prepend) + prepend.height > _yIn(ownRow) + 0.01)
+            problems.push("the prepend element is not above the card's own row");
+        if (_yIn(appended[0]) < _yIn(ownRow) + ownRow.height - 0.01 || _yIn(appended[1]) < _yIn(appended[0]) + appended[0].height - 0.01)
+            problems.push("the append elements are not under the own row, in order");
+        if (_yIn(appended[1]) + appended[1].height > frameBottom - 8 + 0.01)
+            problems.push("the append elements are not inside the frame");
+        if (prepend.width <= 0 || Math.abs(prepend.width - card.settingsRegion.width) > 0.01
+                || Math.abs(card.settingsRegion.width - (card.frame.width - 16)) > 0.01)
+            problems.push("the region's elements are not as wide as the frame inside its margins (" + prepend.width + ", " + card.frame.width + ")");
+        return problems;
+    }
+
+    function _openCards(items, vpns) {
+        _cards = _cardsViewComponent.createObject(suite);
+        _views.push(_cards);
+        // Assigned, not given to createObject: that would hand the view copies of the items
+        _cards.items = items;
+        _cards.vpns = vpns ?? [];
     }
 
     // The General page as the settings window's page loader holds it, in a layer surface in a
@@ -1050,6 +1311,172 @@ TestCase {
         });
         _then("views closed before they were built leave nothing live", () => Date.now() >= _waitUntil && _live("settings.fixture") === "", () => {
             assertEqual(host.status("anchors-a")?.errors.length, 2, "no element failed meanwhile (the module's errors are its two anchors)");
+        });
+
+        // Sections and cards: the section's placements, the cards' before and after, the
+        // opened part (the region `settings`) only while the card is open, the scope, the
+        // cards following their list
+        _then("the fixture views are closed", () => _live("settings.fixture") === "", () => {
+            _tracker.reset();
+            host.load([fixtures + "/anchors-cards-b", fixtures + "/anchors-cards-a"], {});
+            _openCards([_cardItems.one, _cardItems.two, _cardItems.three],
+                       [{ id: "v1", provider: "anchors-cards-a" }, { id: "v2", provider: "anchors-cards-b" }, { id: "v3", provider: "" }]);
+        });
+        _then("the section and the closed cards are built and laid out", () => _settled() && host.status("anchors-cards-a")?.state === "loaded"
+              && _cardsBuilt() && _cardsSteady(), () => {
+            assertEqual(host.status("anchors-cards-a")?.errors.length + "," + host.status("anchors-cards-b")?.errors.length, "0,0",
+                        "the cards' fixture modules: clean (a region's places are places)");
+            const section = _cards.saved;
+            const cards = _savedCardList();
+            assertEqual([section.path, cards[0].path, cards[0].settingsRegion.path, _vpnCard(0).settingsRegion.path].join(" "),
+                        "settings.cards.saved settings.cards.saved.card settings.cards.saved.card.settings settings.cards.vpns.card.settings",
+                        "paths: the section, its cards by their kind, a card's region under it");
+            assertEqual(_live("settings.cards"), ["settings.cards:1", "settings.cards.saved:1", "settings.cards.saved.card:3", "settings.cards.saved.card.settings:3",
+                                                   "settings.cards.vpns:1", "settings.cards.vpns.card:3", "settings.cards.vpns.card.settings:3"].join(","),
+                        "Anchors.live: each card and its region, once per card, open or closed");
+            // Top to bottom: section.before · the title's line · section.prepend · its own
+            // content · each card (before · frame · after) · section.append · section.after
+            const sequence = [["section.before", _yIn(section.beforeHost.items[0])], ["title", _yIn(section.frame)],
+                              ["section.prepend", _yIn(section.prependHost.items[0])], ["section content", _yIn(_cards.intro)]];
+            cards.forEach((card, index) => sequence.push(["card " + index + ".before", _yIn(card.beforeHost.items[0])], ["card " + index, _yIn(card.frame)],
+                                                         ["card " + index + ".after", _yIn(card.afterHost.items[0])]));
+            sequence.push(["section.append", _yIn(section.appendHost.items[0])], ["section.after", _yIn(section.afterHost.items[0])]);
+            console.log("  INFO: the section top to bottom: " + sequence.map(entry => entry[0] + " " + Math.round(entry[1])).join(" · "));
+            assert(sequence.every((entry, index) => index === 0 || entry[1] > sequence[index - 1][1]),
+                   "the section's placements and its cards' in the one order: " + sequence.map(entry => entry[0]).join(" < "));
+            const titleBottom = _yIn(section.frame) + section.frame.height;
+            assert(_yIn(section.prependHost.items[0]) >= titleBottom, "… a prepended element under the title's line, not beside it");
+            assertEqual(JSON.stringify(Object.assign({}, section.beforeHost.items[0].item.context, { tracker: null })),
+                        JSON.stringify({ tracker: null, anchor: "settings.cards.saved", placement: "before" }), "the section's element: the section's context");
+            assertEqual(cards[1].beforeHost.items[0].item.context.itemId + " " + cards[1].beforeHost.items[0].item.context.anchor, "two settings.cards.saved.card",
+                        "a card's element: its card's item in the context");
+            assertEqual(cards.concat([_vpnCard(0), _vpnCard(1), _vpnCard(2)]).map(card => card.settingsRegion.prependHost.built || card.settingsRegion.appendHost.built
+                                                                                   || card.settingsRegion.visible).join(","),
+                        "false,false,false,false,false,false", "closed cards: their region hidden, its hosts build nothing");
+            assertEqual(_tracker.count() + " " + _tracker.count("card.settings"), "10 0", "… ten elements made: the section's four, each card's two beside it");
+            _cards.openId = "two";
+        });
+        _then("the second card open, its region built and laid out", () => _regionBuilt(1) && _cardsSteady()
+              && _openCardProblems(_savedCard(1)).length === 0, () => {
+            const card = _savedCard(1);
+            assertEqual(_names(card.settingsRegion.prependHost) + " " + _names(card.settingsRegion.appendHost),
+                        "anchors-cards-a:Element anchors-cards-a:Element,anchors-cards-b:Element",
+                        "the opened card's region: each placement its elements, by module id");
+            assertEqual(JSON.stringify(Object.assign({}, card.settingsRegion.appendHost.items[1].item.context, { tracker: null })),
+                        JSON.stringify({ itemId: "two", tracker: null, anchor: "settings.cards.saved.card.settings", placement: "append" }),
+                        "… the card's context at the region's path");
+            assertEqual(card.settingsRegion.prependHost.items[0].item.module, host.handle("anchors-cards-a"), "… the module's handle");
+            assert(card.settingsRegion.prependHost.items[0].item.shown, "… on screen");
+            assertEqual(_tracker.count("card.settings") + " " + _tracker.count("|two"), "3 5", "three made in the open card, none in the closed ones");
+            const model = card.settingsRegion.appendHost.repeaterModel;
+            assert(model !== null && !Array.isArray(model) && model.objectProp === "key", "… from a ScriptModel keyed by module and file");
+            _cards.openId = "";
+        });
+        _then("the card closed: its region's elements gone", () => _regionBuilt(-1) && _tracker.count("card.settings") === 0, () => {
+            assertEqual(_tracker.count(), 10, "only the elements beside the cards and in the section are left");
+            assert(!_savedCard(1).settingsRegion.visible && _savedCard(1).settingsRegion.appendHost.count === 0, "… the region hidden, empty");
+            assertEqual(_tracker.count("|two") + " " + _tracker.goneCount, "2 3", "… the three it held destroyed, its two beside it left");
+        });
+        // Opened and closed over and over, each card in turn, and one card to the next directly
+        const openClose = number => {
+            const index = number % 3;
+            _then("card " + index + " open (cycle " + number + ")", () => _cards.openId === _cards.items[index].id && _regionBuilt(index)
+                  && _cardsSteady() && _openCardProblems(_savedCard(index)).length === 0, () => {
+                _cardCycles++;
+                if (number % 2 === 0)
+                    _cards.openId = "";
+                else
+                    _cards.openId = _cards.items[(index + 1) % 3].id;
+            });
+            if (number % 2 === 0) {
+                _then("… closed (cycle " + number + ")", () => _regionBuilt(-1) && _tracker.count("card.settings") === 0, () => {
+                    _cards.openId = _cards.items[(index + 1) % 3].id;
+                });
+            }
+        };
+        _then("cycles start", () => true, () => {
+            _cards.openId = _cards.items[0].id;
+        });
+        for (let i = 0; i < 10; i++)
+            openClose(i);
+        _then("ten times opened and closed", () => _regionBuilt(1) && _cardsSteady(), () => {
+            assertEqual(_cardCycles, 10, "the cards opened and closed ten times, laid out each time");
+            assertEqual(_tracker.count("card.settings") + " " + _tracker.count(), "3 13", "… one card's region built now, nothing left of the others");
+            assertEqual(_tracker.late, 0, "… no element ran after its card took it");
+            // The providers' cards: each shows only its own provider module's element
+            _cards.openId = "";
+            _cards.vpnOpenId = "v1";
+        });
+        const vpnOpen = (index, expected) => {
+            _then("the provider's card " + index + " open", () => _regionBuilt(-1) && _vpnCard(index).settingsRegion.visible
+                  && (expected === "" ? true : _ready(_vpnCard(index).settingsRegion.prependHost, 1)) && _cardsSteady(), () => {
+                const region = _vpnCard(index).settingsRegion;
+                assertEqual(expected === "" ? String(region.prependHost.count) + region.prependHost.built : _names(region.prependHost),
+                            expected === "" ? "0false" : expected,
+                            "an own-provider region: " + (expected === "" ? "a card of no provider shows nothing" : "only the card's provider module's element"));
+                assertEqual(region.appendHost.count, 0, "… nothing at a placement its row does not take");
+                if (index < 2)
+                    _cards.vpnOpenId = ["v2", "v3"][index];
+                else
+                    _cards.vpnOpenId = "";
+            });
+        };
+        vpnOpen(0, "anchors-cards-a:Element");
+        vpnOpen(1, "anchors-cards-b:Element");
+        vpnOpen(2, "");
+        _then("the providers' cards closed", () => _tracker.count("vpns") === 0, () => {
+            // The cards in a list: reordered, the same cards and elements follow
+            _cards.openId = "two";
+        });
+        _then("the second card open again", () => _regionBuilt(1) && _cardsSteady(), () => {
+            const objects = {};
+            for (const card of _savedCardList())
+                objects[card.modelData.id] = card;
+            _cardObjects = objects;
+            _regionElements = _savedCard(1).settingsRegion.appendHost.items.map(item => item.item);
+            _tracker.madeCount = 0;
+            _cards.items = [_cardItems.three, _cardItems.two, _cardItems.one];
+        });
+        _then("the list reordered", () => _savedCard(0)?.modelData.id === "three" && _cardsSteady()
+              && _yIn(_savedCard(0).frame) < _yIn(_savedCard(1).frame) && _yIn(_savedCard(1).frame) < _yIn(_savedCard(2).frame), () => {
+            const cards = _savedCardList();
+            assertEqual(cards.map(card => card.modelData.id).join(","), "three,two,one", "the cards in the list's new order");
+            assert(cards.every(card => card === _cardObjects[card.modelData.id]), "… each the same card as before: not rebuilt");
+            const elements = _savedCard(1).settingsRegion.appendHost.items.map(item => item.item);
+            assert(elements.length === 2 && elements.every((element, index) => element === _regionElements[index]),
+                   "… the open card's elements the same objects");
+            assertEqual(_tracker.madeCount, 0, "… nothing made anew");
+            assertEqual(_openCardProblems(_savedCard(1)).join("; "), "", "… its parts where they stood in the card");
+            assert(_yIn(_savedCard(2).afterHost.items[0]) < _yIn(_cards.saved.appendHost.items[0]), "… the section's end still under its last card");
+            // One added at the front, the open one taken out
+            _cards.items = [_cardItems.four, _cardItems.three, _cardItems.one];
+        });
+        _then("a card added, the open one taken out", () => _savedCardList().length === 3 && _savedCard(0)?.modelData.id === "four"
+              && _cardsBuilt() && _cardsSteady() && _tracker.count("|two") === 0, () => {
+            assertEqual(_savedCardList().map(card => card.modelData.id).join(","), "four,three,one", "the cards as the list is");
+            assert(_savedCard(1) === _cardObjects["three"] && _savedCard(2) === _cardObjects["one"], "… the cards left the same objects, each still its own item");
+            assertEqual(_tracker.count("card.settings"), 0, "the open card taken out: its region's elements destroyed with it, nothing left in a region");
+            assertEqual(_tracker.count("saved.card|") + " " + _tracker.count("|four"), "6 2", "… beside the cards: two each, the new one's made");
+            assertEqual(_live("settings.cards.saved.card"), "settings.cards.saved.card:3,settings.cards.saved.card.settings:3",
+                        "… Anchors.live: three cards, three regions");
+            _cards.openId = "four";
+            _waitUntil = Date.now() + 300;
+        });
+        _then("the new card open, a while later", () => Date.now() >= _waitUntil && _regionBuilt(0) && _cardsSteady()
+              && _openCardProblems(_savedCard(0)).length === 0, () => {
+            assertEqual(_names(_savedCard(0).settingsRegion.appendHost), "anchors-cards-a:Element,anchors-cards-b:Element", "the new card's region, opened");
+            assertEqual(_tracker.late, 0, "no element ran after its card was taken out");
+            // The view closed with a card open
+            _close(_cards);
+            _cards = null;
+        });
+        _then("the cards view closed", () => _live("settings.cards") === "" && _tracker.count() === 0, () => {
+            _waitUntil = Date.now() + 300;
+        });
+        _then("a while after the cards view closed", () => Date.now() >= _waitUntil, () => {
+            assertEqual(_tracker.late + " " + _tracker.count(), "0 0", "the view closed with a card open: every element gone, none ran after");
+            assert(_tracker.beats > 0, "… the elements did run while they stood (the check can fail)");
+            host.unload();
         });
 
         // The General page: where its rows stand (the same before and after it became a

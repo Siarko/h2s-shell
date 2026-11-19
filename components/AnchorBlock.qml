@@ -1,14 +1,16 @@
 import QtQuick
 import qs.singletons
 
-// The base of the shared blocks views are built from (SettingsPage, PopupSection, PopupRow,
-// and the section, card and settings row to come): a place modules can address. A view's
-// author writes only `anchor` — what the block holds ("saved", "vpns"), never where it
-// stands — and the block's path follows from where it stands (ModuleRules.anchorBlockPaths):
-// the nearest enclosing block's path plus its own name, found by walking up `parent` — a
-// binding, so a block moved under another parent has the new path. The view's root takes the
-// base its window or popup gives: the first item up the parents with a string `anchorBase`
-// ("settings.general", "popup.network"). A block with no anchor adds no level and is
+// The base of the shared blocks views are built from (SettingsPage, SettingsSection,
+// SettingsCard and its region, PopupSection, PopupRow, and the settings row to come): a place
+// modules can address. A view's author writes only `anchor` — what the block holds ("saved",
+// "vpns"), never where it stands — and the block's path follows from where it stands
+// (ModuleRules.anchorBlockPaths): the nearest enclosing block's path plus its own name, found
+// by walking up `parent` — a binding, so a block moved under another parent has the new path.
+// The view's root takes the base its window or popup gives: the first item up the parents
+// with a string `anchorBase` ("settings.general", "popup.network"). A card's region (kind
+// "region": SettingsCard's `settings`) is named by the region, right under a block named
+// "card", and nothing inside it is addressable. A block with no anchor adds no level and is
 // addressable only as the view's root — a block of a root kind (ModuleRules.anchorRootKinds:
 // a SettingsPage, a PopupSection) right at the base; a section with no anchor straight under
 // a plain item is not. Never on the lock screen (tests/lock-closure.sh).
