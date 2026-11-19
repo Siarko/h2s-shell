@@ -19,16 +19,7 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 ### What remains of the API plan
 
-Done (in [done.md](done.md), "API plan and the work around it"): the token names pinned
-(T0), `ModuleRules.qml` split (S0), the version gate (A0); the commands lane — command
-runner (A1, A1b), program lookup with trust (A2, A2b), test mode (A3), privileged start
-(A4), the prompt says who and what for (A5), the notification without the shell's prompt
-(A6); the facts lane — shared module object (B1), helpers (C1), system facts (C2), network
-facts (D1), file chooser (E0, E1); the elements lane but a module's icon — pills in three
-sizes (T1), bordered buttons (F1a), public button, controls, rows, base types (F1b–F4);
-dependencies (P1, P2); places so far — anchor rules (U0), the page block (U1a), the
-General page (U1b), the popups (U2); the module's programs and test mode (M2) and
-privileged runs with a `what` (M3). Also the test split and the test seams in a test tree.
+Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
 - [ ] **in progress** (branch `api-u4a-card`): the section and the card, on a fixture view (U4a)
 - [ ] the network profile card on the settings card (U4b)
@@ -183,16 +174,13 @@ Still work or a known risk; the detail is in [done.md](done.md).
 
 ## Order of work
 
-0. Workflow — (a) one suite per run, (c) development rules, (f) work on Arch: done. Open:
+0. Workflow:
    - [ ] (b) own working trees and test bed per agent; modules tested against a pinned core tree
    - [ ] (d) flaky live tests first: the Tailscale stand-in's event replay
          (`tools/stand-in/curl`); the tailnet-lock read not retried (`module/LockClient.qml`)
    - [ ] (e) a read-only check against the real Tailscale daemon at deploy (state, devices,
          no repeated log lines)
-1. Planning, no code — the test split plan done. Open:
-   - [ ] revise [plans/api-next.md](plans/api-next.md): anchors and their naming, a
-         module's public API, the prompt's "who and what for", versioning, a module's own
-         elements, other authors, the direction
+1. Planning, no code:
    - [ ] analysis + plan: PAM configuration from the shell (polkit and lock, NixOS and Arch)
    - [ ] plan: installing, updating and removing modules, with Settings → Modules
    - [ ] revise [plans/documentation.md](plans/documentation.md) and
@@ -201,10 +189,8 @@ Still work or a known risk; the detail is in [done.md](done.md).
    - [ ] `lockscreen.lockOnSleep` default off (`singletons/SettingsSchema.qml`, today `true`)
    - [ ] versioning rule corrected (`CHANGELOG.md` header, `singletons/Version.qml` comment)
    - [ ] cut a minor release (today 2.0.0)
-3. API extension in the core — done; the rest is "What remains of the API plan".
-4. UI anchors replace today's slots (`ModuleSlot.qml`, `Api.slots`) — pages and popups done
-   (U0–U2); cards and network pages open (U4a–U7b)
-5. A module's public API for other modules, basic version — done (P1, P2)
+4. UI anchors replace today's slots (`ModuleSlot.qml`, `Api.slots`): the cards and network
+   pages (U4a–U7b)
 6. Tailscale module migration — open: every workaround removed; exit node per network in
    the connection's options (through an anchor); the manual "for now" override
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
@@ -216,7 +202,6 @@ Still work or a known risk; the detail is in [done.md](done.md).
    install, update, remove from a repository); the safe-mode banner
 9. Lock — open: supervisor limit (3 restarts while locked, then stay locked, tell the user);
    lock-before-sleep conflict detection; screensaver and lock screen together checked
-10. Test split implemented — done (2026-11-17)
 11. PAM configuration from the shell — open
 12. Documentation per [plans/documentation.md](plans/documentation.md); architecture and API
     chapters after 3–7 — open
