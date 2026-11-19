@@ -22,7 +22,9 @@ import qs.singletons
 // The card's wiring: the name is the profile's, one in use bold with the accent's border, the
 // notice's button waiting while busy; the shared card's buttons centred on the row, one that
 // names a vertical alignment of its own keeping it. Then the header: a click asks to toggle, the
-// pointer over it tints the card; a click between two buttons does nothing.
+// pointer over it tints the card; a click between two buttons does nothing, nor does the pointer
+// there tint it. The name's least room, six characters of its font; a long question beside the
+// lock inside the margin.
 TestCase {
     id: suite
     suiteName: "NetworkCardGeometry"
@@ -374,9 +376,10 @@ TestCase {
     // The hotspot asking `question` at the width now: the row under the name, the question
     // whole — on one line when it fits the card, else on more —, inside the card, clear of the
     // arrow
-    function _checkAsking(question) {
+    function _checkAsking(question, withLock) {
         const width = suite.cardWidth;
-        const where = "the hotspot asking at " + width;
+        const where = "the hotspot asking at " + width + (withLock ? ", the lock beside it" : "");
+        hotspotCard.need = withLock ? "auth" : "";
         hotspotCard.useQuestion = question;
         const asking = _find(hotspotCard, item => item.label === hotspotCard.useLabel && typeof item.confirmed === "function");
         asking.asking = true;
@@ -394,11 +397,14 @@ TestCase {
             assertEqual(label.lineCount, 1, where + ": as wide as the card at most: on one line");
         assert(button.x >= 8 - 0.01 && button.right <= width - 8 + 0.01, where + ": the question and its × inside the card (" + button.x + ", " + button.right + ")");
         assert(button.y >= asked.arrow.bottom - 0.01, where + ": under the arrow's line, clear of it");
+        if (withLock)
+            assert(asked.mark && asked.mark.x >= 8 - 0.01 && asked.mark.right <= button.x + 0.01, where + ": the lock inside the card, left of the question (" + JSON.stringify(asked.mark) + ")");
         for (const name of ["edit", "forget"])
             assert(asked[name] && asked[name].x >= 8 - 0.01 && asked[name].right <= width - 8 + 0.01 && asked[name].y >= asked.arrow.bottom - 0.01,
                    where + ": " + name + " inside the card, under the arrow's line");
         asking.asking = false;
         hotspotCard.useQuestion = "Turn on? The Wi-Fi drops";
+        hotspotCard.need = "";
     }
 
     function runAsync() {
@@ -436,10 +442,22 @@ TestCase {
         const question = "Leaves Home: no internet to share. Turn on?";
         for (const width of [331, 211]) {
             suite.cardWidth = width;
-            _checkAsking(question);
+            _checkAsking(question, false);
+            _checkAsking(question, true);
         }
         suite.cardWidth = 380;
         assert(_settle(cards), "380 again: the cards stand still");
+
+        // The least the name keeps on its line before the row moves under it: six of its
+        // average characters, measured here on the name's own font
+        for (const card of cards) {
+            const name = _find(card, item => item.text === card.title && item.label === undefined);
+            const metrics = Qt.createQmlObject("import QtQuick\nFontMetrics {}", suite, "NameMetrics.qml");
+            metrics.font = name.font;
+            assert(metrics.averageCharacterWidth > 0, card.title + ": the name's font measured");
+            assertEqual(card.nameMinimumWidth, Math.ceil(6 * metrics.averageCharacterWidth), card.title + ": the name keeps six characters' room on its line");
+            metrics.destroy();
+        }
 
         // The card's wiring (NetworkProfileCard on SettingsCard): the name is the profile's, a
         // profile in use has its name bold and the border in the accent's colour
@@ -522,6 +540,10 @@ TestCase {
         assert(forget.mapToItem(_window.contentItem, 0, 0).x - (between.x - 3) > 5, "the gap between Edit and Forget (" + between.x + ")");
         _driver.mouseClick(_window.contentItem, between.x, between.y);
         assertEqual(toggles, 1, "a click in the gap between Edit and Forget does not toggle");
+        _driver.mouseMove(titleText, 5, 5);
+        assert(_until(tinted), "the pointer back over the name tints the card");
+        _driver.mouseMove(_window.contentItem, between.x, between.y);
+        assert(_until(() => !tinted()), "the pointer in the gap between Edit and Forget: the card untinted, the gap is no part of the header");
         let providerToggles = 0;
         const onProviderToggle = () => providerToggles++;
         providerCard.toggleRequested.connect(onProviderToggle);

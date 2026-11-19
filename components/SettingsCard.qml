@@ -203,8 +203,13 @@ AnchorBlock {
                         onClicked: root.toggleRequested()
                     }
 
+                    // Its hover too, with the plain arrow: the pointer in a gap of the row
+                    // is not over the header, so the card is not tinted for a click that
+                    // does nothing
                     MouseArea {
                         objectName: "buttonRowArea"
+                        hoverEnabled: true
+                        cursorShape: Qt.ArrowCursor
                         x: _buttonRow.x
                         y: _buttonRow.y
                         width: _buttonRow.width

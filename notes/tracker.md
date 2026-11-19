@@ -275,8 +275,6 @@ All by the owner, 2026-11-17.
 
 - [ ] Wi-Fi password: Enter in the password field starts connecting to the network (the owner, 2026-11-19) — in the network popup and on the saved network's card
 
-- [ ] Network card row, low (second review of 1.29): hovering a dead gap in the button row still tints the card (`SettingsCard` `buttonRowArea` takes clicks, not hover); a wrapped question beside the lock runs 1 px past the margin (`NetworkProfileCard` ~106: floor the room); no test pins the name's six-character minimum
-
 - [ ] Two bar entries of one type and preset: the adopted "active" mark can land on the other cell than the popup sits over (rare)
 
 - [ ] `AnchorsTest` failed twice under load, each time once and never on rerun (a section's parts' order; an earlier one in U7a): find the wait that measures before layout

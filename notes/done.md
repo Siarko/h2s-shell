@@ -1621,6 +1621,10 @@ The tracker's state paragraphs as they stood when these moved:
       manifest does not fit is not waited for (`ztop-unfit` fixture, ModulesTest,
       ModuleRulesTest); a main that went (or was found gone, or whose `destroy()` threw)
       applies the waiting module again one turn later, reading who waits then (`_afterGoing`).
+- [x] Network card row, low (second review of 1.29), 2026-11-19: the button row's area
+      takes hover with the plain arrow, so a gap no longer tints the card; the question
+      beside the lock in whole pixels (the lock's width rounded up, the room floored); the
+      name's six-character minimum pinned on its own font (NetworkCardGeometryTest).
 
 ## The tracker's open sections as worded before 2026-11-19
 

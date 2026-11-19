@@ -102,8 +102,9 @@ SettingsCard {
             confirmLabel: root.useQuestion
             cancelTip: "Cancel"
             // A question longer than a line goes on to more lines: the row moves under the
-            // name, the question on a line of its own if need be (SettingsCard's buttonPlace)
-            maximumWidth: root.primaryRoom - (_mark.visible ? _mark.implicitWidth + 10 : 0)
+            // name, the question on a line of its own if need be (SettingsCard's buttonPlace).
+            // Whole pixels: the lock is placed at its width rounded up
+            maximumWidth: Math.floor(root.primaryRoom - (_mark.visible ? Math.ceil(_mark.implicitWidth) + 10 : 0))
             wraps: true
             available: !root.busy
             onConfirmed: {

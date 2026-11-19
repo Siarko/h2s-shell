@@ -753,6 +753,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A network's card in Settings is no longer highlighted while the pointer rests in a gap
+  between its buttons, where a click does nothing; a long question beside the lock stays
+  inside the card's margin.
 - A notification toast stays small: a long body shows its first six lines and fades out
   (a body of exactly six shows whole, nothing cut); the notification centre shows it whole.
 - A word in a notification's body longer than the card is wide breaks onto the next line
