@@ -90,6 +90,168 @@ Singleton {
     ]
     readonly property var slotNames: slotTable.map(entry => entry.name)
 
+    // ---- Anchors: the places in the shell's views where modules put elements ----
+    //
+    // A view is built from shared blocks (components/AnchorBlock.qml and the kinds on it);
+    // a block with an `anchor` name has a path derived from where it stands:
+    //
+    //   <surface>.<view>[.<block>]…[.<region>]
+    //
+    //   surface   "settings" or "popup" — the bar has no anchors, nor has anything on the
+    //             lock screen, the screensaver or under singletons/lock
+    //   view      a settings page's id (SettingsWindow.pages: general, network_vpn, …) or a
+    //             popup's key (WidgetRegistry: network, notifications, …), given by the
+    //             window or the popup to the view's root
+    //   block     a block's `anchor`, [a-z][a-zA-Z0-9]*: what it holds (saved, vpns), never
+    //             where it stands or its title's words. A block repeated per item is named by
+    //             its kind (card, row): all of them share one path, the item is in the
+    //             element's context. A block with no anchor adds no level
+    //   region    "actions" or "settings": a card's two regions, only right after "card",
+    //             last; never a block's name
+    //
+    // A module names a path, a placement and its element (the manifest's `anchors`):
+    // `before` and `after` put it next to the block, outside it; `prepend` and `append`
+    // inside, first and last of its content (under its frame: a page's heading, a section's
+    // title). Only the paths in anchorTable take content: naming a block does not publish it.
+    // Adding a row bumps the API's minor; tests/AnchorsTest.qml holds the views to the table.
+    readonly property var anchorPlacements: ["before", "after", "prepend", "append"]
+    readonly property var anchorSurfaces: ["settings", "popup"]
+    readonly property var anchorRegions: ["actions", "settings"]
+    // The kinds of block: SettingsPage, SettingsSection, SettingsCard, SettingsRow (PopupRow in
+    // a popup), PopupSection, and a card's region
+    readonly property var anchorKinds: ["page", "section", "card", "row", "popupSection", "region"]
+    readonly property var anchorScopes: ["", "own-provider"]
+    readonly property int maxAnchorPathLength: 200
+
+    // The anchors this shell offers: { path, kind, placements, takes, marks, context, scope,
+    // since, where } —
+    //   kind        one of anchorKinds
+    //   placements  the placements published for the path (a block can take more; one is
+    //               published when a module needs it)
+    //   takes       what an element there may be ("" anything; "SmallButton" on a card's
+    //               actions)
+    //   marks       a card that shows a module's mark while closed
+    //   context     what an element's `context` holds besides { anchor, placement }
+    //   scope       "" — every module's elements; "own-provider" — on an item of a VPN
+    //               provider, only the elements of the module that is that provider
+    //   since       the API version that published it
+    //   where       where it shows, for people
+    // Api.anchors is its frozen copy.
+    readonly property var anchorTable: []
+
+    // Today's slots, read as anchors once their view is converted (the alias's `at` in
+    // anchorTable): a manifest's `slots` entry for one becomes that anchor's element, listed in
+    // the module's deprecations, its context also carrying `slot` (and what `context` adds
+    // here, as the old name promised). network.vpn.page has none: a provider's page is its
+    // settingsPage.
+    readonly property var slotAliases: [
+        { slot: "network.popup.sections", at: "popup.network.connections", place: "append", context: {} },
+        { slot: "notifications.popup.top", at: "popup.notifications", place: "prepend", context: {} },
+        { slot: "settings.general.bottom", at: "settings.general", place: "append", context: {} },
+        { slot: "network.vpn.row", at: "popup.network.connections.vpn.row", place: "after", context: {} },
+        { slot: "network.vpn.card", at: "settings.network_vpn.vpns.card.settings", place: "prepend", context: { open: true } }
+    ]
+
+    // A slot's alias ({ slot, at, place, context }), or null
+    function slotAlias(slot) {
+        return slotAliases.find(alias => alias.slot === slot) ?? null;
+    }
+
+    // Why `name` is not a block's anchor name ("" when it is one)
+    function anchorNameProblem(name) {
+        if (typeof name !== "string" || name === "")
+            return "a block's name is a word";
+        if (name.length > 64 || !/^[a-z][a-zA-Z0-9]*$/.test(name))
+            return show(name) + " is not a block's name (a lowercase letter, then letters and digits; at most 64)";
+        if (anchorRegions.includes(name))
+            return show(name) + " names a card's region, not a block";
+        return "";
+    }
+
+    // Why `path` is not an anchor's path ("" when it is one, whether offered or not)
+    function anchorPathProblem(path) {
+        if (typeof path !== "string" || path === "")
+            return "a place is a dotted name, <surface>.<view>[.<block>]…";
+        if (path.length > maxAnchorPathLength)
+            return show(path) + " is longer than " + maxAnchorPathLength + " characters";
+        const parts = path.split(".");
+        if (parts.length < 2 || !anchorSurfaces.includes(parts[0]))
+            return show(path) + " does not start with settings.<page> or popup.<key>";
+        if (!/^[a-z][a-z0-9_-]{0,63}$/.test(parts[1]))
+            return show(path) + ": " + show(parts[1]) + " is not a page's id or a popup's key";
+        for (let i = 2; i < parts.length; i++) {
+            const part = parts[i];
+            if (anchorRegions.includes(part)) {
+                if (i === 2 || parts[i - 1] !== "card" || i !== parts.length - 1)
+                    return show(path) + ": " + show(part) + " is a card's region: only last, right after \"card\"";
+                continue;
+            }
+            const problem = anchorNameProblem(part);
+            if (problem !== "")
+                return show(path) + ": " + problem;
+        }
+        return "";
+    }
+
+    // Where a block stands: { path, childPath } — `path` its own address ("" not
+    // addressable), `childPath` what the blocks inside it build on. `parentPath` is the
+    // nearest enclosing block's childPath, or the base a window or popup gives its view's
+    // root (`parentIsBase`). A block with no anchor adds no level, and is addressable only as
+    // the view's root (the page itself: settings.general); a name that is not one makes it
+    // and everything inside it unaddressable.
+    function anchorBlockPaths(parentPath, parentIsBase, anchor) {
+        const none = { path: "", childPath: "" };
+        if (typeof parentPath !== "string" || parentPath === "" || anchorPathProblem(parentPath) !== "")
+            return none;
+        if (anchor === undefined || anchor === null || anchor === "")
+            return { path: parentIsBase === true ? parentPath : "", childPath: parentPath };
+        if (anchorNameProblem(anchor) !== "")
+            return none;
+        const path = parentPath + "." + anchor;
+        return anchorPathProblem(path) === "" ? { path: path, childPath: path } : none;
+    }
+
+    // The table's row for `path`, or null
+    function anchorRow(table, path) {
+        return (Array.isArray(table) ? table : []).find(row => isObject(row) && row.path === path) ?? null;
+    }
+
+    // What is wrong with an anchor table (anchorTable, or a suite's): one text per problem
+    function anchorTableProblems(table) {
+        if (!Array.isArray(table))
+            return ["the anchor table is not a list"];
+        const problems = [];
+        const seen = new Set();
+        table.forEach((row, index) => {
+            const where = "row " + index + (isObject(row) && typeof row.path === "string" ? " (" + row.path + ")" : "");
+            if (!isObject(row)) {
+                problems.push(where + ": not an object");
+                return;
+            }
+            const pathProblem = anchorPathProblem(row.path);
+            if (pathProblem !== "")
+                problems.push(where + ": " + pathProblem);
+            if (seen.has(row.path))
+                problems.push(where + ": the path is in the table twice");
+            seen.add(row.path);
+            if (!anchorKinds.includes(row.kind))
+                problems.push(where + ": kind " + show(row.kind) + " is not one of " + anchorKinds.join(", "));
+            if (!Array.isArray(row.placements) || row.placements.length === 0
+                    || !row.placements.every(place => anchorPlacements.includes(place))
+                    || new Set(row.placements).size !== row.placements.length)
+                problems.push(where + ": placements are not some of " + anchorPlacements.join(", "));
+            if (typeof row.takes !== "string" || typeof row.context !== "string" || typeof row.where !== "string" || row.where === "")
+                problems.push(where + ": takes, context and where are texts (where not empty)");
+            if (typeof row.marks !== "boolean")
+                problems.push(where + ": marks is true or false");
+            if (!anchorScopes.includes(row.scope))
+                problems.push(where + ": scope " + show(row.scope) + " is not \"\" or \"own-provider\"");
+            if (!parseApi(row.since))
+                problems.push(where + ": since " + show(row.since) + " is not \"major.minor\"");
+        });
+        return problems;
+    }
+
     // Ids a module cannot take: the core's own namespaces (settings groups and key prefixes,
     // fact prefixes, IPC targets, directories) — a module with id "battery" would own the
     // facts battery.* — and words that mean the shell itself. ModuleRulesTest checks that

@@ -359,6 +359,39 @@ Singleton {
         return { slot: slot, component: component.path };
     }
 
+    // One entry of `anchors`: { at, place, component } or why it is dropped. Only its form:
+    // whether this shell offers the place is ModuleMergeRules.anchorErrors' (an error there,
+    // the entry kept and shown nowhere)
+    function _checkAnchor(entry) {
+        const at = ModuleRules.get(entry, "at");
+        const problem = ModuleRules.anchorPathProblem(at);
+        if (problem !== "")
+            return "at: " + problem;
+        const place = ModuleRules.get(entry, "place");
+        if (!ModuleRules.anchorPlacements.includes(place))
+            return "place " + ModuleRules.show(place) + " is not one of " + ModuleRules.anchorPlacements.join(", ");
+        const component = _file(entry, "component", true);
+        if (component.error)
+            return component.error;
+        return { at: at, place: place, component: component.path };
+    }
+
+    // The manifest's `anchors`, checked: [{ at, place, component }] in manifest order. The
+    // same three twice: the second dropped with an error — a module's file at one place is
+    // what keeps its element alive across changes
+    function readAnchors(raw, errors, warnings) {
+        const kept = [];
+        for (const entry of _entries(raw, "anchors", ["at", "place", "component"], entry => _checkAnchor(entry), errors, warnings)) {
+            if (kept.some(other => other.at === entry.at && other.place === entry.place && other.component === entry.component)) {
+                errors.push("anchors: " + ModuleRules.show(entry.component) + " is named twice for " + ModuleRules.show(entry.at) + ", "
+                            + ModuleRules.show(entry.place) + " (the second is ignored)");
+                continue;
+            }
+            kept.push(entry);
+        }
+        return kept;
+    }
+
     // Reads module.json's text. Never throws. → {
     //   valid        the required fields are there and fine (the module can be considered)
     //   id, name, version, api, description, main ("" for none)

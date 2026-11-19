@@ -392,6 +392,86 @@ Singleton {
             + "; offered: " + ModuleRules.slotNames.join(", ") + ") — " + entry.component + " shows nowhere");
     }
 
+    // ---- Anchors ----
+
+    // A manifest's anchors that this shell does not offer (`table`: ModuleRules.anchorTable,
+    // or a suite's): one error each — the place is not in the table, or does not take the
+    // placement. The rest of the module loads; those elements show nowhere
+    function anchorErrors(manifest, table) {
+        const errors = [];
+        for (const entry of manifest?.anchors ?? []) {
+            const row = ModuleRules.anchorRow(table, entry.at);
+            if (!row)
+                errors.push("anchors: " + ModuleRules.show(entry.at) + " is not a place this shell offers (module API " + ModuleRules.apiVersion + ")");
+            else if (!(row.placements ?? []).includes(entry.place))
+                errors.push("anchors: " + ModuleRules.show(entry.at) + " does not take " + ModuleRules.show(entry.place)
+                            + " (it takes: " + (row.placements ?? []).join(", ") + ")");
+        }
+        return errors;
+    }
+
+    // A manifest's `slots` entries read as anchors: those whose alias (ModuleRules.slotAliases)
+    // names a place `table` offers with that placement — their view is converted, the slot is
+    // gone from it. → [{ at, place, component, slot, context }], in manifest order
+    function slotsAsAnchors(manifest, table) {
+        const read = [];
+        for (const entry of manifest?.slots ?? []) {
+            const alias = ModuleRules.slotAlias(entry.slot);
+            const row = alias ? ModuleRules.anchorRow(table, alias.at) : null;
+            if (row && (row.placements ?? []).includes(alias.place))
+                read.push({ at: alias.at, place: alias.place, component: entry.component, slot: entry.slot,
+                            context: Object.assign({}, alias.context, { slot: entry.slot }) });
+        }
+        return read;
+    }
+
+    // The old ways among a module's slots: one line per slot read as an anchor
+    function slotDeprecations(manifest, table) {
+        return slotsAsAnchors(manifest, table).map(entry =>
+            ModuleRules.deprecation("slots (" + ModuleRules.show(entry.slot) + ")",
+                                    "`anchors`: " + ModuleRules.show(entry.at) + ", " + ModuleRules.show(entry.place)));
+    }
+
+    // A module's elements at the places `table` offers: its `anchors` that pass anchorErrors,
+    // then its slots read as anchors (one that names the file an anchors entry already puts
+    // at that place is left out: one element per module, file and place).
+    // → [{ at, place, component, context }] — `context` what the element's context holds
+    // besides the block's (a slot's name), {} for none; in manifest order
+    function anchorEntries(manifest, table) {
+        const entries = [];
+        const same = (a, b) => a.at === b.at && a.place === b.place && a.component === b.component;
+        for (const entry of manifest?.anchors ?? []) {
+            const row = ModuleRules.anchorRow(table, entry.at);
+            if (row && (row.placements ?? []).includes(entry.place) && !entries.some(other => same(other, entry)))
+                entries.push({ at: entry.at, place: entry.place, component: entry.component, context: {} });
+        }
+        for (const entry of slotsAsAnchors(manifest, table)) {
+            if (!entries.some(other => same(other, entry)))
+                entries.push({ at: entry.at, place: entry.place, component: entry.component, context: entry.context });
+        }
+        return entries;
+    }
+
+    // The elements one host shows: of merged `anchors` ([{ module, at, place, component,
+    // context }]), those at `path` and `placement`. `scopeId` given (a string): only the
+    // elements of the module with that id — an own-provider place on a provider's item; ""
+    // shows none. The one place that orders elements: by module id, a module's together in
+    // its manifest's order — the same for all four placements. Each with `key`
+    // (contributionKey), for the host's ScriptModel. Never throws.
+    function anchorContent(anchors, path, placement, scopeId) {
+        if (!Array.isArray(anchors) || typeof path !== "string" || path === "" || typeof placement !== "string")
+            return [];
+        const scoped = typeof scopeId === "string";
+        const picked = [];
+        anchors.forEach((entry, index) => {
+            if (entry && entry.at === path && entry.place === placement && typeof entry.module === "string"
+                    && (!scoped || entry.module === scopeId))
+                picked.push({ entry: entry, index: index });
+        });
+        picked.sort((a, b) => a.entry.module < b.entry.module ? -1 : a.entry.module > b.entry.module ? 1 : a.index - b.index);
+        return picked.map(each => Object.assign({}, each.entry, { key: contributionKey(each.entry) }));
+    }
+
     // ---- The core's registries, merged with the modules' lists (M2) ----
     //
     // Each takes the core's own list and the host's merged list and returns the list the

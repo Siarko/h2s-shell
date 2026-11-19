@@ -818,6 +818,157 @@ TestCase {
         _api13(rules);
         _api116(rules);
         _dependencies(rules);
+        _anchors(rules);
+    }
+
+    // Anchors: the path rule, the table's form, a block's path, the manifest's `anchors`, the
+    // slots read as anchors, which elements a host shows and in what order
+    function _anchors(rules) {
+        // --- the table ---
+        assertEqual(rules.anchorTable.length, 0, "the anchor table: empty until a view is converted");
+        assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
+        const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
+                                                                 context: "{ editIndex }", scope: "", since: "1.20", where: "a page" }, extra ?? {});
+        const table = [row("settings.general", ["append"]), row("popup.notifications", ["prepend"], { kind: "popupSection" }),
+                       row("settings.fixture.box", ["before", "after", "prepend", "append"], { kind: "section" }),
+                       row("settings.network_vpn.vpns.card.settings", ["prepend"], { kind: "region", scope: "own-provider" })];
+        assertEqual(rules.anchorTableProblems(table).join("; "), "", "a suite's table, well formed");
+        const badTable = rules.anchorTableProblems([row("settings.general", []), row("settings.general", ["inside"]), 5,
+                                                    row("bar.clock", ["append"], { kind: "widget", scope: "mine", since: "1", marks: "no", where: "" })]);
+        for (const fragment of ["placements are not", "twice", "not an object", "does not start with", "kind \"widget\"", "scope \"mine\"",
+                                "since \"1\"", "marks is", "where not empty"])
+            assert(_has(badTable, fragment), "a bad table row: " + fragment);
+        assertEqual(rules.anchorTableProblems(null).length, 1, "… not a list: one problem, no throw");
+        assertEqual(JSON.stringify(rules.anchorRow(table, "popup.notifications")?.placements), "[\"prepend\"]", "anchorRow: the row of a path");
+        assertEqual(rules.anchorRow(table, "popup.network") + "," + rules.anchorRow(null, "x"), "null,null", "… none: null");
+
+        // --- the path rule ---
+        for (const good of ["settings.general", "popup.network.connections", "popup.network.connections.vpn.row", "popup.tray-menu",
+                            "settings.network_vpn.vpns.card.settings", "settings.network_wifi.saved.card.actions", "settings.general.box2.deep"])
+            assertEqual(rules.anchorPathProblem(good), "", "a place's name: " + good);
+        for (const bad of ["", null, 5, {}, "settings", "bar.clock", "lockscreen.password", "screensaver.clock", "Settings.general",
+                           "settings.General", "settings.general.Top", "settings.general.top-x", "settings.general.1a", "settings..x",
+                           "settings.general.", "settings.general.settings", "settings.general.actions", "settings.x.saved.settings",
+                           "settings.x.card.settings.more", "settings.x.card.actions.row", "settings.card.settings",
+                           "settings.general." + "a".repeat(65), "settings.g" + ".abcdefgh".repeat(25)])
+            assert(rules.anchorPathProblem(bad) !== "", "not a place's name: " + JSON.stringify(bad));
+        assertEqual(rules.anchorNameProblem("saved") + rules.anchorNameProblem("connections2"), "", "a block's name: a word");
+        for (const bad of ["", "Saved", "top-x", "a.b", "settings", "actions", 3, null])
+            assert(rules.anchorNameProblem(bad) !== "", "not a block's name: " + JSON.stringify(bad));
+
+        // --- where a block stands ---
+        const paths = (parent, isBase, anchor) => JSON.stringify(rules.anchorBlockPaths(parent, isBase, anchor));
+        assertEqual(paths("settings.general", true, ""), JSON.stringify({ path: "settings.general", childPath: "settings.general" }),
+                    "a view's root with no anchor: the base is its path");
+        assertEqual(paths("settings.general", true, "box"), JSON.stringify({ path: "settings.general.box", childPath: "settings.general.box" }),
+                    "… with an anchor: a level under the base");
+        assertEqual(paths("settings.general.box", false, "card"), JSON.stringify({ path: "settings.general.box.card", childPath: "settings.general.box.card" }),
+                    "a block in a block: the enclosing path and its own name");
+        assertEqual(paths("settings.general.box", false, ""), JSON.stringify({ path: "", childPath: "settings.general.box" }),
+                    "a block with no anchor: not addressable, adds no level");
+        assertEqual(paths("settings.general.box.card", false, "settings"), JSON.stringify({ path: "", childPath: "" }),
+                    "a block named like a region: not addressable, nor anything in it");
+        assertEqual(paths("settings.general", false, "Bad name"), JSON.stringify({ path: "", childPath: "" }), "… a name that is not one: the same");
+        assertEqual(paths("", true, "box") + paths(undefined, false, "") + paths("nowhere", true, ""), JSON.stringify({ path: "", childPath: "" }).repeat(3),
+                    "no base and no enclosing block (or a base that is not a place): nothing addressable");
+
+        // --- today's slots ---
+        assertEqual(rules.slotAliases.map(alias => alias.slot).join(","), rules.slotNames.filter(name => name !== "network.vpn.page").join(","),
+                    "every slot but network.vpn.page has an alias, in the slot table's order");
+        for (const alias of rules.slotAliases) {
+            assert(rules.anchorPathProblem(alias.at) === "" && rules.anchorPlacements.includes(alias.place) && rules.isObject(alias.context),
+                   "an alias names a place and a placement: " + alias.slot + " → " + alias.at + ", " + alias.place);
+            assert(!/lock|screensaver/.test(alias.at), "… never on the lock screen");
+        }
+        assertEqual(rules.slotAlias("network.vpn.card")?.at + " " + rules.slotAlias("network.vpn.card")?.place + " " + rules.slotAlias("network.vpn.card")?.context.open,
+                    "settings.network_vpn.vpns.card.settings prepend true", "slotAlias: the VPN card's, its context still saying open");
+        assertEqual(rules.slotAlias("network.vpn.page") + "," + rules.slotAlias("constructor"), "null,null", "… none for the page or a name that is no slot");
+
+        // --- the manifest's anchors ---
+        const read = (anchors) => {
+            const errors = [];
+            const warnings = [];
+            const kept = ModuleManifestRules.readAnchors({ anchors: anchors }, errors, warnings);
+            return { kept: kept, errors: errors, warnings: warnings };
+        };
+        const fine = read([{ at: "settings.general", place: "append", component: "Row.qml" },
+                           { at: "settings.general", place: "prepend", component: "Row.qml" },
+                           { at: "settings.general", place: "append", component: "sub/Other.qml" }]);
+        assertEqual(JSON.stringify(fine.kept), JSON.stringify([{ at: "settings.general", place: "append", component: "Row.qml" },
+                                                               { at: "settings.general", place: "prepend", component: "Row.qml" },
+                                                               { at: "settings.general", place: "append", component: "sub/Other.qml" }]),
+                    "anchors: { at, place, component } kept in manifest order");
+        assertEqual(fine.errors.length + fine.warnings.length, 0, "… no error, no warning");
+        const twice = read([{ at: "settings.general", place: "append", component: "Row.qml" }, { at: "settings.general", place: "append", component: "Row.qml" }]);
+        assertEqual(twice.kept.length, 1, "the same three twice: the second dropped");
+        assertEqual(twice.errors.join("|"), "anchors: \"Row.qml\" is named twice for \"settings.general\", \"append\" (the second is ignored)", "… said");
+        const wrong = read([{ at: "bar.clock", place: "append", component: "A.qml" }, { at: "settings.general", place: "inside", component: "A.qml" },
+                            { at: "settings.general", place: "append", component: "../A.qml" }, { at: "settings.general", place: "append" },
+                            { at: "settings.general", place: "append", component: "A.qml", order: 3 }, "x"]);
+        assertEqual(wrong.kept.length, 1, "malformed entries dropped, the last kept");
+        for (const fragment of ["anchors[0]: at: \"bar.clock\" does not start with", "anchors[1]: place \"inside\" is not one of before, after, prepend, append",
+                                "anchors[2]: component", "anchors[3]: component is missing", "anchors[5]: not an object"])
+            assert(_has(wrong.errors, fragment), "… said: " + fragment);
+        assert(_has(wrong.warnings, "anchors[4]: unknown field \"order\""), "an unknown field of an entry: a warning");
+        const notList = read({ at: "settings.general" });
+        assertEqual(notList.kept.length + " " + notList.errors.join(""), "0 anchors: not a list (ignored)", "anchors not a list: ignored, said");
+        assertEqual(read(undefined).kept.length + read(undefined).errors.length, 0, "no anchors: none, nothing said");
+
+        // --- against the table ---
+        const manifest = { anchors: [{ at: "settings.general", place: "append", component: "Row.qml" },
+                                     { at: "settings.general", place: "prepend", component: "Row.qml" },
+                                     { at: "settings.nowhere", place: "append", component: "Gone.qml" },
+                                     { at: "settings.fixture.box", place: "before", component: "Box.qml" }],
+                           slots: [{ slot: "settings.general.bottom", component: "Bottom.qml" }, { slot: "network.vpn.row", component: "VpnRow.qml" },
+                                   { slot: "network.vpn.page", component: "Page.qml" }, { slot: "settings.general.bottom", component: "Row.qml" },
+                                   { slot: "network.vpn.card", component: "Card.qml" }] };
+        assertEqual(ModuleMergeRules.anchorErrors(manifest, table).join("|"),
+                    "anchors: \"settings.general\" does not take \"prepend\" (it takes: append)|anchors: \"settings.nowhere\" is not a place this shell offers (module API "
+                    + rules.apiVersion + ")", "anchorErrors: a placement the place does not take, a place not offered");
+        assertEqual(ModuleMergeRules.anchorErrors(manifest, rules.anchorTable).length, 4, "… on this shell's empty table: every anchor is an error");
+        assertEqual(ModuleMergeRules.anchorErrors(null, table).length + ModuleMergeRules.anchorErrors({}, null).length, 0, "… nothing to check: none, no throw");
+        const asAnchors = ModuleMergeRules.slotsAsAnchors(manifest, table);
+        assertEqual(asAnchors.map(entry => entry.slot + ">" + entry.at + "," + entry.place + "," + entry.component).join("|"),
+                    "settings.general.bottom>settings.general,append,Bottom.qml|settings.general.bottom>settings.general,append,Row.qml|network.vpn.card>settings.network_vpn.vpns.card.settings,prepend,Card.qml",
+                    "slotsAsAnchors: the slots whose alias the table offers, in manifest order — not network.vpn.row (its view not converted), never the page");
+        assertEqual(JSON.stringify(asAnchors[0].context) + JSON.stringify(asAnchors[2].context),
+                    JSON.stringify({ slot: "settings.general.bottom" }) + JSON.stringify({ open: true, slot: "network.vpn.card" }),
+                    "… each one's context carrying its slot, the card's open: true");
+        assertEqual(ModuleMergeRules.slotsAsAnchors(manifest, rules.anchorTable).length, 0, "… on this shell's table: none, every slot stays a slot");
+        assertEqual(ModuleMergeRules.slotDeprecations(manifest, table)[0],
+                    "slots (\"settings.general.bottom\"): use `anchors`: \"settings.general\", \"append\" (goes with the shell's next tightening)",
+                    "slotDeprecations: a slot read as an anchor is an old way, listed");
+        assertEqual(ModuleMergeRules.slotDeprecations(manifest, table).length + "," + ModuleMergeRules.slotDeprecations(manifest, []).length, "3,0",
+                    "… one per slot read as an anchor; none while the slot stays a slot");
+        const entries = ModuleMergeRules.anchorEntries(manifest, table);
+        assertEqual(entries.map(entry => entry.at + "," + entry.place + "," + entry.component).join("|"),
+                    "settings.general,append,Row.qml|settings.fixture.box,before,Box.qml|settings.general,append,Bottom.qml|settings.network_vpn.vpns.card.settings,prepend,Card.qml",
+                    "anchorEntries: the anchors the table takes, then the slots read as anchors — the slot naming a file already there left out");
+        assertEqual(JSON.stringify(entries[0].context) + JSON.stringify(entries[2].context), "{}" + JSON.stringify({ slot: "settings.general.bottom" }),
+                    "… an anchor's own context empty, a slot's its name");
+        assertEqual(ModuleMergeRules.anchorEntries({}, table).length + ModuleMergeRules.anchorEntries(null, null).length, 0, "… none: empty, no throw");
+
+        // --- what one host shows ---
+        const merged = [
+            { module: "zeta", at: "settings.general", place: "append", component: "file:///z/A.qml", context: {} },
+            { module: "alpha", at: "settings.general", place: "append", component: "file:///a/Second.qml", context: {} },
+            { module: "alpha", at: "settings.general", place: "prepend", component: "file:///a/Top.qml", context: {} },
+            { module: "beta", at: "settings.general", place: "append", component: "file:///b/B.qml", context: {} },
+            { module: "alpha", at: "settings.general", place: "append", component: "file:///a/First.qml", context: {} },
+            { module: "alpha", at: "settings.general.box", place: "append", component: "file:///a/Box.qml", context: {} },
+            null, { at: "settings.general", place: "append" }];
+        const shown = ModuleMergeRules.anchorContent(merged, "settings.general", "append");
+        assertEqual(shown.map(entry => entry.module + ":" + entry.component.split("/").pop()).join(","), "alpha:Second.qml,alpha:First.qml,beta:B.qml,zeta:A.qml",
+                    "anchorContent: by module id, a module's together in their order — whatever order they came in");
+        assertEqual(shown[0].key, "alpha|file:///a/Second.qml", "… each with its key (module and file)");
+        assertEqual(ModuleMergeRules.anchorContent(merged, "settings.general", "prepend").length + ","
+                    + ModuleMergeRules.anchorContent(merged, "settings.general.box", "append").length, "1,1", "… only that path and placement");
+        assertEqual(ModuleMergeRules.anchorContent(merged, "settings.general", "append", "beta").map(entry => entry.module).join(","), "beta",
+                    "… scoped: only the module the item belongs to");
+        assertEqual(ModuleMergeRules.anchorContent(merged, "settings.general", "append", "").length, 0, "… scoped to no module: none");
+        assertEqual(ModuleMergeRules.anchorContent(null, "x", "append").length + ModuleMergeRules.anchorContent(merged, "", "append").length
+                    + ModuleMergeRules.anchorContent(merged, "settings.general", null).length, 0, "… nothing asked: none, no throw");
+        assertEqual(merged[0].key, undefined, "… the merged list untouched");
     }
 
     // API 1.18: a module's API for other modules — `exports` and `uses` in the manifest, the
