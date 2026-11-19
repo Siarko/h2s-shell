@@ -1912,3 +1912,9 @@ For the owner, from the autonomous run (2026-11-18 on):
   buttons right-aligned, no gap when none shows). Rule in `CLAUDE.md`. Reviewed on the diff
   (low findings left for a follow-up); `tests/run-all.sh` passed on both machines.
 
+- **Calendar follow-ups to the key fix** — on `master` 2026-11-19: a failed event save keeps
+  the form open ("Couldn't save the event"; late answers ignored; no double send); a moved
+  event saves to the calendar it is in now (refused if in several); calendar events keyed by
+  calendar + id in every view; GPU cards fed to their Instantiator by key; `KeyedViewsTest`
+  restores the network singletons on any exit. Quick set passed on both machines.
+
