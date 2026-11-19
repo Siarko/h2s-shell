@@ -186,27 +186,53 @@ TestCase {
         assert(list.itemAtIndex(0) === before["Office"], "… at the top");
 
         // Enter in a network's password field: what Connect does, while it says Connect and
-        // a password is typed. The connects go to a stand-in, never to NetworkManager
+        // can be pressed, and a password is typed. The connects go to a stand-in, never to
+        // NetworkManager. Opened and typed into as the panel does (it keeps both per SSID)
         const home = after["Home"];
+        const office = after["Office"];
         const asked = [];
         const standIn = { connecting: false, connectingTo: "", savedSsids: [], connectToWifi: (ssid, password) => asked.push(ssid + "=" + password),
-            cancelConnect: () => asked.push("cancel") };
+            cancelConnect: () => asked.push("cancel"), forgetNetwork: ssid => asked.push("forget " + ssid) };
         home.wifi = standIn;
-        home.expanded = true;
+        home.toggleRequested();
+        assert(home.expanded, "Wi-Fi list: a row opened");
         const field = _find(home, "wifiPasswordField");
+        const connect = _find(home, "wifiConnect");
+        const problem = _find(home, "wifiRowProblem");
         assert(home.needsPassword && field !== null && field.visible, "Wi-Fi list: a secured network not saved has a password field");
         field.input.accepted();
         assertEqual(asked.length, 0, "Enter with the field empty: nothing");
-        home.passwordText = "a long enough secret";
-        assertEqual(field.text, "a long enough secret", "… a password typed (the panel keeps it)");
+        home.passwordEdited("abc");
+        assert(field.text === "abc" && !connect.available && problem.visible && problem.text === "8 to 63 characters.",
+               "a WPA password too short: Connect not available, a hint says why (" + problem.text + ")");
         field.input.accepted();
-        assertEqual(asked.join(" "), "Home=a long enough secret", "… Enter connects with it, as Connect does");
+        connect.clicked();
+        assertEqual(asked.length, 0, "… neither Enter nor Connect connects with it");
+        home.passwordEdited("a long enough secret");
+        assert(field.text === "a long enough secret" && connect.available && !problem.visible, "… a password long enough: Connect available, no hint");
+        office.toggleRequested();
+        assert(!home.expanded && office.expanded, "another network opened: this row closes");
+        field.input.accepted();
+        assertEqual(asked.length, 0, "… Enter in its field (still focused, only clipped) connects nothing");
+        home.toggleRequested();
+        field.input.accepted();
+        assertEqual(asked.join(" "), "Home=a long enough secret", "opened again, Enter connects with it, as Connect does");
         home.wifi = Object.assign({}, standIn, { connecting: true, connectingTo: "Home" });
-        assertEqual(_find(home, "wifiConnect").label, "Cancel", "… while it connects the button is Cancel");
+        assertEqual(connect.label, "Cancel", "… while it connects the button is Cancel");
         field.input.accepted();
         assertEqual(asked.length, 1, "… and Enter neither connects again nor cancels");
+
+        // The rest of what the row reads and does goes through the same property
+        home.wifi = Object.assign({}, standIn, { connectFailed: true, failedSsid: "Home", failedKind: "password" });
+        assert(problem.visible && problem.text === "Wrong password", "why connecting failed, from the Wi-Fi it is given (" + problem.text + ")");
+        home.wifi = Object.assign({}, standIn, { savedSsids: ["Home"] });
+        assert(home.isSaved && !field.visible, "saved, as the Wi-Fi it is given says: no password field");
+        const forget = _find(home, "wifiForget");
+        forget.confirmed();
+        assertEqual(asked[asked.length - 1], "forget Home", "… and Forget goes to it");
         home.wifi = WifiManager;
-        home.passwordText = "";
+        home.toggleRequested();
+        home.passwordEdited("");
     }
 
     function run() {

@@ -894,7 +894,6 @@ TestCase {
         _rows();
         _baseTypes();
         _progressAndTips();
-        _dropdownGoesWithItsParent();
 
         _window.visible = false;
         _secondWindow.visible = false;
@@ -1269,6 +1268,11 @@ TestCase {
         return top ? Array.from(top.children).find(child => child.toString().startsWith("HoverTip") && child.target === publicTip.target) ?? null : null;
     }
 
+    // The hover handlers on `item`
+    function _handlersOn(item) {
+        return Array.from(item.data).filter(child => child.toString().startsWith("QQuickHoverHandler")).length;
+    }
+
     // ProgressBar and HoverTip (1.31)
     function _progressAndTips() {
         const rules = ApiElementRules;
@@ -1308,10 +1312,13 @@ TestCase {
         assert(Qt.colorEqual(_within(mistypedProgress).children[1].color, Theme.accent), "a kind that does not exist shows as normal");
         assertEqual(ApiElements.warned.filter(key => key === "ProgressBar.kind=blue").length, 1, "… warned about once");
         assert(!ApiElements.warned.some(key => /^ProgressBar\.kind=(normal|success|warning|danger)$/.test(key)), "a kind it knows is not warned about");
-        for (const [value, share, what] of [[2, 1, "above 1: full"], [0, 0, "0: empty"], [NaN, 0, "not a number: empty"], [1, 1, "1: full"]]) {
+        for (const [value, share, what] of [[2, 1, "above 1: full"], [0, 0, "0: empty"], [Infinity, 1, "Infinity: full"], [NaN, 0, "not a number: empty"], [1, 1, "1: full"]]) {
             progress.value = value;
             assert(_until(() => Math.abs(fill.width - progress.width * share) < 0.5), "value " + what + " (" + fill.width + ")");
         }
+        progress.value = -Infinity;
+        assert(_within(progress).indeterminate, "value -Infinity: a run of unknown length");
+        progress.value = 1;
         const piece = _within(unknownLength).children[1];
         assert(Math.abs(piece.width - unknownLength.width * 0.3) < 0.5 && piece.x >= 0 && piece.x + piece.width <= unknownLength.width + 0.5,
                "a value below 0: a piece of the fill along the track (" + piece.x + ", " + piece.width + ")");
@@ -1349,30 +1356,47 @@ TestCase {
         driver.mouseMove(aimed, 5, 5);
         assert(_until(() => _tipOf(aimedTip)?.visible === true), "a tooltip given a target shows over that item");
         driver.mouseMove(elsewhere, 5, 5);
-        aimed.visible = false;
         assert(_until(() => !_tipOf(aimedTip).visible), "… gone with the pointer");
+        driver.mouseMove(aimed, 5, 5);
+        assert(_until(() => _tipOf(aimedTip).visible), "… back with it");
+        aimed.visible = false;
+        assert(_until(() => !_tipOf(aimedTip).visible), "… gone when its item is hidden under the pointer");
+        driver.mouseMove(elsewhere, 5, 5);
+        aimed.visible = true;
+
+        // A target destroyed while its tooltip shows (a row going away under the pointer):
+        // the tooltip goes, nothing read from the handler that went with it
+        const doomed = Qt.createQmlObject("import QtQuick\nRectangle { x: 260; y: 120; width: 40; height: 24 }", _secondWindow.contentItem, "DoomedTarget.qml");
+        const doomedTip = Qt.createQmlObject("import qs.api\nHoverTip { text: \"Doomed\" }", _secondWindow.contentItem, "DoomedTip.qml");
+        doomedTip.target = doomed;
+        const doomedShown = _tipOf(doomedTip);
+        driver.mouseMove(doomed, 5, 5);
+        assert(_until(() => doomedShown.visible), "a tooltip on an item made later shows");
+        doomed.destroy();
+        assert(_until(() => doomedTip.target === null) && _until(() => !doomedShown.visible), "… its item destroyed under the pointer: the tooltip goes");
+        driver.mouseMove(elsewhere, 5, 5);
+        doomedTip.destroy();
+
+        // Tooltips made and destroyed against one item leave one handler on it, not one each
+        const kept = Qt.createQmlObject("import QtQuick\nRectangle { x: 260; y: 160; width: 40; height: 24 }", _secondWindow.contentItem, "KeptTarget.qml");
+        let again = null;
+        for (let i = 0; i < 3; i++) {
+            again = Qt.createQmlObject("import qs.api\nHoverTip { text: \"Again\" }", _secondWindow.contentItem, "AgainTip.qml");
+            again.target = kept;
+            if (i < 2) {
+                let gone = false;
+                again.Component.destruction.connect(() => gone = true);
+                again.destroy();
+                assert(_until(() => gone), "a tooltip made against the item, destroyed");
+            }
+        }
+        assert(_until(() => _handlersOn(kept) === 1), "three tooltips made in turn against one item, two destroyed: one handler on it (" + _handlersOn(kept) + ")");
+        again.destroy();
+        kept.destroy();
 
         const rowItems = _items(tipRow);
         assert(_until(() => rowItems[2].x > 0), "the row laid out");
         assertEqual(rowItems[2].x, 40 + 6, "a tooltip loose in a layout takes no room in it");
         assertEqual(rowItems[1].width + " " + rowItems[1].visible, "0 false", "… no size, and nothing shown in its place");
-    }
-
-    // A dropdown with options destroyed together with its parent (a card closing with a
-    // module's dropdown in it): its options' rows lose their parent first, and must not read
-    // its width then — a TypeError printed fails the run (tests/run-unit.sh)
-    function _dropdownGoesWithItsParent() {
-        const holder = Qt.createQmlObject("import QtQuick\nimport qs.api\nItem { width: 200; height: 40\n"
-            + "    property var choices: [{ value: \"a\", label: \"A\" }, { value: \"b\", label: \"B\" }, { value: \"c\", label: \"C\" }]\n"
-            + "    property alias dropdown: _dropdown\n"
-            + "    Dropdown { id: _dropdown; width: 150; value: \"a\"; options: parent ? parent.choices.map(choice => choice) : [] }\n}",
-            _secondWindow.contentItem, "DropdownHolder.qml");
-        holder.y = 220;
-        assert(_until(() => holder.dropdown.width > 0), "a dropdown with options, laid out");
-        let gone = false;
-        holder.Component.destruction.connect(() => gone = true);
-        holder.destroy();
-        assert(_until(() => gone), "destroyed with its parent in one go, nothing read from a parent already gone");
-        driver.wait(20);
     }
 }

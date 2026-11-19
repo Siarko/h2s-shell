@@ -32,7 +32,9 @@ Item {
         WifiManager.releaseScan();
     }
 
-    // Where a saved network's new password goes: NetworkProfiles (a stand-in in tests)
+    // Where a saved network's new password goes, and whether it can go now (busy):
+    // NetworkProfiles (a stand-in in tests). Only that write goes through it — the saved
+    // networks, the hotspots, the shown passwords and the editor read NetworkProfiles itself
     property var profiles: NetworkProfiles
 
     // The saved network open for its settings, by UUID

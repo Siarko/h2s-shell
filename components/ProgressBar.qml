@@ -3,7 +3,8 @@ import qs.singletons
 
 // A progress bar: the part done of `value` (0 to 1) filled over the track, its ends rounded.
 // A `value` below 0 is a run of unknown length: a piece of the fill slides along the track
-// (standing in the middle with reduced motion). Anything not a number shows as nothing done.
+// (standing in the middle with reduced motion). Above 1 is full (Infinity too); not a number
+// shows as nothing done.
 // Its thickness and its ends come from the theme's `progress` group; `tone` names the fill's
 // colour in Theme (the accent by default).
 //
@@ -15,7 +16,7 @@ Item {
     property string tone: "accent"
 
     readonly property bool indeterminate: value < 0
-    readonly property real _done: Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
+    readonly property real _done: isNaN(value) ? 0 : Math.max(0, Math.min(1, value))
     // The sliding piece's share of the track while the length is unknown
     readonly property real _pieceShare: 0.3
     property real _slide: 0.5

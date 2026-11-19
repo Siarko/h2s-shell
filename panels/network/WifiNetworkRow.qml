@@ -26,14 +26,18 @@ Rectangle {
     signal passwordEdited(string text)
     signal revealToggled
 
-    // Where connecting goes: WifiManager (a stand-in in tests)
+    // The Wi-Fi this row reads and acts on — connecting, cancelling, forgetting, which
+    // networks are saved and why connecting failed: WifiManager (a stand-in in tests)
     property var wifi: WifiManager
 
     readonly property string ssid: root.network.ssid ?? ""
     // The field follows the password kept for this row's network
     onPasswordTextChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
-    readonly property bool isSaved: WifiManager.savedSsids.includes(root.network.ssid)
+    readonly property bool isSaved: (root.wifi.savedSsids ?? []).includes(root.network.ssid)
     readonly property bool needsPassword: root.network.security !== "--" && root.network.security !== "" && !isSaved
+    // A password typed that the network cannot take (too short for WPA): Connect is not
+    // available, and a hint says why (NetworkRules.wifiScanPassword)
+    readonly property bool _passwordWrong: needsPassword && passwordText !== "" && !NetworkRules.wifiScanPassword(passwordText, root.network.security ?? "")
 
     function _signalColor(signal) {
         if (signal >= 75) return Theme.accent
@@ -146,8 +150,11 @@ Rectangle {
                     onRevealToggled: root.revealToggled()
                     onTextEdited: root.passwordEdited(text)
                     objectName: "wifiPasswordField"
-                    // Enter: what Connect beside it does, while it says Connect
-                    onAccepted: if (NetworkRules.wifiEnterConnects(text, root.network.inUse === true, _connectButton._busy)) _connectButton.clicked()
+                    // Enter: what Connect beside it does, while it says Connect and can be
+                    // pressed — not while the row is closed (closing only clips it, and the
+                    // field keeps its focus)
+                    onAccepted: if (root.expanded && visible && _connectButton.available
+                                    && NetworkRules.wifiEnterConnects(text, root.network.inUse === true, _connectButton._busy)) _connectButton.clicked()
                 }
 
                 // Spacer for saved/open networks (no password field)
@@ -156,15 +163,20 @@ Rectangle {
                     Layout.fillWidth: true
                 }
 
-                // Why connecting failed, from nmcli's error (WifiManager.failedKind)
+                // A password that cannot be one, or why connecting failed, from nmcli's error
+                // (WifiManager.failedKind)
                 Text {
-                    visible: WifiManager.connectFailed && WifiManager.failedSsid === root.network.ssid
+                    objectName: "wifiRowProblem"
+                    visible: text !== ""
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: WifiManager.failedKind === "password" ? "Wrong password"
-                        : WifiManager.failedKind === "notFound" ? "The network is out of range"
-                        : WifiManager.failedKind === "auth" ? "Not allowed to connect"
-                        : WifiManager.failedMessage !== "" ? WifiManager.failedMessage : "Could not connect"
+                    textFormat: Text.PlainText
+                    text: root._passwordWrong ? "8 to 63 characters."
+                        : !(root.wifi.connectFailed && root.wifi.failedSsid === root.network.ssid) ? ""
+                        : root.wifi.failedKind === "password" ? "Wrong password"
+                        : root.wifi.failedKind === "notFound" ? "The network is out of range"
+                        : root.wifi.failedKind === "auth" ? "Not allowed to connect"
+                        : (root.wifi.failedMessage ?? "") !== "" ? root.wifi.failedMessage : "Could not connect"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.warning
@@ -179,7 +191,10 @@ Rectangle {
                     readonly property bool _busy: root.wifi.connecting && root.wifi.connectingTo === root.network.ssid
                     label: _busy ? "Cancel" : "Connect"
                     kind: _busy ? "cancel" : "save"
+                    available: _busy || !root._passwordWrong
                     onClicked: {
+                        if (!available)
+                            return;
                         if (_busy)
                             root.wifi.cancelConnect()
                         else
@@ -190,12 +205,13 @@ Rectangle {
                 // Forget button — only for saved networks
                 // Asks first, like every delete (DeleteButton)
                 DeleteButton {
+                    objectName: "wifiForget"
                     visible: root.isSaved
                     label: "Forget"
                     confirmLabel: "Forget?"
                     fontSize: Theme.fontSizeBody
                     cancelTip: "Keep the network"
-                    onConfirmed: WifiManager.forgetNetwork(root.network.ssid)
+                    onConfirmed: root.wifi.forgetNetwork(root.network.ssid)
                 }
             }
         }

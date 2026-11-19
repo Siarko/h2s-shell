@@ -28,15 +28,30 @@ Item {
     width: 0
     height: 0
 
-    HoverHandler {
+    // The hover over the target: a handler on the target, owned here — made when the
+    // target is set, destroyed with this tooltip or when the target changes, so tooltips
+    // made again and again against one item leave no handlers behind on it. A target
+    // destroyed takes its handler with it; the reference then reads null.
+    QtObject {
         id: _hover
-        parent: root.target
-        enabled: root.target !== null
+        property HoverHandler handler: null
+        function attach() {
+            if (handler)
+                handler.destroy();
+            handler = root.target ? _handlerMaker.createObject(root.target, { parent: root.target }) : null;
+        }
     }
+    Component {
+        id: _handlerMaker
+        HoverHandler {}
+    }
+    onTargetChanged: _hover.attach()
+    Component.onCompleted: _hover.attach()
+    Component.onDestruction: if (_hover.handler) _hover.handler.destroy()
 
     Components.HoverTip {
         target: root.target ?? root
-        shown: _hover.hovered && root.target !== null && root.target.visible
+        shown: root.target !== null && _hover.handler !== null && _hover.handler.hovered && root.target.visible
         text: ApiElementRules.tipText(root.text)
     }
 }

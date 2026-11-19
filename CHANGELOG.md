@@ -357,7 +357,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   hardware popup's bars follow them.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the
   network popup), or saves the new password, as Save does (a saved network's card in
-  Settings) — only when that button could be pressed: never with the field empty.
+  Settings) — only when that button could be pressed and the network's row is open: never
+  with the field empty.
 - Modules (no Settings → Modules page yet): the launcher finds modules in
   `~/.local/share/h2s-shell/modules`, each system data directory's `h2s-shell/modules` and the
   directories `H2S_SHELL_MODULE_PATH` names, and hands them to the shell in
@@ -763,6 +764,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- The network popup's Connect is not available while the password typed is too short for
+  the network (WPA: 8 to 63 characters), and says so, as connecting to a hidden network does.
 - A network's card in Settings is no longer highlighted while the pointer rests in a gap
   between its buttons, where a click does nothing; a long question beside the lock stays
   inside the card's margin.

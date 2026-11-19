@@ -70,9 +70,6 @@ Singleton {
         return /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[^\s"'\\]*)?$/.test(String(text ?? ""));
     }
 
-    // A Wi-Fi password NetworkManager takes for `security` (key management): WPA2/WPA3
-    // personal 8–63 characters (or 64 hexadecimal digits, the key itself); others are not
-    // checked here
     // Whether Enter in a network's password field in the network popup connects, as the
     // Connect button beside it would: that button is there (the network not in use) and
     // says Connect (the network not connecting now — it is Cancel then), and a password is
@@ -81,11 +78,23 @@ Singleton {
         return String(password ?? "") !== "" && !inUse && !connectingThis;
     }
 
+    // A Wi-Fi password NetworkManager takes for `security` (key management): WPA2/WPA3
+    // personal 8–63 characters (or 64 hexadecimal digits, the key itself); others are not
+    // checked here
     function isWifiPassword(text: string, security: string): bool {
         const password = String(text ?? "");
         if (security !== "wpa-psk" && security !== "sae")
             return password.length > 0;
         return (password.length >= 8 && password.length <= 63) || /^[0-9A-Fa-f]{64}$/.test(password);
+    }
+
+    // The same for a network in range, its security as the scan names it ("WPA2",
+    // "WPA1 WPA2", "WPA3", "WPA2 802.1X", "WEP"): WPA personal is checked as above;
+    // enterprise (802.1X) and WEP are not
+    function wifiScanPassword(text: string, scanSecurity: string): bool {
+        const words = String(scanSecurity ?? "").split(/\s+/);
+        const personal = words.some(word => /^WPA\d?$/.test(word)) && !words.includes("802.1X");
+        return isWifiPassword(text, personal ? "wpa-psk" : "");
     }
 
     // A speed in Mb/s as a person reads it: "2.5 Gb/s", "866 Mb/s"; "" when unknown

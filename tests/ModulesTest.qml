@@ -1089,7 +1089,11 @@ TestCase {
             host.mainObject("consumer-soft").destroy();
         });
         _then("the soft consumer's main is destroyed from outside", () => host._records.some(record => record.manifest.id === "consumer-soft" && record.mainDeleted), () => {
-            host.setEnabled("provider", true);
+            // The provider turned on in one pass (setEnabled applies twice: the second pass
+            // would make the consumer's main whatever the first left waiting); the consumer
+            // restarts, its old main already gone: nothing goes, so nothing would apply it
+            // again unless the host does when it finds that main gone
+            Config.disabledModules = host._plainList(Config.disabledModules).filter(id => id !== "provider");
         });
         _then("the soft consumer restarts with the provider", () => _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft")?.answer === "hello, soft up", () => {
             assertEqual(host._going.length, 0, "a restarting main deleted from outside: nothing left waiting");

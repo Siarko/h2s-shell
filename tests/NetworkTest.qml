@@ -238,6 +238,11 @@ TestCase {
             assert(!rules.wifiEnterConnects("", false, false), "… not with the field empty");
             assert(!rules.wifiEnterConnects("secret123", true, false), "… nor for the network in use (no Connect button)");
             assert(!rules.wifiEnterConnects("secret123", false, true), "… nor while it connects (the button is Cancel)");
+            for (const security of ["WPA2", "WPA1 WPA2", "WPA3", "WPA2 WPA3"])
+                assert(!rules.wifiScanPassword("abc", security) && rules.wifiScanPassword("12345678", security) && !rules.wifiScanPassword("", security),
+                       "a network in range secured by " + security + ": a password of 8 or more");
+            assert(rules.wifiScanPassword("abc", "WPA2 802.1X") && rules.wifiScanPassword("abc", "WEP") && !rules.wifiScanPassword("", "WEP"),
+                   "… enterprise and WEP not checked, beyond something typed");
                         // --- the connection editor ---
             const wiredBlock = { "connection.id": "Office", "connection.autoconnect": "yes", "connection.autoconnect-priority": "-999",
                 "connection.metered": "unknown", "connection.permissions": "", "ipv4.method": "manual",
