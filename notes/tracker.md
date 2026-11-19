@@ -21,10 +21,6 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] **in progress** (branch `fix-scriptmodel-keys`): lists fed to `ScriptModel` as string keys —
-      a Quickshell 0.3.2 defect gives a delegate another item when rebuilt objects shift
-      (calendar edit could save to the wrong event, a typed Wi-Fi password move to another
-      network); before the network card
 - [ ] the network profile card on the settings card (U4b)
 - [ ] the VPN page (U4c); it also publishes `popup.network.connections.vpn.row` (named in
       U2, not published: it needs the per-VPN context)

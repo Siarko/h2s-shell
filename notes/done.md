@@ -1901,3 +1901,14 @@ For the owner, from the autonomous run (2026-11-18 on):
   (rows replaced by position for rebuilt objects) exposing several of the shell's lists;
   fixed separately (string-key models).
 
+- **Lists fed to `ScriptModel` as string keys** — on `master` 2026-11-19. Quickshell 0.3.2's
+  `ScriptModel.updateValuesUnique` replaces rows by position for rebuilt objects (a delegate
+  gets another item, the wrong one is destroyed; draft
+  `notes/upstream/quickshell-scriptmodel-replace.md`, pinned in `QuickshellPinTest` (g)).
+  `singletons/ListKeyRules.qml` (`keyed`), `components/KeyedModel.qml` (`model`, `byKey`);
+  ~30 views converted (calendar, network settings pages, the Wi-Fi popup list, VPN rows,
+  bar sections, module slots and anchor contents, `Dropdown`, the lock prompt's methods …);
+  a calendar edit saves only to the event it started on; `SettingsCard` fixes (48 px closed,
+  buttons right-aligned, no gap when none shows). Rule in `CLAUDE.md`. Reviewed on the diff
+  (low findings left for a follow-up); `tests/run-all.sh` passed on both machines.
+
