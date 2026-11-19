@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtTest as QT
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -93,7 +94,9 @@ TestCase {
         _row("settings.cards.saved", "section", ["before", "after", "prepend", "append"], "{ tracker }"),
         _row("settings.cards.saved.card", "card", ["before", "after"], "{ itemId, tracker }"),
         _row("settings.cards.saved.card.settings", "region", ["prepend", "append"], "{ itemId, tracker }"),
-        _row("settings.cards.vpns.card.settings", "region", ["prepend"], "{ itemId, tracker }", "own-provider")
+        _row("settings.cards.vpns.card.settings", "region", ["prepend"], "{ itemId, tracker }", "own-provider"),
+        _row("settings.cards.saved.card.actions", "region", ["append"], "{ itemId, tracker }", "", undefined, "SmallButton"),
+        _row("settings.cards.vpns.card.actions", "region", ["append"], "{ itemId, tracker }", "own-provider", undefined, "SmallButton")
     ]
 
     property ModuleHost host: ModuleHost {
@@ -115,8 +118,8 @@ TestCase {
     property var _slotUses: null
     property var _viewTexts: ({})
 
-    function _row(path, kind, placements, context, scope, view) {
-        return { path: path, kind: kind, placements: placements, takes: "", marks: false, context: context, scope: scope ?? "", since: "1.20",
+    function _row(path, kind, placements, context, scope, view, takes) {
+        return { path: path, kind: kind, placements: placements, takes: takes ?? "", marks: false, context: context, scope: scope ?? "", since: "1.20",
                  where: "AnchorsTest's fixture view", view: view ?? "tests/AnchorsTest.qml" };
     }
 
@@ -447,6 +450,10 @@ TestCase {
                                 context: ({ itemId: cardItem.id, tracker: suite._tracker })
                                 Layout.fillWidth: true
                                 onToggleRequested: cardsWindow.openId = open ? "" : cardItem.id
+                                // Its own buttons, as a network's card has them: one above the
+                                // modules' and the one that removes it, last
+                                buttons: SmallButton { objectName: "ownEdit"; label: "Edit" }
+                                lastButtons: DeleteButton { objectName: "ownForget"; label: "Forget"; fontSize: Theme.fontSizeBody }
 
                                 Text {
                                     id: ownRow
@@ -561,8 +568,9 @@ TestCase {
             host.items.forEach(add);
         for (const card of _savedCardList().concat([_vpnCard(0), _vpnCard(1), _vpnCard(2)]).filter(card => card)) {
             add(card.frame);
-            for (const host of [card.beforeHost, card.afterHost, card.settingsRegion.prependHost, card.settingsRegion.appendHost])
+            for (const host of [card.beforeHost, card.afterHost, card.settingsRegion.prependHost, card.settingsRegion.appendHost, card.actionsRegion.appendHost])
                 host.items.forEach(add);
+            add(card.actionsRegion);
         }
         const described = parts.join(" ");
         const steady = described === _lastCards;
@@ -1009,6 +1017,7 @@ TestCase {
     readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
                                                "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
+                                               "settings.network_wifi.hotspots.card.actions",
                                                "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card"]
     function _popupLiveProblems(prefix) {
         const problems = [];
@@ -1191,7 +1200,175 @@ TestCase {
         return steady;
     }
 
+    // ---- A card's buttons (its region `actions`) ----
+
+    property var _driver: QT.TestCase {
+        name: "AnchorsDriver"
+        when: false
+    }
+    // Buttons kept to see that they stay the same objects
+    property var _keptButtons: []
+
+    // The first child of `item` of a type (its name as the engine prints it), or null
+    function _child(item, typeName) {
+        return Array.from(item?.children ?? []).find(child => String(child).startsWith(typeName)) ?? null;
+    }
+
+    // The buttons of the anchors-buttons fixture standing now: "<name>|<anchor>|<itemId>:<count>"
+    function _buttonsLive() {
+        const main = host.mainObject("anchors-buttons");
+        return main ? Object.keys(main.live).sort().map(key => key + ":" + main.live[key]).join(",") : "?";
+    }
+
+    // What is wrong with where a card's buttons stand: `items` top to bottom, the first 4 under
+    // the primary controls' slot (the region's top), each 4 under the one above, each ending
+    // on the stack's right edge (the region's), each a whole number of pixels wide, the region
+    // ending with the last
+    function _stackProblems(card, items) {
+        const problems = [];
+        const region = card.actionsRegion;
+        const at = item => {
+            const corner = item.mapToItem(card, 0, 0);
+            return { y: corner.y, right: corner.x + item.width, bottom: corner.y + item.height, width: item.width };
+        };
+        const edge = at(region).right;
+        let bottom = at(region).y;
+        for (const item of items) {
+            const name = item.objectName !== "" ? item.objectName : item.label;
+            const where = at(item);
+            if (Math.abs(where.y - (bottom + 4)) > 0.01)
+                problems.push(name + " at " + where.y + ", not 4 under " + bottom);
+            if (Math.abs(where.right - edge) > 0.01)
+                problems.push(name + " ends at " + where.right + ", not on the stack's right edge (" + edge + ")");
+            if (Math.abs(where.width - Math.round(where.width)) > 0.001)
+                problems.push(name + " " + where.width + " wide: not on whole pixels");
+            bottom = where.bottom;
+        }
+        if (Math.abs(at(region).bottom - bottom) > 0.01)
+            problems.push("the stack ends at " + at(region).bottom + ", not with its last button (" + bottom + ")");
+        return problems;
+    }
+
     // ---- The Wi-Fi and Ethernet pages: the saved networks' and the wired profiles' cards ----
+
+    // The first shown item under `item` that `test` accepts, depth first, or null
+    function _shownItem(item, test) {
+        for (const child of item?.children ?? []) {
+            if (!child.visible)
+                continue;
+            if (test(child))
+                return child;
+            const found = _shownItem(child, test);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // What is wrong with a page's section titles: each section with buttons on its title's line
+    // has its last one ending at the line's right edge, each centred on the line; `count` the
+    // buttons looked at
+    function _titleButtonProblems(page, count) {
+        const problems = [];
+        let seen = 0;
+        for (const section of Object.values(_sectionsOf(page))) {
+            const frame = section.frame;
+            const row = frame.children[frame.children.length - 1];
+            const buttons = Array.from(row.children).filter(child => child.visible && child.width > 0);
+            if (buttons.length === 0)
+                continue;
+            for (const button of buttons) {
+                seen++;
+                const corner = button.mapToItem(frame, 0, 0);
+                if (Math.abs(corner.y - (frame.height - button.height) / 2) > 0.01)
+                    problems.push(section.path + ": [" + button.label + "] at " + corner.y + ", not centred on the title's line");
+            }
+            const last = buttons[buttons.length - 1];
+            const right = last.mapToItem(frame, 0, 0).x + last.width;
+            if (Math.abs(right - frame.width) > 0.01)
+                problems.push(section.path + ": [" + last.label + "] ends at " + right + ", not at the title line's right edge (" + frame.width + ")");
+            if (Math.abs(frame.mapToItem(section, 0, 0).x + frame.width - section.width) > 0.01)
+                problems.push(section.path + ": the title's line is not as wide as the section");
+        }
+        if (seen !== count)
+            problems.push(seen + " title buttons, not " + count);
+        return problems;
+    }
+
+    // The sections of a page, by path
+    function _sectionsOf(page) {
+        const sections = {};
+        const walk = item => {
+            for (const child of item?.children ?? []) {
+                if (child.isAnchorBlock === true && child.kind === "section")
+                    sections[child.path] = child;
+                walk(child);
+            }
+        };
+        walk(page?.loader.item);
+        return sections;
+    }
+
+    // What is wrong with where an open network card's parts stand, in its frame: the primary
+    // button on the stack's right edge; the stack (Edit connection…, `buttons` a module added,
+    // Forget) 4 apart; the rows 8 in and across the card — "Connect automatically" 6 under the
+    // header (the name's line or the stack, whichever ends lower), priority 12 under it (the
+    // switch keeps 6 under itself), then the page's: the Wi-Fi password's title 6 under
+    // priority and its field's line 4 under that, the field 6 short of Save at the right
+    // margin; the frame 8 under the last (`element`, a module's element under the rows, if
+    // any), or 14 with no row of the page's (their place keeps 6)
+    function _openCardRowsProblems(card, password, buttons, element) {
+        const problems = [];
+        const frame = card.frame;
+        const at = item => {
+            const corner = item.mapToItem(frame, 0, 0);
+            return { x: corner.x, y: corner.y, right: corner.x + item.width, bottom: corner.y + item.height, width: item.width };
+        };
+        const expect = (name, actual, expected) => {
+            if (Math.abs(actual - expected) > 0.01)
+                problems.push(name + " " + Math.round(actual * 100) / 100 + ", not " + Math.round(expected * 100) / 100);
+        };
+        const stack = [_blockChild(card, "profileEdit")].concat(buttons ?? [], [_blockChild(card, "profileForget")]);
+        problems.push(..._stackProblems(card, stack));
+        expect("the primary button's right", at(_blockChild(card, "profilePrimary")).right, at(card.actionsRegion).right);
+        const subtitle = _textItem(card, card.subtitle);
+        const autoconnect = _shownItem(card, item => item.label === card.autoconnectLabel && typeof item.toggled === "function");
+        const priorityText = _textItem(card, "Priority");
+        if (!subtitle || !autoconnect || !priorityText)
+            return problems.concat(["the name's line, Connect automatically and Priority show"]);
+        const headerBottom = Math.max(at(subtitle).bottom, at(card.actionsRegion).bottom);
+        const width = frame.width;
+        const row = (name, item, top) => {
+            expect(name + " at y", at(item).y, top);
+            expect(name + " at x", at(item).x, 8);
+            expect(name + " wide", at(item).width, width - 16);
+            return at(item).bottom;
+        };
+        let bottom = row("Connect automatically", autoconnect, headerBottom + 6);
+        bottom = row("priority", priorityText.parent.parent, bottom + 12);
+        if (password) {
+            const title = _textItem(card, "Password");
+            const field = _blockChild(card, "wifiPassword");
+            if (!title || !field)
+                return problems.concat(["the password's title and field show"]);
+            expect("the password's title at y", at(title).y, bottom + 6);
+            expect("the password's title at x", at(title).x, 8);
+            const line = field.parent;
+            bottom = row("the password's line", line, at(title).bottom + 4);
+            const save = Array.from(line.children).filter(child => child.visible).pop();
+            expect("Save's right", at(save).right, width - 8);
+            expect("the field's right", at(field).right, at(save).x - 6);
+            expect("the field at x", at(field).x, 8);
+        } else {
+            bottom += 6;
+        }
+        if (element) {
+            expect("the module's element at y", at(element).y, bottom + 6);
+            bottom = at(element).bottom;
+        }
+        expect("the frame's height", frame.height, bottom + 8);
+        return problems;
+    }
 
     // A network page as the settings window's page loader holds it, in a layer surface in a
     // corner
@@ -1837,9 +2014,10 @@ TestCase {
             assertEqual([section.path, cards[0].path, cards[0].settingsRegion.path, _vpnCard(0).settingsRegion.path].join(" "),
                         "settings.cards.saved settings.cards.saved.card settings.cards.saved.card.settings settings.cards.vpns.card.settings",
                         "paths: the section, its cards by their kind, a card's region under it");
-            assertEqual(_live("settings.cards"), ["settings.cards:1", "settings.cards.saved:1", "settings.cards.saved.card:3", "settings.cards.saved.card.settings:3",
-                                                   "settings.cards.vpns:1", "settings.cards.vpns.card:3", "settings.cards.vpns.card.settings:3"].join(","),
-                        "Anchors.live: each card and its region, once per card, open or closed");
+            assertEqual(_live("settings.cards"), ["settings.cards:1", "settings.cards.saved:1", "settings.cards.saved.card:3", "settings.cards.saved.card.actions:3",
+                                                   "settings.cards.saved.card.settings:3", "settings.cards.vpns:1", "settings.cards.vpns.card:3",
+                                                   "settings.cards.vpns.card.actions:3", "settings.cards.vpns.card.settings:3"].join(","),
+                        "Anchors.live: each card and its two regions, once per card, open or closed");
             // Top to bottom: section.before · the title's line · section.prepend · its own
             // content · each card (before · frame · after) · section.append · section.after
             const sequence = [["section.before", _yIn(section.beforeHost.items[0])], ["title", _yIn(section.frame)],
@@ -1962,8 +2140,8 @@ TestCase {
             assert(_savedCard(1) === _cardObjects["three"] && _savedCard(2) === _cardObjects["one"], "… the cards left the same objects, each still its own item");
             assertEqual(_tracker.count("card.settings"), 0, "the open card taken out: its region's elements destroyed with it, nothing left in a region");
             assertEqual(_tracker.count("saved.card|") + " " + _tracker.count("|four"), "6 2", "… beside the cards: two each, the new one's made");
-            assertEqual(_live("settings.cards.saved.card"), "settings.cards.saved.card:3,settings.cards.saved.card.settings:3",
-                        "… Anchors.live: three cards, three regions");
+            assertEqual(_live("settings.cards.saved.card"), "settings.cards.saved.card:3,settings.cards.saved.card.actions:3,settings.cards.saved.card.settings:3",
+                        "… Anchors.live: three cards, their regions");
             _cards.openId = "four";
             _waitUntil = Date.now() + 300;
         });
@@ -2335,7 +2513,7 @@ TestCase {
                         [0, vpnRow.mapToItem(row, 0, 0).y + vpnRow.height + 2, row.width].join(" "),
                         "… right under its row, 2 apart, as wide as the row (where the slot stood)");
             assertEqual(_popupLiveProblems("popup.network").join("; "), "", "the network popup's places: every one in the table live, the rest named, not published");
-            assertEqual(_live("settings.network_vpn"), "settings.network_vpn.vpns:1,settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.settings:5",
+            assertEqual(_live("settings.network_vpn"), "settings.network_vpn.vpns:1,settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.actions:5,settings.network_vpn.vpns.card.settings:5",
                         "the VPN page: its section, a card and its opened part per VPN");
             assertEqual(_popupLiveProblems("settings.network_vpn").join("; "), "", "… its place in the table live, the rest named, not published");
             const cards = _vpnCards();
@@ -2349,12 +2527,26 @@ TestCase {
         // Each card opened in turn: its provider module's element only, first in its opened
         // part; none in the others
         const vpnCardOpen = (id, expected, next) => {
+            // anchors-vpn-a also puts a button among its own cards' buttons (…card.actions)
+            const button = id.startsWith("anchors-vpn-a:");
             _then("the card of " + id + " open", () => _vpnCards()[id]?.settingsRegion.visible
-                  && (expected === "-" ? true : _ready(_vpnCards()[id].settingsRegion.prependHost, 1)) && _vpnViewsSteady(), () => {
+                  && (expected === "-" ? true : _ready(_vpnCards()[id].settingsRegion.prependHost, 1))
+                  && (!button || _ready(_vpnCards()[id].actionsRegion.appendHost, 1)) && _vpnViewsSteady(), () => {
                 const cards = _vpnCards();
                 const region = cards[id].settingsRegion;
                 assertEqual(_names(region.prependHost) || "-", expected, "the opened card of " + id + ": " + (expected === "-" ? "no module's element" : "its provider module's element"));
                 assert(vpnIds.filter(other => other !== id).every(other => !cards[other].settingsRegion.prependHost.built), "… none built in the closed cards");
+                const actions = cards[id].actionsRegion;
+                assertEqual(_names(actions.appendHost) || "-", button ? "anchors-vpn-a:Button" : "-",
+                            "… its buttons: " + (button ? "its provider module's button" : "no module's (own-provider)"));
+                assert(vpnIds.filter(other => other !== id).every(other => !cards[other].actionsRegion.appendHost.built), "… no button built in the closed cards");
+                if (button) {
+                    const own = ["profileSettings", "profileEdit"].map(name => _blockChild(cards[id], name)).filter(item => item?.visible);
+                    assertEqual(_stackProblems(cards[id], own.concat([actions.appendHost.items[0].item])).join("; "), "",
+                                "… under the card's own buttons, 4 apart, on their right edge");
+                    assertEqual(actions.appendHost.items[0].item.context.vpnId + " " + actions.appendHost.items[0].item.context.anchor,
+                                id + " settings.network_vpn.vpns.card.actions", "… the VPN in its context, at the region's path");
+                }
                 if (expected !== "-") {
                     const element = region.prependHost.items[0];
                     const comesUpWith = _textItem(cards[id], "Comes up with");
@@ -2420,7 +2612,7 @@ TestCase {
                         "Row|popup.network.connections.vpn.row|anchors-vpn-a:a2:1,Row|popup.network.connections.vpn.row|anchors-vpn-a:a3:1",
                         "a VPN gone: its card's and its row's elements gone with it, the others' left");
             assertEqual(_vpnRows()["anchors-vpn-a:a2"].afterHost.items[0].item, _keptRow, "… the others the same objects");
-            assertEqual(_live("settings.network_vpn.vpns.card"), "settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.settings:5",
+            assertEqual(_live("settings.network_vpn.vpns.card"), "settings.network_vpn.vpns.card:5,settings.network_vpn.vpns.card.actions:5,settings.network_vpn.vpns.card.settings:5",
                         "… Anchors.live: its card gone, the added one's in (five)");
             _keptRow = null;
             _keptCard = null;
@@ -2464,6 +2656,8 @@ TestCase {
             console.log("  geometry: the Ethernet page, closed: " + _pageFingerprint(_ethernetPage));
             assertEqual(_pagePartsProblems(_wifiPage, _wifiPageExpected).join("; "), "", "the Wi-Fi page: its parts where they always stood");
             assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "the Ethernet page: its parts where they always stood");
+            assertEqual(_titleButtonProblems(_wifiPage, 2).join("; "), "", "the Wi-Fi page: Find networks and New hotspot at their title line's right edge, centred on it");
+            assertEqual(_titleButtonProblems(_ethernetPage, 0).join("; "), "", "the Ethernet page: no title buttons");
             _wifiPage.loader.item._open = "anchors-home";
             _ethernetPage.loader.item._open = "anchors-wired";
         });
@@ -2473,12 +2667,17 @@ TestCase {
             console.log("  geometry: the Ethernet page, Wired open: " + _pageFingerprint(_ethernetPage));
             assertEqual(_pagePartsProblems(_wifiPage, _wifiPageExpected).join("; "), "", "… and with a card open");
             assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "… on both pages");
+            assertEqual(_openCardRowsProblems(_profileCards(_wifiPage)["anchors-home"], true).join("; "), "",
+                        "Home open: its buttons stacked on the primary's edge, its rows and the password where the rules put them");
+            assertEqual(_openCardRowsProblems(_profileCards(_ethernetPage)["anchors-wired"], false).join("; "), "", "Wired open: the same, with no row of the page's");
+            assertEqual(_titleButtonProblems(_wifiPage, 2).join("; "), "", "… the title buttons still at their line's right edge");
             _wifiPartsBefore = _pageParts(_wifiPage);
             _ethernetPartsBefore = _pageParts(_ethernetPage);
-            assertEqual(_live("settings.network_wifi"), "settings.network_wifi.hotspots:1,settings.network_wifi.hotspots.card:1,settings.network_wifi.hotspots.card.settings:1,"
-                        + "settings.network_wifi.saved:1,settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.settings:3",
+            assertEqual(_live("settings.network_wifi"), "settings.network_wifi.hotspots:1,settings.network_wifi.hotspots.card:1,settings.network_wifi.hotspots.card.actions:1,"
+                        + "settings.network_wifi.hotspots.card.settings:1,settings.network_wifi.saved:1,settings.network_wifi.saved.card:3,"
+                        + "settings.network_wifi.saved.card.actions:3,settings.network_wifi.saved.card.settings:3",
                         "the Wi-Fi page: its two sections, a card and its opened part per saved network and per hotspot");
-            assertEqual(_live("settings.network_ethernet"), "settings.network_ethernet.profiles:1,settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.settings:2",
+            assertEqual(_live("settings.network_ethernet"), "settings.network_ethernet.profiles:1,settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.actions:2,settings.network_ethernet.profiles.card.settings:2",
                         "the Ethernet page: its section, a card and its opened part per wired profile");
             assertEqual(_popupLiveProblems("settings.network_wifi").concat(_popupLiveProblems("settings.network_ethernet")).join("; "), "",
                         "… their places in the table live, the rest named, not published");
@@ -2489,6 +2688,8 @@ TestCase {
         _then("the network fixture loaded, its element in each open card", () => _generalSettled() && Modules.status("anchors-networks")?.state === "loaded"
               && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].settingsRegion.appendHost, 1)
               && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].settingsRegion.appendHost, 1)
+              && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].actionsRegion.appendHost, 1)
+              && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].actionsRegion.appendHost, 1)
               && _networkPagesSteady(), () => {
             const status = Modules.status("anchors-networks");
             assertEqual(status.errors.length + " " + status.warnings.length + " " + status.deprecations.length, "0 0 0", "the network fixture: loaded, clean");
@@ -2514,10 +2715,32 @@ TestCase {
                          wiredElement.item.context.active].join(" "),
                         "settings.network_ethernet.profiles.card.settings anchors-wired Wired ethernet true", "… Wired, on its page's path");
             assertEqual(homeElement.item.module, Modules.handle("anchors-networks"), "… its module's handle");
-            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing).join("; "), "",
-                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element and its gap");
-            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing).join("; "), "",
+            // Its button among the card's: under "Edit connection…", above "Forget", 4 apart on
+            // one right edge
+            const homeButton = home.actionsRegion.appendHost.items[0];
+            const wiredButton = wired.actionsRegion.appendHost.items[0];
+            assertEqual(_names(home.actionsRegion.appendHost) + " " + _names(wired.actionsRegion.appendHost), "anchors-networks:Button anchors-networks:Button",
+                        "the module's button among each open card's buttons");
+            for (const card of [home, wired]) {
+                const stack = [_blockChild(card, "profileEdit"), card.actionsRegion.appendHost.items[0].item, _blockChild(card, "profileForget")];
+                assertEqual(_stackProblems(card, stack).join("; "), "", card.title + ": Edit connection…, the module's button, Forget — 4 apart, on one right edge");
+            }
+            assertEqual([homeButton.item.context.anchor, homeButton.item.context.networkId, wiredButton.item.context.anchor, wiredButton.item.context.networkId].join(" "),
+                        "settings.network_wifi.saved.card.actions anchors-home settings.network_ethernet.profiles.card.actions anchors-wired",
+                        "… the network in its context, at the region's path");
+            assert(!wifiCards["anchors-office"].actionsRegion.appendHost.built && !ethernetCards["anchors-lab"].actionsRegion.appendHost.built,
+                   "… no button built in a closed card");
+            // The card taller by the element and its gap, and by the button and its gap (the
+            // stack is taller than the name and its line)
+            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing + homeButton.height + 4).join("; "), "",
+                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element, the button and their gaps");
+            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing + wiredButton.height + 4).join("; "), "",
                         "… the Ethernet page too");
+            assertEqual(_openCardRowsProblems(home, true, [homeButton.item], homeElement).join("; "), "",
+                        "Home: its rows where the rules put them, the module's element 6 under the password, the frame 8 under it");
+            assertEqual(_openCardRowsProblems(wired, false, [wiredButton.item], wiredElement).join("; "), "", "Wired: the same");
+            homeButton.item.clicked();
+            assertEqual(homeButton.item.clicks + " " + wiredButton.item.clicks, "1 0", "a click on the button reaches the module's own handler");
             const spot = _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"];
             assert(spot && !spot.settingsRegion.appendHost.built, "the hotspot's card: none");
             assertEqual(_networkLive(), "settings.network_ethernet.profiles.card.settings|anchors-wired:1,settings.network_wifi.saved.card.settings|anchors-home:1",
@@ -2559,8 +2782,8 @@ TestCase {
                         "anchors-office true 1", "… still Office's, up now, its context handed once");
             assertEqual(ethernetCards["anchors-lab"].settingsRegion.appendHost.items[0]?.item, _keptWired, "the wired profiles reordered: Lab's element the same object");
             assertEqual(_live("settings.network_wifi.saved.card") + " " + _live("settings.network_ethernet.profiles.card"),
-                        "settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.settings:3 "
-                        + "settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.settings:2", "… a card per network, Cafe's gone");
+                        "settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.actions:3,settings.network_wifi.saved.card.settings:3 "
+                        + "settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.actions:2,settings.network_ethernet.profiles.card.settings:2", "… a card per network, Cafe's gone");
             assertEqual(_networkLive(), "settings.network_ethernet.profiles.card.settings|anchors-lab:1,settings.network_wifi.saved.card.settings|anchors-office:1",
                         "… no other element made");
             // The open cards' networks taken out
@@ -2570,17 +2793,40 @@ TestCase {
         _then("the open cards' networks gone", () => !_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-office"]
               && !_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-lab"] && _networkLive() === "", () => {
             assertEqual(_live("settings.network_wifi.saved.card") + " " + _live("settings.network_ethernet.profiles.card"),
-                        "settings.network_wifi.saved.card:2,settings.network_wifi.saved.card.settings:2 "
-                        + "settings.network_ethernet.profiles.card:1,settings.network_ethernet.profiles.card.settings:1",
+                        "settings.network_wifi.saved.card:2,settings.network_wifi.saved.card.actions:2,settings.network_wifi.saved.card.settings:2 "
+                        + "settings.network_ethernet.profiles.card:1,settings.network_ethernet.profiles.card.actions:1,settings.network_ethernet.profiles.card.settings:1",
                         "a network gone: its card, and the element in it, gone with it");
             _keptNetwork = null;
             _keptWired = null;
+            // Airport's details not read yet (it could be a hotspot): its card no place
+            const unread = Object.assign({}, _wifiDetailsHeld);
+            delete unread["anchors-airport"];
+            _holdWifiDetails(unread);
+            _wifiPage.loader.item._open = "anchors-airport";
+        });
+        _then("a network whose details are unread, open", () => _profileCards(_wifiPage)["anchors-airport"]?.settingsRegion.visible
+              && _profileCards(_wifiPage)["anchors-airport"].path === "" && _networkPagesSteady(), () => {
+            const airport = _profileCards(_wifiPage)["anchors-airport"];
+            assertEqual(airport.path + "|" + airport.settingsRegion.path + "|" + airport.actionsRegion.path, "||",
+                        "a Wi-Fi network whose details are unread: its card and its regions no place (Api.networks leaves it out)");
+            assert(!airport.settingsRegion.appendHost.built && !airport.actionsRegion.appendHost.built && _networkLive() === "",
+                   "… opened, no module's element or button built for it");
+            assertEqual(_live("settings.network_wifi.saved.card"), "settings.network_wifi.saved.card:1,settings.network_wifi.saved.card.actions:1,settings.network_wifi.saved.card.settings:1",
+                        "… Anchors.live: only Home's card a place");
+            _holdWifiDetails(_wifiDetailsHeld);
+        });
+        _then("its details read", () => _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-airport"]?.settingsRegion.appendHost ?? { items: [] }, 1)
+              && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-airport"].actionsRegion.appendHost, 1) && _networkPagesSteady(), () => {
+            const airport = _cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-airport"];
+            assertEqual(airport.settingsRegion.appendHost.items[0].item.context.networkId + " " + _networkLive(),
+                        "anchors-airport settings.network_wifi.saved.card.settings|anchors-airport:1", "the details read: the card a place, the element built for it");
             _wifiPage.loader.item._open = "anchors-spot";
         });
         _then("the hotspot's card open", () => _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"]?.settingsRegion.visible
               && _networkPagesSteady(), () => {
             const region = _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"].settingsRegion;
             assert(!region.appendHost.built && !region.prependHost.built && _networkLive() === "", "the hotspot's opened card: no module's element (not a place)");
+            assert(!_cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"].actionsRegion.appendHost.built, "… and no module's button");
             assertEqual(Modules.status("anchors-networks")?.errors.length, 0, "no element failed meanwhile");
             _close(_wifiPage);
             _close(_ethernetPage);
@@ -2594,6 +2840,112 @@ TestCase {
             _holdDevices(null);
             _holdNetworks(null);
             _pinNetwork(false);
+        });
+
+        // A card's buttons (settings.cards.saved.card.actions, append; the fixture view's cards
+        // have "Edit" and, last, "Forget") with a fixture module (tests/fixtures/modules/
+        // anchors-buttons): a button of each kind under the card's own, in its manifest's
+        // order, above "Forget", 4 apart on one right edge, at most a third of the card, in the
+        // stack's size; one element that is no button refused; built only while the card is
+        // open; a click reaching the module; the cards reordered, the open one taken out; an
+        // own-provider card's buttons only its provider module's
+        const cardButtons = card => card?.actionsRegion.appendHost.items.filter(item => item.ready) ?? [];
+        _then("the network pages gone", () => _live("settings.network") === "", () => {
+            _tracker.reset();
+            host.load([fixtures + "/anchors-buttons"], {});
+            _openCards(_cardItems(["one", "two", "three"]), [{ id: "v1", provider: "anchors-buttons" }, { id: "v2", provider: "anchors-cards-a" }]);
+        });
+        _then("the buttons' fixture loaded, the cards closed", () => _settled() && host.status("anchors-buttons")?.state === "loaded"
+              && _savedCardList().length === 3 && _cardsSteady(), () => {
+            assertEqual(host.status("anchors-buttons").errors.length, 0, "the buttons' fixture: loaded, clean (nothing refused before it is built)");
+            assertEqual(_savedCard(0).actionsRegion.path, "settings.cards.saved.card.actions", "a card's buttons: the region …card.actions");
+            assert(_savedCardList().every(card => !card.actionsRegion.visible && !card.actionsRegion.appendHost.built), "closed cards: no button built");
+            assertEqual(_buttonsLive(), "", "… none standing");
+            _cards.openId = "two";
+        });
+        _then("the second card open, its buttons built", () => cardButtons(_savedCard(1)).length === 6 && _cardsSteady()
+              && _has(host.status("anchors-buttons")?.errors, "takes a SmallButton"), () => {
+            const card = _savedCard(1);
+            const appended = card.actionsRegion.appendHost;
+            const buttons = cardButtons(card).map(item => item.item);
+            assertEqual(buttons.map(button => button.objectName.replace("anchors-buttons:", "")).join(","), "Primary,Secondary,Danger,Warning,Success,Long",
+                        "the open card: the module's buttons in its manifest's order");
+            assertEqual(appended.items.length + " " + appended.items.filter(item => !item.ready && !item.visible && item.height === 0).length, "7 1",
+                        "… the element that is no button refused: nothing shown, no room taken");
+            assert(_has(host.status("anchors-buttons").errors, "anchors: \"settings.cards.saved.card.actions\" takes a SmallButton"),
+                   "… and said in the module's status: " + JSON.stringify(host.status("anchors-buttons").errors));
+            assertEqual(host.status("anchors-buttons").errors.length, 1, "… once");
+            assertEqual(_buttonsLive().split(",").filter(entry => entry.endsWith("|two:1")).length, 6, "… the buttons made, in the open card only");
+            const edit = _blockChild(card, "ownEdit");
+            const forget = _blockChild(card, "ownForget");
+            assertEqual(_stackProblems(card, [edit].concat(buttons, [forget])).join("; "), "",
+                        "the card's Edit, the module's buttons, then Forget last: 4 apart, on one right edge, on whole pixels");
+            assertEqual(buttons.map(button => button.kind).join(","), "primary,secondary,danger,warning,success,secondary", "… a button of each kind");
+            assertEqual(buttons.map(button => _child(button, "QQuickLoader").item.kind).join(","),
+                        ["primary", "secondary", "danger", "warning", "success", "secondary"].map(kind => ApiElementRules.buttonKind(kind).value).join(","),
+                        "… each drawn as its kind");
+            assertEqual(buttons.map(button => button.size).join(","), "m,m,m,m,m,m", "… each in the stack's size (the one that asked for s too)");
+            const long = buttons[5];
+            const most = Math.floor(card.width / 3);
+            assert(long.implicitWidth > most && Math.abs(long.width - most) < 0.01 && _child(_child(long, "QQuickLoader").item, "QQuickText").truncated,
+                   "a long label: the button a third of the card wide (" + long.width + ", " + most + "), its label cut");
+            assert(buttons.slice(0, 5).every(button => Math.abs(button.width - Math.round(button.implicitWidth)) <= 1),
+                   "… the others at their own width");
+            assertEqual(JSON.stringify(Object.assign({}, buttons[0].context, { tracker: null })),
+                        JSON.stringify({ itemId: "two", tracker: null, anchor: "settings.cards.saved.card.actions", placement: "append" }),
+                        "a button's context: the card's, at the region's path");
+            assertEqual(buttons[0].module, host.handle("anchors-buttons"), "… its module's handle");
+            // Clicks, as the user makes them
+            _driver.mouseClick(buttons[0], buttons[0].width / 2, buttons[0].height / 2);
+            _driver.mouseClick(buttons[2], buttons[2].width / 2, buttons[2].height / 2);
+            assertEqual(host.mainObject("anchors-buttons").clicks.join(","), "Primary|settings.cards.saved.card.actions|two",
+                        "a click reaches the module, with the card's item; a button that asks only asks");
+            _driver.mouseClick(buttons[2], 5, 5);
+            assertEqual(host.mainObject("anchors-buttons").clicks.length, 2, "… and acts on the second click");
+            _keptButtons = buttons;
+            _cards.openId = "";
+        });
+        _then("the card closed: its buttons gone", () => !_savedCard(1).actionsRegion.appendHost.built && _buttonsLive() === "", () => {
+            assert(!_savedCard(1).actionsRegion.visible, "the region hidden with the card closed");
+            _cards.openId = "two";
+        });
+        _then("open again", () => cardButtons(_savedCard(1)).length === 6 && _cardsSteady(), () => {
+            assert(cardButtons(_savedCard(1)).every(item => !_keptButtons.includes(item.item)), "opened again: its buttons made anew");
+            assertEqual(host.status("anchors-buttons").errors.length, 1, "… the refusal not said again");
+            _keptButtons = cardButtons(_savedCard(1)).map(item => item.item);
+            _cardObjects = { one: _savedCard(0), two: _savedCard(1), three: _savedCard(2) };
+            _cards.items = _cardItems(["three", "two", "one"]);
+        });
+        _then("the cards reordered", () => _savedCard(0)?.cardItem.id === "three" && _cardsSteady()
+              && _yIn(_savedCard(0).frame) < _yIn(_savedCard(1).frame), () => {
+            const card = _savedCard(1);
+            assert(card === _cardObjects.two, "the open card the same card");
+            const buttons = cardButtons(card).map(item => item.item);
+            assert(buttons.length === 6 && buttons.every((button, index) => button === _keptButtons[index]) && buttons.every(button => button.context.itemId === "two"),
+                   "… its buttons the same objects, still its item's");
+            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(buttons, [_blockChild(card, "ownForget")])).join("; "), "",
+                        "… where they stood in the card");
+            _cards.items = _cardItems(["three", "one"]);
+        });
+        _then("the open card taken out", () => _savedCardList().length === 2 && _buttonsLive() === "", () => {
+            assert(_savedCardList().every(card => !card.actionsRegion.appendHost.built), "its buttons gone with it, none built elsewhere");
+            _keptButtons = [];
+            _cards.openId = "";
+            _cards.vpnOpenId = "v1";
+        });
+        _then("the module's own provider card open", () => _vpnCard(0)?.actionsRegion.visible && cardButtons(_vpnCard(0)).length === 1 && _cardsSteady(), () => {
+            assertEqual(_names(_vpnCard(0).actionsRegion.appendHost), "anchors-buttons:Primary", "an own-provider card: its provider module's button");
+            assertEqual(_stackProblems(_vpnCard(0), [cardButtons(_vpnCard(0))[0].item]).join("; "), "", "… alone in the stack, 4 under the primary slot");
+            _cards.vpnOpenId = "v2";
+        });
+        _then("another provider's card open", () => _vpnCard(1)?.actionsRegion.visible && !_vpnCard(0).actionsRegion.appendHost.built && _cardsSteady(), () => {
+            assert(!_vpnCard(1).actionsRegion.appendHost.built, "another provider's card: none of the module's buttons");
+            assertEqual(_vpnCard(1).actionsRegion.height, 0, "… and its stack takes no room");
+            _close(_cards);
+            _cards = null;
+        });
+        _then("the buttons' view closed", () => _live("settings.cards") === "" && _buttonsLive() === "", () => {
+            host.unload();
         });
         _clock.start();
     }

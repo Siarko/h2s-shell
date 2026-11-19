@@ -12,6 +12,9 @@ import qs.singletons
 // and a border around both parts in the kind's colour (ThemeRules.buttonLook) — "save"
 // for a button that asks before turning something on.
 //
+// Given a `maximumWidth`, it is never wider, its question and "×" included: a longer label
+// or question is cut with "…". `fullWidth` is what it needs uncut, whatever the cap.
+//
 //   DeleteButton {
 //       confirmLabel: "Delete everywhere?"
 //       cancelTip: "Cancel — keep the preset"
@@ -30,6 +33,11 @@ Row {
     property string tooltip: ""
     // Whether the first click has been made and the button waits for the second
     property bool asking: false
+    // The most it may be, the "×" included (a narrower place cuts the label)
+    property real maximumWidth: Infinity
+    // As wide as it is uncut: what a wrapper asks a layout for, so that the cap does not
+    // feed back into the width it is given
+    readonly property real fullWidth: _button.implicitWidth + (asking ? _cancel.width : 0)
 
     signal confirmed
     // The first click, for owners that track which item is being asked about
@@ -45,7 +53,7 @@ Row {
         implicitWidth: _label.implicitWidth + 2 * Theme.button.horizontalPadding
         // As tall as the label needs, never less than the theme's button height
         implicitHeight: Math.max(Theme.button.minHeight, _label.implicitHeight + 2 * Theme.button.verticalPadding)
-        width: implicitWidth
+        width: Math.min(implicitWidth, Math.max(0, root.maximumWidth - (root.asking ? _cancel.width : 0)))
         height: implicitHeight
         radius: root._shape.radius
         // Square on the side the cancel button attaches to, so the two read as one control
@@ -60,6 +68,8 @@ Row {
         Text {
             id: _label
             anchors.centerIn: parent
+            // Its own width while the button has room for it: only a narrower button elides
+            width: _button.width < _button.implicitWidth ? Math.max(0, _button.width - 2 * Theme.button.horizontalPadding) : implicitWidth
             text: root.asking ? root.confirmLabel : root.label
             textFormat: Text.PlainText
             // One line: a label or question with line breaks does not make the button taller

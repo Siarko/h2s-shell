@@ -209,7 +209,8 @@ Item {
             // look is as it was): each card the place settings.network_vpn.vpns.card, its
             // opened part …card.settings, whose `prepend` shows the elements of the VPN's
             // provider module only (scope own-provider: the card's scopeId), with the VPN in
-            // their context — where the module's old slot network.vpn.card stood
+            // their context — where the module's old slot network.vpn.card stood; its buttons
+            // …card.actions, whose `append` shows that module's buttons under the card's own
             SettingsSection {
                 anchor: "vpns"
                 topMargin: 0

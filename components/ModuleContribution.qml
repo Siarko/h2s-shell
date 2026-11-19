@@ -7,12 +7,17 @@ import qs.singletons
 // gets the module's handle as `module` and `context` (when it declares them) before its
 // Component.onCompleted; `context` is passed again only when it changes by value
 // (ModuleRules.sameContext), so a contribution is not poked by a re-read that changed nothing
-// of it. `properties` ({ name: value }) are passed the same way (a settings page's editIndex).
+// of it. `properties` ({ name: value }) are passed the same way (a settings page's editIndex;
+// one the root object has without declaring it in its file is set right after it is made).
 // `shown` (module API 1.2), when the root object declares `property bool shown`: true while
 // the contribution is on screen — the place it sits in visible and its window open — kept
 // current, so a page or a slot contribution does expensive work (polling, watching) only while
 // it is seen. Gone, or blank, while the module is not active. A change of `url` and of the
 // module's state together (another module's page picked) builds it once, not twice.
+//
+// `takes` ("" anything): what its root object must be, by the mark a public element carries
+// (`apiElement`: "SmallButton" on a card's `actions`). Another object is destroyed as soon as it
+// is made, shows nothing, and its module's status says what the place takes.
 //
 // ModuleSlot and AnchorContent build each contribution with one; ModuleHost.slotComponent hands one out as a
 // Component for a place that takes a Component per module; the settings window shows a
@@ -28,11 +33,14 @@ Item {
     // Or the anchor's path and placement (AnchorContent)
     property string anchor: ""
     property string placement: ""
+    // What the root object must be ("" anything; else its `apiElement` mark)
+    property string takes: ""
     property var context: null
     property var properties: ({})
 
     // Built and showing
     readonly property bool ready: _loader.status === Loader.Ready && _loader.item !== null
+        && (takes === "" || _loader.item.apiElement === takes)
     readonly property var item: _loader.item
     // Why it shows nothing ("" while fine)
     property string error: ""
@@ -96,7 +104,42 @@ Item {
         _passedProperties = _allProperties();
         // The compiled file is cached: this does not compile it again
         // Given only what its root object declares (a Loader warns about the rest)
-        _loader.setSource(url, host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: context })));
+        const initial = host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: context }));
+        _loader.setSource(url, initial);
+        // Made at once (the compiled file is cached, the Loader is synchronous): what it is
+        // is read here, before it is shown
+        _refuseWrongKind();
+        _giveInherited(initial);
+    }
+
+    // `properties` the root object has without declaring them in its file (a public
+    // button's `size`), which a Loader cannot be given: set right after it is made
+    function _giveInherited(initial) {
+        const target = _loader.item;
+        if (!target)
+            return;
+        for (const key of Object.keys(properties ?? {})) {
+            if (key in initial || !(key in target) || key === "module" || key === "context")
+                continue;
+            try {
+                target[key] = properties[key];
+            } catch (thrown) {
+                // Not writable there: left alone
+            }
+        }
+    }
+
+    // Whether the object made is not what the place takes
+    function _wrongKind() {
+        return takes !== "" && _loader.item !== null && _loader.item.apiElement !== takes;
+    }
+
+    function _refuseWrongKind() {
+        if (!_wrongKind())
+            return;
+        _loader.source = "";
+        error = "takes a " + takes;
+        host?.reportError(moduleId, "anchors: " + ModuleRules.show(anchor) + " takes a " + takes);
     }
 
     function _failed(text) {
@@ -140,6 +183,8 @@ Item {
         onStatusChanged: {
             if (status === Loader.Error)
                 root._failed(root.url + ": could not be created");
+            else if (status === Loader.Ready && root._wrongKind())
+                Qt.callLater(root._refuseWrongKind);
         }
     }
 }

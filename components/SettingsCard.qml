@@ -6,15 +6,21 @@ import qs.singletons
 // (components/AnchorBlock.qml). Its root is a plain column: the `before` host, its body — the
 // frame: a header (the name and a line under it — the line keeps its height when empty —,
 // on the right the primary controls (`primary`) and, opened, the secondary buttons stacked
-// under them (`buttons`), each at its own width on one right edge; a hidden one takes no
-// room) and a notice line; opened, its own rows (the content) — the `after` host. The parent sees one item, so it serves as a Repeater's delegate; a card
-// repeated per item is named by its kind (`anchor: "card"`), its item in `context`.
+// under them (`buttons`, then `lastButtons`: the one that removes the item), each at its own
+// width on one right edge; a hidden one takes no room) and a notice line; opened, its own
+// rows (the content) — the `after` host. The parent sees one item, so it serves as a
+// Repeater's delegate; a card repeated per item is named by its kind (`anchor: "card"`), its
+// item in `context`.
 //
-// A card takes nothing inside itself: modules reach its opened part through its region
-// `settings` (<card>.settings), a block of kind "region" around its rows — `prepend` above
-// them, `append` under them. The region's elements exist only while the card is open:
-// closing it destroys them, and what they showed starts anew next time. They get the card's
-// context, and on an own-provider place the card's `scopeId`.
+// A card takes nothing inside itself: modules reach it through its two regions, blocks of
+// kind "region". `settings` (<card>.settings) is around its rows — `prepend` above them,
+// `append` under them. `actions` (<card>.actions) is the stack of secondary buttons —
+// `prepend` above the card's own, `append` under them and above `lastButtons`; it takes the
+// public SmallButton only (the table's `takes`), each at its own width on the stack's right
+// edge, at most a third of the card (a longer label is cut), in the stack's size. A region's
+// elements exist only while the card is open: closing it destroys them, and what they showed
+// starts anew next time. They get the card's context, and on an own-provider place the card's
+// `scopeId`.
 //
 // Repeated per item, it stands on a KeyedModel (its modelData the item's key), so that it
 // keeps its item — and its region's elements — while other items come and go:
@@ -60,19 +66,36 @@ AnchorBlock {
     property alias primary: _primary.data
     // Under `primary`, shown while open
     property alias buttons: _buttons.data
+    // Under those and the modules' buttons, last: the one that removes the item ("Forget")
+    property alias lastButtons: _lastButtons.data
+    // The most a module's button in `actions` may be: a third of the card; a longer label is
+    // cut
+    readonly property real buttonMaxWidth: Math.floor(width / 3)
     signal toggleRequested()
     signal noticeActionRequested()
 
-    // The region, the hosts, the frame and the secondary buttons' column, for the core's
+    // The regions, the hosts, the frame and the secondary buttons' columns, for the core's
     // tests
     readonly property alias settingsRegion: _settings
+    readonly property alias actionsRegion: _actions
     readonly property alias buttonColumn: _buttons
+    readonly property alias lastButtonColumn: _lastButtons
     readonly property alias beforeHost: _before
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
 
     kind: "card"
     placements: ["before", "after"]
+
+    // A module's button in `actions` is the stack's size, as the card's own are
+    readonly property var _buttonProperties: ({ size: "m" })
+
+    function _alignRight(items) {
+        for (const child of items) {
+            if ((child.Layout.alignment & Qt.AlignHorizontal_Mask) === 0)
+                child.Layout.alignment = child.Layout.alignment | Qt.AlignRight;
+        }
+    }
     implicitWidth: _column.implicitWidth
     implicitHeight: _column.implicitHeight
 
@@ -174,23 +197,73 @@ AnchorBlock {
                                 }
                             }
 
-                            // One column, each button at its own width on the right
-                            // edge; the gap above only when a button shows, so hidden
-                            // ones take no room. A layout, not a positioner: it gives each
-                            // button a whole width, so its edges stand on whole pixels. A
-                            // button that names no horizontal alignment of its own goes on
-                            // the right (a vertical one it names is kept).
-                            ColumnLayout {
-                                id: _buttons
+                            // Opened, the secondary buttons: the region `actions` — its
+                            // prepend host, the card's own buttons, its append host (the
+                            // modules' buttons), then the button that removes the item, last
+                            // whatever a module adds. Each button at its own width on one
+                            // right edge, 4 apart; a group with nothing shown takes no room
+                            // and no gap. Layouts, not positioners: each button gets a whole
+                            // width, so its edges stand on whole pixels. A button that names
+                            // no horizontal alignment of its own goes on the right (a
+                            // vertical one it names is kept).
+                            AnchorBlock {
+                                id: _actions
+
+                                readonly property alias prependHost: _actionsPrepend
+                                readonly property alias appendHost: _actionsAppend
+
                                 visible: root.open
                                 Layout.alignment: Qt.AlignRight
-                                Layout.topMargin: implicitHeight > 0 ? 4 : 0
-                                spacing: 4
+                                implicitWidth: _stack.implicitWidth
+                                implicitHeight: _stack.implicitHeight
+                                anchor: "actions"
+                                kind: "region"
+                                placements: ["prepend", "append"]
+                                context: root.context
 
-                                onChildrenChanged: {
-                                    for (const child of children) {
-                                        if ((child.Layout.alignment & Qt.AlignHorizontal_Mask) === 0)
-                                            child.Layout.alignment = child.Layout.alignment | Qt.AlignRight;
+                                ColumnLayout {
+                                    id: _stack
+                                    width: _actions.width
+                                    spacing: 0
+
+                                    AnchorContent {
+                                        id: _actionsPrepend
+                                        block: _actions
+                                        placement: "prepend"
+                                        active: root.open
+                                        stacked: true
+                                        maxElementWidth: root.buttonMaxWidth
+                                        elementProperties: root._buttonProperties
+                                        Layout.alignment: Qt.AlignRight
+                                        Layout.topMargin: count > 0 ? 4 : 0
+                                    }
+
+                                    ColumnLayout {
+                                        id: _buttons
+                                        Layout.alignment: Qt.AlignRight
+                                        Layout.topMargin: implicitHeight > 0 ? 4 : 0
+                                        spacing: 4
+                                        onChildrenChanged: root._alignRight(children)
+                                    }
+
+                                    AnchorContent {
+                                        id: _actionsAppend
+                                        block: _actions
+                                        placement: "append"
+                                        active: root.open
+                                        stacked: true
+                                        maxElementWidth: root.buttonMaxWidth
+                                        elementProperties: root._buttonProperties
+                                        Layout.alignment: Qt.AlignRight
+                                        Layout.topMargin: count > 0 ? 4 : 0
+                                    }
+
+                                    ColumnLayout {
+                                        id: _lastButtons
+                                        Layout.alignment: Qt.AlignRight
+                                        Layout.topMargin: implicitHeight > 0 ? 4 : 0
+                                        spacing: 4
+                                        onChildrenChanged: root._alignRight(children)
                                     }
                                 }
                             }

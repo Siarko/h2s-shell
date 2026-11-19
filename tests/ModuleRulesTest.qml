@@ -833,11 +833,18 @@ TestCase {
                     + "popup.network.connections.vpn.row row after panels/network/VpnSection.qml; "
                     + "settings.network_vpn.vpns.card.settings region prepend panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_wifi.saved.card.settings region append panels/settings/NetworkWifiSettings.qml; "
-                    + "settings.network_ethernet.profiles.card.settings region append panels/settings/NetworkEthernetSettings.qml",
+                    + "settings.network_ethernet.profiles.card.settings region append panels/settings/NetworkEthernetSettings.qml; "
+                    + "settings.network_vpn.vpns.card.actions region append panels/settings/NetworkVpnSettings.qml; "
+                    + "settings.network_wifi.saved.card.actions region append panels/settings/NetworkWifiSettings.qml; "
+                    + "settings.network_ethernet.profiles.card.actions region append panels/settings/NetworkEthernetSettings.qml",
                     "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards; "
-                    + "1.24: the saved networks' and wired profiles' cards)");
+                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards)");
         assertEqual(rules.anchorTable.filter(entry => entry.scope === "own-provider").map(entry => entry.path).join(","),
-                    "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings", "… the VPN places own-provider, the others not");
+                    "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings,settings.network_vpn.vpns.card.actions",
+                    "… the VPN places own-provider, the others not");
+        assertEqual(rules.anchorTable.filter(entry => entry.takes !== "").map(entry => entry.path + " " + entry.takes).join(","),
+                    "settings.network_vpn.vpns.card.actions SmallButton,settings.network_wifi.saved.card.actions SmallButton,"
+                    + "settings.network_ethernet.profiles.card.actions SmallButton", "… a card's buttons take the public button, nothing else does");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
         const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
                                                                  context: "{ editIndex }", scope: "", since: "1.20", where: "a page",
@@ -848,9 +855,12 @@ TestCase {
         assertEqual(rules.anchorTableProblems(table).join("; "), "", "a suite's table, well formed");
         const badTable = rules.anchorTableProblems([row("settings.general", []), row("settings.general", ["inside"]), 5,
                                                     row("bar.clock", ["append"], { kind: "widget", scope: "mine", since: "1", marks: "no", where: "", view: "../x.qml" }),
-                                                    row("settings.other", ["append"], { view: undefined })]);
+                                                    row("settings.other", ["append"], { view: undefined }),
+                                                    row("settings.x.card.settings", ["append"], { kind: "region", takes: "Dropdown" }),
+                                                    row("settings.x.card.actions", ["append"], { kind: "region" })]);
         for (const fragment of ["placements are not", "twice", "not an object", "does not start with", "kind \"widget\"", "scope \"mine\"",
-                                "since \"1\"", "marks is", "where not empty", "view \"../x.qml\" is not a file", "view undefined is not a file"])
+                                "since \"1\"", "marks is", "where not empty", "view \"../x.qml\" is not a file", "view undefined is not a file",
+                                "takes \"Dropdown\" is not", "settings.x.card.actions): a card's actions take a SmallButton"])
             assert(_has(badTable, fragment), "a bad table row: " + fragment);
         assertEqual(rules.anchorTableProblems(null).length, 1, "… not a list: one problem, no throw");
         assertEqual(JSON.stringify(rules.anchorRow(table, "popup.notifications")?.placements), "[\"prepend\"]", "anchorRow: the row of a path");
@@ -1265,6 +1275,15 @@ TestCase {
                     "networkContext: no profile (a card being made) — empty fields, not up");
         assertEqual(rules.apiNetworks([profile("u-unread", "New", "wifi", "")], {}).length, 0,
                     "apiNetworks: a Wi-Fi profile whose details are not read yet is left out (it could be a hotspot)");
+        // Whether a saved network's card is a place: as Api.networks lists it
+        const read = { "u-home": { mode: "infrastructure" }, "u-spot": { mode: "ap" }, "u-odd": "junk" };
+        assertEqual([profile("u-home", "Home", "wifi", ""), profile("u-unread", "New", "wifi", ""), profile("u-spot", "Spot", "wifi", ""),
+                     profile("u-odd", "Odd", "wifi", ""), profile("u-lan", "LAN", "ethernet", ""),
+                     profile("u-port", "Port", "ethernet", "", "bond0"), null, { uuid: "u-x", kind: "vpn" }]
+                    .map(each => rules.networkListed(each, read)).join(","), "true,false,false,false,true,false,false,false",
+                    "networkListed: a Wi-Fi profile once its details say it is no hotspot (not while unread, nor junk); Ethernet that is no port; nothing else");
+        assertEqual(rules.networkListed(profile("u-home", "Home", "wifi", ""), null) + " " + rules.networkListed(profile("u-lan", "LAN", "ethernet", ""), "junk"),
+                    "false true", "… no details read: no Wi-Fi, Ethernet still");
         assertEqual(rules.apiNetworks([], {}).length, 0, "apiNetworks: no profiles, none");
         for (const bad of [null, undefined, "x", 3, {}, [null, 1, "x", [], {}, { uuid: "" }, { uuid: 5, kind: "wifi" }]])
             assertEqual(rules.apiNetworks(bad, null).length, 0, "apiNetworks: garbage skipped — " + JSON.stringify(bad));

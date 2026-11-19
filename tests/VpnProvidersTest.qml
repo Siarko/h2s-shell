@@ -718,14 +718,15 @@ TestCase {
             // Where it sits, by structure — in no window nothing polishes, so the geometry
             // is checked on screen (NetworkCardGeometryTest, the Tailscale module's lock-bed
             // test): the primary button's slot and the secondary buttons' column in one
-            // column right of the text block, the buttons after the slot and right-aligned,
-            // the primary anchored right in its slot
+            // column right of the text block, the buttons (the card's region `actions`) after
+            // the slot and right-aligned, the primary anchored right in its slot
             const buttons = settings.parent;
             const slot = primary.parent.parent;
             const actions = slot.parent;
             const stack = Array.from(actions.children);
-            assert(buttons === card.buttonColumn && buttons.parent === actions && stack.indexOf(slot) >= 0
-                   && stack.indexOf(slot) < stack.indexOf(buttons), "card: Settings… in the primary button's column, under it");
+            assert(buttons === card.buttonColumn && buttons.parent.parent === card.actionsRegion && card.actionsRegion.parent === actions
+                   && stack.indexOf(slot) >= 0 && stack.indexOf(slot) < stack.indexOf(card.actionsRegion),
+                   "card: Settings… in the primary button's column, under it");
             assert((settings.Layout.alignment & Qt.AlignRight) && (slot.Layout.alignment & Qt.AlignRight)
                    && primary.parent.anchors.right === slot.right, "card: Settings… on the primary button's right edge");
             const header = actions.parent;
@@ -750,13 +751,15 @@ TestCase {
                 profile: { uuid: "x", name: "Home", active: false, autoconnect: false, priority: 0, device: "" } });
             const edit = suite._named(own, "profileEdit");
             const forget = suite._named(own, "profileForget");
-            const ownStack = Array.from(edit.parent.children);
-            const ownColumn = Array.from(own.buttonColumn.parent.children);
-            assert(edit.visible && forget.visible && !suite._named(own, "profileSettings").visible && forget.parent === edit.parent
-                   && edit.parent === own.buttonColumn
-                   && ownColumn.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownColumn.indexOf(own.buttonColumn)
-                   && ownStack.indexOf(edit) < ownStack.indexOf(forget) && (forget.Layout.alignment & Qt.AlignRight),
-                   "card: a NetworkManager profile — Edit connection… then Forget, right-aligned under the primary");
+            const ownStack = Array.from(own.buttonColumn.parent.children);
+            const ownColumn = Array.from(own.actionsRegion.parent.children);
+            assert(edit.visible && forget.visible && !suite._named(own, "profileSettings").visible
+                   && edit.parent === own.buttonColumn && forget.parent === own.lastButtonColumn
+                   && ownColumn.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownColumn.indexOf(own.actionsRegion)
+                   && ownStack.indexOf(own.buttonColumn) < ownStack.indexOf(own.actionsRegion.appendHost)
+                   && ownStack.indexOf(own.actionsRegion.appendHost) < ownStack.indexOf(own.lastButtonColumn)
+                   && (forget.Layout.alignment & Qt.AlignRight),
+                   "card: a NetworkManager profile — Edit connection…, the modules' buttons, then Forget, right-aligned under the primary");
             own.destroy();
             suite._rowOne = suite._row("vpt:one");
             suite._extrasOne = suite._extrasOf(suite._rowOne);

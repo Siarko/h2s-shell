@@ -101,8 +101,10 @@ Item {
             // ── The wired profiles ──
             // A section named "profiles": each card the place
             // settings.network_ethernet.profiles.card, its opened part …card.settings, whose
-            // `append` shows any module's elements under the card's rows, with the profile in
-            // their context (as Api.networks names it)
+            // `append` shows any module's elements under the card's rows, and its buttons
+            // …card.actions, whose `append` shows any module's buttons under "Edit
+            // connection…", above "Forget" — with the profile in their context (as
+            // Api.networks names it)
             SettingsSection {
                 anchor: "profiles"
                 title: "Wired profiles"

@@ -619,8 +619,18 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   opened, its own rows; the network pages' card for a saved profile, a hotspot or a VPN,
   `panels/settings/NetworkProfileCard.qml`, is built on it); the settings row follows. A card takes no element inside itself:
   its opened part is its region `settings`, a block of kind `region` around its rows
-  (`prepend` above them, `append` under them), whose elements are built only while the card
-  is open and destroyed when it closes; they get the card's context and scope. A card made
+  (`prepend` above them, `append` under them); its stacked buttons are its region `actions`
+  (`prepend` above the card's own, `append` under them and above the button that removes the
+  item — "Forget", "Delete" stays last, whatever a module adds). A region's elements are built
+  only while the card is open and destroyed when it closes; they get the card's context and
+  scope. `actions` takes the public `SmallButton` only (the row's `takes`): the stack sits in
+  the card's header, beside the name. The host reads the mark the public button carries
+  (`apiElement`, not `instanceof`: `qs.api` imports `qs.components`, so the host cannot name
+  the public type) from the element as soon as it is made, and destroys another, with
+  "anchors: "<path>" takes a SmallButton" in the module's status. The region puts each
+  button at its own width on the stack's right edge (a host with `stacked` set, a layout, so
+  edges stand on whole pixels), at most a third of the card wide — a longer label is cut —
+  and in the stack's size (`m`, set on it after it is made). A card made
   per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
   key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
   goes, and keeps them while other items come and go. A view's author writes only a block's
@@ -679,12 +689,20 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `settings.network_vpn.vpns.card.settings` | `prepend` | as the VPN's row | Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows (`panels/settings/NetworkVpnSettings.qml`); own-provider; built while the card is open; the slot `network.vpn.card` is read as it (its context adds `open: true`) | 1.23 |
   | `settings.network_wifi.saved.card.settings` | `append` | `networkId` (the profile's UUID, `Api.networks`' `id`), `name`, `kind` (`"wifi"`), `active` (fully up) — the network as `Api.networks` names it | Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password) (`panels/settings/NetworkWifiSettings.qml`); built while the card is open; not on a hotspot's card | 1.24 |
   | `settings.network_ethernet.profiles.card.settings` | `append` | as the saved Wi-Fi network's (`kind` `"ethernet"`) | Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows (`panels/settings/NetworkEthernetSettings.qml`); built while the card is open | 1.24 |
+  | `settings.network_vpn.vpns.card.actions` | `append` | as the VPN's row | the same VPN cards' buttons, under the card's own ("Settings…"); own-provider; a `SmallButton` only; built while the card is open | 1.25 |
+  | `settings.network_wifi.saved.card.actions` | `append` | as the saved Wi-Fi network's `settings` | the same Wi-Fi cards' buttons, under "Edit connection…", above "Forget"; a `SmallButton` only; built while the card is open | 1.25 |
+  | `settings.network_ethernet.profiles.card.actions` | `append` | as the wired profile's `settings` | the same wired profiles' cards' buttons, under "Edit connection…", above "Forget"; a `SmallButton` only; built while the card is open | 1.25 |
+
+  A saved Wi-Fi network's card is a place only while `Api.networks` names its network
+  (`ModuleRules.networkListed`): until its details are read it could be a hotspot, so its
+  card has no anchor and no module's element or button is built in it.
 
   Named but not places yet: `popup.network` (the network panel's root), its VPN part
   `popup.network.connections.vpn`, the VPN page's section of cards `settings.network_vpn.vpns`
   and each card `….vpns.card`; the Wi-Fi page's sections `settings.network_wifi.saved` and
   `settings.network_wifi.hotspots`, each card in them (`….saved.card`, `….hotspots.card`) and
-  a hotspot's opened part `….hotspots.card.settings`; the Ethernet page's section
+  a hotspot's opened part and buttons `….hotspots.card.settings`, `….hotspots.card.actions`; the
+  Ethernet page's section
   `settings.network_ethernet.profiles` and each card `….profiles.card`.
 
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's

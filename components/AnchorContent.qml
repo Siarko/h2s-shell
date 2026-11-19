@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import qs.singletons
 
@@ -19,6 +20,12 @@ import qs.singletons
 // the same. An element is the same delegate while its
 // module and file stay, whatever comes and goes before it (a KeyedModel of
 // ModuleMergeRules.contributionKey).
+//
+// `stacked`: each element at its own width on the host's right edge, at most `maxElementWidth`
+// wide — a card's buttons (SettingsCard's `actions`); otherwise each is as wide as the host.
+// On a place whose row `takes` an element (a SmallButton), another is refused
+// (ModuleContribution). `elementProperties` are given to each element that declares them (the
+// stack's button size).
 Item {
     id: root
 
@@ -29,6 +36,12 @@ Item {
     // Whether it shows its elements at all: false builds none and destroys those built (a
     // card's region while the card is closed)
     property bool active: true
+    // Each element at its own width on the right edge, at most maxElementWidth (a card's
+    // stacked buttons), instead of as wide as the host
+    property bool stacked: false
+    property real maxElementWidth: Infinity
+    // Given to each element that declares them ({ size: "m" })
+    property var elementProperties: ({})
 
     readonly property string path: block?.path ?? ""
     readonly property var host: block?.host ?? null
@@ -36,9 +49,12 @@ Item {
     readonly property string scopeId: block?.scopeId ?? ""
     // [{ module, at, place, component, context, key }], in the one order: none unless the
     // block is of its row's kind and has this placement (ModuleRules.anchorBlockFits)
-    readonly property var contributions: active && host && path !== "" && placement !== ""
-        && ModuleRules.anchorBlockFits(ModuleRules.anchorRow(host.anchorTable, path), block.kind, block.placements, placement)
+    readonly property var _row: host && path !== "" ? ModuleRules.anchorRow(host.anchorTable, path) : null
+    readonly property var contributions: active && _row && placement !== ""
+        && ModuleRules.anchorBlockFits(_row, block.kind, block.placements, placement)
         ? host.anchorContent(path, placement, scopeId) : []
+    // What an element here must be ("" anything): the row's
+    readonly property string takes: typeof _row?.takes === "string" ? _row.takes : ""
     readonly property int count: contributions.length
     // The elements built now (ModuleContribution items), and whether the list exists at all —
     // for the core's tests
@@ -65,15 +81,21 @@ Item {
         id: _loader
         width: root.width
         active: root.count > 0
-        sourceComponent: Column {
+        sourceComponent: root.stacked ? _stack : _column
+    }
+
+    // The contributions' keys — "The Repeater crash" in docs/ARCHITECTURE.md: an element is
+    // the same delegate while its module and file stay
+    Component {
+        id: _column
+
+        Column {
             property alias repeater: _repeater
             width: root.width
             spacing: root.spacing
 
             Repeater {
                 id: _repeater
-                // The contributions' keys — "The Repeater crash" in docs/ARCHITECTURE.md: an
-                // element is the same delegate while its module and file stay
                 model: _contributions.model
 
                 ModuleContribution {
@@ -84,8 +106,42 @@ Item {
                     url: contribution.component ?? ""
                     anchor: root.path
                     placement: root.placement
+                    takes: root.takes
+                    properties: root.elementProperties
                     context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
                     width: root.width
+                }
+            }
+        }
+    }
+
+    // Stacked: a layout, not a positioner — it gives each element a whole width, so its edges
+    // stand on whole pixels, as the card's own buttons do
+    Component {
+        id: _stack
+
+        ColumnLayout {
+            property alias repeater: _repeater
+            width: root.width
+            spacing: root.spacing
+
+            Repeater {
+                id: _repeater
+                model: _contributions.model
+
+                ModuleContribution {
+                    required property string modelData
+                    readonly property var contribution: _contributions.byKey[modelData] ?? ({})
+                    host: root.host
+                    moduleId: contribution.module ?? ""
+                    url: contribution.component ?? ""
+                    anchor: root.path
+                    placement: root.placement
+                    takes: root.takes
+                    properties: root.elementProperties
+                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
+                    Layout.alignment: Qt.AlignRight
+                    Layout.maximumWidth: root.maxElementWidth
                 }
             }
         }

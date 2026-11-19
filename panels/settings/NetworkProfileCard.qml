@@ -11,8 +11,9 @@ import qs.singletons.network
 // page offers ("" when there is none: out of range, no cable); disconnecting takes the
 // device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
 // entry (VpnManager) uses it too, as `external`: the page connects it, no editor, no delete.
-// Built on SettingsCard: the frame, the header, the notice line and the opened region are
-// its; this card gives them a profile's buttons and rows.
+// Built on SettingsCard: the frame, the header, the notice line and the two regions are
+// its; this card gives them a profile's buttons and rows — "Forget" as the last button, under
+// what modules add to the card's `actions`.
 SettingsCard {
     id: root
 
@@ -125,7 +126,11 @@ SettingsCard {
             label: "Edit connection…"
             tooltip: root.editTooltip
             onClicked: root.editRequested()
-        },
+        }
+    ]
+
+    // Last, under the modules' buttons (the card's `actions`)
+    lastButtons: [
         DeleteButton {
             objectName: "profileForget"
             visible: root.deletable

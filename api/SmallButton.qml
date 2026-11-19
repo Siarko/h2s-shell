@@ -25,7 +25,11 @@ import qs.singletons
 //
 // A wrapper around the internal buttons (components/SmallButton.qml, DeleteButton.qml):
 // what is declared here is all a module can rely on. As wide and tall as the button
-// inside; given another width, a button that does not ask takes it and cuts its label.
+// inside; given another width, a button that does not ask takes it and cuts its label, and
+// one that asks takes at most it and cuts its label or question (1.25).
+//
+// `apiElement` (1.25, read-only) marks it as the public button: a place that takes only a
+// button (a card's `actions`) reads it from the element built there.
 Item {
     id: root
 
@@ -39,11 +43,14 @@ Item {
     property string confirmLabel: label + "?"
     property string cancelTip: "Cancel"
     property bool asking: false
+    readonly property string apiElement: "SmallButton"
 
     signal clicked
     signal asked
 
-    implicitWidth: _inner.item?.implicitWidth ?? 0
+    // Uncut: a button that asks reports its full width, so the width it is given back
+    // caps it without shrinking what it asks for
+    implicitWidth: _inner.item?.fullWidth ?? _inner.item?.implicitWidth ?? 0
     implicitHeight: _inner.item?.implicitHeight ?? 0
 
     // Not on the element itself, so nothing here becomes a name a module could use
@@ -111,6 +118,7 @@ Item {
             tooltip: root.tooltip
             kind: _inner.kind.value
             fontSize: Theme[_inner.size.value]
+            maximumWidth: root.width
             // Written back only when it differs, so an owner's binding on `asking`
             // is not replaced by its own value coming back
             onAskingChanged: if (root.asking !== asking) root.asking = asking

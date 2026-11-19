@@ -122,6 +122,10 @@ Singleton {
     // a popup), PopupSection, and a card's region
     readonly property var anchorKinds: ["page", "section", "card", "row", "popupSection", "region"]
     readonly property var anchorScopes: ["", "own-provider"]
+    // What a row may demand of its elements: anything, or the public button (by the mark it
+    // carries, `apiElement`). A card's `actions` takes the button only: the stack sits in the
+    // card's header, beside the name, where anything else breaks every card
+    readonly property var anchorTakes: ["", "SmallButton"]
     readonly property int maxAnchorPathLength: 200
 
     // The anchors this shell offers: { path, kind, placements, takes, marks, context, scope,
@@ -129,8 +133,9 @@ Singleton {
     //   kind        one of anchorKinds
     //   placements  the placements published for the path (a block can take more; one is
     //               published when a module needs it)
-    //   takes       what an element there may be ("" anything; "SmallButton" on a card's
-    //               actions)
+    //   takes       what an element there must be (anchorTakes: "" anything; "SmallButton" on
+    //               a card's actions — another is refused when it is built, an error in its
+    //               module's status: components/ModuleContribution.qml)
     //   marks       a card that shows a module's mark while closed
     //   context     what an element's `context` holds besides { anchor, placement }
     //   scope       "" — every module's elements; "own-provider" — on an item of a VPN
@@ -168,6 +173,18 @@ Singleton {
         { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
           context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"ethernet\", active: fully up }", scope: "", since: "1.24",
           where: "Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows",
+          view: "panels/settings/NetworkEthernetSettings.qml" },
+        { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+          context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.25",
+          where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, its buttons under the card's own (\"Settings…\")",
+          view: "panels/settings/NetworkVpnSettings.qml" },
+        { path: "settings.network_wifi.saved.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+          context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.25",
+          where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, its buttons under \"Edit connection…\", above \"Forget\"",
+          view: "panels/settings/NetworkWifiSettings.qml" },
+        { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
+          context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.25",
+          where: "Settings → System → Network → Ethernet, the opened card of each wired profile, its buttons under \"Edit connection…\", above \"Forget\"",
           view: "panels/settings/NetworkEthernetSettings.qml" }
     ]
 
@@ -349,6 +366,10 @@ Singleton {
                 problems.push(where + ": placements are not some of " + anchorPlacements.join(", "));
             if (typeof row.takes !== "string" || typeof row.context !== "string" || typeof row.where !== "string" || row.where === "")
                 problems.push(where + ": takes, context and where are texts (where not empty)");
+            else if (!anchorTakes.includes(row.takes))
+                problems.push(where + ": takes " + show(row.takes) + " is not \"\" or \"SmallButton\"");
+            else if (typeof row.path === "string" && row.path.endsWith(".card.actions") && row.takes !== "SmallButton")
+                problems.push(where + ": a card's actions take a SmallButton");
             if (typeof row.view !== "string" || !/^[a-z][a-zA-Z0-9_/]*\.qml$/.test(row.view) || row.view.includes("//"))
                 problems.push(where + ": view " + show(row.view) + " is not a file of the shell (\"panels/NetworkPanel.qml\")");
             if (typeof row.marks !== "boolean")
@@ -995,10 +1016,7 @@ Singleton {
         const active = [];
         const inactive = [];
         for (const profile of Array.isArray(profiles) ? profiles : []) {
-            if (!_joinable(profile))
-                continue;
-            const wifi = has(details, profile.uuid) ? details[profile.uuid] : null;
-            if (profile.kind === "wifi" && (!isObject(wifi) || wifi.mode === "ap"))
+            if (!networkListed(profile, details))
                 continue;
             const network = networkRow(profile.uuid, profile.name, profile.kind, profile.state === "activated");
             (network.active ? active : inactive).push(network);
@@ -1015,6 +1033,20 @@ Singleton {
         const details = isObject(wifiDetails) ? wifiDetails : {};
         return (Array.isArray(profiles) ? profiles : []).every(profile =>
             !_joinable(profile) || profile.kind !== "wifi" || (has(details, profile.uuid) && isObject(details[profile.uuid])));
+    }
+
+    // Whether Api.networks lists `profile` (NetworkProfiles' profile, or a page's row built
+    // on it) given the Wi-Fi details read so far: joinable, and a Wi-Fi profile only once its
+    // details are read and say it is no hotspot. A saved network's card is a place only then,
+    // so that no module's element is built for a network Api.networks does not name
+    function networkListed(profile, wifiDetails) {
+        if (!_joinable(profile))
+            return false;
+        if (profile.kind !== "wifi")
+            return true;
+        const details = isObject(wifiDetails) ? wifiDetails : {};
+        const wifi = has(details, profile.uuid) ? details[profile.uuid] : null;
+        return isObject(wifi) && wifi.mode !== "ap";
     }
 
     // A profile apiNetworks may list: Wi-Fi or Ethernet with a UUID, not a port

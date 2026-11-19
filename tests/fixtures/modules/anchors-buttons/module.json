@@ -1,0 +1,18 @@
+{
+    "id": "anchors-buttons",
+    "name": "Anchors buttons fixture",
+    "version": "1.0.0",
+    "api": "1.24",
+    "description": "Puts a button of each kind, one with a long label and one element that is no button in the buttons of AnchorsTest's fixture cards, and a button in its own provider's card (tests/AnchorsTest.qml)",
+    "main": "Main.qml",
+    "anchors": [
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Primary.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Secondary.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "NotButton.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Danger.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Warning.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Success.qml" },
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "Long.qml" },
+        { "at": "settings.cards.vpns.card.actions", "place": "append", "component": "Primary.qml" }
+    ]
+}

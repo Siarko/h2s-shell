@@ -24,7 +24,7 @@ TestCase {
 
     // What a module can rely on, per element: properties and signals, sorted
     readonly property var pinned: ({
-        "SmallButton": ["asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "kind", "label", "size", "tooltip"],
+        "SmallButton": ["apiElement", "asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "kind", "label", "size", "tooltip"],
         "Dropdown": ["options", "picked", "placeholder", "size", "value"],
         "InputField": ["accepted", "editingFinished", "password", "placeholder", "problem", "revealToggled", "revealed", "size", "text", "textEdited"],
         "Pill": ["clicked", "label", "picked", "size", "tooltip"],
@@ -166,6 +166,7 @@ TestCase {
             Public.SmallButton { id: reserved; label: "Typo"; kind: "toString"; size: "constructor" }
             Public.SmallButton { id: varied; label: "Varied" }
             Public.SmallButton { id: narrow; label: "A label much longer than its button"; width: 80 }
+            Public.SmallButton { id: narrowAsks; label: "A label much longer than its button"; confirm: true; width: 80 }
             Public.SmallButton { id: asksWithTip; label: "Tip"; confirm: true; tooltip: "Another tip" }
         }
 
@@ -742,7 +743,8 @@ TestCase {
         driver.mouseClick(asks, 5, 5);
         assertEqual(asks.clicks + " " + asks.questions + " " + asks.asking, "0 1 true", "its first click asks: asked(), asking, nothing done");
         assertEqual(parts.label.text, "Remove?", "and it shows the question");
-        assert(_until(() => asks.width === parts.face.width + parts.cancel.width) && parts.cancel.visible, "the element is as wide as the question and its \"×\"");
+        assert(_until(() => asks.width === parts.face.width + parts.cancel.width && parts.cancel.x === parts.face.width) && parts.cancel.visible,
+               "the element is as wide as the question and its \"×\", the \"×\" right of the question");
         driver.mouseClick(parts.cancel, 3, 3);
         assertEqual(asks.clicks + " " + asks.questions + " " + asks.asking, "0 1 false", "the \"×\" takes the question back");
         driver.mouseClick(asks, 5, 5);
@@ -788,6 +790,21 @@ TestCase {
         // --- narrower than its label ---
         const narrowLabel = _child(_inside(narrow), "QQuickText");
         assert(narrow.width === 80 && _inside(narrow).width === 80 && narrowLabel.truncated, "a button made narrower than its label keeps that width and cuts the label");
+        const narrowParts = _parts(_inside(narrowAsks));
+        assert(_inside(narrowAsks).width <= 80 && narrowParts.face.width === 80 && narrowParts.label.truncated,
+               "a button that asks, made narrower than its label: no wider than that, its label cut");
+        assert(narrowAsks.implicitWidth > 80, "… while it still asks for its full width");
+        _inside(narrowAsks).asking = true;
+        assert(_until(() => narrowParts.cancel.x === narrowParts.face.width) && narrowParts.face.width + narrowParts.cancel.width === 80 && narrowParts.label.truncated,
+               "… asking, the question and its \"×\" in that width, the question cut");
+        _inside(narrowAsks).asking = false;
+        assertEqual(narrow.apiElement + " " + narrowAsks.apiElement, "SmallButton SmallButton", "the public button carries its mark, apiElement");
+        try {
+            narrow.apiElement = "Other";
+        } catch (error) {
+            // Read-only
+        }
+        assertEqual(narrow.apiElement, "SmallButton", "… read-only");
 
         _askingAndOneLine();
         _controls();
