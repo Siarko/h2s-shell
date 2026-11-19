@@ -102,14 +102,16 @@ ColumnLayout {
         color: Theme.textMuted
     }
 
+    // Keyed by name: re-sorted by energy, a row moves with its app and shows its current use
+    KeyedModel { id: _rowsModel; values: root._rows; keyProp: "name" }
     Repeater {
-        // ScriptModel, never the bare array (CLAUDE.md)
-        model: ScriptModel { values: root._rows }
+        model: _rowsModel.model
 
         ColumnLayout {
             id: _row
-            required property var modelData
-            readonly property real _share: root._total > 0 ? modelData.wh / root._total : 0
+            required property string modelData
+            readonly property var usage: _rowsModel.byKey[modelData] ?? ({})
+            readonly property real _share: root._total > 0 ? (usage.wh ?? 0) / root._total : 0
 
             Layout.fillWidth: true
             spacing: 3
@@ -120,11 +122,11 @@ ColumnLayout {
 
                 Text {
                     Layout.fillWidth: true
-                    text: _row.modelData.name
+                    text: _row.usage.name ?? ""
                     elide: Text.ElideRight
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
-                    color: _row.modelData.system ? Theme.textSecondary : Theme.textPrimary
+                    color: _row.usage.system ? Theme.textSecondary : Theme.textPrimary
                 }
                 Text {
                     text: Math.round(_row._share * 100) + "%"
@@ -135,7 +137,7 @@ ColumnLayout {
                 Text {
                     Layout.preferredWidth: _whMetrics.width
                     horizontalAlignment: Text.AlignRight
-                    text: root._wh(_row.modelData.wh)
+                    text: root._wh(_row.usage.wh ?? 0)
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textMuted
@@ -153,7 +155,7 @@ ColumnLayout {
                     width: parent.width * _row._share
                     height: parent.height
                     radius: 2
-                    color: _row.modelData.system ? Theme.textSecondary : Theme.accent
+                    color: _row.usage.system ? Theme.textSecondary : Theme.accent
                 }
             }
         }

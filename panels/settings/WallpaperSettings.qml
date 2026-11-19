@@ -353,17 +353,18 @@ Flickable {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
                     spacing: 6
+                    KeyedModel { id: _fixedSlotsModel; values: root._fixedSlots; keyProp: "slot" }
                     Repeater {
-                        // ScriptModel, never the bare array (CLAUDE.md)
-                        model: ScriptModel { values: root._fixedSlots; objectProp: "slot" }
+                        model: _fixedSlotsModel.model
                         WallpaperSlot {
-                            required property var modelData
-                            label: modelData.label.replace("Workspace ", "WS ")
-                            image: root._absolute(root._assignments[modelData.slot])
+                            required property string modelData
+                            readonly property var slotEntry: _fixedSlotsModel.byKey[modelData] ?? ({})
+                            label: (slotEntry.label ?? "").replace("Workspace ", "WS ")
+                            image: root._absolute(root._assignments[slotEntry.slot])
                             emptyText: root._scope === "everywhere" ? "First image" : "First chosen"
-                            picked: root._isTarget("wallpaper.assignments", modelData.slot)
-                            onClicked: if (root._thumbnails) root._open("wallpaper.assignments", modelData.slot)
-                            onCleared: root._choose("wallpaper.assignments", modelData.slot, "")
+                            picked: root._isTarget("wallpaper.assignments", slotEntry.slot)
+                            onClicked: if (root._thumbnails) root._open("wallpaper.assignments", slotEntry.slot)
+                            onCleared: root._choose("wallpaper.assignments", slotEntry.slot, "")
                         }
                     }
                 }
@@ -456,15 +457,17 @@ Flickable {
                     Layout.bottomMargin: 6
                     spacing: 6
                     Repeater {
-                        model: ScriptModel { values: root._dayNames.map((name, index) => ({ index: index, name: name })); objectProp: "name" }
+                        // The names themselves (strings), the day by its place
+                        model: ScriptModel { values: root._dayNames }
                         WallpaperSlot {
-                            required property var modelData
-                            label: modelData.name.slice(0, 3)
-                            image: root._absolute(root._weekdays[modelData.index])
+                            required property string modelData
+                            required property int index
+                            label: modelData.slice(0, 3)
+                            image: root._absolute(root._weekdays[index])
                             emptyText: "First set"
-                            picked: root._isTarget("wallpaper.weekdays", modelData.index)
-                            onClicked: if (root._thumbnails) root._open("wallpaper.weekdays", modelData.index)
-                            onCleared: root._choose("wallpaper.weekdays", modelData.index, "")
+                            picked: root._isTarget("wallpaper.weekdays", index)
+                            onClicked: if (root._thumbnails) root._open("wallpaper.weekdays", index)
+                            onCleared: root._choose("wallpaper.weekdays", index, "")
                         }
                     }
                 }
@@ -498,15 +501,17 @@ Flickable {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
                     spacing: 6
+                    KeyedModel { id: _pinnedSlotsModel; values: root._pinnedSlots; keyProp: "slot" }
                     Repeater {
-                        model: ScriptModel { values: root._pinnedSlots; objectProp: "slot" }
+                        model: _pinnedSlotsModel.model
                         WallpaperSlot {
-                            required property var modelData
-                            label: modelData.label.replace("Workspace ", "WS ")
-                            image: root._absolute(root._pinned[modelData.slot])
-                            picked: root._isTarget("wallpaper.pinned", modelData.slot)
-                            onClicked: if (root._thumbnails) root._open("wallpaper.pinned", modelData.slot)
-                            onCleared: root._choose("wallpaper.pinned", modelData.slot, "")
+                            required property string modelData
+                            readonly property var slotEntry: _pinnedSlotsModel.byKey[modelData] ?? ({})
+                            label: (slotEntry.label ?? "").replace("Workspace ", "WS ")
+                            image: root._absolute(root._pinned[slotEntry.slot])
+                            picked: root._isTarget("wallpaper.pinned", slotEntry.slot)
+                            onClicked: if (root._thumbnails) root._open("wallpaper.pinned", slotEntry.slot)
+                            onCleared: root._choose("wallpaper.pinned", slotEntry.slot, "")
                         }
                     }
                     // Adds one: which place first, then its image
@@ -545,14 +550,16 @@ Flickable {
                     Flow {
                         Layout.fillWidth: true
                         spacing: 4
+                        KeyedModel { id: _pinCandidatesModel; values: root._addingPin ? root._pinCandidates : []; keyProp: "slot" }
                         Repeater {
-                            model: ScriptModel { values: root._addingPin ? root._pinCandidates : []; objectProp: "slot" }
+                            model: _pinCandidatesModel.model
                             Pill {
-                                required property var modelData
-                                label: modelData.label
+                                required property string modelData
+                                readonly property var slotEntry: _pinCandidatesModel.byKey[modelData] ?? ({})
+                                label: slotEntry.label ?? ""
                                 fontSize: Theme.fontSizeBody
                                 size: "m"
-                                onClicked: root._open("wallpaper.pinned", modelData.slot)
+                                onClicked: root._open("wallpaper.pinned", slotEntry.slot)
                             }
                         }
                     }

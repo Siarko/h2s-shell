@@ -347,23 +347,27 @@ Item {
             }
 
             Repeater {
-                // ScriptModel, never a bare array — see "The Repeater crash"
+                // A row per place in the list, by its index (numbers compare strictly in a
+                // ScriptModel, rebuilt objects do not — "The Repeater crash" in
+                // docs/ARCHITECTURE.md); the row reads its text from the list
                 model: ScriptModel {
-                    values: _listEditor.items.map((text, index) => ({ text: text, index: index }))
+                    values: _listEditor.items.map((text, index) => index)
                 }
 
                 Row {
                     id: _listRow
-                    required property var modelData
+                    required property int modelData
+                    readonly property int _index: modelData
+                    readonly property string _text: _listEditor.items[_index] ?? ""
                     width: _listEditor.width
                     spacing: 4
 
                     InputField {
                         width: _listRow.width - 28
-                        text: _listRow.modelData.text
+                        text: _listRow._text
                         onEditingFinished: {
-                            if (text !== _listRow.modelData.text)
-                                _listEditor.replaced(_listRow.modelData.index, text);
+                            if (text !== _listRow._text)
+                                _listEditor.replaced(_listRow._index, text);
                         }
                     }
 
@@ -385,7 +389,7 @@ Item {
                         PointerArea {
                             id: _removeArea
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: _listEditor.replaced(_listRow.modelData.index, null)
+                            onClicked: _listEditor.replaced(_listRow._index, null)
                         }
                     }
                 }

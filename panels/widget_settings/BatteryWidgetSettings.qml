@@ -106,13 +106,16 @@ Item {
         }
 
         Repeater {
-            model: ScriptModel { values: root._thresholds.map((threshold, index) => ({ index: index, threshold: threshold })) }
+            // A row per place in the list, by its index (numbers compare strictly in a
+            // ScriptModel, rebuilt objects do not — "The Repeater crash" in
+            // docs/ARCHITECTURE.md); the row reads its threshold from the list
+            model: ScriptModel { values: root._thresholds.map((threshold, index) => index) }
 
             Column {
                 id: _row
-                required property var modelData
-                readonly property int _index: modelData.index
-                readonly property var _threshold: modelData.threshold
+                required property int modelData
+                readonly property int _index: modelData
+                readonly property var _threshold: root._thresholds[_index] ?? ({})
                 readonly property bool _picking: root._picking === String(_index)
 
                 width: _col.width

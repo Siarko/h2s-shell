@@ -110,19 +110,21 @@ Flickable {
         }
 
         // ── The profiles ───────────────────────────────────────────
+        // Keyed by name (names are unique): the profiles are parsed anew from the config on
+        // every change, and a card stays with its profile ("The Repeater crash" in
+        // docs/ARCHITECTURE.md)
+        KeyedModel { id: _profilesModel; values: Profiles.profiles; keyProp: "name" }
         Repeater {
-            // ScriptModel, never the bare array — see "The Repeater crash"
-            model: ScriptModel {
-                values: Profiles.profiles
-            }
+            model: _profilesModel.model
 
             Rectangle {
                 id: _card
-                required property var modelData
+                required property string modelData
+                readonly property var profile: _profilesModel.byKey[modelData] ?? ({})
                 required property int index
 
-                readonly property bool active: Profiles.activeProfiles.includes(modelData.name)
-                readonly property var leaves: ProfileRules.flatLeaves(modelData.when)
+                readonly property bool active: Profiles.activeProfiles.includes(profile.name)
+                readonly property var leaves: ProfileRules.flatLeaves(profile.when)
 
                 function setLeaves(newLeaves) {
                     Profiles.updateProfile(index, { when: newLeaves.length > 0 ? { all: newLeaves } : {} })
@@ -152,7 +154,7 @@ Flickable {
                             selectionColor: Theme.selection
                             selectedTextColor: Theme.selectedText
                             Layout.fillWidth: true
-                            text: _card.modelData.name
+                            text: _card.profile.name
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBodyLarge
                             font.bold: true
@@ -161,11 +163,11 @@ Flickable {
                             clip: true
                             onEditingFinished: {
                                 const name = text.trim();
-                                if (name !== "" && name !== _card.modelData.name
+                                if (name !== "" && name !== _card.profile.name
                                         && !Profiles.profiles.some(profile => profile.name === name))
                                     Profiles.updateProfile(_card.index, { name: name });
                                 else
-                                    text = _card.modelData.name;
+                                    text = _card.profile.name;
                             }
                         }
 
@@ -179,8 +181,8 @@ Flickable {
                         // Enabled
                         ToggleSwitch {
                             offColor: Theme.popupBackground
-                            checked: _card.modelData.enabled !== false
-                            onToggled: Profiles.updateProfile(_card.index, { enabled: _card.modelData.enabled === false })
+                            checked: _card.profile.enabled !== false
+                            onToggled: Profiles.updateProfile(_card.index, { enabled: _card.profile.enabled === false })
                         }
 
                         SmallButton {
@@ -200,11 +202,11 @@ Flickable {
                             cancelTip: "Cancel — keep the profile"
                             onConfirmed: Profiles.removeProfile(_card.index)
                             // One question at a time, across the cards
-                            onAskingStarted: root._confirmingDelete = _card.modelData.name
+                            onAskingStarted: root._confirmingDelete = _card.profile.name
                             Connections {
                                 target: root
                                 function on_ConfirmingDeleteChanged() {
-                                    if (root._confirmingDelete !== _card.modelData.name)
+                                    if (root._confirmingDelete !== _card.profile.name)
                                         _deleteProfile.asking = false;
                                 }
                             }
@@ -224,7 +226,7 @@ Flickable {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         leftPadding: 8
-                        text: ProfileRules.describe(_card.modelData.when)
+                        text: ProfileRules.describe(_card.profile.when)
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
                         color: Theme.textPrimary
@@ -266,7 +268,7 @@ Flickable {
                         Item { Layout.fillWidth: true }
 
                         Text {
-                            text: Object.keys(_card.modelData.set ?? {}).length + " settings"
+                            text: Object.keys(_card.profile.set ?? {}).length + " settings"
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeSmall
                             color: Theme.textDisabled
@@ -274,7 +276,7 @@ Flickable {
 
                         SmallButton {
                             label: "Edit values"
-                            onClicked: root.editValuesRequested(_card.modelData.name)
+                            onClicked: root.editValuesRequested(_card.profile.name)
                         }
                     }
                 }

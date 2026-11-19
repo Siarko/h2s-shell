@@ -161,21 +161,22 @@ Item {
             spacing: 4
             leftPadding: 12
 
+            // Keyed by fact (the list is rebuilt when a module's facts come or go)
+            KeyedModel { id: _factTypesModel; values: ProfileRules.factTypes; keyProp: "fact" }
             Repeater {
-                model: ScriptModel {
-                    values: ProfileRules.factTypes
-                }
+                model: _factTypesModel.model
 
                 Pill {
                     fontSize: Theme.fontSizeBody
                     size: "s"
-                    required property var modelData
-                    label: modelData.label
-                    picked: modelData.fact === root.leaf.fact
+                    required property string modelData
+                    readonly property var factEntry: _factTypesModel.byKey[modelData] ?? ({})
+                    label: factEntry.label ?? ""
+                    picked: factEntry.fact === root.leaf.fact
                     onClicked: {
                         root._pickingFact = false;
-                        if (modelData.fact !== root.leaf.fact)
-                            root.changedTo(root._leafFor(modelData.fact));
+                        if (factEntry.fact !== root.leaf.fact)
+                            root.changedTo(root._leafFor(factEntry.fact));
                     }
                 }
             }

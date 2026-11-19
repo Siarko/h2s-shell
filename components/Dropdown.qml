@@ -74,14 +74,16 @@ Rectangle {
         open: root.open
         onClosed: root.open = false
 
+        // Keyed by value: the options can be live (the account's calendars), new objects
+        // at each change ("The Repeater crash" in docs/ARCHITECTURE.md)
+        KeyedModel { id: _optionsModel; values: root.options; keyProp: "value" }
         Repeater {
-            // ScriptModel, never the bare array — see "The Repeater crash"; the options can
-            // be live (the account's calendars)
-            model: ScriptModel { values: root.options }
+            model: _optionsModel.model
 
             Rectangle {
-                required property var modelData
-                readonly property bool picked: modelData.value === root.value
+                required property string modelData
+                readonly property var option: _optionsModel.byKey[modelData] ?? ({})
+                readonly property bool picked: option.value === root.value
                 width: parent.width
                 height: Math.max(24, _optionLabel.implicitHeight + 6)
                 radius: Theme.listItem.radius
@@ -93,14 +95,14 @@ Rectangle {
                     spacing: 6
 
                     Dot {
-                        visible: modelData.color !== undefined
+                        visible: option.color !== undefined
                         anchors.verticalCenter: parent.verticalCenter
-                        color: modelData.color ?? "transparent"
+                        color: option.color ?? "transparent"
                     }
                     Text {
                         id: _optionLabel
-                        width: parent.width - (modelData.color !== undefined ? 16 : 0)
-                        text: modelData.label
+                        width: parent.width - (option.color !== undefined ? 16 : 0)
+                        text: option.label ?? ""
                         textFormat: Text.PlainText
                         maximumLineCount: 1
                         elide: Text.ElideRight
@@ -117,7 +119,7 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.open = false;
-                        root.picked(modelData.value);
+                        root.picked(option.value);
                     }
                 }
             }

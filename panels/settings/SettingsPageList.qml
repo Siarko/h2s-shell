@@ -98,34 +98,34 @@ Item {
         width: parent.width
         spacing: 4
 
+        // Keyed by the page's id (modules' pages come and go) — "The Repeater crash" in
+        // docs/ARCHITECTURE.md: a page keeps its row while its id stays
+        KeyedModel { id: _pagesModel; values: root.pages; keyProp: "id" }
+
         Repeater {
             id: _rows
-            // ScriptModel, never the bare array (modules' pages come and go) — "The Repeater
-            // crash" in docs/ARCHITECTURE.md; a page keeps its row while its id stays
-            model: ScriptModel {
-                objectProp: "id"
-                values: root.pages
-            }
+            model: _pagesModel.model
 
             // A page's row, with room above it for a separator when it has one
             Item {
                 id: _delegate
-                required property var modelData
+                required property string modelData
+                readonly property var page: _pagesModel.byKey[modelData] ?? ({})
                 required property int index
-                readonly property bool selected: modelData.id === root.selectedPage
+                readonly property bool selected: page.id === root.selectedPage
                 readonly property Item row: _row
-                readonly property bool _child: !!modelData.parent
+                readonly property bool _child: !!page.parent
                 // A group with one of its pages open: lit faintly, the page itself marked
-                readonly property bool _groupOpen: !!modelData.group && root._openGroup === modelData.id
+                readonly property bool _groupOpen: !!page.group && root._openGroup === page.id
                 // Only the pages of the tab that is open; a group's pages only while it is open
                 // A page with `shown` only while it says so (a device the computer has)
-                visible: modelData.tab === root.tab && (!_child || root._openGroup === modelData.parent)
-                    && (modelData.shown ? modelData.shown() : true)
+                visible: page.tab === root.tab && (!_child || root._openGroup === page.parent)
+                    && (page.shown ? page.shown() : true)
                 width: _column.width
                 height: _row.y + _row.height
 
                 Rectangle {
-                    visible: !!_delegate.modelData.separatorBefore
+                    visible: !!_delegate.page.separatorBefore
                     y: 5
                     width: parent.width
                     height: 1
@@ -135,7 +135,7 @@ Item {
 
                 Rectangle {
                     id: _row
-                    y: _delegate.modelData.separatorBefore ? 13 : 0
+                    y: _delegate.page.separatorBefore ? 13 : 0
                     width: parent.width
                     height: _delegate._child ? 30 : 34
                     radius: Theme.settings.sidebarItemRadius
@@ -148,7 +148,7 @@ Item {
                     // right, so cutting a long name never hides it.
                     // A group: open or folded
                     Text {
-                        visible: !!_delegate.modelData.group
+                        visible: !!_delegate.page.group
                         anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 10 }
                         text: _delegate._groupOpen ? "▾" : "▸"
                         font.family: Theme.fontFamily
@@ -158,7 +158,7 @@ Item {
 
                     Text {
                         id: _changedMark
-                        visible: (Theme.drafts, (_delegate.modelData.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
+                        visible: (Theme.drafts, (_delegate.page.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
                         anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
                         text: "✎"
                         font.family: Theme.fontFamily
@@ -176,7 +176,7 @@ Item {
                         }
                         // A name wider than the sidebar (a larger font) is cut
                         elide: Text.ElideRight
-                        text: _delegate.modelData.label
+                        text: _delegate.page.label
                         // A module names its page: never read as markup
                         textFormat: Text.PlainText
                         maximumLineCount: 1
@@ -191,7 +191,7 @@ Item {
                         centred: false
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.pageClicked(_delegate.modelData.id)
+                        onClicked: root.pageClicked(_delegate.page.id)
                     }
                 }
             }

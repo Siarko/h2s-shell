@@ -203,21 +203,20 @@ Item {
 
         // The ways in that need nothing typed: what each is doing, from the rules
         // ("Touch the fingerprint reader", PAM's own "Failed to match fingerprint", "not
-        // available, trying again later"). A fresh array on every view: through a
-        // ScriptModel keyed by name, never the bare array (CLAUDE.md)
+        // available, trying again later"). A fresh array on every view: keyed by name
+        // (KeyedModel, "The Repeater crash" in docs/ARCHITECTURE.md)
+        KeyedModel { id: _methodsModel; values: root.view.methods; keyProp: "name" }
         Repeater {
-            model: ScriptModel {
-                values: root.view.methods
-                objectProp: "name"
-            }
+            model: _methodsModel.model
 
             Text {
-                required property var modelData
+                required property string modelData
+                readonly property var method: _methodsModel.byKey[modelData] ?? ({})
                 Layout.fillWidth: true
-                visible: modelData.visible
-                text: modelData.text
+                visible: method.visible ?? false
+                text: method.text ?? ""
                 textFormat: Text.PlainText
-                color: modelData.isError ? Theme.error : Theme.textSecondary
+                color: method.isError ? Theme.error : Theme.textSecondary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 horizontalAlignment: Text.AlignHCenter

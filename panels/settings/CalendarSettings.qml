@@ -190,19 +190,16 @@ ColumnLayout {
                 id: _calColumn
                 width: parent.width
 
+                // Keyed by id: calendarsArray is new objects on every fetch ("The Repeater
+                // crash" in docs/ARCHITECTURE.md)
+                KeyedModel { id: _calendarsModel; values: GoogleCalendar.calendarsArray; keyProp: "id" }
                 Repeater {
-                    // ScriptModel diffs old vs. new values so only changed delegates get
-                    // added/removed — see MusicPanel.qml for why binding a plain live-model
-                    // array straight to Repeater.model was crashing this app. Keyed by "id"
-                    // since calendarsArray rebuilds fresh objects on every calendar fetch.
-                    model: ScriptModel {
-                        objectProp: "id"
-                        values: GoogleCalendar.calendarsArray
-                    }
+                    model: _calendarsModel.model
 
                     delegate: Item {
                         id: calendarRow
-                        required property var modelData
+                        required property string modelData
+                        readonly property var calendar: _calendarsModel.byKey[modelData] ?? ({})
                         width: _calColumn.width
                         height: 32
 
@@ -218,11 +215,11 @@ ColumnLayout {
                                 width: 8
                                 height: 8
                                 radius: width / 2
-                                color: calendarRow.modelData.color
+                                color: calendarRow.calendar.color ?? Theme.textDisabled
                             }
 
                             Text {
-                                text: calendarRow.modelData.name
+                                text: calendarRow.calendar.name ?? ""
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
                                 color: Theme.textPrimary
@@ -231,8 +228,8 @@ ColumnLayout {
                             }
 
                             Checkbox {
-                                checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.modelData.id)
-                                onToggled: GoogleCalendar.setCalendarEnabled(calendarRow.modelData.id, !checked)
+                                checked: GoogleCalendar.enabledCalendarIds.includes(calendarRow.calendar.id)
+                                onToggled: GoogleCalendar.setCalendarEnabled(calendarRow.calendar.id, !checked)
                             }
                         }
                     }
