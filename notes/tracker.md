@@ -267,6 +267,8 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
+- [ ] `AnchorsTest` failed twice under load, each time once and never on rerun (a section's parts' order; an earlier one in U7a): find the wait that measures before layout
+
 - [ ] Tailscale module: the event stream is started outside `_run`, so one bus message is cut at the runner's default 1 MB (a very large netmap message)
 
 - [ ] A VPN provider's id is matched against module ids without checking the module that registered it is that module (`VpnManager.register`): a module could register under another's id and get its elements under its VPNs (older than U4c). Also `VpnManager.ownExtrasOf` serves `rowExtras` for a module's provider too (unreachable for Tailscale)
