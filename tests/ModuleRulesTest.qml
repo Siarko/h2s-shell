@@ -883,6 +883,15 @@ TestCase {
         assertEqual(paths("settings.general.box.card", false, "settings"), JSON.stringify({ path: "", childPath: "" }),
                     "a block named like a region: not addressable, nor anything in it");
         assertEqual(paths("settings.general", false, "Bad name"), JSON.stringify({ path: "", childPath: "" }), "… a name that is not one: the same");
+        assertEqual(paths("settings.general.saved.card", false, "settings", "region") + paths("settings.general.saved.card", false, "actions", "region"),
+                    JSON.stringify({ path: "settings.general.saved.card.settings", childPath: "" })
+                    + JSON.stringify({ path: "settings.general.saved.card.actions", childPath: "" }),
+                    "a card's region: the card's path and the region's name; nothing addressable inside it");
+        assertEqual([paths("settings.general.saved", false, "settings", "region"), paths("settings.general.saved.card.actions", false, "settings", "region"),
+                     paths("settings.general.saved.card", false, "box", "region"), paths("settings.general.saved.card", false, "", "region"),
+                     paths("settings.general.saved.card", true, undefined, "region"), paths("", false, "settings", "region")].join(""),
+                    JSON.stringify({ path: "", childPath: "" }).repeat(6),
+                    "… not right under a card named \"card\" (under a section, under a region), not a region's name, no name, no card: not addressable");
         assertEqual(paths("", true, "box") + paths(undefined, false, "") + paths("nowhere", true, "", "page"), JSON.stringify({ path: "", childPath: "" }).repeat(3),
                     "no base and no enclosing block (or a base that is not a place): nothing addressable");
 

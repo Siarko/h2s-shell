@@ -231,11 +231,17 @@ Singleton {
     // the view's root: a block of a root kind (anchorRootKinds, `kind`) right at the base (the
     // page itself: settings.general) — anything else with no name at the base, a section
     // straight under a plain item, is not; a name that is not one makes it and everything
-    // inside it unaddressable.
+    // inside it unaddressable. A card's region (kind "region") is named by the region
+    // (anchorRegions), right under a card named "card", and nothing is under it; no other
+    // kind takes a region's name.
     function anchorBlockPaths(parentPath, parentIsBase, anchor, kind) {
         const none = { path: "", childPath: "" };
         if (typeof parentPath !== "string" || parentPath === "" || anchorPathProblem(parentPath) !== "")
             return none;
+        if (kind === "region") {
+            const regionPath = parentPath + "." + anchor;
+            return anchorRegions.includes(anchor) && anchorPathProblem(regionPath) === "" ? { path: regionPath, childPath: "" } : none;
+        }
         if (anchor === undefined || anchor === null || anchor === "")
             return { path: parentIsBase === true && anchorRootKinds.includes(kind) ? parentPath : "", childPath: parentPath };
         if (anchorNameProblem(anchor) !== "")
