@@ -1955,3 +1955,15 @@ For the owner, from the autonomous run (2026-11-18 on):
   pinned. Reviewed, two layout defects fixed with cases; `tests/run-all.sh` and the Tailscale
   lock bed passed on both machines.
 
+- **A module's icon (U7a) and marks on closed cards (U7b)** — on `master` 2026-11-19, module
+  API 1.26 and 1.27. Manifest `icon`: a glyph of the icon font (private-use ranges only, the
+  shell's own marks and 46 lock / no-entry lookalikes refused), an SVG (read and refused
+  with any external reference, other encodings or a wrong start; theme-coloured or its own
+  colours) or a PNG/WebP picture (magic bytes checked); `components/ModuleIcon.qml`, handle
+  `icon`, a fallback letter. `module.setMark(path, itemId, label)` / `clearMark` on the saved
+  Wi-Fi and wired cards (first three marks by module id, right after the name, also for
+  right-to-left names; labels cleaned of C1/bidi; warnings one line per kind).
+  `SettingsCard`'s before/after host gap only for something visible. Reviewed (an SVG
+  could load any file and stall every image through a FIFO — fixed); `tests/run-all.sh`
+  passed on both machines.
+
