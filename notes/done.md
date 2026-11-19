@@ -2134,3 +2134,12 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   there and available and emptied by account operations (`keptTargets`); pills keyed by device
   id. The `find -P` check runs once for several devices. Reviewed, fixed; module suites and
   stand-ins on both machines, the module's lock bed on NixOS.
+- **The command runner: `endWithShell` and `outputAfterCancel` (module API 1.33)** — on
+  `master` 2026-11-19, found by D3. `endWithShell: true` (opt-in): the run waits for the tool
+  look-up and starts as `setpriv --pdeathsig KILL -- <argv>` (inside `timeout` when it has a
+  limit), so it dies with the shell; only such runs read setpriv's 126/127 as `failedToStart`.
+  Default runs unchanged (argv, timing, codes); privileged runs ignore the option.
+  `outputAfterCancel: true`: lines after `cancel()` and the result (`cancelled: true`) still
+  arrive. A first version made `setpriv` the default for unlimited runs; its review found it
+  wrapped `pkexec`, turned "cannot start" into a silent "dismissed" and killed programs modules
+  launch on every restart — hence the opt-in. `tests/run-all.sh` passed on both machines.
