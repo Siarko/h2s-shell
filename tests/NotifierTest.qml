@@ -31,10 +31,28 @@ TestCase {
         assertEqual(Notifier.plainText(42, 10) + "|" + Notifier.plainText(null, 10) + "|" + Notifier.plainText({ toString: () => "x" }, 10), "42||",
                     "plainText: a number as text, anything else nothing");
 
+        // --- plainText with lines: the body's line breaks kept ---
+        assertEqual(JSON.stringify(Notifier.plainText("a\nb\r\nc\rd\te", 100, 20)), JSON.stringify("a\nb\nc\nd e"),
+                    "plainText (lines): LF kept, CRLF and CR as LF, a tab a space");
+        assertEqual(JSON.stringify(Notifier.plainText("a\u2028b\u2029c\u0085d", 100, 20)), JSON.stringify("a\nb\nc\nd"),
+                    "plainText (lines): the Unicode line and paragraph separators as LF");
+        assertEqual(JSON.stringify(Notifier.plainText("a\n\u0007b\u202e\nc", 100, 20)), JSON.stringify("a\nb\nc"),
+                    "plainText (lines): other control and format characters still dropped");
+        const twentyFive = Array.from({ length: 25 }, (unused, i) => "line" + (i + 1)).join("\n");
+        const cutLines = Notifier.plainText(twentyFive, 1000, 20);
+        assertEqual(cutLines.split("\n").length + " " + cutLines.split("\n")[19], "20 line20…", "plainText (lines): cut after 20 lines, the last kept one ending in …");
+        assertEqual(Notifier.plainText(Array(20).fill("x").join("\n"), 1000, 20).split("\n").length + " " + Notifier.plainText(Array(20).fill("x").join("\n"), 1000, 20).endsWith("…"),
+                    "20 false", "plainText (lines): 20 lines, kept whole");
+        assertEqual(Notifier.plainText("ab\nc", 2, 1), "a…", "plainText (lines): a line cut that meets the character cap stays within it");
+        assertEqual(Notifier.plainText("a\nb", 100, 0) + "|" + Notifier.plainText("a\nb", 100), "a b|a b", "plainText: no lines given, one line");
+
         // --- prepared: format "plain" ---
         const plain = Notifier.prepared("Module: <b>Tail\nscale</b> & co", { body: "Authorization: <i>Send</i> a file & more\n-x", format: "plain", urgency: "low" });
         assertEqual(plain.summary, "Module: <b>Tail scale</b> & co", "plain: the summary on one line, not escaped (no markup there)");
-        assertEqual(plain.options.body, "Authorization: &lt;i&gt;Send&lt;/i&gt; a file &amp; more -x", "plain: the body on one line, &, < and > as entities");
+        assertEqual(JSON.stringify(plain.options.body), JSON.stringify("Authorization: &lt;i&gt;Send&lt;/i&gt; a file &amp; more\n-x"), "plain: the body keeps its line break, &, < and > as entities");
+        const longBody = Notifier.prepared("Two\r\nlines", { body: Array(30).fill("<x>").join("\r\n"), format: "plain" });
+        assert(longBody.summary === "Two lines" && longBody.options.body.split("\n").length === 20 && longBody.options.body.endsWith("&lt;x&gt;…"),
+               "plain: the summary one line; the body at most 20 lines, escaped after the cut");
         assertEqual(plain.options.urgency + " " + plain.options.format, "low plain", "plain: the other options kept");
         assertEqual(Notifier.prepared("s", { body: "&lt;", format: "plain" }).options.body, "&amp;lt;", "plain: an entity in the text is shown as written");
         assertEqual(Notifier.prepared("x".repeat(300), { body: "y".repeat(1200), format: "plain" }).summary.length, 200, "plain: the summary cut at 200");

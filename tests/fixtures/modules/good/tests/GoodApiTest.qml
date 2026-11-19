@@ -111,7 +111,7 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.27", "Api.version");
+        assertEqual(Api.version, "1.28", "Api.version");
         // (1.26) Its icon, as the shell draws it
         assertEqual(JSON.stringify(module.icon), JSON.stringify({ kind: "svg", glyph: "", url: Qt.resolvedUrl("../icon.svg").toString(), colors: "theme" }),
                     "module.icon: its SVG, by its file's URL, painted in the theme's colour");
@@ -157,9 +157,9 @@ TestCase {
         Api.notify("Line\nbreak", { body: "<", format: "plain" });
         const plain = ModuleTestKit.notified;
         assertEqual(plain.map(entry => entry.summary + "|" + entry.body + "|" + entry.appName + "|" + entry.format).join(","),
-                    "File <b>received</b>|a&amp;b &lt;i&gt;.txt c.txt|Good fixture|plain,Line break|&lt;|H2S Shell|plain",
-                    "notify, format plain: one line each, the body's &, < and > as entities, the summary as written");
-        assertEqual(JSON.stringify(plain[0]?.command?.slice(-3)), JSON.stringify(["--", "File <b>received</b>", "a&amp;b &lt;i&gt;.txt c.txt"]),
+                    "File <b>received</b>|a&amp;b &lt;i&gt;.txt\nc.txt|Good fixture|plain,Line break|&lt;|H2S Shell|plain",
+                    "notify, format plain: the summary one line, (1.28) the body keeping its line break, its &, < and > as entities, the summary as written");
+        assertEqual(JSON.stringify(plain[0]?.command?.slice(-3)), JSON.stringify(["--", "File <b>received</b>", "a&amp;b &lt;i&gt;.txt\nc.txt"]),
                     "… and so to notify-send");
         ModuleTestKit.clearRecords();
         // A module's notification never takes the shell's own toast (category x-qs-shell)

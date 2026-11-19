@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.27" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.28" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -151,8 +151,10 @@ import qs.singletons.network
 //                          actions…); a module's own handle's notify() names the module.
 //                          (1.12) options.format "plain": the summary and body are plain
 //                          text — use it for any text from outside (a command's output, a
-//                          peer's or a file's name): each on one line (line breaks and tabs
-//                          become spaces), other control and format characters (a
+//                          peer's or a file's name): the summary on one line (line breaks
+//                          and tabs become spaces); (1.28) the body keeps its line breaks
+//                          (CR and CRLF as one, tabs as spaces), at most 20 lines, the last
+//                          kept one ending in "…"; other control and format characters (a
 //                          right-to-left override, a zero-width joiner) dropped, the summary cut
 //                          at 200 characters and the body at 1000 with "…"; "&", "<" and ">"
 //                          in the body shown as written, never read as markup. A text that

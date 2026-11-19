@@ -888,7 +888,8 @@ shell's network settings use too), `Api.minuteNow` (the start of the current min
 "5 min ago" without a clock of the module's own), `module.log(level, text, key)` (a line
 "[<id>] …"; with a key, written only when that key's level or text changed — a failure
 once, not once per attempt) and notifications with `format: "plain"` (`Notifier.prepared`:
-summary and body on one line, control and format characters dropped, capped, the body's
+the summary on one line, the body keeping its line breaks — at most 20 lines
+(`Notifier.plainBodyLines`) — control and format characters dropped, capped, the body's
 `&`, `<`, `>` shown as written) for any text from outside. A module's notification never
 carries the shell's own category (`x-qs-shell`, the toast at the bottom of the screen:
 `ModuleRules.moduleNotifyOptions`).

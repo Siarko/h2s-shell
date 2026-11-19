@@ -45,23 +45,44 @@ Singleton {
     // A notification daemon reads the body as markup (the spec's <b>, <i>, <a>, <img>; the
     // shell's own server too, NotificationMarkup) and the summary as plain text. Text from
     // outside the shell — a module's, a command's output, a file's name — is sent with
-    // format "plain": each text on one line (line breaks and tabs become spaces), other
+    // format "plain": the summary on one line (line breaks and tabs become spaces), the body
+    // keeping its line breaks (CR and CRLF as "\n", at most plainBodyLines lines), other
     // control and format characters dropped, cut with "…" at its cap; in the body "&", "<" and ">"
-    // become entities, so the daemon shows them as written. The summary is not escaped: the
-    // spec has no markup there, and a daemon would show "&amp;".
+    // become entities, so the daemon shows them as written (a daemon shows the body's "\n"
+    // as a line break; the shell's own server turns it into <br>). The summary is not
+    // escaped: the spec has no markup there, and a daemon would show "&amp;".
     readonly property int plainSummaryCap: 200
     readonly property int plainBodyCap: 1000
+    // A body of more lines is cut after this many, the last kept line ending in "…": enough
+    // for a command's short output or a list of a few files, not a log a popup cannot hold
+    readonly property int plainBodyLines: 20
 
-    // One text as plain sends it, before the body's escaping: one line (line breaks, tabs,
-    // U+2028/2029 as spaces), no control or format characters (PrivilegedRules.unprintableCode:
-    // C0, DEL, C1, a right-to-left override, a zero-width joiner), at most `cap` characters,
-    // counted by code point. Not a string or a number: ""
-    function plainText(value, cap) {
+    // One text as plain sends it, before the body's escaping: no control or format characters
+    // (PrivilegedRules.unprintableCode: C0, DEL, C1, a right-to-left override, a zero-width
+    // joiner), at most `cap` characters, counted by code point. With `lines` 0 or absent one
+    // line (line breaks, tabs, U+2028/2029 as spaces); with `lines` > 0 line breaks kept as
+    // "\n" (CR, CRLF, NEL, U+2028/2029), tabs as spaces, at most `lines` lines (cut with "…").
+    // Not a string or a number: ""
+    function plainText(value, cap, lines) {
         if (typeof value !== "string" && typeof value !== "number")
             return "";
-        const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
-        const characters = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0)));
-        return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : characters.join("");
+        const maxLines = typeof lines === "number" && lines > 0 ? Math.floor(lines) : 0;
+        const folded = maxLines === 0
+            ? String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ")
+            : String(value).replace(/\r\n?|[\u0085\u2028\u2029]/g, "\n").replace(/[\t\v\f]+/g, " ");
+        let characters = PrivilegedRules.characters(folded).filter(character => character === "\n" || !PrivilegedRules.unprintableCode(character.codePointAt(0)));
+        let cut = false;
+        if (maxLines > 0) {
+            let breaks = 0;
+            const end = characters.findIndex(character => character === "\n" && ++breaks === maxLines);
+            if (end >= 0) {
+                characters = characters.slice(0, end);
+                cut = true;
+            }
+        }
+        if (characters.length > cap || (cut && characters.length === cap))
+            return characters.slice(0, cap - 1).join("") + "…";
+        return characters.join("") + (cut ? "…" : "");
     }
 
     // The summary and options as send() hands them on (pure): with format "plain" the
@@ -72,7 +93,7 @@ Singleton {
         if (options.format !== "plain")
             return { summary: summary, options: options };
         const plain = Object.assign({}, options);
-        const body = plainText(options.body ?? "", plainBodyCap);
+        const body = plainText(options.body ?? "", plainBodyCap, plainBodyLines);
         plain.body = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return { summary: plainText(summary ?? "", plainSummaryCap), options: plain };
     }
