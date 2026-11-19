@@ -2062,3 +2062,9 @@ For the owner, from the autonomous run (2026-11-18 on):
   operator no longer sees a lock beside "Switch"; the exit-node mark on the popup's network rows
   too. Reviewed, fixed; suites, stand-ins and lock bed passed on both machines.
 
+- **The module's last migration slice (M11)** — on the module's `main` 2026-11-19 (manifest
+  `api` 1.32). No checks for older shells left (`typeof module?.…`, `system?.…`, `run?.cancel`);
+  the received-files notification lists one name per line. Reviewed (nothing found); suites,
+  stand-ins and lock bed passed on both machines. The module uses nothing the closing slice (Z)
+  removes.
+

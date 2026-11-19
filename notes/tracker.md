@@ -21,7 +21,6 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the module: the last (M11)
 - [ ] the closing slice (Z), after the module is released
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
@@ -236,6 +235,7 @@ All by the owner, 2026-11-17.
   file(s) are picked, a row under that device's row names the file (or "N files") with a Send
   button; after Send, a progress bar of the send in that row (from the bus's outgoing files);
   the same for several files. The settings window does not open (M8).
+- Taildrop names with U+2028/U+2029 (module, low): `TaildropRules._unsafeCharacters` misses them, so such a name shows on two lines in the received-files notification; Tailscale itself refuses such names. One regex range.
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - Exit node "for now", details (2026-11-19): with no per-network choice for the networks up,
