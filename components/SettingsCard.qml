@@ -4,10 +4,10 @@ import qs.singletons
 
 // A framed item on a settings page that opens (a saved network, a VPN), as an anchor block
 // (components/AnchorBlock.qml). Its root is a plain column: the `before` host, its body — the
-// frame: a header (the name and a line under it, on the right the primary controls
-// (`primary`) and, opened, the secondary buttons stacked under them (`buttons`), each at its
-// own width on one right edge) and a notice line; opened, its own rows (the content) — the
-// `after` host. The parent sees one item, so it serves as a Repeater's delegate; a card
+// frame: a header (the name and a line under it — the line keeps its height when empty —,
+// on the right the primary controls (`primary`) and, opened, the secondary buttons stacked
+// under them (`buttons`), each at its own width on one right edge; a hidden one takes no
+// room) and a notice line; opened, its own rows (the content) — the `after` host. The parent sees one item, so it serves as a Repeater's delegate; a card
 // repeated per item is named by its kind (`anchor: "card"`), its item in `context`.
 //
 // A card takes nothing inside itself: modules reach its opened part through its region
@@ -16,17 +16,29 @@ import qs.singletons
 // closing it destroys them, and what they showed starts anew next time. They get the card's
 // context, and on an own-provider place the card's `scopeId`.
 //
-//   delegate: SettingsCard {
-//       required property var modelData
-//       anchor: "card"
-//       Layout.fillWidth: true
-//       title: modelData.name
-//       open: page.openId === modelData.uuid
-//       context: ({ networkId: modelData.uuid, name: modelData.name })
-//       onToggleRequested: page.openId = open ? "" : modelData.uuid
-//       primary: SmallButton { label: "Connect"; … }
-//       SwitchRow { … }                          // its own rows: Layout.* apply
+// Repeated per item, it stands on a KeyedModel (its modelData the item's key), so that it
+// keeps its item — and its region's elements — while other items come and go:
+//
+//   KeyedModel { id: _networks; values: page.networks; keyProp: "uuid" }
+//   Repeater {
+//       model: _networks.model
+//       delegate: SettingsCard {
+//           required property string modelData
+//           readonly property var network: _networks.byKey[modelData] ?? ({})
+//           anchor: "card"
+//           Layout.fillWidth: true
+//           title: network.name ?? ""
+//           open: page.openId === network.uuid
+//           context: ({ networkId: network.uuid, name: network.name })
+//           onToggleRequested: page.openId = open ? "" : network.uuid
+//           primary: SmallButton { label: "Connect"; … }
+//           SwitchRow { … }                      // its own rows: Layout.* apply
+//       }
 //   }
+//
+// The notice's button is available while `noticeAvailable`: NetworkProfileCard's is
+// unavailable while the card is busy, so a page moving from it binds `noticeAvailable:
+// !busy`.
 AnchorBlock {
     id: root
 
@@ -39,6 +51,7 @@ AnchorBlock {
     // (`noticeAction`, "" none) that emits noticeActionRequested
     property string notice: ""
     property string noticeAction: ""
+    // Whether the notice's button can be clicked (bind it to the page's busy state)
     property bool noticeAvailable: true
     property real spacing: 6
     property real hostGap: 6
@@ -51,8 +64,10 @@ AnchorBlock {
     signal toggleRequested()
     signal noticeActionRequested()
 
-    // The region, the hosts and the frame, for the core's tests
+    // The region, the hosts, the frame and the secondary buttons' column, for the core's
+    // tests
     readonly property alias settingsRegion: _settings
+    readonly property alias buttonColumn: _buttons
     readonly property alias beforeHost: _before
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
@@ -126,8 +141,9 @@ AnchorBlock {
                                 font.bold: root.active
                                 color: Theme.textPrimary
                             }
+                            // Shown empty too: the header keeps its height (as
+                            // NetworkProfileCard's)
                             Text {
-                                visible: root.subtitle !== ""
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
                                 text: root.subtitle
@@ -143,7 +159,7 @@ AnchorBlock {
                         // running under them
                         ColumnLayout {
                             Layout.alignment: Qt.AlignTop
-                            spacing: 4
+                            spacing: 0
 
                             // At least as tall as the name and its line, the primary controls
                             // centred in it
@@ -160,11 +176,17 @@ AnchorBlock {
                                 }
                             }
 
-                            ColumnLayout {
+                            // One column, each button at its own width on the right
+                            // edge; the gap above only when a button shows, so hidden
+                            // ones take no room
+                            Grid {
                                 id: _buttons
                                 visible: root.open
                                 Layout.alignment: Qt.AlignRight
+                                Layout.topMargin: implicitHeight > 0 ? 4 : 0
+                                columns: 1
                                 spacing: 4
+                                horizontalItemAlignment: Grid.AlignRight
                             }
                         }
 
