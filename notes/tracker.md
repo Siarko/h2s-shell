@@ -278,6 +278,8 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
+- [ ] `components/ReorderList.qml` binds a bare array (`root._shown`) to `ListView.model` — against the Repeater-crash rule (found in the ScriptModel key fix)
+
 Defects and risks:
 - [ ] `panels/Popup.qml` `contentLoader.onLoaded` sets `availableHeight` / `popupAnimating`
       on a panel unguarded: a readonly one throws and skips the rest (core and module panels)
