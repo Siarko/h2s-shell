@@ -43,6 +43,11 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To look at on a screen**
 
+- **The Wi-Fi and Ethernet settings pages on anchor blocks** (U5): the "Saved networks"
+  and "Hotspots" titles with their buttons at the right edge, the cards' spacing, an opened
+  card with the password row, the "None yet" lines on a machine with none; Ethernet: "Wired
+  profiles" as far under the device card as before, an opened profile card.
+
 - **The popups on anchor blocks** (U2). Network popup with Tailscale up: VPN header, rows
   4 px apart, the exit-node chooser right under its row, Ethernet and Wi-Fi spacing
   unchanged, the divider over the network list only while Wi-Fi is on, the list not cut
