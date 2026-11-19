@@ -1,9 +1,10 @@
 import QtQuick
+import qs.components
 import qs.singletons
 
 // A notification as the screensaver and the lock screen show it, with as much detail as
 // their privacy setting allows:
-//   "full"  — app, title and text
+//   "full"  — app, title and text, and the sender's progress bar
 //   "title" — app and title
 //   "app"   — the app alone, when even the title (a sender, say) gives too much away
 // Anything else counts as "app": a value this does not know shows the least.
@@ -19,6 +20,7 @@ Rectangle {
 
     readonly property bool _showTitle: detail === "full" || detail === "title"
     readonly property bool _showBody: detail === "full"
+    readonly property var _progress: NotificationRules.progress(modelData?.hints)
 
     width: 360
     radius: Theme.notificationCard.radius
@@ -72,6 +74,22 @@ Rectangle {
             wrapMode: Text.WordWrap
             maximumLineCount: 2
             elide: Text.ElideRight
+        }
+
+        // How far the sender's job has gone (NotificationRules.progress) — as much as the
+        // body says, so only where the body shows
+        Item {
+            width: parent.width
+            height: _progressBar.implicitHeight + 6
+            visible: root._showBody && root._progress.shown
+
+            ProgressBar {
+                id: _progressBar
+                objectName: "progress"
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                value: root._progress.value
+                tone: root._progress.tone
+            }
         }
     }
 }

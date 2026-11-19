@@ -372,6 +372,7 @@ PanelWindow {
     //   qs ipc call shelltest cellRect clock
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
+    //   qs ipc call shelltest notificationState
     IpcHandler {
         target: "shelltest"
         enabled: bar.modelData === Quickshell.screens[0]
@@ -390,6 +391,15 @@ PanelWindow {
             if (!window)
                 return "{}";
             return bar._testRect(bar._testFind(window.contentItem, item => item.objectName === name && item.visible), window._screenOffset);
+        }
+
+        // The notifications the server holds, in its order: each one's id, summary and
+        // progress as its card shows it (NotificationRules.progress)
+        function notificationState(): string {
+            return JSON.stringify(Notifications.notifications.values.map(notification => ({
+                id: notification.id, summary: notification.summary,
+                progress: NotificationRules.progress(notification.hints)
+            })));
         }
 
         function popupState(): string {

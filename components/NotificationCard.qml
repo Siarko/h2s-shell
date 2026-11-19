@@ -34,6 +34,9 @@ Rectangle {
     property real timerProgress: 1.0
 
     signal dismissRequested()
+    // An action ran on a notification that stays after it (resident): its entry stays, so
+    // no dismissal is asked — a toast still leaves
+    signal actionInvoked()
 
     // ---- Swiped away with a finger, as on Android ----
     // Dragged sideways the card follows the finger and fades; let go past a third of its
@@ -67,7 +70,14 @@ Rectangle {
         if (Date.now() - _selectionClearedAt < 400)
             return;
         _defaultAction.invoke();
-        dismissRequested();
+        _afterAction();
+    }
+    // A resident notification keeps its entry after an action (NotificationRules)
+    function _afterAction() {
+        if (NotificationRules.dismissAfterAction(notification))
+            dismissRequested();
+        else
+            actionInvoked();
     }
     // The header's dismiss control sits inside a tappable area: its press marks the tap
     // that follows as its own
@@ -112,11 +122,16 @@ Rectangle {
     property string _body
     property string _appIcon
     property string _image
+    property var _hints: ({})
     Binding on _appName { when: notifCard.notification !== null; value: notifCard.notification?.appName ?? ""; restoreMode: Binding.RestoreNone }
     Binding on _summary { when: notifCard.notification !== null; value: notifCard.notification?.summary ?? ""; restoreMode: Binding.RestoreNone }
     Binding on _body { when: notifCard.notification !== null; value: notifCard.notification?.body ?? ""; restoreMode: Binding.RestoreNone }
     Binding on _appIcon { when: notifCard.notification !== null; value: notifCard.notification?.appIcon ?? ""; restoreMode: Binding.RestoreNone }
+    Binding on _hints { when: notifCard.notification !== null; value: notifCard.notification?.hints ?? {}; restoreMode: Binding.RestoreNone }
     Binding on _image { when: notifCard.notification !== null; value: (notifCard.notification?.image ?? "").toString(); restoreMode: Binding.RestoreNone }
+
+    // How far the sender's job has gone, from its hints: a bar under the text
+    readonly property var progress: NotificationRules.progress(_hints)
 
     readonly property string _appIconSource: _pictureSource(_appIcon)
     // The same picture as the icon is shown once, in the header
@@ -418,6 +433,17 @@ Rectangle {
                         }
                     }
                 }
+
+                // The sender's progress (NotificationRules.progress); the bar's own
+                // animation smooths a sender that updates fast
+                ProgressBar {
+                    objectName: "progress"
+                    visible: notifCard.progress.shown
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    value: notifCard.progress.value
+                    tone: notifCard.progress.tone
+                }
             }
         }
 
@@ -535,7 +561,7 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             modelData.invoke();
-                            notifCard.dismissRequested();
+                            notifCard._afterAction();
                         }
                     }
                 }
@@ -552,7 +578,7 @@ Rectangle {
             placeholder: notifCard.notification?.inlineReplyPlaceholder ?? ""
             onSent: text => {
                 notifCard.notification?.sendInlineReply(text);
-                notifCard.dismissRequested();
+                notifCard._afterAction();
             }
         }
 

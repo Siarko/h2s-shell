@@ -363,6 +363,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Notifications show an app's progress: a bar under the text when the app sends one (the
+  notification spec's `value` hint), moving as the app updates the same notification — in
+  the toast, the notification panel, and on the screensaver and lock screen where they show
+  a notification's text. An action on a notification that asks to stay (resident) no
+  longer takes it out of the panel.
 - Settings → Appearance → Controls: "Progress bars", their thickness and corner radius; the
   hardware popup's bars follow them.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the

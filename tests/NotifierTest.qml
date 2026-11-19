@@ -7,6 +7,7 @@ import qs.components
 // notify-send gets for it. Nothing is sent: send() is checked in module test mode, where it
 // records (tests/fixtures/modules/good, GoodApiTest).
 TestCase {
+    id: suite
     suiteName: "Notifier"
 
     property Component _shellToast: Component {
@@ -148,6 +149,48 @@ TestCase {
                "the centre's card: a long word wrapped within the width (" + centreBody.lineCount + " lines, " + centreBody.contentWidth + " of " + centreBody.width + ")");
         centreCard.destroy();
         hudItem.destroy();
+
+        // --- the sender's progress, under the text (NotificationRules.progress) ---
+        const withHints = hints => Object.assign({}, notification, { body: "photo.jpg", hints: hints });
+        const progressCard = _card.createObject(null, { notification: withHints({ value: 40 }) });
+        const progressBar = _find(progressCard, item => item.objectName === "progress");
+        assert(progressBar !== null, "the card has a progress bar");
+        assert(progressBar.visible && Math.abs(progressBar.value - 0.4) < 1e-9 && progressBar.tone === "accent",
+               "value 40: the bar at 0.4, the accent (" + progressBar.visible + ", " + progressBar.value + ", " + progressBar.tone + ")");
+        progressCard.notification = withHints({ value: 40, "x-qs-progress-state": "failed" });
+        assert(progressBar.visible && progressBar.value === 1 && progressBar.tone === "error", "failed: full, the error colour");
+        progressCard.notification = withHints({});
+        assert(!progressBar.visible, "no value: no bar");
+        progressCard.notification = Object.assign({}, notification, { body: "photo.jpg" });
+        assert(!progressBar.visible, "no hints at all: no bar");
+        progressCard.destroy();
+
+        // --- an action: the entry goes, unless the notification is resident ---
+        // The card and its action are given the suite as parent: made without one, the
+        // garbage collector may take them apart before their deferred destroy, and the
+        // card's buttons then read a theme already gone (TypeErrors in the log)
+        const pressAction = resident => {
+            const action = _action.createObject(suite, { identifier: "skip", text: "Skip" });
+            const card = _card.createObject(suite, { notification: Object.assign({}, notification, { resident: resident, actions: [action] }) });
+            const result = { invoked: 0, dismissals: 0, actionsInvoked: 0 };
+            card.dismissRequested.connect(() => result.dismissals++);
+            card.actionInvoked.connect(() => result.actionsInvoked++);
+            const button = _find(card, item => item instanceof MouseArea && item.parent?.modelData === action);
+            if (button)
+                button.clicked(null);
+            result.found = button !== null;
+            result.invoked = action.invoked;
+            card.destroy();
+            action.destroy();
+            return result;
+        };
+        const notResident = pressAction(false);
+        assert(notResident.found, "the action's button is on the card");
+        assert(notResident.invoked === 1 && notResident.dismissals === 1 && notResident.actionsInvoked === 0,
+               "not resident: the action runs and the entry is asked to go (" + JSON.stringify(notResident) + ")");
+        const resident = pressAction(true);
+        assert(resident.invoked === 1 && resident.dismissals === 0 && resident.actionsInvoked === 1,
+               "resident: the action runs, no dismissal asked, the toast told to leave (" + JSON.stringify(resident) + ")");
     }
 
     // The body under `card` (found by `test`), its box given a toast's width
@@ -174,6 +217,18 @@ TestCase {
             screenWidth: 800
             screenModelData: ({ name: "test-screen" })
             slotEnabled: false
+        }
+    }
+    // A notification's action as Quickshell hands it: an object with an identifier, a text
+    // and invoke()
+    property Component _action: Component {
+        QtObject {
+            property string identifier
+            property string text
+            property int invoked: 0
+            function invoke() {
+                invoked++;
+            }
         }
     }
     property Component _card: Component {

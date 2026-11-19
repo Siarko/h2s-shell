@@ -70,6 +70,7 @@ TestCase {
                 property string appName: "Messages"
                 property string summary: "<b>Alice</b> <a href=\"https://example.com\">link</a><img src=\"https://example.com/x.png\">"
                 property string body: "Your code is 123456"
+                property var hints: ({ value: 40 })
             }
         }
 
@@ -216,6 +217,23 @@ TestCase {
         assertEqual(cardBody.textFormat, Text.PlainText, "so is the body");
         card.detail = "something else";
         assert(!cardTitle.visible && !cardBody.visible, "an unknown detail shows the least");
+
+        // --- the sender's progress: only where the body shows ---
+        const cardProgress = _find(card, "progress");
+        const progressShown = () => cardProgress.parent.visible && cardProgress.visible;
+        card.detail = "app";
+        assert(!progressShown(), "app only: no progress bar");
+        card.detail = "title";
+        assert(!progressShown(), "title: no progress bar");
+        card.detail = "full";
+        assert(progressShown() && Math.abs(cardProgress.value - 0.4) < 1e-9, "full: the bar, at 0.4 (" + cardProgress.value + ")");
+        card.modelData.hints = { value: 40, "x-qs-progress-state": "done" };
+        assert(progressShown() && cardProgress.value === 1 && cardProgress.tone === "success", "full, done: full, the success colour");
+        card.modelData.hints = { value: 40, "x-qs-progress-state": "cancelled" };
+        assert(!progressShown(), "full, cancelled: no bar");
+        card.modelData.hints = {};
+        assert(!progressShown(), "full, no value: no bar");
+        card.detail = "app";
 
         // --- IdleWatch: a new IdleMonitor for every change (Quickshell's own re-creation
         // can leave isIdle false for good) ---

@@ -200,6 +200,8 @@ Item {
         replyBackground: Theme.surfaceSunken
         width: root.cardWidth
         onDismissRequested: root.dismiss()
+        // An action on a resident notification: the toast leaves, the entry stays
+        onActionInvoked: root.dismiss()
         // No bar on a toast that stays
         timerVisible: !root._persistent
         timerProgress: root.remaining

@@ -46,6 +46,7 @@ QtObject {
     property var _pointerRules: PointerRulesTest {}
     property var _batteryRules: BatteryRulesTest {}
     property var _toastRules: ToastRulesTest {}
+    property var _notificationRules: NotificationRulesTest {}
     property var _wallpaperRules: WallpaperRulesTest {}
     property var _polkitRules: PolkitRulesTest {}
     property var _privilegedRules: PrivilegedRulesTest {}
