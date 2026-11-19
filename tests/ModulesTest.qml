@@ -706,6 +706,52 @@ TestCase {
         });
         _then("the link's target is read", () => _exists !== null, () => {
             assertEqual(_exists, "", "nothing made through the link");
+            // Turned off and on again once the link is gone: made this time
+            suite._exists = null;
+            _sh("rm \"$1/linked/h2s-shell/module-data\"", [_scratch], () => {
+                suite._dataHost.setEnabled("good", false);
+                suite._exists = "off";
+            });
+        });
+        _then("good is off", () => _exists === "off" && _dataHost.statuses.find(status => status.id === "good")?.state === "disabled", () => {
+            suite._exists = null;
+            _dataHost.setEnabled("good", true);
+        });
+        _then("good is on again", () => _dataHost.statuses.find(status => status.id === "good")?.state === "loaded", () => {
+            const root = _scratch + "/linked/h2s-shell/module-data";
+            assertEqual(_dataHost.handle("good").dataDirectory, root + "/good", "a data directory that failed: made again when the module is turned on");
+            assertEqual(_dataHost.statuses.find(status => status.id === "good")?.warnings.length, 0, "… the warning gone");
+            // Removed while the shell runs: made again at the next load
+            _sh("rm -r \"$1/good\"", [root], () => suite._dataHost.load(_dirs(["good"]), {}));
+        });
+        _then("good loads again", () => _dataHost.statuses.length > 0 && _dataHost.statuses.every(status => status.state !== "pending") && !_dataHost._makingData, () => {
+            _sh("stat -c '%a' \"$1/linked/h2s-shell/module-data/good\"", [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("the removed directory's mode is read", () => _exists !== null, () => {
+            assertEqual(_exists, "700", "a data directory removed since: made again (700) at the next load");
+            assertEqual(_dataHost.handle("good").dataDirectory, _scratch + "/linked/h2s-shell/module-data/good", "… and shown");
+            // The root changed while a run for the old one was out: its answer is dropped,
+            // and the directory made in the new root
+            suite._exists = null;
+            _dataHost.dataRoot = _scratch + "/first/h2s-shell/module-data";
+            // The moment the run for the first root starts, the root changes
+            const switchRoot = () => {
+                if (!suite._dataHost._makingData)
+                    return;
+                suite._dataHost._makingDataChanged.disconnect(switchRoot);
+                suite._switchedRoot = true;
+                suite._dataHost.dataRoot = _scratch + "/second/h2s-shell/module-data";
+            };
+            suite._switchedRoot = false;
+            _dataHost._makingDataChanged.connect(switchRoot);
+            _dataHost.load(_dirs(["good"]), {});
+        });
+        _then("good loads in the second root", () => _switchedRoot && _dataHost.statuses.find(status => status.id === "good")?.state === "loaded" && !_dataHost._makingData, () => {
+            assertEqual(_dataHost.handle("good").dataDirectory, _scratch + "/second/h2s-shell/module-data/good", "module.dataDirectory: in the root in use");
+            _sh("stat -c '%a' \"$1/second/h2s-shell/module-data/good\"", [_scratch], (code, output) => suite._exists = output.trim());
+        });
+        _then("the second root's directory is read", () => _exists !== null, () => {
+            assertEqual(_exists, "700", "… made there: the late answer for the first root did not count for it");
             _dataHost.unload();
             _dataHost.destroy();
             _dataHost = null;
@@ -716,6 +762,7 @@ TestCase {
 
     property var _goodState: null
     property var _dataHost: null
+    property bool _switchedRoot: false
     property string _testDataDirectory: ""
     // The suite's own host while a second one, in test mode, is `host`
     property var _mainHost: null

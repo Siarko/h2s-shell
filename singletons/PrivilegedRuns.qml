@@ -136,8 +136,7 @@ Singleton {
             ? { blocked: "", notFound: false, error: snapshot.problem }
             : PrivilegedRules.refusal({
                 argv: words, options: parsed, active: handle.active === true, locked: locked,
-                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? "",
-                dataRoot: String(facts?.dataRoot ?? "")
+                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? ""
             });
         if (refused) {
             if (refused.blocked !== "locked")

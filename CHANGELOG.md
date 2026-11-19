@@ -18,8 +18,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   from `user-dirs.dirs` read as text, `readIpForwarding()` → `{ ipv4, ipv6 }`,
   `refresh()`; a fact that could not be read is `""` or `null`, never a guess) and
   `module.dataDirectory` (`<dataHome>/h2s-shell/module-data/<id>`, made 700 by the shell
-  before the module loads; `""` with a warning in the status when it cannot be made).
-  `module.privileged.start` refuses a program that lies in a module's data directory.
+  before the module loads, every folder from the data home down checked; `""` with a
+  warning in the status when it cannot be made safely). Nothing in it may be run as root.
   In module test mode `Api.system` is `ModuleTestKit.setSystem`'s made-up facts and the
   data directory lies in a private temporary home (`ModuleTestKit.dataHome`); the facts
   are reset before each suite and by `clearRecords()`.

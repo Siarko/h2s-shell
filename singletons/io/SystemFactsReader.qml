@@ -74,21 +74,17 @@ QtObject {
             }
         });
         const path = _userDirsFile();
-        if (path === "") {
+        if (path === "")
             _userDirsAnswered(generation, { answered: true, found: false, failed: false, text: "" });
-        } else if (_userDirs.path !== path) {
-            _userDirsGeneration = generation;
-            _userDirs.path = path;
-        } else {
-            _userDirsGeneration = generation;
-            _userDirs.reload();
-        }
+        else
+            _userDirsLoad = _userDirsComponent.createObject(root, { generation: generation, path: path });
     }
 
     property var _readings: ({ environment: environment })
     property int _generation: 0
-    property int _userDirsGeneration: 0
     property var _nameRun: null
+    // The newest load of user-dirs.dirs (each refresh() starts one of its own)
+    property var _userDirsLoad: null
 
     function _userDirsFile() {
         return userDirsPath !== "" ? userDirsPath
@@ -118,13 +114,24 @@ QtObject {
     property KernelFile _kernelFile: KernelFile {}
     property KernelFile _forwardingFile: KernelFile {}
 
-    property FileView _userDirs: FileView {
-        printErrors: false
-        onLoaded: root._userDirsAnswered(root._userDirsGeneration, { answered: true, found: true, failed: false, text: text() })
-        onLoadFailed: error => root._userDirsAnswered(root._userDirsGeneration, {
-            answered: true, found: error !== FileViewError.FileNotFound,
-            failed: error !== FileViewError.FileNotFound, text: ""
-        })
+    // One load of user-dirs.dirs, which knows the refresh() it belongs to: an older one's
+    // text never becomes a newer one's answer. Gone once it answered
+    property Component _userDirsComponent: Component {
+        FileView {
+            id: load
+            property int generation: 0
+            printErrors: false
+            onLoaded: answer({ answered: true, found: true, failed: false, text: text() })
+            onLoadFailed: error => answer({
+                answered: true, found: error !== FileViewError.FileNotFound,
+                failed: error !== FileViewError.FileNotFound, text: ""
+            })
+
+            function answer(userDirs) {
+                root._userDirsAnswered(generation, userDirs);
+                load.destroy();
+            }
+        }
     }
 
     property CommandRunner _runner: CommandRunner {}

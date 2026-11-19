@@ -120,17 +120,18 @@ import qs.singletons.network
 //                          same on every machine, nothing read
 //   module.dataDirectory   (1.13, on its handle) the module's own directory for its files
 //                          (certificates, caches): "<dataHome>/h2s-shell/module-data/<id>".
-//                          The shell makes it before the module loads, mode 700 — the
-//                          directory above it too — after checking that each is a real
-//                          directory (not a link) that the user owns; a directory there
-//                          before is closed (700) as well. When that fails the module loads
-//                          all the same with dataDirectory "" and a warning in its status
-//                          (`modules list`): a module that needs it checks for "". It is
-//                          apart from the module's own directory, which installing and
-//                          removing the module owns; the shell never removes it. The user
-//                          can write it, so nothing in it may ever run as root — never hand
-//                          a file of it to module.privileged.start as the program (refused:
-//                          `error`) or as a script. In module test mode it lies in a private
+//                          The shell makes it before the module loads (at each load of the
+//                          modules, and when the module is turned on), mode 700, after
+//                          checking every folder from the data home down: owned by the user
+//                          (or root, above the data root), writable by no one else, and no
+//                          link below the data home. A data root or module directory that
+//                          others could write before is refused, not closed. When that
+//                          fails the module loads all the same with dataDirectory "" and a
+//                          warning in its status (`modules list`): a module that needs it
+//                          checks for "". It is apart from the module's own directory,
+//                          which installing and removing the module owns; the shell never
+//                          removes it. Nothing in the data directory may be run as root —
+//                          the user can write there. In module test mode it lies in a private
 //                          temporary directory the shell made, never in the user's data home,
 //                          and setSystem does not move it
 //   Api.copy(text)         puts text on the clipboard

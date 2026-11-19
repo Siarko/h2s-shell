@@ -82,11 +82,12 @@ Singleton {
     // XDG_DOWNLOAD_DIR from user-dirs.dirs' text — read, never run as a shell would — else
     // <home>/Downloads. `userDirs`: { text, found (false: there is no such file), failed
     // (true: it is there and could not be read) }. A value is "$HOME/<path>" or an absolute
-    // path, in double quotes (xdg-user-dirs writes no other); anything else (a command
-    // substitution, another variable, a relative path) is no folder and the default is taken.
-    // "$HOME" or "$HOME/" alone means "no download folder" there: the default too. A file
-    // that could not be read, or no home: "" (unknown), unless the file names an absolute
-    // folder.
+    // path, in double quotes (xdg-user-dirs writes no other), a "# comment" after it allowed;
+    // anything else (a command substitution, another variable, a relative path) is no folder
+    // and the default is taken. Inside the quotes a backslash is read as sh reads it: it
+    // drops before ", \, $ and ` and stays before anything else. "$HOME" or "$HOME/" alone
+    // means "no download folder" there: the default too. A file that could not be read, or
+    // no home: "" (unknown), unless the file names an absolute folder.
     function downloadDirectory(userDirs, home) {
         const homePath = absolutePath(home);
         const fallback = homePath !== "" && homePath !== "/" ? homePath + "/Downloads" : "";
@@ -94,29 +95,48 @@ Singleton {
             return "";
         if (userDirs?.found !== true)
             return fallback;
+        const noFolder = { fromHome: false, rest: "" };
         let value = null;
         // The last assignment counts, as when the file is sourced
         for (const line of String(userDirs?.text ?? "").split("\n")) {
-            const match = /^\s*XDG_DOWNLOAD_DIR\s*=\s*"((?:[^"\\$`]|\\.|\$HOME(?![A-Za-z0-9_]))*)"\s*$/.exec(line);
+            const match = /^\s*XDG_DOWNLOAD_DIR\s*=\s*"((?:[^"\\]|\\.)*)"(?:\s+#.*|\s*)$/.exec(line);
             if (match)
-                value = match[1];
+                value = _quotedValue(match[1]) ?? noFolder;
             else if (/^\s*XDG_DOWNLOAD_DIR\s*=/.test(line))
-                value = "";
+                value = noFolder;
         }
-        if (value === null || value === "")
+        if (value === null || (!value.fromHome && value.rest === ""))
             return fallback;
-        const fromHome = value === "$HOME" || value.startsWith("$HOME/");
-        const rest = fromHome ? value.slice(5) : value;
-        // "$HOME" anywhere else is not what xdg-user-dirs writes
-        if (/(^|[^\\])\$/.test(rest))
-            return fallback;
-        if (fromHome && homePath === "")
+        if (value.fromHome && homePath === "")
             return "";
-        const path = (fromHome ? (homePath === "/" ? "" : homePath) : "") + rest.replace(/\\(.)/g, "$1");
+        const path = (value.fromHome ? (homePath === "/" ? "" : homePath) : "") + value.rest;
         const folder = absolutePath(path);
         if (folder === "" || folder === homePath || folder === "/")
             return fallback;
         return folder;
+    }
+
+    // The text between the double quotes as sh would make it → { fromHome (it starts with
+    // $HOME), rest (the text after it) }, or null for what is no folder: an expansion other
+    // than a leading $HOME ($, `), a backslash at the end
+    function _quotedValue(quoted) {
+        const fromHome = /^\$HOME(?![A-Za-z0-9_])/.test(quoted);
+        let rest = "";
+        for (let i = fromHome ? 5 : 0; i < quoted.length; i++) {
+            const character = quoted[i];
+            if (character === "\\") {
+                const next = quoted[i + 1];
+                if (next === undefined)
+                    return null;
+                rest += "\"\\$`".includes(next) ? next : character + next;
+                i++;
+            } else if (character === "$" || character === "`") {
+                return null;
+            } else {
+                rest += character;
+            }
+        }
+        return { fromHome: fromHome, rest: rest };
     }
 
     // A forwarding switch's text ("0\n", "1\n") → true, false, or null when it could not be
@@ -242,35 +262,49 @@ Singleton {
         return base === "" || !/^[a-z][a-z0-9_-]{0,31}$/.test(String(id ?? "")) ? "" : base + "/" + id;
     }
 
-    // `path` is the root itself or lies below it (by its spelling)
-    function within(path, root) {
-        const base = absolutePath(root);
-        const target = absolutePath(path);
-        return base !== "" && target !== "" && (target === base || target.startsWith(base + "/"));
-    }
-
     // The script that makes the data directories, run as the user: $1 the root, or "" — then
-    // a private temporary one is made first (mktemp -d, below $2, or /tmp when $2 is not an
+    // a private temporary home is made first (mktemp -d, below $2, or /tmp when $2 is not an
     // absolute directory: module test mode) and named on a line "home <path>" — then the
-    // ids. Under umask 077, so a parent it has to make is 700; the root and each module's
-    // directory are then made 700 whatever made them before, after checking that each is a
-    // real directory (not a link) this user owns. One line per id: "made <id>" or
-    // "failed <id>"; "root-failed" when the root cannot be used.
+    // ids. Under umask 077, so a directory it makes is 700. From the data home down (the
+    // root less "/h2s-shell/module-data") it goes into each part with `cd -P`, then checks
+    // the directory it is in: owned by the user or root, and not writable by group or others
+    // unless it is root's with the sticky bit (/tmp) — so no other user can swap a part
+    // below it. Below the data home no part may be a link. The root and each module's
+    // directory must be the user's own besides, and are then made 700 (`chmod 700 .`: the
+    // directory checked, not whatever a name leads to by then); one that others could write
+    // before is refused, not closed, since what they put there would stay. One line per id:
+    // "made <id>" or "failed <id>"; "root-failed" when the root cannot be used.
     readonly property string makeScript: [
         "umask 077",
         "root=$1; base=$2; shift 2",
         "if [ -z \"$root\" ]; then",
         "  case $base in /*) [ -d \"$base\" ] || base=/tmp ;; *) base=/tmp ;; esac",
         "  home=$(mktemp -d \"$base/h2s-module-data.XXXXXX\") || { echo root-failed; exit 3; }",
-        "  echo \"home $home\"",
+        "  printf 'home %s\\n' \"$home\"",
         "  root=$home/.local/share/" + "h2s-shell/module-data",
         "fi",
-        "mkdir -p -- \"$root\" 2> /dev/null",
-        "if [ -L \"$root\" ] || [ ! -d \"$root\" ] || [ ! -O \"$root\" ] || ! chmod 700 -- \"$root\" 2> /dev/null; then echo root-failed; exit 3; fi",
+        "fail() { echo root-failed; exit 3; }",
+        "case $root in /h2s-shell/module-data) data=/ ;; /*/h2s-shell/module-data) data=${root%/h2s-shell/module-data} ;; *) fail ;; esac",
+        "uid=$(id -u) || fail",
+        // The directory it is in: the user's or root's, not writable by group or others
+        // unless root's and sticky
+        "safe() {",
+        "  set -- $(stat -c '%u %a' . 2> /dev/null)",
+        "  [ $# -eq 2 ] || return 1",
+        "  [ \"$1\" = \"$uid\" ] || [ \"$1\" = 0 ] || return 1",
+        "  [ $((0$2 & 022)) -eq 0 ] || { [ \"$1\" = 0 ] && [ $((0$2 & 01000)) -ne 0 ]; }",
+        "}",
+        // Into a part below, made when missing; never a link
+        "step() { mkdir -- \"$1\" 2> /dev/null; [ ! -L \"$1\" ] && cd -P -- \"$1\" 2> /dev/null; }",
+        // The user's own, safe, then 700
+        "own() { safe && [ -O . ] && chmod 700 . 2> /dev/null; }",
+        "mkdir -p -- \"$data\" 2> /dev/null",
+        "cd -P -- \"$data\" 2> /dev/null && safe || fail",
+        "step h2s-shell && safe || fail",
+        "step module-data && own || fail",
         "for id; do",
-        "  dir=$root/$id",
-        "  mkdir -- \"$dir\" 2> /dev/null",
-        "  if [ ! -L \"$dir\" ] && [ -d \"$dir\" ] && [ -O \"$dir\" ] && chmod 700 -- \"$dir\" 2> /dev/null; then echo \"made $id\"; else echo \"failed $id\"; fi",
+        "  case $id in ''|*[!a-z0-9_-]*) echo \"failed $id\"; continue ;; esac",
+        "  if ( step \"$id\" && own ); then echo \"made $id\"; else echo \"failed $id\"; fi",
         "done"
     ].join("\n")
 

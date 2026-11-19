@@ -63,7 +63,6 @@ TestCase {
     property var _queried: null
     property CommandRunner runner: CommandRunner {}
     property CommandRunner dataRunner: CommandRunner {}
-    property var _dataRefused: null
     property var _dataMode: null
     property var _ran: null
     property var _ranLines: []
@@ -198,10 +197,6 @@ TestCase {
         ModuleTestKit.setSystem({ userName: "dave" });
         ModuleTestKit.clearRecords();
         assertEqual(Api.system.userName, "tester", "clearRecords(): the default facts again");
-        // Nothing in the data directory runs as root
-        module.privileged.start([module.dataDirectory + "/helper", "x"], {
-            what: "Run a helper", timeoutMs: 1000, notifyFailures: false, done: result => suite._dataRefused = result
-        });
         dataRunner.start(["stat", "-c", "%a %U", module.dataDirectory], { done: result => suite._dataMode = result });
 
         // --- its widget's presets (API 1.3) ---
@@ -320,9 +315,7 @@ TestCase {
             done: result => suite._ran = result
         });
 
-        _then("the data directory is looked at", () => _dataRefused !== null && _dataMode !== null, () => {
-            assert(!_dataRefused.ok && _dataRefused.error.includes("data directory") && _dataRefused.code === -1,
-                   "privileged.start: a program in its data directory refused, nothing run: " + JSON.stringify(_dataRefused));
+        _then("the data directory is looked at", () => _dataMode !== null, () => {
             assert(_dataMode.ok && _dataMode.stdout.startsWith("700 "), "module.dataDirectory: there, mode 700: " + _dataMode.stdout);
         });
         _then("the commands answered", () => Object.keys(_results).length === 16 && _queried !== null, () => {

@@ -646,12 +646,16 @@ switches, read when asked. A reading that failed or says something unexpected is
 
 A module's data directory is `<dataHome>/h2s-shell/module-data/<id>`, apart from its own
 directory (which installing and removing it owns). The host makes it before the module
-loads (`ModuleHost.dataRoot`, set by `Modules` from `SystemFacts.dataHome`): under umask
-077, then the root and the module's directory each checked to be a real directory, not a
-link, that the user owns, and set to 700. One it cannot make so leaves the module loading
-with `module.dataDirectory` `""` and a warning in its status. The shell never removes it.
-The user can write it, so nothing in it runs as root: `module.privileged.start` refuses a
-program that lies there (`PrivilegedRules.refusal`).
+loads (`ModuleHost.dataRoot`, set by `Modules` from `SystemFacts.dataHome`), again at each
+load and when the module is turned on, by a script run as the user
+(`SystemFactsRules.makeScript`): under umask 077 it goes from the data home down with
+`cd -P` and checks each folder it is in — owned by the user or root, writable by no one else
+(a sticky folder of root's aside), no link below the data home — then the root and the
+module's directory must be the user's own and are set to 700 (`chmod 700 .`, on the folder
+checked). One that others could write before is refused rather than closed. One it cannot
+make so leaves the module loading with `module.dataDirectory` `""` and a warning in its
+status. The shell never removes it. Nothing in the data directory may be run as root — the
+user can write there.
 
 Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`
 in milliseconds — `singletons/Format.qml`), `Api.address` (IPv4, IPv6, networks: `isIp`,

@@ -73,12 +73,12 @@ Scope {
     property string storeDirectory: ""
     // (API 1.13) Where the modules' data directories are: "<dataHome>/h2s-shell/module-data"
     // (SystemFactsRules.dataRoot; "" — the suites' default — none: every module.dataDirectory
-    // is ""). A module's, "<dataRoot>/<id>", is made before the module loads: under umask 077
-    // (a parent it has to make is 700), then the root and the module's directory chmod 700,
-    // each first checked to be a real directory (not a link) the user owns. One that cannot
-    // be made so leaves the module loading with module.dataDirectory "" and a warning in its
-    // status. Never anything run as root: the user can write there. Not used in test mode,
-    // where the data directories are below `testHome`
+    // is ""). A module's, "<dataRoot>/<id>", is made before the module loads, again at each
+    // load and when it is turned on (SystemFactsRules.makeScript: every folder from the data
+    // home down checked, the root and the module's 700). One that cannot be made so leaves
+    // the module loading with module.dataDirectory "" and a warning in its status. Nothing
+    // there may be run as root: the user can write there. Not used in test mode, where the
+    // data directories are below `testHome`
     property string dataRoot: ""
     // In module test mode: the private temporary home the host made (mktemp -d, in
     // XDG_RUNTIME_DIR, else /tmp) before the first module loaded — the data directories are
@@ -240,6 +240,8 @@ Scope {
             // Nothing is read here: each module is pending until the file check (a process,
             // under checkTimeoutMs) has handed over its module.json and qmldir
             _records = parsed.directories.map(directory => _newRecord(directory));
+            // Each load makes the data directories again: one that failed, or was removed
+            _forgetData();
             _loadCalled = true;
             _startGuard();
             _makeStoreDirectory();
@@ -270,8 +272,11 @@ Scope {
         if (!enabled)
             list.push(id);
         // Turned on again: programs found missing before are looked for again (installed
-        // since, perhaps)
+        // since, perhaps), and its data directory made again
         if (enabled) {
+            // (not one running now: forgetting its directory would restart it)
+            if (disabledIds.includes(id))
+                _forgetData(id);
             for (const record of _records.filter(entry => entry.manifest.id === id)) {
                 if (record.testVerdicts && Object.keys(record.testVerdicts).some(name => record.testVerdicts[name].path === ""))
                     record.testVerdicts = null;
@@ -737,9 +742,14 @@ Scope {
 
     // ---- The data directories (API 1.13) ----
 
-    // { <id>: true (made) | false (could not be) }, for the host's life
-    property var _dataAnswers: ({})
+    // What making the data directories answered: { root (the one they were made in),
+    // made: { <id>: true (made) | false (could not be) } }. Forgotten at each load(), and a
+    // module's at setEnabled(id, true), so a directory that failed, or was removed since, is
+    // made again; an answer for a root that is no longer the one in use counts for nothing
+    property var _dataAnswers: ({ root: "", made: {} })
     property bool _makingData: false
+    // Raised when the answers are forgotten: a run started before answers for nothing
+    property int _dataGeneration: 0
 
     function _dataDirectoryKnown(id) {
         if (!id)
@@ -747,7 +757,33 @@ Scope {
         // No root (the suites' default, or not an absolute path): no data directories
         if (!testMode && SystemFactsRules.absolutePath(dataRoot) === "")
             return true;
-        return ModuleRules.has(_dataAnswers, id);
+        return _dataAnswers.root === dataRootInUse && ModuleRules.has(_dataAnswers.made, id);
+    }
+
+    function _dataFailed(id) {
+        return _dataAnswers.root === dataRootInUse && ModuleRules.has(_dataAnswers.made, id) && _dataAnswers.made[id] === false;
+    }
+
+    function _forgetData(id) {
+        _dataGeneration++;
+        const made = id === undefined ? {} : Object.assign({}, _dataAnswers.made);
+        if (id !== undefined)
+            delete made[id];
+        _dataAnswers = { root: _dataAnswers.root, made: made };
+        _publishDataDirectories();
+    }
+
+    // The handles' dataDirectory, from the answers for the root in use
+    function _publishDataDirectories() {
+        const published = {};
+        if (_dataAnswers.root === dataRootInUse) {
+            for (const id of Object.keys(_dataAnswers.made)) {
+                if (_dataAnswers.made[id] === true)
+                    published[id] = SystemFactsRules.dataDirectory(_dataAnswers.root, id);
+            }
+        }
+        if (JSON.stringify(published) !== JSON.stringify(dataDirectories))
+            dataDirectories = published;
     }
 
     function _dataWarning(id) {
@@ -762,6 +798,7 @@ Scope {
         // In test mode before the temporary home exists: "" — the script makes it first
         const where = testMode ? (testHome !== "" ? dataRootInUse : "") : SystemFactsRules.absolutePath(dataRoot);
         const base = SystemFactsRules.baseDirectories({ XDG_RUNTIME_DIR: Quickshell.env("XDG_RUNTIME_DIR") }).runtimeDirectory;
+        const generation = _dataGeneration;
         const lines = [];
         _makingData = true;
         _check(["sh", "-c", SystemFactsRules.makeScript, "sh", where, base].concat(ids), {
@@ -771,27 +808,29 @@ Scope {
             },
             done: result => {
                 root._makingData = false;
-                root._dataAnswered(ids, lines, result.timedOut);
+                root._dataAnswered(ids, lines, result.timedOut, where, generation);
             }
         });
     }
 
-    function _dataAnswered(ids, lines, timedOut) {
+    function _dataAnswered(ids, lines, timedOut, where, generation) {
         const answers = SystemFactsRules.makeAnswers(lines, ids);
         if (testMode && testHome === "" && answers.home !== "")
             testHome = answers.home;
-        const known = Object.assign({}, _dataAnswers);
-        const made = Object.assign({}, dataDirectories);
-        for (const id of ids) {
-            known[id] = answers.made[id] === true;
-            if (known[id])
-                made[id] = SystemFactsRules.dataDirectory(dataRootInUse, id);
-            else
-                console.warn("[Modules] " + id + ": " + _dataWarning(id) + (timedOut ? " (no answer in " + checkTimeoutMs / 1000 + " s)" : ""));
+        // The root this answer is for: the one asked, or below the temporary home it made
+        const answeredRoot = where !== "" ? where : (answers.home !== "" ? SystemFactsRules.dataRoot(answers.home + "/.local/share") : "");
+        // Late: the answers were forgotten since, or the root in use is another now — asked
+        // again by _apply
+        if (generation === _dataGeneration && answeredRoot === dataRootInUse) {
+            const made = _dataAnswers.root === answeredRoot ? Object.assign({}, _dataAnswers.made) : {};
+            for (const id of ids) {
+                made[id] = answers.made[id] === true;
+                if (!made[id])
+                    console.warn("[Modules] " + id + ": " + _dataWarning(id) + (timedOut ? " (no answer in " + checkTimeoutMs / 1000 + " s)" : ""));
+            }
+            _dataAnswers = { root: answeredRoot, made: made };
+            _publishDataDirectories();
         }
-        _dataAnswers = known;
-        if (JSON.stringify(made) !== JSON.stringify(dataDirectories))
-            dataDirectories = made;
         _applyGuarded();
     }
 
@@ -1000,7 +1039,7 @@ Scope {
                 else
                     console.warn(what + ": " + errors.join("; "));
             }
-            const warnings = record.shadowedBy === "" && ModuleRules.has(_dataAnswers, record.manifest.id) && _dataAnswers[record.manifest.id] === false
+            const warnings = record.shadowedBy === "" && _dataFailed(record.manifest.id)
                 ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings;
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",

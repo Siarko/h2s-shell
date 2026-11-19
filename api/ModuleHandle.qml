@@ -126,7 +126,7 @@ QtObject {
                 root._privilegedKey = PrivilegedRuns.newOwnerKey();
             // argv is read once, inside: the words judged are the ones that run
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: root.host?.testMode === true, tools: _tools, dataRoot: root.host?.dataRootInUse ?? ""
+                testMode: root.host?.testMode === true, tools: _tools
             });
         }
     }
@@ -145,7 +145,7 @@ QtObject {
     // "<dataHome>/h2s-shell/module-data/<id>", made private (700) by the shell before the
     // module loads; "" when it could not be (a warning in its status says so) — or, in module
     // test mode, the same below the shell's private temporary home. The user can write it:
-    // nothing in it ever runs as root (module.privileged refuses a program there)
+    // nothing in it may be run as root
     readonly property string dataDirectory: ModuleRules.has(host?.dataDirectories ?? {}, moduleId) ? String(host.dataDirectories[moduleId]) : ""
 
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)

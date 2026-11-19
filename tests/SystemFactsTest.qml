@@ -7,8 +7,8 @@ import qs.singletons.io
 // What the shell knows of the system (module API 1.13, Api.system): SystemFactsRules from
 // made-up readings — as on NixOS, as on Arch, and readings that failed or say something
 // unexpected — then the reader (singletons/io/SystemFactsReader.qml) on made-up files passed
-// in as paths, and the data directories' rules. Asynchronous: the reader's name is a process
-// and user-dirs.dirs is read without blocking.
+// in as paths, and the data directories' rules and script (on made-up trees). Asynchronous:
+// the reader's name is a process and user-dirs.dirs is read without blocking.
 TestCase {
     id: suite
     suiteName: "SystemFacts"
@@ -144,6 +144,17 @@ TestCase {
         assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"$HOME/../../etc\"\n"), "/home/u"), "/home/u/Downloads", "a \"..\" part: no folder");
         assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"$HOME/a\\\"b\"\n"), "/home/u"), "/home/u/a\"b", "an escaped quote kept as written");
         assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/a\"\nXDG_DOWNLOAD_DIR=\"/b\"\n"), "/home/u"), "/b", "the last assignment counts");
+        // A backslash inside double quotes, as sh reads it
+        assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"$HOME/a\\b\"\n"), "/home/u"), "/home/u/a\\b",
+                    "a backslash before an ordinary character: kept");
+        assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/a\\\\b\\$c\\`d\"\n"), "/home/u"), "/a\\b$c`d",
+                    "\\\\, \\$ and \\`: the backslash dropped");
+        assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/a\\\\$HOME/x\"\n"), "/home/u"), "/home/u/Downloads",
+                    "an escaped backslash before $HOME: $HOME is expanded there, so no folder");
+        assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/data/dl\"   # mine\n"), "/home/u"), "/data/dl",
+                    "a comment after the closing quote: allowed");
+        assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/data/dl\"# mine\n"), "/home/u"), "/home/u/Downloads",
+                    "\"#\" right after the quote (part of the word in sh): no folder");
         assertEqual(rules.downloadDirectory(found("XDG_DOWNLOAD_DIR=\"/a\"\nXDG_DOWNLOAD_DIR=\"$(x)\"\n"), "/home/u"), "/home/u/Downloads",
                     "… also when it is no folder");
         assertEqual(rules.downloadDirectory({ answered: true, found: true, failed: true }, "/home/u"), "",
@@ -216,9 +227,6 @@ TestCase {
         assertEqual(rules.dataDirectory("/d/h2s-shell/module-data", "tailscale"), "/d/h2s-shell/module-data/tailscale", "a module's: <root>/<id>");
         assertEqual(rules.dataDirectory("/d", "../etc"), "", "an id that is no module id: none");
         assertEqual(rules.dataDirectory("", "tailscale"), "", "no root: none");
-        assert(rules.within("/d/m/tailscale/helper", "/d/m") && rules.within("/d/m", "/d/m"), "within: below the root, or the root");
-        assert(!rules.within("/d/mx/helper", "/d/m") && !rules.within("/usr/bin/x", "") && !rules.within("relative", "/d"),
-               "… not a neighbour with the same start, not with no root, not a relative path");
         const answers = rules.makeAnswers(["home /run/user/1000/h2s-module-data.x1", "made good", "failed other", "made unasked"], ["good", "other", "silent"]);
         assertEqual(JSON.stringify(answers), JSON.stringify({ home: "/run/user/1000/h2s-module-data.x1", made: { good: true, other: false, silent: false } }),
                     "the script's lines: made, failed, an id not answered for is failed; one not asked for ignored");
@@ -264,21 +272,45 @@ TestCase {
             assertEqual(_reader.facts.downloadDirectory, "/data/downloads", "xdg-user-dirs' file, with its comments: the absolute folder");
             // Changed, then read again: the new value once the new reading came
             _sh("printf 'XDG_DOWNLOAD_DIR=\"$HOME/Hämtat\"\\n' > \"$1/arch/config/user-dirs.dirs\"", [_scratch], () => {
-                suite._reader.nameCommand = ["sh", "-c", "sleep 0.5; echo old"];
+                // A first run that outlives the newer one: it shrugs off the TERM of the newer
+                // refresh() and answers (cancelled, failed) only at the KILL a second later
+                suite._reader.nameCommand = ["sh", "-c", "trap '' TERM; echo started > \"$0\"; sleep 2; echo old", _scratch + "/name-started"];
                 suite._reader.refresh();
-                // A newer refresh at once: the first one's answer must not win
-                suite._reader.nameCommand = ["printf", "newer\\n"];
-                suite._reader.refresh();
+                suite._newerAnswered = false;
+                _sh("while [ ! -s \"$1\" ]; do sleep 0.05; done", [_scratch + "/name-started"], () => {
+                    // A newer refresh once the first run is going: its answer must not win
+                    suite._reader.nameCommand = ["printf", "newer\\n"];
+                    suite._reader.refresh();
+                });
             });
         });
-        _then("the second reading came, and the first run ended", () => _reader.facts.downloadDirectory === "/home/bob/Hämtat"
-              && _reader.facts.userName === "newer" && _reader._runner.running === 0, () => {
+        _then("the newer name came", () => _reader.facts.userName === "newer", () => {
+            assert(_reader._runner.running === 1, "… while the first run is still out (its answer comes later)");
+            suite._newerAnswered = true;
+        });
+        _then("the second reading came, and the first run ended", () => _newerAnswered && _reader.facts.downloadDirectory === "/home/bob/Hämtat"
+              && _reader._runner.running === 0, () => {
             assertEqual(_reader.facts.userName, "newer", "refresh(): the newer reading wins over a late answer from before it");
             assertEqual(_reader.facts.downloadDirectory, "/home/bob/Hämtat", "refresh(): user-dirs.dirs read again");
+            // Two refreshes; the first one's load of user-dirs.dirs answers after the second
+            // began (its answer handed over by hand, with a text the file never had)
+            _reader.nameCommand = ["printf", "bob\\n"];
+            _reader.refresh();
+            const first = _reader._userDirsLoad;
+            _reader.refresh();
+            first.answer({ answered: true, found: true, failed: false, text: "XDG_DOWNLOAD_DIR=\"/stale\"\n" });
+            assertEqual(_reader.facts.downloadDirectory, "/home/bob/Hämtat", "an older load of user-dirs.dirs answering late: not the newer refresh's answer");
+            suite._newerAnswered = false;
+            _sh("sleep 0.3", [], () => suite._newerAnswered = true);
+        });
+        _then("the second load answered", () => _newerAnswered && _reader._runner.running === 0, () => {
+            assertEqual(_reader.facts.downloadDirectory, "/home/bob/Hämtat", "… the newer load's answer counts");
             _reader.destroy();
             _readerFailing();
         });
     }
+
+    property bool _newerAnswered: false
 
     function _readerFailing() {
         _reader = _readerComponent.createObject(suite, {
@@ -310,6 +342,73 @@ TestCase {
                         "a name program that is not there: the name unknown; no user-dirs.dirs: ~/Downloads");
             _reader.destroy();
             _reader = null;
+            _dataScript();
+        });
+    }
+
+    // ---- The script that makes the data directories, on made-up trees ----
+
+    property var _scriptCases: null
+
+    function _dataScript() {
+        // Each case: its tree made, then the script run → "<case>: <its lines>" and, where
+        // told, the modes after
+        _sh([
+            "mk=$1; d=$2/data; mkdir -p \"$d\"; cd \"$d\" || exit 1",
+            "run() { label=$1; shift; printf '%s: ' \"$label\"; sh -c \"$mk\" sh \"$@\" | tr '\\n' ' '; echo; }",
+            "mode() { printf '%s mode: ' \"$1\"; shift; stat -c '%a' \"$@\" 2>&1 | tr '\\n' ' '; echo; }",
+            "mkdir -m 755 fresh; run fresh \"$d/fresh/h2s-shell/module-data\" '' good",
+            "mode fresh fresh fresh/h2s-shell fresh/h2s-shell/module-data fresh/h2s-shell/module-data/good",
+            "mkdir -p loose/h2s-shell; chmod 777 loose/h2s-shell; run loose \"$d/loose/h2s-shell/module-data\" '' good",
+            "test -e loose/h2s-shell/module-data && echo 'loose made: yes' || echo 'loose made: no'",
+            "mkdir -m 777 loose-target; mkdir linked-loose; ln -s \"$d/loose-target\" linked-loose/h2s-shell",
+            "run linked-loose \"$d/linked-loose/h2s-shell/module-data\" '' good; ls -A loose-target | tr '\\n' ' '; echo '(loose-target)'",
+            "mkdir -m 700 tight-target; mkdir linked-tight; ln -s \"$d/tight-target\" linked-tight/h2s-shell",
+            "run linked-tight \"$d/linked-tight/h2s-shell/module-data\" '' good",
+            "mkdir -m 777 loose-home; run loose-home \"$d/loose-home/h2s-shell/module-data\" '' good",
+            "mkdir -m 1777 sticky-home; run sticky-home \"$d/sticky-home/h2s-shell/module-data\" '' good",
+            "mkdir -m 700 home-target; ln -s \"$d/home-target\" linked-home; run linked-home \"$d/linked-home/h2s-shell/module-data\" '' good",
+            "mkdir -p -m 700 module-link/h2s-shell/module-data; mkdir -m 755 module-target; ln -s \"$d/module-target\" module-link/h2s-shell/module-data/good",
+            "run module-link \"$d/module-link/h2s-shell/module-data\" '' good other; mode module-link module-target",
+            "mkdir -p -m 700 module-loose/h2s-shell/module-data; mkdir -m 770 module-loose/h2s-shell/module-data/good",
+            "run module-loose \"$d/module-loose/h2s-shell/module-data\" '' good; mode module-loose module-loose/h2s-shell/module-data/good",
+            "mkdir -p -m 700 root-loose/h2s-shell; mkdir -m 777 root-loose/h2s-shell/module-data",
+            "run root-loose \"$d/root-loose/h2s-shell/module-data\" '' good; mode root-loose root-loose/h2s-shell/module-data",
+            "run bad-id \"$d/fresh/h2s-shell/module-data\" '' '../x' ''",
+            "run not-a-root \"$d/fresh/elsewhere\" '' good",
+            "mkdir -m 700 base; run test-mode '' \"$d/base\" good; ls base | sed 's/[.].*//'"
+        ].join("\n"), [rules.makeScript, _scratch], (code, output) => {
+            const cases = {};
+            for (const line of output.split("\n")) {
+                const at = line.indexOf(": ");
+                if (at > 0)
+                    cases[line.slice(0, at)] = line.slice(at + 2).trim();
+                else if (line.trim() !== "")
+                    cases[line.trim()] = true;
+            }
+            suite._scriptCases = cases;
+        });
+        _then("the script ran on its trees", () => _scriptCases !== null, () => {
+            const cases = _scriptCases;
+            assertEqual(cases.fresh, "made good", "a data home of 755: made");
+            assertEqual(cases["fresh mode"], "755 700 700 700", "… the data home left as it was; what it made 700");
+            assertEqual(cases.loose + " | " + cases["loose made"], "root-failed | no",
+                        "the folder above the root writable by others: refused, nothing made in it");
+            assertEqual(cases["linked-loose"], "root-failed", "the folder above the root a link to one others can write: refused");
+            assert(cases["(loose-target)"] === true, "… nothing made through the link: " + JSON.stringify(cases));
+            assertEqual(cases["linked-tight"], "root-failed", "… a link to a private one: refused too (no link below the data home)");
+            assertEqual(cases["loose-home"], "root-failed", "a data home others can write: refused");
+            assertEqual(cases["sticky-home"], "root-failed", "… sticky, but not root's: refused");
+            assertEqual(cases["linked-home"], "made good", "a data home that is a link to a private folder: made");
+            assertEqual(cases["module-link"], "failed good made other", "a module's directory that is a link: failed; the others made");
+            assertEqual(cases["module-link mode"], "755", "… the link's target not chmod'ed");
+            assertEqual(cases["module-loose"], "failed good", "a module's directory others could write before: refused, not closed");
+            assertEqual(cases["module-loose mode"], "770", "… left as it was");
+            assertEqual(cases["root-loose"] + " " + cases["root-loose mode"], "root-failed 777", "a root others could write before: refused, left as it was");
+            assertEqual(cases["bad-id"], "failed ../x failed", "an id that is no module id: failed, nothing made");
+            assertEqual(cases["not-a-root"], "root-failed", "a root not ending in h2s-shell/module-data: refused");
+            assert(/^home \S+\/base\/h2s-module-data\.\S+ made good$/.test(cases["test-mode"] ?? ""),
+                   "no root: a temporary home made below $2, named, then the directory: " + cases["test-mode"]);
         });
     }
 
