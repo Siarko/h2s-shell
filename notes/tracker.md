@@ -268,6 +268,8 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
+- [ ] Wi-Fi password: Enter in the password field starts connecting to the network (the owner, 2026-11-19) — in the network popup and on the saved network's card
+
 - [ ] Network card row, low (second review of 1.29): hovering a dead gap in the button row still tints the card (`SettingsCard` `buttonRowArea` takes clicks, not hover); a wrapped question beside the lock runs 1 px past the margin (`NetworkProfileCard` ~106: floor the room); no test pins the name's six-character minimum
 
 - [ ] Soft dependencies, low (second review of 1.30): the docs say a views-only soft dependent keeps its views while its provider restarts — it goes pending until the provider is back (fix the wording in `docs/ARCHITECTURE.md`, `api/Api.qml`, CHANGELOG); a soft dependent that never received the provider (a dropped cycle edge, a version that does not fit) still restarts with it (filter on what it was given); a restarting member whose main was deleted elsewhere, or whose `destroy()` throws inside `_reap`, can stay pending until an unrelated pass
