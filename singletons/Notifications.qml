@@ -101,9 +101,14 @@ Singleton {
             notification.summaryChanged.connect(() => root._replaced(notification));
             notification.bodyChanged.connect(() => root._replaced(notification));
 
+            // Closed while its toast waits (its sender closed it, or it was dismissed in the
+            // centre): out of the queue, where it would be shown, and counted on the badge
+            notification.closed.connect(() => root._dropWaiting(notification));
+
             // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
                 if (!notification.tracked) {
+                    root._dropWaiting(notification);
                     var remainingTimestamps = Object.assign({}, timestamps);
                     delete remainingTimestamps[notification.id];
                     timestamps = remainingTimestamps;
@@ -242,6 +247,9 @@ Singleton {
     // the list of shown toasts in one step, before the queue changes: a change of the
     // queue makes every other free slot take one at once, and each must count this one.
     function takeHudNotification() {
+        // One freed while it waited reads null: dropped, never shown
+        if (hudQueue.some(notification => !_waitingAlive(notification)))
+            hudQueue = hudQueue.filter(notification => _waitingAlive(notification));
         const kinds = hudQueue.map(notification => toastTiming(notification).kind);
         const index = ToastRules.nextToast(kinds, shownToasts.length - stayingToasts.length, toastRoom);
         if (index < 0)
@@ -250,6 +258,15 @@ Singleton {
         toastShown(item.id, toastTiming(item));
         hudQueue = hudQueue.slice(0, index).concat(hudQueue.slice(index + 1));
         return item;
+    }
+
+    function _waitingAlive(notification) {
+        return notification !== null && notification !== undefined && notification.tracked !== false;
+    }
+
+    function _dropWaiting(notification) {
+        if (hudQueue.includes(notification))
+            hudQueue = hudQueue.filter(waiting => waiting !== notification);
     }
 
     function setHudPanelOpen(open) {

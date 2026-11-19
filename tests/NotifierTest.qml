@@ -329,6 +329,44 @@ TestCase {
         drain({ "notifications.followSenderTime": false }, [0, 3000, -1], (others, staying) => others === 1 && staying === 0,
               "\"Apps choose how long\" off: one at a time, one shows");
 
+        // --- one closed while it waits: never shown, the next shows after the first leaves ---
+        const closedWaiting = (makeQueue, message) => {
+            settings({});
+            const waitSlots = [];
+            for (let i = 0; i < 4; i++) {
+                const slot = _slot.createObject(suite, { screenModelData: { name: Notifications.toastScreen } });
+                made.push(slot);
+                waitSlots.push(slot);
+            }
+            const queue = makeQueue();
+            Notifications.hudQueue = queue.list;
+            const firstSlot = waitSlots.find(slot => slot.currentNotif === queue.first);
+            queue.close();
+            firstSlot.dismiss();
+            const free = waitSlots.filter(slot => slot !== firstSlot && slot.currentNotif === null);
+            let threw = "";
+            try {
+                free.forEach(slot => slot._retry());
+            } catch (error) {
+                threw = String(error);
+            }
+            const showing = waitSlots.filter(slot => slot.currentNotif !== null && slot._shownId >= 0);
+            assert(firstSlot !== undefined && threw === "" && showing.length === 1 && showing[0].currentNotif === queue.last
+                   && Notifications.hudQueue.length === 0 && waitSlots.every(slot => !slot._taking),
+                   message + " (" + showing.length + " showing, " + Notifications.hudQueue.length + " waiting" + (threw ? ", threw " + threw : "") + ")");
+            clear();
+            for (const slot of waitSlots)
+                slot.slotEnabled = false;
+        };
+        closedWaiting(() => {
+            const list = [standIn(-1), standIn(-1), standIn(-1)];
+            return { list: list, first: list[0], last: list[2], close: () => list[1].dismiss() };
+        }, "one at a time, the 2nd dismissed while it waits: the 3rd shows after the 1st, nothing left waiting");
+        closedWaiting(() => {
+            const list = [standIn(-1), null, standIn(-1)];
+            return { list: list, first: list[0], last: list[2], close: () => {} };
+        }, "one at a time, the 2nd freed while it waits (reads null): the 3rd shows after the 1st");
+
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();

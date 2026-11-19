@@ -66,13 +66,19 @@ Item {
         // one: this slot is busy with the first (Notifications counts it as shown already)
         if (_taking)
             return;
+        // Still holding a toast's place (its notification freed without a word): let it go
+        _leave();
         if (Notifications.hudPanelOpen || !slotEnabled) {
             currentNotif = null;
             return;
         }
         _taking = true;
-        const notif = Notifications.takeHudNotification();
-        _taking = false;
+        let notif = null;
+        try {
+            notif = Notifications.takeHudNotification();
+        } finally {
+            _taking = false;
+        }
         if (!notif) {
             currentNotif = null;
             return;
