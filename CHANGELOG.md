@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.25: a card's buttons — `settings.network_vpn.vpns.card.actions` (own-provider),
+  `settings.network_wifi.saved.card.actions` and `settings.network_ethernet.profiles.card.actions`,
+  `append`: a button among the opened card's buttons, under the card's own, above "Forget" /
+  "Delete" (which stays last), built while the card is open, with the card's context. They take
+  the public `SmallButton` only, marked by its new read-only `apiElement`: another element is
+  not shown and is an error in the module's status. Each button stands at its own width on the
+  stack's right edge, at most a third of the card wide (a longer label is cut), in size `m`. A
+  `SmallButton` that asks, given less than its width, now takes it and cuts its label or
+  question. A saved Wi-Fi network's card is a place only once its details are read (as
+  `Api.networks` lists it).
 - 1.24: the saved networks' places — `settings.network_wifi.saved.card.settings` and
   `settings.network_ethernet.profiles.card.settings`, `append`: an element in the opened card
   of each saved Wi-Fi network on Settings → System → Network → Wi-Fi and of each wired profile

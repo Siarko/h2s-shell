@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.24" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.25" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -97,6 +97,24 @@ import qs.singletons.network
 //                                                     Ethernet, under the card's rows: append;
 //                                                     context as the Wi-Fi network's (kind
 //                                                     "ethernet")
+//                            settings.network_vpn.vpns.card.actions,
+//                            settings.network_wifi.saved.card.actions,
+//                            settings.network_ethernet.profiles.card.actions (1.25)  the
+//                                                     buttons of the same opened cards: append,
+//                                                     under the card's own ("Settings…", "Edit
+//                                                     connection…"), above "Forget" / "Delete",
+//                                                     which stays last; context as the card's
+//                                                     settings (the VPN's own-provider). These
+//                                                     take a SmallButton only (`takes`): another
+//                                                     element is not shown, an error in the
+//                                                     module's status says so. Each button at its
+//                                                     own width on the stack's right edge, at
+//                                                     most a third of the card wide (a longer
+//                                                     label is cut), in size "m" whatever it
+//                                                     asks for; any kind, with or without
+//                                                     confirm
+//                          A saved Wi-Fi network's card is a place only once its details are
+//                          read (until then Api.networks leaves it out: it could be a hotspot)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
 //                          (1.19): a module keeps to its own handle — another module is
 //                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose
@@ -324,7 +342,10 @@ import qs.singletons.network
 //                          clicked() — do it: the click, or with confirm the second one;
 //                          asked() — the first click of a button that asks. A danger button
 //                          without confirm acts on the first click. A button that asks
-//                          shows no `checked` and keeps its own width in a layout.
+//                          shows no `checked` and keeps its own width in a layout, or less
+//                          when given less (1.25: its label or question cut);
+//                          apiElement (1.25, read-only) "SmallButton" — the mark a place
+//                          that takes only a button reads.
 //                          `checked` shows only on a secondary button: a primary,
 //                          danger, warning or success one looks the same either way.
 //   Dropdown               (1.5) options ([{ value, label }]; other fields of an option
