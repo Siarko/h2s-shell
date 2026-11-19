@@ -98,28 +98,32 @@ Item {
             width: _page.width - 2 * Theme.settings.pageMargin
             spacing: 0
 
-            Heading {
-                text: "Wi-Fi"
+            // The heading, with the radio's switch on its right (the switch shows whether
+            // Wi-Fi is on), as the VPN page's heading holds its buttons
+            RowLayout {
+                Layout.fillWidth: true
                 Layout.bottomMargin: 8
+                spacing: 10
+                Heading {
+                    Layout.fillWidth: true
+                    text: "Wi-Fi"
+                }
+                PrivilegedMark {
+                    need: NetworkOverview.need("enable-disable-wifi")
+                }
+                ToggleSwitch {
+                    objectName: "wifiSwitch"
+                    checked: WifiManager.wifiEnabled
+                    enabled: NetworkOverview.need("enable-disable-wifi") !== "no"
+                    opacity: enabled ? 1 : 0.4
+                    onToggled: WifiManager.toggleWifi()
+                }
             }
 
             // A profile saved and reconnected, waiting for Keep (after leaving its editor)
             KeepSettingsBar {
                 Layout.fillWidth: true
                 Layout.bottomMargin: visible ? 10 : 0
-            }
-
-            SwitchRow {
-                label: "Wi-Fi"
-                hint: !WifiManager.wifiEnabled ? "Off"
-                    : WifiManager.hotspot ? "Hotspot on: " + WifiManager.hotspot.ssid
-                    : root._active
-                    ? "Connected to " + root._active.ssid
-                      + (NetworkOverview.wifiLink ? " · " + NetworkOverview.wifiLink.signal + " % · " + NetworkRules.speedText(NetworkOverview.wifiLink.rate) : "")
-                    : "Not connected"
-                need: NetworkOverview.need("enable-disable-wifi")
-                checked: WifiManager.wifiEnabled
-                onToggled: WifiManager.toggleWifi()
             }
 
             // The Wi-Fi device and its connection, as on the Overview
@@ -133,7 +137,6 @@ Item {
                 NetworkDeviceCard {
                     required property string modelData
                     Layout.fillWidth: true
-                    Layout.topMargin: 6
                     device: _devicesModel.byKey[modelData] ?? ({})
                 }
             }

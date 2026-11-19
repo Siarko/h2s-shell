@@ -1695,11 +1695,37 @@ TestCase {
         return entries.join(" · ");
     }
 
-    // The Wi-Fi page with every card closed: the heading, the Wi-Fi switch 8 under it, the
-    // saved networks' title 20 lower (the switch's 6 and the title's 14), each saved network's
-    // card 6 apart (the one in use, the one in range, the one out of range), the hotspots'
-    // title 20 under the last, the hotspot's card, the form for a hidden network 20 lower
-    readonly property var _wifiPageExpected: [["text Wi-Fi", 0, false], ["SwitchRow", 8, true], ["text Saved networks", 20, true],
+    // What is wrong with the Wi-Fi page's heading: the Wi-Fi switch on the heading's line, at
+    // its right edge (the column's), centred on it, showing whether Wi-Fi is on; no "Wi-Fi"
+    // switch row under it
+    function _wifiHeadingProblems(page) {
+        const column = _pageColumn(page);
+        const toggle = _shownItem(column, item => item.objectName === "wifiSwitch");
+        if (!toggle)
+            return ["no Wi-Fi switch"];
+        const line = toggle.parent;
+        const problems = [];
+        const point = toggle.mapToItem(column, 0, 0);
+        const linePoint = line.mapToItem(column, 0, 0);
+        if (Math.abs(point.x + toggle.width - column.width) > 0.01)
+            problems.push("the switch ends at " + (point.x + toggle.width) + ", not at the column's right edge (" + column.width + ")");
+        if (Math.abs(point.y - (linePoint.y + (line.height - toggle.height) / 2)) > 0.01)
+            problems.push("the switch at " + point.y + ", not centred on the heading's line");
+        if (!_textItem(line, "Wi-Fi"))
+            problems.push("the switch not on the heading's line");
+        if (toggle.checked !== WifiManager.wifiEnabled)
+            problems.push("the switch shows " + toggle.checked + ", Wi-Fi is " + WifiManager.wifiEnabled);
+        if (_shownItem(column, item => item.label === "Wi-Fi" && typeof item.toggled === "function"))
+            problems.push("a Wi-Fi switch row still shown");
+        return problems;
+    }
+
+    // The Wi-Fi page with every card closed: the heading's line across the page (the Wi-Fi
+    // switch on its right), the saved networks' title 22 lower (the heading's 8 and the
+    // title's 14), each saved network's card 6 apart (the one in use, the one in range, the one
+    // out of range), the hotspots' title 20 under the last, the hotspot's card, the form for a
+    // hidden network 20 lower
+    readonly property var _wifiPageExpected: [["text Wi-Fi", 0, true], ["text Saved networks", 22, true],
         ["card Home", 6, true], ["card Office", 6, true], ["card Cafe", 6, true], ["text Hotspots", 20, true], ["card Spot", 6, true],
         ["HiddenNetworkRow", 20, true]]
     // The Ethernet page: the heading, the wired device's card 8 under it, the wired profiles'
@@ -2748,6 +2774,7 @@ TestCase {
             assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "the Ethernet page: its parts where they always stood");
             assertEqual(_titleButtonProblems(_wifiPage, 2).join("; "), "", "the Wi-Fi page: Find networks and New hotspot at their title line's right edge, centred on it");
             assertEqual(_titleButtonProblems(_ethernetPage, 0).join("; "), "", "the Ethernet page: no title buttons");
+            assertEqual(_wifiHeadingProblems(_wifiPage).join("; "), "", "the Wi-Fi page: the switch at the heading's right edge, centred on it, no row under the heading");
             _wifiPage.loader.item._open = "anchors-home";
             _ethernetPage.loader.item._open = "anchors-wired";
         });
