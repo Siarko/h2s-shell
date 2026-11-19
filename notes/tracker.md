@@ -64,19 +64,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
-- **A module's icon and marks on closed cards** (U7a, U7b, the agent's looks): 6 px between a
-  card's name and the first mark, 4 px between marks; icons in the name's colour, also on an
-  active card; a module without an icon shows the first letter of its name, upper case,
-  muted. Marks are on saved Wi-Fi and wired cards only (as the plan's table) — VPN cards too?
-
-- **A module's buttons in a card** (U6): the region forces size `m` (a module's `size: "s"`
-  is overridden), reading the plan's "the size is m"; the alternative is `m` as the default
-  and the module's choice kept. A long label is cut at a third of the card's width.
-
-- **An opened network card with no page rows** (wired, hotspot) keeps 6 px of empty space at the
-  bottom, inherited from the old card and kept so the rebuilt card measures the same (U4b).
-  Remove it?
-
 - **A question in the confirm colour**: "Connect" on a network card and "Turn on" for a
   hotspot ask in dark green on the surface, hard to read. Keep, or another colour?
 - **The public pill's text** (before M10): small font at every size, as the shell's pills;
@@ -263,6 +250,15 @@ All by the owner, 2026-11-17.
   stays one line). Notifications with a progress bar are wanted: a module updates one
   notification's progress instead of sending new ones (the spec's `value` hint and
   replacement; the shell is the notification server). An API feature, planned.
+- A module's icon (2026-11-19): it is the module's face in the list that manages modules
+  (Settings → Modules), not something the shell puts on cards. A module that adds something
+  to a network shows it on that network's card itself, with its own element in a place the
+  card offers on its name line (closed and open); the shell only bounds its size.
+  `setMark` / `clearMark` (unreleased, 1.27) go.
+- A module's button in a card (2026-11-19): the module chooses its size; `m` is only the
+  default. The module's author keeps it consistent.
+- An opened card ends as far under its last line as its first line is under the top (the
+  6 px left by an empty page-rows column go).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
