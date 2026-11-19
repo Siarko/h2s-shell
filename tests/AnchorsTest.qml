@@ -1022,7 +1022,6 @@ TestCase {
     // The popup places live under `prefix` against the table: each of its rows live, and
     // every live path not in it among those named, not published
     readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
-                                               "settings.network_vpn.vpns.card.title",
                                                "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
                                                "settings.network_wifi.hotspots.card.actions", "settings.network_wifi.hotspots.card.title",
@@ -2581,7 +2580,7 @@ TestCase {
             const component = Qt.createComponent("FakeVpnProvider.qml");
             _ownVpn = component.createObject(suite, { providerId: "anchors-own", withExtras: true });
             _ownVpn.add("x", "Own");
-            Modules.host.load([fixtures + "/anchors-vpn-b", fixtures + "/anchors-vpn-a"], {});
+            Modules.host.load([fixtures + "/anchors-vpn-b", fixtures + "/anchors-vpn-a", fixtures + "/anchors-vpn-title"], {});
         });
         _then("the VPN fixtures loaded, their providers registered", () => _generalSettled() && Modules.host.mainObject("anchors-vpn-a") !== null
               && Modules.host.mainObject("anchors-vpn-b") !== null, () => {
@@ -2606,7 +2605,8 @@ TestCase {
         _then("the popup's VPN rows built, each provider module's under its own", () => {
             const rows = _vpnRows();
             return vpnIds.every(id => rows[id]) && _ready(rows["anchors-vpn-a:a1"].afterHost, 1) && _ready(rows["anchors-vpn-a:a2"].afterHost, 1)
-                && _ready(rows["anchors-vpn-b:b1"].afterHost, 1) && Object.keys(_vpnCards()).length === 5 && _vpnViewsSteady();
+                && _ready(rows["anchors-vpn-b:b1"].afterHost, 1) && Object.keys(_vpnCards()).length === 5
+                && vpnIds.every(id => _titleElements(_vpnCards()[id]).length === 1) && _vpnViewsSteady();
         }, () => {
             const rows = _vpnRows();
             assertEqual(vpnIds.map(id => _names(rows[id].afterHost) || "-").join(" "),
@@ -2642,6 +2642,17 @@ TestCase {
             assertEqual(_popupLiveProblems("settings.network_vpn").join("; "), "", "… its place in the table live, the rest named, not published");
             const cards = _vpnCards();
             assert(vpnIds.every(id => !cards[id].settingsRegion.prependHost.built), "closed cards: no element built in them");
+            // The name's line (1.29): any module's element on every VPN's card, whatever its
+            // provider; one with a width and no implicit width shown at that width
+            assertEqual(Modules.status("anchors-vpn-title")?.state + " " + Modules.status("anchors-vpn-title")?.errors.length, "loaded 0", "anchors-vpn-title: loaded, clean");
+            assertEqual(vpnIds.map(id => _titleNames(cards[id])).join(" "), Array(5).fill("anchors-vpn-title:Mark").join(" "),
+                        "the VPN cards' name line: the element on every card, NetworkManager's and every provider's");
+            assertEqual(vpnIds.map(id => _titleElements(cards[id])[0].item.context.vpnId + "|" + _titleElements(cards[id])[0].item.context.anchor).join(" "),
+                        vpnIds.map(id => id + "|settings.network_vpn.vpns.card.title").join(" "), "… each with its card's VPN, at the place's path");
+            assertEqual(vpnIds.map(id => Math.round(_titleElements(cards[id])[0].width) + "x" + Math.round(_titleElements(cards[id])[0].item.width)).join(" "),
+                        Array(5).fill("16x16").join(" "), "… an element with no implicit width at its own width (16)");
+            for (const id of vpnIds)
+                assertEqual(_titleProblems(cards[id]).join("; "), "", id + ": the element on the name's line, as tall as it, after the name, clear of the card's own parts");
             assertEqual(vpnIds.map(id => cards[id].scopeId).join(","), ",anchors-own,anchors-vpn-a,anchors-vpn-a,anchors-vpn-b", "each card's scope: its provider's id");
             assertEqual(_vpnLive("anchors-vpn-a") + " " + _vpnLive("anchors-vpn-b"),
                         "Row|popup.network.connections.vpn.row|anchors-vpn-a:a1:1,Row|popup.network.connections.vpn.row|anchors-vpn-a:a2:1 "

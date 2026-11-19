@@ -13,6 +13,16 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.29: a card's buttons (`….card.actions`) stand in one row on the card's name line, closed
+  and open: the card's main button, its own ("Settings…", "Edit" — was "Edit connection…"),
+  the modules' buttons, then "Forget" / "Delete"; they are built as long as the card is, not
+  only while it is open. Each 6 apart, centred on the line, at most a third of the card; the
+  card's own buttons keep their room, the name is cut first, the modules' buttons beyond the
+  room left are cut on the right. The VPN cards' name line is a place:
+  `settings.network_vpn.vpns.card.title` (`append`, any module's, whatever the VPN's provider;
+  context as the card's `settings`). An element with no `implicitWidth` (a
+  `Rectangle { width: 16 }`) is laid out at the width it has when it is made, instead of at
+  no width.
 - 1.28: a plain notification's body (`format: "plain"`) keeps its line breaks — CR and CRLF
   become one, at most 20 lines, the last kept one ending in "…"; the summary stays one line.
   A VPN provider's `failed(entryId, what, reason)` is sent as such a plain notification: a

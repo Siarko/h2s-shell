@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.28" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.29" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -124,8 +124,11 @@ import qs.singletons.network
 //                                                     is cut first; the modules' buttons beyond
 //                                                     the room left are cut on the right
 //                            settings.network_wifi.saved.card.title,
-//                            settings.network_ethernet.profiles.card.title (1.28)  the name's
-//                                                     line of the same cards, closed and open:
+//                            settings.network_ethernet.profiles.card.title (1.28),
+//                            settings.network_vpn.vpns.card.title (1.29)  the name's
+//                                                     line of the same cards, closed and open
+//                                                     (the VPN's: every VPN's card, whatever
+//                                                     its provider — not own-provider):
 //                                                     append, after the name; context as the
 //                                                     card's settings. For what a module adds
 //                                                     to that network (an exit node, a mark of
@@ -139,7 +142,11 @@ import qs.singletons.network
 //                                                     cut first: the elements keep their place,
 //                                                     right after the name, and never cover the
 //                                                     card's own parts. An element with
-//                                                     `visible: false` takes no room. A click
+//                                                     `visible: false` takes no room. (1.29)
+//                                                     An element with no implicitWidth (a
+//                                                     `Rectangle { width: 16 }`) is laid out at
+//                                                     the width it has when it is made; set
+//                                                     implicitWidth to change it later. A click
 //                                                     on an element that takes none opens or
 //                                                     closes the card, as on the name
 //                          A saved Wi-Fi network's card is a place only once its details are

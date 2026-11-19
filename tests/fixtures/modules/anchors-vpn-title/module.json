@@ -1,0 +1,10 @@
+{
+    "id": "anchors-vpn-title",
+    "name": "Anchors VPN title fixture",
+    "version": "1.0.0",
+    "api": "1.29",
+    "description": "An element with a width but no implicit width on the name's line of every VPN's card, whatever its provider (tests/AnchorsTest.qml)",
+    "anchors": [
+        { "at": "settings.network_vpn.vpns.card.title", "place": "append", "component": "Mark.qml" }
+    ]
+}

@@ -653,7 +653,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   them at most a quarter of the card (`titleMaxWidth`), cut on the right; the name's right
   padding keeps their room and its minimum width is that room, so the name is cut first and
   the elements never cover the card's own parts; the card measures the same with or without
-  them. A card made
+  them. An element with no implicit width is laid out at the width it had when it was made
+  (`ModuleContribution` reads it before giving the element its own width). A card made
   per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
   key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
   goes, and keeps them while other items come and go. A view's author writes only a block's
@@ -717,6 +718,7 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `settings.network_ethernet.profiles.card.actions` | `append` | as the wired profile's `settings` | the same wired profiles' cards' buttons, the same | 1.25 |
   | `settings.network_wifi.saved.card.title` | `append` | as the saved Wi-Fi network's `settings` | each saved Wi-Fi network's card, closed and open: its name's line, after the name — what a module adds to that network (any element, on theme tokens), as tall as the line, a quarter of the card at most for all | 1.28 |
   | `settings.network_ethernet.profiles.card.title` | `append` | as the wired profile's `settings` | each wired profile's card, the same | 1.28 |
+  | `settings.network_vpn.vpns.card.title` | `append` | as the VPN's row | each VPN's card, whatever its provider (not own-provider), the same | 1.29 |
 
   A module's icon (the manifest's `icon`) is its face in Settings → Modules; the shell puts
   it on no card. The marks of API 1.27 (`module.setMark`, `clearMark`, a card row's `marks`)

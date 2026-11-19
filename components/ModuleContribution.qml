@@ -57,8 +57,14 @@ Item {
     readonly property bool elementShown: ready && (!_loader.visible || _loader.item.visible)
 
     visible: ready
-    implicitWidth: elementShown ? _loader.item.implicitWidth : 0
+    // An element with no implicit width (a `Rectangle { width: 16 }`) takes the width it had
+    // when it was made, so it shows on a name line instead of standing at no width
+    implicitWidth: elementShown ? (_loader.item.implicitWidth > 0 ? _loader.item.implicitWidth : _ownWidth) : 0
     implicitHeight: elementShown ? _loader.item.implicitHeight : 0
+
+    // The element's own width, read as it is made, before it is given this wrapper's
+    property real _ownWidth: 0
+    property bool _measured: false
 
     property var _passedContext: null
     property var _passedProperties: ({})
@@ -94,6 +100,8 @@ Item {
 
     function _load() {
         _loadQueued = false;
+        _measured = false;
+        _ownWidth = 0;
         _loader.source = "";
         error = "";
         if (!_active)
@@ -116,7 +124,9 @@ Item {
         const initial = host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: context }));
         _loader.setSource(url, initial);
         // Made at once (the compiled file is cached, the Loader is synchronous): what it is
-        // is read here, before it is shown
+        // is read here, before it is shown — its own width too, before it is given one
+        _ownWidth = _loader.item ? _loader.item.width : 0;
+        _measured = true;
         _refuseWrongKind();
         _giveInherited(initial);
     }
@@ -186,9 +196,10 @@ Item {
         _passedProperties = wanted;
     }
 
+    // Its width given to the element itself, not through the Loader's: a Loader of a set width
+    // resizes its item as soon as it is made, and the element's own width is lost
     Loader {
         id: _loader
-        width: root.width
         onStatusChanged: {
             if (status === Loader.Error)
                 root._failed(root.url + ": could not be created");
@@ -196,5 +207,6 @@ Item {
                 Qt.callLater(root._refuseWrongKind);
         }
     }
+    Binding { target: _loader.item; property: "width"; value: root.width; when: root._measured && _loader.item !== null }
     Binding { target: _loader; property: "height"; value: root.height; when: root.givenHeight }
 }

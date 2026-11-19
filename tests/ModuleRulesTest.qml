@@ -837,14 +837,17 @@ TestCase {
                     + "settings.network_ethernet.profiles.card.settings region append panels/settings/NetworkEthernetSettings.qml; "
                     + "settings.network_wifi.saved.card.title region append panels/settings/NetworkWifiSettings.qml; "
                     + "settings.network_ethernet.profiles.card.title region append panels/settings/NetworkEthernetSettings.qml; "
+                    + "settings.network_vpn.vpns.card.title region append panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_vpn.vpns.card.actions region append panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_wifi.saved.card.actions region append panels/settings/NetworkWifiSettings.qml; "
                     + "settings.network_ethernet.profiles.card.actions region append panels/settings/NetworkEthernetSettings.qml",
                     "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards; "
-                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards; 1.28: their name's line)");
+                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards; 1.28: their name's line; 1.29: the VPN cards' name line)");
         assertEqual(rules.anchorTable.filter(entry => entry.path.endsWith(".card.title")).map(entry => entry.path + " " + entry.placements.join("/") + " " + entry.since).join(","),
-                    "settings.network_wifi.saved.card.title append 1.28,settings.network_ethernet.profiles.card.title append 1.28",
-                    "… the saved Wi-Fi networks' and wired profiles' name lines take elements, appended (1.28)");
+                    "settings.network_wifi.saved.card.title append 1.28,settings.network_ethernet.profiles.card.title append 1.28,settings.network_vpn.vpns.card.title append 1.29",
+                    "… the saved Wi-Fi networks' and wired profiles' name lines take elements, appended (1.28), and the VPN cards' (1.29)");
+        assertEqual(rules.anchorTable.find(entry => entry.path === "settings.network_vpn.vpns.card.title")?.scope, "",
+                    "… the VPN cards' name line any module's, whatever the VPN's provider");
         assert(rules.anchorTable.every(entry => !("marks" in entry)), "… no row names marks any more (1.27's marks removed before any release)");
         assertEqual(rules.anchorTable.filter(entry => entry.scope === "own-provider").map(entry => entry.path).join(","),
                     "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings,settings.network_vpn.vpns.card.actions",

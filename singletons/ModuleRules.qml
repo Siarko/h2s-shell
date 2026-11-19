@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.28"
+    readonly property string apiVersion: "1.29"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -181,6 +181,10 @@ Singleton {
           context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.28",
           where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: on its name's line, after the name",
           view: "panels/settings/NetworkEthernetSettings.qml" },
+        { path: "settings.network_vpn.vpns.card.title", kind: "region", placements: ["append"], takes: "",
+          context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "", since: "1.29",
+          where: "Settings → System → Network → VPN, each VPN's card, whatever its provider, closed and open: on its name's line, after the name",
+          view: "panels/settings/NetworkVpnSettings.qml" },
         { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.25",
           where: "Settings → System → Network → VPN, the card of each VPN of the module's provider, closed and open: in the row of buttons on its name's line, after the card's own (\"Settings…\", \"Edit\"), before \"Delete\"",
