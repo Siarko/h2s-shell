@@ -199,6 +199,13 @@ Item {
             Qt.callLater(root._retry);
         }
 
+        // Announced again while on screen: counting, it counts its time from full (a new
+        // count key); waiting its turn or staying, it is full already
+        function onToastRestartRequested(id) {
+            if (id === root._shownId && root._shownId >= 0)
+                root._generation++;
+        }
+
         function onHudQueueCleared() {
             countdown.stop();
             if (root.currentNotif !== null) {

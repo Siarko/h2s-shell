@@ -172,6 +172,41 @@ Singleton {
         return progress(hints).state === "running";
     }
 
+    // An announce count as the handle sends it in "x-qs-announce" (a whole number from 1,
+    // as text); anything else: 0, none
+    function announceCount(value): int {
+        if (typeof value !== "string" && typeof value !== "number")
+            return 0;
+        const count = Number(value);
+        return Number.isInteger(count) && count > 0 && count <= 2147483647 ? count : 0;
+    }
+
+    // Whether a notification's new hints announce it again (pure): its "x-qs-announce"
+    // count differs from the one seen before (`previous`, the hint's earlier value, absent
+    // for none). Only the shell's own sender is believed — a notification carrying this
+    // run's token (x-qs-progress-run, made per Notifier and never handed to a module or an
+    // app); an outside app's replacement never brings its toast back
+    function announced(previous, hints, currentRun): bool {
+        const run = hints?.["x-qs-progress-run"];
+        if (typeof run !== "string" || run === "" || run !== currentRun)
+            return false;
+        const count = announceCount(hints?.["x-qs-announce"]);
+        return count > 0 && count !== announceCount(previous);
+    }
+
+    // What an announce does to a notification's toast (pure): "restart" — it is on screen,
+    // its time starts again; "queue" — it is not, it waits for a slot like a new one;
+    // "none" — toasts off, no toast screen, the centre open, it is gone, or it waits
+    // already. `state`: { toastsOn, toastScreen, centreOpen, alive, shown, waiting }
+    function announceEffect(state): string {
+        if (state?.toastsOn !== true || typeof state.toastScreen !== "string" || state.toastScreen === ""
+                || state.centreOpen !== false || state.alive !== true)
+            return "none";
+        if (state.shown === true)
+            return "restart";
+        return state.waiting === true ? "none" : "queue";
+    }
+
     // ---- GVariant text for gdbus (security-relevant: read line by line) ----
     // A handle's notification is sent with `gdbus call … --method …Notify -- <arguments>`:
     // each argument one argv word in the GVariant text format, which gdbus parses. Text

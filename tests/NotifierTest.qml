@@ -195,6 +195,7 @@ TestCase {
                "resident: the action runs, no dismissal asked, the toast told to leave (" + JSON.stringify(resident) + ")");
 
         _toastTimes();
+        _announces();
         _progress();
     }
 
@@ -647,6 +648,108 @@ TestCase {
             return { list: list, first: list[0], last: list[2], close: () => {} };
         }, "one at a time, the 2nd freed while it waits (reads null): the 3rd shows after the 1st");
 
+        Config.globals = savedGlobals;
+        for (const object of made)
+            object.destroy();
+    }
+
+    // The shell's own sender announcing a notification again (x-qs-announce raised,
+    // Notifications.watchAnnounces): its toast comes back once through the queue, or on
+    // screen counts its time again; stand-in notifications, a slot on a stand-in toast screen
+    function _announces() {
+        const savedGlobals = Config.globals;
+        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
+        Notifications.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
+        const made = [];
+        let nextId = 9101;
+        const standIn = run => {
+            const hints = { value: 40 };
+            if (run !== undefined)
+                hints["x-qs-progress-run"] = run;
+            const standing = _standIn.createObject(suite, { id: nextId++, summary: "Job", hints: hints });
+            made.push(standing);
+            Notifications.watchAnnounces(standing);
+            return standing;
+        };
+        const replace = (notification, change) => {
+            notification.hints = Object.assign({}, notification.hints, change);
+        };
+        // Its own screen's name: slots of the suite's earlier parts, not freed yet, are on "test-screen"
+        const slot = _slot.createObject(suite, { screenModelData: { name: "announce-screen" } });
+        made.push(slot);
+        const countdown = slot.resources.find(resource => resource.property === "remaining");
+        // The toast leaves now, its slide out finished
+        const away = () => {
+            slot.dismiss();
+            slot.resources.find(resource => resource.property === "x" && resource.to === slot.screenWidth).complete();
+        };
+        const timesShown = id => Notifications.shownToasts.filter(shown => shown === id).length;
+        const quiet = message => assert(slot.currentNotif === null && Notifications.hudQueue.length === 0 && Notifications.shownToasts.length === 0,
+                                       message + " (" + Notifications.hudQueue.length + " waiting, " + Notifications.shownToasts.length + " shown)");
+
+        const job = standIn(Notifier.progressRun);
+        Notifications.enqueueHudNotification(job);
+        assert(slot.currentNotif === job && timesShown(job.id) === 1, "the job's toast shows");
+        away();
+        quiet("taken away: gone");
+
+        replace(job, { "x-qs-announce": "1" });
+        assert(slot.currentNotif === job && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0 && countdown.running,
+               "announced with its toast gone: it comes back, counting");
+        replace(job, { value: 50 });
+        assert(slot.currentNotif === job && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0,
+               "a plain update while shown: nothing more");
+        away();
+        replace(job, { value: 60 });
+        quiet("a plain update after it went: it does not come back (once)");
+
+        // On screen: its time starts again, no second toast
+        replace(job, { "x-qs-announce": "2" });
+        // As if it had counted half its time
+        countdown.pause();
+        slot.remaining = 0.5;
+        const before = slot.remaining;
+        replace(job, { "x-qs-announce": "3" });
+        assert(before === 0.5 && countdown.running && !countdown.paused && slot.remaining > 0.9
+               && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0,
+               "announced on screen: its time starts again, no second toast (" + before + " → " + slot.remaining + ")");
+
+        // Waiting its turn already: not queued twice
+        const other = standIn(Notifier.progressRun);
+        away();
+        Notifications.enqueueHudNotification(other);
+        Notifications.enqueueHudNotification(job);
+        assert(slot.currentNotif === other && Notifications.hudQueue.length === 1, "the job waits behind another toast");
+        replace(job, { "x-qs-announce": "4" });
+        assert(Notifications.hudQueue.length === 1 && timesShown(job.id) === 0, "announced while waiting: still once in the queue");
+        Notifications.clearHudQueue();
+        slot.resources.find(resource => resource.property === "x" && resource.to === slot.screenWidth).complete();
+        quiet("cleared");
+
+        // Toasts off, no toast screen, the centre open: nothing slides in
+        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": false }));
+        replace(job, { "x-qs-announce": "5" });
+        quiet("toasts off: an announce brings nothing");
+        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
+        Notifications.screensOverride = [];
+        replace(job, { "x-qs-announce": "6" });
+        Notifications.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
+        quiet("no toast screen: an announce brings nothing");
+        Notifications.setHudPanelOpen(true);
+        replace(job, { "x-qs-announce": "7" });
+        Notifications.setHudPanelOpen(false);
+        quiet("the centre open: an announce brings nothing");
+
+        // An outside app's replacement — plain, or even with the hint but not this run's token
+        const outside = standIn();
+        const otherRun = standIn("an-earlier-run");
+        replace(outside, { value: 70 });
+        outside.summary = "Replaced";
+        replace(outside, { "x-qs-announce": "1" });
+        replace(otherRun, { "x-qs-announce": "1" });
+        quiet("an outside app's replacement, or another run's announce: nothing, as before");
+
+        Notifications.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();

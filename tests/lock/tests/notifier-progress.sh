@@ -11,6 +11,8 @@
 # - ten updates in a burst: a few gdbus calls, the last value shown;
 # - an action pressed after an update reaches its callback once, the entry stays;
 # - done: the toast takes the user's time and goes, the entry stays, full;
+# - announced: a brief toast that went comes back once for the user's time; a plain
+#   update brings nothing;
 # - dismissed: onDismissed, the entry gone, a later update sends nothing;
 # - close(): gone, no onDismissed;
 # - a reload: the running notification of the run before is dismissed as an orphan, an
@@ -92,6 +94,24 @@ check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
 check "the entry stays in the centre" entry_is "$id" 'n is not None and n["progress"]["state"] == "done"'
 check "after done no update is taken" handle_is 'h["state"] == "done"'
 done_id=$id
+
+# An announce brings a toast back once; a plain update does not
+progress send '{"summary": "Announced", "progress": 10}' > /dev/null
+check_within 5 "a brief handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
+id=$(handle_field id)
+check_within 5 "brief: its toast counts the user's 2 s" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 2000}'
+check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
+progress update '{"progress": 40}' > /dev/null
+check_within 5 "a plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.4'
+check "… and brings no toast back" entry_is "$id" 'not n["toast"]["shown"]'
+progress update '{"progress": 50, "announce": true}' > /dev/null
+check_within 5 "an announced update brings the toast back" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 2000} and n["progress"]["value"] == 0.5'
+check_within 6 "… for the user's time, then it goes" entry_is "$id" 'not n["toast"]["shown"]'
+progress update '{"progress": 60}' > /dev/null
+check_within 5 "a later plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.6'
+check "… and brings nothing back (once)" entry_is "$id" 'not n["toast"]["shown"]'
+progress close > /dev/null
+check_within 5 "closed: the entry gone" entry_is "$id" 'n is None'
 
 # Dismissed by the user (as the centre dismisses it)
 progress send '{"summary": "Second", "progress": 10}' > /dev/null

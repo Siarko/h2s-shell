@@ -116,6 +116,32 @@ TestCase {
         assert(!rules.orphaned({ value: 40 }, "new") && !rules.orphaned({ value: 40, "x-qs-progress-run": "" }, "new")
                && !rules.orphaned({ "x-qs-progress-run": 3 }, "new") && !rules.orphaned(undefined, "new"),
                "no run token (an outside app's, or not a string): never an orphan");
+
+        // --- announced: a raised x-qs-announce on this run's own notification ---
+        const own = count => count === undefined ? { value: 40, "x-qs-progress-run": "now" }
+            : { value: 40, "x-qs-progress-run": "now", "x-qs-announce": count };
+        assert(rules.announced(undefined, own("1"), "now"), "announced: the first value (none before) announces");
+        assert(!rules.announced("1", own("1"), "now"), "announced: the same value again (a plain update) does not");
+        assert(rules.announced("1", own("2"), "now") && rules.announced("2", own(3), "now"), "announced: raised, as text or a number");
+        assert(!rules.announced(undefined, own(), "now") && !rules.announced("2", own(), "now"), "announced: absent does not");
+        assert(!rules.announced(undefined, own("0"), "now") && !rules.announced(undefined, own("x"), "now")
+               && !rules.announced(undefined, own("1.5"), "now") && !rules.announced(undefined, own(true), "now"),
+               "announced: not a whole number from 1: none");
+        assert(!rules.announced(undefined, { "x-qs-announce": "1" }, "now")
+               && !rules.announced(undefined, { "x-qs-announce": "1", "x-qs-progress-run": "old" }, "now")
+               && !rules.announced(undefined, { "x-qs-announce": "1", "x-qs-progress-run": "" }, "")
+               && !rules.announced(undefined, undefined, "now"),
+               "announced: without this run's token (an outside app, another run) never believed");
+
+        // --- announceEffect: what an announce does to the toast ---
+        const effect = change => rules.announceEffect(Object.assign({ toastsOn: true, toastScreen: "DP-1", centreOpen: false,
+            alive: true, shown: false, waiting: false }, change));
+        assertEqual(effect({}), "queue", "announceEffect: not on screen, not waiting: queued like a new one");
+        assertEqual(effect({ shown: true }), "restart", "announceEffect: on screen: its time starts again");
+        assertEqual(effect({ waiting: true }), "none", "announceEffect: waiting already: not queued twice");
+        assertEqual([effect({ toastsOn: false }), effect({ toastScreen: "" }), effect({ centreOpen: true }), effect({ alive: false }),
+                     effect({ shown: true, centreOpen: true }), rules.announceEffect(undefined)].join(" "), "none none none none none none",
+                    "announceEffect: toasts off, no toast screen, the centre open, gone: nothing");
     }
 
     // GVariant text for gdbus: every string a single-quoted literal of printable ASCII

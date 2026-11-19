@@ -15,7 +15,10 @@ Singleton {
         screen: Profiles.value("notifications.toastScreen") ?? "",
         fullscreen: Profiles.value("notifications.toastFullscreen") ?? "show",
         fullscreenScreen: Profiles.value("notifications.toastFullscreenScreen") ?? ""
-    }, Workspaces.screens)
+    }, screensOverride ?? Workspaces.screens)
+    // The screens a suite stands in for the compositor's (Workspaces.screens' shape), so a
+    // toast has a screen to go to there; null: the compositor's
+    property var screensOverride: null
     onToastScreenChanged: {
         if (toastScreen === "") {
             clearHudQueue();
@@ -107,6 +110,7 @@ Singleton {
             // comes, only new text
             notification.summaryChanged.connect(() => root._replaced(notification));
             notification.bodyChanged.connect(() => root._replaced(notification));
+            root.watchAnnounces(notification);
 
             // Closed while its toast waits (its sender closed it, or it was dismissed in the
             // centre): out of the queue, where it would be shown, and counted on the badge.
@@ -311,6 +315,39 @@ Singleton {
         toastShown(item.id, toastTiming(item));
         hudQueue = hudQueue.slice(0, index).concat(hudQueue.slice(index + 1));
         return item;
+    }
+
+    // A shown toast is asked to start its time again (an announce), by id
+    signal toastRestartRequested(int id)
+
+    // The shell's own sender announcing a notification again (a replacement raising its
+    // x-qs-announce, NotificationRules.announced) brings its toast back once, through the
+    // queue like a new one — or, on screen, starts its time again. Every other replacement
+    // leaves the toast as it is.
+    function watchAnnounces(notification) {
+        let seen = notification.hints?.["x-qs-announce"];
+        notification.hintsChanged.connect(() => {
+            const hints = notification.hints;
+            const announcedNow = NotificationRules.announced(seen, hints, Notifier.progressRun);
+            seen = hints?.["x-qs-announce"];
+            if (announcedNow)
+                root._announce(notification);
+        });
+    }
+
+    function _announce(notification) {
+        const effect = NotificationRules.announceEffect({
+            toastsOn: _toastsOn,
+            toastScreen: toastScreen,
+            centreOpen: hudPanelOpen,
+            alive: _waitingAlive(notification),
+            shown: shownToasts.includes(notification.id),
+            waiting: hudQueue.includes(notification)
+        });
+        if (effect === "restart")
+            toastRestartRequested(notification.id);
+        else if (effect === "queue")
+            enqueueHudNotification(notification);
     }
 
     function _waitingAlive(notification) {
