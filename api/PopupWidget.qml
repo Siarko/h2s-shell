@@ -7,7 +7,9 @@ import qs.components as Components
 //   PopupWidget { widgetType: "example"; property var module: null; BarText { text: "…" } }
 //
 // Pinned by name: `widgetType` (the manifest's widget type), `popup` (set by the bar),
-// `popupOpen` (whether its popup shows), `interactive` (false: the cell takes no input —
+// `popupOpen` (its popup shows, opened from this entry: not when another entry of the same
+// type opened it; an entry built in the place of the one that opened it, same type and
+// preset, takes it over), `interactive` (false: the cell takes no input —
 // its content has click targets of its own), and the signals `clicked`, `hover(status)`,
 // `scrolled(delta)`, `scrollNotch(direction)`, `middleClicked`. The bar needs the object
 // itself, so this is the internal widget (components/PopupWidget.qml), not a wrapper:

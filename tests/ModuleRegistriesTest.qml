@@ -116,11 +116,24 @@ TestCase {
             widget.popup = _popup;
             return widget;
         };
+        suite._widgetUrl = url;
         _widgetA = make("Alpha");
         _widgetB = make("Beta");
         assert(_widgetA !== null && _widgetB !== null, (type ?? "good") + "'s widget built twice (" + widgetComponent.errorString() + ")");
         assertEqual(_widgetA.preset + "," + _widgetB.preset, "Alpha,Beta", "… one per preset");
     }
+
+    // One more entry of the bar's widget type, as _makeBar builds them
+    function _remakeWidget(preset) {
+        const widgetComponent = Qt.createComponent(_widgetUrl, Component.PreferSynchronous);
+        const widget = widgetComponent.createObject(_barWindow.row, Modules.initialProperties(_widgetUrl, { preset: preset }));
+        widget.width = 100;
+        widget.height = 40;
+        widget.popup = _popup;
+        return widget;
+    }
+
+    property string _widgetUrl: ""
 
     function _dropBar() {
         _widgetA?.destroy();
@@ -391,6 +404,34 @@ TestCase {
         _then("closed after the cycles", _popupGone, () => {
             assertEqual(_cycles, 6, "six popups opened and closed");
             assertEqual(_goodState.panelsGone, _goodState.panelsBuilt, "… every panel built destroyed");
+            // The entry that opened the popup built again while it shows: the new one on the
+            // same preset takes it over
+            _widgetA.togglePopup(false);
+        });
+        _then("open from Alpha before its entry is built again", _panelShown, () => {
+            _widgetA.destroy();
+            suite._widgetA = _remakeWidget("Alpha");
+        });
+        _then("the rebuilt Alpha entry takes the popup over", () => _popup.openedBy === _widgetA, () => {
+            assert(_widgetA.popupOpen && !_widgetB.popupOpen, "popupOpen: the new entry on Alpha, not Beta");
+            assert(_popup.active && !_popup.closing, "… the popup still open");
+            _widgetA.togglePopup(false);
+        });
+        _then("a click on the rebuilt entry closes the popup", _popupGone, () => {
+            // Built again on another preset: none takes it over, and a click on any entry of
+            // the type closes it
+            _widgetB.togglePopup(false);
+        });
+        _then("open from Beta before its entry goes", _panelShown, () => {
+            _widgetB.destroy();
+            suite._widgetB = _remakeWidget("Gamma");
+        });
+        _then("the Beta entry gone", () => _popup.openedBy === null && _widgetB?.preset === "Gamma", () => {
+            assert(!_widgetA.popupOpen && !_widgetB.popupOpen, "no entry on its preset: none shows the popup as its own");
+            _widgetA.togglePopup(false);
+        });
+        _then("a click on another entry of the type closes it", _popupGone, () => {
+            assertEqual(_goodState.panelsGone, _goodState.panelsBuilt, "… closed, not switched: its panel destroyed");
             _widgetA.destroy();
             _widgetB.destroy();
             _popup.destroy();

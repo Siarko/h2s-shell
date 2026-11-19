@@ -757,7 +757,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   instead of running off the side unseen.
 - With two bar entries of one widget type, a click on the second while the first's popup is
   open switches the popup to it, as hovering does, instead of closing it; only the entry
-  that opened the popup shows as active.
+  that opened the popup shows as active. That entry built again while its popup shows (the
+  bar changed) still shows as active, and its click closes the popup.
 - A notification from a module that sends plain text keeps the line breaks of its
   body instead of running every line into one; empty lines at its start and end are dropped
   and a run of empty lines shows as one.

@@ -473,7 +473,10 @@ import qs.singletons.network
 // not a wrapper: the names below are pinned (tests/ApiElementsTest.qml), what else the
 // type has is not promised.
 //   PopupWidget            a bar widget that opens the popup its manifest names:
-//                          widgetType, popup (set by the bar), popupOpen, interactive;
+//                          widgetType, popup (set by the bar), popupOpen (its popup shows,
+//                          opened from this entry — not from another entry of the type; an
+//                          entry built in the place of the one that opened it, same type
+//                          and preset, takes it over), interactive;
 //                          clicked, hover(status), scrolled(delta), scrollNotch(direction),
 //                          middleClicked; its children are the cell's content. A widget that
 //                          declares `property string preset` is given its bar entry's preset

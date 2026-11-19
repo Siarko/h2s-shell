@@ -15,10 +15,35 @@ BarWidget {
     // A setting of the active shell profile, per widget type (writable for tests only)
     property string popupMode: Profiles.value("widgets." + widgetType + ".popupMode") ?? WidgetRegistry.defaultPopupMode
 
-    // Open from this entry: another entry of the same widget type showing it does not count
+    // Its popup shows, opened from this entry: another entry of the same widget type
+    // showing it does not count
     readonly property bool popupOpen: !!popup?.active && popup?.contentType === popupContent && popup?.openedBy === root
 
     active: popupOpen
+
+    // The popup shows this widget type's panel, opened by an entry that is gone (the bar
+    // built again while it showed)
+    function _openerGone() {
+        return !!popup?.active && popup.openedBy === null && popup.contentType === popupContent
+            && popup.contentData?.widgetType === widgetType;
+    }
+
+    // Such a popup is taken over by the entry built in that one's place — the first of the
+    // same type and preset: it shows as active and its click closes the popup
+    function _adoptPopup() {
+        if (_openerGone() && (popup.contentData?.preset ?? "") === _openerData().preset)
+            popup.openedBy = root;
+    }
+
+    onPopupChanged: _adoptPopup()
+    Component.onCompleted: _adoptPopup()
+
+    Connections {
+        target: root.popup
+        function onOpenedByChanged() {
+            root._adoptPopup();
+        }
+    }
 
     // What the popup is told of the widget that opened it (Popup.open's contentData; a
     // module's panel gets it as `opener`, API 1.15): its type and its bar entry's preset —
@@ -29,11 +54,13 @@ BarWidget {
 
     // Opened by click it stays until clicked again; opened by hover it closes when the
     // pointer leaves the popup. Opened by a tap it stays too, and a tap outside closes it
-    // (Popup, touchOpened). A click on another entry of the same type switches it there.
+    // (Popup, touchOpened). A click on another entry of the same type switches it there;
+    // when the entry that opened it is gone and none took its place, any entry of the type
+    // counts as the one that opened it, and closes it.
     function togglePopup(byTouch) {
         if (!popup)
             return;
-        if (PointerRules.popupClick(!!popup.active, popup.contentType === popupContent, popup.openedBy === root) === "close")
+        if (PointerRules.popupClick(!!popup.active, popup.contentType === popupContent, popup.openedBy === root || _openerGone()) === "close")
             popup.close();
         else
             popup.open(root, true, popupContent, _openerData(), byTouch);
