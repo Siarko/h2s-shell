@@ -97,6 +97,10 @@ TestCase {
         onDone: lines => suite._queried.push(lines)
     }
     property var _queried: []
+    property Io.LatestQuery latest: Io.LatestQuery {
+        onAnswered: (lines, result) => suite._latest.push({ lines: lines, ok: result.ok, code: result.code, stderr: result.stderr })
+    }
+    property var _latest: []
     property var _actions: []
 
     // name → { handle, result, answers, lines: [[line, stream]…], out: [chunk…], err: […] }
@@ -465,6 +469,31 @@ TestCase {
                         "… a program that cannot start is answered, with an error");
             assertEqual(JSON.stringify(_actions[3].lines), "[\"after\"]", "… and the queue goes on after it");
             assertEqual(JSON.stringify(_queried), "[[\"x\",\"y\"],[\"x\",\"y\"]]", "CommandQuery: its non-empty stdout lines; requests while it ran: one more run, not two");
+            _latestQuery();
+        });
+    }
+
+    // LatestQuery: a run something was asked during is not answered; the run after is, with
+    // whether it worked
+    function _latestQuery() {
+        latest.command = ["sh", "-c", "n=$(cat \"$1/count\" 2>/dev/null || echo 0); n=$((n + 1)); echo \"$n\" > \"$1/count\"; sleep 0.2; "
+                          + "echo \"run$n\"; if [ -e \"$1/fail\" ]; then echo 'Error: invalid field' >&2; exit 3; fi", "sh", _directory];
+        latest.request();
+        assert(latest.running, "LatestQuery: running after request()");
+        latest.request();
+        latest.request();
+        _then("LatestQuery answered", () => _latest.length >= 1 && !latest.running, () => {
+            assertEqual(JSON.stringify(_latest), JSON.stringify([{ lines: ["run2"], ok: true, code: 0, stderr: "" }]),
+                        "LatestQuery: requests while it ran — that run's answer dropped, one more run answered (its lines, ok)");
+            _start("failNext", bare, ["touch", _directory + "/fail"]);
+        });
+        _then("the next run set to fail", () => _answered("failNext"), () => {
+            latest.request();
+        });
+        _then("LatestQuery answered a failing run", () => _latest.length >= 2 && !latest.running, () => {
+            assertEqual(JSON.stringify(_latest[1]), JSON.stringify({ lines: ["run3"], ok: false, code: 3, stderr: "Error: invalid field" }),
+                        "LatestQuery: a run that fails — answered, not ok, with its stderr");
+            assertEqual(_latest.length, 2, "LatestQuery: one answer per run answered");
             _start("cleanup", bare, ["rm", "-rf", "--", _directory]);
         });
         _then("the scratch directory removed", () => _answered("cleanup"), () => {

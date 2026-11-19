@@ -669,14 +669,20 @@ once its details are read, so a hotspot never shows) with `Api.networksReady`;
 `Api.vpnsUp`, whose rows say what each VPN does with the traffic — `fullTunnel`, `setsDns`,
 `routes`, each `null` where it is not known, never `false` for "not read"; and
 `Api.localNetworks` (`{ device, kind, family, address, network }`: the global addresses of
-every device that is no VPN's) with `Api.localNetworksReady`, false while the reading has
+every device that is no VPN's, deprecated IPv6 privacy addresses left out by the flags `ip -j
+-6 address show` gives) with `Api.localNetworksReady`, false while the reading has
 not worked. All come from what the shell's network singletons read from NetworkManager
 (`NetworkProfiles`, `VpnManager.details`, `IpManager.devices`); the pure functions in
 `singletons/ModuleRules.qml` (`apiNetworks`, `apiNetworksReady`, `vpnRouting`,
-`apiVpnsUp`, `apiLocalNetworks`) decide. A NetworkManager WireGuard VPN's routing is its
-peers' allowed-ips with the profile's never-default; a plugin VPN's is what NetworkManager
-set up while it is up (a gateway or a `/0` route is a full tunnel); a provider's is what its
-entry reports (`components/VpnProvider.qml`). The VPN slots' context has the other VPNs up
+`apiVpnsUp`, `apiLocalNetworks`) decide. Those readings run through
+`singletons/io/LatestQuery.qml`, which says whether a run worked and drops the answer of a run
+something changed under. A NetworkManager WireGuard VPN's routing is its
+peers' allowed-ips with the profile's never-default, peer-routes and IPv6 method; a plugin
+VPN's is what NetworkManager set up, read while it is activated (a gateway, a `/0` route or
+the two halves of the addresses is a full tunnel); a provider's is what its
+entry reports (`components/VpnProvider.qml`). A field an older nmcli does not know
+(`wireguard.peer-routes`, `GENERAL.IP-IFACE`…) is asked again without when nmcli names it.
+The VPN slots' context has the other VPNs up
 as such rows too (`otherVpns`).
 
 Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`

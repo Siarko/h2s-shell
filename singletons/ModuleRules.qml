@@ -788,22 +788,34 @@ Singleton {
 
     // What a VPN does with the traffic → { fullTunnel, setsDns, routes }, each null where
     // it is not known — never false for "not read":
-    //   fullTunnel  it takes the default route (all traffic not bound for a closer network)
+    //   fullTunnel  true when it takes all traffic of IPv4 or of IPv6 (or both) that no more
+    //               specific route sends elsewhere — the default route of that family, or
+    //               "all" written as its two halves (0.0.0.0/1 and 128.0.0.0/1, ::/1 and
+    //               8000::/1); false when it takes that of neither; null when not known
     //   setsDns     it brings DNS servers of its own while up
-    //   routes      the networks it carries, canonical ("10.0.0.0/8", "0.0.0.0/0" for all)
+    //   routes      the networks it carries, canonical ("10.0.0.0/8", "0.0.0.0/0" for all);
+    //               null when not known, or when there are more than maxRoutes
     // A provider's VPN: the three its entry reported (NetworkRules.vpnProviderEntries).
-    // NetworkManager's, from its details (NetworkRules.vpnDetails): WireGuard by its peers'
-    // allowed-ips — a /0 of a family whose never-default is off is a full tunnel; a plugin
-    // VPN by what NetworkManager made of it while up — a gateway or a /0 route is a full
-    // tunnel, never-default on in both families is not. DNS servers and routes are known only
-    // from a reading made while it was up.
+    // NetworkManager's, from its details (NetworkRules.vpnDetails):
+    //   WireGuard by its profile: its peers' allowed-ips become its routes unless peer-routes
+    //   is off (then the routes are not known from the profile, and it is a full tunnel only
+    //   by what never-default rules out); the IPv6 ones do not count while IPv6 is disabled;
+    //   a /0 counts as all of its family unless never-default is on for that family (not
+    //   read: unknown), the two halves count whatever never-default says (they are no
+    //   default route). peer-routes not read (an nmcli older than the field): on, as
+    //   NetworkManager did before it had the setting.
+    //   A plugin VPN by what NetworkManager made of it while up — a gateway, a /0 route or
+    //   the two halves is a full tunnel, never-default on in both families is not.
+    // DNS servers, and a plugin VPN's routes, are known only from a reading made while it
+    // was "activated" (not while it was still activating).
     function vpnRouting(vpn, detail) {
+        const unknown = { fullTunnel: null, setsDns: null, routes: null };
         if (!isObject(vpn))
-            return { fullTunnel: null, setsDns: null, routes: null };
+            return unknown;
         if (vpn.type === "provider")
             return vpnRoutingFields({ fullTunnel: vpn.fullTunnel, setsDns: vpn.setsDns, routes: vpn.routes }).fields;
         if (!isObject(detail))
-            return { fullTunnel: null, setsDns: null, routes: null };
+            return unknown;
         const up = detail.up === true;
         const strings = value => Array.isArray(value) ? value.filter(item => typeof item === "string") : [];
         const setsDns = up ? strings(detail.dns).length > 0 : null;
@@ -811,31 +823,56 @@ Singleton {
         if (vpn.type === "wireguard") {
             if (!Array.isArray(detail.allowedIps))
                 return { fullTunnel: null, setsDns: setsDns, routes: null };
-            const routes = _networks(detail.allowedIps);
+            if (detail.peerRoutes === false) {
+                const neither = neverDefault(4) === true && (neverDefault(6) === true || detail.ipv6Disabled === true);
+                return { fullTunnel: neither ? false : null, setsDns: setsDns, routes: null };
+            }
+            const allowed = detail.ipv6Disabled === true
+                ? detail.allowedIps.filter(item => typeof item === "string" && AddressRules.parseCidr(item.trim())?.family !== 6)
+                : detail.allowedIps;
+            const routes = _networks(allowed);
+            if (routes === null)
+                return { fullTunnel: null, setsDns: setsDns, routes: null };
             let fullTunnel = false;
             for (const family of [4, 6]) {
-                if (!routes.some(route => AddressRules.parseCidr(route)?.family === family && AddressRules.parseCidr(route)?.bits === 0))
-                    continue;
-                if (neverDefault(family) === false) {
+                const takes = _takesAll(routes, family);
+                if (takes === "halves" || takes === "default" && neverDefault(family) === false) {
                     fullTunnel = true;
                     break;
                 }
-                if (neverDefault(family) !== true)
+                if (takes === "default" && neverDefault(family) !== true)
                     fullTunnel = null;
             }
             return { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes };
         }
         if (!up)
-            return { fullTunnel: null, setsDns: null, routes: null };
-        const routes = _networks(strings(detail.routes)).filter(route => !AddressRules.contains("fe80::/10", route));
+            return unknown;
+        const all = _networks(strings(detail.routes));
+        const routes = all === null ? null : all.filter(route => !AddressRules.contains("fe80::/10", route));
         const fullTunnel = neverDefault(4) === true && neverDefault(6) === true ? false
-            : strings(detail.gateways).length > 0 || routes.some(route => AddressRules.parseCidr(route)?.bits === 0);
+            : strings(detail.gateways).length > 0 ? true
+            : routes === null ? null
+            : _takesAll(routes, 4) !== "" || _takesAll(routes, 6) !== "";
         return { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes };
     }
 
+    // Whether canonical `routes` cover all of `family`: "default" (its /0), "halves" (its
+    // two /1), or ""
+    function _takesAll(routes, family) {
+        const all = family === 4 ? ["0.0.0.0/0", ["0.0.0.0/1", "128.0.0.0/1"]] : ["::/0", ["::/1", "8000::/1"]];
+        if (routes.includes(all[0]))
+            return "default";
+        return all[1].every(half => routes.includes(half)) ? "halves" : "";
+    }
+
+    // The most routes a VPN's row lists; with more, its routes are unknown (null), and the
+    // shell says so in its log (vpnRoutesProblems, a provider's in its problems)
+    readonly property int maxRoutes: 256
+
     // The three of vpnRouting as a provider (or a test) hands them, checked → { fields,
     // problems }: fullTunnel and setsDns true, false or null (absent: null); routes null or a
-    // list of networks, each written canonically, the wrong ones left out (at most 64)
+    // list of networks, each written canonically, the wrong ones left out — null when there
+    // are more than maxRoutes
     function vpnRoutingFields(given) {
         const source = isObject(given) ? given : {};
         const problems = [];
@@ -854,49 +891,100 @@ Singleton {
         let routes = null;
         if (Array.isArray(rawRoutes)) {
             routes = _networks(rawRoutes);
-            const wrong = rawRoutes.slice(0, 64).filter(route => typeof route !== "string" || AddressRules.parseCidr(route) === null);
-            if (wrong.length > 0)
-                problems.push("routes: not networks, left out: " + wrong.slice(0, 3).map(route => show(route)).join(", "));
+            if (routes === null) {
+                problems.push(routesProblem(rawRoutes));
+            } else {
+                const wrong = rawRoutes.filter(route => typeof route !== "string" || AddressRules.parseCidr(route.trim()) === null);
+                if (wrong.length > 0)
+                    problems.push("routes: not networks, left out: " + wrong.slice(0, 3).map(route => show(route)).join(", "));
+            }
         } else if (rawRoutes !== undefined && rawRoutes !== null) {
             problems.push("routes is not a list of networks or null");
         }
         return { fields: { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes }, problems: problems };
     }
 
-    // Networks as texts → the readable ones written canonically ("192.168.1.0/24"), each once,
-    // at most 64
-    function _networks(list) {
-        const networks = [];
-        for (const item of Array.isArray(list) ? list.slice(0, 256) : []) {
-            const cidr = typeof item === "string" ? AddressRules.parseCidr(item.trim()) : null;
-            if (cidr !== null && !networks.includes(cidr.network))
-                networks.push(cidr.network);
+    // Why a list of routes is not taken: more than maxRoutes networks in it
+    function routesProblem(list) {
+        return "routes: more than " + maxRoutes + " (" + (Array.isArray(list) ? list.length : 0) + " given) — not known";
+    }
+
+    // NetworkManager's VPNs whose routes are unknown for being too many (vpnRouting) →
+    // sentences for the log, one per VPN
+    function vpnRoutesProblems(vpns, details) {
+        const known = isObject(details) ? details : {};
+        const problems = [];
+        for (const vpn of Array.isArray(vpns) ? vpns : []) {
+            if (!isObject(vpn) || typeof vpn.uuid !== "string" || !has(known, vpn.uuid) || !isObject(known[vpn.uuid]))
+                continue;
+            const detail = known[vpn.uuid];
+            const list = vpn.type === "wireguard" ? detail.allowedIps : detail.up === true ? detail.routes : null;
+            if (Array.isArray(list) && _networks(list) === null)
+                problems.push(_plainLine(vpn.name, 80) + ": " + routesProblem(list));
         }
-        return networks.slice(0, 64);
+        return problems;
+    }
+
+    // Networks as texts → the readable ones written canonically ("192.168.1.0/24"), each once
+    // — or null when there are more than maxRoutes (the list is then not known whole)
+    function _networks(list) {
+        const source = Array.isArray(list) ? list : [];
+        if (source.length > maxRoutes * 16)
+            return null;
+        const networks = [];
+        for (const item of source) {
+            const cidr = typeof item === "string" ? AddressRules.parseCidr(item.trim()) : null;
+            if (cidr !== null && !networks.includes(cidr.network)) {
+                if (networks.length === maxRoutes)
+                    return null;
+                networks.push(cidr.network);
+            }
+        }
+        return networks;
     }
 
     // Api.localNetworks: the networks this computer is on, from NetworkManager's devices
-    // (Nmcli.devices: { device, type, ipv4 [], ipv6 [] }, addresses with their prefix) →
-    // [{ device, kind, family, address, network }] — `kind` "wifi", "ethernet", "bridge",
-    // "modem" or "other", `family` 4 or 6, `address` this computer's (canonical, no prefix),
-    // `network` the one it lies in ("192.168.1.0/24"). Only global addresses (not loopback,
-    // link-local, multicast or unspecified); not on a VPN's device: a loopback, tun,
-    // WireGuard, IP tunnel or VPN device, or one named in `vpnInterfaces` (the VPNs' and the
-    // providers' interfaces). Each device and address once, in the given order, at most 64.
-    function apiLocalNetworks(devices, vpnInterfaces) {
+    // (Nmcli.devices: { device, ipIface, type, ipv4 [], ipv6 [] }, addresses with their
+    // prefix) → [{ device, kind, family, address, network }] — `device` the interface the
+    // addresses are on (ipIface where known: a modem's wwan0, not its cdc-wdm0), `kind`
+    // "wifi", "ethernet", "bridge", "modem" or "other", `family` 4 or 6, `address` this
+    // computer's (canonical, no prefix), `network` the one it lies in ("192.168.1.0/24"; null
+    // for a host prefix, /32 or /128 — DHCPv6 hands out a /128, whose network the router
+    // announces apart). Only global addresses (not loopback, link-local, multicast or
+    // unspecified), and of IPv6 not a deprecated one (`ipv6Flags`,
+    // NetworkRules.ipv6AddressFlags: a privacy address already replaced — the current
+    // temporary one is kept; where the flags are not known, null, every address is kept).
+    // Not on a VPN's device: a loopback, tun, WireGuard, IP tunnel or VPN device, or one
+    // named in `vpnInterfaces` (the VPNs' and the providers' interfaces) — except a Wi-Fi or
+    // Ethernet device named there (an IPsec VPN reports the physical interface it runs on):
+    // that one stays, less the VPNs' own addresses (`vpnAddresses`, with or without prefix),
+    // which are left out wherever they show; a VPN that reports no addresses cannot be told
+    // apart there. Each device and address once, in the given order, at most 64.
+    function apiLocalNetworks(devices, vpnInterfaces, vpnAddresses, ipv6Flags) {
         const skipped = new Set((Array.isArray(vpnInterfaces) ? vpnInterfaces : []).filter(name => typeof name === "string" && name !== ""));
+        const vpnOwn = new Set((Array.isArray(vpnAddresses) ? vpnAddresses : [])
+            .map(address => typeof address === "string" ? AddressRules.parseCidr(address.trim().split("/")[0]) : null)
+            .filter(address => address !== null).map(address => address.address));
+        const flags = isObject(ipv6Flags) ? ipv6Flags : {};
         const rows = [];
         const seen = new Set();
         for (const device of Array.isArray(devices) ? devices : []) {
-            if (!isObject(device) || typeof device.device !== "string" || skipped.has(device.device))
+            if (!isObject(device) || typeof device.device !== "string")
                 continue;
             if (localNetworkSkippedTypes.includes(device.type))
+                continue;
+            const name = typeof device.ipIface === "string" && device.ipIface !== "" ? device.ipIface : device.device;
+            const physical = device.type === "wifi" || device.type === "ethernet";
+            if (!physical && (skipped.has(device.device) || skipped.has(name)))
                 continue;
             const kind = localNetworkKind(device.type);
             const addresses = (Array.isArray(device.ipv4) ? device.ipv4 : []).concat(Array.isArray(device.ipv6) ? device.ipv6 : []);
             for (const address of addresses) {
-                const row = localNetworkRow(device.device, kind, address);
-                if (row === null || seen.has(row.device + " " + row.address))
+                const row = localNetworkRow(name, kind, address);
+                if (row === null || seen.has(row.device + " " + row.address) || vpnOwn.has(row.address))
+                    continue;
+                const flag = row.family === 6 && has(flags, row.device + " " + row.address) ? flags[row.device + " " + row.address] : null;
+                if (isObject(flag) && flag.deprecated === true)
                     continue;
                 seen.add(row.device + " " + row.address);
                 rows.push(row);
@@ -916,7 +1004,7 @@ Singleton {
 
     // One row of Api.localNetworks — a device's name (1 to 15 printable characters, no "/" or
     // space), a kind of localNetworkKind's, and an address with its prefix ("192.168.1.23/24")
-    // that is global — or null
+    // that is global — or null. A host prefix (/32, /128) gives the address, `network` null
     function localNetworkRow(device, kind, address) {
         if (typeof device !== "string" || !/^[^\u0000- \u007f/]{1,15}$/.test(device) || typeof address !== "string")
             return null;
@@ -928,7 +1016,7 @@ Singleton {
         if (host === null || network === null || !_globalAddress(host))
             return null;
         return { device: device, kind: ["wifi", "ethernet", "bridge", "modem"].includes(kind) ? kind : "other",
-            family: network.family, address: host.address, network: network.network };
+            family: network.family, address: host.address, network: network.bits === (network.family === 4 ? 32 : 128) ? null : network.network };
     }
 
     // Not loopback, link-local, multicast, unspecified or broadcast: what `ip` calls scope
@@ -945,7 +1033,8 @@ Singleton {
     // checks: networks { id, name, kind ("wifi" | "ethernet"), active }, localNetworks
     // { device, kind, address: "<address>/<prefix>" } (family and network derived; one that
     // is not global left out), vpnsUp { name, type, provider, fullTunnel, setsDns, routes }.
-    // A wrong field or row is left out and named in `problems`.
+    // A wrong field or row is left out and named in `problems`; so are localNetworks given
+    // with localNetworksReady false, a state the shell never shows.
     function testNetworkFacts(given) {
         const source = isObject(given) ? given : {};
         const problems = [];
@@ -988,9 +1077,16 @@ Singleton {
             checked.problems.forEach(problem => problems.push("vpnsUp: " + problem));
             return vpnUpRow(row.name, row.type, row.type === "provider" ? row.provider : "", checked.fields);
         });
+        // As the shell has it: no local network listed while they are not read. Networks may
+        // be listed while networksReady is false — the shell lists the Ethernet ones while
+        // a Wi-Fi profile's details are still unread
+        const networksReady = flag("networksReady");
+        const localNetworksReady = flag("localNetworksReady");
+        if (!localNetworksReady && localNetworks.length > 0)
+            problems.push("localNetworks: left out, localNetworksReady is false (the shell lists none then)");
         return {
-            facts: { networksReady: flag("networksReady"), networks: networks, localNetworksReady: flag("localNetworksReady"),
-                localNetworks: localNetworks, vpnsUp: vpnsUp },
+            facts: { networksReady: networksReady, networks: networks, localNetworksReady: localNetworksReady,
+                localNetworks: localNetworksReady ? localNetworks : [], vpnsUp: vpnsUp },
             problems: problems
         };
     }

@@ -190,6 +190,8 @@ TestCase {
                    "devices: state number and words, speed in Mb/s");
             assertEqual(wired.mac, "34:5A:60:B5:AA:BE", "devices: a MAC keeps its colons");
             assertEqual(Nmcli.devices(["GENERAL.DEVICE:e", "WIRED-PROPERTIES.CARRIER:off"])[0].carrier, "off", "devices: the cable out");
+            assertEqual(JSON.stringify(Nmcli.devices(["GENERAL.DEVICE:cdc-wdm0", "GENERAL.TYPE:gsm", "GENERAL.IP-IFACE:wwan0", "GENERAL.DEVICE:e"])
+                                       .map(device => device.ipIface)), JSON.stringify(["wwan0", ""]), "devices: the interface the IP runs on; not read — \"\"");
             assertEqual(wired.carrier, "", "devices: the cable not known");
             assertEqual(wired.ipv6[0], "fe80::6f33:7072:7167:c19c/64", "devices: an IPv6 address keeps its colons");
             assert(wired.ipv4.length === 1 && wired.dns[0] === "192.168.1.1" && wired.domains[0] === "lan", "devices: addresses, DNS, domains");
@@ -407,7 +409,7 @@ TestCase {
             const routing = rules.vpnDetails([
                 { "connection.uuid": "w3", "wireguard.peers": "K1= allowed-ips=10.0.0.0/8;fd00::/8 endpoint=a.example:51820, K2= allowed-ips=0.0.0.0/0",
                   "ipv4.never-default": "no", "ipv6.never-default": "yes" },
-                { "connection.uuid": "o3", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn", "GENERAL.IP-IFACE": "tun0",
+                { "connection.uuid": "o3", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn", "GENERAL.STATE": "activated", "GENERAL.IP-IFACE": "tun0",
                   "IP4.GATEWAY": "10.8.0.1", "IP6.GATEWAY": "", "IP4.ROUTE": ["dst = 10.8.0.0/24, nh = 0.0.0.0, mt = 50", "dst = 0.0.0.0/0, nh = 10.8.0.1, mt = 50"],
                   "IP6.ROUTE": ["dst = fe80::/64, nh = ::, mt = 256"] },
                 { "connection.uuid": "o4", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn" }]);
@@ -418,6 +420,58 @@ TestCase {
                         JSON.stringify([["10.8.0.1"], ["10.8.0.0/24", "0.0.0.0/0", "fe80::/64"], true]), "vpn: while up, its gateways and its routes' destinations");
             assertEqual(JSON.stringify([routing["o4"].allowedIps, routing["o4"].neverDefault4, routing["o4"].gateways, routing["o4"].up]),
                         JSON.stringify([null, null, [], false]), "vpn: fields not read — unknown (null), not \"no\"");
+            // Up only when "activated": while activating, the active part is there but not whole
+            const activating = rules.vpnDetails([
+                { "connection.uuid": "o5", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn", "GENERAL.STATE": "activating",
+                  "GENERAL.IP-IFACE": "tun0", "IP4.ADDRESS": ["10.8.0.6/24"] }]);
+            assertEqual(JSON.stringify([activating["o5"].up, activating["o5"].iface]), JSON.stringify([false, "tun0"]),
+                        "vpn: GENERAL.STATE activating — not up (its DNS, gateways and routes not all set yet)");
+            const wireguardSettings = rules.vpnDetails([
+                { "connection.uuid": "w4", "wireguard.peers": "K1= allowed-ips=0.0.0.0/0", "wireguard.peer-routes": "no", "ipv6.method": "disabled" },
+                { "connection.uuid": "w5", "wireguard.peers": "K1= allowed-ips=0.0.0.0/0", "wireguard.peer-routes": "yes", "ipv6.method": "auto" },
+                { "connection.uuid": "w6", "wireguard.peers": "" }]);
+            assertEqual(JSON.stringify(["w4", "w5", "w6"].map(uuid => [wireguardSettings[uuid].peerRoutes, wireguardSettings[uuid].ipv6Disabled])),
+                        JSON.stringify([[false, true], [true, false], [null, null]]), "vpn: peer-routes and whether IPv6 is disabled; not read — null");
+            // The fields asked, less those an older nmcli refused (only the optional ones)
+            const detailFields = rules.vpnDetailFields([]);
+            assert(["wireguard.peers", "wireguard.peer-routes", "ipv6.method", "GENERAL.STATE", "IP4.ROUTE"].every(field => detailFields.includes(field)),
+                   "vpn: the details' fields: peers, peer-routes, IPv6 method, state, routes");
+            assert(!rules.vpnDetailFields(["wireguard.peer-routes"]).includes("wireguard.peer-routes")
+                   && rules.vpnDetailFields(["wireguard.peer-routes"]).includes("wireguard.peers"), "vpn: a refused field left out, the rest asked");
+            assertEqual(rules.vpnDetailFields(["connection.uuid", "GENERAL.STATE"]).length, detailFields.length, "vpn: a field it needs is never left out");
+            assert(rules.deviceAddressFields([]).includes("GENERAL.IP-IFACE") && !rules.deviceAddressFields(["GENERAL.IP-IFACE"]).includes("GENERAL.IP-IFACE")
+                   && rules.deviceAddressFields(["GENERAL.DEVICE"]).includes("GENERAL.DEVICE"), "devices' addresses: GENERAL.IP-IFACE optional, the rest not");
+            // A refused field only when nmcli says so: an empty answer turns nothing off
+            assertEqual(rules.rejectedField("Error: invalid field 'wireguard.peers'; allowed fields: connection,ipv4 and GENERAL,IP4, or profile,active."),
+                        "wireguard.peers", "rejectedField: the field nmcli names");
+            assertEqual(JSON.stringify(["", "Error: unknown connection 'u1'.", null, "Error: invalid field ''"].map(text => rules.rejectedField(text))),
+                        JSON.stringify(["", "", "", ""]), "rejectedField: an empty answer or another error — none");
+            // What a reading came to
+            assertEqual(rules.readProblem({ ok: true, code: 0, stderr: "", truncated: false }, "nmcli"), "", "readProblem: it worked — none");
+            assertEqual(JSON.stringify([
+                rules.readProblem({ ok: false, code: 8, stderr: "Error: NetworkManager is not running.\nmore" }, "nmcli"),
+                rules.readProblem({ ok: false, code: -1, failedToStart: true }, "nmcli"),
+                rules.readProblem({ ok: false, timedOut: true }, "ip"),
+                rules.readProblem({ ok: true, code: 0, truncated: true }, "nmcli"),
+                rules.readProblem(null, "nmcli")]),
+                JSON.stringify(["nmcli failed (8): Error: NetworkManager is not running.", "nmcli could not be started", "ip did not answer",
+                                "too much output from nmcli", "nmcli gave no answer"]),
+                "readProblem: a failure, not started, no answer, cut short, nothing — each a failure, in a few words");
+            // The IPv6 addresses' flags (ip -j -6 address show)
+            const ipFlags = rules.ipv6AddressFlags(JSON.stringify([
+                { ifindex: 2, ifname: "wlan0", addr_info: [
+                    { family: "inet6", local: "2001:DB8:0:1::aaaa", prefixlen: 64, scope: "global", temporary: true, dynamic: true, preferred_life_time: 3000 },
+                    { family: "inet6", local: "2001:db8:0:1::bbbb", prefixlen: 64, scope: "global", temporary: true, dynamic: true, deprecated: true, preferred_life_time: 0 },
+                    { family: "inet6", local: "2001:db8:0:1::cccc", prefixlen: 64, scope: "global", temporary: true, preferred_life_time: 0 },
+                    { family: "inet6", local: "2001:db8:0:1::1", prefixlen: 64, scope: "global", mngtmpaddr: true },
+                    { family: "inet", local: "192.168.1.5", prefixlen: 24 }, null, { family: "inet6", local: "nonsense" }] },
+                { ifname: 5 }, null]));
+            assertEqual(JSON.stringify(ipFlags), JSON.stringify({
+                "wlan0 2001:db8:0:1::aaaa": { temporary: true, deprecated: false }, "wlan0 2001:db8:0:1::bbbb": { temporary: true, deprecated: true },
+                "wlan0 2001:db8:0:1::cccc": { temporary: true, deprecated: true }, "wlan0 2001:db8:0:1::1": { temporary: false, deprecated: false } }),
+                "ipv6AddressFlags: temporary, deprecated (the flag, or no preferred lifetime left); addresses canonical; the rest skipped");
+            assert(rules.ipv6AddressFlags("") === null && rules.ipv6AddressFlags("{}") === null && rules.ipv6AddressFlags("[") === null,
+                   "ipv6AddressFlags: not ip's JSON list — null (not known)");
             assert(rules.importTypeOf("/x/home.conf", plugins) === "wireguard" && rules.importTypeOf("/x/a.OVPN", plugins) === "openvpn"
                    && rules.importTypeOf("/x/cisco.pcf", plugins) === "vpnc" && rules.importTypeOf("/x/a.pcf", []) === ""
                    && rules.importTypeOf("/x/a.ovpn", []) === "", "vpn: import kind by the file's ending, only with its plugin");

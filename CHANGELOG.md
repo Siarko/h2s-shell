@@ -14,14 +14,17 @@ section to the new version and date.
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.16: network facts — `Api.networksReady` (the profiles and every Wi-Fi profile's details
-  read; a failed reading leaves it false), `Api.networks` lists a Wi-Fi network only once
-  its details are read (a hotspot no longer shows for a moment), `Api.vpnsUp` rows gain
-  `fullTunnel`, `setsDns` and `routes` (each `null` where not known, never `false` for "not
-  read"; a `VpnProvider` entry may report them), `Api.localNetworks` (frozen `{ device,
-  kind, family, address, network }`: global addresses only, none on a VPN's, tun,
-  WireGuard or provider device) with `Api.localNetworksReady`, and the VPN slots' context
-  `otherVpns` (the other VPNs up as `Api.vpnsUp` rows) beside `otherVpnsUp`. In module test
-  mode they are `ModuleTestKit.setNetworks`' facts, nothing of NetworkManager read.
+  read; a failed reading of either leaves it false), `Api.networks` lists a Wi-Fi network only
+  once its details are read (a hotspot no longer shows for a moment), `Api.vpnsUp` rows gain
+  `fullTunnel` (all traffic of IPv4 or IPv6, its default route or the two halves), `setsDns`
+  and `routes` (each `null` where not known, never `false` for "not read": while a VPN is
+  still activating, WireGuard with peer-routes off, more than 256 routes; a `VpnProvider`
+  entry may report them), `Api.localNetworks` (frozen `{ device, kind, family, address,
+  network }`: global addresses only, no deprecated IPv6 privacy address, `network` null for a
+  /32 or /128, none on a VPN's, tun, WireGuard or provider device but a Wi-Fi or Ethernet one
+  an IPsec VPN runs on, less its addresses) with `Api.localNetworksReady`, and the VPN slots'
+  context `otherVpns` (the other VPNs up as `Api.vpnsUp` rows) beside `otherVpnsUp`. In module
+  test mode they are `ModuleTestKit.setNetworks`' facts, nothing of NetworkManager read.
 - 1.15: a module's shared object and what its popup panel is given — `module.main` (the
   object made from the manifest's `main` while the module is active, set before its
   widgets, popups and pages are built, null while it is off, a new object when it is turned

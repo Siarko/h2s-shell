@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Io
 import qs.api
 import qs.singletons
+import qs.singletons.network
 
 // The module system's rules (singletons/ModuleRules.qml and the four Module…Rules files
 // beside it): the manifest, API compatibility, namespaces, the import check, search-path
@@ -808,7 +809,8 @@ TestCase {
         // VPNs: NetworkManager's from their details (NetworkRules.vpnDetails' shape)
         const wireguard = { uuid: "u-wg", name: "wg-home", type: "wireguard", state: "activated" };
         const plugin = { uuid: "u-ovpn", name: "Work", type: "vpn", state: "activated" };
-        const detail = fields => Object.assign({ dns: [], neverDefault4: false, neverDefault6: false, allowedIps: null, gateways: [], routes: [], up: true }, fields);
+        const detail = fields => Object.assign({ dns: [], neverDefault4: false, neverDefault6: false, ipv6Disabled: false, allowedIps: null, peerRoutes: true,
+                                                 gateways: [], routes: [], up: true }, fields);
         const routing = (vpn, fields) => JSON.stringify(rules.vpnRouting(vpn, fields === null ? null : detail(fields)));
         const known = (fullTunnel, setsDns, routes) => JSON.stringify({ fullTunnel: fullTunnel, setsDns: setsDns, routes: routes });
         assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/0", "::/0"], dns: ["10.35.53.1"] }), known(true, true, ["0.0.0.0/0", "::/0"]),
@@ -828,6 +830,31 @@ TestCase {
         assertEqual(routing(plugin, { gateways: ["10.9.0.1"], neverDefault4: true, neverDefault6: true }), known(false, false, []),
                     "… never-default on in both families — not a full tunnel");
         assertEqual(routing(plugin, { up: false }), known(null, null, null), "… not read while up — nothing known");
+        // Read while it was still activating (NetworkRules.vpnDetails: up only when "activated")
+        const activating = NetworkRules.vpnDetails([{ "connection.uuid": "u-ovpn", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn",
+                                                      "GENERAL.STATE": "activating", "GENERAL.IP-IFACE": "tun0", "ipv4.never-default": "no", "ipv6.never-default": "no" }]);
+        assertEqual(JSON.stringify(rules.vpnRouting(plugin, activating["u-ovpn"])), known(null, null, null),
+                    "… a plugin VPN read while activating (no DNS, gateway or route yet) — unknown, not a split tunnel without DNS");
+        const wireguardActivating = NetworkRules.vpnDetails([{ "connection.uuid": "u-wg", "wireguard.peers": "K= allowed-ips=10.8.0.0/24",
+                                                               "GENERAL.STATE": "activating", "GENERAL.IP-IFACE": "wg0", "ipv4.never-default": "no", "ipv6.never-default": "no" }]);
+        assertEqual(JSON.stringify(rules.vpnRouting(wireguard, wireguardActivating["u-wg"])), known(false, null, ["10.8.0.0/24"]),
+                    "… WireGuard read while activating: its routes from the profile, its DNS unknown");
+        // WireGuard: peer-routes, IPv6 disabled, all traffic as two halves
+        assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/0"], peerRoutes: false }), known(null, false, null),
+                    "… peer-routes off — its routes and whether it takes all unknown");
+        assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/0"], peerRoutes: false, neverDefault4: true, neverDefault6: true }), known(false, false, null),
+                    "… peer-routes off, never-default on in both families — not a full tunnel, routes unknown");
+        assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/0"], peerRoutes: null }), known(true, false, ["0.0.0.0/0"]),
+                    "… peer-routes not read (an older nmcli) — on, as NetworkManager had it before the setting");
+        assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/1", "128.0.0.0/1"], neverDefault4: true }), known(true, false, ["0.0.0.0/1", "128.0.0.0/1"]),
+                    "… all IPv4 as its two halves — a full tunnel, never-default or not (they are no default route)");
+        assertEqual(routing(wireguard, { allowedIps: ["::/1", "8000::/1", "10.0.0.0/8"] }), known(true, false, ["::/1", "8000::/1", "10.0.0.0/8"]),
+                    "… all IPv6 as its two halves — a full tunnel");
+        assertEqual(routing(wireguard, { allowedIps: ["0.0.0.0/1"] }), known(false, false, ["0.0.0.0/1"]), "… one half alone — not");
+        assertEqual(routing(wireguard, { allowedIps: ["10.0.0.0/8", "::/0"], ipv6Disabled: true }), known(false, false, ["10.0.0.0/8"]),
+                    "… ::/0 with IPv6 disabled — not carried, not a full tunnel");
+        assertEqual(routing(plugin, { routes: ["0.0.0.0/1", "128.0.0.0/1"] }), known(true, false, ["0.0.0.0/1", "128.0.0.0/1"]),
+                    "… a plugin VPN's two halves — a full tunnel");
         assertEqual(routing(plugin, null), known(null, null, null), "… no details — nothing known");
         assertEqual(JSON.stringify(rules.vpnRouting(null, null)), known(null, null, null), "… no VPN — nothing known");
         // A provider's: what its entry reported, checked
@@ -838,7 +865,19 @@ TestCase {
         const fields = rules.vpnRoutingFields({ fullTunnel: true, routes: ["10.0.0.1/8", 5, "x", "10.0.0.0/8"] });
         assertEqual(JSON.stringify(fields.fields), known(true, null, ["10.0.0.0/8"]), "vpnRoutingFields: routes canonical and once; absent null");
         assertEqual(fields.problems.length, 1, "… the wrong routes named once: " + fields.problems.join("; "));
-        assertEqual(rules.vpnRoutingFields({ routes: Array.from({ length: 100 }, (unused, i) => "10." + i + ".0.0/16") }).fields.routes.length, 64, "… at most 64 routes");
+        const manyRoutes = count => Array.from({ length: count }, (unused, i) => "10." + (i >> 8) + "." + (i & 255) + ".0/24");
+        assertEqual(rules.vpnRoutingFields({ routes: manyRoutes(rules.maxRoutes) }).fields.routes.length, rules.maxRoutes, "… up to maxRoutes routes kept");
+        const tooMany = rules.vpnRoutingFields({ routes: manyRoutes(rules.maxRoutes + 1) });
+        assertEqual(JSON.stringify([tooMany.fields.routes, tooMany.problems.length]), "[null,1]", "… more — routes unknown (null), never cut, and said: " + tooMany.problems.join("; "));
+        assertEqual(rules.vpnRoutingFields({ routes: manyRoutes(rules.maxRoutes).concat(manyRoutes(rules.maxRoutes)) }).fields.routes.length, rules.maxRoutes,
+                    "… repeated ones count once");
+        assertEqual(routing(wireguard, { allowedIps: manyRoutes(rules.maxRoutes + 1) }), known(null, false, null), "vpnRouting: more WireGuard routes than that — unknown");
+        assertEqual(routing(plugin, { routes: manyRoutes(rules.maxRoutes + 1) }), known(null, false, null), "… a plugin VPN's too");
+        assertEqual(routing(plugin, { routes: manyRoutes(rules.maxRoutes + 1), gateways: ["10.9.0.1"] }), known(true, false, null), "… a gateway still a full tunnel");
+        const routesProblems = rules.vpnRoutesProblems([wireguard, plugin, { uuid: "u-small", name: "Small", type: "vpn" }],
+                                                       { "u-wg": detail({ allowedIps: manyRoutes(300) }), "u-ovpn": detail({ routes: manyRoutes(300) }),
+                                                         "u-small": detail({ routes: ["10.0.0.0/8"] }) });
+        assertEqual(routesProblems.length, 2, "vpnRoutesProblems: one sentence per VPN with too many routes: " + routesProblems.join("; "));
         for (const bad of [null, undefined, 3, "x", []])
             assertEqual(JSON.stringify(rules.vpnRoutingFields(bad).fields), known(null, null, null), "… garbage — unknown: " + JSON.stringify(bad));
         // apiVpnsUp with the details
@@ -875,7 +914,7 @@ TestCase {
             device("tailscale0", "tun", ["100.101.102.103/32"], ["fd7a:115c:a1e0::1/128"]),
             device("wg0", "wireguard", ["10.8.0.2/24"]),
             device("tun0", "unknown", ["10.9.0.6/24"]),
-            device("ts1", "ethernet", ["100.64.0.9/10"]),
+            device("ts1", "dummy", ["100.64.0.9/10"]),
             device("gre1", "ip-tunnel", ["10.99.0.1/30"]),
             device("p2p-dev-wlan0", "wifi-p2p", ["192.168.49.1/24"]),
             device("bad/name", "ethernet", ["192.168.7.1/24"]),
@@ -892,6 +931,29 @@ TestCase {
         assertEqual(rules.apiLocalNetworks(Array.from({ length: 100 }, (unused, i) => device("eth" + i, "ethernet", ["10." + i + ".0.1/24"])), null).length, 64,
                     "… at most 64");
         assertEqual(rules.localNetworkRow("eth0", "weird", "10.0.0.1/8").kind, "other", "localNetworkRow: a kind it does not know — other");
+        assertEqual(JSON.stringify([rules.localNetworkRow("eth0", "ethernet", "2001:db8::5/128"), rules.localNetworkRow("eth0", "ethernet", "203.0.113.7/32")]),
+                    JSON.stringify([local("eth0", "ethernet", 6, "2001:db8::5", null), local("eth0", "ethernet", 4, "203.0.113.7", null)]),
+                    "localNetworkRow: a host prefix (/128 from DHCPv6, /32) — the address, no network");
+        // An IPsec VPN reports the physical interface it runs on: the device stays, less its address
+        const ipsec = rules.apiLocalNetworks([device("wlan0", "wifi", ["192.168.1.5/24", "10.10.10.2/32"]), device("tun0", "tun", ["10.9.0.6/24"])],
+                                             ["wlan0", "tun0"], ["10.10.10.2/32"], null);
+        assertEqual(JSON.stringify(ipsec.map(row => row.device + " " + row.address)), JSON.stringify(["wlan0 192.168.1.5"]),
+                    "apiLocalNetworks: a Wi-Fi device a VPN runs on — kept, less the VPN's own address");
+        assertEqual(rules.apiLocalNetworks([device("br0", "bridge", ["192.168.1.5/24"])], ["br0"], [], null).length, 0, "… a bridge named as a VPN's — left out");
+        assertEqual(rules.apiLocalNetworks([device("enp1s0", "ethernet", ["192.168.1.5/24", "10.10.10.2/24"])], [], ["10.10.10.2"], null).length, 1,
+                    "… a VPN's address left out wherever it shows (written without prefix too)");
+        // A modem: its IP interface, not its control device
+        assertEqual(JSON.stringify(rules.apiLocalNetworks([Object.assign(device("cdc-wdm0", "gsm", ["100.70.1.2/30"]), { ipIface: "wwan0" })], ["cdc-wdm0"], [], null)),
+                    JSON.stringify([]), "… a device named as a VPN's by its device name — left out with its IP interface");
+        assertEqual(JSON.stringify(rules.apiLocalNetworks([Object.assign(device("cdc-wdm0", "gsm", ["100.70.1.2/30"]), { ipIface: "wwan0" })], [], [], null)),
+                    JSON.stringify([local("wwan0", "modem", 4, "100.70.1.2", "100.70.1.0/30")]), "… a modem by the interface its IP runs on");
+        // IPv6 privacy addresses: the deprecated ones left out by their flags
+        const privacy = device("wlan0", "wifi", [], ["2001:db8:0:1::1/64", "2001:db8:0:1::aaaa/64", "2001:db8:0:1::bbbb/64"]);
+        const privacyFlags = { "wlan0 2001:db8:0:1::1": { temporary: false, deprecated: false }, "wlan0 2001:db8:0:1::aaaa": { temporary: true, deprecated: false },
+                               "wlan0 2001:db8:0:1::bbbb": { temporary: true, deprecated: true } };
+        assertEqual(JSON.stringify(rules.apiLocalNetworks([privacy], [], [], privacyFlags).map(row => row.address)),
+                    JSON.stringify(["2001:db8:0:1::1", "2001:db8:0:1::aaaa"]), "… IPv6: the stable and the current temporary address, not a deprecated one");
+        assertEqual(rules.apiLocalNetworks([privacy], [], [], null).length, 3, "… flags not known — every address kept");
 
         // The test kit's facts
         const defaults = rules.testNetworkFacts(null);
@@ -904,14 +966,18 @@ TestCase {
                     "[true,1,1,0]", "… wrong fields and rows left out");
         assertEqual(given.problems.length, 6, "… each named: " + given.problems.join("; "));
         assertEqual(rules.testNetworkFacts("x").problems.length, 1, "… not an object: named");
+        const notRead = rules.testNetworkFacts({ localNetworksReady: false, localNetworks: [{ device: "eth0", kind: "ethernet", address: "10.0.0.1/8" }],
+                                                 networksReady: false, networks: [{ id: "u", kind: "ethernet" }] });
+        assertEqual(JSON.stringify([notRead.facts.localNetworks, notRead.problems.length, notRead.facts.networks.length]), "[[],1,1]",
+                    "… local networks while not read — left out and named, as the shell lists none then; networks may show (Ethernet before the Wi-Fi details)");
 
-        // What Api hands out
-        const frozen = rules.frozenRows(JSON.stringify([{ routes: ["10.0.0.0/8"] }]));
-        assert(Object.isFrozen(frozen[0].routes), "frozenRows: the lists inside an entry frozen too");
-        assert(typeof Api.networksReady === "boolean" && typeof Api.localNetworksReady === "boolean", "Api.networksReady, Api.localNetworksReady: booleans");
-        assert(Array.isArray(Api.localNetworks) && Object.isFrozen(Api.localNetworks)
-               && Api.localNetworks.every(row => Object.isFrozen(row) && (row.family === 4 || row.family === 6)), "Api.localNetworks: frozen rows of the shape");
-        assert(Api.vpnsUp.every(vpn => "fullTunnel" in vpn && "setsDns" in vpn && "routes" in vpn), "Api.vpnsUp: rows with the routing fields");
+        // What Api hands out (pure: Api itself, outside module test mode, reads the real
+        // NetworkProfiles, VpnManager and IpManager — created by the first suite that
+        // touches Api, here _version's Api.version, and VpnManager by VpnProvidersTest)
+        const frozen = rules.frozenRows(JSON.stringify([{ name: "x", routes: ["10.0.0.0/8"] }]));
+        assert(Object.isFrozen(frozen) && Object.isFrozen(frozen[0]) && Object.isFrozen(frozen[0].routes), "frozenRows: the list, its entries and the lists inside frozen");
+        const upRow = rules.vpnUpRow("wg", "wireguard", "", { fullTunnel: true, setsDns: null, routes: ["0.0.0.0/0"] });
+        assertEqual(JSON.stringify(Object.keys(upRow)), JSON.stringify(["name", "type", "provider", "fullTunnel", "setsDns", "routes"]), "vpnUpRow: the routing fields in every row");
     }
 
     // M2: the API version's home, presetDefaults, the slot table, the registries' merges, the

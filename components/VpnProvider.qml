@@ -62,7 +62,8 @@ import qs.singletons.network
 //                           up. Absent or wrong is null — unknown, never "false"
 //                 routes    optional list of networks or null (1.16): what it carries
 //                           ("100.64.0.0/10", "0.0.0.0/0" for all); written canonically, a
-//                           wrong one left out and logged. These three are Api.vpnsUp's for
+//                           wrong one left out and logged; more than 256 networks: null
+//                           (unknown), logged. These three are Api.vpnsUp's for
 //                           the entry while it is up, and the other VPNs' `otherVpns`
 //               A provider keeps reporting its entry in EVERY state — logged out, stopped,
 //               daemon unreadable: the entry with `attention` — never an empty list for

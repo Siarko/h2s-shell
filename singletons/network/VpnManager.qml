@@ -74,9 +74,11 @@ Singleton {
         }
     }
 
-    // nmcli before wireguard.peers existed refuses the field, and the whole query with it:
-    // asked again without it
-    property bool _withPeers: true
+    // The fields an older nmcli refused (NetworkRules.vpnDetailFields): a refused field fails
+    // the whole query, so it is asked again without it — only when nmcli names the field,
+    // never on an empty answer (which may be a VPN going away under the query)
+    property var _rejectedFields: []
+    property string _detailsProblem: ""
 
     function _readDetails() {
         if (nmVpns.length === 0) {
@@ -84,27 +86,40 @@ Singleton {
             detailsRead = NetworkProfiles.listRead;
             return;
         }
-        const fields = ["connection.uuid", "connection.interface-name", "vpn.service-type", "vpn.data"].concat(_withPeers ? ["wireguard.peers"] : [])
-            .concat(["ipv4.never-default", "ipv6.never-default", "GENERAL.IP-IFACE", "IP4.ADDRESS", "IP6.ADDRESS", "IP4.DNS", "IP6.DNS",
-                "IP4.GATEWAY", "IP6.GATEWAY", "IP4.ROUTE", "IP6.ROUTE"]);
-        const command = ["nmcli", "-t", "-f", fields.join(","), "connection", "show"];
+        const command = ["nmcli", "-t", "-f", NetworkRules.vpnDetailFields(_rejectedFields).join(","), "connection", "show"];
         for (const vpn of nmVpns)
             command.push("uuid", vpn.uuid);
         _details.command = command;
         _details.request();
     }
 
-    CommandQuery {
+    // A run asked for while one is going on drops that one's answer (LatestQuery): a VPN's
+    // state changed meanwhile, and what it read may be from before
+    LatestQuery {
         id: _details
-        onDone: lines => {
-            if (lines.length === 0 && root.nmVpns.length > 0 && root._withPeers) {
-                root._withPeers = false;
+        onAnswered: (lines, result) => {
+            const problem = NetworkRules.readProblem(result, "nmcli");
+            const refused = problem === "" ? "" : NetworkRules.rejectedField(result.stderr);
+            if (refused !== "" && NetworkRules.vpnDetailOptionalFields.includes(refused) && !root._rejectedFields.includes(refused)) {
+                console.warn("VpnManager: this nmcli does not know " + refused + ": the VPNs' details are read without it");
+                root._rejectedFields = root._rejectedFields.concat([refused]);
                 root._readDetails();
                 return;
             }
+            if (problem !== root._detailsProblem)
+                console.warn("VpnManager: the VPNs' details " + (problem === "" ? "are read again" : "could not be read: " + problem));
+            root._detailsProblem = problem;
             root.nmDetails = NetworkRules.vpnDetails(Nmcli.records(lines, "connection.uuid"));
             root.detailsRead = true;
         }
+    }
+
+    // Lists of routes longer than ModuleRules.maxRoutes make a VPN's routes unknown in
+    // Api.vpnsUp: said once, when that changes
+    readonly property string _routesProblem: ModuleRules.vpnRoutesProblems(nmVpns, nmDetails).join("; ")
+    on_RoutesProblemChanged: {
+        if (_routesProblem !== "")
+            console.warn("VpnManager: " + _routesProblem);
     }
 
     // The interfaces NetworkManager's VPN profiles are set to: what the kill switch lets
@@ -116,6 +131,10 @@ Singleton {
     // Every interface that is a VPN's: those set in the profiles and named by providers, and
     // those the VPNs run on now — what Api.localNetworks leaves out
     readonly property var vpnInterfaces: Array.from(new Set(interfaceNames.concat(vpns.map(vpn => interfaceOf(vpn)).filter(name => name !== ""))))
+    // The addresses the VPNs up now hold (their details'): left out of Api.localNetworks
+    // where a VPN runs on a physical device (IPsec puts its address on the Wi-Fi's or the
+    // Ethernet's interface)
+    readonly property var vpnAddresses: [].concat(...activeVpns.map(vpn => details[vpn.uuid]?.addresses ?? [])).filter(address => typeof address === "string")
 
     // The interface a VPN runs on while up: its tunnel's (a plugin VPN's profile names the
     // link under it; a provider's `detail.iface`), else its profile's device (WireGuard's own)

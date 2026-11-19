@@ -14,8 +14,14 @@ Singleton {
 
     // [{ uuid, name, type, kind, device, autoconnect, priority, lastUsed, active, port, state }]
     property var profiles: []
-    // The list read at least once — empty, too (no NetworkManager profile at all)
+    // The list read at least once — empty, too (no NetworkManager profile at all); a failed
+    // reading counts too, with `profiles` empty, so the views do not wait for ever
     property bool listRead: false
+    // The last reading of the list worked: false while not read and after a failure (no
+    // nmcli, NetworkManager not running) — the empty list is then unknown, never "none"
+    // (Api.networksReady)
+    property bool listOk: false
+    property string _listProblem: ""
     // { uuid: { ssid, security, hidden, mode, band } } for the Wi-Fi profiles
     // (Nmcli.wifiDetails); mode "ap" is a hotspot
     property var wifi: ({})
@@ -54,12 +60,19 @@ Singleton {
         _list.request();
     }
 
-    CommandQuery {
+    // A request while it runs drops that run's answer and runs again (LatestQuery): the
+    // list kept is from after the last change reported
+    LatestQuery {
         id: _list
         command: ["nmcli", "-t", "-f", "UUID,NAME,TYPE,DEVICE,AUTOCONNECT,AUTOCONNECT-PRIORITY,TIMESTAMP,ACTIVE,SLAVE,STATE", "connection", "show"]
-        onDone: lines => {
+        onAnswered: (lines, result) => {
+            const problem = NetworkRules.readProblem(result, "nmcli");
+            if (problem !== root._listProblem)
+                console.warn("NetworkProfiles: the profiles " + (problem === "" ? "are read again" : "could not be read: " + problem));
+            root._listProblem = problem;
             root.profiles = Nmcli.profiles(lines);
             root._awaitingList = false;
+            root.listOk = problem === "";
             root.listRead = true;
             const wifi = root.profiles.filter(profile => profile.kind === "wifi");
             if (wifi.length === 0) {

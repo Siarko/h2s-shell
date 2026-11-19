@@ -488,13 +488,90 @@ Singleton {
         return names[name] ?? (name || "VPN");
     }
 
-    // The VPN profiles' details from `nmcli -t -f connection.uuid,vpn.service-type,vpn.data,
-    // wireguard.peers,ipv4.never-default,ipv6.never-default,GENERAL.IP-IFACE,IP4.ADDRESS,
-    // IP6.ADDRESS,IP4.DNS,IP6.DNS,IP4.GATEWAY,IP6.GATEWAY,IP4.ROUTE,IP6.ROUTE connection show
-    // uuid A uuid B…` blocks (Nmcli.records): { uuid: { service ("" for WireGuard), server
-    // (host, or host:port; "" unknown), iface, addresses [], dns [], neverDefault4,
-    // neverDefault6, allowedIps [] (null: the peers not read), gateways [], routes [], up } } —
-    // iface, addresses, dns, gateways and routes only while it is up. A plugin's server is in vpn.data ("remote = host:1194, …" for
+    // What a reading by LatestQuery (or CommandRunner) came to: "" when it worked, else why
+    // not, in a few words for the log. Output cut short is a failure: the rest is unknown
+    function readProblem(result, program) {
+        const name = String(program ?? "the command");
+        if (result === null || typeof result !== "object")
+            return name + " gave no answer";
+        if (result.ok === true && result.truncated !== true)
+            return "";
+        if (result.failedToStart === true)
+            return name + " could not be started";
+        if (result.timedOut === true)
+            return name + " did not answer";
+        if (result.truncated === true)
+            return "too much output from " + name;
+        const first = String(result.stderr ?? "").trim().split("\n")[0].replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
+        return name + " failed (" + result.code + ")" + (first !== "" ? ": " + first : "");
+    }
+
+    // The field nmcli refused in `-f` ("Error: invalid field 'wireguard.peer-routes'; allowed
+    // fields: …"), or "" when its stderr says no such thing — an empty answer or another
+    // error is not a refused field
+    function rejectedField(stderr) {
+        return /invalid field '([A-Za-z0-9_.-]{1,80})'/.exec(String(stderr ?? ""))?.[1] ?? "";
+    }
+
+    // The fields VpnManager asks of its VPN profiles (vpnDetails reads them), less the ones
+    // in `rejected` that an older nmcli may not know (vpnDetailOptionalFields): such a field
+    // refused fails the whole query, so it is asked again without it
+    readonly property var vpnDetailOptionalFields: ["wireguard.peers", "wireguard.peer-routes", "ipv6.method"]
+    function vpnDetailFields(rejected) {
+        const dropped = (Array.isArray(rejected) ? rejected : []).filter(field => vpnDetailOptionalFields.includes(field));
+        return ["connection.uuid", "connection.interface-name", "vpn.service-type", "vpn.data", "wireguard.peers", "wireguard.peer-routes",
+                "ipv4.never-default", "ipv6.never-default", "ipv6.method", "GENERAL.STATE", "GENERAL.IP-IFACE", "IP4.ADDRESS", "IP6.ADDRESS",
+                "IP4.DNS", "IP6.DNS", "IP4.GATEWAY", "IP6.GATEWAY", "IP4.ROUTE", "IP6.ROUTE"].filter(field => !dropped.includes(field));
+    }
+
+    // The fields IpManager asks of every device for Api.localNetworks, the same way:
+    // GENERAL.IP-IFACE (a modem's IP runs on another interface than its device) may be
+    // refused by an old nmcli, and is asked again without
+    readonly property var deviceAddressOptionalFields: ["GENERAL.IP-IFACE"]
+    function deviceAddressFields(rejected) {
+        const dropped = (Array.isArray(rejected) ? rejected : []).filter(field => deviceAddressOptionalFields.includes(field));
+        return ["GENERAL.DEVICE", "GENERAL.TYPE", "GENERAL.IP-IFACE", "IP4.ADDRESS", "IP6.ADDRESS"].filter(field => !dropped.includes(field));
+    }
+
+    // The IPv6 addresses' flags from `ip -j -6 address show` → { "<interface> <address>":
+    // { temporary, deprecated } } (the address canonical), or null when the text is not
+    // that JSON. Deprecated: the kernel's flag, or no preferred lifetime left — a privacy
+    // address replaced by a newer one, kept only for the connections still using it
+    function ipv6AddressFlags(text) {
+        let links = null;
+        try {
+            links = JSON.parse(String(text ?? ""));
+        } catch (error) {
+            return null;
+        }
+        if (!Array.isArray(links))
+            return null;
+        const flags = {};
+        for (const link of links) {
+            if (link === null || typeof link !== "object" || typeof link.ifname !== "string" || !Array.isArray(link.addr_info))
+                continue;
+            for (const info of link.addr_info) {
+                if (info === null || typeof info !== "object" || info.family !== "inet6" || typeof info.local !== "string")
+                    continue;
+                const address = AddressRules.parseCidr(info.local);
+                if (address === null)
+                    continue;
+                flags[link.ifname + " " + address.address] = {
+                    temporary: info.temporary === true,
+                    deprecated: info.deprecated === true || info.preferred_life_time === 0
+                };
+            }
+        }
+        return flags;
+    }
+
+    // The VPN profiles' details from `nmcli -t -f <vpnDetailFields> connection show uuid A
+    // uuid B…` blocks (Nmcli.records): { uuid: { service ("" for WireGuard), server (host,
+    // or host:port; "" unknown), iface, addresses [], dns [], neverDefault4, neverDefault6,
+    // ipv6Disabled, allowedIps [] (null: the peers not read), peerRoutes, gateways [],
+    // routes [], up } } — iface, addresses, dns, gateways and routes only while it is
+    // active. `up` only when NetworkManager says "activated": while it is still activating
+    // the DNS servers, gateways and routes are not all set yet. A plugin's server is in vpn.data ("remote = host:1194, …" for
     // OpenVPN, "gateway = …" for most), WireGuard's in its first peer's endpoint. `iface` is
     // the tunnel's own (tun0): a plugin VPN's profile names the link under it as its device.
     function vpnDetails(blocks) {
@@ -536,14 +613,17 @@ Singleton {
                 addresses: list("IP4.ADDRESS").concat(list("IP6.ADDRESS")), dns: list("IP4.DNS").concat(list("IP6.DNS")),
                 // What decides whether it takes all traffic, which networks it carries and
                 // whether it brings DNS servers (ModuleRules.vpnRouting): the profile's
-                // never-default per family, WireGuard's peers' allowed-ips, and while up its
-                // gateways and routes. `up` the block came with the active part (GENERAL.*):
-                // the last ones were read
+                // never-default per family, whether IPv6 is off, WireGuard's peers'
+                // allowed-ips and whether they become routes (peerRoutes; null: not read),
+                // and while up its gateways and routes. `up` NetworkManager says the
+                // connection is "activated": the last ones were read whole
                 neverDefault4: flag("ipv4.never-default"), neverDefault6: flag("ipv6.never-default"),
+                ipv6Disabled: block["ipv6.method"] === "disabled" ? true : typeof block["ipv6.method"] === "string" && block["ipv6.method"] !== "" ? false : null,
                 allowedIps: Object.prototype.hasOwnProperty.call(block, "wireguard.peers") ? allowedIps : null,
+                peerRoutes: flag("wireguard.peer-routes"),
                 gateways: [block["IP4.GATEWAY"] ?? "", block["IP6.GATEWAY"] ?? ""].filter(gateway => gateway !== "" && gateway !== "--"),
                 routes: destinations("IP4.ROUTE").concat(destinations("IP6.ROUTE")),
-                up: Object.prototype.hasOwnProperty.call(block, "GENERAL.IP-IFACE")
+                up: block["GENERAL.STATE"] === "activated"
             };
         }
         return details;

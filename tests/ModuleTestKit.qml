@@ -41,7 +41,8 @@ import qs.api
 //                          (both read, no network, no VPN) — each call from the defaults; null:
 //                          the defaults. Rows go through the shell's own checks. → the
 //                          problems, frozen ([] when everything was taken): a wrong field or
-//                          row is left out. Nothing of the real NetworkManager is read in test
+//                          row is left out, and so are localNetworks rows with
+//                          localNetworksReady false (the shell lists none then). Nothing of the real NetworkManager is read in test
 //                          mode. Reset before each suite
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)

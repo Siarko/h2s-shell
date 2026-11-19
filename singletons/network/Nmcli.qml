@@ -191,6 +191,9 @@ Singleton {
             const list4 = key => Array.isArray(block[key]) ? block[key] : (block[key] ? [block[key]] : []);
             list.push({
                 device: block["GENERAL.DEVICE"] ?? "",
+                // The interface its IP runs on, when asked for and other than the device (a
+                // modem's wwan0 under cdc-wdm0, PPPoE's ppp0); "" not known
+                ipIface: block["GENERAL.IP-IFACE"] ?? "",
                 type: block["GENERAL.TYPE"] ?? "",
                 kind: kindOf(block["GENERAL.TYPE"] ?? ""),
                 mac: block["GENERAL.HWADDR"] ?? "",

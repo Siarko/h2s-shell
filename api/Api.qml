@@ -154,32 +154,51 @@ import qs.singletons.network
 //                          (1.16) A Wi-Fi network only once its details are read (until
 //                          then it could be a hotspot)
 //   Api.networksReady      (1.16) the profiles and the Wi-Fi details of every Wi-Fi profile
-//                          have been read: an empty Api.networks then means none. A reading
-//                          that failed leaves it false
+//                          have been read: an empty Api.networks then means none. False while
+//                          not, and when the last reading of either failed (no nmcli,
+//                          NetworkManager not running) — Api.networks is then not known
+//                          whole, never "no network". While false Api.networks may still
+//                          list some (the Ethernet ones before the Wi-Fi details are read)
 //   Api.vpnsUp             (1.3) the VPNs up now, frozen: [{ name, type ("wireguard", "vpn"…
 //                          or "provider"), provider (a provider's providerId, else "") }];
 //                          a new array only when something in it changed. (1.16) Each row
 //                          also says what the VPN does with the traffic, null where that is
 //                          not known (never false for "not read"):
-//                            fullTunnel  true | false | null — it takes the default route
+//                            fullTunnel  true | false | null — true: it takes all traffic of
+//                                        IPv4 or of IPv6 (or both) that no more specific
+//                                        route sends elsewhere (that family's default route,
+//                                        or "all" as its two halves, 0.0.0.0/1 + 128.0.0.0/1,
+//                                        ::/1 + 8000::/1); false: of neither family
 //                            setsDns     true | false | null — it brings DNS servers of its
-//                                        own while up
+//                                        own while up; null until read while it is fully up
 //                            routes      [networks] | null — what it carries, canonical
-//                                        ("10.0.0.0/8"; "0.0.0.0/0", "::/0" for all), frozen
-//                          NetworkManager's WireGuard: its peers' allowed-ips, a /0 a full
-//                          tunnel unless never-default is on for that family; a plugin VPN:
-//                          what NetworkManager set up while it is up (a gateway or a /0 route
-//                          is a full tunnel). A provider's VPN: what its entry reports
-//                          (VpnProvider, below), null where it reports nothing
+//                                        ("10.0.0.0/8"; "0.0.0.0/0", "::/0" for all), frozen;
+//                                        null when not known, and when there would be more
+//                                        than 256 (the shell logs that)
+//                          NetworkManager's WireGuard: from its profile — its peers'
+//                          allowed-ips (not the IPv6 ones while its IPv6 is disabled), a /0
+//                          all of its family unless never-default is on for it; with
+//                          peer-routes off the routes are null and fullTunnel null unless
+//                          never-default rules it out. A plugin VPN: what NetworkManager set
+//                          up, read while it is "activated" (a gateway, a /0 or the two
+//                          halves is a full tunnel); all three null while it is still
+//                          activating. A provider's VPN: what its entry reports (VpnProvider,
+//                          below), null where it reports nothing
 //   Api.localNetworks      (1.16) the networks this computer is on, frozen: [{ device (the
-//                          interface), kind ("wifi" | "ethernet" | "bridge" | "modem" |
+//                          interface the address is on — a modem's wwan0, not its control
+//                          device), kind ("wifi" | "ethernet" | "bridge" | "modem" |
 //                          "other"), family (4 | 6), address (this computer's, canonical, no
-//                          prefix), network (the one it lies in, "192.168.1.0/24") }] —
-//                          global addresses only (no loopback, link-local or multicast), none
-//                          on a VPN's device (loopback, tun, WireGuard, an IP tunnel, an
-//                          interface of NetworkManager's VPNs or a provider's); from
-//                          NetworkManager's devices, read again when the networks change; at
-//                          most 64. A new array only when something in it changed
+//                          prefix), network (the one it lies in, "192.168.1.0/24"; null for a
+//                          /32 or /128 address, whose network is not said with it — DHCPv6's) }]
+//                          — global addresses only (no loopback, link-local or multicast), of
+//                          IPv6 no deprecated privacy address (the current one stays; when
+//                          `ip` cannot tell the flags, every address stays); none on a VPN's
+//                          device (loopback, tun, WireGuard, an IP tunnel, an interface of
+//                          NetworkManager's VPNs or a provider's), except a Wi-Fi or Ethernet
+//                          device a VPN runs on (IPsec), which stays less the VPNs' own
+//                          addresses; from NetworkManager's devices, read again when the
+//                          networks change; at most 64. A new array only when something in
+//                          it changed
 //   Api.localNetworksReady (1.16) the devices' addresses were read; false (and
 //                          Api.localNetworks empty) while not, and when the last reading
 //                          failed — unknown, never "no network"
@@ -607,7 +626,7 @@ Singleton {
         : NetworkProfiles.listRead ? JSON.stringify(ModuleRules.apiNetworks(NetworkProfiles.profiles, NetworkProfiles.wifi)) : "[]"
     readonly property var networks: ModuleRules.frozenRows(_networksText)
     readonly property bool networksReady: testMode ? _testNetworkFacts.networksReady
-        : ModuleRules.apiNetworksReady(NetworkProfiles.listRead, NetworkProfiles.profiles, NetworkProfiles.wifi)
+        : ModuleRules.apiNetworksReady(NetworkProfiles.listRead && NetworkProfiles.listOk, NetworkProfiles.profiles, NetworkProfiles.wifi)
 
     readonly property string _vpnsUpText: testMode ? JSON.stringify(_testNetworkFacts.vpnsUp)
         : JSON.stringify(ModuleRules.apiVpnsUp(VpnManager.activeVpns, VpnManager.details))
@@ -615,7 +634,8 @@ Singleton {
 
     readonly property bool localNetworksReady: testMode ? _testNetworkFacts.localNetworksReady : IpManager.devicesRead
     readonly property string _localNetworksText: testMode ? JSON.stringify(_testNetworkFacts.localNetworks)
-        : IpManager.devicesRead ? JSON.stringify(ModuleRules.apiLocalNetworks(IpManager.devices, VpnManager.vpnInterfaces)) : "[]"
+        : IpManager.devicesRead ? JSON.stringify(ModuleRules.apiLocalNetworks(IpManager.devices, VpnManager.vpnInterfaces,
+                                                                                  VpnManager.vpnAddresses, IpManager.ipv6Flags)) : "[]"
     readonly property var localNetworks: ModuleRules.frozenRows(_localNetworksText)
 
     // Set by ModuleTestKit.setNetworks in test mode (null: the defaults — read, none)
