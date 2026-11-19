@@ -564,12 +564,13 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
 - **Reaching another module or the host**: a module knows of another only its plain state,
   `Api.moduleStatus(id)` (frozen `{ id, name, version, state, active }`, or null), and its
   `exports` through `uses`. The old ways still work and are listed among the module's
-  `deprecations`, found in its code by `ModuleSourceRules.codeDeprecations` (comments and
-  strings do not count): `Api.module(id)`, and `module.host` (where the handle is named
+  `deprecations`, found in its QML and JavaScript code by `ModuleSourceRules.codeDeprecations`
+  (comments and strings do not count; a file the module does not name, reached only by the
+  scan below, in its first 64 KB): `Api.module(id)`, and `module.host` (where the handle is named
   `module` or comes straight from `Api.moduleAt`: QML cannot notice a property read, so a
   handle under another name is not found). Both go with the shell's next tightening.
   Importing `qs.singletons` (and below) or a directory outside the module's own is an error
-  in its status; the module still loads.
+  in its status (a JavaScript file's `.import` too); the module still loads.
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
@@ -581,10 +582,11 @@ status — and `qs.components` — the shell's internal components, which may ch
 in any release — only for a module not yet moved off it: the import still works and is
 listed among the module's `deprecations` in `qs ipc call modules list`; any other import
 outside those, `Quickshell`, `Quickshell.Io`, `QtQuick…`, `QtQml…` and the module's own
-directory is a warning there. Every QML file under
+directory is a warning there. Every QML and JavaScript file under
 the module's directory is read for its imports, in subdirectories too — up to 100 files,
-8 directories deep, hidden directories, links and other file systems skipped; the files it
-left out or could not read are one warning, "imports not checked in N files"):
+8 directories deep, hidden directories, links and other file systems skipped; a file the
+module does not name is read in its first 64 KB; the files it left out or could not read
+are one warning, "imports not checked in N files"):
 
 ```qml
 // module.json: "widgets": [{ "type": "example", "name": "Example", "widget": "Widget.qml",

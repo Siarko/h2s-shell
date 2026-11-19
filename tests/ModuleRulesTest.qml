@@ -607,6 +607,17 @@ TestCase {
                     "A.qml imports qs.singletons.io, the shell's own: a module reaches the shell through qs.api",
                     "below qs.singletons too; not a longer name, not qs.api, not its own directory");
         assertEqual(ModuleSourceRules.importErrors("A.qml", null).length, 0, "no text: no error, no throw");
+        // A JavaScript file's `.import` lines: judged as a QML file's imports
+        const script = ".pragma library\n.import qs.singletons as S\n.import QtQuick.LocalStorage 2.0 as Sql\n.import \"../../other/x.js\" as X\n.import \"own.js\" as Own\n"
+                     + ".import Quickshell.Hyprland as H\nfunction f() { return 1; }\n";
+        assertEqual(ModuleSourceRules.importErrors("lib/util.js", script).join("|"),
+                    "lib/util.js imports qs.singletons, the shell's own: a module reaches the shell through qs.api|"
+                    + "lib/util.js imports \"../../other/x.js\", outside the module's directory: another module is used through `uses`",
+                    "a script's .import of qs.singletons and of a file outside the module: errors");
+        assertEqual(ModuleSourceRules.importErrors("lib/util.js", ".import \"../util.js\" as U\n").length, 0, "… a file of its own module through \"..\": none");
+        assertEqual(ModuleSourceRules.importWarnings("lib/util.js", script).join("|").includes("Quickshell.Hyprland") && ModuleSourceRules.importWarnings("lib/util.js", script).length === 1, true,
+                    "… outside the allowlist: a warning, as in QML");
+        assertEqual(ModuleSourceRules.importDeprecations({ "u.js": ".import qs.components as C\n" }).length, 1, "… a deprecated import: listed");
         assert(!_has(warnings, "qs.panels"), "… nothing after the header counts");
         assertEqual(ModuleSourceRules.importWarnings("A.qml", "import QtQuick\nQtObject {}").length, 0, "an allowed file: no warning");
         assertEqual(ModuleSourceRules.importWarnings("A.qml", null).length, 0, "no text: no warning, no throw");
@@ -672,6 +683,50 @@ TestCase {
                     "not counted: comments, strings, template literals, a regex literal, moduleAt, moduleStatus, another object's host, a longer name");
         assertEqual(ModuleSourceRules.codeDeprecations(null).length + ModuleSourceRules.codeDeprecations({}).length
                     + ModuleSourceRules.codeDeprecations({ "A.qml": null, "B.qml": 5 }).length, 0, "no files, no text: none, no throw");
+        // Where a "/" starts a regex: after `=>` and the keywords that take an operand too, so
+        // a quote inside it does not open a string that hides the rest of the file
+        const apiModule = "Api.module(id) (in A.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening;
+        const hostLine = "module.host (in A.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening;
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    function f(list) { return list.filter(x => /'/.test(x)); }\n"
+                                                         + "    property string s: 'Api.module(id) is old'\n}\n" }).length, 0,
+                    "a regex after `=>` with a quote in it: the string after it is still a string");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property var f: u => /^https?:\\/\\//.test(u) && Api.module(\"x\")\n}\n" }).join("|"),
+                    apiModule, "… and its `//` does not open a comment hiding the code after it");
+        for (const keyword of ["typeof", "case", "in", "of", "delete", "void", "throw", "instanceof", "new", "return"]) {
+            assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    function f(x) { switch (x) { case 1: return " + keyword + " /'/; } }\n"
+                                                             + "    property string s: 'Api.module(id)'\n    property var b: module.host\n}\n" }).join("|"),
+                        hostLine, "a regex after `" + keyword + "`: its quote opens no string (module.host after it found, the string's text not)");
+        }
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property real a: x.in / 2 / 'y'.length\n    property var b: module.host\n}\n" }).join("|"),
+                    hostLine, "a property named like a keyword (x.in) divides");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property real a: n / 2 + \"half\n    property var b: module.host\n}\n" }).join("|"),
+                    hostLine, "an unterminated string ends at its line's end: one line lost, not the file");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property string a: \"one \\\n module.host\"\n}\n" }).length, 0,
+                    "… a string continued after a \"\\\" goes on to the next line");
+        // Template literals: their text skipped, the code inside `${…}` read
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property string s: `${Api.module(\"x\").name}`\n}\n" }).join("|"),
+                    apiModule, "the code inside a template's `${…}` is read");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property string s: `a ${ `b ${ {k: module.host}.k } c` } d`\n}\n" }).join("|"),
+                    hostLine, "… in a template nested in one, with braces of its own");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property string s: `${s.replace(\"`\", \"\")} Api.module(x)`\n    property var b: module.host\n}\n" }).join("|"),
+                    hostLine, "… a backtick in a string inside it does not end the template; its text after the substitution is still text");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property string s: `text ${'}'} module.host`\n}\n" }).length, 0,
+                    "… a brace in a string inside it does not end the substitution");
+        // `module` only as the whole name
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    property var a: $module.host\n    property var b: my_module.host\n    property var c: $Api.module(\"x\")\n}\n" }).length, 0,
+                    "$module.host, my_module.host, $Api.module(): other names");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "module.host" }).join("|"), hostLine, "… at the start of the text, found");
+        // A script of the module: its code is read the same way
+        assertEqual(ModuleSourceRules.codeDeprecations({ "lib/util.js": ".pragma library\n.import qs.api as A\nfunction other() { return A.Api.module(\"x\"); }\n" }).join("|"),
+                    "Api.module(id) (in lib/util.js): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening,
+                    "a JavaScript file's code: read too");
+        // The text without comments and strings, made once by the caller: the same answers
+        const sample = "import QtQuick\nItem {\n    property var module: null\n    readonly property var opener: null\n    property var b: module.host\n    Item { property int nested }\n}\n";
+        const sampleCode = ModuleSourceRules.codeText(sample);
+        assertEqual(ModuleSourceRules.rootProperties(sample, sampleCode).join(","), ModuleSourceRules.rootProperties(sample).join(","), "rootProperties with the code given: the same");
+        assertEqual(ModuleSourceRules.openerPropertyWarning("A.qml", sample, sampleCode), ModuleSourceRules.openerPropertyWarning("A.qml", sample), "openerPropertyWarning with the code given: the same");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": sample }, { "A.qml": sampleCode }).join("|"), hostLine, "codeDeprecations with the code given: the same");
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": sample }, { "A.qml": "QtObject {}" }).length, 0, "… the code given is what is read");
         assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject { property var a: Api.module(\"x\") }", "tests/T.qml": "Item { property var a: Api.module(\"x\") }" }).join("|"),
                     "Api.module(id) (in 2 files): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening,
                     "a suite counts too");
@@ -1309,6 +1364,8 @@ TestCase {
         const files = ModuleFileRules.filesToCheck(alpha, "singleton S 1.0 S.qml\n");
         assertEqual(files.map(entry => entry.file + ":" + entry.kind).join(","), "A1.qml:entry,P.qml:entry,A2.qml:entry,Page.qml:entry,Row.qml:entry,S.qml:qmldir",
                     "filesToCheck: every file named, each once, with its kind");
+        assertEqual(ModuleFileRules.listing("ok", "./Main.qml\n./lib/util.js\n./notes.txt\n./lib/x.mjs\nstatus 0").files.join(","), "Main.qml,lib/util.js",
+                    "listing: QML and JavaScript files, nothing else");
         const listed = ModuleFileRules.listing("ok", "./Main.qml\n./sections/Row.qml\n./../Out.qml\n/abs.qml\n./sub//X.qml\n./a\tb.qml\n./Main.qml\n./line\nbreak.qml\nstatus 0");
         assertEqual(JSON.stringify(listed.files), JSON.stringify(["Main.qml", "sections/Row.qml"]), "listing: the listing's QML files inside the directory, each once");
         assertEqual(listed.skipped + " " + listed.more + " " + listed.failed, "5 false false",

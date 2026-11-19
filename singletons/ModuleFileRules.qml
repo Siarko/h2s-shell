@@ -143,12 +143,14 @@ Singleton {
 
     readonly property int maxFileBytes: 1024 * 1024
 
-    // The import scan (importWarnings, importDeprecations) reads every QML file under the
-    // module's directory, not only the ones it names: a file in a subdirectory, or one a
-    // Loader builds, imports as much as main does. At most this many files, at most this many
-    // directories deep; of each, its first ModuleRules.maxHeaderBytes (all the import reader
-    // looks at). What it leaves out (more files, deeper ones, names it cannot read back) or
-    // cannot read is one warning in the module's status (scanWarning): never "nothing found".
+    // The import scan (importWarnings, importDeprecations, codeDeprecations) reads every QML
+    // and JavaScript file under the module's directory, not only the ones it names: a file in
+    // a subdirectory, one a Loader builds, or a script a file imports, imports as much as main
+    // does. At most this many files, at most this many directories deep; of each, its first
+    // ModuleRules.maxHeaderBytes (all the import reader looks at; the old ways in its code are
+    // looked for there too). What it leaves out (more files, deeper ones, names it cannot read
+    // back) or cannot read is one warning in the module's status (scanWarning): never
+    // "nothing found".
     readonly property int maxScannedFiles: 100
     readonly property int scanDepth: 8
     // The listing's lines at most (a line per file found, one level deeper than scanDepth
@@ -157,11 +159,11 @@ Singleton {
     // The key the listing's answer and text are filed under, among a check's files
     readonly property string listKey: "*.qml"
 
-    // The listing's answer and text → { files, skipped, more, failed }: the QML files it
-    // names, relative to the module's directory, the first maxScannedFiles of them, each
-    // once; `skipped` the ones found and left out — past maxScannedFiles, deeper than
-    // scanDepth, a name that is not plainly a path inside the directory (a line break or
-    // another control character in it, a ".." part); `more` when more may have been left
+    // The listing's answer and text → { files, skipped, more, failed }: the QML and
+    // JavaScript files it names, relative to the module's directory, the first
+    // maxScannedFiles of them, each once; `skipped` the ones found and left out — past
+    // maxScannedFiles, deeper than scanDepth, a name that is not plainly a path inside the
+    // directory (a line break or another control character in it, a ".." part); `more` when more may have been left
     // out than counted (the listing cut at maxListedLines, or a file deeper than scanDepth:
     // the listing looks one level further only); `failed` when it was not read whole
     // (no answer, find failing on a directory it could not read, no status line).
@@ -182,9 +184,9 @@ Singleton {
             result.failed = true;
         }
         for (const line of lines) {
-            // find prints every name ending in .qml: a line that does not is a piece of a
-            // name with a line break in it (its last piece is counted)
-            if (!line.endsWith(".qml"))
+            // find prints every name ending in .qml or .js: a line that does not is a piece of
+            // a name with a line break in it (its last piece is counted)
+            if (!line.endsWith(".qml") && !line.endsWith(".js"))
                 continue;
             const file = line.startsWith("./") ? line.slice(2) : "";
             const parts = file.split("/");
@@ -209,7 +211,7 @@ Singleton {
         return result;
     }
 
-    // The status warning for an incomplete import scan: "" when every QML file was read.
+    // The status warning for an incomplete import scan: "" when every listed file was read.
     // `unread`: how many of the listed files the check did not read (gone, not a regular file
     // any more, a name not valid UTF-8, out of time).
     function scanWarning(listed, unread) {
@@ -264,10 +266,10 @@ Singleton {
     // checkTimeoutMs, and a triple without its "ok" line when the deadline kills the process
     // counts as failed. The "ok" comes after the text, so a text cut short is never whole.
     //
-    // Two kinds of triple more: a cap "list" lists the module's QML files instead (the
-    // file is ignored) — regular files only, links not followed, hidden directories skipped,
-    // not into another file system (-xdev), one level deeper than scanDepth, at most
-    // maxListedLines — each line "<index>:./<path relative to the directory>", then
+    // Two kinds of triple more: a cap "list" lists the module's QML and JavaScript files
+    // instead (the file is ignored) — regular files only, links not followed, hidden
+    // directories skipped, not into another file system (-xdev), one level deeper than
+    // scanDepth, at most maxListedLines — each line "<index>:./<path relative to the directory>", then
     // "<index>:status <find's exit status>" (not 0: a directory it could not read), then
     // "<index>\tok"; a cap "h<n>" reads the first n bytes of a file of any size (the import
     // scan needs only its header; no size asked). The module's real directory is resolved
@@ -276,7 +278,7 @@ Singleton {
         + "while [ $# -ge 3 ]; do cap=$1; dir=$2; file=$3; shift 3; "
         + "if [ \"$cap\" = list ]; then "
         + "if [ -d \"$dir\" ]; then ( cd -- \"$dir\" && find -P . -xdev -mindepth 1 -maxdepth " + (scanDepth + 2)
-        + " -name '.*' -prune -o -type f -name '*.qml' -print; echo \"status $?\" ) 2>/dev/null "
+        + " -name '.*' -prune -o -type f \\( -name '*.qml' -o -name '*.js' \\) -print; echo \"status $?\" ) 2>/dev/null "
         + "| head -n " + maxListedLines + " | sed \"s/^/$i:/\"; printf '%s\\tok\\n' $i; "
         + "else printf '%s\\tcannot be listed\\n' $i; fi; i=$((i+1)); continue; fi; "
         + "whole=1; case $cap in h*) cap=${cap#h}; whole=0 ;; esac; "

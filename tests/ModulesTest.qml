@@ -183,8 +183,9 @@ TestCase {
             assertEqual(fields?.id, "bad-manifest-fields", "bad-manifest-fields: its id still shown");
 
             const forbidden = _expectState("forbidden-import", "loaded");
-            assertEqual(JSON.stringify(forbidden?.errors), JSON.stringify(["Main.qml imports qs.singletons, the shell's own: a module reaches the shell through qs.api"]),
-                        "forbidden-import: loaded, the shell's singletons imported an error naming the file and the import");
+            assertEqual(JSON.stringify(forbidden?.errors), JSON.stringify(["Main.qml imports qs.singletons, the shell's own: a module reaches the shell through qs.api",
+                                                                          "sections/reach.js imports qs.singletons, the shell's own: a module reaches the shell through qs.api"]),
+                        "forbidden-import: loaded, the shell's singletons imported an error naming the file and the import — a script's .import too");
             assert(!_has(forbidden?.warnings, "qs.singletons"), "… not a warning");
             assert(_has(forbidden?.warnings, "sections/deeper/Deeper.qml imports Quickshell.Hyprland"),
                    "forbidden-import: a QML file in a subdirectory, named nowhere, is scanned too: " + JSON.stringify(forbidden?.warnings));
@@ -192,9 +193,9 @@ TestCase {
                    "… and its deprecated import listed: " + JSON.stringify(forbidden?.deprecations));
             assert(!_has(forbidden?.warnings, "qs.panels"), "… but not one in a hidden directory");
             assertEqual(JSON.stringify(forbidden?.deprecations.filter(line => !line.startsWith("import "))),
-                        JSON.stringify(["Api.module(id) (in sections/OldWays.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses` (goes with the shell's next tightening)",
+                        JSON.stringify(["Api.module(id) (in 2 files): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses` (goes with the shell's next tightening)",
                                         "module.host (in sections/OldWays.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit) (goes with the shell's next tightening)"]),
-                        "… and the old ways of reaching another module and the host, from its code: " + JSON.stringify(forbidden?.deprecations));
+                        "… and the old ways of reaching another module and the host, from its code (a script's too): " + JSON.stringify(forbidden?.deprecations));
 
             _expectState("duplicate-id", "loaded");
             const second = _expectState("duplicate-id-2", "duplicate");
@@ -567,6 +568,18 @@ TestCase {
         });
         _then("test-programs loads in test mode", () => _settled() && _status("test-programs")?.state === "loaded"
               && _status("test-programs-links")?.state === "loaded" && _status("test-programs-dir-out")?.state === "loaded", () => {
+            // A module cannot switch test mode off either: not through what its handle reaches
+            const reachedOn = host.handle("test-programs").host;
+            assert(reachedOn === host, "a module's handle reaches the host in test mode too");
+            let threwOff = false;
+            try {
+                reachedOn.testMode = false;
+            } catch (error) {
+                threwOff = true;
+            }
+            assert(threwOff && host.testMode, "writing testMode through the handle: refused, still on");
+            assertEqual(reachedOn.setTestMode(false), false, "setTestMode(false) through the handle: refused");
+            assert(host.testMode && host.describe().testMode, "… still on");
             const directory = fixtures + "/test-programs/stand-ins";
             const status = _status("test-programs");
             assertEqual(status?.errors.length + " " + JSON.stringify(status?.missingPrograms), "0 []", "test mode: its required stand-in found, loaded: " + status?.errors.join("; "));

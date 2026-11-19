@@ -16,10 +16,11 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.19: reach closed, the old ways listed — `Api.moduleStatus(id)` gives another module's
   plain state, frozen `{ id, name, version, state, active }` (null for no such module).
   `Api.module(id)` and the handle's `host` still work and are listed in the module's
-  `deprecations` where its code uses them (comments and strings do not count); both go with
-  the shell's next tightening. Importing `qs.singletons` (and below) or a directory outside
-  the module's own is now an error in its status instead of a warning; the module still
-  loads. A module turned off and on again before its old main is gone waits for it, so the
+  `deprecations` where its code uses them (QML and JavaScript files; comments and strings do
+  not count); both go with the shell's next tightening. Importing `qs.singletons` (and below)
+  or a directory outside the module's own is now an error in its status instead of a warning,
+  in a JavaScript file's `.import` too; the module still loads. The import scan reads a
+  module's JavaScript files as well as its QML. A module turned off and on again before its old main is gone waits for it, so the
   old main reads its own `module.uses` to the end; a dependent's main deleted by something
   other than the shell no longer keeps its provider waiting.
 - 1.18: a module's API for other modules — `"exports": { "version": "1.0" }` in a provider's

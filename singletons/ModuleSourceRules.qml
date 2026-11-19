@@ -23,14 +23,15 @@ Singleton {
 
     // (API 1.19) The old ways of reaching another module or the shell's host in a module's
     // code, each listed among its `deprecations` (codeDeprecations) and removed with the
-    // shell's next tightening: { what, pattern (matched against _codeText: comments and
+    // shell's next tightening: { what, pattern (matched against codeText: comments and
     // strings do not count), use }. `module.host` is found where the handle is named
-    // `module` (or a handle comes straight from Api.moduleAt): QML cannot notice a read of a
+    // `module` (not `$module` or `my_module`; or a handle comes straight from Api.moduleAt):
+    // QML cannot notice a read of a
     // property, so a handle kept under another name is not found.
     readonly property var deprecatedCode: [
-        { what: "Api.module(id)", pattern: /\bApi\s*\.\s*module\s*\(/,
+        { what: "Api.module(id)", pattern: /(?:^|[^\w$])Api\s*\.\s*module\s*\(/,
           use: "`Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" },
-        { what: "module.host", pattern: /(?:\bmodule|\bmoduleAt\s*\((?:[^()]|\([^()]*\))*\))\s*\??\.\s*host\b/,
+        { what: "module.host", pattern: /(?:^|[^\w$])(?:module|moduleAt\s*\((?:[^()]|\([^()]*\))*\))\s*\??\.\s*host\b/,
           use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)" }
     ]
 
@@ -47,13 +48,13 @@ Singleton {
     // warn and drop them — modulePropertyWarning and openerPropertyWarning say so in the
     // module's status). Never throws.
     //
-    // A pragmatic reader, not a QML parser: it skips comments, strings and template literals,
-    // and a regular-expression literal where one can start (after one of ( , = : [ ! & | ? { } ;
-    // or `return`), so their braces do not count. Not handled: a regex literal after
-    // anything else (`x = a / b / c` is division; `)` then `/` too) — such a file may lose its
-    // initial properties (it is then given none, and its `module` comes from Api.moduleAt).
-    function rootProperties(text) {
-        const rootText = _rootText(text);
+    // A pragmatic reader, not a QML parser: it skips what codeText leaves out (comments,
+    // strings, template literals' text, regex literals where one can start), so their braces
+    // do not count. Not handled: a regex literal after anything else (`)` then `/` is division)
+    // — such a file may lose its initial properties (it is then given none, and its `module`
+    // comes from Api.moduleAt). `code`: codeText(text), when the caller has it already.
+    function rootProperties(text, code) {
+        const rootText = _rootText(text, code);
         const names = [];
         const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+([A-Za-z_][\w.]*(?:<[\w.]+>)?)\s+([A-Za-z_]\w*)/g;
         let match;
@@ -72,18 +73,18 @@ Singleton {
 
     // A warning when a file's root object declares `module` in a way that never gets the
     // handle (readonly, or a type other than var); "" otherwise
-    function modulePropertyWarning(file, text) {
-        return _varPropertyWarning(file, text, "module", "the module's handle");
+    function modulePropertyWarning(file, text, code) {
+        return _varPropertyWarning(file, text, code, "module", "the module's handle");
     }
 
     // The same for a popup panel's `opener` (the widget that opened it)
-    function openerPropertyWarning(file, text) {
-        return _varPropertyWarning(file, text, "opener", "the widget that opened it");
+    function openerPropertyWarning(file, text, code) {
+        return _varPropertyWarning(file, text, code, "opener", "the widget that opened it");
     }
 
-    function _varPropertyWarning(file, text, name, given) {
+    function _varPropertyWarning(file, text, code, name, given) {
         const pattern = new RegExp("(?:^|[\\s;])((?:required|default|readonly)\\s+)*property\\s+([A-Za-z_][\\w.]*(?:<[\\w.]+>)?)\\s+" + name + "\\b", "g");
-        const rootText = _rootText(text);
+        const rootText = _rootText(text, code);
         let match;
         while ((match = pattern.exec(rootText)) !== null) {
             if (/\breadonly\s+property/.test(match[0]) || match[2] !== "var")
@@ -93,52 +94,136 @@ Singleton {
     }
 
     // The text of a QML file's root object at depth 1: comments, strings and regex literals
-    // blanked (_codeText), nested objects reduced to ";"
-    function _rootText(text) {
-        const code = _codeText(text);
+    // blanked (codeText; `code` when the caller has it), nested objects reduced to ";"
+    function _rootText(text, code) {
+        const source = typeof code === "string" ? code : codeText(text);
+        const parts = [];
         let depth = 0;
-        let rootText = "";
-        for (const character of code) {
-            if (character === "{") {
+        // Where the run of depth-1 text being read started
+        let start = -1;
+        for (let i = 0; i < source.length; i++) {
+            const character = source.charCodeAt(i);
+            if (character !== 123 && character !== 125)     // "{", "}"
+                continue;
+            if (start >= 0)
+                parts.push(source.slice(start, i));
+            start = -1;
+            if (character === 123) {
                 depth++;
                 if (depth === 2)
-                    rootText += ";";
-                continue;
-            }
-            if (character === "}") {
+                    parts.push(";");
+            } else {
                 depth--;
-                continue;
             }
             if (depth === 1)
-                rootText += character;
+                start = i + 1;
         }
-        return rootText;
+        if (start >= 0)
+            parts.push(source.slice(start));
+        return parts.join("");
     }
 
-    // A QML file's text without what is not code: a line comment dropped, each block comment,
-    // string, template literal and regular-expression literal one space (so their braces and words do not
-    // count). Never throws; "" for anything but a string.
-    function _codeText(text) {
+    // A QML or JavaScript file's text without what is not code: a line comment dropped, each
+    // block comment, string, regular-expression literal and template literal's text one space
+    // (so their braces and words do not count); the code inside a template's `${…}` is kept
+    // (nested braces, strings and templates followed). Never throws; "" for anything but a
+    // string.
+    //
+    // A "/" starts a regex literal where a value cannot end: at the start, after one of
+    // ( , = : [ ! & | ? { } ; > (so after `=>` too), or after a keyword that takes an operand
+    // (regexKeywords) that is not a property name (`x.in`). An unterminated string or regex
+    // ends at its line's end — a string spans lines only after a "\" — so a misread costs
+    // one line, not the rest of the file.
+    function codeText(text) {
         if (typeof text !== "string")
             return "";
         const source = text.slice(0, ModuleFileRules.maxFileBytes);
-        let code = "";
-        // The last significant character outside comments and strings, and the word before
-        // it: where a "/" starts a regex literal rather than divides
+        const length = source.length;
+        // Pieces joined once at the end: a megabyte grown a character at a time is slow
+        const parts = [];
+        // Where the code not copied yet starts
+        let copied = 0;
+        // The last significant character outside comments and strings ("a" for a word, a
+        // number's digit, a string's end), and the word it ended, if any: where a "/" starts
+        // a regex literal rather than divides
         let last = "";
         let lastWord = "";
-        for (let i = 0; i < source.length; i++) {
-            const character = source[i];
-            const next = source[i + 1];
-            if (/\s/.test(character)) {
-                code += character;
+        // Per `${…}` open: its depth of braces of its own
+        const substitutions = [];
+        const skip = (from, to, replacement) => {
+            if (from > copied)
+                parts.push(source.slice(copied, from));
+            parts.push(replacement);
+            copied = to;
+        };
+        // A template's text from `start` (after its "`" or a substitution's "}") to its end
+        // or its next "${": the index after it
+        const templateText = start => {
+            let j = start;
+            while (j < length) {
+                const character = source.charCodeAt(j);
+                if (character === 92) {                 // "\"
+                    j += 2;
+                    continue;
+                }
+                if (character === 96) {                 // "`"
+                    last = "a";
+                    lastWord = "";
+                    return j + 1;
+                }
+                if (character === 36 && source.charCodeAt(j + 1) === 123) {   // "${"
+                    substitutions.push(0);
+                    last = "{";
+                    lastWord = "";
+                    return j + 2;
+                }
+                j++;
+            }
+            return length;
+        };
+        let i = 0;
+        while (i < length) {
+            const code = source.charCodeAt(i);
+            // White space: copied, changes nothing
+            if (code === 32 || code === 10 || code === 9 || code === 13 || code === 12 || code === 11 || code === 160) {
+                i++;
                 continue;
             }
-            if (character === "/" && next !== "/" && next !== "*"
-                    && (last === "" || "(,=:[!&|?{};".includes(last) || lastWord === "return")) {
+            // A word: an identifier or keyword
+            if ((code >= 97 && code <= 122) || (code >= 65 && code <= 90) || code === 95 || code === 36 || code > 127) {
+                let j = i + 1;
+                while (j < length) {
+                    const inner = source.charCodeAt(j);
+                    if ((inner >= 97 && inner <= 122) || (inner >= 65 && inner <= 90) || (inner >= 48 && inner <= 57)
+                            || inner === 95 || inner === 36 || inner > 127)
+                        j++;
+                    else
+                        break;
+                }
+                lastWord = last === "." ? "" : source.slice(i, j);
+                last = "a";
+                i = j;
+                continue;
+            }
+            const character = source[i];
+            const next = source[i + 1];
+            if (character === "/" && next === "/") {
+                const end = source.indexOf("\n", i);
+                skip(i, end < 0 ? length : end, "");
+                i = end < 0 ? length : end;
+                continue;
+            }
+            if (character === "/" && next === "*") {
+                const end = source.indexOf("*/", i + 2);
+                const to = end < 0 ? length : end + 2;
+                skip(i, to, " ");
+                i = to;
+                continue;
+            }
+            if (character === "/" && (last === "" || "(,=:[!&|?{};>".includes(last) || (lastWord !== "" && regexKeywords.includes(lastWord)))) {
                 let j = i + 1;
                 let inClass = false;
-                while (j < source.length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
+                while (j < length && source[j] !== "\n" && (inClass || source[j] !== "/")) {
                     if (source[j] === "\\")
                         j++;
                     else if (source[j] === "[")
@@ -147,49 +232,61 @@ Singleton {
                         inClass = false;
                     j++;
                 }
-                i = j;
-                last = "/";
-                lastWord = "";
-                code += " ";
-                continue;
-            }
-            const wordMatch = /[A-Za-z_$]/.test(character) ? /^[A-Za-z_$][\w$]*/.exec(source.slice(i, i + 64)) : null;
-            if (wordMatch) {
-                code += wordMatch[0];
-                i += wordMatch[0].length - 1;
+                // Past its closing "/" (its flags are a word that follows), or at the line's end
+                const to = j < length && source[j] === "/" ? j + 1 : j;
+                skip(i, to, " ");
+                i = to;
                 last = "a";
-                lastWord = wordMatch[0];
+                lastWord = "";
                 continue;
             }
-            lastWord = "";
-            if (character === "/" && next === "/") {
-                const end = source.indexOf("\n", i);
-                i = end < 0 ? source.length : end - 1;
-                continue;
-            }
-            if (character === "/" && next === "*") {
-                const end = source.indexOf("*/", i + 2);
-                i = end < 0 ? source.length : end + 1;
-                code += " ";
-                continue;
-            }
-            if (character === "\"" || character === "'" || character === "`") {
+            if (character === "\"" || character === "'") {
                 let j = i + 1;
-                while (j < source.length && source[j] !== character) {
+                while (j < length && source[j] !== character && source[j] !== "\n") {
                     if (source[j] === "\\")
                         j++;
                     j++;
                 }
-                i = j;
+                const to = j < length && source[j] === character ? j + 1 : j;
+                skip(i, to, " ");
+                i = to;
                 last = "a";
-                code += " ";
+                lastWord = "";
                 continue;
             }
+            if (character === "`") {
+                const to = templateText(i + 1);
+                skip(i, to, " ");
+                i = to;
+                continue;
+            }
+            if (substitutions.length > 0) {
+                if (character === "{") {
+                    substitutions[substitutions.length - 1]++;
+                } else if (character === "}") {
+                    if (substitutions[substitutions.length - 1] === 0) {
+                        // The substitution's end: its template's text goes on
+                        substitutions.pop();
+                        const to = templateText(i + 1);
+                        skip(i, to, " ");
+                        i = to;
+                        continue;
+                    }
+                    substitutions[substitutions.length - 1]--;
+                }
+            }
             last = character;
-            code += character;
+            lastWord = "";
+            i++;
         }
-        return code;
+        if (copied < length)
+            parts.push(source.slice(copied));
+        return parts.join("");
     }
+
+    // The keywords after which a "/" starts a regex literal (their operand follows)
+    readonly property var regexKeywords: ["return", "typeof", "case", "in", "of", "delete", "void", "throw",
+        "instanceof", "new", "else", "do", "yield", "await"]
 
     // Of `wanted` ({ name: value }), the ones the root object declares (`declared`, from
     // rootProperties)
@@ -207,7 +304,9 @@ Singleton {
     // The imports at the top of a QML file: [{ name, directory }] — `name` a module name
     // (QtQuick.Layouts) or, for a quoted import, the quoted text with `directory` true. Read
     // as Quickshell's scanner reads them: line by line until the first line with a "{",
-    // whose statements before the "{" are read too (`import qs.components; Item {}`).
+    // whose statements before the "{" are read too (`import qs.components; Item {}`). A
+    // JavaScript file's `.import` lines count the same (`.import qs.singletons as S`; a quoted
+    // one names a file, judged as a directory is: inside the module's own or not).
     function importsOf(text) {
         const imports = [];
         if (typeof text !== "string")
@@ -218,7 +317,7 @@ Singleton {
             const line = rawLine.replace(/^((?:[^"\/]|"[^"]*"|\/(?!\/))*)\/\/.*$/, "$1").trim();
             const brace = line.indexOf("{");
             for (const statement of (brace >= 0 ? line.slice(0, brace) : line).split(";")) {
-                const match = /^import\s+(?:"([^"]*)"|([A-Za-z_][A-Za-z0-9_.]*))/.exec(statement.trim());
+                const match = /^\.?import\s+(?:"([^"]*)"|([A-Za-z_][A-Za-z0-9_.]*))/.exec(statement.trim());
                 if (!match)
                     continue;
                 imports.push(match[1] !== undefined ? { name: match[1], directory: true } : { name: match[2], directory: false });
@@ -306,12 +405,12 @@ Singleton {
 
     // The deprecations for a module's code (`texts`: { file: text }): one line per old way of
     // deprecatedCode it uses, saying where — the file, or how many files. In the order of
-    // deprecatedCode.
-    function codeDeprecations(texts) {
+    // deprecatedCode. `known`: { file: codeText(text) } for the files the caller has it of.
+    function codeDeprecations(texts, known) {
         const lines = [];
         const codes = {};
         for (const file of Object.keys(texts ?? {}))
-            codes[file] = _codeText(texts[file]);
+            codes[file] = typeof known?.[file] === "string" ? known[file] : codeText(texts[file]);
         for (const old of deprecatedCode) {
             const files = Object.keys(codes).filter(file => old.pattern.test(codes[file]));
             if (files.length === 0)

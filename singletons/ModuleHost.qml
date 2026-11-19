@@ -706,6 +706,9 @@ Scope {
                 files.push(listed);
         }
         const read = {};
+        // Each file's text without comments and strings, made once: the property reader, the
+        // property warnings and the old ways all read it
+        const codes = {};
         // Capped per file (importWarnings) and per module: added after the loops
         const importLines = [];
         // (1.19) Imports that reach into the shell or another module: errors, capped the same way
@@ -717,21 +720,24 @@ Scope {
                 continue;
             }
             read[name] = text;
-            record.rootProperties[name] = ModuleSourceRules.rootProperties(text);
+            const code = ModuleSourceRules.codeText(text);
+            codes[name] = code;
+            record.rootProperties[name] = ModuleSourceRules.rootProperties(text, code);
             // Only the files the core builds and hands `module` (main, the entries' components);
             // a singleton finding its handle with Api.moduleAt in a readonly property is fine
-            const moduleWarning = ModuleFileRules.manifestFiles(record.manifest).includes(name) ? ModuleSourceRules.modulePropertyWarning(name, text) : "";
+            const moduleWarning = ModuleFileRules.manifestFiles(record.manifest).includes(name) ? ModuleSourceRules.modulePropertyWarning(name, text, code) : "";
             if (moduleWarning !== "")
                 record.warnings.push(moduleWarning);
-            const openerWarning = (record.manifest.widgets ?? []).some(widget => widget.popupPanel === name) ? ModuleSourceRules.openerPropertyWarning(name, text) : "";
+            const openerWarning = (record.manifest.widgets ?? []).some(widget => widget.popupPanel === name) ? ModuleSourceRules.openerPropertyWarning(name, text, code) : "";
             if (openerWarning !== "")
                 record.warnings.push(openerWarning);
             importLines.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
             reachLines.push(...ModuleSourceRules.importErrors(name, text));
         }
-        // Its other QML files, in subdirectories or built by a Loader, for their imports
-        // alone; one that could not be read is not an error (nothing loads it by name), but
-        // counted: the status says how many were not checked
+        // Its other QML and JavaScript files, in subdirectories, built by a Loader or imported,
+        // for their imports and the old ways alone (in their first ModuleRules.maxHeaderBytes);
+        // one that could not be read is not an error (nothing loads it by name), but counted:
+        // the status says how many were not checked
         let unread = 0;
         for (const name of record.scanListing?.files ?? []) {
             const text = texts?.[name];
@@ -752,7 +758,7 @@ Scope {
         if (scanWarning !== "")
             record.warnings.push(scanWarning);
         // The old ways its files still use: listed in its status, the module loads as before
-        record.deprecations = ModuleSourceRules.importDeprecations(read).concat(ModuleSourceRules.codeDeprecations(read));
+        record.deprecations = ModuleSourceRules.importDeprecations(read).concat(ModuleSourceRules.codeDeprecations(read, codes));
     }
 
     // ---- The stores' directory ----
@@ -1152,9 +1158,10 @@ Scope {
         }
         record.component = component;
         record.main = object;
-        // Tells the host when this main is really gone (destroy() only asks for it): a child
-        // of the main, destroyed with it, after the main's own Component.onDestruction
-        _goneWatcher.createObject(object, { gone: () => root._mainGone(object) });
+        // Tells the host when this main is really gone (destroy() only asks for it): the main's
+        // own destruction, after its Component.onDestruction, seen by an object of the host's
+        // (a child of the main could go without it)
+        _goneWatcher.createObject(root, { main: object, gone: () => root._mainGone(object) });
         // (1.18) Its exports object, read once: what its dependents get as module.uses.<id>
         // for as long as this main lives
         if (record.manifest.exports) {
@@ -1238,7 +1245,7 @@ Scope {
             Qt.callLater(root._applyGuarded);
     }
 
-    // A main is gone (its watcher went with it): the providers waiting on it go next, one
+    // A main is gone (its watcher saw it destroyed): the providers waiting on it go next, one
     // turn of the event loop later, after what was torn down with it
     function _mainGone(main) {
         if (_dying)
@@ -1256,10 +1263,22 @@ Scope {
         }
     }
 
+    // Watches one main: an object property is set to null when the object it holds is
+    // deleted, and notifies — so this reports the main's own destruction and nothing else;
+    // it goes once it has reported
     property Component _goneWatcher: Component {
         QtObject {
+            id: watcher
+            property QtObject main: null
             property var gone: null
-            Component.onDestruction: gone?.()
+            onMainChanged: {
+                if (main !== null || gone === null)
+                    return;
+                const report = gone;
+                gone = null;
+                report();
+                watcher.destroy();
+            }
         }
     }
 

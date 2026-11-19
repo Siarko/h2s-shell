@@ -643,19 +643,23 @@ import qs.singletons.network
 // Reaching into another module or the shell (1.19): a module uses its own handle, qs.api,
 // Api.moduleStatus(id) and the exports it `uses`. `Api.module(id)` and the handle's `host`
 // still work and are listed in the module's `deprecations` where its code uses them (read
-// from its QML files, comments and strings left out: `Api.module(`, and `.host` on `module`
+// from its QML and JavaScript files, comments and strings left out: `Api.module(`, and
+// `.host` on `module`
 // or straight on Api.moduleAt(…) — a handle kept under another name is not found, QML cannot
 // notice a property read); both go with the shell's next tightening (`host` then becomes
 // `_host`). Importing the shell's singletons (`qs.singletons` and below) or a directory
-// outside the module's own is an error in its status; the module still loads.
+// outside the module's own is an error in its status, in a JavaScript file's `.import` too;
+// the module still loads.
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any
 // release. A module that still imports it loads as before, and the import is listed in
 // its status (`deprecations`, in `modules list`); it becomes an error with the change
-// that raises the floor. The imports are read from every QML file under the module's
-// directory — in subdirectories too, and ones only a Loader builds — up to 100 files, 8
-// directories deep, hidden directories, links and other file systems skipped; any other
+// that raises the floor. The imports are read from every QML and JavaScript file under the
+// module's directory — in subdirectories too, and ones only a Loader builds — up to 100
+// files, 8 directories deep, hidden directories, links and other file systems skipped; a
+// file the module does not name (main, its entries' files, tests, qmldir) is read in its
+// first 64 KB only, for its imports and the old ways above alike; any other
 // import outside what modules may import is a warning in the status (at most 5 per file, 50 per
 // module, the rest counted). Files the scan left out or could not read are one warning
 // ("imports not checked in N files"), never a silent "no warnings".
