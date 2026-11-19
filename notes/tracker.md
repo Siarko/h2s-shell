@@ -63,31 +63,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
-- **The Tailscale module's texts since M3** (the agent's words):
-  - "Authorization" lines: Connect, Disconnect, Log in, Add an account, Log out; Change
-    the exit node; Allow / Block the local network; Accept / Ignore routes; Use / Ignore
-    Tailscale DNS; Block / Allow incoming connections; Start / Stop the SSH server; Start /
-    Stop the web interface; Offer an exit node / Stop offering an exit node; Turn on / off
-    automatic updates, source NAT, stateful filtering; Offer an app connector / Stop the
-    app connector; Report device posture / Stop posture reports; Run a peer relay / Turn
-    off the peer relay; Check for updates / Stop update checks; Rename this device, Change
-    offered routes, Name the account; Become the operator / Give up the operator role;
-    List accounts, Switch account, Remove an account; Stop every share, Stop Funnel; Share
-    a port, Share a port on the internet, Stop a share, Turn on / off Funnel.
-  - Refused: "<what> — not allowed"; the entry "Not allowed." (was "No authentication
-    agent answered."); "It was not run as administrator: the command holds characters that
-    can't be shown" / "… it doesn't say what it is for" / "… the screen is locked".
-  - "Can't ask for the password." (no way to run as administrator); "Changes that need an
-    administrator are not offered: pkexec is still being looked for." (just after start).
-  - Funnel left public after a wait: "Port N is public with something else on it." with
-    "Turn off Funnel", and the notice "… Turn Funnel off on Tailscale's page."
-- **Spacing in a settings page** (U1a, from the old General slot): 16 px between the page
-  and the module hosts before and after it, 4 px between elements in a host. Status texts
-  quote paths in JSON quotes, not backticks.
-- **Agents' wording**: the Controls page's "Warning buttons" / "Success buttons" and their
-  CHANGELOG line (F1a); `modules list`: "import qs.components (in 17 files): use the
-  elements of qs.api (goes with the shell's next tightening)" (F4).
-
 ## Left open by done work
 
 Still work or a known risk; the detail is in [done.md](done.md).
