@@ -28,16 +28,16 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 Done slices are in [done.md](done.md), "Notifications with a progress bar and Taildrop's
 list of transfers". Work branches: core `notif-progress`, module `taildrop-transfers`.
 
-- [ ] Notifications with a progress bar (core, module API 1.33,
+- [ ] Notifications with a progress bar (core, module API 1.33 opened on `master`,
       [plans/notification-progress.md](plans/notification-progress.md)): left the progress
-      handle (N2), an announce brings the toast back (N4), `notify` returns the handle (N3).
-      Before N2: the runner's unlimited runs under `setpriv --pdeathsig` and an opt-in for
-      output after `cancel()` (found by D3; API 1.33).
+      handle (N2, in progress — its mechanism changed, see "Open points"), an announce brings
+      the toast back (N4), `notify` returns the handle (N3).
 - [ ] Taildrop's list of transfers (module,
-      [plans/taildrop-transfers.md](plans/taildrop-transfers.md)): left the list on the page
-      (D4), several devices from the page (D8), the popup in two panels (D5), docs and the
-      real machine (D6), progress notifications (D7, after N3); after the core's
-      output-after-cancel: a save stopped after its rename reports "saved".
+      [plans/taildrop-transfers.md](plans/taildrop-transfers.md)): all built but progress
+      notifications (D7, after N3). For the owner (D6): on a real tailnet — a real send, Skip
+      mid-file and what the peer keeps; two files in parallel to one device; one file to two
+      devices at once; a save of a large file; the bus's entry for a killed send; then the
+      module's 0.7.0 release.
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
       review of each area's first slices
@@ -65,6 +65,24 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **Taildrop's list on the page, looks not in the plan** (D4, agent's choice stands): the list
+  under the Save / Open folder row, incoming files first; titles bold; the state text cut at
+  half the section's width; incoming files "Receiving · 40 %"; an ended save keeps the title
+  "Saving N files".
+- **Several devices from the page** (D8, agent's choice stands): a device row's "Send file…"
+  makes that device the only one picked (not added to the choice); a picked device that drops
+  out stays out when it comes back; "Send to N devices".
+- **How the progress handle talks to the server** (N2, the lead's choice, for the owner's
+  eyes): `notify-send` closes a notification itself after a click (and `--action` always
+  waits), so the plan's waiter could not keep actions after a click. The handle instead sends
+  and updates with a one-shot `gdbus call … Notify` (arguments as GVariant text through an
+  escaping rule with adversarial cases) and learns clicks and closing from the shell's own
+  server objects by id; with another daemon owning the name the handle reads "unknown". Plain
+  notifications still go through `notify-send` as before.
+- **Taildrop in the popup, choices not in the plan** (D5, agent's choice stands): "Send file…"
+  works while a send to that device runs; a new Send clears that device's last result in the
+  popup (the page keeps it); a save stays listed until both views clear it; "Saving 1 file",
+  "Saved X" / "Saved 3 files" / "Saved 2 of 3"; ended saves get a "×" in the popup.
 - **Taildrop words and choices not in the plan** (D1, agent's choice stands): a queued file
   "Queued"; a running file of unknown size "Sending…" / "Saving…"; a failure without a reason
   "Failed"; save reasons "Bad name", "Not fetched", "No free name"; a one-file title
@@ -156,6 +174,11 @@ Still work or a known risk; the detail is in [done.md](done.md).
   be called back.
 - Unlimited runs (sends, saves) are not wrapped in `setpriv --pdeathsig`: a shell crash leaves
   them running (core fix in progress).
+
+- (Taildrop) The page's transfers list is not limited to the operator (the old send line was).
+  Incoming files are keyed by name only: two peers sending one name at once show one row.
+- (Taildrop) `fileOffers` runs `schedule` twice per file row on every tick of the popup's
+  files panel; the cost grows with rows and transfers.
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
