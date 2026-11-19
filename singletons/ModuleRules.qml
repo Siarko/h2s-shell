@@ -160,7 +160,15 @@ Singleton {
         { path: "settings.network_vpn.vpns.card.settings", kind: "region", placements: ["prepend"], takes: "", marks: false,
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.23",
           where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows",
-          view: "panels/settings/NetworkVpnSettings.qml" }
+          view: "panels/settings/NetworkVpnSettings.qml" },
+        { path: "settings.network_wifi.saved.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
+          context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"wifi\", active: fully up }", scope: "", since: "1.24",
+          where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password)",
+          view: "panels/settings/NetworkWifiSettings.qml" },
+        { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
+          context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"ethernet\", active: fully up }", scope: "", since: "1.24",
+          where: "Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows",
+          view: "panels/settings/NetworkEthernetSettings.qml" }
     ]
 
     // The kinds a view's root is: the one block with no name that is addressable, at the
@@ -1018,6 +1026,14 @@ Singleton {
     // One row of Api.networks, each field of its kind (the name plain, on one line, capped)
     function networkRow(id, name, kind, active) {
         return { id: String(id), name: _plainLine(name, 200), kind: String(kind), active: active === true };
+    }
+
+    // What an element in a saved network's opened card gets as context (the Wi-Fi and
+    // Ethernet pages' places): the network as Api.networks names it — { networkId: the
+    // profile's UUID, name, kind ("wifi" | "ethernet"), active: fully up }
+    function networkContext(profile) {
+        const network = networkRow(profile?.uuid ?? "", profile?.name, profile?.kind ?? "", profile?.state === "activated");
+        return { networkId: network.id, name: network.name, kind: network.kind, active: network.active };
     }
 
     // Text from outside (a network's or a VPN's name) on one line: control characters

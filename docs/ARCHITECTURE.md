@@ -677,10 +677,15 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `popup.notifications` | `prepend` | `count` (the notifications in the list) | the notifications popup, under its header, above the list (`panels/NotificationPanel.qml`); the slot `notifications.popup.top` is read as it | 1.22 |
   | `popup.network.connections.vpn.row` | `after` | `vpnId`, `entryId`, `vpn`, `provider` (the provider object), `otherVpnsUp`, `otherVpns` | the network popup's VPN part, under the row of each VPN of the module's provider (`panels/network/VpnSection.qml`); own-provider; the slot `network.vpn.row` is read as it | 1.23 |
   | `settings.network_vpn.vpns.card.settings` | `prepend` | as the VPN's row | Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows (`panels/settings/NetworkVpnSettings.qml`); own-provider; built while the card is open; the slot `network.vpn.card` is read as it (its context adds `open: true`) | 1.23 |
+  | `settings.network_wifi.saved.card.settings` | `append` | `networkId` (the profile's UUID, `Api.networks`' `id`), `name`, `kind` (`"wifi"`), `active` (fully up) — the network as `Api.networks` names it | Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password) (`panels/settings/NetworkWifiSettings.qml`); built while the card is open; not on a hotspot's card | 1.24 |
+  | `settings.network_ethernet.profiles.card.settings` | `append` | as the saved Wi-Fi network's (`kind` `"ethernet"`) | Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows (`panels/settings/NetworkEthernetSettings.qml`); built while the card is open | 1.24 |
 
   Named but not places yet: `popup.network` (the network panel's root), its VPN part
   `popup.network.connections.vpn`, the VPN page's section of cards `settings.network_vpn.vpns`
-  and each card `….vpns.card`.
+  and each card `….vpns.card`; the Wi-Fi page's sections `settings.network_wifi.saved` and
+  `settings.network_wifi.hotspots`, each card in them (`….saved.card`, `….hotspots.card`) and
+  a hotspot's opened part `….hotspots.card.settings`; the Ethernet page's section
+  `settings.network_ethernet.profiles` and each card `….profiles.card`.
 
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's
   views against the table: every place in it live once they are built, and where the rows of

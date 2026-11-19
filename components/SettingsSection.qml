@@ -72,7 +72,9 @@ AnchorBlock {
                 color: Theme.textPrimary
             }
 
-            Row {
+            // A layout, not a positioner: it gives each button a whole width, so its edges
+            // stand on whole pixels
+            RowLayout {
                 id: _buttons
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 spacing: 8

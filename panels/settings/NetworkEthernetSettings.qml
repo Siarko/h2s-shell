@@ -99,36 +99,47 @@ Item {
             }
 
             // ── The wired profiles ──
-            SectionTitle { text: "Wired profiles" }
-            Text {
-                visible: root._profiles.length === 0
-                text: "None: NetworkManager makes one when a cable is plugged in."
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textMuted
-            }
+            // A section named "profiles": each card the place
+            // settings.network_ethernet.profiles.card, its opened part …card.settings, whose
+            // `append` shows any module's elements under the card's rows, with the profile in
+            // their context (as Api.networks names it)
+            SettingsSection {
+                anchor: "profiles"
+                title: "Wired profiles"
+                Layout.fillWidth: true
 
-            // Keyed by uuid: a card keeps its profile while the list is read again
-            KeyedModel { id: _profilesModel; values: root._profiles; keyProp: "uuid" }
-            Repeater {
-                model: _profilesModel.model
+                Text {
+                    visible: root._profiles.length === 0
+                    text: "None: NetworkManager makes one when a cable is plugged in."
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textMuted
+                }
 
-                NetworkProfileCard {
-                    required property string modelData
-                    readonly property var ethernetProfile: _profilesModel.byKey[modelData] ?? ({})
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: 6
-                    profile: ethernetProfile
-                    subtitle: (ethernetProfile.active ? "In use on " + ethernetProfile.device
-                            : ethernetProfile.lastUsed > 0 ? "Last used " + Format.ago(ethernetProfile.lastUsed) : "Never used")
-                        + (ethernetProfile.autoconnect ? "" : " · Not automatic")
-                    open: root._open === ethernetProfile.uuid
-                    useDevice: root._usableDevice
-                    useLabel: "Use"
-                    autoconnectHint: "When a cable is plugged in"
-                    onToggleRequested: root._open = open ? "" : ethernetProfile.uuid
-                    onForgotten: root._open = ""
-                    onEditRequested: root._editing = ethernetProfile.uuid
+                // Keyed by uuid: a card keeps its profile while the list is read again
+                KeyedModel { id: _profilesModel; values: root._profiles; keyProp: "uuid" }
+                Repeater {
+                    model: _profilesModel.model
+
+                    NetworkProfileCard {
+                        required property string modelData
+                        readonly property var ethernetProfile: _profilesModel.byKey[modelData] ?? ({})
+                        anchor: "card"
+                        context: ModuleRules.networkContext(ethernetProfile)
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 6
+                        profile: ethernetProfile
+                        subtitle: (ethernetProfile.active ? "In use on " + ethernetProfile.device
+                                : ethernetProfile.lastUsed > 0 ? "Last used " + Format.ago(ethernetProfile.lastUsed) : "Never used")
+                            + (ethernetProfile.autoconnect ? "" : " · Not automatic")
+                        open: root._open === ethernetProfile.uuid
+                        useDevice: root._usableDevice
+                        useLabel: "Use"
+                        autoconnectHint: "When a cable is plugged in"
+                        onToggleRequested: root._open = open ? "" : ethernetProfile.uuid
+                        onForgotten: root._open = ""
+                        onEditRequested: root._editing = ethernetProfile.uuid
+                    }
                 }
             }
         }

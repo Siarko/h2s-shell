@@ -139,261 +139,255 @@ Item {
             }
 
             // ── Saved networks, and finding others ──
-            RowLayout {
+            // A section named "saved": each card the place settings.network_wifi.saved.card,
+            // its opened part …card.settings, whose `append` shows any module's elements under
+            // the page's rows, with the network in their context (as Api.networks names it)
+            SettingsSection {
+                anchor: "saved"
+                title: "Saved networks"
+                topMargin: 14
                 Layout.fillWidth: true
-                Layout.topMargin: 14
-                Layout.bottomMargin: 6
-                spacing: 8
-                Text {
-                    Layout.fillWidth: true
-                    text: "Saved networks"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    font.bold: true
-                    color: Theme.textPrimary
-                }
-                SmallButton {
+                buttons: SmallButton {
                     label: "Find networks"
                     available: WifiManager.wifiEnabled
                     tooltip: available ? "The networks in range, to connect to a new one" : "Wi-Fi is off"
                     onClicked: root._finding = true
                 }
-            }
-            Text {
-                visible: root._saved.length === 0
-                text: "None yet: networks are saved when you connect to them."
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textMuted
-            }
 
-            // Keyed by uuid: a card keeps its network (and what is typed into it) while the
-            // list is rebuilt and re-sorted on every scan
-            KeyedModel { id: _savedModel; values: root._saved; keyProp: "uuid" }
-            Repeater {
-                model: _savedModel.model
+                Text {
+                    visible: root._saved.length === 0
+                    text: "None yet: networks are saved when you connect to them."
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textMuted
+                }
 
-                NetworkProfileCard {
-                    id: _network
-                    objectName: "savedNetwork"
-                    required property string modelData
-                    readonly property var network: _savedModel.byKey[modelData] ?? ({})
-                    readonly property bool _personal: network.security === "wpa-psk" || network.security === "sae"
-                    readonly property var _shown: root._shownPasswords[network.uuid]
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: 6
-                    profile: network
-                    title: network.ssid + (network.name !== network.ssid ? "  (" + network.name + ")" : "")
-                    subtitle: [
-                        network.active ? "Connected" : network.signal >= 0 ? "In range · " + network.signal + " %" : "Out of range",
-                        Nmcli.securityName(network.security),
-                        network.hidden ? "Hidden" : "",
-                        network.lastUsed > 0 ? "Last used " + Format.ago(network.lastUsed) : "Never used"
-                    ].filter(part => part !== "").join(" · ")
-                    open: root._open === network.uuid
-                    // In range: on the Wi-Fi device
-                    useDevice: network.signal >= 0 ? NetworkManager.wifiDevice : ""
-                    autoconnectHint: "When in range"
-                    priorityHint: "Higher wins when several are in range"
-                    onToggleRequested: root._open = open ? "" : network.uuid
-                    onForgotten: root._open = ""
-                    onEditRequested: root._editing = network.uuid
+                // Keyed by uuid: a card keeps its network (and what is typed into it) while the
+                // list is rebuilt and re-sorted on every scan
+                KeyedModel { id: _savedModel; values: root._saved; keyProp: "uuid" }
+                Repeater {
+                    model: _savedModel.model
 
-                    // The password: shown for a while, or changed
-                    ColumnLayout {
-                        visible: _network._personal
+                    NetworkProfileCard {
+                        id: _network
+                        objectName: "savedNetwork"
+                        required property string modelData
+                        readonly property var network: _savedModel.byKey[modelData] ?? ({})
+                        readonly property bool _personal: network.security === "wpa-psk" || network.security === "sae"
+                        readonly property var _shown: root._shownPasswords[network.uuid]
+                        anchor: "card"
+                        context: ModuleRules.networkContext(network)
                         Layout.fillWidth: true
-                        spacing: 4
-                        Text {
-                            text: "Password"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                        }
-                        RowLayout {
+                        Layout.bottomMargin: 6
+                        profile: network
+                        title: network.ssid + (network.name !== network.ssid ? "  (" + network.name + ")" : "")
+                        subtitle: [
+                            network.active ? "Connected" : network.signal >= 0 ? "In range · " + network.signal + " %" : "Out of range",
+                            Nmcli.securityName(network.security),
+                            network.hidden ? "Hidden" : "",
+                            network.lastUsed > 0 ? "Last used " + Format.ago(network.lastUsed) : "Never used"
+                        ].filter(part => part !== "").join(" · ")
+                        open: root._open === network.uuid
+                        // In range: on the Wi-Fi device
+                        useDevice: network.signal >= 0 ? NetworkManager.wifiDevice : ""
+                        autoconnectHint: "When in range"
+                        priorityHint: "Higher wins when several are in range"
+                        onToggleRequested: root._open = open ? "" : network.uuid
+                        onForgotten: root._open = ""
+                        onEditRequested: root._editing = network.uuid
+
+                        // The password: shown for a while, or changed
+                        ColumnLayout {
+                            visible: _network._personal
                             Layout.fillWidth: true
-                            spacing: 6
-                            InputField {
-                                id: _password
-                                objectName: "wifiPassword"
+                            spacing: 4
+                            Text {
+                                text: "Password"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textPrimary
+                            }
+                            RowLayout {
                                 Layout.fillWidth: true
-                                outlined: true
-                                // The eye shows the saved password for a while (read from
-                                // NetworkManager), and hides it again. Written into the field,
-                                // not bound to it: only into an empty field, and taken out only
-                                // while the field still holds it — what is typed is never
-                                // overwritten (the 30 s hiding wiped it), and clearing the field
-                                // after a save no longer stops the eye from working
-                                password: true
-                                revealed: _network._shown !== undefined
-                                ownsReveal: false
-                                onRevealToggled: root._togglePassword(_network.network.uuid)
-                                property string _written: ""
-                                readonly property var _secret: _network._shown
-                                on_SecretChanged: {
-                                    if (_secret !== undefined && (text === "" || text === _written)) {
-                                        text = _secret;
-                                        _written = _secret;
-                                    } else if (_secret === undefined && text === _written) {
-                                        text = "";
-                                        _written = "";
+                                spacing: 6
+                                InputField {
+                                    id: _password
+                                    objectName: "wifiPassword"
+                                    Layout.fillWidth: true
+                                    outlined: true
+                                    // The eye shows the saved password for a while (read from
+                                    // NetworkManager), and hides it again. Written into the field,
+                                    // not bound to it: only into an empty field, and taken out only
+                                    // while the field still holds it — what is typed is never
+                                    // overwritten (the 30 s hiding wiped it), and clearing the field
+                                    // after a save no longer stops the eye from working
+                                    password: true
+                                    revealed: _network._shown !== undefined
+                                    ownsReveal: false
+                                    onRevealToggled: root._togglePassword(_network.network.uuid)
+                                    property string _written: ""
+                                    readonly property var _secret: _network._shown
+                                    on_SecretChanged: {
+                                        if (_secret !== undefined && (text === "" || text === _written)) {
+                                            text = _secret;
+                                            _written = _secret;
+                                        } else if (_secret === undefined && text === _written) {
+                                            text = "";
+                                            _written = "";
+                                        }
                                     }
+                                    placeholder: _network._shown === undefined ? "••••••••  (type a new one to change it)" : ""
+                                    problem: text !== "" && text !== _written && !NetworkRules.isWifiPassword(text, _network.network.security)
                                 }
-                                placeholder: _network._shown === undefined ? "••••••••  (type a new one to change it)" : ""
-                                problem: text !== "" && text !== _written && !NetworkRules.isWifiPassword(text, _network.network.security)
+                                SmallButton {
+                                    label: "Save"
+                                    kind: "save"
+                                    available: !NetworkProfiles.busy && _password.text !== "" && _password.text !== _password._written
+                                        && NetworkRules.isWifiPassword(_password.text, _network.network.security)
+                                    onClicked: NetworkProfiles.setWifiPassword(_network.network.uuid, _password.text, ok => {
+                                        if (!ok)
+                                            return;
+                                        const shown = Object.assign({}, root._shownPasswords);
+                                        delete shown[_network.network.uuid];
+                                        root._shownPasswords = shown;
+                                        _password.text = "";
+                                        _password._written = "";
+                                    })
+                                }
                             }
-                            SmallButton {
-                                label: "Save"
-                                kind: "save"
-                                available: !NetworkProfiles.busy && _password.text !== "" && _password.text !== _password._written
-                                    && NetworkRules.isWifiPassword(_password.text, _network.network.security)
-                                onClicked: NetworkProfiles.setWifiPassword(_network.network.uuid, _password.text, ok => {
-                                    if (!ok)
-                                        return;
-                                    const shown = Object.assign({}, root._shownPasswords);
-                                    delete shown[_network.network.uuid];
-                                    root._shownPasswords = shown;
-                                    _password.text = "";
-                                    _password._written = "";
-                                })
+                            Hint {
+                                visible: _password.problem
+                                text: "8 to 63 characters."
                             }
-                        }
-                        Hint {
-                            visible: _password.problem
-                            text: "8 to 63 characters."
                         }
                     }
                 }
             }
 
             // ── Hotspots: this computer's own networks ──
-            RowLayout {
+            // A section named "hotspots", its cards named too; no place in it is published
+            // (a hotspot is no network this computer joins)
+            SettingsSection {
+                anchor: "hotspots"
+                title: "Hotspots"
+                topMargin: 14
                 Layout.fillWidth: true
-                Layout.topMargin: 14
-                Layout.bottomMargin: 6
-                spacing: 8
-                Text {
-                    Layout.fillWidth: true
-                    text: "Hotspots"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    font.bold: true
-                    color: Theme.textPrimary
-                }
-                SmallButton {
+                buttons: SmallButton {
                     label: "New hotspot"
                     tooltip: "Other devices join this computer and use its internet"
                     onClicked: root._newHotspot = true
                 }
-            }
-            Text {
-                visible: root._hotspots.length === 0
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "None yet: a hotspot lets phones and other computers use this one's internet."
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                color: Theme.textMuted
-            }
 
-            KeyedModel { id: _hotspotsModel; values: root._hotspots; keyProp: "uuid" }
-            Repeater {
-                model: _hotspotsModel.model
-
-                NetworkProfileCard {
-                    id: _hotspot
-                    required property string modelData
-                    readonly property var hotspot: _hotspotsModel.byKey[modelData] ?? ({})
-                    readonly property var _shown: root._shownPasswords[hotspot.uuid]
-                    readonly property int _devices: hotspot.active ? NetworkOverview.hotspotClients.length : 0
+                Text {
+                    visible: root._hotspots.length === 0
                     Layout.fillWidth: true
-                    Layout.bottomMargin: 6
-                    profile: hotspot
-                    title: hotspot.ssid + (hotspot.name !== hotspot.ssid ? "  (" + hotspot.name + ")" : "")
-                    subtitle: [
-                        hotspot.active ? "On · " + _devices + (_devices === 1 ? " device" : " devices") : "Off",
-                        Nmcli.securityName(hotspot.security),
-                        Nmcli.bandName(hotspot.band),
-                        hotspot.hidden ? "Hidden" : ""
-                    ].filter(part => part !== "").join(" · ")
-                    open: root._open === hotspot.uuid
-                    useDevice: WifiManager.wifiEnabled ? NetworkManager.wifiDevice : ""
-                    useLabel: "Turn on"
-                    stopLabel: "Turn off"
-                    stopsProfile: true
-                    useQuestion: WifiManager.hotspotQuestion
-                    autoconnectLabel: "Start automatically"
-                    autoconnectHint: "When the computer starts"
-                    showPriority: false
-                    editTooltip: "Name, password, band, and the addresses handed out"
-                    onToggleRequested: root._open = open ? "" : hotspot.uuid
-                    onForgotten: root._open = ""
-                    onEditRequested: root._editing = hotspot.uuid
+                    wrapMode: Text.WordWrap
+                    text: "None yet: a hotspot lets phones and other computers use this one's internet."
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeBody
+                    color: Theme.textMuted
+                }
 
-                    // The password, to tell those who join
-                    RowLayout {
-                        visible: _hotspot.hotspot.security !== ""
+                KeyedModel { id: _hotspotsModel; values: root._hotspots; keyProp: "uuid" }
+                Repeater {
+                    model: _hotspotsModel.model
+
+                    NetworkProfileCard {
+                        id: _hotspot
+                        required property string modelData
+                        readonly property var hotspot: _hotspotsModel.byKey[modelData] ?? ({})
+                        readonly property var _shown: root._shownPasswords[hotspot.uuid]
+                        readonly property int _devices: hotspot.active ? NetworkOverview.hotspotClients.length : 0
+                        anchor: "card"
                         Layout.fillWidth: true
-                        spacing: 8
-                        Text {
-                            text: "Password"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                        }
-                        Text {
+                        Layout.bottomMargin: 6
+                        profile: hotspot
+                        title: hotspot.ssid + (hotspot.name !== hotspot.ssid ? "  (" + hotspot.name + ")" : "")
+                        subtitle: [
+                            hotspot.active ? "On · " + _devices + (_devices === 1 ? " device" : " devices") : "Off",
+                            Nmcli.securityName(hotspot.security),
+                            Nmcli.bandName(hotspot.band),
+                            hotspot.hidden ? "Hidden" : ""
+                        ].filter(part => part !== "").join(" · ")
+                        open: root._open === hotspot.uuid
+                        useDevice: WifiManager.wifiEnabled ? NetworkManager.wifiDevice : ""
+                        useLabel: "Turn on"
+                        stopLabel: "Turn off"
+                        stopsProfile: true
+                        useQuestion: WifiManager.hotspotQuestion
+                        autoconnectLabel: "Start automatically"
+                        autoconnectHint: "When the computer starts"
+                        showPriority: false
+                        editTooltip: "Name, password, band, and the addresses handed out"
+                        onToggleRequested: root._open = open ? "" : hotspot.uuid
+                        onForgotten: root._open = ""
+                        onEditRequested: root._editing = hotspot.uuid
+
+                        // The password, to tell those who join
+                        RowLayout {
+                            visible: _hotspot.hotspot.security !== ""
                             Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            text: _hotspot._shown ?? "••••••••"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textSecondary
-                        }
-                        SmallButton {
-                            label: _hotspot._shown === undefined ? "Show" : "Hide"
-                            onClicked: root._togglePassword(_hotspot.hotspot.uuid)
-                        }
-                    }
-
-                    // Who is on it: the devices heard from lately, by address
-                    ColumnLayout {
-                        visible: _hotspot.hotspot.active
-                        Layout.fillWidth: true
-                        spacing: 2
-                        Text {
-                            text: "Devices"
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSizeBody
-                            color: Theme.textPrimary
-                        }
-                        Hint {
-                            visible: NetworkOverview.hotspotClients.length === 0
-                            text: "None yet."
-                        }
-                        KeyedModel {
-                            id: _clientsModel
-                            values: _hotspot.hotspot.active ? NetworkOverview.hotspotClients : []
-                            keyProp: "mac"
-                        }
-                        Repeater {
-                            model: _clientsModel.model
-                            RowLayout {
-                                required property string modelData
-                                readonly property var client: _clientsModel.byKey[modelData] ?? ({})
+                            spacing: 8
+                            Text {
+                                text: "Password"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textPrimary
+                            }
+                            Text {
                                 Layout.fillWidth: true
-                                spacing: 12
-                                Text {
-                                    text: client.address
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeBody
-                                    color: Theme.textSecondary
-                                }
-                                Text {
+                                elide: Text.ElideRight
+                                text: _hotspot._shown ?? "••••••••"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textSecondary
+                            }
+                            SmallButton {
+                                label: _hotspot._shown === undefined ? "Show" : "Hide"
+                                onClicked: root._togglePassword(_hotspot.hotspot.uuid)
+                            }
+                        }
+
+                        // Who is on it: the devices heard from lately, by address
+                        ColumnLayout {
+                            visible: _hotspot.hotspot.active
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "Devices"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textPrimary
+                            }
+                            Hint {
+                                visible: NetworkOverview.hotspotClients.length === 0
+                                text: "None yet."
+                            }
+                            KeyedModel {
+                                id: _clientsModel
+                                values: _hotspot.hotspot.active ? NetworkOverview.hotspotClients : []
+                                keyProp: "mac"
+                            }
+                            Repeater {
+                                model: _clientsModel.model
+                                RowLayout {
+                                    required property string modelData
+                                    readonly property var client: _clientsModel.byKey[modelData] ?? ({})
                                     Layout.fillWidth: true
-                                    text: client.mac
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSizeSmall
-                                    color: Theme.textMuted
+                                    spacing: 12
+                                    Text {
+                                        text: client.address
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeBody
+                                        color: Theme.textSecondary
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: client.mac
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.textMuted
+                                    }
                                 }
                             }
                         }

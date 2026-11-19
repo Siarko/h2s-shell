@@ -66,6 +66,15 @@ import qs.singletons.network
 // the others; VPNs reordered, added and taken out with new objects at each read — the
 // elements follow their VPN, a context handed again only when it changed, an element gone
 // with its VPN.
+//
+// The Wi-Fi and Ethernet pages in a network state the suite holds (saved networks, a hotspot,
+// wired profiles, a wired device): where their parts stand, every card closed and one open on
+// each page, as they always stood; then a fixture module (tests/fixtures/modules/anchors-
+// networks) at the saved networks' and wired profiles' opened cards (append): its element
+// only in the open card, under the page's rows, 6 apart, with the network in its context as
+// Api.networks names it; the page otherwise unmoved; none in a closed card or a hotspot's;
+// networks read anew with new objects (reordered, one up, added, taken out) — the element
+// follows its network, its context handed once, and goes with it.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -195,6 +204,10 @@ TestCase {
     function _end() {
         _pinNetwork(false);
         _holdProfiles(null);
+        _holdWifiDetails(null);
+        _holdDevices(null);
+        if (_heldNetworks !== null)
+            _holdNetworks(null);
         _fakeVpn?.destroy();
         _ownVpn?.destroy();
         _dropPopup();
@@ -993,7 +1006,10 @@ TestCase {
 
     // The popup places live under `prefix` against the table: each of its rows live, and
     // every live path not in it among those named, not published
-    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card"]
+    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
+                                               "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
+                                               "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
+                                               "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card"]
     function _popupLiveProblems(prefix) {
         const problems = [];
         const live = Object.keys(Anchors.live).filter(path => path === prefix || path.startsWith(prefix + "."));
@@ -1173,6 +1189,314 @@ TestCase {
         const steady = described === _lastVpnViews;
         _lastVpnViews = described;
         return steady;
+    }
+
+    // ---- The Wi-Fi and Ethernet pages: the saved networks' and the wired profiles' cards ----
+
+    // A network page as the settings window's page loader holds it, in a layer surface in a
+    // corner
+    property Component _networkPageViewComponent: Component {
+        PanelWindow {
+            id: networkPageWindow
+
+            property string page: ""
+            property url source
+            property alias loader: networkPageLoader
+
+            anchors {
+                top: true
+                left: true
+            }
+            implicitWidth: 520
+            implicitHeight: 1000
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Loader {
+                id: networkPageLoader
+                property string anchorBase: "settings." + networkPageWindow.page
+                anchors.fill: parent
+                source: networkPageWindow.source
+            }
+        }
+    }
+    property var _wifiPage: null
+    property var _ethernetPage: null
+    // An element kept to see that it stays the same object
+    property var _keptNetwork: null
+    property int _keptNetworkChanges: 0
+    property var _keptWired: null
+    // The parts of the two pages with no module, to compare with them under one
+    property var _wifiPartsBefore: []
+    property var _ethernetPartsBefore: []
+
+    // Stand-in Wi-Fi details and devices, held in their singletons while set, as the profiles
+    // are (_holdProfiles)
+    property var _heldWifi: null
+    property var _unheldWifi: null
+    function _holdWifiDetails(details) {
+        if (details !== null && _heldWifi === null)
+            _unheldWifi = NetworkProfiles.wifi;
+        if (details === null && _heldWifi === null)
+            return;
+        _heldWifi = details;
+        NetworkProfiles.wifi = details ?? _unheldWifi ?? {};
+    }
+    property Connections _holdNetworkWifi: Connections {
+        target: NetworkProfiles
+        enabled: suite._heldWifi !== null
+        function onWifiChanged() {
+            if (NetworkProfiles.wifi !== suite._heldWifi)
+                NetworkProfiles.wifi = suite._heldWifi;
+        }
+    }
+    property var _heldDevices: null
+    property var _unheldDevices: null
+    function _holdDevices(devices) {
+        if (devices !== null && _heldDevices === null)
+            _unheldDevices = NetworkOverview.devices;
+        if (devices === null && _heldDevices === null)
+            return;
+        _heldDevices = devices;
+        NetworkOverview.devices = devices ?? _unheldDevices ?? [];
+    }
+    property Connections _holdOverviewDevices: Connections {
+        target: NetworkOverview
+        enabled: suite._heldDevices !== null
+        function onDevicesChanged() {
+            if (NetworkOverview.devices !== suite._heldDevices)
+                NetworkOverview.devices = suite._heldDevices;
+        }
+    }
+
+    // NetworkManager's profiles as a read gives them, new objects at each call: [uuid, name,
+    // kind, last used, the device it is up on ("" not up)]
+    function _networkProfiles(entries) {
+        return entries.map(entry => ({ uuid: entry[0], name: entry[1], type: entry[2] === "wifi" ? "802-11-wireless" : "802-3-ethernet",
+                                       kind: entry[2], autoconnect: true, priority: 0, lastUsed: entry[3], active: entry[4] !== "",
+                                       port: "", device: entry[4], state: entry[4] !== "" ? "activated" : "" }));
+    }
+    readonly property var _wifiDetailsHeld: ({
+        "anchors-home": { ssid: "Home", security: "wpa-psk", hidden: false, mode: "infrastructure", band: "" },
+        "anchors-office": { ssid: "Office", security: "sae", hidden: false, mode: "infrastructure", band: "" },
+        "anchors-cafe": { ssid: "Cafe", security: "", hidden: false, mode: "infrastructure", band: "" },
+        "anchors-airport": { ssid: "Airport", security: "wpa-psk", hidden: false, mode: "infrastructure", band: "" },
+        "anchors-spot": { ssid: "Spot", security: "wpa-psk", hidden: false, mode: "ap", band: "a" }
+    })
+    readonly property var _wiredDevice: ({ device: "eth-anchors", ipIface: "", type: "ethernet", kind: "ethernet", mac: "00:11:22:33:44:55", mtu: 1500,
+                                          state: 100, stateText: "connected", connection: "Wired", vendor: "", product: "", driver: "", speed: 1000,
+                                          carrier: "on", ipv4: [], gateway4: "", dns: [], domains: [], ipv6: [], gateway6: "" })
+
+    // The cards of a page (every card block under it, whatever its path), by profile UUID
+    function _profileCards(page) {
+        const cards = {};
+        const walk = item => {
+            for (const child of item?.children ?? []) {
+                if (child.isAnchorBlock === true && child.kind === "card")
+                    cards[child.profile?.uuid ?? ""] = child;
+                walk(child);
+            }
+        };
+        walk(page?.loader.item);
+        return cards;
+    }
+
+    // The cards at `path` on a page, by profile UUID
+    function _cardsAt(page, path) {
+        const cards = {};
+        for (const card of _blocksAt(page?.loader.item, path))
+            cards[card.profile?.uuid ?? ""] = card;
+        return cards;
+    }
+
+    // A page's column: what its Flickable scrolls
+    function _pageColumn(page) {
+        for (const child of page?.loader.item?.children ?? []) {
+            if (child.contentHeight !== undefined && child.contentItem)
+                return child.contentItem.children[0] ?? null;
+        }
+        return null;
+    }
+
+    // A network page's parts top to bottom, as { name, x, y, width, height } in its column:
+    // what stands in its columns, looked into through the columns, plain items and blocks
+    // other than cards, never into a part. A card is named by its title, a line of a title and
+    // buttons by its first text, a text by itself, a part in a file of its own by its type
+    function _pageParts(page) {
+        const column = _pageColumn(page);
+        const parts = [];
+        if (!column)
+            return parts;
+        const typeOf = item => String(item).replace(/\(.*$/, "").replace(/_QML(TYPE)?_\d+$/, "");
+        const isCard = item => item.isAnchorBlock === true && item.kind === "card";
+        const opens = item => (item.isAnchorBlock === true && !isCard(item) && item.contributions === undefined)
+            || /^QQuick(Column|ColumnLayout|Item|Loader)(_QML_\d+)?\(/.test(String(item));
+        const firstText = item => {
+            if (!item.visible)
+                return "";
+            if (typeof item.text === "string" && item.font !== undefined && /[A-Za-z]/.test(item.text))
+                return item.text;
+            for (const child of item.children ?? []) {
+                const text = firstText(child);
+                if (text !== "")
+                    return text;
+            }
+            return "";
+        };
+        const nameOf = item => {
+            if (isCard(item))
+                return "card " + item.title;
+            if (item.contributions !== undefined)
+                return "modules";
+            if (typeof item.text === "string" && item.font !== undefined)
+                return "text " + item.text.slice(0, 18);
+            if (/^QQuickRowLayout/.test(String(item)))
+                return "text " + firstText(item).slice(0, 18);
+            return typeOf(item);
+        };
+        const walk = item => {
+            for (const child of item.children ?? []) {
+                if (!child.visible || child.width <= 0 || child.height <= 0)
+                    continue;
+                if (opens(child)) {
+                    walk(child);
+                    continue;
+                }
+                const point = child.mapToItem(column, 0, 0);
+                parts.push({ name: nameOf(child), x: point.x, y: point.y, width: child.width, height: child.height });
+            }
+        };
+        walk(column);
+        return parts.sort((a, b) => a.y - b.y || a.x - b.x);
+    }
+
+    // What is wrong with where a page's parts stand: `expected` [[name, the gap above it,
+    // whether it is as wide as the column]], each at the column's left edge — measured from
+    // each part's own height, so no font changes it
+    function _pagePartsProblems(page, expected) {
+        const parts = _pageParts(page);
+        const width = _pageColumn(page)?.width ?? -1;
+        if (parts.map(part => part.name).join("|") !== expected.map(entry => entry[0]).join("|"))
+            return ["the parts: " + parts.map(part => part.name).join("|")];
+        const problems = [];
+        parts.forEach((part, index) => {
+            const [name, gap, full] = expected[index];
+            const top = index === 0 ? gap : parts[index - 1].y + parts[index - 1].height + gap;
+            if (Math.abs(part.y - top) > 0.01)
+                problems.push(name + " at y " + part.y + ", not " + top);
+            if (Math.abs(part.x) > 0.01)
+                problems.push(name + " at x " + part.x + ", not 0");
+            if (full && Math.abs(part.width - width) > 0.01)
+                problems.push(name + " " + part.width + " wide, not " + width);
+        });
+        return problems;
+    }
+
+    // Everything a page shows, for comparing two versions of it on one machine: each text
+    // (where it is drawn: its position, the width of its letters, its height), each button,
+    // each card's frame and each named item, in the page loader's coordinates
+    function _pageFingerprint(page) {
+        const loader = page.loader;
+        const entries = [];
+        const round = value => Math.round(value * 100) / 100;
+        const walk = item => {
+            for (const child of item.children ?? []) {
+                if (!child.visible)
+                    continue;
+                const point = child.mapToItem(loader, 0, 0);
+                const at = [round(point.x), round(point.y)];
+                if (typeof child.text === "string" && child.font !== undefined) {
+                    if (child.text !== "")
+                        entries.push("'" + child.text.slice(0, 24) + "' " + at.concat([round(child.contentWidth), round(child.height)]).join(" "));
+                    continue;
+                }
+                if (typeof child.label === "string" && child.clicked !== undefined) {
+                    entries.push("[" + child.label + "] " + at.concat([round(child.width), round(child.height)]).join(" "));
+                    continue;
+                }
+                if (child.isAnchorBlock === true && child.kind === "card")
+                    entries.push("card " + child.title + " " + at.concat([round(child.width), round(child.height)]).join(" "));
+                else if (child.objectName !== "")
+                    entries.push(child.objectName + " " + at.concat([round(child.width), round(child.height)]).join(" "));
+                walk(child);
+            }
+        };
+        walk(loader.item);
+        return entries.join(" · ");
+    }
+
+    // The Wi-Fi page with every card closed: the heading, the Wi-Fi switch 8 under it, the
+    // saved networks' title 20 lower (the switch's 6 and the title's 14), each saved network's
+    // card 6 apart (the one in use, the one in range, the one out of range), the hotspots'
+    // title 20 under the last, the hotspot's card, the form for a hidden network 20 lower
+    readonly property var _wifiPageExpected: [["text Wi-Fi", 0, false], ["SwitchRow", 8, true], ["text Saved networks", 20, true],
+        ["card Home", 6, true], ["card Office", 6, true], ["card Cafe", 6, true], ["text Hotspots", 20, true], ["card Spot", 6, true],
+        ["HiddenNetworkRow", 20, true]]
+    // The Ethernet page: the heading, the wired device's card 8 under it, the wired profiles'
+    // title 26 lower, each profile's card 6 apart (the one in use first)
+    readonly property var _ethernetPageExpected: [["text Ethernet", 0, false], ["NetworkDeviceCard", 8, true], ["text Wired profiles", 26, false],
+        ["card Wired", 6, true], ["card Lab", 6, true]]
+
+    // Where both pages' parts stand still (a layout places its children in its polish pass,
+    // after they are built)
+    property string _lastNetworkPages: ""
+    function _networkPagesSteady() {
+        const described = [_wifiPage, _ethernetPage].map(page => page ? _describeParts(_pageParts(page)) : "-").join(" / ")
+            + [_wifiPage, _ethernetPage].map(page => page ? _pageFingerprint(page) : "-").join(" / ");
+        const steady = described === _lastNetworkPages;
+        _lastNetworkPages = described;
+        return steady;
+    }
+
+    // The parts of `after` against `before`: the same, those under `card` lower by `shift`,
+    // `card` itself taller by it
+    function _shiftedProblems(before, after, card, shift) {
+        if (before.map(part => part.name).join("|") !== after.map(part => part.name).join("|"))
+            return ["the parts: " + after.map(part => part.name).join("|")];
+        const problems = [];
+        const index = before.findIndex(part => part.name === card);
+        before.forEach((part, i) => {
+            const moved = after[i];
+            const y = part.y + (i > index ? shift : 0);
+            const height = part.height + (i === index ? shift : 0);
+            if (Math.abs(moved.y - y) > 0.01 || Math.abs(moved.height - height) > 0.01 || Math.abs(moved.x - part.x) > 0.01 || Math.abs(moved.width - part.width) > 0.01)
+                problems.push(part.name + " at " + [moved.x, moved.y, moved.width, moved.height].join(" ") + ", not " + [part.x, y, part.width, height].join(" "));
+        });
+        return problems;
+    }
+
+    // The elements of the network fixture standing now: "<anchor>|<networkId>:<count>"
+    function _networkLive() {
+        const main = Modules.host.mainObject("anchors-networks");
+        return main ? Object.keys(main.live).sort().map(key => key + ":" + main.live[key]).join(",") : "?";
+    }
+
+    // What is wrong with where a card's element stands: in its opened part, under the page's
+    // own rows (the card's rows' column) `spacing` apart, last, as wide as the part
+    function _regionElementProblems(card) {
+        const region = card.settingsRegion;
+        const element = region.appendHost.items[0];
+        if (!element)
+            return ["no element"];
+        const siblings = region.appendHost.parent.children;
+        let rows = null;
+        for (let i = 0; i < siblings.length; i++) {
+            if (siblings[i] === region.appendHost)
+                rows = siblings[i - 1];
+        }
+        const problems = [];
+        const top = element.mapToItem(card, 0, 0).y;
+        const rowsBottom = rows.mapToItem(card, 0, 0).y + rows.height;
+        if (Math.abs(top - (rowsBottom + card.spacing)) > 0.01)
+            problems.push("the element at " + top + ", not " + card.spacing + " under the rows (" + rowsBottom + ")");
+        if (Math.abs(element.mapToItem(region, 0, 0).y + element.height - region.height) > 0.01)
+            problems.push("the element is not last in the opened part");
+        if (Math.abs(element.width - region.width) > 0.01 || Math.abs(element.mapToItem(region, 0, 0).x) > 0.01)
+            problems.push("the element " + element.width + " wide, not " + region.width);
+        return problems;
     }
 
     // The suite's bar (two cells) and a popup on its screen, as the bar opens it
@@ -2111,6 +2435,165 @@ TestCase {
             _ownVpn.destroy();
             _ownVpn = null;
             _holdProfiles(null);
+        });
+
+        // The Wi-Fi and Ethernet pages: where their parts stand, with a card open and with a
+        // module's element in it; the saved networks' and the wired profiles' opened cards
+        // (settings.network_wifi.saved.card.settings, settings.network_ethernet.profiles.card.
+        // settings, append) — each opened card shows the element of the fixture module
+        // (tests/fixtures/modules/anchors-networks) under the page's own rows, with the
+        // network in its context; a closed card builds none, a hotspot's card none; networks
+        // read anew (new objects, reordered, added, taken out): the element follows its network
+        // and goes with it
+        _then("the VPN fixtures gone", () => Modules.host.statuses.length === 0 && _live("settings") === "", () => {
+            _pinNetwork(true);
+            _holdWifiDetails(_wifiDetailsHeld);
+            _holdDevices([_wiredDevice]);
+            _holdNetworks([{ ssid: "Home", signal: 80, security: "WPA2", inUse: true, bands: ["2.4G"], band: "2.4G" },
+                           { ssid: "Office", signal: 60, security: "WPA3", inUse: false, bands: ["5G"], band: "5G" }]);
+            _holdProfiles(_networkProfiles([["anchors-home", "Home", "wifi", 30, "wlan0"], ["anchors-office", "Office", "wifi", 20, ""],
+                                            ["anchors-cafe", "Cafe", "wifi", 10, ""], ["anchors-spot", "Spot", "wifi", 5, ""],
+                                            ["anchors-wired", "Wired", "ethernet", 30, "eth-anchors"], ["anchors-lab", "Lab", "ethernet", 20, ""]]));
+            _wifiPage = _networkPageViewComponent.createObject(suite, { page: "network_wifi", source: Qt.resolvedUrl("../panels/settings/NetworkWifiSettings.qml") });
+            _ethernetPage = _networkPageViewComponent.createObject(suite, { page: "network_ethernet", source: Qt.resolvedUrl("../panels/settings/NetworkEthernetSettings.qml") });
+            _views.push(_wifiPage, _ethernetPage);
+        });
+        _then("the network pages laid out, every card closed", () => Object.keys(_profileCards(_wifiPage)).length === 4
+              && Object.keys(_profileCards(_ethernetPage)).length === 2 && _networkPagesSteady(), () => {
+            console.log("  geometry: the Wi-Fi page, closed: " + _pageFingerprint(_wifiPage));
+            console.log("  geometry: the Ethernet page, closed: " + _pageFingerprint(_ethernetPage));
+            assertEqual(_pagePartsProblems(_wifiPage, _wifiPageExpected).join("; "), "", "the Wi-Fi page: its parts where they always stood");
+            assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "the Ethernet page: its parts where they always stood");
+            _wifiPage.loader.item._open = "anchors-home";
+            _ethernetPage.loader.item._open = "anchors-wired";
+        });
+        _then("a card open on each page", () => _profileCards(_wifiPage)["anchors-home"]?.settingsRegion.visible
+              && _profileCards(_ethernetPage)["anchors-wired"]?.settingsRegion.visible && _networkPagesSteady(), () => {
+            console.log("  geometry: the Wi-Fi page, Home open: " + _pageFingerprint(_wifiPage));
+            console.log("  geometry: the Ethernet page, Wired open: " + _pageFingerprint(_ethernetPage));
+            assertEqual(_pagePartsProblems(_wifiPage, _wifiPageExpected).join("; "), "", "… and with a card open");
+            assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "… on both pages");
+            _wifiPartsBefore = _pageParts(_wifiPage);
+            _ethernetPartsBefore = _pageParts(_ethernetPage);
+            assertEqual(_live("settings.network_wifi"), "settings.network_wifi.hotspots:1,settings.network_wifi.hotspots.card:1,settings.network_wifi.hotspots.card.settings:1,"
+                        + "settings.network_wifi.saved:1,settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.settings:3",
+                        "the Wi-Fi page: its two sections, a card and its opened part per saved network and per hotspot");
+            assertEqual(_live("settings.network_ethernet"), "settings.network_ethernet.profiles:1,settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.settings:2",
+                        "the Ethernet page: its section, a card and its opened part per wired profile");
+            assertEqual(_popupLiveProblems("settings.network_wifi").concat(_popupLiveProblems("settings.network_ethernet")).join("; "), "",
+                        "… their places in the table live, the rest named, not published");
+            const cards = Object.values(_profileCards(_wifiPage)).concat(Object.values(_profileCards(_ethernetPage)));
+            assert(cards.every(card => !card.settingsRegion.appendHost.built && !card.settingsRegion.prependHost.built), "no module: nothing built in any card");
+            Modules.host.load([fixtures + "/anchors-networks"], {});
+        });
+        _then("the network fixture loaded, its element in each open card", () => _generalSettled() && Modules.status("anchors-networks")?.state === "loaded"
+              && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].settingsRegion.appendHost, 1)
+              && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].settingsRegion.appendHost, 1)
+              && _networkPagesSteady(), () => {
+            const status = Modules.status("anchors-networks");
+            assertEqual(status.errors.length + " " + status.warnings.length + " " + status.deprecations.length, "0 0 0", "the network fixture: loaded, clean");
+            const wifiCards = _cardsAt(_wifiPage, "settings.network_wifi.saved.card");
+            const ethernetCards = _cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card");
+            assertEqual(["anchors-home", "anchors-office", "anchors-cafe"].map(id => _names(wifiCards[id].settingsRegion.appendHost) || "-").join(" "),
+                        "anchors-networks:Element - -", "the Wi-Fi page: the element in the open card only");
+            assert(!wifiCards["anchors-office"].settingsRegion.appendHost.built && !wifiCards["anchors-cafe"].settingsRegion.appendHost.built,
+                   "… nothing built in the closed cards");
+            assertEqual(["anchors-wired", "anchors-lab"].map(id => _names(ethernetCards[id].settingsRegion.appendHost) || "-").join(" "),
+                        "anchors-networks:Element -", "the Ethernet page: the same");
+            const home = wifiCards["anchors-home"];
+            const wired = ethernetCards["anchors-wired"];
+            assertEqual(_regionElementProblems(home).join("; "), "", "Home's element: under the page's rows (the password), 6 apart, last, as wide as the opened part");
+            assertEqual(_regionElementProblems(wired).join("; "), "", "Wired's element: under the card's rows, 6 apart, last, as wide");
+            const homeElement = home.settingsRegion.appendHost.items[0];
+            const wiredElement = wired.settingsRegion.appendHost.items[0];
+            assertEqual(_contextKeys(homeElement.item), "active,anchor,kind,name,networkId,placement", "the element's context: the network, with anchor and placement");
+            assertEqual([homeElement.item.context.anchor, homeElement.item.context.placement, homeElement.item.context.networkId, homeElement.item.context.name,
+                         homeElement.item.context.kind, homeElement.item.context.active].join(" "),
+                        "settings.network_wifi.saved.card.settings append anchors-home Home wifi true", "… Home, as Api.networks names it");
+            assertEqual([wiredElement.item.context.anchor, wiredElement.item.context.networkId, wiredElement.item.context.name, wiredElement.item.context.kind,
+                         wiredElement.item.context.active].join(" "),
+                        "settings.network_ethernet.profiles.card.settings anchors-wired Wired ethernet true", "… Wired, on its page's path");
+            assertEqual(homeElement.item.module, Modules.handle("anchors-networks"), "… its module's handle");
+            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing).join("; "), "",
+                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element and its gap");
+            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing).join("; "), "",
+                        "… the Ethernet page too");
+            const spot = _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"];
+            assert(spot && !spot.settingsRegion.appendHost.built, "the hotspot's card: none");
+            assertEqual(_networkLive(), "settings.network_ethernet.profiles.card.settings|anchors-wired:1,settings.network_wifi.saved.card.settings|anchors-home:1",
+                        "the elements standing: one per open card");
+            _wifiPage.loader.item._open = "anchors-office";
+            _ethernetPage.loader.item._open = "anchors-lab";
+        });
+        _then("other cards opened", () => _networkLive() === "settings.network_ethernet.profiles.card.settings|anchors-lab:1,settings.network_wifi.saved.card.settings|anchors-office:1"
+              && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-office"].settingsRegion.appendHost, 1)
+              && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-lab"].settingsRegion.appendHost, 1)
+              && _networkPagesSteady(), () => {
+            const wifiCards = _cardsAt(_wifiPage, "settings.network_wifi.saved.card");
+            const ethernetCards = _cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card");
+            assert(!wifiCards["anchors-home"].settingsRegion.appendHost.built && !ethernetCards["anchors-wired"].settingsRegion.appendHost.built,
+                   "the cards closed: their elements gone");
+            const office = wifiCards["anchors-office"];
+            const lab = ethernetCards["anchors-lab"];
+            assertEqual(_regionElementProblems(office).join("; ") + _regionElementProblems(lab).join("; "), "", "the cards opened: each its element, under its rows");
+            _keptNetwork = office.settingsRegion.appendHost.items[0].item;
+            _keptWired = lab.settingsRegion.appendHost.items[0].item;
+            assertEqual(_keptNetwork.context.networkId + " " + _keptNetwork.context.active + " " + _keptWired.context.networkId,
+                        "anchors-office false anchors-lab", "… with its own network: Office, not up; Lab");
+            _keptNetworkChanges = _keptNetwork.contextChanges;
+            // A new read: new objects; Office comes up, Cafe forgotten, Airport saved; Lab used
+            // last, Wired no longer up
+            _holdProfiles(_networkProfiles([["anchors-airport", "Airport", "wifi", 40, ""], ["anchors-home", "Home", "wifi", 30, ""],
+                                            ["anchors-office", "Office", "wifi", 20, "wlan0"], ["anchors-spot", "Spot", "wifi", 5, ""],
+                                            ["anchors-wired", "Wired", "ethernet", 30, ""], ["anchors-lab", "Lab", "ethernet", 40, ""]]));
+        });
+        const cardOrder = (page, path) => _blocksAt(page?.loader.item, path).filter(card => card.visible)
+            .sort((a, b) => a.mapToItem(null, 0, 0).y - b.mapToItem(null, 0, 0).y).map(card => card.profile?.name ?? "");
+        _then("the networks read anew", () => cardOrder(_wifiPage, "settings.network_wifi.saved.card").join(",") === "Office,Home,Airport"
+              && cardOrder(_ethernetPage, "settings.network_ethernet.profiles.card").join(",") === "Lab,Wired" && _networkPagesSteady(), () => {
+            const wifiCards = _cardsAt(_wifiPage, "settings.network_wifi.saved.card");
+            const ethernetCards = _cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card");
+            assertEqual(wifiCards["anchors-office"].settingsRegion.appendHost.items[0]?.item, _keptNetwork,
+                        "Office up, moved to the top, Cafe gone, Airport added: its element the same object");
+            assertEqual(_keptNetwork.context.networkId + " " + _keptNetwork.context.active + " " + (_keptNetwork.contextChanges - _keptNetworkChanges),
+                        "anchors-office true 1", "… still Office's, up now, its context handed once");
+            assertEqual(ethernetCards["anchors-lab"].settingsRegion.appendHost.items[0]?.item, _keptWired, "the wired profiles reordered: Lab's element the same object");
+            assertEqual(_live("settings.network_wifi.saved.card") + " " + _live("settings.network_ethernet.profiles.card"),
+                        "settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.settings:3 "
+                        + "settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.settings:2", "… a card per network, Cafe's gone");
+            assertEqual(_networkLive(), "settings.network_ethernet.profiles.card.settings|anchors-lab:1,settings.network_wifi.saved.card.settings|anchors-office:1",
+                        "… no other element made");
+            // The open cards' networks taken out
+            _holdProfiles(_networkProfiles([["anchors-airport", "Airport", "wifi", 40, ""], ["anchors-home", "Home", "wifi", 30, ""],
+                                            ["anchors-spot", "Spot", "wifi", 5, ""], ["anchors-wired", "Wired", "ethernet", 30, ""]]));
+        });
+        _then("the open cards' networks gone", () => !_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-office"]
+              && !_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-lab"] && _networkLive() === "", () => {
+            assertEqual(_live("settings.network_wifi.saved.card") + " " + _live("settings.network_ethernet.profiles.card"),
+                        "settings.network_wifi.saved.card:2,settings.network_wifi.saved.card.settings:2 "
+                        + "settings.network_ethernet.profiles.card:1,settings.network_ethernet.profiles.card.settings:1",
+                        "a network gone: its card, and the element in it, gone with it");
+            _keptNetwork = null;
+            _keptWired = null;
+            _wifiPage.loader.item._open = "anchors-spot";
+        });
+        _then("the hotspot's card open", () => _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"]?.settingsRegion.visible
+              && _networkPagesSteady(), () => {
+            const region = _cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"].settingsRegion;
+            assert(!region.appendHost.built && !region.prependHost.built && _networkLive() === "", "the hotspot's opened card: no module's element (not a place)");
+            assertEqual(Modules.status("anchors-networks")?.errors.length, 0, "no element failed meanwhile");
+            _close(_wifiPage);
+            _close(_ethernetPage);
+            _wifiPage = null;
+            _ethernetPage = null;
+        });
+        _then("the network pages closed", () => _live("settings.network_wifi") === "" && _live("settings.network_ethernet") === "", () => {
+            Modules.host.unload();
+            _holdProfiles(null);
+            _holdWifiDetails(null);
+            _holdDevices(null);
+            _holdNetworks(null);
+            _pinNetwork(false);
         });
         _clock.start();
     }

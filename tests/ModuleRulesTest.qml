@@ -831,8 +831,11 @@ TestCase {
                     "settings.general page append panels/settings/GeneralSettings.qml; popup.network.connections popupSection append panels/NetworkPanel.qml; "
                     + "popup.notifications popupSection prepend panels/NotificationPanel.qml; "
                     + "popup.network.connections.vpn.row row after panels/network/VpnSection.qml; "
-                    + "settings.network_vpn.vpns.card.settings region prepend panels/settings/NetworkVpnSettings.qml",
-                    "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards)");
+                    + "settings.network_vpn.vpns.card.settings region prepend panels/settings/NetworkVpnSettings.qml; "
+                    + "settings.network_wifi.saved.card.settings region append panels/settings/NetworkWifiSettings.qml; "
+                    + "settings.network_ethernet.profiles.card.settings region append panels/settings/NetworkEthernetSettings.qml",
+                    "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards; "
+                    + "1.24: the saved networks' and wired profiles' cards)");
         assertEqual(rules.anchorTable.filter(entry => entry.scope === "own-provider").map(entry => entry.path).join(","),
                     "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings", "… the VPN places own-provider, the others not");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
@@ -1249,6 +1252,17 @@ TestCase {
             { id: "u-home", name: "Home", kind: "wifi", active: false },
             { id: "u-train", name: "Train", kind: "wifi", active: false }]),
             "apiNetworks: Wi-Fi and Ethernet, active first (\"activated\" only), no hotspot, VPN, bridge, port or loopback");
+        // The context of an element in a saved network's card (1.24): the network as Api.networks
+        // names it, under the key networkId
+        assertEqual(JSON.stringify([profile("u-cafe", "Cafe", "wifi", "activated"), profile("u-train", "Train\nnow", "wifi", "activating"),
+                                    profile("u-office", "Office LAN", "ethernet", "")].map(rules.networkContext)),
+                    JSON.stringify([{ networkId: "u-cafe", name: "Cafe", kind: "wifi", active: true },
+                                    { networkId: "u-train", name: "Train now", kind: "wifi", active: false },
+                                    { networkId: "u-office", name: "Office LAN", kind: "ethernet", active: false }]),
+                    "networkContext: the profile's UUID, its name on one line, its kind, up only when \"activated\"");
+        assertEqual(JSON.stringify([undefined, null, {}].map(rules.networkContext)),
+                    JSON.stringify([0, 1, 2].map(() => ({ networkId: "", name: "", kind: "", active: false }))),
+                    "networkContext: no profile (a card being made) — empty fields, not up");
         assertEqual(rules.apiNetworks([profile("u-unread", "New", "wifi", "")], {}).length, 0,
                     "apiNetworks: a Wi-Fi profile whose details are not read yet is left out (it could be a hotspot)");
         assertEqual(rules.apiNetworks([], {}).length, 0, "apiNetworks: no profiles, none");
