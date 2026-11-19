@@ -13,6 +13,14 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.17: a file chooser — `module.chooseFiles({ mode, title, startDirectory }, done)` on the
+  handle (`mode` `"open"`, `"openMany"` or `"folder"`; `done` gets frozen `{ paths, cancelled,
+  blocked, error }`, absolute paths): the system's dialog, hosted by the shell so a popup can
+  ask and close, one at a time for the whole shell (`blocked: "busy"`), refused while the
+  session is locked (`blocked: "locked"`) and closed by a lock (`cancelled`), closed with no
+  answer when the module is turned off. In module test mode no dialog opens: the calls are
+  recorded and answered by the suite (`ModuleTestKit.chooserCalls`, `chooserOpen`,
+  `answerChooser`, `cancelChooser`).
 - 1.16: network facts — `Api.networksReady` (the profiles and every Wi-Fi profile's details
   read; a failed reading of either leaves it false), `Api.networks` lists a Wi-Fi network only
   once its details are read (a hotspot no longer shows for a moment), `Api.vpnsUp` rows gain

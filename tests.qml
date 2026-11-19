@@ -60,6 +60,8 @@ QtObject {
     property var _lockView: LockViewTest {}
     property var _authPromptView: AuthPromptViewTest {}
     property var _moduleRules: ModuleRulesTest {}
+    property var _fileChooserRules: FileChooserRulesTest {}
+    property var _fileChooser: FileChooserTest {}
     property var _commandRules: CommandRulesTest {}
     property var _commandRunner: CommandRunnerTest {}
     property var _quickshellPin: QuickshellPinTest {}
@@ -67,7 +69,13 @@ QtObject {
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading]
+    readonly property var _asyncSuites: [_pointerInput, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleRegistries, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _fileChooser]
+    // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other
+    // asynchronous suites are done, so that no key they send reaches it, nor its keys them
+    readonly property bool _chooserLast: {
+        _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser);
+        return true;
+    }
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
     // asynchronous ones are done — or after a deadline, counting those as failed. A suite

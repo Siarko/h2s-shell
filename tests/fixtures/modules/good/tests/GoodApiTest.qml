@@ -7,7 +7,8 @@ import ".."
 // TestCase) — its handle, its settings, facts, store, the theme, the slot table, commands
 // through the API's helpers against stand-in programs (tests/stand-in.sh, and its pkexec in
 // tests/programs — the manifest's testPrograms), and module test mode as a module's suites see
-// it (Api.testMode, its stand-ins, what openUrl and notify record: ModuleTestKit)
+// it (Api.testMode, its stand-ins, what openUrl and notify record, the file chooser's calls
+// and answers: ModuleTestKit)
 TestCase {
     id: suite
     suiteName: "good: the module API"
@@ -67,6 +68,11 @@ TestCase {
     property var _ran: null
     property var _ranLines: []
     property var _results: ({})
+    // What module.chooseFiles answered (API 1.17), in order; the call left open when the
+    // module is turned off, and the busy one
+    property var _chosen: []
+    property var _afterOff: null
+    property var _busy: null
 
     // The store is read by a process (API 1.2): everything starts once it has answered
     function runAsync() {
@@ -99,7 +105,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.16", "Api.version");
+        assertEqual(Api.version, "1.17", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
@@ -353,6 +359,58 @@ TestCase {
             done: result => suite._ran = result
         });
 
+        // --- the file chooser (API 1.17): in test mode no dialog — the call is recorded and
+        // the suite answers it (ModuleTestKit) ---
+        ModuleTestKit.clearRecords();
+        const chooser = module.chooseFiles({ mode: "openMany", title: "Send\nfiles", startDirectory: "/srv/share/" },
+                                           result => suite._chosen = suite._chosen.concat([result]));
+        assert(chooser.open && ModuleTestKit.chooserOpen, "chooseFiles: open, waiting for the answer");
+        assertEqual(JSON.stringify(ModuleTestKit.chooserCalls),
+                    JSON.stringify([{ moduleId: "good", mode: "openMany", title: "Send files", startDirectory: "/srv/share" }]),
+                    "ModuleTestKit.chooserCalls: the call as the shell took it — the title on one line, the directory without its /");
+        module.chooseFiles({ mode: "folder" }, result => suite._busy = result);
+        assertEqual(ModuleTestKit.chooserCalls.length, 1, "… a second call while one is open is not recorded");
+        assert(ModuleTestKit.answerChooser(["relative"]) !== "" && ModuleTestKit.chooserOpen, "answerChooser: a relative path refused, still open");
+        assertEqual(ModuleTestKit.answerChooser(["/srv/share/a b.txt", "/srv/share/c"]), "", "answerChooser: two files");
+        assert(!chooser.open && !ModuleTestKit.chooserOpen, "… closed");
+        assertEqual(_chosen.length + " " + (_busy === null), "0 true", "… done is called after, never inside the call");
+        _then("the chooser answered", () => _chosen.length === 1 && _busy !== null, () => {
+            assertEqual(JSON.stringify(_chosen[0]), JSON.stringify({ paths: ["/srv/share/a b.txt", "/srv/share/c"], cancelled: false, blocked: "", error: "" }),
+                        "done: the paths, as absolute paths");
+            assert(Object.isFrozen(_chosen[0]) && Object.isFrozen(_chosen[0].paths), "… frozen");
+            assertEqual(JSON.stringify(_busy), JSON.stringify({ paths: [], cancelled: false, blocked: "busy", error: "" }),
+                        "a second chooser while one was open: blocked busy");
+            module.chooseFiles({ mode: "folder" }, result => suite._chosen = suite._chosen.concat([result]));
+            assertEqual(ModuleTestKit.chooserCalls[1]?.startDirectory, Api.system.home, "no startDirectory: the home directory (Api.system.home)");
+            assertEqual(ModuleTestKit.answerChooser(["/a", "/b"]), "mode \"folder\" chooses one path, not 2", "answerChooser: two for a folder refused");
+            assertEqual(ModuleTestKit.cancelChooser(), "", "cancelChooser()");
+        });
+        _then("the chooser cancelled", () => _chosen.length === 2, () => {
+            assertEqual(JSON.stringify(_chosen[1]), JSON.stringify({ paths: [], cancelled: true, blocked: "", error: "" }), "cancelled");
+            assertEqual(ModuleTestKit.cancelChooser(), "no chooser is open", "… none open now");
+            ModuleTestKit.setSessionLocked(true);
+            module.chooseFiles({}, result => suite._chosen = suite._chosen.concat([result]));
+            assert(!ModuleTestKit.chooserOpen && ModuleTestKit.chooserCalls.length === 2, "locked: nothing opens, nothing recorded");
+        });
+        _then("the chooser refused while locked", () => _chosen.length === 3, () => {
+            assertEqual(JSON.stringify(_chosen[2]), JSON.stringify({ paths: [], cancelled: false, blocked: "locked", error: "" }), "locked: blocked");
+            ModuleTestKit.setSessionLocked(false);
+            module.chooseFiles({ mode: "open" }, result => suite._chosen = suite._chosen.concat([result]));
+            assert(ModuleTestKit.chooserOpen, "unlocked: it opens");
+            ModuleTestKit.setSessionLocked(true);
+        });
+        _then("a lock closes the chooser", () => _chosen.length === 4, () => {
+            assertEqual(JSON.stringify(_chosen[3]), JSON.stringify({ paths: [], cancelled: true, blocked: "", error: "" }), "a lock while open: cancelled");
+            assert(!ModuleTestKit.chooserOpen, "… closed");
+            ModuleTestKit.setSessionLocked(false);
+            module.chooseFiles({ mode: "save" }, result => suite._chosen = suite._chosen.concat([result]));
+        });
+        _then("the chooser refused a wrong mode", () => _chosen.length === 5, () => {
+            assertEqual(_chosen[4].error, "mode must be one of open, openMany, folder", "a wrong mode: error, nothing opened");
+            // Left open: the module is turned off below with it open
+            module.chooseFiles({}, result => suite._afterOff = result);
+            assert(ModuleTestKit.chooserOpen, "a chooser open while the module is turned off");
+        });
         _then("the data directory is looked at", () => _dataMode !== null, () => {
             assert(_dataMode.ok && _dataMode.stdout.startsWith("700 "), "module.dataDirectory: there, mode 700: " + _dataMode.stdout);
         });
@@ -393,10 +451,15 @@ TestCase {
         });
         _then("it is turned off", () => !module.active && ModuleTestKit.status("good")?.state === "disabled", () => {
             assert(!ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "off: its widget is gone");
+            assert(!ModuleTestKit.chooserOpen, "off: its chooser closed");
+            assertEqual(ModuleTestKit.answerChooser(["/srv/late"]), "no chooser is open", "… nothing left to answer");
             assert(ModuleTestKit.setEnabled("good", true), "ModuleTestKit.setEnabled(good, true)");
         });
         _then("it is on again", () => module.active && ModuleTestKit.status("good")?.state === "loaded", () => {
             assert(ModuleTestKit.widgetEntries.some(entry => entry.module === "good"), "on again: its widget is back");
+            assertEqual(_afterOff, null, "the chooser open when it was turned off: done never called");
+            ModuleTestKit.clearRecords();
+            assertEqual(ModuleTestKit.chooserCalls.length, 0, "clearRecords(): the chooser calls too");
         });
     }
 }

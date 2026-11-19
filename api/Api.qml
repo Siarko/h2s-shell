@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.16" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.17" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -544,6 +544,37 @@ import qs.singletons.network
 //                          found: the run fails, not available. An `elevate` set to a path
 //                          outside test mode runs as given, unjudged — that ends in slice Z,
 //                          with the type.
+//
+// The file chooser (1.17), on a module's handle (api/ModuleHandle.qml; singletons/FileChooser.qml).
+//   module.chooseFiles(options, done)   asks the user for files or a folder → a handle
+//                          { open (bool), cancel() }. options, all optional (read once):
+//                            mode            "open" (the default: one file) | "openMany"
+//                                            (several files) | "folder"
+//                            title           plain text: one line, control and format
+//                                            characters dropped, at most 60 characters
+//                            startDirectory  an absolute path; none or "": the home
+//                                            directory (Api.system.home)
+//                            done(result)    called once, after chooseFiles has returned —
+//                                            never while the module is off
+//                          result, frozen: { paths (absolute paths, never URLs; frozen),
+//                          cancelled (the user closed it, cancel() was called, or the
+//                          session locked while it was open), blocked ("" | "locked": the
+//                          session is locked, nothing opened | "busy": a chooser is open
+//                          already — one at a time for the whole shell, any module's),
+//                          error (options of the wrong kind; the dialog could not be opened
+//                          or returned something that is not a local file — never half a
+//                          choice) }.
+//                          The dialog is the system's: Qt's file dialog, which the user's Qt
+//                          platform theme makes the portal's or GTK's, else Qt Quick's own.
+//                          Qt Quick's own returns one file even for "openMany"; take
+//                          `paths` as one or more. It is hosted by the shell, not by the
+//                          caller's window: a popup can ask and close. The module turned
+//                          off: the dialog closes and done is not called. A portal's dialog
+//                          is another program's window: the shell cannot close it (on a lock,
+//                          the module turned off), and what is chosen in it then is dropped.
+//                          In module test mode no dialog opens: the call is recorded and the
+//                          suite answers it (ModuleTestKit.chooserCalls, answerChooser,
+//                          cancelChooser); the lock is the test kit's (setSessionLocked).
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

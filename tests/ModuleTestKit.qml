@@ -5,7 +5,7 @@ import QtQuick
 import qs.singletons
 import qs.api
 
-// What a module's suites get of the shell in module test mode (module API 1.10–1.16; tests only:
+// What a module's suites get of the shell in module test mode (module API 1.10–1.17; tests only:
 // `import qs.tests`, which a module may import in its tests alone). Under tests/run-modules.sh
 // the shell's own module host runs in test mode; this is that host, seen from a suite.
 //
@@ -46,8 +46,22 @@ import qs.api
 //                          mode. Reset before each suite
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)
-//   clearRecords()         empties `opened` and `notified`, and sets the real clock and the
-//                          default system and network facts again
+//   clearRecords()         empties `opened`, `notified` and `chooserCalls`, and sets the
+//                          real clock and the default system and network facts again
+//   (1.17, the file chooser: module.chooseFiles opens no dialog in test mode — each call
+//   that would open one is recorded and waits for the suite's answer; the lock is the one
+//   setSessionLocked sets)
+//   chooserCalls           the calls that opened, oldest first: [{ moduleId, mode, title,
+//                          startDirectory }] as the shell took them (the title cleaned, the
+//                          directory absolute: the system's home, Api.system.home, when none
+//                          was given)
+//   chooserOpen            a chooser is open, waiting for an answer
+//   answerChooser(paths)   the user chose these (absolute paths; one for "open" and
+//                          "folder") → "" when answered, else why not (no chooser open, a
+//                          wrong answer: nothing answered); `done` gets { paths, cancelled:
+//                          false, blocked: "", error: "" }
+//   cancelChooser()        the user closed the dialog → "" or why not; `done` gets
+//                          cancelled: true
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
@@ -66,17 +80,27 @@ import qs.api
 //                          words (PrivilegedRuns.announcementFor: PolkitRules.announcement's
 //                          { module, moduleName, moduleId, authorization, command,
 //                          commandShown, … }) or null
-//   setSessionLocked(on)   the session is locked, or not
+//   setSessionLocked(on)   the session is locked, or not (for the runs as administrator
+//                          and the file chooser: a lock closes an open chooser, cancelled)
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
 //
-// Not here yet, because their features are not in the API yet: anchors and the file
-// chooser's answer.
+// Not here yet, because their feature is not in the API yet: anchors.
 Singleton {
     readonly property bool testMode: Modules.host.testMode
     readonly property var widgetEntries: Modules.host.widgetEntries
     readonly property var opened: Api._opened
     readonly property var notified: Notifier.recorded
+    readonly property var chooserCalls: FileChooser.testCalls
+    readonly property bool chooserOpen: Modules.host.testMode && FileChooser.open
+
+    function answerChooser(paths) {
+        return Modules.host.testMode ? FileChooser.testAnswer(paths) : "module test mode is off";
+    }
+
+    function cancelChooser() {
+        return Modules.host.testMode ? FileChooser.testCancel() : "module test mode is off";
+    }
 
     function setEnabled(id, on) {
         return Modules.host.testMode ? Modules.host.setEnabled(String(id ?? ""), on === true) : false;
@@ -179,11 +203,13 @@ Singleton {
     readonly property string dataHome: Modules.host.testMode && Modules.host.testHome !== "" ? Modules.host.testHome + "/.local/share" : ""
 
     function setSessionLocked(on) {
-        if (Modules.host.testMode)
+        if (Modules.host.testMode) {
             PrivilegedRuns.testLocked = on === true;
+            FileChooser.testLocked = on === true;
+        }
     }
 
-    // The links and notifications recorded, and the clock setNow set
+    // The links, notifications and chooser calls recorded, and the clock setNow set
     function clearRecords() {
         if (Modules.host.testMode) {
             Api._testNow = 0;
@@ -192,5 +218,6 @@ Singleton {
         }
         Api._opened = [];
         Notifier.clearRecorded();
+        FileChooser.testClear();
     }
 }

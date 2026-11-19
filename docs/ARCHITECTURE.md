@@ -833,6 +833,30 @@ and a trusted `timeout` are found.
   setuid); `timeout` leads into the store.
 - Arch: `/usr/bin/pkexec`, `/usr/bin/timeout`.
 
+**The file chooser** (`module.chooseFiles(options, done)` on the handle;
+`singletons/FileChooser.qml`, its decisions in `singletons/FileChooserRules.qml`): asks the
+user for files or a folder. `options`: `mode` (`"open"`, the default: one file; `"openMany"`;
+`"folder"`), `title` (plain text, one line, at most 60 characters), `startDirectory` (an
+absolute path; none: the home directory, `Api.system.home`). `done(result)`, called once
+after the call has returned: frozen `{ paths (absolute paths, never URLs), cancelled,
+blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
+- **One at a time for the whole shell**, hosted by the shell and not by the caller's window,
+  so a popup can ask and close: another call while one is open is `blocked: "busy"`.
+- **The dialog is the system's**: QtQuick.Dialogs' `FileDialog` / `FolderDialog`, which Qt's
+  platform theme (`QT_QPA_PLATFORMTHEME`) makes the portal's or GTK's where the user's theme
+  says so, else Qt Quick's own. Qt Quick's own opens only with a visible window of the shell
+  as its parent: the shell shows a window of one transparent pixel, which takes no input, while
+  a dialog is open, and makes the dialog in it. Qt Quick's own returns one file even in
+  `openMany`; the portal's can return several.
+- **The session locked**: nothing opens (`blocked: "locked"`); a lock while one is open closes
+  it (`cancelled`). **The module turned off**: its dialog is closed and `done` is never
+  called. A portal's window belongs to another process and stays on screen in both cases;
+  what is chosen in it then is dropped. The dialog is closed before it is destroyed:
+  destroyed while open, Qt Quick's own leaves its window behind.
+- The lock screen never depends on it (`tests/lock-closure.sh`).
+- NixOS and Arch: the same; which dialog appears follows the user's Qt platform theme on
+  either.
+
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
   rules, and the runner against `sh -c` scripts), `tests/PrivilegedRulesTest.qml` (the rules
   of runs as administrator, the queue's life among them) and the fixture
@@ -840,6 +864,9 @@ and a trusted `timeout` are found.
   module test mode: a stand-in pkexec that prints its arguments, streaming, cancels, the
   head and which request is its own, a module turned off, the lock),
   `tests/PolkitRulesTest.qml` (the prompt's texts and the matching of a request to a run),
+  `tests/FileChooserRulesTest.qml` (the chooser's rules), `tests/FileChooserTest.qml` (the
+  real dialog in the runner's headless compositor, driven by keys: a file chosen, a cancel,
+  busy, a lock, the module turned off),
   `tests/AuthPromptViewTest.qml` (the prompt's Module, Authorization and Command lines),
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
@@ -882,18 +909,21 @@ and a trusted `timeout` are found.
   first on `PATH` that fails the run if anything starts it. `module.privileged` takes the
   module's `<testPrograms>/pkexec` and nothing else — without one it is not available —
   and its runs see the test kit's polkit agent and lock, never the shell's.
+  `module.chooseFiles` opens no dialog: each call that would open one is recorded and waits
+  for the suite's answer, and the lock it sees is the test kit's.
   `Api.system` and the network facts are then the test kit's made-up facts, nothing read, and the data
   directories lie below a private temporary home the host makes before the first module
   loads (`ModuleHost.testHome`: `mktemp -d` in `XDG_RUNTIME_DIR`, else `/tmp`), never in the
   user's data home. A module's suites see test mode through `ModuleTestKit` (`qs.tests`):
   `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
   (the facts `Api.system` tells; never moves `module.dataDirectory`), `setNetworks` (the
-  network facts: by default read and empty), `dataHome`,
-  `clearRecords`, and for runs as administrator
+  network facts: by default read and empty), `dataHome`, `chooserCalls`, `chooserOpen`,
+  `answerChooser`, `cancelChooser` (the file chooser), `clearRecords`, and for runs as
+  administrator
   `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
   its message written by the kit from pkexec's algorithm, not the shell's),
-  `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`, `setSessionLocked`,
-  `privilegedIdle`.
+  `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`, `setSessionLocked` (the file
+  chooser's lock too), `privilegedIdle`.
 
 ### Logging
 

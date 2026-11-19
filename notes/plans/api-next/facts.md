@@ -173,6 +173,21 @@ What follows for E1:
 - Not tried by hand, for the owner: Ctrl+click and Shift+click on two files in Qt Quick's
   own dialog (expected: one stays chosen); "Open" in the folder dialog with nothing chosen.
 
+**As built (E1, module API 1.17).** The owner's answer was "the system's standard dialog"
+(tracker, "Decisions"); E1 takes the lead's reading of it — whichever dialog the user's Qt
+platform theme gives, as the module's dialogs do today — and leaves `DontUseNativeDialog`
+off (one place in `singletons/FileChooser.qml` if the owner wants Qt Quick's own everywhere).
+So `openMany` returns several files only where the platform's dialog can (the portal's), one
+with Qt Quick's own; a lock and the module turned off close Qt Quick's own and GTK's, while a
+portal's window stays on screen and its answer is dropped. The one-pixel layer-shell window
+(no input, shown only while a dialog is open) is the parent; the dialog is closed before it
+is destroyed, and the window hidden before it is destroyed (else Qt Quick's dialog warns that
+it found no window to open in). `startDirectory` empty is the home directory. Tested:
+`tests/FileChooserTest.qml` runs Qt Quick's own dialog in the unit runner's headless
+compositor, driven by QtTest key events (Down to a file, Return; Escape); a module's suites
+get recorded calls (`ModuleTestKit`). By hand, open: the portal's and GTK's dialogs through
+the shell, Ctrl/Shift+click in Qt Quick's own.
+
 ### 3.10 Not in this plan
 
 - A terminal call and a terminal setting: the owner decided a global "default programs"
@@ -196,7 +211,7 @@ The rows of this file's slices; the order, sizes and dependencies are in the ind
 | C2 System facts, data directory | 1.10 | `singletons/SystemFacts.qml`, `ModuleHost.qml`, `api/Api.qml`, `api/ModuleHandle.qml`, test kit | `SystemFactsTest` |
 | D1 Network facts | 1.11 | `ModuleRules.qml` (`apiNetworks`, `apiVpnsUp`, `apiLocalNetworks`), `api/Api.qml`, `network/VpnManager.qml`, `components/VpnProvider.qml` | `ModuleRulesTest` |
 | E0 File chooser: the spike | — | none kept; the finding is in §3.9 | the four points of §3.9, on Arch; not run on NixOS |
-| E1 File chooser | 1.12 | `singletons/FileChooser.qml`, `ModuleHost.qml`, `api/ModuleHandle.qml`, test kit, `tests/lock-closure.sh` | recorded calls in test mode; closed with the module; by hand |
+| E1 File chooser | 1.17 | `singletons/FileChooser.qml`, `ModuleHost.qml`, `api/ModuleHandle.qml`, test kit, `tests/lock-closure.sh` | recorded calls in test mode; closed with the module; by hand |
 
 ---
 

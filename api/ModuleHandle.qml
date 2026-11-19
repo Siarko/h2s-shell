@@ -145,8 +145,18 @@ QtObject {
     onActiveChanged: {
         if (!active && _privilegedKey !== "")
             PrivilegedRuns.ownerGone(_privilegedKey);
-        if (!active)
+        if (!active) {
             _logWritten.clear();
+            FileChooser.ownerGone(root);
+        }
+    }
+
+    // ---- The file chooser (API 1.17) ----
+    // `chooseFiles(options, done)` asks the user for files or a folder in the system's dialog,
+    // hosted by the shell (singletons/FileChooser.qml; Api.qml says what it does). Closed, and
+    // `done` dropped, when the module is turned off.
+    function chooseFiles(options, done) {
+        return FileChooser.choose(root, options, done, Api.system.home);
     }
 
     // ---- Its data directory (API 1.13) ----
