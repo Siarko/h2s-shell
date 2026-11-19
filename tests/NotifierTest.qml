@@ -1,6 +1,7 @@
 import QtQuick
 import qs.singletons
 import qs.hud
+import qs.components
 
 // Notifier's pure parts: format "plain" (what it makes of a summary and a body) and the words
 // notify-send gets for it. Nothing is sent: send() is checked in module test mode, where it
@@ -104,5 +105,55 @@ TestCase {
         assert(texts.length > 0 && texts.every(text => text.textFormat === Text.PlainText), "shell toast: every text plain (" + texts.length + ")");
         assert(texts.some(text => text.text === crafted), "shell toast: the summary as written");
         toast.destroy();
+
+        // --- a toast cuts a long body; the notification centre's card shows it whole ---
+        const longText = Array.from({ length: 20 }, (_, i) => "line " + (i + 1)).join("\n");
+        const notification = { id: 7, appName: "Test", appIcon: "", summary: "Long", body: longText, image: "", actions: [], hasInlineReply: false };
+        const hudItem = _toast.createObject(null);
+        hudItem.currentNotif = notification;
+        const toastCard = _find(hudItem, item => item.bodyMaxLines !== undefined);
+        assert(toastCard !== null, "the toast has its card");
+        assertEqual(toastCard?.bodyMaxLines, 6, "the toast: at most 6 lines of the body");
+        const centreCard = _card.createObject(null, { notification: notification });
+        assertEqual(centreCard.bodyMaxLines, 0, "the centre's card: the whole body");
+        const isBody = item => item instanceof TextEdit && String(item.text).includes("line 20");
+        const toastBody = _find(toastCard, isBody);
+        const centreBody = _find(centreCard, isBody);
+        const lineSpacing = toastBody.font.pixelSize * 1.6;
+        assert(toastCard.bodyCut && toastCard.bodyShownHeight <= 6 * lineSpacing && toastCard.bodyShownHeight >= 5 * toastBody.font.pixelSize
+               && toastCard.bodyShownHeight < toastBody.implicitHeight / 2,
+               "the toast: 20 lines cut to 6 lines' height (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
+        assert(toastBody.parent.clip, "… clipped");
+        assert(!centreCard.bodyCut && Math.abs(centreCard.bodyShownHeight - centreBody.implicitHeight) < 0.5 && !centreBody.parent.clip,
+               "the centre's card: the whole body, not clipped (" + centreCard.bodyShownHeight + " of " + centreBody.implicitHeight + ")");
+        hudItem.currentNotif = Object.assign({}, notification, { body: "one line" });
+        assert(!toastCard.bodyCut, "the toast: a short body not cut");
+        centreCard.destroy();
+        hudItem.destroy();
+    }
+
+    // The first item under `item` (itself not included) for which `test` holds, or null
+    function _find(item, test) {
+        for (const child of item?.children ?? []) {
+            if (test(child))
+                return child;
+            const found = _find(child, test);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    property Component _toast: Component {
+        NotificationHudItem {
+            screenWidth: 800
+            screenModelData: ({ name: "test-screen" })
+            slotEnabled: false
+        }
+    }
+    property Component _card: Component {
+        NotificationCard {
+            width: 360
+        }
     }
 }

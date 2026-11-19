@@ -749,6 +749,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A notification toast stays small: a long body shows its first six lines and fades out;
+  the notification centre shows it whole.
 - With two bar entries of one widget type, a click on the second while the first's popup is
   open switches the popup to it, as hovering does, instead of closing it; only the entry
   that opened the popup shows as active.

@@ -22,6 +22,13 @@ Rectangle {
     property color borderColor: Theme.outline
     property color replyBackground: Theme.surfaceSunken
 
+    // At most this many lines of the body show, the rest cut under a fade (a toast); 0: the
+    // whole body (the notification centre)
+    property int bodyMaxLines: 0
+    // The body is taller than it may be, and cut; the height it shows
+    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyEdit.implicitHeight > _bodyBox.implicitHeight + 0.5
+    readonly property real bodyShownHeight: _bodyBox.implicitHeight
+
     property bool timerVisible: false
     // Fraction of the auto-dismiss time left, 1 → 0; the owner runs the countdown
     property real timerProgress: 1.0
@@ -313,74 +320,104 @@ Rectangle {
                     }
                 }
 
-                // Body (optional — hidden when empty)
-                TextEdit {
-                    id: _bodyEdit
-                    selectionColor: Theme.selection
-                    selectedTextColor: Theme.selectedText
-                    // The body's markup, made safe: formatting, links, image rows
-                    // (NotificationMarkup)
-                    textFormat: TextEdit.RichText
-                    text: NotificationMarkup.richText(notifCard._body, notifCard._markupColors)
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    color: Theme.textSecondary
+                // Body (optional — hidden when empty), in a box that cuts it at
+                // bodyMaxLines lines (a toast)
+                Item {
+                    id: _bodyBox
                     Layout.fillWidth: true
-                    wrapMode: TextEdit.WordWrap
-                    readOnly: true
-                    selectByMouse: true
                     visible: notifCard._body.length > 0
-                    onSelectedTextChanged: {
-                        if (selectedText !== "")
-                            notifCard._activeEdit = _bodyEdit;
-                        else if (notifCard._activeEdit === _bodyEdit)
-                            notifCard._selectionClearedAt = Date.now();
+                    implicitHeight: notifCard.bodyMaxLines > 0
+                        ? Math.min(_bodyEdit.implicitHeight, notifCard.bodyMaxLines * _bodyMetrics.lineSpacing) : _bodyEdit.implicitHeight
+                    clip: notifCard.bodyMaxLines > 0
+
+                    FontMetrics {
+                        id: _bodyMetrics
+                        font: _bodyEdit.font
                     }
 
-                    // Text stays selectable by dragging, but over a link, or on a card
-                    // that is clicked, the pointer is a hand, not a text cursor
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        cursorShape: notifCard._defaultAction !== null || _bodyEdit.hoveredLink !== ""
-                            ? Qt.PointingHandCursor : Qt.IBeamCursor
-                    }
+                    TextEdit {
+                        id: _bodyEdit
+                        selectionColor: Theme.selection
+                        selectedTextColor: Theme.selectedText
+                        // The body's markup, made safe: formatting, links, image rows
+                        // (NotificationMarkup)
+                        textFormat: TextEdit.RichText
+                        text: NotificationMarkup.richText(notifCard._body, notifCard._markupColors)
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textSecondary
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        wrapMode: TextEdit.WordWrap
+                        readOnly: true
+                        selectByMouse: true
 
-                    // A link clicked: rich text takes that click itself and reports it
-                    // here — opened, or asked about — and it is not the card's default
-                    // action
-                    onLinkActivated: link => notifCard._openLink(link)
+                        onSelectedTextChanged: {
+                            if (selectedText !== "")
+                                notifCard._activeEdit = _bodyEdit;
+                            else if (notifCard._activeEdit === _bodyEdit)
+                                notifCard._selectionClearedAt = Date.now();
+                        }
 
-                    // On the text itself: the text takes the press for selecting, so a
-                    // handler further up never sees the click. A handler of the same item
-                    // sees it first, and a drag (a selection) is no tap. Not on a link.
-                    TapHandler {
-                        enabled: notifCard._defaultAction !== null
-                        onTapped: eventPoint => {
-                            if (_bodyEdit.linkAt(eventPoint.position.x, eventPoint.position.y) === "")
-                                notifCard._activateDefault();
+                        // Text stays selectable by dragging, but over a link, or on a card
+                        // that is clicked, the pointer is a hand, not a text cursor
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            cursorShape: notifCard._defaultAction !== null || _bodyEdit.hoveredLink !== ""
+                                ? Qt.PointingHandCursor : Qt.IBeamCursor
+                        }
+
+                        // A link clicked: rich text takes that click itself and reports it
+                        // here — opened, or asked about — and it is not the card's default
+                        // action
+                        onLinkActivated: link => notifCard._openLink(link)
+
+                        // On the text itself: the text takes the press for selecting, so a
+                        // handler further up never sees the click. A handler of the same item
+                        // sees it first, and a drag (a selection) is no tap. Not on a link.
+                        TapHandler {
+                            enabled: notifCard._defaultAction !== null
+                            onTapped: eventPoint => {
+                                if (_bodyEdit.linkAt(eventPoint.position.x, eventPoint.position.y) === "")
+                                    notifCard._activateDefault();
+                            }
+                        }
+
+                        // Where a link goes, on hover — a link's text can say anything
+                        HoverTip {
+                            target: _bodyEdit
+                            // Not on an image row's link: the row shows its address
+                            shown: _bodyEdit.hoveredLink !== "" && !notifCard._imageLinks.includes(_bodyEdit.hoveredLink)
+                            text: _bodyEdit.hoveredLink
+                            // Room for an address, broken anywhere when it is longer
+                            maxWidth: 420
+                            delay: 300
+                            // Over the line of the link under the pointer, at the pointer
+                            anchorRect: {
+                                const point = _bodyHover.point.position;
+                                const line = _bodyEdit.positionToRectangle(_bodyEdit.positionAt(point.x, point.y));
+                                return Qt.rect(point.x, line.y, 0, line.height);
+                            }
+                        }
+
+                        HoverHandler {
+                            id: _bodyHover
                         }
                     }
 
-                    // Where a link goes, on hover — a link's text can say anything
-                    HoverTip {
-                        target: _bodyEdit
-                        // Not on an image row's link: the row shows its address
-                        shown: _bodyEdit.hoveredLink !== "" && !notifCard._imageLinks.includes(_bodyEdit.hoveredLink)
-                        text: _bodyEdit.hoveredLink
-                        // Room for an address, broken anywhere when it is longer
-                        maxWidth: 420
-                        delay: 300
-                        // Over the line of the link under the pointer, at the pointer
-                        anchorRect: {
-                            const point = _bodyHover.point.position;
-                            const line = _bodyEdit.positionToRectangle(_bodyEdit.positionAt(point.x, point.y));
-                            return Qt.rect(point.x, line.y, 0, line.height);
+                    // A cut body fades out into the card over its last line
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: _bodyMetrics.lineSpacing
+                        visible: notifCard.bodyCut
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Qt.rgba(notifCard.color.r, notifCard.color.g, notifCard.color.b, 0) }
+                            GradientStop { position: 1.0; color: notifCard.color }
                         }
-                    }
-
-                    HoverHandler {
-                        id: _bodyHover
                     }
                 }
             }
