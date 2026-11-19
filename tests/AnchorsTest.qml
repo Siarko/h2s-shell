@@ -25,6 +25,9 @@ import qs.singletons
 // row shows each block only its scope's module. The table set anew is merged anew; a slot
 // read as its anchor is no longer built as a slot (ModuleRules.slotAliasProblems, on the
 // shell's files).
+//
+// The General page as the settings window's page loader holds it: where its rows stand — the
+// headings, the hint and each setting at the page's margin, as far apart as they always were.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -310,6 +313,87 @@ TestCase {
         }
     }
 
+    // The General page as the settings window's page loader holds it, in a layer surface in a
+    // corner, for where its rows stand
+    property Component _generalViewComponent: Component {
+        PanelWindow {
+            id: generalWindow
+
+            property alias loader: generalLoader
+
+            anchors {
+                top: true
+                left: true
+            }
+            implicitWidth: 420
+            implicitHeight: 1000
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Loader {
+                id: generalLoader
+                property string anchorBase: "settings.general"
+                anchors.fill: parent
+                source: Qt.resolvedUrl("../panels/settings/GeneralSettings.qml")
+            }
+        }
+    }
+    property var _generalView: null
+
+    // The General page's rows top to bottom, as { name, x, y, width, height } in the loader's
+    // coordinates: its headings and hint (the texts outside a setting's editor) and each
+    // setting's editor (named by its key)
+    function _generalRows(loader) {
+        const rows = [];
+        const walk = item => {
+            for (const child of item.children ?? []) {
+                if (!child.visible)
+                    continue;
+                const point = child.mapToItem(loader, 0, 0);
+                const row = { x: point.x, y: point.y, width: child.width, height: child.height };
+                if (typeof child.key === "string" && child.editIndex !== undefined)
+                    rows.push(Object.assign(row, { name: "setting " + child.key }));
+                else if (typeof child.text === "string" && child.font !== undefined && child.text !== "")
+                    rows.push(Object.assign(row, { name: "text " + child.text.slice(0, 16) }));
+                else
+                    walk(child);
+            }
+        };
+        walk(loader.item);
+        return rows.sort((a, b) => a.y - b.y);
+    }
+
+    // What the rows must be: the heading at the page's margin; under it, 8 apart, the general
+    // settings one after another; 16 lower the second heading, 2 under it the hint, 8 under
+    // that the appearance settings; every row at the margin, the settings as wide as the page
+    // inside its margins — measured from each row's own height, so no font changes it
+    function _generalLayoutProblems(rows, width) {
+        const margin = Theme.settings.pageMargin;
+        const general = SettingsSchema.keysInGroup("general");
+        const appearance = SettingsSchema.keysInGroup("appearance");
+        const expected = [["text General", 0]].concat(general.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]),
+                                                      [["text Theme and motion", 16], ["text Which theme this", 2]],
+                                                      appearance.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]));
+        const problems = [];
+        if (rows.map(row => row.name).join("|") !== expected.map(entry => entry[0]).join("|"))
+            return ["the rows: " + rows.map(row => row.name).join("|")];
+        rows.forEach((row, index) => {
+            const top = index === 0 ? margin : rows[index - 1].y + rows[index - 1].height + expected[index][1];
+            if (Math.abs(row.y - top) > 0.01)
+                problems.push(row.name + " at y " + row.y + ", not " + top);
+            if (Math.abs(row.x - margin) > 0.01)
+                problems.push(row.name + " at x " + row.x + ", not " + margin);
+            if (row.name.startsWith("setting ") && Math.abs(row.width - (width - 2 * margin)) > 0.01)
+                problems.push(row.name + " " + row.width + " wide, not " + (width - 2 * margin));
+            if (row.height <= 0)
+                problems.push(row.name + " has no height");
+        });
+        return problems;
+    }
+
     function _open(base) {
         const view = _viewComponent.createObject(suite, { base: base ?? "settings.fixture" });
         _views.push(view);
@@ -584,6 +668,25 @@ TestCase {
         });
         _then("views closed before they were built leave nothing live", () => Date.now() >= _waitUntil && _live("settings.fixture") === "", () => {
             assertEqual(host.status("anchors-a")?.errors.length, 2, "no element failed meanwhile (the module's errors are its two anchors)");
+        });
+
+        // The General page: where its rows stand (the same before and after it became a
+        // SettingsPage)
+        _then("the fixture views are gone", () => true, () => {
+            _generalView = _generalViewComponent.createObject(suite);
+            _views.push(_generalView);
+        });
+        _then("the General page is laid out", () => {
+            const rows = _generalRows(_generalView.loader);
+            return rows.length > 3 && rows[rows.length - 1].y > rows[0].y && rows.every(row => row.height > 0);
+        }, () => {
+            const rows = _generalRows(_generalView.loader);
+            console.log("  INFO: the General page's rows (x y width height): "
+                        + rows.map(row => row.name + " " + [row.x, row.y, row.width, row.height].map(Math.round).join(" ")).join(" · "));
+            assertEqual(_generalLayoutProblems(rows, _generalView.loader.width).join("; "), "",
+                        "the General page's rows: headings, hint and settings at the page's margin, 8, 16 and 2 apart as before");
+            _close(_generalView);
+            _generalView = null;
         });
         _clock.start();
     }
