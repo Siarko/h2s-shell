@@ -1120,7 +1120,25 @@ TestCase {
                "exports: an unknown field is a warning");
         const user = ModuleManifestRules.parseManifest(_manifest({ uses: { zeta: "1.0", alpha: "2.3" } }));
         assert(user.valid, "uses: valid");
-        assertEqual(JSON.stringify(user.uses), "[{\"id\":\"zeta\",\"version\":\"1.0\"},{\"id\":\"alpha\",\"version\":\"2.3\"}]", "uses: [{ id, version }] in the manifest's order");
+        assertEqual(JSON.stringify(user.uses), "[{\"id\":\"zeta\",\"version\":\"1.0\",\"optional\":false},{\"id\":\"alpha\",\"version\":\"2.3\",\"optional\":false}]",
+                    "uses: [{ id, version, optional }] in the manifest's order, a version alone hard");
+        // (1.30) The object form: soft with optional true, hard without
+        const soft = ModuleManifestRules.parseManifest(_manifest({ api: "1.30", uses: { zeta: { version: "1.2", optional: true }, alpha: { version: "2.0" },
+                                                                                     beta: { version: "1.0", optional: false } } }));
+        assertEqual(JSON.stringify(soft.uses.map(use => use.id + " " + use.version + " " + use.optional)), JSON.stringify(["zeta 1.2 true", "alpha 2.0 false", "beta 1.0 false"]),
+                    "uses as objects: optional true is soft, none or false is hard");
+        assert(soft.valid && soft.warnings.length === 0, "… valid, no warning with api 1.30: " + soft.warnings.join("; "));
+        const softOld = ModuleManifestRules.parseManifest(_manifest({ api: "1.29", uses: { zeta: { version: "1.2", optional: true } } }));
+        assert(softOld.valid && softOld.uses[0]?.optional === true && _has(softOld.warnings, "uses: an entry as an object is a form of API 1.30, the manifest asks for API 1.29"),
+               "the object form with api 1.29: read all the same, said in a warning: " + softOld.warnings.join("; "));
+        const softExtra = ModuleManifestRules.parseManifest(_manifest({ api: "1.30", uses: { zeta: { version: "1.2", optinal: true } } }));
+        assert(softExtra.valid && softExtra.uses[0]?.optional === false && _has(softExtra.warnings, "uses.zeta: unknown field \"optinal\" (ignored)"),
+               "an unknown field in a use: a warning, the use hard: " + softExtra.warnings.join("; "));
+        for (const bad of [{ zeta: { optional: true } }, { zeta: { version: "1", optional: true } }, { zeta: { version: "1.0", optional: "yes" } },
+                           { zeta: { version: "1.0", optional: 1 } }, { zeta: {} }]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest({ api: "1.30", uses: bad }));
+            assert(!parsed.valid && _has(parsed.errors, "uses.zeta"), "uses " + JSON.stringify(bad) + ": the module fails, said: " + parsed.errors.join("; "));
+        }
         for (const bad of [[], "zeta", 3, { "Zeta": "1.0" }, { "battery": "1.0" }, { "zeta": "1" }, { "zeta": 1 }, { "constructor": "1.0" }]) {
             const parsed = ModuleManifestRules.parseManifest(_manifest({ uses: bad }));
             assert(!parsed.valid && _has(parsed.errors, "uses"), "uses " + JSON.stringify(bad) + ": the module fails, said: " + parsed.errors.join("; "));
@@ -1221,6 +1239,63 @@ TestCase {
         states.a.state = "disabled";
         plan = ModuleMergeRules.dependencyPlan([module("a", { b: "1.0" }, "1.0"), module("b", { a: "1.0" }, "1.0")], states);
         assertEqual(summary(plan), "b:failed,a:disabled", "a cycle: a member turned off stays off; the other fails");
+
+        // (1.30) Soft uses: loaded with or without the provider, after it when it is there
+        const softModule = (id, hard, soft, exportsVersion) => {
+            const made = module(id, hard, exportsVersion);
+            made.uses = made.uses.concat(Object.keys(soft ?? {}).map(other => ({ id: other, version: soft[other], optional: true })));
+            return made;
+        };
+        const optional = (plan, id) => (ModuleMergeRules.planned(plan, id)?.optional ?? []).join(",");
+        const notes = (plan, id) => (ModuleMergeRules.planned(plan, id)?.notes ?? []).join("; ");
+        const softPair = [softModule("app", {}, { lib: "1.0" }), module("lib", {}, "1.2")];
+        plan = ModuleMergeRules.dependencyPlan(softPair, all(["app", "lib"]));
+        assertEqual(plan.order.join(",") + " " + summary(plan) + " " + optional(plan, "app"), "lib,app lib:loaded,app:loaded lib",
+                    "soft, the provider there and fitting: after it, loaded, given it");
+        assertEqual(plan.modules.find(entry => entry.id === "app").reasons.length + notes(plan, "app"), "0", "… no reason, no note");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "1.0" })], all(["app"]));
+        assertEqual(summary(plan) + " [" + optional(plan, "app") + "] [" + notes(plan, "app") + "]", "app:loaded [] []",
+                    "soft, the provider not installed: loaded without it, nothing said");
+        for (const [state, noted] of [["disabled", ""], ["failed", ""], ["missing-module", ""], ["incompatible", ""]]) {
+            states = all(["app", "lib"]);
+            states.lib.state = state;
+            plan = ModuleMergeRules.dependencyPlan(softPair, states);
+            assertEqual(summary(plan) + " [" + optional(plan, "app") + "] [" + notes(plan, "app") + "]", "lib:" + state + ",app:loaded [] [" + noted + "]",
+                        "soft, the provider " + state + ": loaded without it, nothing said (its own status says it)");
+        }
+        states = all(["app", "lib"]);
+        states.lib.state = "pending";
+        assertEqual(summary(ModuleMergeRules.dependencyPlan(softPair, states)), "lib:pending,app:pending", "soft, the provider pending: the dependent waits for it");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "1.3" }), module("lib", {}, "1.2")], all(["app", "lib"]));
+        assertEqual(summary(plan) + " [" + optional(plan, "app") + "] " + notes(plan, "app"), "lib:loaded,app:loaded [] can use module lib 1.3: has 1.2",
+                    "soft, an older exports version: loaded without it, noted");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", {}, { lib: "1.0" }), module("lib")], all(["app", "lib"]));
+        assertEqual(notes(plan, "app"), "can use module lib 1.0: exports no API", "soft, a provider without exports: noted");
+        states = all(["app", "lib"]);
+        states.lib.exports = "no exports property";
+        plan = ModuleMergeRules.dependencyPlan(softPair, states);
+        assertEqual(summary(plan) + " [" + optional(plan, "app") + "] " + notes(plan, "app"), "lib:loaded,app:loaded [] can use module lib 1.0: gives no exports object",
+                    "soft, a provider without its exports object: loaded without it, noted");
+        plan = ModuleMergeRules.dependencyPlan([softModule("app", { must: "1.0" }, { lib: "1.0" }), module("lib", {}, "1.0")], all(["app", "lib"]));
+        assertEqual(summary(plan) + " " + reasons(plan, "app") + " [" + optional(plan, "app") + "]", "lib:loaded,app:missing-module needs module must 1.0: not installed []",
+                    "a hard use missing beside a soft one there: missing-module, the soft one not given");
+        // Cycles through soft edges: broken, never an error
+        plan = ModuleMergeRules.dependencyPlan([softModule("a", {}, { b: "1.0" }, "1.0"), module("b", { a: "1.0" }, "1.0")], all(["a", "b"]));
+        assertEqual(plan.order.join(",") + " " + summary(plan) + " " + plan.cycles.length, "a,b a:loaded,b:loaded 0",
+                    "a cycle closed by a soft edge (a softly uses b, b needs a): broken, b after a, both loaded, no cycle");
+        assertEqual("[" + optional(plan, "a") + "] " + notes(plan, "a"), "[] can use module b 1.0: left out, a cycle of uses", "… a does not get b, noted");
+        plan = ModuleMergeRules.dependencyPlan([softModule("a", {}, { b: "1.0" }, "1.0"), softModule("b", {}, { a: "1.0" }, "1.0")], all(["a", "b"]));
+        assertEqual(plan.order.join(",") + " " + summary(plan) + " a[" + optional(plan, "a") + "] b[" + optional(plan, "b") + "]", "b,a b:loaded,a:loaded a[b] b[]",
+                    "two soft edges in a cycle: the first by id kept (a gets b), the other broken");
+        plan = ModuleMergeRules.dependencyPlan([softModule("x", {}, { y: "1.0" }, "1.0"), module("y", { z: "1.0" }, "1.0"), module("z", { x: "1.0" }, "1.0")],
+                                               all(["x", "y", "z"]));
+        assertEqual(plan.order.join(",") + " " + summary(plan) + " " + notes(plan, "x"), "x,z,y x:loaded,z:loaded,y:loaded can use module y 1.0: left out, a cycle of uses",
+                    "a cycle of three with one soft edge: broken there, the hard chain in order");
+        plan = ModuleMergeRules.dependencyPlan([softModule("self", {}, { self: "1.0" }, "1.0")], all(["self"]));
+        assertEqual(summary(plan) + " " + notes(plan, "self"), "self:loaded can use module self 1.0: left out, a cycle of uses", "a module softly using itself: loaded, noted");
+        plan = ModuleMergeRules.dependencyPlan([softModule("a", { b: "1.0" }, { c: "1.0" }, "1.0"), module("b", { a: "1.0" }, "1.0"), module("c", {}, "1.0")],
+                                               all(["a", "b", "c"]));
+        assertEqual(summary(plan), "b:failed,c:loaded,a:failed", "a hard cycle stays an error with a soft edge beside it");
 
         // Duplicates: the first manifest of an id counts; one provider serves several
         plan = ModuleMergeRules.dependencyPlan([module("lib", {}, "1.0"), module("lib", { gone: "1.0" }, "0.1"), module("one", { lib: "1.0" }),

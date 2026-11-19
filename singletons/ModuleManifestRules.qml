@@ -91,12 +91,17 @@ import QtQuick
 //                 dependent asking for "1.2" gets it from "1.2" up to "1.<anything>", never
 //                 from "2.0" (ModuleMergeRules.usesFit). Malformed: the module fails.
 //   uses          optional (API 1.18): { <module id>: "major.minor" } — the modules whose
-//                 exports it needs, each with the least version of their `exports`. All are
-//                 required: without one the module does not load (state missing-module,
-//                 ModuleMergeRules.dependencyPlan), and it loads after them. The module gets
-//                 each one's `exports` object as module.uses.<id>, nothing else of it. An id
-//                 that is not a module id (or a reserved one) or a version that is not
-//                 "major.minor": the module fails.
+//                 exports it needs, each with the least version of their `exports`. These
+//                 are required (hard): without one the module does not load (state
+//                 missing-module, ModuleMergeRules.dependencyPlan), and it loads after them.
+//                 (API 1.30) An entry may be an object instead,
+//                 { "version": "major.minor", "optional": true } — a soft dependency: the
+//                 module loads with or without it, after it when it is there, and its
+//                 module.uses.<id> is null without it. { "version": … } alone is hard.
+//                 The module gets each one's `exports` object as module.uses.<id>, nothing
+//                 else of it. An id that is not a module id (or a reserved one), a version
+//                 that is not "major.minor", or an `optional` that is not true or false: the
+//                 module fails (another field in the object: a warning).
 //                 exports or uses in a manifest whose `api` is below 1.18: read all the same,
 //                 with a warning.
 //
@@ -651,7 +656,7 @@ Singleton {
     //   widgets, settingsPages, settings, facts, slots, anchors   the entries kept, checked
     //   programs, optionalPrograms, testPrograms ("" for none, else without a trailing "/"),
     //   setupHints, tests
-    //   exports      (1.18) { version } or null; uses (1.18) [{ id, version }]
+    //   exports      (1.18) { version } or null; uses (1.18) [{ id, version, optional (1.30) }]
     //   icon         (1.26) { kind, glyph, file, colors } or null (readIcon)
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
@@ -735,7 +740,7 @@ Singleton {
                 warnings.push("description is not a text of at most 1000 characters (ignored)");
         }
         _readExports(raw, result, errors, warnings);
-        _readUses(raw, result, errors);
+        _readUses(raw, result, errors, warnings);
         // Fields of a newer API than the manifest asks for: read all the same, and said —
         // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
@@ -849,10 +854,13 @@ Singleton {
             result.exports = { version: version };
     }
 
-    // `uses` (API 1.18): { <id>: "major.minor" } → result.uses, [{ id, version }] in the
-    // manifest's order, or errors (the module fails: it would run without what it needs).
-    // Using itself is left to the dependency plan, which names it as a cycle.
-    function _readUses(raw, result, errors) {
+    // `uses` (API 1.18): { <id>: "major.minor" | { version, optional } (1.30) } →
+    // result.uses, [{ id, version, optional }] in the manifest's order, or errors (the module
+    // fails: it would run without what it needs, or a soft entry read as hard would keep it
+    // from loading). Using itself is left to the dependency plan, which names it as a cycle.
+    // An object form in a manifest whose `api` is below 1.30: read all the same, with a
+    // warning.
+    function _readUses(raw, result, errors, warnings) {
         const given = ModuleRules.get(raw, "uses");
         if (given === undefined)
             return;
@@ -865,15 +873,35 @@ Singleton {
             errors.push("uses: " + ids.length + " modules, at most " + ModuleRules.maxEntries);
             return;
         }
+        let objectForm = false;
         for (const id of ids) {
-            const version = given[id];
-            if (!ModuleRules.idPattern.test(id) || ModuleRules.reservedIds.includes(id))
+            const entry = given[id];
+            let version = entry;
+            let optional = false;
+            if (!ModuleRules.idPattern.test(id) || ModuleRules.reservedIds.includes(id)) {
                 errors.push("uses: " + ModuleRules.show(id) + " is not a module id");
-            else if (!ModuleRules.parseApi(version))
+                continue;
+            }
+            if (ModuleRules.isObject(entry)) {
+                objectForm = true;
+                // An unknown field is a warning, as in `exports` (a manifest for a newer shell)
+                for (const other of Object.keys(entry).filter(key => key !== "version" && key !== "optional"))
+                    warnings.push("uses." + id + ": unknown field " + ModuleRules.show(other) + " (ignored)");
+                if (entry.optional !== undefined && typeof entry.optional !== "boolean") {
+                    errors.push("uses." + id + ".optional: " + ModuleRules.show(entry.optional) + " is not true or false");
+                    continue;
+                }
+                version = entry.version;
+                optional = entry.optional === true;
+            }
+            if (!ModuleRules.parseApi(version))
                 errors.push("uses." + id + ": " + ModuleRules.show(version) + " is not a version \"major.minor\"");
             else
-                result.uses.push({ id: id, version: version });
+                result.uses.push({ id: id, version: version, optional: optional });
         }
+        const asked = ModuleRules.parseApi(result.api);
+        if (objectForm && asked && (asked.major < 1 || (asked.major === 1 && asked.minor < 30)))
+            warnings.push("uses: an entry as an object is a form of API 1.30, the manifest asks for API " + result.api + " (read all the same)");
     }
 
     // Marks every entry after the first with the same `field` as repeated, with an error

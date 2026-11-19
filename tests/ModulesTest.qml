@@ -114,7 +114,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.29 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.30 Good fixture", "good: version, API, name");
             // (1.26) Its icon, an SVG painted in the theme's colour: on its handle as the shell draws it
             assertEqual(JSON.stringify(host.handle("good").icon),
                         JSON.stringify({ kind: "svg", glyph: "", url: "file://" + fixtures + "/good/icon.svg", colors: "theme" }),
@@ -976,6 +976,59 @@ TestCase {
         _then("the views-only consumer is back", () => _status("consumer-views")?.state === "loaded" && _consumerPage.ready, () => {
             _consumerPage.destroy();
             suite._consumerPage = null;
+            // (API 1.30) A soft use: the consumer loads without the provider, module.uses.provider null
+            host.load(_dirs(["consumer-soft"]), {});
+        });
+        _then("the soft consumer alone settles", () => _settled() && _status("consumer-soft")?.state !== "pending", () => {
+            const status = _expectState("consumer-soft", "loaded");
+            assertEqual((status?.errors ?? []).length + (status?.warnings ?? []).length, 0, "soft uses not installed: loaded, nothing said: "
+                        + (status?.errors ?? []).concat(status?.warnings ?? []).join("; "));
+            const main = host.mainObject("consumer-soft");
+            assertEqual(JSON.stringify(main?.usesAtStart), JSON.stringify({ provider: null, absent: null }), "module.uses: each soft use null without its provider");
+            assertEqual(main?.answer, "no provider", "… the main saw null while it was built");
+            _providerProbe.state.log = [];
+            host.load(_dirs(["consumer-soft", "provider"]), {});
+        });
+        _then("the soft consumer with its provider settles", () => _settled() && _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft")?.answer !== "no provider", () => {
+            assertEqual(host._order.join(","), "provider,consumer-soft", "a soft provider there: planned before its dependent");
+            const main = host.mainObject("consumer-soft");
+            assert(main.usesAtStart.provider === host.mainObject("provider")?.exports && main.usesAtStart.absent === null,
+                   "module.uses.provider: the provider's exports object; the one not installed still null");
+            assertEqual(_providerProbe.state.log.join("|"), "provider up|hello soft up", "the provider's main first, then the soft consumer's");
+            suite._softMain = main;
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", false);
+        });
+        _then("the soft consumer restarts without the provider", () => _status("consumer-soft")?.state === "loaded" && host.mainObject("consumer-soft") !== null
+              && host.mainObject("consumer-soft") !== suite._softMain && _providerProbe.state.log.includes("provider gone"), () => {
+            assertEqual(_providerProbe.state.log.join("|"), "hello soft gone: same uses|provider gone",
+                        "the provider turned off: the soft consumer's main went first, reading module.uses as it was, then the provider's");
+            assertEqual(host.mainObject("consumer-soft").usesAtStart.provider, null, "… a new main, module.uses.provider null");
+            assertEqual(_status("consumer-soft").errors.length, 0, "… loaded, no error");
+            suite._softMain = host.mainObject("consumer-soft");
+            _providerProbe.state.log = [];
+            host.setEnabled("provider", true);
+        });
+        _then("the soft consumer restarts with the provider back", () => _status("consumer-soft")?.state === "loaded"
+              && host.mainObject("consumer-soft") !== suite._softMain && host.mainObject("consumer-soft")?.answer === "hello, soft up", () => {
+            assertEqual(_providerProbe.state.log.join("|"), "provider up|hello soft up", "the provider back: its main, then a new soft consumer main");
+            assert(host.mainObject("consumer-soft").usesAtStart.provider === host.mainObject("provider")?.exports, "… given the new provider's object");
+            suite._softMain = null;
+            // A provider there whose main gives no exports object: loaded without it, noted
+            host.load(_dirs(["consumer-soft", "provider-no-exports"]), {});
+        });
+        _then("the soft consumer beside a provider without exports settles", () => _settled() && _status("consumer-soft")?.state !== "pending", () => {
+            const status = _expectState("consumer-soft", "loaded");
+            assert(_has(status?.warnings, "can use module provider 1.1: gives no exports object") && status.errors.length === 0,
+                   "… noted as a warning, no error: " + status?.warnings.join("; "));
+            assertEqual(host.mainObject("consumer-soft")?.usesAtStart?.provider, null, "… module.uses.provider null");
+            host.load(_dirs(["consumer-soft", "provider-failing-main"]), {});
+        });
+        _then("the soft consumer beside a failing provider settles", () => _settled() && _status("consumer-soft")?.state !== "pending", () => {
+            _expectState("provider-failing-main", "failed");
+            const status = _expectState("consumer-soft", "loaded");
+            assertEqual(status?.errors.length, 0, "a soft provider whose main failed: loaded, no error");
+            assertEqual(host.mainObject("consumer-soft")?.usesAtStart?.provider, null, "… module.uses.provider null");
             host.unload();
         });
         _clock.start();
@@ -984,6 +1037,7 @@ TestCase {
     property var _providerProbe: null
     property var _oldExports: null
     property var _oldUses: null
+    property var _softMain: null
     property var _consumerPage: null
     property Component _contributionComponent: Component {
         ModuleContribution {}

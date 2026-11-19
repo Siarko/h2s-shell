@@ -603,6 +603,22 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   provider's main (a suite checks it), but nothing in the host holds the provider for them. When the shell reloads, the engine runs every main's
   `Component.onDestruction` newest first, and a dependent's main is always newer than its
   providers'.
+- **Soft uses** (API 1.30): `"uses": { "<id>": { "version": "1.2", "optional": true } }` —
+  the module loads with or without that provider; `{ "version": "1.2" }` alone, like the
+  plain string, is hard. One object form under the one id rather than a second field, so an
+  id is never both hard and soft and `module.uses.<id>` has one meaning. With the provider
+  there and fitting, the plan puts the dependent after it and `module.uses.<id>` is its
+  object; without it (not installed, off, failed, not fitting, no `exports` object) the
+  entry is `null` and the module loads all the same — a provider that is there and does not
+  fit is a warning in the dependent's status ("can use module x 1.2: has 2.0"). A provider
+  pending leaves a soft dependent pending too, so a start does not make it twice. When a
+  soft provider comes or goes while the dependent is on, the host turns the dependent's
+  main off and on again (`ModuleHost._usesChange`: pending until the old main is gone, the
+  provider's going main waiting for it as above): `module.uses` never holds a provider that
+  is gone, and one main sees one `module.uses` for its whole life, so the frozen-`uses` rule
+  of hard uses holds unchanged. Cycles: only hard edges make a cycle an error; a soft edge
+  whose provider already reaches its dependent is left out (dependent ids, then provider
+  ids, in order), its entry `null`, warned about ("left out, a cycle of uses").
 - **Reaching another module or the host**: a module knows of another only its plain state,
   `Api.moduleStatus(id)` (frozen `{ id, name, version, state, active }`, or null), and its
   `exports` through `uses`. The old ways still work and are listed among the module's
@@ -1091,7 +1107,7 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup,
-  data directories, and `provider` / `consumer` for `exports` and `uses`),
+  data directories, and `provider` / `consumer` / `consumer-soft` for `exports` and `uses`),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the

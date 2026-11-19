@@ -1,0 +1,12 @@
+{
+    "id": "consumer-soft",
+    "name": "Soft consumer fixture",
+    "version": "1.0.0",
+    "api": "1.30",
+    "description": "A module that can use the provider fixture's API and loads without it (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": {
+        "provider": { "version": "1.1", "optional": true },
+        "absent": { "version": "1.0", "optional": true }
+    }
+}

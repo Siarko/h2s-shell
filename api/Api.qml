@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.29" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.30" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -795,8 +795,24 @@ import qs.singletons.network
 //                          the provider still loads, and its dependents count it as missing.
 //   "uses": { "<id>": "1.0" }   in a dependent's module.json: the modules whose exports it
 //                          needs, each with the least version: the same major, the provider's
-//                          minor at least the one asked for. All are required. A dependent's
-//                          main is made after its providers' and destroyed before them.
+//                          minor at least the one asked for. A version alone is required
+//                          (hard). A dependent's main is made after its providers' and
+//                          destroyed before them.
+//   "uses": { "<id>": { "version": "1.2", "optional": true } }   (1.30) a soft use: the module
+//                          loads with or without that provider. When it is there and fits, the
+//                          module is made after it and module.uses.<id> is its exports object;
+//                          when not (not installed, off, failed, an older or another major,
+//                          no exports object), module.uses.<id> is null and the module loads
+//                          all the same — a provider that is there and does not fit is a
+//                          warning in its status ("can use module x 1.2: has 2.0"). The
+//                          provider coming or going while the module is on turns the module's
+//                          main off and on again (pending meanwhile; its views are rebuilt when
+//                          they read module.uses): module.uses never holds a provider that is
+//                          gone, and a main reads one module.uses for its whole life. Soft uses
+//                          never make a cycle an error: one that would close a cycle is left
+//                          out (by dependent id, then provider id), null, and warned about
+//                          ("left out, a cycle of uses"). { "version": "1.2" } alone is hard.
+//                          One object form for both, so a use is one entry under one id.
 //   module.uses            (on its handle) frozen { <id>: that module's exports object } — the
 //                          object, nothing else of the provider. Set just before the module is
 //                          turned on (before its main is made and its views built) and kept,
@@ -804,7 +820,8 @@ import qs.singletons.network
 //                          and going do not touch it, and while the module is off it still
 //                          holds what its last main had. Empty for a module never turned on. A
 //                          provider turned off, failing or reloaded turns its dependents off
-//                          first (state missing-module), and they come back after it; its main
+//                          first (state missing-module; a soft dependent is turned off and on
+//                          again without it), and they come back after it; its main
 //                          is destroyed only once theirs are gone, so a dependent's main and
 //                          views can read module.uses — in bindings, in Component.onDestruction
 //                          — for as long as they live. A module turned off and on again
@@ -819,7 +836,7 @@ import qs.singletons.network
 //                          it) and hands it no function to call later: the shell cannot see a
 //                          function held by the provider, which could then call into a module
 //                          that is off.
-//   state "missing-module" a module it uses is not there or not usable, one reason per module
+//   state "missing-module" a module it uses (hard) is not there or not usable, one reason per module
 //                          in its errors: "needs module tailscale 1.0: not installed" /
 //                          "turned off" / "failed" / "exports no API" / "has 0.9" / "gives no
 //                          exports object". Waiting for one: "pending". A cycle of `uses`

@@ -13,6 +13,14 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.30: soft dependencies between modules — a `uses` entry may be
+  `{ "version": "1.2", "optional": true }`: the module loads with or without that provider,
+  after it when it is there, and `module.uses.<id>` is null without it (a provider there that
+  does not fit is a warning). The provider coming or going turns the module's main off and on
+  again; a cycle closed by a soft use is broken, not an error. `{ "version": … }` alone, like
+  the plain string, stays hard. The file chooser: no `title` shows the module's name; a lock
+  that closes an open chooser answers `blocked: "locked"` (was `cancelled`), so a module can
+  tell it from the user cancelling.
 - 1.29: a card's buttons (`….card.actions`) stand in one row on the card's name line, closed
   and open: the card's main button, its own ("Settings…", "Edit" — was "Edit connection…"),
   the modules' buttons, then "Forget" / "Delete". The region `actions` is now built while the

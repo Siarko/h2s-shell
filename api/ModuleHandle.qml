@@ -48,7 +48,9 @@ QtObject {
     // kept, the same object, until it is turned on again: a provider turned off or reloaded
     // first turns this module off (missing-module), and its main is destroyed only after this
     // module's main is gone, so what this module's main and views read — bindings, their
-    // Component.onDestruction — is there for as long as they live. Empty for a module never
+    // Component.onDestruction — is there for as long as they live. (API 1.30) A soft use
+    // (`optional`) is null without its provider; the provider coming or going turns this
+    // module's main off and on again, with the new module.uses. Empty for a module never
     // turned on. Nothing else of a provider is given. The host's to set (ModuleHost.usesOf):
     // not writable through the handle.
     readonly property var uses: host ? host.usesOf(moduleId, host.usesRevision) : Object.freeze({})

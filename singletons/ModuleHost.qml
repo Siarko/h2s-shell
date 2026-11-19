@@ -26,7 +26,10 @@ import qs.singletons.io
 // its contributions and facts and turns its handle's `active` off; on again, they come back.
 // (API 1.18) A module that `uses` others loads after them and gets their exports objects
 // (usesOf); one of them leaving — turned off, failed, the shell reloading — turns it off
-// first (missing-module), and it comes back after the provider does.
+// first (missing-module), and it comes back after the provider does. (API 1.30) A soft use
+// (`optional`) does not keep it from loading: without the provider its module.uses.<id> is
+// null. A soft provider coming or going while it is on turns its main off and on again
+// (pending meanwhile), so module.uses always says what is there.
 //
 // The shell's one instance is in Modules (the singleton, fed from the environment); the
 // suites make their own (tests/ModulesTest.qml), so this takes its directories through load()
@@ -580,7 +583,7 @@ Scope {
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [], mainDeleted: false,
             // (1.18) Its main's exports object while the main lives (null: none), why there is
             // none when it declares exports, and why it does not load for the modules it uses
-            exportsObject: null, exportsProblem: "", dependencyReasons: [],
+            exportsObject: null, exportsProblem: "", dependencyReasons: [], dependencyNotes: [],
             rootProperties: ({}),
             // (1.26) Its icon's file passed the check (a module whose files are not checked —
             // incompatible, a bad qmldir — shows no icon file), and why it could not be
@@ -1059,17 +1062,27 @@ Scope {
         const ordered = plan.order.map(id => byId.get(id)).concat(_records.filter(record => !counted.includes(record)));
         const finalState = record => counted.includes(record) ? ModuleMergeRules.planned(plan, record.manifest.id) : { state: own.get(record).state, reasons: [] };
 
-        // What does not stay loaded leaves, dependents first
+        // What does not stay loaded leaves, dependents first; (1.30) so does, for a moment,
+        // the main of a module staying on whose soft providers change — a provider going is
+        // still there now, and goes only after this main (_reap)
+        const restarting = new Set();
+        const restart = (record, entry) => {
+            _settle(record, own.get(record), { state: "pending", reasons: [] });
+            restarting.add(record);
+            waitingForGoing = true;
+        };
         for (const record of ordered.slice().reverse()) {
             const entry = finalState(record);
             if (entry.state !== "loaded")
                 _settle(record, own.get(record), entry);
+            else if (counted.includes(record) && record.main && _usesChange(record, entry))
+                restart(record, entry);
         }
         // What is loaded comes, providers first: each checked again against what was made
         // before it (a provider whose main just failed, or gave no exports object)
         for (const record of ordered) {
             let entry = finalState(record);
-            if (entry.state !== "loaded")
+            if (entry.state !== "loaded" || restarting.has(record))
                 continue;
             if (counted.includes(record) && (record.manifest.uses ?? []).length > 0)
                 entry = ModuleMergeRules.planned(planNow(), record.manifest.id);
@@ -1078,8 +1091,14 @@ Scope {
                 continue;
             }
             const manifest = record.manifest;
+            // A soft provider made in this pass, for a main already running: turned off, and
+            // on again once it is gone
+            if (counted.includes(record) && record.main && _usesChange(record, entry)) {
+                restart(record, entry);
+                continue;
+            }
             if (counted.includes(record))
-                _giveUses(record);
+                _giveUses(record, entry);
             _setActive(manifest.id, true);
             if (!record.main && record.mainError === "" && manifest.main !== "")
                 _createMain(record);
@@ -1095,6 +1114,7 @@ Scope {
             // Declared exports and no main to give them: its dependents count it as missing
             record.exportsProblem = manifest.exports && !record.main && record.mainError === "" ? ModuleRules.exportsOf(null).problem : record.exportsProblem;
             record.dependencyReasons = [];
+            record.dependencyNotes = (entry.notes ?? []).slice();
             record.missingPrograms = own.get(record).facts.missingPrograms;
         }
         if (unknownPrograms.length > 0)
@@ -1110,21 +1130,38 @@ Scope {
     // A module waits for an old main of its own to go (_apply): applied again when one goes
     property bool _waitingForGoing: false
 
-    // (1.18) A module about to be turned on (or staying on): its `uses`, its providers'
-    // exports objects now (their mains made before, in this pass or earlier). A new object
-    // only when one of them is another object — never while it stays on, since a provider
-    // that goes turns it off first
-    function _giveUses(record) {
-        const id = record.manifest.id;
+    // (1.18) What a module's `uses` would be now (`entry`: its plan entry): each hard
+    // provider's exports object (its main made before, in this pass or earlier); (1.30) each
+    // soft one's when the plan gives it (entry.optional) and its object is there, else null
+    function _usesNow(record, entry) {
         const given = {};
         for (const use of record.manifest.uses ?? []) {
             const provider = _record(use.id);
-            if (provider?.exportsObject)
+            if (use.optional === true)
+                given[use.id] = (entry?.optional ?? []).includes(use.id) && provider?.exportsObject ? provider.exportsObject : null;
+            else if (provider?.exportsObject)
                 given[use.id] = provider.exportsObject;
         }
-        const before = _uses.get(id);
+        return given;
+    }
+
+    function _sameUses(before, given) {
         const keys = Object.keys(given);
-        if (before && Object.keys(before).length === keys.length && keys.every(key => before[key] === given[key]))
+        return !!before && Object.keys(before).length === keys.length && keys.every(key => ModuleRules.has(before, key) && before[key] === given[key]);
+    }
+
+    // (1.30) A module on with a main whose `uses` would change: only a soft provider can, as
+    // a hard one going turns it off first
+    function _usesChange(record, entry) {
+        return activeIds.includes(record.manifest.id) && !_sameUses(_uses.get(record.manifest.id), _usesNow(record, entry));
+    }
+
+    // (1.18) A module about to be turned on (or staying on, with no main to turn off): its
+    // `uses` now. A new object only when one of them is another object
+    function _giveUses(record, entry) {
+        const id = record.manifest.id;
+        const given = _usesNow(record, entry);
+        if (_sameUses(_uses.get(id), given))
             return;
         _uses.set(id, Object.freeze(given));
         usesRevision++;
@@ -1142,6 +1179,7 @@ Scope {
             record.facts = {};
         record.state = entry.state;
         record.dependencyReasons = entry.reasons.slice();
+        record.dependencyNotes = [];
         record.missingPrograms = known.facts.missingPrograms;
     }
 
@@ -1376,7 +1414,7 @@ Scope {
                     console.warn(what + ": " + errors.join("; "));
             }
             const warnings = (record.shadowedBy === "" && _dataFailed(record.manifest.id)
-                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings);
+                ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings).concat(record.dependencyNotes ?? []);
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,

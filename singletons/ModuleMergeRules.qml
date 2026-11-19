@@ -99,23 +99,34 @@ Singleton {
     }
 
     // The order the modules load in and the state each ends in, from what `uses` asks for.
-    // `manifests`: checked manifests ({ id, uses: [{ id, version }], exports: { version } |
-    // null }); a second one with an id already given is ignored (the host gives the ones that
-    // count). `states`: { <id>: { state, exports } } — `state` what the module's own checks
-    // say (stateOf), `exports` "" when its exports object is there, a text when it is not
-    // (exportsOf), undefined while not known (taken as there: the host asks again once the
-    // main is made).
+    // `manifests`: checked manifests ({ id, uses: [{ id, version, optional }], exports:
+    // { version } | null }); a second one with an id already given is ignored (the host gives
+    // the ones that count). `states`: { <id>: { state, exports } } — `state` what the module's
+    // own checks say (stateOf), `exports` "" when its exports object is there, a text when it
+    // is not (exportsOf), undefined while not known (taken as there: the host asks again once
+    // the main is made).
     // → { order: [ids], providers first, then by id; destroyed in the reverse order,
-    //     modules: [{ id, state, reasons: [text] }] in that order,
+    //     modules: [{ id, state, reasons: [text], optional: [ids], notes: [text] }] in that
+    //       order — `optional` the soft providers it gets (loaded, fitting, their exports
+    //       object there), `notes` why one that is installed is left out (a warning, never
+    //       an error),
     //     cycles: [[ids]] }
     // A module whose own state is not "loaded" keeps it. One that would load:
-    //   in a cycle of uses                    → failed, "uses form a cycle: a → b → a", or
+    //   in a cycle of hard uses               → failed, "uses form a cycle: a → b → a", or
     //                                            "uses itself"
-    //   a provider pending                    → pending (it waits for it)
-    //   a provider missing or not loaded, exporting nothing or an older version, or without
-    //   its exports object                    → missing-module, one reason per provider:
+    //   a provider pending (hard, or soft
+    //   and kept)                             → pending (it waits for it)
+    //   a hard provider missing or not loaded, exporting nothing or an older version, or
+    //   without its exports object            → missing-module, one reason per provider:
     //     "needs module tailscale 1.0: not installed" / "turned off" / "failed" /
     //     "exports no API" / "has 0.9" / "gives no exports object"
+    //   a soft provider likewise              → loaded without it (module.uses.<id> null);
+    //     a note when it is there and does not fit: "can use module x 1.2: has 2.0" /
+    //     "exports no API" / "gives no exports object"
+    // Soft (1.30) edges order like hard ones, but never close a cycle: taken by dependent id,
+    // then provider id, each soft edge whose provider already reaches its dependent (through
+    // hard edges and the soft ones kept) is broken — the dependent does not wait for that
+    // provider and does not get it, noted "can use module x 1.2: left out, a cycle of uses".
     // Pure, and never throws on any input.
     function dependencyPlan(manifests, states) {
         const known = new Map();
@@ -125,13 +136,15 @@ Singleton {
                 continue;
             known.set(id, { id: id, exports: ModuleRules.isObject(manifest.exports) ? manifest.exports : null,
                             uses: (Array.isArray(manifest.uses) ? manifest.uses : [])
-                                .filter(use => use && typeof use.id === "string" && typeof use.version === "string") });
+                                .filter(use => use && typeof use.id === "string" && typeof use.version === "string")
+                                .map(use => ({ id: use.id, version: use.version, optional: use.optional === true })) });
         }
         const ids = Array.from(known.keys()).sort();
-        const edges = id => Array.from(new Set(known.get(id).uses.map(use => use.id).filter(other => known.has(other)))).sort();
+        const hardEdges = id => Array.from(new Set(known.get(id).uses.filter(use => !use.optional).map(use => use.id)
+                                                   .filter(other => known.has(other)))).sort();
 
-        // The cycles: strongly connected components (Tarjan) of more than one module, or of
-        // one that uses itself
+        // The cycles: strongly connected components (Tarjan) of hard edges of more than one
+        // module, or of one that uses itself
         let counter = 0;
         const index = new Map();
         const low = new Map();
@@ -144,7 +157,7 @@ Singleton {
             counter++;
             stack.push(id);
             onStack.add(id);
-            for (const other of edges(id)) {
+            for (const other of hardEdges(id)) {
                 if (!index.has(other)) {
                     visit(other);
                     low.set(id, Math.min(low.get(id), low.get(other)));
@@ -160,7 +173,7 @@ Singleton {
                     onStack.delete(member);
                     component.push(member);
                 } while (member !== id);
-                if (component.length > 1 || edges(id).includes(id))
+                if (component.length > 1 || hardEdges(id).includes(id))
                     cycles.push(component.sort());
             }
         };
@@ -172,12 +185,39 @@ Singleton {
         for (const component of cycles) {
             const members = new Set(component);
             for (const id of component) {
-                const path = _cyclePath(id, members, edges);
+                const path = _cyclePath(id, members, hardEdges);
                 cycleText.set(id, path.length <= 2 ? "uses itself" : "uses form a cycle: " + path.join(" → "));
             }
         }
 
-        // The order: each module after the ones it uses (depth first, by id), a cycle's
+        // The soft edges kept: each one whose provider does not reach its dependent already
+        const kept = new Map(ids.map(id => [id, new Set()]));
+        const allEdges = id => Array.from(new Set(hardEdges(id).concat(Array.from(kept.get(id))))).sort();
+        const reaches = (from, to) => {
+            const seen = new Set([from]);
+            const queue = [from];
+            while (queue.length > 0) {
+                const id = queue.shift();
+                if (id === to)
+                    return true;
+                for (const other of allEdges(id)) {
+                    if (!seen.has(other)) {
+                        seen.add(other);
+                        queue.push(other);
+                    }
+                }
+            }
+            return false;
+        };
+        for (const id of ids) {
+            const softIds = Array.from(new Set(known.get(id).uses.filter(use => use.optional && known.has(use.id)).map(use => use.id))).sort();
+            for (const other of softIds) {
+                if (!reaches(other, id))
+                    kept.get(id).add(other);
+            }
+        }
+
+        // The order: each module after the ones it uses (depth first, by id), a hard cycle's
         // members where the walk meets them
         const order = [];
         const placed = new Set();
@@ -186,7 +226,7 @@ Singleton {
             if (placed.has(id) || entered.has(id))
                 return;
             entered.add(id);
-            for (const other of edges(id))
+            for (const other of allEdges(id))
                 place(other);
             placed.add(id);
             order.push(id);
@@ -209,15 +249,29 @@ Singleton {
             const own = stateOf(id);
             let state = own;
             const reasons = [];
+            const optional = [];
+            const notes = [];
             if (own === "loaded" && cycleText.has(id)) {
                 state = "failed";
                 reasons.push(cycleText.get(id));
             } else if (own === "loaded") {
                 let waiting = false;
                 for (const use of known.get(id).uses) {
-                    const needs = "needs module " + use.id + " " + use.version + ": ";
+                    const needs = (use.optional ? "can use module " : "needs module ") + use.id + " " + use.version + ": ";
+                    // A soft provider: without it the module loads all the same; a note only
+                    // when it is there and does not fit
+                    const miss = (text, worthNoting) => {
+                        if (!use.optional)
+                            reasons.push(needs + text);
+                        else if (worthNoting)
+                            notes.push(needs + text);
+                    };
                     if (!known.has(use.id)) {
-                        reasons.push(needs + "not installed");
+                        miss("not installed", false);
+                        continue;
+                    }
+                    if (use.optional && !kept.get(id).has(use.id)) {
+                        miss("left out, a cycle of uses", true);
                         continue;
                     }
                     const providerState = final.get(use.id) ?? stateOf(use.id);
@@ -226,21 +280,25 @@ Singleton {
                         continue;
                     }
                     if (providerState !== "loaded") {
-                        reasons.push(needs + _notLoadedReason(providerState));
+                        miss(_notLoadedReason(providerState), false);
                         continue;
                     }
                     const provider = known.get(use.id);
                     if (!provider.exports) {
-                        reasons.push(needs + "exports no API");
+                        miss("exports no API", true);
                         continue;
                     }
                     const fit = usesFit(use.version, provider.exports.version);
                     if (!fit.fits) {
-                        reasons.push(needs + fit.reason);
+                        miss(fit.reason, true);
                         continue;
                     }
-                    if (exportsProblem(use.id) !== "")
-                        reasons.push(needs + "gives no exports object");
+                    if (exportsProblem(use.id) !== "") {
+                        miss("gives no exports object", true);
+                        continue;
+                    }
+                    if (use.optional && !optional.includes(use.id))
+                        optional.push(use.id);
                 }
                 if (reasons.length > 0)
                     state = "missing-module";
@@ -248,7 +306,8 @@ Singleton {
                     state = "pending";
             }
             final.set(id, state);
-            result.push({ id: id, state: state, reasons: reasons });
+            result.push({ id: id, state: state, reasons: reasons,
+                          optional: state === "loaded" ? optional : [], notes: state === "loaded" ? notes : [] });
         }
         return { order: order, modules: result, cycles: cycles };
     }
