@@ -1,0 +1,11 @@
+{
+    "id": "anchors-refused",
+    "name": "Anchors refused fixture",
+    "version": "1.0.0",
+    "api": "1.25",
+    "description": "Puts one element that is no button, and nothing else, in the buttons of AnchorsTest's fixture cards and of its own provider's card (tests/AnchorsTest.qml)",
+    "anchors": [
+        { "at": "settings.cards.saved.card.actions", "place": "append", "component": "NotButton.qml" },
+        { "at": "settings.cards.vpns.card.actions", "place": "append", "component": "NotButton.qml" }
+    ]
+}

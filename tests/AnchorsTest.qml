@@ -1208,6 +1208,8 @@ TestCase {
     }
     // Buttons kept to see that they stay the same objects
     property var _keptButtons: []
+    // Where the button under a hidden one stood before
+    property real _nextButtonY: 0
 
     // The first child of `item` of a type (its name as the engine prints it), or null
     function _child(item, typeName) {
@@ -2903,6 +2905,21 @@ TestCase {
             _driver.mouseClick(buttons[2], 5, 5);
             assertEqual(host.mainObject("anchors-buttons").clicks.length, 2, "… and acts on the second click");
             _keptButtons = buttons;
+            // A button the module hides takes no room and no gap
+            _nextButtonY = _yIn(buttons[2]);
+            buttons[1].visible = false;
+        });
+        _then("a button hidden, the next one moved", () => Math.abs(_yIn(_keptButtons[2]) - _nextButtonY) > 0.01 && _cardsSteady(), () => {
+            const card = _savedCard(1);
+            const shown = _keptButtons.filter((button, index) => index !== 1);
+            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(shown, [_blockChild(card, "ownForget")])).join("; "), "",
+                        "a hidden button takes no room: the next one up in its place, 4 under the one above");
+            _keptButtons[1].visible = true;
+        });
+        _then("the button shown again, the next one back", () => Math.abs(_yIn(_keptButtons[2]) - _nextButtonY) < 0.01 && _cardsSteady(), () => {
+            const card = _savedCard(1);
+            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(_keptButtons, [_blockChild(card, "ownForget")])).join("; "), "",
+                        "… shown again, back in its place");
             _cards.openId = "";
         });
         _then("the card closed: its buttons gone", () => !_savedCard(1).actionsRegion.appendHost.built && _buttonsLive() === "", () => {
@@ -2945,6 +2962,32 @@ TestCase {
             _cards = null;
         });
         _then("the buttons' view closed", () => _live("settings.cards") === "" && _buttonsLive() === "", () => {
+            host.unload();
+        });
+
+        // A card whose only module element is refused (tests/fixtures/modules/anchors-refused:
+        // no button, in a saved card's and in its own provider card's buttons) measures as
+        // without it: no room, no gap
+        _then("the buttons' fixture unloaded", () => host.statuses.length === 0, () => {
+            host.load([fixtures + "/anchors-refused"], {});
+            _openCards(_cardItems(["one"]), [{ id: "v1", provider: "anchors-refused" }]);
+        });
+        _then("the refused fixture loaded", () => _settled() && host.status("anchors-refused")?.state === "loaded"
+              && _savedCardList().length === 1 && _cardsSteady(), () => {
+            _cards.openId = "one";
+            _cards.vpnOpenId = "v1";
+        });
+        _then("both cards open, their element refused", () => _savedCard(0).actionsRegion.visible && _vpnCard(0).actionsRegion.visible
+              && _savedCard(0).actionsRegion.appendHost.items.length === 1 && _vpnCard(0).actionsRegion.appendHost.items.length === 1
+              && host.status("anchors-refused")?.errors.length === 2 && _cardsSteady(), () => {
+            const card = _savedCard(0);
+            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit"), _blockChild(card, "ownForget")]).join("; "), "",
+                        "a saved card whose only module element is refused: Edit, then Forget 4 under it, no gap added");
+            assertEqual(_vpnCard(0).actionsRegion.height, 0, "… a card with no button of its own: the stack takes no room");
+            _close(_cards);
+            _cards = null;
+        });
+        _then("the refused fixture's view closed", () => _live("settings.cards") === "", () => {
             host.unload();
         });
         _clock.start();

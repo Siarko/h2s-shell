@@ -630,7 +630,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   "anchors: "<path>" takes a SmallButton" in the module's status. The region puts each
   button at its own width on the stack's right edge (a host with `stacked` set, a layout, so
   edges stand on whole pixels), at most a third of the card wide — a longer label is cut —
-  and in the stack's size (`m`, set on it after it is made). A card made
+  and in the stack's size (`m`, set on it after it is made); a button hidden (`visible:
+  false`) and an element refused take no room and no gap. A card made
   per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
   key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
   goes, and keeps them while other items come and go. A view's author writes only a block's

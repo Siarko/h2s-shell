@@ -106,8 +106,11 @@ import qs.singletons.network
 //                                                     which stays last; context as the card's
 //                                                     settings (the VPN's own-provider). These
 //                                                     take a SmallButton only (`takes`): another
-//                                                     element is not shown, an error in the
-//                                                     module's status says so. Each button at its
+//                                                     element is built once (its startup code
+//                                                     runs), then destroyed, not shown; an error
+//                                                     in the module's status says so. A button
+//                                                     with `visible: false` takes no room. Each
+//                                                     button at its
 //                                                     own width on the stack's right edge, at
 //                                                     most a third of the card wide (a longer
 //                                                     label is cut), in size "m" whatever it

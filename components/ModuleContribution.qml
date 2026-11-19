@@ -47,9 +47,16 @@ Item {
 
     readonly property bool _active: host !== null && host.activeIds.includes(moduleId) && url !== ""
 
+    // Whether the element itself is shown: an element with `visible: false` has no size, so a
+    // layout skips it with its gap (a stacked button) and a Column too. Its own `visible` reads
+    // its parents' as well and its explicit value cannot be read, so this wrapper's `visible`
+    // cannot follow it (hidden, the element would read hidden for good); while the wrapper is
+    // not shown, the element's is unknown and its size is kept
+    readonly property bool elementShown: ready && (!_loader.visible || _loader.item.visible)
+
     visible: ready
-    implicitWidth: ready ? _loader.item.implicitWidth : 0
-    implicitHeight: ready ? _loader.item.implicitHeight : 0
+    implicitWidth: elementShown ? _loader.item.implicitWidth : 0
+    implicitHeight: elementShown ? _loader.item.implicitHeight : 0
 
     property var _passedContext: null
     property var _passedProperties: ({})

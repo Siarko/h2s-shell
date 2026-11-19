@@ -235,7 +235,9 @@ AnchorBlock {
                                         maxElementWidth: root.buttonMaxWidth
                                         elementProperties: root._buttonProperties
                                         Layout.alignment: Qt.AlignRight
-                                        Layout.topMargin: count > 0 ? 4 : 0
+                                        // Only for what was built and shows: a refused or
+                                        // failed element has no size
+                                        Layout.topMargin: implicitHeight > 0 ? 4 : 0
                                     }
 
                                     ColumnLayout {
@@ -255,7 +257,9 @@ AnchorBlock {
                                         maxElementWidth: root.buttonMaxWidth
                                         elementProperties: root._buttonProperties
                                         Layout.alignment: Qt.AlignRight
-                                        Layout.topMargin: count > 0 ? 4 : 0
+                                        // Only for what was built and shows: a refused or
+                                        // failed element has no size
+                                        Layout.topMargin: implicitHeight > 0 ? 4 : 0
                                     }
 
                                     ColumnLayout {

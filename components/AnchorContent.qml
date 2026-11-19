@@ -23,6 +23,7 @@ import qs.singletons
 //
 // `stacked`: each element at its own width on the host's right edge, at most `maxElementWidth`
 // wide — a card's buttons (SettingsCard's `actions`); otherwise each is as wide as the host.
+// Either way an element whose module hides it (`visible: false`) takes no room and no gap.
 // On a place whose row `takes` an element (a SmallButton), another is refused
 // (ModuleContribution). `elementProperties` are given to each element that declares them (the
 // stack's button size).
@@ -120,17 +121,25 @@ Item {
     Component {
         id: _stack
 
+        // The gaps are the elements' own top margins, each but the first shown: an element its
+        // module hides gets no size and no gap — a layout gives the spacing even to an item of
+        // no size, and leaves out only one that is not visible, which a wrapper cannot follow
+        // (ModuleContribution's `elementShown`)
         ColumnLayout {
             property alias repeater: _repeater
+            // The index of the first element shown (-1 none)
+            readonly property int firstShown: root.items.findIndex(item => item.elementShown)
             width: root.width
-            spacing: root.spacing
+            spacing: 0
 
             Repeater {
                 id: _repeater
                 model: _contributions.model
 
                 ModuleContribution {
+                    id: _stacked
                     required property string modelData
+                    required property int index
                     readonly property var contribution: _contributions.byKey[modelData] ?? ({})
                     host: root.host
                     moduleId: contribution.module ?? ""
@@ -141,7 +150,11 @@ Item {
                     properties: root.elementProperties
                     context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
                     Layout.alignment: Qt.AlignRight
-                    Layout.maximumWidth: root.maxElementWidth
+                    // Hidden by its module: kept to no size (one of 0 alone falls back to the
+                    // last size it was given)
+                    Layout.maximumWidth: elementShown ? root.maxElementWidth : 0
+                    Layout.maximumHeight: elementShown ? Infinity : 0
+                    Layout.topMargin: elementShown && index > _stacked.parent.firstShown ? root.spacing : 0
                 }
             }
         }
