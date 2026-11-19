@@ -40,12 +40,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To look at on a screen**
 
-- **The popups on anchor blocks** (U2). Network popup with Tailscale up: VPN header, rows
-  4 px apart, the exit-node chooser right under its row, Ethernet and Wi-Fi spacing
-  unchanged, the divider over the network list only while Wi-Fi is on, the list not cut
-  short, a hotspot on its line with "Turn off hotspot". Notifications: header and "Clear
-  all" 8 px in, the list filling and scrolling, cards sliding, "All caught up" then
-  closing. Moving the pointer between bar cells with a popup open.
 - **The file chooser for modules** (E1, both machines): opened from a module popup that is
   then closed, the dialog stays, has the keyboard, opens where asked, returns the pick; a
   lock closes it; with `QT_QPA_PLATFORMTHEME=xdgdesktopportal` "several files" returns
@@ -237,6 +231,11 @@ All by the owner, 2026-11-17.
 - Network cards (2026-11-19): the main button, Edit and Forget stand in one row on the name
   line, also while the card is closed (saved Wi-Fi, hotspot, wired; nothing stacked when
   opened). Order: main, Edit, Forget.
+- Taildrop send from the popup (2026-11-19, seen on a screen: picking a file opens the settings
+  window where Send must be clicked — impractical): everything stays in the popup. After the
+  file(s) are picked, a row under that device's row names the file (or "N files") with a Send
+  button; after Send, a progress bar of the send in that row (from the bus's outgoing files);
+  the same for several files. The settings window does not open (M8).
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
