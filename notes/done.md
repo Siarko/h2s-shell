@@ -2030,3 +2030,11 @@ For the owner, from the autonomous run (2026-11-18 on):
   so; both Taildrop dialogs through `module.chooseFiles`. Reviewed, fixed; suites, stand-ins
   and lock bed passed on both machines (the lock bed against the core's new card row).
 
+- **Core round three** — on `master` 2026-11-19, module API 1.31. Public `ProgressBar` (theme
+  group `progress`) and `HoverTip` (owns its hover handler); Enter in the Wi-Fi password field
+  connects (popup: the row open, a WPA password 8–63 characters; saved card: Enter = Save);
+  soft-dependency fixes (only mains given a provider restart with it; no wait on an unfit soft
+  provider; no member left pending); network card gap hover, whole-pixel question beside the
+  lock; `Dropdown` option width guarded. Reviewed, fixed; `tests/run-all.sh` passed on both
+  machines.
+
