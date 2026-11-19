@@ -29,6 +29,7 @@ ColumnLayout {
     }
 
     SchemaSettingEditor { key: "notifications.toasts"; editIndex: root.editIndex }
+    SchemaSettingEditor { key: "notifications.followSenderTime"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastDuration"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastLayout"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor {
@@ -36,6 +37,7 @@ ColumnLayout {
         editIndex: root.editIndex
         available: root._toastsOn && root._column
     }
+    SchemaSettingEditor { key: "notifications.maxStayingToasts"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastScreen"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastFullscreen"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor {

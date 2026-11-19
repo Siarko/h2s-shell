@@ -471,12 +471,13 @@ EOF
 }
 
 # notify <app> <summary> <body>: a notification sent to the shell's server on the private
-# session bus (stack_start --session-bus)
+# session bus (stack_start --session-bus), leaving its display time to the server (-1, as
+# notify-send without -t does)
 notify() {
     [ -n "${LOCKTEST_SESSION_BUS:-}" ] || abort "notify needs stack_start --session-bus"
     DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
         --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
-        --method org.freedesktop.Notifications.Notify "$1" 0 "" "$2" "$3" '[]' '{}' 0 > /dev/null
+        --method org.freedesktop.Notifications.Notify "$1" 0 "" "$2" "$3" '[]' '{}' "int32 -1" > /dev/null
 }
 # Whether the shell's notification server has registered on the private bus
 notification_server_up() {

@@ -113,16 +113,18 @@ PanelWindow {
     }
 
     // ---- Toasts ----
-    // Slots stacked newest on top: one shows notifications one at a time (the rest
-    // counted on the badge), more show a column of them. The slots always exist — the
-    // setting only enables them — so changing it never destroys a toast on screen. Each
-    // toast's place comes from Notifications.shownToasts (oldest first): above it are
-    // the newer ones, so a new toast pushes the others down and the oldest, at the
-    // bottom, is the one counting down.
+    // The layout's slots, for toasts that count down: one shows notifications one at a
+    // time (the rest counted on the badge), more show a column of them; toasts that stay
+    // take none of them and stack above, up to their own limit (Notifications.toastRoom,
+    // ToastRules.slots). The slots always exist — the settings only enable them — so
+    // changing one never destroys a toast on screen. Each toast's place comes from
+    // ToastRules.stackOrder: those that stay on top, then the others newest first, so a
+    // new toast pushes the older ones down and the oldest, at the bottom, is the one
+    // counting down.
     readonly property int _toastTop: Theme.bar.reservedSpace + Theme.osdToast.screenGap
-    readonly property int _toastSlots: Profiles.value("notifications.toastLayout") === "column"
-        ? (Profiles.value("notifications.toastColumnSize") ?? 3) : 1
-    readonly property int _maxToastSlots: 10
+    readonly property int _toastSlots: Notifications.toastRoom.total
+    // The largest column (10) and the most toasts that stay (5)
+    readonly property int _maxToastSlots: 15
     readonly property int _toastSpacing: Theme.osdToast.spacing
 
     // The toast on screen showing notification `id`
@@ -136,15 +138,15 @@ PanelWindow {
     }
 
     // Distance from the top of the stack for the toast showing `id`: the heights of the
-    // newer toasts above it. null for a toast not in the list (leaving, or empty).
+    // toasts above it. null for a toast not in the list (leaving, or empty).
     function _toastY(id) {
-        const shown = Notifications.shownToasts;
-        const index = shown.indexOf(id);
+        const order = ToastRules.stackOrder(Notifications.shownToasts, Notifications.stayingToasts);
+        const index = order.indexOf(id);
         if (index < 0)
             return null;
         let y = 0;
-        for (let i = index + 1; i < shown.length; i++)
-            y += (_slotFor(shown[i])?.height ?? 0) + _toastSpacing;
+        for (let i = 0; i < index; i++)
+            y += (_slotFor(order[i])?.height ?? 0) + _toastSpacing;
         return y;
     }
 

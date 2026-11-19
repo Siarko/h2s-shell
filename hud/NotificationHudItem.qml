@@ -4,9 +4,11 @@ import qs.singletons
 import qs.components
 
 // One notification toast slot. Manages its own queue consumption, slide-in/out
-// animations, and auto-dismiss timer. Hud stacks one or more of them, newest on top
-// ("notifications.toastLayout"); every free slot takes the next notification from the
-// shared queue, and Hud works out its place (stackY).
+// animations, and auto-dismiss timer. Hud stacks several of them: those that count down
+// newest on top, as many as the layout has slots ("notifications.toastLayout"), and the
+// toasts that stay above them; every free slot takes the next notification that has room
+// from the shared queue (Notifications.dequeueHudNotification), and Hud works out its
+// place (stackY).
 Item {
     id: root
 
@@ -28,6 +30,12 @@ Item {
     }
 
     property var currentNotif: null
+    // The id this slot put on the list of shown toasts, -1 while none: taken off by that,
+    // even when the notification object is gone by then
+    property int _shownId: -1
+    // Counts the toasts this slot showed, so one shown after another counts afresh
+    property int _generation: 0
+    property bool _taking: false
     // A reply hovered or being written: Hud gives its window the keyboard
     readonly property bool wantsKeyboard: currentNotif !== null && notifCard.wantsKeyboard
     // Held: under a resting pointer, or with a reply being written — no countdown either way,
@@ -54,11 +62,17 @@ Item {
 
     // Consume the next item from the shared queue and start the slide-in
     function showNext() {
+        // Taking one changes the queue, which asks every free slot — this one too — to take
+        // one: this slot is busy with the first
+        if (_taking)
+            return;
         if (Notifications.hudPanelOpen || !slotEnabled) {
             currentNotif = null;
             return;
         }
+        _taking = true;
         const notif = Notifications.dequeueHudNotification();
+        _taking = false;
         if (!notif) {
             currentNotif = null;
             return;
@@ -66,9 +80,18 @@ Item {
         _placing = true;
         currentNotif = notif;
         remaining = 1.0;
-        Notifications.toastShown(notif.id, Notifications.isPersistent(notif));
+        _shownId = notif.id;
+        _generation++;
+        Notifications.toastShown(notif.id, Notifications.toastTiming(notif));
         Qt.callLater(() => root._placing = false);
         slideIn.start();
+    }
+
+    // Room on screen came (a toast left, changed its time, a setting): a free slot on the
+    // toasts' screen takes what waits
+    function _retry() {
+        if (currentNotif === null && !slideOut.running && Notifications.toastScreen === screenModelData.name)
+            showNext();
     }
 
     function dismiss() {
@@ -80,22 +103,50 @@ Item {
     // Off the list of shown toasts as soon as it starts leaving, so the next one in line
     // starts counting down at once
     function _leave() {
-        if (currentNotif !== null)
-            Notifications.toastGone(currentNotif.id);
+        if (_shownId < 0)
+            return;
+        const id = _shownId;
+        _shownId = -1;
+        Notifications.toastGone(id);
+    }
+
+    // Left without a notification while shown: off the list too, or a toast waiting behind
+    // it would never count down
+    onCurrentNotifChanged: {
+        if (currentNotif === null)
+            _leave();
     }
 
     // Gone without leaving — a reload rebuilding the HUD — it must still come off the list,
     // or the toasts after it wait for it to count down, for ever
     Component.onDestruction: _leave()
 
-    // Critical: stays until dismissed, no countdown (Notifications.isPersistent)
-    readonly property bool _persistent: currentNotif !== null && Notifications.isPersistent(currentNotif)
-    // Whether this toast is the one counting down: the oldest on screen that is not persistent
-    readonly property bool _counting: currentNotif !== null && !_persistent && Notifications.countingToast === currentNotif.id
+    // How long it shows (Notifications.toastTiming, ToastRules.timing): the sender's time,
+    // the user's, or 0 — it stays until taken away ("×", a swipe), no countdown. Read again
+    // when the sender replaces the notification with another time.
+    readonly property var _timing: currentNotif !== null ? Notifications.toastTiming(currentNotif) : ({ ms: 0, kind: "stays" })
+    readonly property string _timingKey: _timing.kind + ":" + _timing.ms
+    on_TimingKeyChanged: {
+        if (_shownId >= 0)
+            Notifications.toastTimed(_shownId, _timing);
+    }
+    readonly property bool _staying: currentNotif !== null && _timing.kind === "stays"
+    // Whether this toast counts down now: one with the sender's time at once, one with the
+    // user's time when it is the oldest of those on screen; one that stays never
+    readonly property bool _counting: _shownId >= 0 && currentNotif !== null && !_staying
+        && (_timing.kind === "own" || Notifications.countingToast === _shownId)
+    // What it counts: a new toast, or a new time, counts from full
+    readonly property string _countKey: _counting ? _generation + ":" + _timing.ms : ""
 
-    on_CountingChanged: {
-        if (!_counting)
+    on_CountKeyChanged: {
+        if (_countKey === "") {
+            countdown.stop();
+            // Waiting its turn again, or staying: full; leaving, its bar stays as it was
+            if (_shownId >= 0)
+                remaining = 1.0;
             return;
+        }
+        countdown.duration = Math.max(1000, _timing.ms);
         countdown.restart();
         // A held toast does not count down either
         if (_held)
@@ -124,6 +175,10 @@ Item {
         function onToastScreenChanged() {
             if (Notifications.toastScreen === root.screenModelData.name && root.currentNotif === null && !slideOut.running)
                 root.showNext();
+        }
+
+        function onRoomForToasts() {
+            Qt.callLater(root._retry);
         }
 
         function onHudQueueCleared() {
@@ -182,7 +237,8 @@ Item {
         property: "remaining"
         from: 1.0
         to: 0.0
-        duration: (Profiles.value("notifications.toastDuration") ?? 5) * 1000
+        // Set with each start, from the toast's time (on_CountKeyChanged)
+        duration: 5000
         onFinished: root.dismiss()
     }
 
@@ -203,7 +259,7 @@ Item {
         // An action on a resident notification: the toast leaves, the entry stays
         onActionInvoked: root.dismiss()
         // No bar on a toast that stays
-        timerVisible: !root._persistent
+        timerVisible: !root._staying
         timerProgress: root.remaining
 
         HoverHandler {

@@ -250,8 +250,14 @@ Singleton {
         { key: "notifications.toasts", label: "Show toasts", group: "notifications",
           type: "bool", default: true,
           hint: "Off, notifications only go to the notification panel." },
+        // An app's own display time (the spec's expire timeout) followed by the toasts
+        // (ToastRules.timing); off, every toast shows for the time below
+        { key: "notifications.followSenderTime", label: "Apps choose how long", group: "notifications",
+          type: "bool", default: true,
+          hint: "Off: every toast shows for the time below." },
         { key: "notifications.toastDuration", label: "Show each toast for", group: "notifications",
-          type: "number", min: 1, max: 120, suffix: "s", default: 5 },
+          type: "number", min: 1, max: 120, suffix: "s", default: 5,
+          hint: "When the app does not say." },
         { key: "notifications.toastLayout", label: "Several at once", group: "notifications",
           type: "enum", default: "queue", options: [
               { value: "queue", label: "One at a time, the rest counted" },
@@ -260,6 +266,10 @@ Singleton {
         { key: "notifications.toastColumnSize", label: "Toasts in the column", group: "notifications",
           type: "number", min: 2, max: 10, default: 3,
           hint: "More wait in the queue, counted beside the column." },
+        // Toasts that stay until taken away (an app asking for it, critical ones) stack above
+        // the layout's slots, at most this many (ToastRules.slots)
+        { key: "notifications.maxStayingToasts", label: "Toasts that stay, at most", group: "notifications",
+          type: "number", min: 1, max: 5, default: 3 },
         // Where toasts show, and what a fullscreen window on that screen changes (ToastRules).
         // The shell's own messages follow them. Screens by port ("DP-2").
         { key: "notifications.toastScreen", label: "Show toasts on", group: "notifications",

@@ -122,8 +122,17 @@ input through except where a card is actually visible.
 
 The shell *is* the notification server (`org.freedesktop.Notifications`), with support
 for body markup, hyperlinks, images, action buttons, action icons and inline replies.
-Notifications stay in the panel until dismissed. A critical notification's toast stays
-on screen too, until dismissed or answered (no countdown); the others count down past it. Arrival timestamps are recorded, and
+Notifications stay in the panel until dismissed. A toast shows as long as its app asks (the
+spec's expire timeout): an app asking for 0 keeps its toast up until it is closed, one
+asking for 30 s gets 30 s, and one leaving it to the shell (most do) gets "Show each toast
+for". Settings → Notifications → "Apps choose how long", off, gives every toast that time.
+A critical notification is outlined in red and its toast stays too. A toast that stays
+has no timer bar and is always taken away by its "×" or a swipe; the time is only the
+toast's — the entry stays in the panel. Toasts with the user's time count down one at a
+time, the oldest first; one with its app's own time counts by itself, and one that stays
+holds none up. Toasts that stay take none of the layout's places (one at a time, or the
+column): they stack above them, at most "Toasts that stay, at most" (3 by default); more
+wait in the queue, counted on the badge. Arrival timestamps are recorded, and
 configured regex patterns extract codes from the summary and body so a verification code
 can be copied without opening the sending app.
 

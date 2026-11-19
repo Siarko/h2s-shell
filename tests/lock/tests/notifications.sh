@@ -5,6 +5,10 @@
 # the screensaver (whose default is still "in full") and then by the lock screen: the lock
 # screen's card is a single line, clearly shorter than the screensaver's. (What each
 # detail shows, line by line, is checked in the unit suite: tests/LockViewTest.qml.)
+#
+# Then the toasts' display time, as each sender asks for it (the spec's expire timeout):
+# 0 stays, 2000 ms shows 2 s, -1 the user's time (5 s by default). Read from the shell's
+# state over the shelltest IPC: whether each toast is on screen, and for how long.
 
 stack_start --session-bus --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 3,
     "lockscreen.lockscreenEnabled": false}'
@@ -54,3 +58,35 @@ log "the notification's card on the lock screen (default detail): $on_lock px"
 check "the lock screen shows the card" test "$on_lock" -gt 0
 check "a single line: shorter than the screensaver's by at least the title and the text" \
     test "$on_lock" -lt "$((on_screensaver - 20))"
+
+# notify_for <summary> <expire timeout, ms>: a notification asking for that display time,
+# printing the id the server gives it
+notify_for() {
+    DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
+        --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.Notify "Timer" 0 "" "$1" "" '[]' '{}' "int32 $2" \
+        | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p'
+}
+
+# toast_is <id> <shown: true|false> [<duration, ms>]: the shell's state of that
+# notification's toast
+toast_is() {
+    shell_ipc shelltest notificationState | python3 -I -c '
+import json, sys
+toast = next((n["toast"] for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
+wanted = {"shown": sys.argv[2] == "true"}
+if len(sys.argv) > 3:
+    wanted["duration"] = int(sys.argv[3])
+sys.exit(0 if toast is not None and all(toast.get(key) == value for key, value in wanted.items()) else 1)' "$@"
+}
+
+staying=$(notify_for "Stays" 0)
+check "the server gave the notification an id" test -n "$staying"
+check_within 5 "expire 0: its toast is up, with no time (it stays)" toast_is "$staying" true 0
+timed=$(notify_for "Two seconds" 2000)
+check_within 5 "expire 2000: its toast is up too, for 2000 ms (the one that stays holds no slot)" toast_is "$timed" true 2000
+check_within 4 "… and gone after it, well before the user's 5 s" toast_is "$timed" false
+usual=$(notify_for "The usual" -1)
+check_within 5 "expire -1: its toast is up for the user's time, 5000 ms" toast_is "$usual" true 5000
+check_within 8 "… and gone after it" toast_is "$usual" false
+check "the one that stays is still up, past the user's time" toast_is "$staying" true 0

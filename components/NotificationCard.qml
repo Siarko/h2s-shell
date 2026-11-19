@@ -85,7 +85,7 @@ Rectangle {
     property real _selectionClearedAt: 0
     // A critical notification is outlined in the error colour, wherever the card is (a
     // toast, the panel, the lock screen) — the toast of one also stays (Notifications)
-    readonly property bool _critical: Notifications.isPersistent(notification)
+    readonly property bool _critical: Notifications.isCritical(notification)
     border.width: _critical ? Math.max(borderWidth, Theme.border.selectedWidth) : borderWidth
     border.color: _critical ? Theme.error : borderColor
     clip: true

@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Services.Notifications
 import qs.singletons
 import qs.hud
 import qs.components
@@ -191,6 +192,103 @@ TestCase {
         const resident = pressAction(true);
         assert(resident.invoked === 1 && resident.dismissals === 0 && resident.actionsInvoked === 1,
                "resident: the action runs, no dismissal asked, the toast told to leave (" + JSON.stringify(resident) + ")");
+
+        _toastTimes();
+    }
+
+    // Toasts through the shared queue (Notifications.hudQueue), each in a slot as Hud makes
+    // them, with stand-in notifications: how long each shows (ToastRules.timing), which one
+    // counts down, and the room for those that stay (ToastRules.slots)
+    function _toastTimes() {
+        const savedGlobals = Config.globals;
+        const made = [];
+        let nextId = 9001;
+        const standIn = (expire, critical) => {
+            const standing = _standIn.createObject(suite, { id: nextId++, expireTimeout: expire, summary: "Toast",
+                urgency: critical ? NotificationUrgency.Critical : NotificationUrgency.Normal });
+            made.push(standing);
+            return standing;
+        };
+        // Queued, then a new slot takes the next one that has room
+        const show = notification => {
+            Notifications.enqueueHudNotification(notification);
+            const slot = _slot.createObject(suite);
+            made.push(slot);
+            slot.showNext();
+            return slot;
+        };
+        const countdownOf = slot => slot.resources.find(resource => resource.property === "remaining") ?? null;
+        const cardOf = slot => _find(slot, item => item.bodyMaxLines !== undefined);
+        const counting = slot => slot._counting && countdownOf(slot).running;
+        const settings = change => {
+            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
+        };
+        const clear = () => Notifications.clearHudQueue();
+
+        // --- the default layout (one at a time): one that stays takes none of its slot ---
+        settings({});
+        const stays = show(standIn(0));
+        assert(stays.currentNotif?.id === 9001 && !counting(stays) && !cardOf(stays).timerVisible,
+               "expire 0: shown, no countdown, no timer bar");
+        assert(Notifications.stayingToasts.includes(9001) && Notifications.toastDurations[9001] === 0, "expire 0: listed as staying, its time 0");
+        const ordinary = show(standIn(-1));
+        assert(ordinary.currentNotif?.id === 9002 && counting(ordinary) && countdownOf(ordinary).duration === 5000 && cardOf(ordinary).timerVisible,
+               "beside it, an ordinary toast shows in the layout's one slot and counts the user's 5 s");
+        const critical = show(standIn(-1, true));
+        assert(critical.currentNotif?.id === 9003 && !counting(critical) && !cardOf(critical).timerVisible && cardOf(critical)._critical,
+               "a critical one stays above too, outlined");
+        cardOf(stays).dismissRequested();
+        assert(!Notifications.shownToasts.includes(9001) && made[0].dismissCalls === 0 && made[0].tracked,
+               "its \"×\": the toast goes, the entry stays");
+        clear();
+
+        // --- the limit of those that stay: more wait, counted ---
+        settings({ "notifications.maxStayingToasts": 1 });
+        const first = show(standIn(0));
+        Notifications.enqueueHudNotification(standIn(0));
+        const ordinaryAfter = standIn(-1);
+        const taker = show(ordinaryAfter);
+        assert(first.currentNotif !== null && taker.currentNotif === ordinaryAfter && Notifications.hudQueue.length === 1
+               && Notifications.hudQueue[0].expireTimeout === 0,
+               "at most 1 that stays: the second waits in the queue, the ordinary one after it shows");
+        clear();
+
+        // --- a column: the sender's time counts by itself, the user's time one at a time ---
+        settings({ "notifications.toastLayout": "column", "notifications.toastColumnSize": 3 });
+        const oldest = show(standIn(-1));
+        const waiting = show(standIn(-1));
+        const ownTime = show(standIn(3000));
+        assert(counting(oldest) && !counting(waiting) && waiting.remaining === 1, "the user's time: the oldest counts, the next waits its turn");
+        assert(counting(ownTime) && countdownOf(ownTime).duration === 3000 && Notifications.toastDurations[ownTime.currentNotif.id] === 3000,
+               "3000 ms: counts 3 s at once, by itself");
+        oldest.dismiss();
+        assert(counting(waiting), "the oldest leaving while it counts: the next counts at once");
+        waiting.currentNotif.expireTimeout = 0;
+        assert(!counting(waiting) && waiting.remaining === 1 && !cardOf(waiting).timerVisible && Notifications.stayingToasts.includes(waiting.currentNotif.id),
+               "replaced with 0 while counting: it stops, stays, no timer bar");
+        clear();
+
+        settings({});
+        const replaced = show(standIn(0));
+        replaced.currentNotif.expireTimeout = -1;
+        assert(counting(replaced) && countdownOf(replaced).duration === 5000 && cardOf(replaced).timerVisible && !Notifications.stayingToasts.includes(replaced.currentNotif.id),
+               "replaced 0 → -1 while shown: counts the user's time, its bar shows");
+        replaced.currentNotif.expireTimeout = 4000;
+        assert(counting(replaced) && countdownOf(replaced).duration === 4000 && Notifications.toastDurations[replaced.currentNotif.id] === 4000,
+               "replaced with 4000: counts 4 s from full");
+        clear();
+
+        // --- "Apps choose how long" off: every toast the user's time, as before ---
+        settings({ "notifications.followSenderTime": false, "notifications.toastLayout": "column" });
+        const zero = show(standIn(0));
+        const thirty = show(standIn(30000));
+        assert(counting(zero) && countdownOf(zero).duration === 5000 && cardOf(zero).timerVisible && !counting(thirty),
+               "setting off: expire 0 counts the user's time; 30 s waits its turn like any other");
+        clear();
+
+        Config.globals = savedGlobals;
+        for (const object of made)
+            object.destroy();
     }
 
     // The body under `card` (found by `test`), its box given a toast's width
@@ -228,6 +326,37 @@ TestCase {
             property int invoked: 0
             function invoke() {
                 invoked++;
+            }
+        }
+    }
+    // A slot of the toast stack, on a screen that is not the toasts' screen: it takes a
+    // toast only when told (showNext), not on its own
+    property Component _slot: Component {
+        NotificationHudItem {
+            screenWidth: 800
+            screenModelData: ({ name: "test-screen" })
+        }
+    }
+    // A notification as the server hands it, as far as a toast reads it
+    property Component _standIn: Component {
+        QtObject {
+            property int id
+            property real expireTimeout: -1
+            property int urgency: NotificationUrgency.Normal
+            property string appName: "Test"
+            property string appIcon: ""
+            property string summary
+            property string body: ""
+            property string image: ""
+            property var actions: []
+            property bool hasInlineReply: false
+            property var hints: ({})
+            property bool resident: false
+            property bool tracked: true
+            property int dismissCalls: 0
+            function dismiss() {
+                dismissCalls++;
+                tracked = false;
             }
         }
     }

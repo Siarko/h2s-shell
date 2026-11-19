@@ -10,6 +10,10 @@ section to the new version and date.
 
 ## [Unreleased]
 
+A minor release, though toasts now follow the display time an app asks for, which changes
+how long some toasts show: apps that leave it to the shell (most) see no change, and
+Settings → Notifications → "Apps choose how long", off, keeps the old behaviour.
+
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
@@ -363,6 +367,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Toasts now show as long as the app asks (an app asking for 0 stays until closed);
+  Settings → Notifications → Apps choose how long, off, keeps every toast at your time.
+  Toasts that stay — those, and critical ones — no longer hold the others back: they stack
+  above the toasts that count down, at most "Toasts that stay, at most" (3 by default), more
+  waiting in the queue.
 - Notifications show an app's progress: a bar under the text when the app sends one (the
   notification spec's `value` hint), moving as the app updates the same notification — in
   the toast, the notification panel, and on the screensaver and lock screen where they show

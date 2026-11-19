@@ -393,12 +393,15 @@ PanelWindow {
             return bar._testRect(bar._testFind(window.contentItem, item => item.objectName === name && item.visible), window._screenOffset);
         }
 
-        // The notifications the server holds, in its order: each one's id, summary and
-        // progress as its card shows it (NotificationRules.progress)
+        // The notifications the server holds, in its order: each one's id, summary,
+        // progress as its card shows it (NotificationRules.progress), and its toast —
+        // whether it is on screen and for how long, in ms (0: it stays; ToastRules.timing)
         function notificationState(): string {
             return JSON.stringify(Notifications.notifications.values.map(notification => ({
                 id: notification.id, summary: notification.summary,
-                progress: NotificationRules.progress(notification.hints)
+                progress: NotificationRules.progress(notification.hints),
+                toast: { shown: Notifications.shownToasts.includes(notification.id),
+                         duration: Notifications.toastDurations[notification.id] ?? null }
             })));
         }
 

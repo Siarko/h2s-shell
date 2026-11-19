@@ -146,30 +146,82 @@ Singleton {
 
     // HUD queue — shared across all HUD instances
     property var hudQueue: []
-    // Ids of the toasts on screen, oldest first. Only the oldest counts down to its
-    // dismissal; the others wait their turn, so a column of toasts leaves one at a time.
+    // Ids of the toasts on screen, oldest first. Only the oldest with the user's time
+    // counts down to its dismissal; the others with that time wait their turn, so a column
+    // of toasts leaves one at a time.
     property var shownToasts: []
-    // Of those, the ones that stay until dismissed (isPersistent): they never count down,
-    // and the next toast counts instead, so they hold up nothing
-    property var persistentToasts: []
-    // The toast counting down now: the oldest that is not persistent
-    readonly property var countingToast: shownToasts.find(id => !persistentToasts.includes(id)) ?? null
+    // Of those, the toasts with a time of their own (ToastRules.timing: "own" or "stays"):
+    // a sender's time counts by itself, at once, and a toast that stays never counts — so
+    // neither holds up the others, and the next with the user's time counts instead
+    property var ownTimeToasts: []
+    // Of those, the ones that stay until taken away: they take none of the layout's slots,
+    // they stack above them (ToastRules.slots)
+    property var stayingToasts: []
+    // Each shown toast's time in ms, by id; 0: it stays
+    property var toastDurations: ({})
+    // The toast counting down the user's time now: the oldest without a time of its own
+    readonly property var countingToast: shownToasts.find(id => !ownTimeToasts.includes(id)) ?? null
 
-    // A critical notification's toast stays until dismissed, as the notification spec asks
-    // (a battery about to die, the shell's authentication prompt failing)
-    function isPersistent(notification) {
+    // Room on screen (ToastRules.slots): the layout's slots for toasts that count down,
+    // toasts that stay above them up to their limit
+    readonly property var toastRoom: ToastRules.slots(Profiles.value("notifications.toastLayout") ?? "queue",
+        Profiles.value("notifications.toastColumnSize") ?? 3, stayingToasts.length,
+        Profiles.value("notifications.maxStayingToasts") ?? 3)
+    // A slot that was free may take a toast now: one left, changed its time, or the room grew
+    signal roomForToasts
+    onShownToastsChanged: roomForToasts()
+    onToastRoomChanged: roomForToasts()
+
+    // A critical notification is outlined in red, and its toast stays until taken away, as
+    // the notification spec asks (a battery about to die, the shell's authentication prompt
+    // failing)
+    function isCritical(notification) {
         return notification?.urgency === NotificationUrgency.Critical;
     }
 
-    function toastShown(id, persistent) {
+    // How long a notification's toast shows (ToastRules.timing): the time its sender asks
+    // for, unless the user turned that off; the user's time when the sender leaves it to us
+    function toastTiming(notification) {
+        return ToastRules.timing({
+            expireTimeout: notification?.expireTimeout,
+            critical: isCritical(notification),
+            defaultSeconds: Profiles.value("notifications.toastDuration") ?? 5,
+            followSender: Profiles.value("notifications.followSenderTime") !== false
+        });
+    }
+
+    function toastShown(id, timing) {
         shownToasts = shownToasts.concat([id]);
-        if (persistent)
-            persistentToasts = persistentToasts.concat([id]);
+        toastTimed(id, timing);
+    }
+
+    // A shown toast's time, when it shows and whenever it changes (its sender replaced it
+    // with another time, a setting changed)
+    function toastTimed(id, timing) {
+        if (!shownToasts.includes(id))
+            return;
+        const own = timing.kind !== "default";
+        const stays = timing.kind === "stays";
+        if (own !== ownTimeToasts.includes(id))
+            ownTimeToasts = own ? ownTimeToasts.concat([id]) : ownTimeToasts.filter(shown => shown !== id);
+        if (stays !== stayingToasts.includes(id))
+            stayingToasts = stays ? stayingToasts.concat([id]) : stayingToasts.filter(shown => shown !== id);
+        if (toastDurations[id] !== timing.ms) {
+            const durations = Object.assign({}, toastDurations);
+            durations[id] = timing.ms;
+            toastDurations = durations;
+        }
     }
 
     function toastGone(id) {
         shownToasts = shownToasts.filter(shown => shown !== id);
-        persistentToasts = persistentToasts.filter(shown => shown !== id);
+        ownTimeToasts = ownTimeToasts.filter(shown => shown !== id);
+        stayingToasts = stayingToasts.filter(shown => shown !== id);
+        if (toastDurations[id] !== undefined) {
+            const durations = Object.assign({}, toastDurations);
+            delete durations[id];
+            toastDurations = durations;
+        }
     }
 
     // Toasts switched off — by the user or a profile — drop the ones still waiting
@@ -185,11 +237,15 @@ Singleton {
         hudQueue = hudQueue.concat([notification]);
     }
 
+    // The next toast a free slot shows: the oldest waiting that has room on screen
+    // (ToastRules.nextToast) — or null, and those waiting go on waiting
     function dequeueHudNotification() {
-        if (hudQueue.length === 0)
+        const index = ToastRules.nextToast(hudQueue.map(notification => toastTiming(notification).kind),
+            shownToasts.length - stayingToasts.length, toastRoom);
+        if (index < 0)
             return null;
-        const item = hudQueue[0];
-        hudQueue = hudQueue.slice(1);
+        const item = hudQueue[index];
+        hudQueue = hudQueue.slice(0, index).concat(hudQueue.slice(index + 1));
         return item;
     }
 
