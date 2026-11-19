@@ -331,13 +331,14 @@ TestCase {
             assertEqual(wrapped.stdout, "started", "… with what it printed until then");
             const watchdog = _runs.limitBare.result;
             assertEqual(watchdog.timedOut + " " + watchdog.ok + " " + watchdog.code + " " + watchdog.failedToStart, "true false -1 false", "past the limit, bare: the runner's watchdog ends it, timedOut");
-            assert(watchdog.durationMs >= 300 && watchdog.durationMs < 5000, "… at the limit (" + watchdog.durationMs + " ms)");
+            // The runner's own timers are coarse Qt timers, which may fire up to 5% early
+            assert(watchdog.durationMs >= 285 && watchdog.durationMs < 5000, "… at the limit (" + watchdog.durationMs + " ms)");
             const killedWrapped = _runs.stubbornWrapped.result;
             assertEqual(killedWrapped.timedOut + " " + killedWrapped.ok, "true false", "TERM shrugged off, inside timeout: its KILL ends it, timedOut");
             assert(killedWrapped.durationMs >= 500 && killedWrapped.durationMs < 5000, "… killAfterMs after the limit (" + killedWrapped.durationMs + " ms)");
             const killedBare = _runs.stubbornBare.result;
             assertEqual(killedBare.timedOut + " " + killedBare.ok + " " + killedBare.code, "true false -1", "TERM shrugged off, bare: the runner's KILL ends it, timedOut");
-            assert(killedBare.durationMs >= 500 && killedBare.durationMs < 5000, "… killAfterMs after the limit (" + killedBare.durationMs + " ms)");
+            assert(killedBare.durationMs >= 475 && killedBare.durationMs < 5000, "… killAfterMs after the limit (" + killedBare.durationMs + " ms)");
             assertEqual(_runs.inTime.result.ok + " " + _runs.inTime.result.timedOut, "true false", "a run that ends in time: the watchdog never speaks");
             assertEqual(_runs.limitNoSetpriv.result.timedOut + " " + _runs.limitNoSetpriv.result.code, "true -1", "timeout but no setpriv: the watchdog keeps the limit");
             _cancelling();
