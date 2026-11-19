@@ -1945,3 +1945,13 @@ For the owner, from the autonomous run (2026-11-18 on):
   buttons in a RowLayout (whole pixels). Pages measured identical before and after (280
   positions). Reviewed, no defect; `tests/run-all.sh` passed on both machines.
 
+- **The card's button place (U6)** — on `master` 2026-11-19, module API 1.25. A card's
+  `actions` region (prepend host, own buttons, append host for module buttons, `lastButtons`
+  — Forget/Delete stays last); rows `….card.actions` on the VPN, saved Wi-Fi and wired cards
+  (append, `takes: "SmallButton"`, a non-button refused with one status error); module buttons
+  on the stack's right edge at size `m`, cut at a third of the card; a hidden or refused
+  element takes no room; `DeleteButton.maximumWidth`; `ModuleRules.networkListed` (no card
+  path before a Wi-Fi profile's details are read); the Wi-Fi and Ethernet pages' positions
+  pinned. Reviewed, two layout defects fixed with cases; `tests/run-all.sh` and the Tailscale
+  lock bed passed on both machines.
+

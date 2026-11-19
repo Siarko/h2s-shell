@@ -21,10 +21,8 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the card's button place (U6); with it from U5's review: pin the pages' positions in a
-      test (the button at the title's right edge, the open card's rows), and no element for a
-      Wi-Fi profile whose details are not read yet
-- [ ] a module's icon (U7a); the mark on a closed card (U7b)
+- [ ] a module's icon (U7a); the mark on a closed card (U7b) — with it: `SettingsCard`'s before
+      and after hosts add their gap for refused or failed elements too (`count > 0`)
 - [ ] the module: its runner (M1), main and popup (M4), helpers and facts (M5), row and
       card onto anchors (M6), exit node per network on the cards (M7), "Send file…" through
       the chooser (M8), the "for now" override (M9), off the shell's internals (M10), the
