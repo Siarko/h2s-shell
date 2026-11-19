@@ -202,37 +202,40 @@ Item {
                 color: Theme.textMuted
             }
 
+            // Keyed by uuid: a card keeps its VPN (an open card, its fields) while the list
+            // is read again
+            KeyedModel { id: _vpnsModel; values: VpnManager.vpns; keyProp: "uuid" }
             Repeater {
-                // ScriptModel, never the bare array (CLAUDE.md)
-                model: ScriptModel { values: VpnManager.vpns; objectProp: "uuid" }
+                model: _vpnsModel.model
 
                 NetworkProfileCard {
                     id: _vpn
-                    required property var modelData
-                    readonly property bool _wireguard: modelData.type === "wireguard"
+                    required property string modelData
+                    readonly property var vpn: _vpnsModel.byKey[modelData] ?? ({})
+                    readonly property bool _wireguard: vpn.type === "wireguard"
                     // A VPN provider's (VpnManager; components/VpnProvider.qml): connected
                     // through it, no NetworkManager editor, no delete — its extras and page
-                    readonly property bool _provided: modelData.type === "provider"
-                    readonly property var _attention: VpnManager.attentionOf(modelData)
+                    readonly property bool _provided: vpn.type === "provider"
+                    readonly property var _attention: VpnManager.attentionOf(vpn)
                     // The page states the limit whenever blocking is on, connected or not
-                    readonly property string _lockdownNote: VpnLockdown.noteFor(modelData, true)
+                    readonly property string _lockdownNote: VpnLockdown.noteFor(vpn, true)
                     // Its own page: an entry of the settings window's list to go to, else one
                     // framed over this page (VpnManager.settingsPageOf, pageOf)
-                    readonly property string _settingsPage: _provided ? VpnManager.settingsPageOf(modelData) : ""
-                    readonly property string _pageUrl: _provided ? VpnManager.pageOf(modelData) : ""
-                    readonly property bool _up: modelData.state === "activated"
-                    readonly property string _server: VpnManager.details[modelData.uuid]?.server ?? ""
+                    readonly property string _settingsPage: _provided ? VpnManager.settingsPageOf(vpn) : ""
+                    readonly property string _pageUrl: _provided ? VpnManager.pageOf(vpn) : ""
+                    readonly property bool _up: vpn.state === "activated"
+                    readonly property string _server: VpnManager.details[vpn.uuid]?.server ?? ""
                     // The tunnel's own interface and addresses (a plugin VPN's profile names
                     // the link under it as its device)
-                    readonly property var _details: VpnManager.details[modelData.uuid] ?? null
-                    readonly property string _iface: VpnManager.interfaceOf(modelData)
+                    readonly property var _details: VpnManager.details[vpn.uuid] ?? null
+                    readonly property string _iface: VpnManager.interfaceOf(vpn)
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
-                    profile: modelData
+                    profile: vpn
                     // A provider's status line ("Via <exit node>") beside the state
-                    subtitle: [VpnManager.typeName(modelData), root._stateText(modelData), modelData.status ?? "", _server]
+                    subtitle: [VpnManager.typeName(vpn), root._stateText(vpn), vpn.status ?? "", _server]
                         .filter(part => part !== "").join(" · ")
-                    open: root._open === modelData.uuid
+                    open: root._open === vpn.uuid
                     usable: true
                     stopsProfile: true
                     // NetworkManager brings a WireGuard profile up by itself; a plugin VPN
@@ -245,37 +248,37 @@ Item {
                     forgetAction: "Deleting"
                     editTooltip: "Its name, addresses, DNS and the rest"
                     external: _provided
-                    busy: VpnManager.busyFor(modelData)
-                    need: VpnManager.needFor(modelData)
+                    busy: VpnManager.busyFor(vpn)
+                    need: VpnManager.needFor(vpn)
                     // Needing the user: no Connect, its action (if any) beside the notice
-                    canUse: VpnManager.canConnect(modelData)
+                    canUse: VpnManager.canConnect(vpn)
                     notice: [_attention?.reason ?? "", _lockdownNote].filter(line => line !== "").join("\n")
                     noticeAction: _attention?.action ?? ""
-                    onToggleRequested: root._open = open ? "" : modelData.uuid
+                    onToggleRequested: root._open = open ? "" : vpn.uuid
                     onForgotten: root._open = ""
-                    onEditRequested: root._editing = modelData.uuid
-                    onUseRequested: VpnManager.connect(modelData.uuid)
-                    onStopRequested: VpnManager.disconnect(modelData.uuid)
-                    onNoticeActionRequested: VpnManager.attend(modelData.uuid)
+                    onEditRequested: root._editing = vpn.uuid
+                    onUseRequested: VpnManager.connect(vpn.uuid)
+                    onStopRequested: VpnManager.disconnect(vpn.uuid)
+                    onNoticeActionRequested: VpnManager.attend(vpn.uuid)
                     // A provider's page: "Settings…", under the card's primary button
                     hasSettings: _settingsPage !== "" || _pageUrl !== ""
-                    settingsTooltip: "Its own settings: " + VpnManager.typeName(modelData)
+                    settingsTooltip: "Its own settings: " + VpnManager.typeName(vpn)
                     onSettingsRequested: {
-                        if (!VpnManager.openSettingsPageOf(modelData))
-                            root._providerPage = modelData.uuid;
+                        if (!VpnManager.openSettingsPageOf(vpn))
+                            root._providerPage = vpn.uuid;
                     }
 
                     // A provider's own: its extras (slot network.vpn.card)
                     VpnExtras {
                         Layout.fillWidth: true
                         slot: VpnManager.slots.card
-                        vpn: _vpn.modelData
+                        vpn: _vpn.vpn
                         extra: ({ open: _vpn.open })
                     }
 
                     // The networks it comes up with (set in their editors)
                     DetailRow {
-                        readonly property var _networks: VpnManager.networksWith(_vpn.modelData.uuid)
+                        readonly property var _networks: VpnManager.networksWith(_vpn.vpn.uuid)
                         label: "Comes up with"
                         value: _networks.length > 0 ? _networks.map(uuid => NetworkProfiles.nameOf(uuid)).join(", ")
                             : "No network — pick it in a Wi-Fi or wired profile's editor"

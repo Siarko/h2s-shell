@@ -123,16 +123,18 @@ Item {
             }
 
             // The Wi-Fi device and its connection, as on the Overview
+            KeyedModel {
+                id: _devicesModel
+                values: NetworkOverview.devices.filter(device => device.kind === "wifi" && device.state !== 10)
+                keyProp: "device"
+            }
             Repeater {
-                model: ScriptModel {
-                    values: NetworkOverview.devices.filter(device => device.kind === "wifi" && device.state !== 10)
-                    objectProp: "device"
-                }
+                model: _devicesModel.model
                 NetworkDeviceCard {
-                    required property var modelData
+                    required property string modelData
                     Layout.fillWidth: true
                     Layout.topMargin: 6
-                    device: modelData
+                    device: _devicesModel.byKey[modelData] ?? ({})
                 }
             }
 
@@ -165,33 +167,37 @@ Item {
                 color: Theme.textMuted
             }
 
+            // Keyed by uuid: a card keeps its network (and what is typed into it) while the
+            // list is rebuilt and re-sorted on every scan
+            KeyedModel { id: _savedModel; values: root._saved; keyProp: "uuid" }
             Repeater {
-                // ScriptModel, never the bare array (CLAUDE.md)
-                model: ScriptModel { values: root._saved; objectProp: "uuid" }
+                model: _savedModel.model
 
                 NetworkProfileCard {
                     id: _network
-                    required property var modelData
-                    readonly property bool _personal: modelData.security === "wpa-psk" || modelData.security === "sae"
-                    readonly property var _shown: root._shownPasswords[modelData.uuid]
+                    objectName: "savedNetwork"
+                    required property string modelData
+                    readonly property var network: _savedModel.byKey[modelData] ?? ({})
+                    readonly property bool _personal: network.security === "wpa-psk" || network.security === "sae"
+                    readonly property var _shown: root._shownPasswords[network.uuid]
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
-                    profile: modelData
-                    title: modelData.ssid + (modelData.name !== modelData.ssid ? "  (" + modelData.name + ")" : "")
+                    profile: network
+                    title: network.ssid + (network.name !== network.ssid ? "  (" + network.name + ")" : "")
                     subtitle: [
-                        modelData.active ? "Connected" : modelData.signal >= 0 ? "In range · " + modelData.signal + " %" : "Out of range",
-                        Nmcli.securityName(modelData.security),
-                        modelData.hidden ? "Hidden" : "",
-                        modelData.lastUsed > 0 ? "Last used " + Format.ago(modelData.lastUsed) : "Never used"
+                        network.active ? "Connected" : network.signal >= 0 ? "In range · " + network.signal + " %" : "Out of range",
+                        Nmcli.securityName(network.security),
+                        network.hidden ? "Hidden" : "",
+                        network.lastUsed > 0 ? "Last used " + Format.ago(network.lastUsed) : "Never used"
                     ].filter(part => part !== "").join(" · ")
-                    open: root._open === modelData.uuid
+                    open: root._open === network.uuid
                     // In range: on the Wi-Fi device
-                    useDevice: modelData.signal >= 0 ? NetworkManager.wifiDevice : ""
+                    useDevice: network.signal >= 0 ? NetworkManager.wifiDevice : ""
                     autoconnectHint: "When in range"
                     priorityHint: "Higher wins when several are in range"
-                    onToggleRequested: root._open = open ? "" : modelData.uuid
+                    onToggleRequested: root._open = open ? "" : network.uuid
                     onForgotten: root._open = ""
-                    onEditRequested: root._editing = modelData.uuid
+                    onEditRequested: root._editing = network.uuid
 
                     // The password: shown for a while, or changed
                     ColumnLayout {
@@ -209,6 +215,7 @@ Item {
                             spacing: 6
                             InputField {
                                 id: _password
+                                objectName: "wifiPassword"
                                 Layout.fillWidth: true
                                 outlined: true
                                 // The eye shows the saved password for a while (read from
@@ -220,7 +227,7 @@ Item {
                                 password: true
                                 revealed: _network._shown !== undefined
                                 ownsReveal: false
-                                onRevealToggled: root._togglePassword(_network.modelData.uuid)
+                                onRevealToggled: root._togglePassword(_network.network.uuid)
                                 property string _written: ""
                                 readonly property var _secret: _network._shown
                                 on_SecretChanged: {
@@ -233,18 +240,18 @@ Item {
                                     }
                                 }
                                 placeholder: _network._shown === undefined ? "••••••••  (type a new one to change it)" : ""
-                                problem: text !== "" && text !== _written && !NetworkRules.isWifiPassword(text, _network.modelData.security)
+                                problem: text !== "" && text !== _written && !NetworkRules.isWifiPassword(text, _network.network.security)
                             }
                             SmallButton {
                                 label: "Save"
                                 kind: "save"
                                 available: !NetworkProfiles.busy && _password.text !== "" && _password.text !== _password._written
-                                    && NetworkRules.isWifiPassword(_password.text, _network.modelData.security)
-                                onClicked: NetworkProfiles.setWifiPassword(_network.modelData.uuid, _password.text, ok => {
+                                    && NetworkRules.isWifiPassword(_password.text, _network.network.security)
+                                onClicked: NetworkProfiles.setWifiPassword(_network.network.uuid, _password.text, ok => {
                                     if (!ok)
                                         return;
                                     const shown = Object.assign({}, root._shownPasswords);
-                                    delete shown[_network.modelData.uuid];
+                                    delete shown[_network.network.uuid];
                                     root._shownPasswords = shown;
                                     _password.text = "";
                                     _password._written = "";
@@ -289,25 +296,27 @@ Item {
                 color: Theme.textMuted
             }
 
+            KeyedModel { id: _hotspotsModel; values: root._hotspots; keyProp: "uuid" }
             Repeater {
-                model: ScriptModel { values: root._hotspots; objectProp: "uuid" }
+                model: _hotspotsModel.model
 
                 NetworkProfileCard {
                     id: _hotspot
-                    required property var modelData
-                    readonly property var _shown: root._shownPasswords[modelData.uuid]
-                    readonly property int _devices: modelData.active ? NetworkOverview.hotspotClients.length : 0
+                    required property string modelData
+                    readonly property var hotspot: _hotspotsModel.byKey[modelData] ?? ({})
+                    readonly property var _shown: root._shownPasswords[hotspot.uuid]
+                    readonly property int _devices: hotspot.active ? NetworkOverview.hotspotClients.length : 0
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
-                    profile: modelData
-                    title: modelData.ssid + (modelData.name !== modelData.ssid ? "  (" + modelData.name + ")" : "")
+                    profile: hotspot
+                    title: hotspot.ssid + (hotspot.name !== hotspot.ssid ? "  (" + hotspot.name + ")" : "")
                     subtitle: [
-                        modelData.active ? "On · " + _devices + (_devices === 1 ? " device" : " devices") : "Off",
-                        Nmcli.securityName(modelData.security),
-                        Nmcli.bandName(modelData.band),
-                        modelData.hidden ? "Hidden" : ""
+                        hotspot.active ? "On · " + _devices + (_devices === 1 ? " device" : " devices") : "Off",
+                        Nmcli.securityName(hotspot.security),
+                        Nmcli.bandName(hotspot.band),
+                        hotspot.hidden ? "Hidden" : ""
                     ].filter(part => part !== "").join(" · ")
-                    open: root._open === modelData.uuid
+                    open: root._open === hotspot.uuid
                     useDevice: WifiManager.wifiEnabled ? NetworkManager.wifiDevice : ""
                     useLabel: "Turn on"
                     stopLabel: "Turn off"
@@ -317,13 +326,13 @@ Item {
                     autoconnectHint: "When the computer starts"
                     showPriority: false
                     editTooltip: "Name, password, band, and the addresses handed out"
-                    onToggleRequested: root._open = open ? "" : modelData.uuid
+                    onToggleRequested: root._open = open ? "" : hotspot.uuid
                     onForgotten: root._open = ""
-                    onEditRequested: root._editing = modelData.uuid
+                    onEditRequested: root._editing = hotspot.uuid
 
                     // The password, to tell those who join
                     RowLayout {
-                        visible: _hotspot.modelData.security !== ""
+                        visible: _hotspot.hotspot.security !== ""
                         Layout.fillWidth: true
                         spacing: 8
                         Text {
@@ -342,13 +351,13 @@ Item {
                         }
                         SmallButton {
                             label: _hotspot._shown === undefined ? "Show" : "Hide"
-                            onClicked: root._togglePassword(_hotspot.modelData.uuid)
+                            onClicked: root._togglePassword(_hotspot.hotspot.uuid)
                         }
                     }
 
                     // Who is on it: the devices heard from lately, by address
                     ColumnLayout {
-                        visible: _hotspot.modelData.active
+                        visible: _hotspot.hotspot.active
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
@@ -361,21 +370,27 @@ Item {
                             visible: NetworkOverview.hotspotClients.length === 0
                             text: "None yet."
                         }
+                        KeyedModel {
+                            id: _clientsModel
+                            values: _hotspot.hotspot.active ? NetworkOverview.hotspotClients : []
+                            keyProp: "mac"
+                        }
                         Repeater {
-                            model: ScriptModel { values: _hotspot.modelData.active ? NetworkOverview.hotspotClients : []; objectProp: "mac" }
+                            model: _clientsModel.model
                             RowLayout {
-                                required property var modelData
+                                required property string modelData
+                                readonly property var client: _clientsModel.byKey[modelData] ?? ({})
                                 Layout.fillWidth: true
                                 spacing: 12
                                 Text {
-                                    text: modelData.address
+                                    text: client.address
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeBody
                                     color: Theme.textSecondary
                                 }
                                 Text {
                                     Layout.fillWidth: true
-                                    text: modelData.mac
+                                    text: client.mac
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.textMuted

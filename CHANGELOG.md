@@ -649,6 +649,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Editing a calendar event while the calendar refreshes no longer moves the edit to another
+  event's card, and Save no longer changes another event: an edit saves only to the event
+  it was started on, and says so when that event has been deleted meanwhile.
+- A Wi-Fi password typed into a saved network's card in Settings stays with that network
+  when the list is read again; it no longer moves to another network's card (and was saved
+  there). A network that connects shows as connected at the top of the list.
+- The network popup's Wi-Fi list: a network that appears fades in on its own row, rows
+  slide to their new place when re-sorted, and signal and "in use" are current.
 - A module's run as administrator through the old `PrivilegedAction` asked for in the
   first seconds after the shell starts no longer starts when the session has locked
   meanwhile, and no longer lets the next run start beside it.

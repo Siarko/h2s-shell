@@ -226,16 +226,18 @@ Item {
         Flow {
             Layout.fillWidth: true
             spacing: 4
+            KeyedModel { id: _optionsModel; values: _choice.options; keyProp: "value" }
             Repeater {
-                model: ScriptModel { values: _choice.options }
+                model: _optionsModel.model
                 Pill {
-                    required property var modelData
-                    label: modelData.label
-                    tooltip: modelData.hint ?? ""
+                    required property string modelData
+                    readonly property var option: _optionsModel.byKey[modelData] ?? ({})
+                    label: option.label
+                    tooltip: option.hint ?? ""
                     fontSize: Theme.fontSizeBody
                     size: "m"
-                    picked: modelData.value === _choice.value
-                    onClicked: _choice.picked(modelData.value)
+                    picked: option.value === _choice.value
+                    onClicked: _choice.picked(option.value)
                 }
             }
         }
@@ -825,18 +827,20 @@ Item {
                     visible: VpnManager.vpns.length > 0 || _unavailable.count > 0
                     Layout.fillWidth: true
                     spacing: 4
+                    KeyedModel { id: _vpnPillsModel; values: VpnManager.vpns; keyProp: "uuid" }
                     Repeater {
-                        model: ScriptModel { values: VpnManager.vpns; objectProp: "uuid" }
+                        model: _vpnPillsModel.model
                         Pill {
-                            required property var modelData
-                            label: modelData.name
-                            tooltip: VpnManager.typeName(modelData)
+                            required property string modelData
+                            readonly property var vpnProfile: _vpnPillsModel.byKey[modelData] ?? ({})
+                            label: vpnProfile.name
+                            tooltip: VpnManager.typeName(vpnProfile)
                             fontSize: Theme.fontSizeBody
                             size: "m"
-                            picked: root._vpnsEdited.includes(modelData.uuid)
+                            picked: root._vpnsEdited.includes(vpnProfile.uuid)
                             onClicked: root._vpnsEdited = picked
-                                ? root._vpnsEdited.filter(vpn => vpn !== modelData.uuid)
-                                : root._vpnsEdited.concat([modelData.uuid])
+                                ? root._vpnsEdited.filter(vpn => vpn !== vpnProfile.uuid)
+                                : root._vpnsEdited.concat([vpnProfile.uuid])
                         }
                     }
                     // A provider's VPN picked for this network that is not available now
@@ -845,17 +849,18 @@ Item {
                     // click, then Save)
                     Repeater {
                         id: _unavailable
-                        model: ScriptModel { values: NetworkRules.unavailableVpnIds(root._vpnsOriginal, VpnManager.vpns).map(vpn => ({ id: vpn })); objectProp: "id" }
+                        // The ids themselves: strings go into a ScriptModel as they are
+                        model: ScriptModel { values: NetworkRules.unavailableVpnIds(root._vpnsOriginal, VpnManager.vpns) }
                         Pill {
-                            required property var modelData
-                            label: VpnManager.labelOf(modelData.id)
+                            required property string modelData
+                            label: VpnManager.labelOf(modelData)
                             tooltip: "Not available now (its provider not loaded, signed out or not listing it): kept until you take it out"
                             fontSize: Theme.fontSizeBody
                             size: "m"
-                            picked: root._vpnsEdited.includes(modelData.id)
+                            picked: root._vpnsEdited.includes(modelData)
                             onClicked: root._vpnsEdited = picked
-                                ? root._vpnsEdited.filter(vpn => vpn !== modelData.id)
-                                : root._vpnsEdited.concat([modelData.id])
+                                ? root._vpnsEdited.filter(vpn => vpn !== modelData)
+                                : root._vpnsEdited.concat([modelData])
                         }
                     }
                 }

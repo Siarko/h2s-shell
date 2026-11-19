@@ -73,13 +73,14 @@ Rectangle {
             }
         }
 
+        KeyedModel { id: _hotspotsModel; values: root._hotspots; keyProp: "uuid" }
         Repeater {
-            // ScriptModel, never the bare array (CLAUDE.md)
-            model: ScriptModel { values: root._hotspots; objectProp: "uuid" }
+            model: _hotspotsModel.model
 
             Rectangle {
                 id: _hotspot
-                required property var modelData
+                required property string modelData
+                readonly property var hotspot: _hotspotsModel.byKey[modelData] ?? ({})
                 width: _column.width
                 height: _row.implicitHeight + 8
                 radius: Theme.row.radius
@@ -96,7 +97,7 @@ Rectangle {
                         Text {
                             width: parent.width
                             elide: Text.ElideRight
-                            text: _hotspot.modelData.ssid
+                            text: _hotspot.hotspot.ssid
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
                             color: Theme.textPrimary
@@ -104,7 +105,7 @@ Rectangle {
                         Text {
                             width: parent.width
                             elide: Text.ElideRight
-                            text: [Nmcli.securityName(_hotspot.modelData.security), Nmcli.bandName(_hotspot.modelData.band)]
+                            text: [Nmcli.securityName(_hotspot.hotspot.security), Nmcli.bandName(_hotspot.hotspot.band)]
                                 .filter(part => part !== "").join(" · ")
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXSmall
@@ -117,7 +118,7 @@ Rectangle {
                         label: "Turn on"
                         kind: "save"
                         available: !NetworkProfiles.connecting && NetworkManager.wifiDevice !== ""
-                        onClicked: NetworkProfiles.activate(_hotspot.modelData.uuid, NetworkManager.wifiDevice)
+                        onClicked: NetworkProfiles.activate(_hotspot.hotspot.uuid, NetworkManager.wifiDevice)
                     }
                     // Asks first: the network in use would be left with nothing to share
                     DeleteButton {
@@ -128,7 +129,7 @@ Rectangle {
                         confirmLabel: "No internet to share. Turn on?"
                         cancelTip: "Stay on " + (WifiManager.wifiNetworks.find(network => network.inUse)?.ssid ?? "the network")
                         available: !NetworkProfiles.connecting && NetworkManager.wifiDevice !== ""
-                        onConfirmed: NetworkProfiles.activate(_hotspot.modelData.uuid, NetworkManager.wifiDevice)
+                        onConfirmed: NetworkProfiles.activate(_hotspot.hotspot.uuid, NetworkManager.wifiDevice)
                     }
                 }
             }

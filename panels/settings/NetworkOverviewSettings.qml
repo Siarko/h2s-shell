@@ -83,24 +83,26 @@ Flickable {
                 id: _summary
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
                 spacing: 4
+                KeyedModel { id: _summaryModel; values: NetworkOverview.summary; keyProp: "kind" }
                 Repeater {
-                    model: ScriptModel { values: NetworkOverview.summary; objectProp: "kind" }
+                    model: _summaryModel.model
                     RowLayout {
                         id: _summaryLine
-                        required property var modelData
+                        required property string modelData
+                        readonly property var kindSummary: _summaryModel.byKey[modelData] ?? ({})
                         // The kind's own page, once it has one (notes/plans/network.md)
-                        readonly property string _page: root._pageOf(modelData.kind)
+                        readonly property string _page: root._pageOf(kindSummary.kind)
                         Layout.fillWidth: true
                         spacing: 8
                         Rectangle {
                             implicitWidth: 8
                             implicitHeight: 8
                             radius: 4
-                            color: modelData.good ? Theme.success : Theme.textMuted
+                            color: kindSummary.good ? Theme.success : Theme.textMuted
                         }
                         Text {
                             Layout.preferredWidth: 140
-                            text: modelData.label
+                            text: kindSummary.label
                             textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
@@ -109,11 +111,11 @@ Flickable {
                         Text {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
-                            text: modelData.text
+                            text: kindSummary.text
                             textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
-                            color: modelData.good ? Theme.textSecondary : Theme.textMuted
+                            color: kindSummary.good ? Theme.textSecondary : Theme.textMuted
                         }
                         Text {
                             visible: _summaryLine._page !== ""
@@ -164,16 +166,17 @@ Flickable {
             color: Theme.textMuted
         }
 
+        KeyedModel { id: _mainDevicesModel; values: NetworkOverview.mainDevices; keyProp: "device" }
         Repeater {
-            // ScriptModel, never the bare array (CLAUDE.md)
-            model: ScriptModel { values: NetworkOverview.mainDevices; objectProp: "device" }
+            model: _mainDevicesModel.model
 
             NetworkDeviceCard {
-                required property var modelData
+                required property string modelData
+                readonly property var networkDevice: _mainDevicesModel.byKey[modelData] ?? ({})
                 Layout.fillWidth: true
                 Layout.bottomMargin: 8
-                device: modelData
-                page: root._pageOf(modelData.kind)
+                device: networkDevice
+                page: root._pageOf(networkDevice.kind)
             }
         }
 
@@ -196,12 +199,14 @@ Flickable {
             Layout.fillWidth: true
             Layout.topMargin: 4
             spacing: 2
+            KeyedModel { id: _otherDevicesModel; values: _others.open ? NetworkOverview.otherDevices : []; keyProp: "device" }
             Repeater {
-                model: ScriptModel { values: _others.open ? NetworkOverview.otherDevices : []; objectProp: "device" }
+                model: _otherDevicesModel.model
                 DetailRow {
-                    required property var modelData
-                    label: modelData.device
-                    value: modelData.type + " · " + modelData.stateText + (modelData.ipv4.length > 0 ? " · " + modelData.ipv4.join(", ") : "")
+                    required property string modelData
+                    readonly property var otherDevice: _otherDevicesModel.byKey[modelData] ?? ({})
+                    label: otherDevice.device
+                    value: otherDevice.type + " · " + otherDevice.stateText + (otherDevice.ipv4.length > 0 ? " · " + otherDevice.ipv4.join(", ") : "")
                 }
             }
         }

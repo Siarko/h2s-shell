@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.network
 
@@ -31,17 +32,17 @@ Item {
 
     implicitHeight: WifiManager.wifiNetworks.length === 0 ? _empty.implicitHeight : _list.height
 
+    KeyedModel { id: _networks; values: WifiManager.wifiNetworks; keyProp: "ssid" }
+
     ListView {
         id: _list
+        objectName: "wifiNetworks"
         width: parent.width
         height: Math.min(contentHeight, Math.max(80, root.maximumHeight))
         clip: true
-        // Keyed by "ssid", as WifiManager rebuilds wifiNetworks fresh on every scan (see
-        // VpnSection for why)
-        model: ScriptModel {
-            objectProp: "ssid"
-            values: WifiManager.wifiNetworks
-        }
+        // Keyed by SSID (WifiManager builds new objects on every scan): a row keeps its
+        // network, so the fade-in, the slide and the colours go to the right rows
+        model: _networks.model
         spacing: 4
         boundsBehavior: Flickable.StopAtBounds
         // A network found by a scan fades in, and the list makes room for it; rows
@@ -58,6 +59,8 @@ Item {
         }
 
         delegate: WifiNetworkRow {
+            required property string modelData
+            network: _networks.byKey[modelData] ?? ({})
             width: _list.width
             expanded: root._expandedSsid === ssid
             passwordText: root._passwords[ssid] ?? ""

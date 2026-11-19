@@ -68,6 +68,7 @@ QtObject {
     property var _commandRules: CommandRulesTest {}
     property var _commandRunner: CommandRunnerTest {}
     property var _listKeyRules: ListKeyRulesTest {}
+    property var _keyedViews: KeyedViewsTest {}
     property var _quickshellPin: QuickshellPinTest {}
     property var _modules: ModulesTest {}
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }

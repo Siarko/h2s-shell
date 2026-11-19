@@ -10,13 +10,12 @@ import qs.singletons.network
 //
 // Whether it is open, its password and whether that shows are the panel's, kept under
 // the network's SSID, and come in through `expanded`, `passwordText` and `showPassword`:
-// a delegate is reused for another network when the list is rebuilt (each scan, a
-// connection), and state kept here moved to whichever network took its place.
+// they outlive the row (a network that drops out of range and comes back finds them).
 Rectangle {
     id: root
 
-    required property var modelData
-    required property int index
+    // The network shown (WifiManager.wifiNetworks), looked up by the list by SSID
+    property var network: ({})
 
     property bool expanded: false
     property string passwordText: ""
@@ -27,14 +26,11 @@ Rectangle {
     signal passwordEdited(string text)
     signal revealToggled
 
-    readonly property string ssid: modelData.ssid
-    // The field follows the password kept for this row's network: when the row is given
-    // another network, it shows that one's. Not on ssidChanged — that can run before
-    // passwordText has followed the new SSID, and put the old network's password in the
-    // new one's field, so a typed password stayed with the place in the list.
+    readonly property string ssid: root.network.ssid ?? ""
+    // The field follows the password kept for this row's network
     onPasswordTextChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
-    readonly property bool isSaved: WifiManager.savedSsids.includes(modelData.ssid)
-    readonly property bool needsPassword: modelData.security !== "--" && modelData.security !== "" && !isSaved
+    readonly property bool isSaved: WifiManager.savedSsids.includes(root.network.ssid)
+    readonly property bool needsPassword: root.network.security !== "--" && root.network.security !== "" && !isSaved
 
     function _signalColor(signal) {
         if (signal >= 75) return Theme.accent
@@ -46,7 +42,7 @@ Rectangle {
     // The info row, and with it the action row when open: as tall as they are
     height: expanded ? _networkColumn.implicitHeight : _infoRow.height
     radius: Theme.row.radius
-    color: modelData.inUse ? Theme.accentTint : Theme.surface
+    color: root.network.inUse ? Theme.accentTint : Theme.surface
     clip: true
 
     Behavior on height {
@@ -80,35 +76,35 @@ Rectangle {
                     height: 8
                     radius: width / 2
                     Layout.alignment: Qt.AlignVCenter
-                    color: root._signalColor(root.modelData.signal)
+                    color: root._signalColor(root.network.signal)
                 }
 
                 Text {
-                    text: root.modelData.ssid
+                    text: root.network.ssid
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBodyLarge
-                    color: root.modelData.inUse ? Theme.accent : Theme.textPrimary
+                    color: root.network.inUse ? Theme.accent : Theme.textPrimary
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                 }
 
                 SignalBars {
-                    strength: root.modelData.signal
+                    strength: root.network.signal
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textSecondary
                 }
 
                 Text {
-                    visible: root.modelData.band !== "" && root.modelData.band !== undefined
-                    text: root.modelData.band ?? ""
+                    visible: root.network.band !== "" && root.network.band !== undefined
+                    text: root.network.band ?? ""
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeXSmall
-                    color: (root.modelData.band === "5G") ? Theme.accent : Theme.textMuted
+                    color: (root.network.band === "5G") ? Theme.accent : Theme.textMuted
                 }
 
                 Text {
-                    visible: root.modelData.security !== "--" && root.modelData.security !== ""
-                    text: root.modelData.security !== "--" ? root.modelData.security : ""
+                    visible: root.network.security !== "--" && root.network.security !== ""
+                    text: root.network.security !== "--" ? root.network.security : ""
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeXSmall
                     color: Theme.textMuted
@@ -156,7 +152,7 @@ Rectangle {
 
                 // Why connecting failed, from nmcli's error (WifiManager.failedKind)
                 Text {
-                    visible: WifiManager.connectFailed && WifiManager.failedSsid === root.modelData.ssid
+                    visible: WifiManager.connectFailed && WifiManager.failedSsid === root.network.ssid
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: WifiManager.failedKind === "password" ? "Wrong password"
@@ -171,15 +167,15 @@ Rectangle {
 
                 // Connect / Cancel button
                 SmallButton {
-                    visible: !root.modelData.inUse
-                    readonly property bool _busy: WifiManager.connecting && WifiManager.connectingTo === root.modelData.ssid
+                    visible: !root.network.inUse
+                    readonly property bool _busy: WifiManager.connecting && WifiManager.connectingTo === root.network.ssid
                     label: _busy ? "Cancel" : "Connect"
                     kind: _busy ? "cancel" : "save"
                     onClicked: {
                         if (_busy)
                             WifiManager.cancelConnect()
                         else
-                            WifiManager.connectToWifi(root.modelData.ssid, root.needsPassword ? root.passwordText : "")
+                            WifiManager.connectToWifi(root.network.ssid, root.needsPassword ? root.passwordText : "")
                     }
                 }
 
@@ -191,7 +187,7 @@ Rectangle {
                     confirmLabel: "Forget?"
                     fontSize: Theme.fontSizeBody
                     cancelTip: "Keep the network"
-                    onConfirmed: WifiManager.forgetNetwork(root.modelData.ssid)
+                    onConfirmed: WifiManager.forgetNetwork(root.network.ssid)
                 }
             }
         }

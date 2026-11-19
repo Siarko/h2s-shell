@@ -53,26 +53,24 @@ PopupSection {
         }
     }
 
+    // Keyed by uuid (names may repeat): the profiles are new objects on every read
+    // ("The Repeater crash" in docs/ARCHITECTURE.md)
+    KeyedModel { id: _vpnsModel; values: VpnManager.vpns; keyProp: "uuid" }
+
     Repeater {
-        // ScriptModel, never the bare array — see "The Repeater crash" in
-        // docs/ARCHITECTURE.md. The profiles are brand-new JS objects on every read, so
-        // objectProp keys the diff by id instead of object identity — otherwise every
-        // read would look like a full remove+insert (names may repeat: not by name).
-        model: ScriptModel {
-            objectProp: "uuid"
-            values: VpnManager.vpns
-        }
+        model: _vpnsModel.model
 
         delegate: PopupRow {
             id: _vpn
-            required property var modelData
+            required property string modelData
+            readonly property var vpn: _vpnsModel.byKey[modelData] ?? ({})
             required property int index
 
-            readonly property bool isActive: modelData.state === "activated"
-            readonly property bool isChanging: modelData.state === "activating" || modelData.state === "deactivating"
+            readonly property bool isActive: vpn.state === "activated"
+            readonly property bool isChanging: vpn.state === "activating" || vpn.state === "deactivating"
             // A provider's lasting "needs the user" ({ reason, action }), else null
-            readonly property var attention: VpnManager.attentionOf(modelData)
-            readonly property string lockdownNote: VpnLockdown.noteFor(modelData)
+            readonly property var attention: VpnManager.attentionOf(vpn)
+            readonly property string lockdownNote: VpnLockdown.noteFor(vpn)
 
             anchor: "row"
             width: root.width
@@ -92,7 +90,7 @@ PopupSection {
                     spacing: 6
 
                     Text {
-                        text: VpnManager.glyphOf(_vpn.modelData)
+                        text: VpnManager.glyphOf(_vpn.vpn)
                         textFormat: Text.PlainText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
@@ -110,7 +108,7 @@ PopupSection {
                         Text {
                             objectName: "vpnName"
                             width: parent.width
-                            text: _vpn.modelData.name
+                            text: _vpn.vpn.name
                             textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeBody
@@ -122,7 +120,7 @@ PopupSection {
                             objectName: "vpnStatus"
                             width: parent.width
                             visible: text !== ""
-                            text: _vpn.modelData.status ?? ""
+                            text: _vpn.vpn.status ?? ""
                             textFormat: Text.PlainText
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.fontSizeXSmall
@@ -133,27 +131,27 @@ PopupSection {
                     }
 
                     PrivilegedMark {
-                        need: VpnManager.needFor(_vpn.modelData)
+                        need: VpnManager.needFor(_vpn.vpn)
                     }
 
                     SmallButton {
                         // Needing the user and off: its action in place of Connect, or no
                         // button when it has none (VpnManager.primaryLabel)
-                        readonly property bool _attends: VpnManager.attendsInstead(_vpn.modelData)
-                        label: VpnManager.primaryLabel(_vpn.modelData)
+                        readonly property bool _attends: VpnManager.attendsInstead(_vpn.vpn)
+                        label: VpnManager.primaryLabel(_vpn.vpn)
                         kind: _vpn.isActive ? "delete" : "save"
                         visible: label !== ""
                         // Not while an operation runs: for NetworkManager's, while any
                         // connecting runs — a second click before the list says
                         // "activating" would bring the tunnel down and up again
-                        available: !_vpn.isChanging && !VpnManager.busyFor(_vpn.modelData)
+                        available: !_vpn.isChanging && !VpnManager.busyFor(_vpn.vpn)
                         onClicked: {
                             if (_attends)
-                                VpnManager.attend(_vpn.modelData.uuid)
+                                VpnManager.attend(_vpn.vpn.uuid)
                             else if (_vpn.isActive)
-                                VpnManager.disconnect(_vpn.modelData.uuid)
+                                VpnManager.disconnect(_vpn.vpn.uuid)
                             else
-                                VpnManager.connect(_vpn.modelData.uuid)
+                                VpnManager.connect(_vpn.vpn.uuid)
                         }
                     }
                 }
@@ -177,10 +175,10 @@ PopupSection {
                 }
                 SmallButton {
                     // Shown here only while active (otherwise it is the row's button)
-                    visible: _vpn.attention !== null && (_vpn.attention.action ?? "") !== "" && _vpn.modelData.active
+                    visible: _vpn.attention !== null && (_vpn.attention.action ?? "") !== "" && _vpn.vpn.active
                     label: _vpn.attention?.action ?? ""
-                    available: !VpnManager.busyFor(_vpn.modelData)
-                    onClicked: VpnManager.attend(_vpn.modelData.uuid)
+                    available: !VpnManager.busyFor(_vpn.vpn)
+                    onClicked: VpnManager.attend(_vpn.vpn.uuid)
                 }
             }
 
@@ -201,7 +199,7 @@ PopupSection {
             VpnExtras {
                 width: parent.width
                 slot: VpnManager.slots.row
-                vpn: _vpn.modelData
+                vpn: _vpn.vpn
             }
         }
     }

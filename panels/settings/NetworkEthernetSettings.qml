@@ -62,26 +62,27 @@ Item {
             }
 
             // ── The devices ──
+            KeyedModel { id: _devicesModel; values: root._devices; keyProp: "device" }
             Repeater {
-                // ScriptModel, never the bare array (CLAUDE.md)
-                model: ScriptModel { values: root._devices; objectProp: "device" }
+                model: _devicesModel.model
 
                 ColumnLayout {
                     id: _device
-                    required property var modelData
+                    required property string modelData
+                    readonly property var ethernetDevice: _devicesModel.byKey[modelData] ?? ({})
                     Layout.fillWidth: true
                     Layout.bottomMargin: 10
                     spacing: 6
 
                     NetworkDeviceCard {
                         Layout.fillWidth: true
-                        device: _device.modelData
+                        device: _device.ethernetDevice
                     }
 
                     // Connecting is the profiles' (below): here only a missing cable is said — by
                     // the cable itself (carrier): "unavailable" also means no firmware, or disabled
                     Text {
-                        visible: _device.modelData.carrier === "off"
+                        visible: _device.ethernetDevice.carrier === "off"
                         text: "Cable unplugged"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
@@ -107,24 +108,27 @@ Item {
                 color: Theme.textMuted
             }
 
+            // Keyed by uuid: a card keeps its profile while the list is read again
+            KeyedModel { id: _profilesModel; values: root._profiles; keyProp: "uuid" }
             Repeater {
-                model: ScriptModel { values: root._profiles; objectProp: "uuid" }
+                model: _profilesModel.model
 
                 NetworkProfileCard {
-                    required property var modelData
+                    required property string modelData
+                    readonly property var ethernetProfile: _profilesModel.byKey[modelData] ?? ({})
                     Layout.fillWidth: true
                     Layout.bottomMargin: 6
-                    profile: modelData
-                    subtitle: (modelData.active ? "In use on " + modelData.device
-                            : modelData.lastUsed > 0 ? "Last used " + Format.ago(modelData.lastUsed) : "Never used")
-                        + (modelData.autoconnect ? "" : " · Not automatic")
-                    open: root._open === modelData.uuid
+                    profile: ethernetProfile
+                    subtitle: (ethernetProfile.active ? "In use on " + ethernetProfile.device
+                            : ethernetProfile.lastUsed > 0 ? "Last used " + Format.ago(ethernetProfile.lastUsed) : "Never used")
+                        + (ethernetProfile.autoconnect ? "" : " · Not automatic")
+                    open: root._open === ethernetProfile.uuid
                     useDevice: root._usableDevice
                     useLabel: "Use"
                     autoconnectHint: "When a cable is plugged in"
-                    onToggleRequested: root._open = open ? "" : modelData.uuid
+                    onToggleRequested: root._open = open ? "" : ethernetProfile.uuid
                     onForgotten: root._open = ""
-                    onEditRequested: root._editing = modelData.uuid
+                    onEditRequested: root._editing = ethernetProfile.uuid
                 }
             }
         }
