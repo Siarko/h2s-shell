@@ -101,8 +101,10 @@ SettingsCard {
             fontSize: Theme.fontSizeBody
             confirmLabel: root.useQuestion
             cancelTip: "Cancel"
-            // A long question is cut to the room the other buttons leave
+            // A question longer than a line goes on to more lines: the row moves under the
+            // name, the question on a line of its own if need be (SettingsCard's buttonPlace)
             maximumWidth: root.primaryRoom - (_mark.visible ? _mark.implicitWidth + 10 : 0)
+            wraps: true
             available: !root.busy
             onConfirmed: {
                 if (root.external)

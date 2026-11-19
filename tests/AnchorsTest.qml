@@ -2874,11 +2874,15 @@ TestCase {
             assertEqual([homeButton.item.context.anchor, homeButton.item.context.networkId, wiredButton.item.context.anchor, wiredButton.item.context.networkId].join(" "),
                         "settings.network_wifi.saved.card.actions anchors-home settings.network_ethernet.profiles.card.actions anchors-wired",
                         "… the network in its context, at the region's path");
-            // The card taller by the element and its gap only: the button stands on the name's
-            // line
-            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing).join("; "), "",
-                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element and its gap");
-            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing).join("; "), "",
+            // The name's line of an open card full: its main button, Edit, the module's button
+            // and Forget beside the name's least and the modules' elements on its line (a
+            // quarter of the card) do not fit, so the row stands on a line of its own under the
+            // name — the card taller by that line (the row and 6 above it) and by the element
+            // and its gap, nothing else
+            assertEqual(home.buttonPlace + " " + wired.buttonPlace, "ownLine ownLine", "Home and Wired open: the row on a line of its own under the name");
+            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing + home.buttonRow.height + home.spacing).join("; "), "",
+                        "the Wi-Fi page otherwise as it was: only the open card taller, by the row's line, the element and its gap");
+            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing + wired.buttonRow.height + wired.spacing).join("; "), "",
                         "… the Ethernet page too");
             assertEqual(_openCardRowsProblems(home, true, [homeButton.item], homeElement).join("; "), "",
                         "Home: its rows where the rules put them, the module's element 6 under the password, the frame 8 under it");

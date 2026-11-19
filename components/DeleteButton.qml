@@ -13,7 +13,9 @@ import qs.singletons
 // for a button that asks before turning something on.
 //
 // Given a `maximumWidth`, it is never wider, its question and "×" included: a longer label
-// or question is cut with "…". `fullWidth` is what it needs uncut, whatever the cap.
+// or question is cut with "…" — or, with `wraps`, goes on to more lines, the button growing
+// taller (the "×" keeps one line's width). `fullWidth` is what it needs on one line, whatever
+// the cap.
 //
 //   DeleteButton {
 //       confirmLabel: "Delete everywhere?"
@@ -35,6 +37,8 @@ Row {
     property bool asking: false
     // The most it may be, the "×" included (a narrower place cuts the label)
     property real maximumWidth: Infinity
+    // Beyond `maximumWidth`, the label or question goes on to more lines instead of being cut
+    property bool wraps: false
     // As wide as it is uncut: what a wrapper asks a layout for, so that the cap does not
     // feed back into the width it is given
     readonly property real fullWidth: _button.implicitWidth + (asking ? _cancel.width : 0)
@@ -72,12 +76,23 @@ Row {
             width: _button.width < _button.implicitWidth ? Math.max(0, _button.width - 2 * Theme.button.horizontalPadding) : implicitWidth
             text: root.asking ? root.confirmLabel : root.label
             textFormat: Text.PlainText
-            // One line: a label or question with line breaks does not make the button taller
-            maximumLineCount: 1
+            // One line unless it wraps: a label or question with line breaks does not make the
+            // button taller
+            wrapMode: root.wraps ? Text.Wrap : Text.NoWrap
+            maximumLineCount: root.wraps ? 2147483647 : 1
+            horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             font.family: Theme.fontFamily
             font.pixelSize: root.fontSize
             color: Theme[root._look.label]
+        }
+
+        // One line of the label, measured: the "×" is as wide as one line is tall
+        Text {
+            id: _oneLine
+            visible: false
+            text: "X"
+            font: _label.font
         }
 
         // The border: around the button, and around the button and its cancel button
@@ -120,7 +135,8 @@ Row {
     Rectangle {
         id: _cancel
         visible: root.asking
-        width: _button.height
+        // As wide as one line of the button is tall
+        width: Math.max(Theme.button.minHeight, _oneLine.implicitHeight + 2 * Theme.button.verticalPadding)
         height: _button.height
         radius: root._shape.radius
         topLeftRadius: 0

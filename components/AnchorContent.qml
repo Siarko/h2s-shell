@@ -125,6 +125,7 @@ Item {
                     takes: root.takes
                     properties: root.elementProperties
                     context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
+                    sizedByElement: true
                     givenHeight: root.elementHeight > 0
                     clip: root.elementHeight > 0
                     Layout.alignment: Qt.AlignVCenter

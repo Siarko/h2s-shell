@@ -276,7 +276,8 @@ MTU (bridges, containers' and tunnels folded under "Other devices"), and the hos
 global DNS and the connectivity check — through `nmcli` and NetworkManager's D-Bus
 properties (`busctl`); a change refused for want of rights goes to the polkit prompt.
 **Wi-Fi** (shown when the computer has Wi-Fi): the radio's switch on the page's heading, the
-network in use, the saved networks with connect, edit and forget on each card's name line,
+network in use, the saved networks with connect, edit and forget on each card's name line
+(under the name in a narrow window or while a long question asks),
 autoconnect, priority and the password (shown for 30 s, or changed) when it is opened, a hidden network, and "Find networks": the networks in range sliding in from
 the right — the popup's own list (`panels/network/WifiNetworkList.qml`), so connecting works
 the same in both; the Overview's Wi-Fi card and summary line lead there. **Hotspots**:

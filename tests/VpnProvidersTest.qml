@@ -735,18 +735,19 @@ TestCase {
             assert((settings.Layout.alignment & Qt.AlignVCenter) && (primary.Layout.alignment & Qt.AlignVCenter),
                    "card: the buttons centred on the name's line");
             const header = row.parent;
-            const titleBlock = Array.from(header.children).find(child => child !== row && child.Layout.fillWidth);
-            assert(titleBlock !== undefined && Array.from(header.children).indexOf(titleBlock) < Array.from(header.children).indexOf(row)
-                   && !row.Layout.fillWidth, "card: the text block on the left, filling the rest (it elides, never runs under the buttons)");
+            const titleBlock = Array.from(header.children).find(child => child !== row && child.x === 0 && child.children.length > 0);
+            assert(card.buttonPlace === "nameLine" && titleBlock !== undefined && Math.abs(titleBlock.x + titleBlock.width - (row.x - 10)) < 1
+                   && row.width === Math.ceil(row.implicitWidth),
+                   "card: on the name's line, the text block on the left, up to 10 short of the buttons (it elides, never runs under them)");
             assert(!Qt.colorEqual(card.frame.color, Theme.surface), "card: opened, not Theme.surface — its buttons (Theme.surface) stay visible as buttons");
             // Busy, or no primary button at all: the line keeps its height, Settings… stays put
-            const lineHeight = row.Layout.preferredHeight;
+            const lineHeight = row.height;
             card.busy = true;
-            assertEqual(row.Layout.preferredHeight, lineHeight, "card: busy — the buttons' line keeps its height (Settings… does not move)");
+            assertEqual(row.height, lineHeight, "card: busy — the buttons' line keeps its height (Settings… does not move)");
             card.busy = false;
             card.canUse = false;
             card.profile = Object.assign({}, card.profile, { active: false });
-            assert(!primary.visible && row.Layout.preferredHeight === lineHeight, "card: no primary button — the line keeps the text block's height");
+            assert(!primary.visible && row.height === lineHeight, "card: no primary button — the line keeps the text block's height");
             card.profile = suite._vpn("vpt:two");
             card.canUse = true;
             card.open = false;

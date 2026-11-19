@@ -103,8 +103,11 @@ import qs.singletons.network
 //                            settings.network_wifi.saved.card.actions,
 //                            settings.network_ethernet.profiles.card.actions (1.25)  the
 //                                                     buttons of the same cards: append, (1.29)
-//                                                     closed and open, in the row of buttons on
-//                                                     the name's line, after the card's own
+//                                                     closed and open — built while the card is
+//                                                     closed too, as long as the card is (1.25:
+//                                                     only while it was open) —, in the row of
+//                                                     buttons on the name's line (or under the
+//                                                     name, see below), after the card's own
 //                                                     ("Settings…", "Edit"), before "Forget" /
 //                                                     "Delete", which stays last; context as
 //                                                     the card's settings (the VPN's
@@ -119,10 +122,16 @@ import qs.singletons.network
 //                                                     wide (a longer label is cut), in the size
 //                                                     it sets (1.28; "m", the card's own
 //                                                     buttons' size, when it sets none); any
-//                                                     kind, with or without confirm. The card's
-//                                                     own buttons keep their room and the name
-//                                                     is cut first; the modules' buttons beyond
-//                                                     the room left are cut on the right
+//                                                     kind, with or without confirm. The row
+//                                                     stays on the name's line while it fits
+//                                                     beside a few characters of the name and
+//                                                     the name line's elements; else it stands
+//                                                     on a line of its own under the name,
+//                                                     right-aligned (wider than the card: the
+//                                                     main button alone on that line, the rest
+//                                                     under it). The card's own buttons keep
+//                                                     their room; the modules' buttons beyond
+//                                                     a line's room are cut on the right
 //                            settings.network_wifi.saved.card.title,
 //                            settings.network_ethernet.profiles.card.title (1.28),
 //                            settings.network_vpn.vpns.card.title (1.29)  the name's
@@ -143,10 +152,13 @@ import qs.singletons.network
 //                                                     right after the name, and never cover the
 //                                                     card's own parts. An element with
 //                                                     `visible: false` takes no room. (1.29)
-//                                                     An element with no implicitWidth (a
-//                                                     `Rectangle { width: 16 }`) is laid out at
-//                                                     the width it has when it is made; set
-//                                                     implicitWidth to change it later. A click
+//                                                     An element made with no implicitWidth and
+//                                                     a width of its own (a `Rectangle { width:
+//                                                     16 }`) keeps that width; any other follows
+//                                                     its implicitWidth, down to none. The
+//                                                     elements leave the name less room, so the
+//                                                     card's buttons move under the name sooner.
+//                                                     A click
 //                                                     on an element that takes none opens or
 //                                                     closes the card, as on the name
 //                          A saved Wi-Fi network's card is a place only once its details are

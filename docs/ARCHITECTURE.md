@@ -631,11 +631,18 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   `panels/settings/NetworkProfileCard.qml`, is built on it); the settings row follows. A card takes no element inside itself:
   its opened part is its region `settings`, a block of kind `region` around its rows
   (`prepend` above them, `append` under them), whose elements are built only while the card
-  is open and destroyed when it closes. Its buttons stand in one row on the name's line,
-  closed and open — the main one (and the lock beside it), the card's own, the region
+  is open and destroyed when it closes. Its buttons stand in one row, closed and open — the
+  main one (and the lock beside it), the card's own, the region
   `actions` (`prepend` before the card's own, `append` after them and before the button that
   removes the item — "Forget", "Delete" stays last, whatever a module adds), built as long as
-  the card is. Regions get the card's context and scope. `actions` takes the public
+  the card is. The row stands on the name's line when it fits there beside the name's least
+  (`nameMinimumWidth`, a few characters, plus the room kept for the name line's elements)
+  and the arrow; else it moves to a line of its own under the name and its line,
+  right-aligned; wider than the card (a long question while a button asks), the main button
+  takes that line alone and the rest stand on a line under it (`buttonPlace`: `nameLine`,
+  `ownLine`, `twoLines`, decided from the row's width alone). A question longer than the card
+  goes on to more lines (`DeleteButton`'s `wraps`). The row's area takes the clicks that miss
+  a button, so a click between two buttons does not open the card. Regions get the card's context and scope. `actions` takes the public
   `SmallButton` only (the row's `takes`). The host reads the mark the public button carries
   (`apiElement`, not `instanceof`: `qs.api` imports `qs.components`, so the host cannot name
   the public type) from the element as soon as it is made, and destroys another, with
@@ -643,7 +650,7 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   buttons side by side (a host with `inline` set, a layout, so edges stand on whole pixels),
   6 apart, centred on the line, each at its own width, at most a third of the card wide — a
   longer label is cut — the card's own buttons keeping their room and the modules' cut on the
-  right beyond the room the name's part leaves (`buttonRoom`; the name is cut first), and in
+  right beyond what is left of a line (`buttonRoom`, the card's width inside its margins), and in
   the size it sets, or, setting none, the row's (`m`: the region sets the public
   button's `defaultSize` after it is made, which `size` follows until the module sets it —
   the module's own `size` replaces that binding, so it is never overridden); a button hidden (`visible:
@@ -651,10 +658,14 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   `title`, closed and open (`append`, after the name): the host lays its elements side by side
   (`AnchorContent`'s `inline`), 4 apart, each given the line's height and cut to it, all of
   them at most a quarter of the card (`titleMaxWidth`), cut on the right; the name's right
-  padding keeps their room and its minimum width is that room, so the name is cut first and
-  the elements never cover the card's own parts; the card measures the same with or without
-  them. An element with no implicit width is laid out at the width it had when it was made
-  (`ModuleContribution` reads it before giving the element its own width). A card made
+  padding keeps their room and its minimum width is that room and the name's least, so the
+  name is cut first and the elements never cover the card's own parts; with less room left
+  on the line, the buttons move under the name sooner. Such inline hosts size each element
+  from itself (`ModuleContribution`'s `sizedByElement`): one made with a width of its own and
+  no implicit width keeps that width, any other follows its implicit width, down to none.
+  Every other host (a column: a card's `before` and `after`, its `settings`, a popup's rows,
+  a page's sections, a vertical slot, a module's settings page) makes each element as wide as
+  itself, so one anchored to its parent's sides fills it. A card made
   per item by a `Repeater` on a `KeyedModel` (string keys, the card looking its item up by
   key — [The Repeater crash](#the-repeater-crash)) takes its elements with it when its item
   goes, and keeps them while other items come and go. A view's author writes only a block's

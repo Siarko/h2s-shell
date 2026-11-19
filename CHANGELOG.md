@@ -15,14 +15,21 @@ The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.29: a card's buttons (`….card.actions`) stand in one row on the card's name line, closed
   and open: the card's main button, its own ("Settings…", "Edit" — was "Edit connection…"),
-  the modules' buttons, then "Forget" / "Delete"; they are built as long as the card is, not
-  only while it is open. Each 6 apart, centred on the line, at most a third of the card; the
-  card's own buttons keep their room, the name is cut first, the modules' buttons beyond the
-  room left are cut on the right. The VPN cards' name line is a place:
+  the modules' buttons, then "Forget" / "Delete". The region `actions` is now built while the
+  card is closed too, as long as the card is (1.25: built only while the card is open): a
+  module's button there is made when the card is, and its startup code runs for every card
+  of the place, open or not. Each button 6 apart, centred on its line, at most a third of the
+  card. The row stays on the name's line while it fits beside a few characters of the name
+  and the name line's elements; else it moves to a line of its own under the name,
+  right-aligned, and wider than the card the main button takes that line alone, the rest
+  under it; the card's own buttons keep their room, the modules' buttons beyond a line's
+  room are cut on the right. The VPN cards' name line is a place:
   `settings.network_vpn.vpns.card.title` (`append`, any module's, whatever the VPN's provider;
-  context as the card's `settings`). An element with no `implicitWidth` (a
-  `Rectangle { width: 16 }`) is laid out at the width it has when it is made, instead of at
-  no width.
+  context as the card's `settings`). On a name line an element made with no `implicitWidth`
+  and a width of its own (a `Rectangle { width: 16 }`) keeps that width instead of standing
+  at no width; any other follows its `implicitWidth`. Elsewhere (a card's `before`, `after`
+  and `settings`, popup rows, page sections) an element is as wide as its place, one anchored
+  to its parent's sides too.
 - 1.28: a plain notification's body (`format: "plain"`) keeps its line breaks — CR and CRLF
   become one, at most 20 lines, the last kept one ending in "…"; the summary stays one line.
   A VPN provider's `failed(entryId, what, reason)` is sent as such a plain notification: a
@@ -640,7 +647,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand
   in one row on the name's line, also while the card is closed — the main one (Connect,
   Disconnect, Turn on), "Settings…", "Edit" (was "Edit connection…"), what a module adds,
-  then "Forget" or "Delete". A long name is cut first.
+  then "Forget" or "Delete". When they do not fit beside the name (a narrow window, a long
+  question while a button asks), they move to a line of their own under it, on the right;
+  a long question gets the card's whole width, on more lines if need be, never cut. A click
+  between two buttons no longer opens the card.
 - Sizes of a terabyte and more show in TB ("1.8 TB" instead of "1843.2 GB"), on the disk
   card among others.
 - The connection editor no longer takes an IPv4 address written with leading zeros

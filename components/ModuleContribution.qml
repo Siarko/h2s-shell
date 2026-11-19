@@ -39,6 +39,11 @@ Item {
     property var properties: ({})
     // The element is given this wrapper's height as well as its width (a card's name line)
     property bool givenHeight: false
+    // Sized by its element, side by side with others (a card's name line, its buttons' row):
+    // the wrapper is as wide as the element wants. Otherwise (a column: a card's `before`,
+    // a popup's rows, a page) the element is as wide as the wrapper, so one anchored to its
+    // parent's sides fills the place. Set as it is made, not changed after
+    property bool sizedByElement: false
 
     // Built and showing
     readonly property bool ready: _loader.status === Loader.Ready && _loader.item !== null
@@ -57,13 +62,16 @@ Item {
     readonly property bool elementShown: ready && (!_loader.visible || _loader.item.visible)
 
     visible: ready
-    // An element with no implicit width (a `Rectangle { width: 16 }`) takes the width it had
-    // when it was made, so it shows on a name line instead of standing at no width
-    implicitWidth: elementShown ? (_loader.item.implicitWidth > 0 ? _loader.item.implicitWidth : _ownWidth) : 0
+    // Sized by its element: an element made with no implicit width and a width of its own (a
+    // `Rectangle { width: 16 }`) keeps that width, so it shows on a name line instead of
+    // standing at no width; any other follows its implicit width, down to none (a Text
+    // emptied, a Row whose children hide)
+    implicitWidth: elementShown ? (_fixedWidth > 0 ? _fixedWidth : _loader.item.implicitWidth) : 0
     implicitHeight: elementShown ? _loader.item.implicitHeight : 0
 
-    // The element's own width, read as it is made, before it is given this wrapper's
-    property real _ownWidth: 0
+    // The width an element sized by itself keeps (0: it follows its implicit width), decided
+    // once, as it is made, before it is given this wrapper's width
+    property real _fixedWidth: 0
     property bool _measured: false
 
     property var _passedContext: null
@@ -101,7 +109,7 @@ Item {
     function _load() {
         _loadQueued = false;
         _measured = false;
-        _ownWidth = 0;
+        _fixedWidth = 0;
         _loader.source = "";
         error = "";
         if (!_active)
@@ -125,7 +133,8 @@ Item {
         _loader.setSource(url, initial);
         // Made at once (the compiled file is cached, the Loader is synchronous): what it is
         // is read here, before it is shown — its own width too, before it is given one
-        _ownWidth = _loader.item ? _loader.item.width : 0;
+        const made = _loader.item;
+        _fixedWidth = sizedByElement && made && !(made.implicitWidth > 0) && made.width > 0 ? made.width : 0;
         _measured = true;
         _refuseWrongKind();
         _giveInherited(initial);
@@ -196,8 +205,9 @@ Item {
         _passedProperties = wanted;
     }
 
-    // Its width given to the element itself, not through the Loader's: a Loader of a set width
-    // resizes its item as soon as it is made, and the element's own width is lost
+    // In a column the Loader is as wide as the wrapper, and so is its element. Sized by its
+    // element, the width is given to the element itself, not through the Loader's: a Loader of
+    // a set width resizes its item as soon as it is made, and the element's own width is lost
     Loader {
         id: _loader
         onStatusChanged: {
@@ -207,6 +217,7 @@ Item {
                 Qt.callLater(root._refuseWrongKind);
         }
     }
-    Binding { target: _loader.item; property: "width"; value: root.width; when: root._measured && _loader.item !== null }
+    Binding { target: _loader; property: "width"; value: root.width; when: !root.sizedByElement }
+    Binding { target: _loader.item; property: "width"; value: root.width; when: root.sizedByElement && root._measured && _loader.item !== null }
     Binding { target: _loader; property: "height"; value: root.height; when: root.givenHeight }
 }
