@@ -51,6 +51,13 @@ Singleton {
                 return;
             }
 
+            // Left running by the shell's own sender before a reload (the server hands its
+            // notifications to the new shell again): nothing will update or end it
+            if (NotificationRules.orphaned(notification.hints, Notifier.progressRun)) {
+                notification.dismiss();
+                return;
+            }
+
             // Timestamp and codes first, tracking last: tracking adds the notification to
             // the list, and a card created right then has to find both already there.
             // Both maps are reassigned, not mutated — an in-place change emits no signal,
@@ -102,8 +109,13 @@ Singleton {
             notification.bodyChanged.connect(() => root._replaced(notification));
 
             // Closed while its toast waits (its sender closed it, or it was dismissed in the
-            // centre): out of the queue, where it would be shown, and counted on the badge
-            notification.closed.connect(() => root._dropWaiting(notification));
+            // centre): out of the queue, where it would be shown, and counted on the badge.
+            // And said by id, for the shell's own sender (Notifier's handles)
+            const closedId = notification.id;
+            notification.closed.connect(reason => {
+                root._dropWaiting(notification);
+                root.notificationClosed(closedId, reason);
+            });
 
             // Remove timestamp and extracted codes when this notification is dismissed
             notification.trackedChanged.connect(function () {
@@ -124,6 +136,38 @@ Singleton {
 
     signal dismissAllRequested
     signal openPanelRequested
+
+    // For the shell's own sender (Notifier's progress handles), which learns a click and a
+    // dismissal here, in-process, rather than from a process waiting on the bus: a tracked
+    // notification closed (its id, NotificationCloseReason), and an action run on a card
+    signal notificationClosed(int id, int reason)
+    signal actionInvoked(int id, string actionId)
+
+    // Whether the server holds a notification with this id now
+    function tracks(id): bool {
+        return notifications.values.some(notification => notification.id === id);
+    }
+
+    // Runs one of a notification's actions, as its card does: the server sends it to the
+    // sender, and it is said by id (actionInvoked)
+    function invokeAction(notification, action) {
+        if (!action)
+            return;
+        action.invoke();
+        if (notification)
+            actionInvoked(notification.id, String(action.identifier ?? ""));
+    }
+
+    // Dismisses what an earlier run of the shell's own sender left running (a reload made
+    // a new Notifier): nothing will update or end it (NotificationRules.orphaned). Those
+    // the server hands over again after a reload come through onNotification, which drops
+    // them the same way; this catches any held already when the shell starts
+    function dismissOrphans() {
+        for (const notification of notifications.values.slice()) {
+            if (NotificationRules.orphaned(notification.hints, Notifier.progressRun))
+                notification.dismiss();
+        }
+    }
 
     function isShellNotification(notification) {
         return (notification.hints["category"] ?? "") === "x-qs-shell";
@@ -310,7 +354,10 @@ Singleton {
     // The server keeps its notifications over a reload of the shell; this count starts
     // afresh — so what is there when it starts counts as seen, or after every reload each
     // one was unread again and the bell rang ("until opened") until the panel was opened
-    Component.onCompleted: Qt.callLater(markSeen)
+    Component.onCompleted: Qt.callLater(() => {
+        markSeen();
+        dismissOrphans();
+    })
 
     function clearHudQueue() {
         hudQueue = [];

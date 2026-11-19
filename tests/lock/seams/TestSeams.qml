@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.io as Io
 
 // The test tree's TestSeams: copied over singletons/TestSeams.qml (whose properties are
 // constants) when a test tree is assembled — the lock bed's copy of the checkout
@@ -64,5 +65,62 @@ Singleton {
             Qt.callLater(() => Quickshell.reload(hard));
             return hard ? "hard reload" : "reload";
         }
+
+        // One progress notification of the shell's own sender, on its real path — gdbus to
+        // the shell's own server on the bed's private bus (tests/lock/tests/notifier-progress.sh):
+        //   progress send '{"summary", "body", "progress", "toast", "actions": ["id", …]}'
+        //   progress update '{"summary"?, "progress"?, "state"?, "announce"?}'
+        //   progress close ''
+        //   progress state ''  → { id, state, open, calls, events }
+        // ("send", not "show": the CLI takes "show" for its own subcommand.) Each answers the state. A test tree's Notifier only records (module test mode), so
+        // the handle is made here as Notifier.send makes it, with recordOnly off; its
+        // callbacks add to `events` ("action:<id>", "dismissed").
+        function progress(operation: string, argument: string): string {
+            return root._progress(operation, argument);
+        }
+    }
+
+    property var _progressHandle: null
+    property var _progressEvents: []
+    property var _progressRunner: null
+    property Component _progressHandleComponent: Component {
+        Io.NotificationHandle {}
+    }
+    property Component _progressRunnerComponent: Component {
+        Io.CommandRunner {}
+    }
+
+    function _progress(operation, argument) {
+        let given = {};
+        try {
+            given = argument !== "" ? JSON.parse(argument) : {};
+        } catch (error) {
+            return JSON.stringify({ error: "not JSON" });
+        }
+        const handle = _progressHandle;
+        if (operation === "send") {
+            if (_progressRunner === null)
+                _progressRunner = _progressRunnerComponent.createObject(root);
+            _progressEvents = [];
+            const actions = (given.actions ?? []).map(id => ({
+                id: id, label: id, onTriggered: () => root._progressEvents = root._progressEvents.concat(["action:" + id])
+            }));
+            const options = Object.assign({}, given, { actions: actions });
+            _progressHandle = _progressHandleComponent.createObject(root, {
+                number: 1, recordOnly: false, runner: _progressRunner, server: Notifications,
+                wanted: Notifier.progressContent(given.summary ?? "", options, Notifier.progressRun),
+                callbacks: { actions: actions, onDismissed: () => root._progressEvents = root._progressEvents.concat(["dismissed"]) }
+            });
+        } else if (handle === null) {
+            return JSON.stringify({ error: "no handle" });
+        } else if (operation === "update") {
+            handle.update(given);
+        } else if (operation === "close") {
+            handle.close();
+        } else if (operation !== "state") {
+            return JSON.stringify({ error: "unknown operation" });
+        }
+        const current = _progressHandle;
+        return JSON.stringify({ id: current.id, state: current.state, open: current.open, calls: current.calls, events: _progressEvents });
     }
 }

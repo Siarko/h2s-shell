@@ -373,6 +373,8 @@ PanelWindow {
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
     //   qs ipc call shelltest notificationState
+    //   qs ipc call shelltest notificationAction 7 cancel
+    //   qs ipc call shelltest notificationDismiss 7
     IpcHandler {
         target: "shelltest"
         enabled: bar.modelData === Quickshell.screens[0]
@@ -398,11 +400,31 @@ PanelWindow {
         // whether it is on screen and for how long, in ms (0: it stays; ToastRules.timing)
         function notificationState(): string {
             return JSON.stringify(Notifications.notifications.values.map(notification => ({
-                id: notification.id, summary: notification.summary,
+                id: notification.id, summary: notification.summary, body: notification.body,
                 progress: NotificationRules.progress(notification.hints),
                 toast: { shown: Notifications.shownToasts.includes(notification.id),
                          duration: Notifications.toastDurations[notification.id] ?? null }
             })));
+        }
+
+        // A notification's action run as its card runs it (Notifications.invokeAction), and
+        // a notification dismissed as the centre dismisses it (tracked = false); "" when done,
+        // else what was not found
+        function notificationAction(id: int, action: string): string {
+            const notification = Notifications.notifications.values.find(candidate => candidate.id === id);
+            const found = notification?.actions.find(candidate => candidate.identifier === action);
+            if (!found)
+                return "not found";
+            Notifications.invokeAction(notification, found);
+            return "";
+        }
+
+        function notificationDismiss(id: int): string {
+            const notification = Notifications.notifications.values.find(candidate => candidate.id === id);
+            if (!notification)
+                return "not found";
+            notification.tracked = false;
+            return "";
         }
 
         function popupState(): string {

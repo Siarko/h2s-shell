@@ -69,7 +69,7 @@ Rectangle {
         // A click that cleared a selection only clears it — the text took the press first
         if (Date.now() - _selectionClearedAt < 400)
             return;
-        _defaultAction.invoke();
+        Notifications.invokeAction(notification, _defaultAction);
         _afterAction();
     }
     // A resident notification keeps its entry after an action (NotificationRules)
@@ -560,7 +560,7 @@ Rectangle {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            modelData.invoke();
+                            Notifications.invokeAction(notifCard.notification, modelData);
                             notifCard._afterAction();
                         }
                     }

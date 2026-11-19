@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.singletons.io as Io
 
 // send(summary, opts?)
 //
@@ -20,8 +21,21 @@ import QtQuick
 //   actions:     [{ id, label, onTriggered }]     — action buttons
 //   onDismissed: function                         — called when dismissed without action
 //   format:      "plain"                          — the texts are plain text (plainOptions)
+//   progress:    number                           — 0–100, or -1 for a run of unknown length:
+//                                                   send() returns a handle (below)
+//   toast:       "brief" | "whileRunning"         — with progress: how long its toast shows
 // }
 // No inline reply: notify-send has no option to ask for one (libnotify 0.8.8).
+//
+// Without `progress` send() returns nothing and runs one notify-send. With it, send()
+// returns a handle (io/NotificationHandle.qml: open, state, update(), close()) whose
+// notification is sent with `gdbus call … Notify` (progressCommand) and replaced in place
+// by its id; the shell is the notification server, so the handle learns a click and a
+// dismissal from it in-process (Notifications), never from a waiting process. Such a
+// notification is resident (its actions stay after a click), carries the progress in the
+// spec's "value" hint and the shell's own hints (x-qs-progress-state, x-qs-progress-run,
+// x-qs-announce), and asks for the toast's time by `toast` (NotificationRules.expireTime);
+// a caller's own expireTime and x-qs-… hints are not used there.
 //
 // In module test mode (Modules binds `recordOnly` to ModuleHost.testMode) nothing is sent: each
 // call is recorded in `recorded` instead, and no callback ever runs — a suite must not reach
@@ -40,6 +54,15 @@ Singleton {
     function clearRecorded() {
         recorded = [];
     }
+
+    function _record(entry) {
+        recorded = recorded.concat([Object.freeze(entry)]).slice(-maxRecorded);
+    }
+
+    // This Notifier's run token, sent with each of its progress notifications: a reload
+    // makes a new Notifier, and Notifications dismisses a running notification of another
+    // run as an orphan (NotificationRules.orphaned)
+    readonly property string progressRun: Date.now().toString(36) + "-" + Math.floor(Math.random() * 2147483647).toString(36)
 
     // ---- Plain text (format: "plain") ----
     // A notification daemon reads the body as markup (the spec's <b>, <i>, <a>, <img>; the
@@ -168,7 +191,136 @@ Singleton {
         return cmd;
     }
 
+    // ---- A progress notification's content and the words gdbus gets (pure) ----
+
+    // The content a handle shows first, from send()'s summary and options → { appName,
+    // icon, urgency, category, transient, hints, format, summary, body, actions [{ id,
+    // label }], actionsKey, progress, state "running", toast, announce 0, run }
+    function progressContent(givenSummary, opts, run) {
+        const ready = prepared(givenSummary, opts);
+        const options = ready.options;
+        const actions = (Array.isArray(options.actions) ? options.actions : [])
+            .map(action => ({ id: String(action?.id ?? ""), label: String(action?.label ?? "") }));
+        return Object.freeze({
+            appName: String(options.appName ?? "H2S Shell"), icon: String(options.icon ?? ""),
+            urgency: String(options.urgency ?? ""), category: String(options.category ?? ""), transient: options.transient === true,
+            hints: options.hints !== null && typeof options.hints === "object" ? Object.assign({}, options.hints) : {},
+            format: options.format === "plain" ? "plain" : "",
+            summary: String(ready.summary ?? ""), body: String(options.body ?? ""),
+            actions: Object.freeze(actions), actionsKey: JSON.stringify(actions),
+            progress: typeof options.progress === "number" && !isNaN(options.progress) ? options.progress : 0,
+            state: "running", toast: options.toast === "whileRunning" ? "whileRunning" : "brief",
+            announce: 0, run: String(run ?? "")
+        });
+    }
+
+    // A content after update(changes) (pure): { summary?, body?, progress?, actions?,
+    // state?, announce? } — the texts made plain again with the content's format; a state
+    // other than "running" or an end state, or a progress that is not a number, is ignored;
+    // announce: true raises the announce count by one
+    function updatedContent(content, changes) {
+        const given = changes ?? {};
+        const next = Object.assign({}, content);
+        if (given.summary !== undefined || given.body !== undefined) {
+            const ready = prepared(given.summary !== undefined ? given.summary : content.summary,
+                { body: given.body !== undefined ? given.body : content.body, format: content.format });
+            // A text left unchanged is not made plain twice (its entities would be escaped again)
+            if (given.summary !== undefined)
+                next.summary = String(ready.summary ?? "");
+            if (given.body !== undefined)
+                next.body = String(ready.options.body ?? "");
+        }
+        if (typeof given.progress === "number" && !isNaN(given.progress))
+            next.progress = given.progress;
+        if (Array.isArray(given.actions)) {
+            next.actions = Object.freeze(given.actions.map(action => ({ id: String(action?.id ?? ""), label: String(action?.label ?? "") })));
+            next.actionsKey = JSON.stringify(next.actions);
+        }
+        if (given.state === "running" || NotificationRules.endStates.includes(given.state))
+            next.state = given.state;
+        if (given.announce === true)
+            next.announce = content.announce + 1;
+        return Object.freeze(next);
+    }
+
+    readonly property var _notificationsCall: ["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications",
+        "--object-path", "/org/freedesktop/Notifications", "--method"]
+
+    // gdbus's argv for a content, replacing `replaceId` (0: a new notification). Every
+    // argument after "--" is one word of GVariant text (NotificationRules.gvariant*): the
+    // spec's Notify(app_name, replaces_id, app_icon, summary, body, actions, hints,
+    // expire_timeout). The caller's hints first, without "x-qs-…" keys; the shell's own
+    // after them, so they win: urgency, category, transient as given, resident true, the
+    // value, the state, the run, the announce count (from 1)
+    function progressCommand(content, replaceId) {
+        const urgencies = { low: 0, normal: 1, critical: 2 };
+        const entries = [];
+        for (const key in content.hints) {
+            if (key.startsWith("x-qs-"))
+                continue;
+            const value = content.hints[key];
+            entries.push({ key: key, type: NotificationRules.hintType(value), value: value });
+        }
+        if (urgencies[content.urgency] !== undefined)
+            entries.push({ key: "urgency", type: "byte", value: urgencies[content.urgency] });
+        if (content.category !== "")
+            entries.push({ key: "category", type: "string", value: content.category });
+        if (content.transient)
+            entries.push({ key: "transient", type: "boolean", value: true });
+        entries.push({ key: "resident", type: "boolean", value: true });
+        entries.push({ key: "value", type: "int32", value: NotificationRules.progressValue(content.progress) });
+        entries.push({ key: "x-qs-progress-state", type: "string", value: content.state });
+        entries.push({ key: "x-qs-progress-run", type: "string", value: content.run });
+        if (content.announce > 0)
+            entries.push({ key: "x-qs-announce", type: "string", value: String(content.announce) });
+        const actionWords = [];
+        for (const action of content.actions)
+            actionWords.push(action.id, action.label);
+        const id = Number.isInteger(replaceId) && replaceId > 0 && replaceId <= 4294967295 ? replaceId : 0;
+        return _notificationsCall.concat(["org.freedesktop.Notifications.Notify", "--",
+            NotificationRules.gvariantString(content.appName), "uint32 " + id, NotificationRules.gvariantString(content.icon),
+            NotificationRules.gvariantString(content.summary), NotificationRules.gvariantString(content.body),
+            NotificationRules.gvariantStringArray(actionWords), NotificationRules.gvariantHints(entries),
+            "int32 " + NotificationRules.expireTime(content.toast, content.state)]);
+    }
+
+    // gdbus's argv closing notification `id`
+    function closeCommand(id) {
+        const known = Number.isInteger(id) && id > 0 && id <= 4294967295 ? id : 0;
+        return _notificationsCall.concat(["org.freedesktop.Notifications.CloseNotification", "--", "uint32 " + known]);
+    }
+
+    // Handles made so far (their numbers), and the ids test mode makes up for them
+    property int _handles: 0
+
+    function _sendProgress(givenSummary, options) {
+        _handles++;
+        return _handleComponent.createObject(root, {
+            number: _handles, recordOnly: recordOnly, runner: _runner, server: Notifications,
+            wanted: progressContent(givenSummary, options, progressRun),
+            callbacks: { actions: Array.isArray(options.actions) ? options.actions : [], onDismissed: options.onDismissed ?? null }
+        });
+    }
+
+    // A handle's show, update or close in test mode, as recorded
+    function _recordHandle(kind, number, content) {
+        _record({
+            kind: kind, handle: number, summary: content.summary, body: content.body, progress: content.progress,
+            state: content.state, toast: content.toast, expireTime: NotificationRules.expireTime(content.toast, content.state),
+            announce: content.announce, actions: Object.freeze(content.actions.map(action => action.label)), format: content.format
+        });
+    }
+
+    property Io.CommandRunner _runner: Io.CommandRunner {}
+
+    Component {
+        id: _handleComponent
+        Io.NotificationHandle {}
+    }
+
     function send(givenSummary, opts) {
+        if (typeof opts?.progress === "number" && !isNaN(opts.progress))
+            return _sendProgress(givenSummary, opts);
         const ready = prepared(givenSummary, opts);
         const summary = ready.summary;
         const options = ready.options;

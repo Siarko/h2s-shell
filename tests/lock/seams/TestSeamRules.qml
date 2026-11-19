@@ -22,7 +22,7 @@ Singleton {
         { name: "H2S_LOCK_SYSTEM", what: "the system the password fallback assumes, nixos or other, with H2S_LOCK_SYSTEM_PAM_DIR (Lockscreen)" },
         { name: "H2S_LOCK_LEDS_DIR", what: "the keyboard LEDs' directory instead of /sys/class/leds (CapsLockLed)" },
         { name: "H2S_LOCK_TEST_TIMINGS", what: "a JSON object of LockRules.timings overrides (Lockscreen)" },
-        { name: "H2S_LOCK_TEST_RELOAD", what: "1: the IPC target locktest, which reloads the shell (Lockscreen)" },
+        { name: "H2S_LOCK_TEST_RELOAD", what: "1: the IPC target locktest, which reloads the shell and drives one progress notification (Lockscreen, Notifier)" },
         { name: "H2S_SHELL_TEST_MODULE_GUARD_MS", what: "the module start guard's window in ms (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_CHECK_PATH", what: "a directory put first on the module file check's PATH (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_CHECK_MS", what: "the module host's checks' deadline in ms (Modules)" },
