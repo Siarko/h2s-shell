@@ -25,8 +25,28 @@ installed shell into a test tree (below). Module test mode (A3), privileged star
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
 with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
-B1 and D1 are on `master` (below). Next: E1 (the file chooser), then P1/P2, the places
-lane, the remaining module slices.
+B1, D1 and E1 are on `master` (below): the facts lane is done. Next: P1/P2 (a module's
+API for others), the places lane, the remaining module slices.
+
+- [x] **API plan, E1 the file chooser**: on `master` (2026-11-19; module API 1.17; reviewed
+      by a second agent on the diff, fixed by another author with cases that fail before;
+      `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS, tools from nix —
+      one earlier NixOS failure of the module fixture part was most likely the chooser test
+      locking the privileged queue, fixed; the Tailscale module's suites pass).
+      `module.chooseFiles(options, done)` → `{ open, cancel() }` (`open` / `openMany` /
+      `folder`, title one line without `<>&`, `startDirectory`); one chooser for the whole
+      shell (`busy`), never while locked, a lock closes it, module off closes it with no
+      callback, a reload closes it (`onDestruction`); paths absolute; the dialog is the
+      platform theme's, in a 1-px click-through layer-shell window
+      (`singletons/FileChooser.qml`, `FileChooserRules`); `ModuleTestKit` chooser records
+      (`answerChooser(moduleId, paths)`, `cancelChooser(moduleId)`, `setChooserLocked`),
+      reset per suite; `tests/FileChooserTest.qml` drives the real dialog headless with
+      keys. The unit run's limit for asynchronous suites is 90 s (was 60 s). Left open:
+  - The by-hand checks and choices are under "Open points" (the file chooser).
+  - A folder dialog opened in a folder with sub-folders selects the first one: accepted
+    without a click, it returns that sub-folder (Qt; documented). With no sub-folders it
+    returns the folder shown.
+  - The `onDestruction` close has no test of its own (cannot be triggered in the unit run).
 
 - [x] **API plan, B1 the shared module object and popup inputs, D1 network facts**: on
       `master` (2026-11-19; module API 1.15 and 1.16; each reviewed by a second agent on the
