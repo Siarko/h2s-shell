@@ -1,0 +1,9 @@
+{
+    "id": "ztop",
+    "name": "Top fixture",
+    "version": "1.0.0",
+    "api": "1.30",
+    "description": "A module that needs the middle fixture's API (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": { "zmid": "1.0" }
+}

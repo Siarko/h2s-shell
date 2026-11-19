@@ -1064,11 +1064,30 @@ Scope {
 
         // What does not stay loaded leaves, dependents first; (1.30) so does, for a moment,
         // the main of a module staying on whose soft providers change — a provider going is
-        // still there now, and goes only after this main (_reap)
+        // still there now, and goes only after this main (_reap). Every running main that
+        // uses a restarting one, hard or soft, directly or through others, restarts with it,
+        // dependents first: each is queued in _going, holding its providers' objects, before
+        // its provider's main is asked to go — so it still reaches them while it goes
         const restarting = new Set();
-        const restart = (record, entry) => {
-            _settle(record, own.get(record), { state: "pending", reasons: [] });
-            restarting.add(record);
+        const rank = new Map(plan.order.map((id, index) => [id, index]));
+        const restart = record => {
+            const group = [record];
+            for (let i = 0; i < group.length; i++) {
+                const id = group[i].manifest.id;
+                for (const other of counted) {
+                    if (other.main && !group.includes(other) && !restarting.has(other)
+                            && (other.manifest.uses ?? []).some(use => use.id === id))
+                        group.push(other);
+                }
+            }
+            group.sort((a, b) => (rank.get(b.manifest.id) ?? -1) - (rank.get(a.manifest.id) ?? -1));
+            for (const member of group) {
+                _settle(member, own.get(member), { state: "pending", reasons: [] });
+                // Waiting, for what is planned after it in this pass (a module with views
+                // only that uses it waits too, rather than losing it under its views)
+                own.get(member).state = "pending";
+                restarting.add(member);
+            }
             waitingForGoing = true;
         };
         for (const record of ordered.slice().reverse()) {
@@ -1076,7 +1095,7 @@ Scope {
             if (entry.state !== "loaded")
                 _settle(record, own.get(record), entry);
             else if (counted.includes(record) && record.main && _usesChange(record, entry))
-                restart(record, entry);
+                restart(record);
         }
         // What is loaded comes, providers first: each checked again against what was made
         // before it (a provider whose main just failed, or gave no exports object)
@@ -1094,7 +1113,7 @@ Scope {
             // A soft provider made in this pass, for a main already running: turned off, and
             // on again once it is gone
             if (counted.includes(record) && record.main && _usesChange(record, entry)) {
-                restart(record, entry);
+                restart(record);
                 continue;
             }
             if (counted.includes(record))

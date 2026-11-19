@@ -1,0 +1,9 @@
+{
+    "id": "ztop-soft",
+    "name": "Soft top fixture",
+    "version": "1.0.0",
+    "api": "1.30",
+    "description": "A module that can use the middle fixture's API (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": { "zmid": { "version": "1.0", "optional": true } }
+}

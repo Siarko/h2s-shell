@@ -1,0 +1,10 @@
+{
+    "id": "zmid",
+    "name": "Middle fixture",
+    "version": "1.0.0",
+    "api": "1.30",
+    "description": "A module in the middle of a chain: it can use the provider fixture and offers an API of its own (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": { "provider": { "version": "1.1", "optional": true } },
+    "exports": { "version": "1.0" }
+}

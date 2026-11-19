@@ -17,7 +17,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   `{ "version": "1.2", "optional": true }`: the module loads with or without that provider,
   after it when it is there, and `module.uses.<id>` is null without it (a provider there that
   does not fit is a warning). The provider coming or going turns the module's main off and on
-  again; a cycle closed by a soft use is broken, not an error. `{ "version": … }` alone, like
+  again, a new main that has lost what the old one held, and with it every main that uses it,
+  which goes before it; a module with views only is not turned off, its views get the new
+  `module.uses`. A cycle closed by a soft use is broken, not an error. `{ "version": … }` alone, like
   the plain string, stays hard. The file chooser: no `title` shows the module's name; a lock
   that closes an open chooser answers `blocked: "locked"` (was `cancelled`), so a module can
   tell it from the user cancelling.

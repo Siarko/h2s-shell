@@ -808,7 +808,14 @@ import qs.singletons.network
 //                          provider coming or going while the module is on turns the module's
 //                          main off and on again (pending meanwhile; its views are rebuilt when
 //                          they read module.uses): module.uses never holds a provider that is
-//                          gone, and a main reads one module.uses for its whole life. Soft uses
+//                          gone, and a main reads one module.uses for its whole life. Each
+//                          time, the main starts from nothing: whatever it held in memory is
+//                          lost (keep what must last in its data directory or settings). The
+//                          mains that use it, hard or soft, restart with it, going before it.
+//                          A soft dependent without a main (views only) is not turned off:
+//                          module.uses is replaced by a new object under its live views, so a
+//                          binding on module.uses.<id> follows it (null once the provider has
+//                          gone) and a view must not keep the old object. Soft uses
 //                          never make a cycle an error: one that would close a cycle is left
 //                          out (by dependent id, then provider id), null, and warned about
 //                          ("left out, a cycle of uses"). { "version": "1.2" } alone is hard.

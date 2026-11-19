@@ -1029,12 +1029,67 @@ TestCase {
             const status = _expectState("consumer-soft", "loaded");
             assertEqual(status?.errors.length, 0, "a soft provider whose main failed: loaded, no error");
             assertEqual(host.mainObject("consumer-soft")?.usesAtStart?.provider, null, "… module.uses.provider null");
+            // A chain: zmid soft-uses the provider; ztop needs zmid, ztop-soft can use it. A
+            // restarting zmid takes the mains using it along, and they go before it
+            host.load(_dirs(["ztop", "ztop-soft", "zmid", "provider"]), {});
+        });
+        _then("the chain loads", () => _settled() && _chainMains(["provider", "zmid", "ztop", "ztop-soft"]), () => {
+            assertEqual(host._order.join(","), "provider,zmid,ztop,ztop-soft", "the chain: providers first");
+            _watchChain(["zmid", "ztop", "ztop-soft"]);
+            host.setEnabled("provider", false);
+        });
+        _then("the chain restarts without the provider", () => _settled() && _chainRestarted(["zmid", "ztop", "ztop-soft"]), () => {
+            assertEqual(_chainLog.join("|"), "soft top gone, mid ping=pong|top gone, mid ping=pong|mid gone",
+                        "the provider off: the mains using zmid went first, still reaching it, then zmid's");
+            _watchChain(["zmid", "ztop", "ztop-soft"]);
+            host.setEnabled("provider", true);
+        });
+        _then("the chain restarts with the provider back", () => _settled() && _chainRestarted(["zmid", "ztop", "ztop-soft"]) && host.mainObject("provider") !== null, () => {
+            assertEqual(_chainLog.join("|"), "soft top gone, mid ping=pong|top gone, mid ping=pong|mid gone",
+                        "the provider back: the mains using zmid went first, still reaching it, then zmid's");
+            assert(host.mainObject("ztop").module.uses.zmid === host.mainObject("zmid").exports, "… ztop given the new zmid's object");
+            // Soft all the way: provider ← zmid ← ztop-soft
+            host.load(_dirs(["ztop-soft", "zmid", "provider"]), {});
+        });
+        _then("the soft chain loads", () => _settled() && _chainMains(["provider", "zmid", "ztop-soft"]), () => {
+            _watchChain(["zmid", "ztop-soft"]);
+            host.setEnabled("provider", false);
+        });
+        _then("the soft chain restarts without the provider", () => _settled() && _chainRestarted(["zmid", "ztop-soft"]), () => {
+            assertEqual(_chainLog.join("|"), "soft top gone, mid ping=pong|mid gone", "a soft chain: its top went first, still reaching zmid");
+            assert(host.mainObject("ztop-soft").module.uses.zmid === host.mainObject("zmid").exports, "… given the new zmid's object");
+            host.setEnabled("provider", true);
+        });
+        _then("the soft chain is back", () => _settled() && host.mainObject("provider") !== null && host.mainObject("ztop-soft") !== null, () => {
             host.unload();
         });
         _clock.start();
     }
 
     property var _providerProbe: null
+    // The chain fixtures: what their mains said as they went, and the mains watched
+    property var _chainLog: []
+    property var _chainWatched: ({})
+
+    function _chainMains(ids) {
+        return ids.every(id => _status(id)?.state === "loaded" && host.mainObject(id) !== null);
+    }
+
+    function _watchChain(ids) {
+        suite._chainLog = [];
+        const watched = {};
+        for (const id of ids) {
+            const main = host.mainObject(id);
+            main.report = text => suite._chainLog = suite._chainLog.concat([text]);
+            watched[id] = main;
+        }
+        suite._chainWatched = watched;
+    }
+
+    // Each watched main replaced by a new one, loaded
+    function _chainRestarted(ids) {
+        return _chainMains(ids) && ids.every(id => host.mainObject(id) !== _chainWatched[id]);
+    }
     property var _oldExports: null
     property var _oldUses: null
     property var _softMain: null

@@ -616,7 +616,15 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   main off and on again (`ModuleHost._usesChange`: pending until the old main is gone, the
   provider's going main waiting for it as above): `module.uses` never holds a provider that
   is gone, and one main sees one `module.uses` for its whole life, so the frozen-`uses` rule
-  of hard uses holds unchanged. Cycles: only hard edges make a cycle an error; a soft edge
+  of hard uses holds unchanged. The restart is a new main each time: what the old one held in
+  memory is lost, so a soft dependent keeps what must last in its data directory or settings.
+  Every running main that uses the restarting one, hard or soft, directly or through others,
+  restarts with it: the whole set is taken down in the reverse of the plan, each dependent
+  queued in `_going` before its provider's main is asked to go, so it still reaches its
+  providers while it goes, and made again in the plan's order. A soft dependent without a
+  main (views only) is not turned off: its `module.uses` is replaced by a new object under
+  its live views — a binding on `module.uses.<id>` follows it (`null` once the provider has
+  gone), and a view keeps no reference to the old object. Cycles: only hard edges make a cycle an error; a soft edge
   whose provider already reaches its dependent is left out (dependent ids, then provider
   ids, in order), its entry `null`, warned about ("left out, a cycle of uses").
 - **Reaching another module or the host**: a module knows of another only its plain state,
@@ -1107,7 +1115,8 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup,
-  data directories, and `provider` / `consumer` / `consumer-soft` for `exports` and `uses`),
+  data directories, and `provider` / `consumer` / `consumer-soft` and the chain `zmid` / `ztop` / `ztop-soft` for
+  `exports` and `uses`),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the
