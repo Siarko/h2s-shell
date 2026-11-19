@@ -68,6 +68,10 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **A module's buttons in a card** (U6): the region forces size `m` (a module's `size: "s"`
+  is overridden), reading the plan's "the size is m"; the alternative is `m` as the default
+  and the module's choice kept. A long label is cut at a third of the card's width.
+
 - **An opened network card with no page rows** (wired, hotspot) keeps 6 px of empty space at the
   bottom, inherited from the old card and kept so the rebuilt card measures the same (U4b).
   Remove it?
