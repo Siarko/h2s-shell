@@ -85,7 +85,8 @@ Singleton {
             return;
         }
         const fields = ["connection.uuid", "connection.interface-name", "vpn.service-type", "vpn.data"].concat(_withPeers ? ["wireguard.peers"] : [])
-            .concat(["GENERAL.IP-IFACE", "IP4.ADDRESS", "IP6.ADDRESS", "IP4.DNS", "IP6.DNS"]);
+            .concat(["ipv4.never-default", "ipv6.never-default", "GENERAL.IP-IFACE", "IP4.ADDRESS", "IP6.ADDRESS", "IP4.DNS", "IP6.DNS",
+                "IP4.GATEWAY", "IP6.GATEWAY", "IP4.ROUTE", "IP6.ROUTE"]);
         const command = ["nmcli", "-t", "-f", fields.join(","), "connection", "show"];
         for (const vpn of nmVpns)
             command.push("uuid", vpn.uuid);
@@ -112,6 +113,10 @@ Singleton {
     // Those and the ones providers name (a new WireGuard profile takes another)
     readonly property var interfaceNames: Object.values(details).map(detail => detail.interfaceName).filter(name => name !== "")
 
+    // Every interface that is a VPN's: those set in the profiles and named by providers, and
+    // those the VPNs run on now — what Api.localNetworks leaves out
+    readonly property var vpnInterfaces: Array.from(new Set(interfaceNames.concat(vpns.map(vpn => interfaceOf(vpn)).filter(name => name !== ""))))
+
     // The interface a VPN runs on while up: its tunnel's (a plugin VPN's profile names the
     // link under it; a provider's `detail.iface`), else its profile's device (WireGuard's own)
     function interfaceOf(vpn): string {
@@ -132,14 +137,14 @@ Singleton {
     // (the stand-in) hands its Components over itself (rowExtras, cardExtras, pageUrl) —
     // extrasFor and pageOf ask the module host first, then the provider.
     //   network.vpn.row  — under the VPN's row in the network popup; context { slot, vpnId,
-    //                      entryId, vpn, provider, otherVpnsUp }
+    //                      entryId, vpn, provider, otherVpnsUp, otherVpns }
     //   network.vpn.card — on the VPN's card in Settings → System → Network → VPN, while the
     //                      card is open; context { slot, vpnId, entryId, vpn, provider,
-    //                      otherVpnsUp, open }
+    //                      otherVpnsUp, otherVpns, open }
     //   network.vpn.page — a page of the provider's own, opened over the VPN page from the
     //                      card, in the settings pages' frame (title, Back, scrolling) — only
     //                      when the provider has no settingsPage the settings window knows
-    //                      (settingsPageOf, pageOf); context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, close }
+    //                      (settingsPageOf, pageOf); context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns, close }
     //   (contextFor makes them)
     readonly property var slots: ({ row: "network.vpn.row", card: "network.vpn.card", page: "network.vpn.page" })
 
@@ -331,14 +336,17 @@ Singleton {
     }
 
     // The context a slot's contribution gets (VpnManager.slots): { slot, vpnId, entryId,
-    // vpn, provider, otherVpnsUp } and `extra` ({ open } on the card, { close } on the page).
-    // `provider` is the provider object itself, so a contribution can call its functions and
-    // read its state; `otherVpnsUp` the names of the other VPNs up now (two VPNs may compete
-    // for routes and DNS).
+    // vpn, provider, otherVpnsUp, otherVpns } and `extra` ({ open } on the card, { close } on
+    // the page). `provider` is the provider object itself, so a contribution can call its
+    // functions and read its state; `otherVpnsUp` the names of the other VPNs up now (two VPNs
+    // may compete for routes and DNS), `otherVpns` the same VPNs as Api.vpnsUp's rows
+    // ({ name, type, provider, fullTunnel, setsDns, routes }: whether they do compete).
     function contextFor(slot: string, vpn, extra) {
+        const others = activeVpns.filter(other => other.uuid !== (vpn?.uuid ?? ""));
         return Object.assign({ slot: slot, vpnId: vpn?.uuid ?? "", entryId: vpn?.entryId ?? "", vpn: vpn,
             provider: providerOf(vpn)?.object ?? null,
-            otherVpnsUp: activeVpns.filter(other => other.uuid !== (vpn?.uuid ?? "")).map(other => other.name) }, extra ?? {});
+            otherVpnsUp: others.map(other => other.name),
+            otherVpns: ModuleRules.frozenRows(JSON.stringify(ModuleRules.apiVpnsUp(others, details))) }, extra ?? {});
     }
 
     // The provider VPNs in "VPN with a network" that are not among `vpns` now — not

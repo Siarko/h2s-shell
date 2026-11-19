@@ -5,7 +5,7 @@ import QtQuick
 import qs.singletons
 import qs.api
 
-// What a module's suites get of the shell in module test mode (module API 1.10–1.13; tests only:
+// What a module's suites get of the shell in module test mode (module API 1.10–1.16; tests only:
 // `import qs.tests`, which a module may import in its tests alone). Under tests/run-modules.sh
 // the shell's own module host runs in test mode; this is that host, seen from a suite.
 //
@@ -33,10 +33,20 @@ import qs.api
 //                          wrong kind or one Api.system does not have is left out. Never
 //                          moves module.dataDirectory, which stays in the host's temporary
 //                          home. Reset before each suite
+//   setNetworks(facts)     (1.16) what Api's network facts tell: { networksReady,
+//                          networks: [{ id, name, kind, active }], localNetworksReady,
+//                          localNetworks: [{ device, kind, address: "<address>/<prefix>" }]
+//                          (family and network derived, as the shell does), vpnsUp: [{ name,
+//                          type, provider, fullTunnel, setsDns, routes }] } over the defaults
+//                          (both read, no network, no VPN) — each call from the defaults; null:
+//                          the defaults. Rows go through the shell's own checks. → the
+//                          problems, frozen ([] when everything was taken): a wrong field or
+//                          row is left out. Nothing of the real NetworkManager is read in test
+//                          mode. Reset before each suite
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)
 //   clearRecords()         empties `opened` and `notified`, and sets the real clock and the
-//                          default system facts again
+//                          default system and network facts again
 //   (1.11, running as administrator: singletons/PrivilegedRuns.qml — the shell's polkit
 //   agent and lock are never looked at in test mode, these are what the runs see)
 //   setPolkitAgent(state)  the agent's state, PolkitRules.state's words: "active" (the
@@ -151,6 +161,20 @@ Singleton {
         return Object.freeze(checked.problems);
     }
 
+    function setNetworks(facts) {
+        if (!Modules.host.testMode)
+            return Object.freeze(["module test mode is off"]);
+        // A copy, so a suite changing its object afterwards changes nothing
+        let copy = null;
+        try {
+            copy = facts === null || facts === undefined ? null : JSON.parse(JSON.stringify(facts));
+        } catch (error) {
+            return Object.freeze(["the network facts are not plain data: " + error]);
+        }
+        Api._testNetworkGiven = copy;
+        return Object.freeze(ModuleRules.testNetworkFacts(copy).problems);
+    }
+
     readonly property string dataHome: Modules.host.testMode && Modules.host.testHome !== "" ? Modules.host.testHome + "/.local/share" : ""
 
     function setSessionLocked(on) {
@@ -163,6 +187,7 @@ Singleton {
         if (Modules.host.testMode) {
             Api._testNow = 0;
             Api._testSystemGiven = null;
+            Api._testNetworkGiven = null;
         }
         Api._opened = [];
         Notifier.clearRecorded();

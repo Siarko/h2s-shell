@@ -86,6 +86,8 @@ QtObject {
             ModuleTestKit.setNow(0);
             // … nor the system facts it set (ModuleTestKit.setSystem)
             ModuleTestKit.setSystem(null);
+            // … nor the network facts (ModuleTestKit.setNetworks)
+            ModuleTestKit.setNetworks(null);
             let suite = null;
             try {
                 suite = component.createObject(root);

@@ -287,6 +287,25 @@ TestCase {
         const extraVpns = rules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: extra.entries });
         assert(extraVpns[0].status === "Via exit-1" && extraVpns[0].busy === true && extraVpns[3].status === "", "merged: status and busy carried");
 
+        // --- an entry's routing (module API 1.16): absent or wrong is null, never false ---
+        const routed = rules.vpnProviderEntries("p", [
+            { id: "r1", name: "a", state: "activated", fullTunnel: false, setsDns: true, routes: ["100.64.0.0/10", "FD7A:115C:A1E0::/48"] },
+            { id: "r2", name: "b", state: "activated" },
+            { id: "r3", name: "c", state: "activated", fullTunnel: "no", setsDns: 0, routes: ["100.64.0.0/10", "nonsense"] },
+            { id: "r4", name: "d", state: "activated", routes: "0.0.0.0/0" }
+        ]);
+        const routedById = id => routed.entries.find(item => item.id === id);
+        assertEqual(JSON.stringify([routedById("r1").fullTunnel, routedById("r1").setsDns, routedById("r1").routes]),
+                    JSON.stringify([false, true, ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]]), "entries: fullTunnel, setsDns, routes (canonical)");
+        assertEqual(JSON.stringify([routedById("r2").fullTunnel, routedById("r2").setsDns, routedById("r2").routes]), "[null,null,null]",
+                    "entries: the three absent — null, unknown");
+        assertEqual(JSON.stringify([routedById("r3").fullTunnel, routedById("r3").setsDns, routedById("r3").routes, routedById("r4").routes]),
+                    JSON.stringify([null, null, ["100.64.0.0/10"], null]), "entries: wrong ones null, a wrong route left out");
+        assertEqual(routed.problems.length, 4, "entries: each wrong one reported: " + routed.problems.join("; "));
+        const routedVpns = rules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: routed.entries });
+        assert(routedVpns[0].fullTunnel === false && routedVpns[0].setsDns === true && routedVpns[0].routes.length === 2 && routedVpns[1].routes === null,
+               "merged: the three carried");
+
         // --- slot contexts compared by value ---
         const owner = { providerId: "p" };
         const contextA = { slot: "network.vpn.row", vpnId: "p:a", entryId: "a", vpn: { uuid: "p:a", state: "" }, provider: owner, close: () => 1 };
@@ -457,6 +476,9 @@ TestCase {
                && pageContext.provider === fake && typeof pageContext.close === "function",
                "slots: a contribution's context carries the provider object itself");
         assert(VpnManager.contextFor(VpnManager.slots.row, { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
+        assert(Object.isFrozen(rowContext.otherVpns) && JSON.stringify(rowContext.otherVpns.map(vpn => vpn.name)) === JSON.stringify(rowContext.otherVpnsUp)
+               && rowContext.otherVpns.every(vpn => Object.isFrozen(vpn) && "fullTunnel" in vpn && "setsDns" in vpn && "routes" in vpn),
+               "slots: otherVpns — the other VPNs up as Api.vpnsUp's rows, beside their names");
         fake.withExtras = false;
 
         // The card's "Settings…": the provider's own settings page when the settings window has

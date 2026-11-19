@@ -99,7 +99,7 @@ TestCase {
         assertEqual(Api.module("no-such-module"), null, "an unknown id: no handle");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.15", "Api.version");
+        assertEqual(Api.version, "1.16", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");
@@ -205,6 +205,37 @@ TestCase {
         ModuleTestKit.clearRecords();
         assertEqual(Api.system.userName, "tester", "clearRecords(): the default facts again");
         dataRunner.start(["stat", "-c", "%a %U", module.dataDirectory], { done: result => suite._dataMode = result });
+
+        // --- network facts (API 1.16): in test mode the test kit's, never NetworkManager's ---
+        assertEqual([Api.networksReady, Api.networks.length, Api.localNetworksReady, Api.localNetworks.length, Api.vpnsUp.length].join(" "),
+                    "true 0 true 0 0", "network facts in test mode: the defaults — read, no network, no VPN");
+        assertEqual(JSON.stringify(ModuleTestKit.setNetworks({
+            networks: [{ id: "u-home", name: "Home\nWi-Fi", kind: "wifi", active: true }],
+            localNetworks: [{ device: "wlan0", kind: "wifi", address: "192.168.1.23/24" },
+                            { device: "wlan0", kind: "wifi", address: "2001:DB8::17/64" }],
+            vpnsUp: [{ name: "Office", type: "vpn", fullTunnel: false, setsDns: true, routes: ["10.1.2.3/8"] },
+                     { name: "Mesh", type: "provider", provider: "mesh" }]
+        })), "[]", "setNetworks: every row taken");
+        assertEqual(JSON.stringify(Api.networks), JSON.stringify([{ id: "u-home", name: "Home Wi-Fi", kind: "wifi", active: true }]),
+                    "Api.networks follows; a name on one line");
+        assertEqual(JSON.stringify(Api.localNetworks), JSON.stringify([
+            { device: "wlan0", kind: "wifi", family: 4, address: "192.168.1.23", network: "192.168.1.0/24" },
+            { device: "wlan0", kind: "wifi", family: 6, address: "2001:db8::17", network: "2001:db8::/64" }]),
+            "Api.localNetworks: family, address and network derived as the shell does");
+        assertEqual(JSON.stringify(Api.vpnsUp), JSON.stringify([
+            { name: "Office", type: "vpn", provider: "", fullTunnel: false, setsDns: true, routes: ["10.0.0.0/8"] },
+            { name: "Mesh", type: "provider", provider: "mesh", fullTunnel: null, setsDns: null, routes: null }]),
+            "Api.vpnsUp: fullTunnel, setsDns, routes; not reported is null");
+        assert(Object.isFrozen(Api.vpnsUp) && Object.isFrozen(Api.vpnsUp[0]) && Object.isFrozen(Api.vpnsUp[0].routes) && Object.isFrozen(Api.localNetworks[0]),
+               "… frozen, the routes too");
+        ModuleTestKit.setNetworks({ networksReady: false, localNetworksReady: false });
+        assertEqual([Api.networksReady, Api.networks.length, Api.localNetworksReady].join(" "), "false 0 false", "… not read: ready false; each call from the defaults");
+        const networkProblems = ModuleTestKit.setNetworks({ localNetworks: [{ device: "lo", kind: "other", address: "127.0.0.1/8" }],
+                                                            vpnsUp: [{ name: "X", type: "vpn", fullTunnel: "yes" }], colour: "red" });
+        assertEqual(networkProblems.length, 3, "setNetworks: a loopback address, a wrong fullTunnel and an unknown field named: " + networkProblems.join("; "));
+        assertEqual(Api.localNetworks.length + " " + Api.vpnsUp[0].fullTunnel, "0 null", "… a loopback address left out, a wrong fullTunnel unknown");
+        ModuleTestKit.clearRecords();
+        assertEqual([Api.networksReady, Api.vpnsUp.length].join(" "), "true 0", "clearRecords(): the default network facts again");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");

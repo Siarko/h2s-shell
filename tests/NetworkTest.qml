@@ -403,6 +403,21 @@ TestCase {
                    "vpn: several peers — the first's endpoint, without the comma; not up, no interface");
             assert(upDetails["o2"].iface === "tun0" && upDetails["o2"].addresses.join(" ") === "10.8.0.6/24 fd00::6/64"
                    && upDetails["o2"].dns[0] === "10.8.0.1", "vpn: while up, the tunnel's own interface, addresses and DNS");
+            // What decides its routing (ModuleRules.vpnRouting)
+            const routing = rules.vpnDetails([
+                { "connection.uuid": "w3", "wireguard.peers": "K1= allowed-ips=10.0.0.0/8;fd00::/8 endpoint=a.example:51820, K2= allowed-ips=0.0.0.0/0",
+                  "ipv4.never-default": "no", "ipv6.never-default": "yes" },
+                { "connection.uuid": "o3", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn", "GENERAL.IP-IFACE": "tun0",
+                  "IP4.GATEWAY": "10.8.0.1", "IP6.GATEWAY": "", "IP4.ROUTE": ["dst = 10.8.0.0/24, nh = 0.0.0.0, mt = 50", "dst = 0.0.0.0/0, nh = 10.8.0.1, mt = 50"],
+                  "IP6.ROUTE": ["dst = fe80::/64, nh = ::, mt = 256"] },
+                { "connection.uuid": "o4", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn" }]);
+            assertEqual(JSON.stringify([routing["w3"].allowedIps, routing["w3"].neverDefault4, routing["w3"].neverDefault6, routing["w3"].up]),
+                        JSON.stringify([["10.0.0.0/8", "fd00::/8", "0.0.0.0/0"], false, true, false]),
+                        "vpn: every peer's allowed-ips, never-default per family; not up");
+            assertEqual(JSON.stringify([routing["o3"].gateways, routing["o3"].routes, routing["o3"].up]),
+                        JSON.stringify([["10.8.0.1"], ["10.8.0.0/24", "0.0.0.0/0", "fe80::/64"], true]), "vpn: while up, its gateways and its routes' destinations");
+            assertEqual(JSON.stringify([routing["o4"].allowedIps, routing["o4"].neverDefault4, routing["o4"].gateways, routing["o4"].up]),
+                        JSON.stringify([null, null, [], false]), "vpn: fields not read — unknown (null), not \"no\"");
             assert(rules.importTypeOf("/x/home.conf", plugins) === "wireguard" && rules.importTypeOf("/x/a.OVPN", plugins) === "openvpn"
                    && rules.importTypeOf("/x/cisco.pcf", plugins) === "vpnc" && rules.importTypeOf("/x/a.pcf", []) === ""
                    && rules.importTypeOf("/x/a.ovpn", []) === "", "vpn: import kind by the file's ending, only with its plugin");

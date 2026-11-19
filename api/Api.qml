@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.15" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.16" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -151,11 +151,42 @@ import qs.singletons.network
 //                          hotspots, VPNs, bridges or their ports; active ones first, then
 //                          NetworkProfiles' order; empty until the profiles are read. A new
 //                          array only when something in it changed
+//                          (1.16) A Wi-Fi network only once its details are read (until
+//                          then it could be a hotspot)
+//   Api.networksReady      (1.16) the profiles and the Wi-Fi details of every Wi-Fi profile
+//                          have been read: an empty Api.networks then means none. A reading
+//                          that failed leaves it false
 //   Api.vpnsUp             (1.3) the VPNs up now, frozen: [{ name, type ("wireguard", "vpn"…
 //                          or "provider"), provider (a provider's providerId, else "") }];
-//                          a new array only when something in it changed.
-//                          Both show every installed module the saved network names and the
-//                          VPN names: modules are trusted and run in the shell's process
+//                          a new array only when something in it changed. (1.16) Each row
+//                          also says what the VPN does with the traffic, null where that is
+//                          not known (never false for "not read"):
+//                            fullTunnel  true | false | null — it takes the default route
+//                            setsDns     true | false | null — it brings DNS servers of its
+//                                        own while up
+//                            routes      [networks] | null — what it carries, canonical
+//                                        ("10.0.0.0/8"; "0.0.0.0/0", "::/0" for all), frozen
+//                          NetworkManager's WireGuard: its peers' allowed-ips, a /0 a full
+//                          tunnel unless never-default is on for that family; a plugin VPN:
+//                          what NetworkManager set up while it is up (a gateway or a /0 route
+//                          is a full tunnel). A provider's VPN: what its entry reports
+//                          (VpnProvider, below), null where it reports nothing
+//   Api.localNetworks      (1.16) the networks this computer is on, frozen: [{ device (the
+//                          interface), kind ("wifi" | "ethernet" | "bridge" | "modem" |
+//                          "other"), family (4 | 6), address (this computer's, canonical, no
+//                          prefix), network (the one it lies in, "192.168.1.0/24") }] —
+//                          global addresses only (no loopback, link-local or multicast), none
+//                          on a VPN's device (loopback, tun, WireGuard, an IP tunnel, an
+//                          interface of NetworkManager's VPNs or a provider's); from
+//                          NetworkManager's devices, read again when the networks change; at
+//                          most 64. A new array only when something in it changed
+//   Api.localNetworksReady (1.16) the devices' addresses were read; false (and
+//                          Api.localNetworks empty) while not, and when the last reading
+//                          failed — unknown, never "no network"
+//                          These show every installed module the saved network names, the
+//                          VPN names and the addresses: modules are trusted and run in the
+//                          shell's process. In module test mode they are the test kit's
+//                          (ModuleTestKit.setNetworks), nothing read
 //
 // And these types (files beside this one):
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
@@ -253,11 +284,15 @@ import qs.singletons.network
 //   VpnProvider            a VPN provider (the contract is API 1.1's, written in
 //                          components/VpnProvider.qml): providerId (the module's id),
 //                          kind, typeName, glyph, entries, ready, busy, canChange,
-//                          lockdownNote, settingsPage; connect(entryId, request),
+//                          lockdownNote, settingsPage (an entry may set fullTunnel, setsDns
+//                          and routes, 1.16: Api.vpnsUp's; absent is null, unknown);
+//                          connect(entryId, request),
 //                          disconnect(entryId, request), attend(entryId);
 //                          failed(entryId, what, reason). Its three VPN slots
 //                          (network.vpn.row, .card, .page) are manifest `slots`
-//                          contributions like any other (Api.slots).
+//                          contributions like any other (Api.slots). Their context's
+//                          `otherVpns` (1.16): the other VPNs up as Api.vpnsUp's rows,
+//                          beside `otherVpnsUp` (their names).
 //
 // A module's popup panel (the manifest's `popupPanel`, 1.15): built when its popup opens and
 // destroyed when it closes; it gets its module's handle as `module` (`property var module`)
@@ -564,14 +599,28 @@ Singleton {
     // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
     readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))
 
-    // (1.3) Through a JSON text: a string property notifies only when its value changes, so
-    // a module reacting to these is not woken by every re-read of the profiles
-    readonly property string _networksText: NetworkProfiles.listRead
-        ? JSON.stringify(ModuleRules.apiNetworks(NetworkProfiles.profiles, NetworkProfiles.wifi)) : "[]"
+    // (1.3, 1.16) Network facts (above). Through a JSON text: a string property notifies only
+    // when its value changes, so a module reacting to these is not woken by every re-read of
+    // the profiles. In module test mode the test kit's (ModuleTestKit.setNetworks), and the
+    // shell's network singletons are not touched
+    readonly property string _networksText: testMode ? JSON.stringify(_testNetworkFacts.networks)
+        : NetworkProfiles.listRead ? JSON.stringify(ModuleRules.apiNetworks(NetworkProfiles.profiles, NetworkProfiles.wifi)) : "[]"
     readonly property var networks: ModuleRules.frozenRows(_networksText)
+    readonly property bool networksReady: testMode ? _testNetworkFacts.networksReady
+        : ModuleRules.apiNetworksReady(NetworkProfiles.listRead, NetworkProfiles.profiles, NetworkProfiles.wifi)
 
-    readonly property string _vpnsUpText: JSON.stringify(ModuleRules.apiVpnsUp(VpnManager.activeVpns))
+    readonly property string _vpnsUpText: testMode ? JSON.stringify(_testNetworkFacts.vpnsUp)
+        : JSON.stringify(ModuleRules.apiVpnsUp(VpnManager.activeVpns, VpnManager.details))
     readonly property var vpnsUp: ModuleRules.frozenRows(_vpnsUpText)
+
+    readonly property bool localNetworksReady: testMode ? _testNetworkFacts.localNetworksReady : IpManager.devicesRead
+    readonly property string _localNetworksText: testMode ? JSON.stringify(_testNetworkFacts.localNetworks)
+        : IpManager.devicesRead ? JSON.stringify(ModuleRules.apiLocalNetworks(IpManager.devices, VpnManager.vpnInterfaces)) : "[]"
+    readonly property var localNetworks: ModuleRules.frozenRows(_localNetworksText)
+
+    // Set by ModuleTestKit.setNetworks in test mode (null: the defaults — read, none)
+    property var _testNetworkGiven: null
+    readonly property var _testNetworkFacts: ModuleRules.testNetworkFacts(_testNetworkGiven).facts
 
     function module(id) {
         return Modules.handle(id);

@@ -35,9 +35,17 @@ Singleton {
         function onEthernetDeviceChanged() { root._poll() }
     }
 
+    // Every device's addresses (Nmcli.devices: { device, type, kind, ipv4 [], ipv6 [] }, the
+    // addresses with their prefix), for Api.localNetworks; [] while not read
+    property var devices: []
+    // The last reading of them worked: a failed one (no nmcli, NetworkManager not running)
+    // leaves `devices` empty and this false — unknown, never "no network"
+    property bool devicesRead: false
+
     // Each device that exists; asked while already running, a query runs once more after
     // (CommandQuery)
     function _poll() {
+        _readDevices()
         if (NetworkManager.wifiDevice !== "")
             wifiQuery.request()
         if (NetworkManager.ethernetDevice !== "")
@@ -63,6 +71,42 @@ Singleton {
             root.ethernetDns = result.dns
         }
     }
+
+    // One reading at a time; one asked for meanwhile runs when it ends, so the answer kept is
+    // always from a reading started after the last change was reported
+    property var _devicesRun: null
+    property bool _devicesAgain: false
+    property string _devicesProblem: ""
+
+    function _readDevices() {
+        if (_devicesRun !== null) {
+            _devicesAgain = true
+            return
+        }
+        _devicesRun = _devicesRunner.start(["nmcli", "-t", "-f", "GENERAL.DEVICE,GENERAL.TYPE,IP4.ADDRESS,IP6.ADDRESS", "device", "show"], {
+            timeoutMs: 15000,
+            maxOutputBytes: 262144,
+            done: result => {
+                root._devicesRun = null
+                const ok = result.ok && !result.truncated
+                root.devices = ok ? Nmcli.devices(result.stdout.split("\n")) : []
+                root.devicesRead = ok
+                // Logged when the outcome changes, not on every reading
+                const problem = ok ? "" : (result.failedToStart ? "nmcli could not be started"
+                    : result.timedOut ? "nmcli did not answer" : result.truncated ? "too much output"
+                    : "nmcli failed (" + result.code + "): " + result.stderr.trim().split("\n")[0].slice(0, 200))
+                if (problem !== root._devicesProblem)
+                    console.warn("IpManager: the devices' addresses " + (problem === "" ? "are read again" : "could not be read: " + problem))
+                root._devicesProblem = problem
+                if (root._devicesAgain) {
+                    root._devicesAgain = false
+                    root._readDevices()
+                }
+            }
+        })
+    }
+
+    property CommandRunner _devicesRunner: CommandRunner {}
 
     function _parse(lines) {
         var address = ""

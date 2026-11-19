@@ -29,7 +29,8 @@ import qs.singletons.network
 //   kind        string — what sort of thing it is ("mesh", "vpn"); informative only
 //   typeName    string — the VPN's type as the cards and the editor's picker show it
 //   glyph       string — a Nerd Font glyph for its rows and, when only it is up, the bar
-//   entries     [{ id, name, state, attention, detail, active, status, busy }]:
+//   entries     [{ id, name, state, attention, detail, active, status, busy, fullTunnel,
+//               setsDns, routes }]:
 //                 id        1–64 of letters, digits, . _ ~ - ; unique within the provider;
 //                           STABLE for the same VPN (it is stored in settings)
 //                 name      text shown for it
@@ -56,6 +57,13 @@ import qs.singletons.network
 //                           <exit node>", "Starting…")
 //                 busy      optional bool, default false: an operation runs for this entry —
 //                           its buttons wait (as for the provider-wide `busy`)
+//                 fullTunnel, setsDns   optional true | false | null (module API 1.16): it
+//                           takes the default route; it brings DNS servers of its own while
+//                           up. Absent or wrong is null — unknown, never "false"
+//                 routes    optional list of networks or null (1.16): what it carries
+//                           ("100.64.0.0/10", "0.0.0.0/0" for all); written canonically, a
+//                           wrong one left out and logged. These three are Api.vpnsUp's for
+//                           the entry while it is up, and the other VPNs' `otherVpns`
 //               A provider keeps reporting its entry in EVERY state — logged out, stopped,
 //               daemon unreadable: the entry with `attention` — never an empty list for
 //               "don't know". An entry it does not report is shown nowhere and, in "VPN with
@@ -88,8 +96,9 @@ import qs.singletons.network
 //               implicitHeight; it must not scroll itself. Unused while settingsPage is
 //               there. Neither: no "Settings…".
 //   A contribution's root item may declare `property var context`; the core sets it to
-//   { slot, vpnId, entryId, vpn, provider } — `provider` this object, to call its functions
-//   and read its state — (the card's adds `open`; the page's adds `close`, a function that
+//   { slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns } — `provider` this
+//   object, to call its functions and read its state; `otherVpnsUp` the other VPNs up by
+//   name, `otherVpns` as Api.vpnsUp's rows — (the card's adds `open`; the page's adds `close`, a function that
 //   goes back to the VPN page), and again only when its value changes. See
 //   VpnManager.slots, VpnManager.contextFor.
 //

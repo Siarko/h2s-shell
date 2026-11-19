@@ -664,6 +664,21 @@ make so leaves the module loading with `module.dataDirectory` `""` and a warning
 status. The shell never removes it. Nothing in the data directory may be run as root — the
 user can write there.
 
+**Network facts.** `Api.networks` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one only
+once its details are read, so a hotspot never shows) with `Api.networksReady`;
+`Api.vpnsUp`, whose rows say what each VPN does with the traffic — `fullTunnel`, `setsDns`,
+`routes`, each `null` where it is not known, never `false` for "not read"; and
+`Api.localNetworks` (`{ device, kind, family, address, network }`: the global addresses of
+every device that is no VPN's) with `Api.localNetworksReady`, false while the reading has
+not worked. All come from what the shell's network singletons read from NetworkManager
+(`NetworkProfiles`, `VpnManager.details`, `IpManager.devices`); the pure functions in
+`singletons/ModuleRules.qml` (`apiNetworks`, `apiNetworksReady`, `vpnRouting`,
+`apiVpnsUp`, `apiLocalNetworks`) decide. A NetworkManager WireGuard VPN's routing is its
+peers' allowed-ips with the profile's never-default; a plugin VPN's is what NetworkManager
+set up while it is up (a gateway or a `/0` route is a full tunnel); a provider's is what its
+entry reports (`components/VpnProvider.qml`). The VPN slots' context has the other VPNs up
+as such rows too (`otherVpns`).
+
 Helpers, so a module copies none of the shell's code: `Api.format` (`bytes`, `rate`, `ago`
 in milliseconds — `singletons/Format.qml`), `Api.address` (IPv4, IPv6, networks: `isIp`,
 `parseCidr`, `contains`, `overlap`, `redact` — `singletons/AddressRules.qml`, the reader the
@@ -861,12 +876,13 @@ and a trusted `timeout` are found.
   first on `PATH` that fails the run if anything starts it. `module.privileged` takes the
   module's `<testPrograms>/pkexec` and nothing else — without one it is not available —
   and its runs see the test kit's polkit agent and lock, never the shell's.
-  `Api.system` is then the test kit's made-up facts, nothing read, and the data
+  `Api.system` and the network facts are then the test kit's made-up facts, nothing read, and the data
   directories lie below a private temporary home the host makes before the first module
   loads (`ModuleHost.testHome`: `mktemp -d` in `XDG_RUNTIME_DIR`, else `/tmp`), never in the
   user's data home. A module's suites see test mode through `ModuleTestKit` (`qs.tests`):
   `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
-  (the facts `Api.system` tells; never moves `module.dataDirectory`), `dataHome`,
+  (the facts `Api.system` tells; never moves `module.dataDirectory`), `setNetworks` (the
+  network facts: by default read and empty), `dataHome`,
   `clearRecords`, and for runs as administrator
   `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
   its message written by the kit from pkexec's algorithm, not the shell's),

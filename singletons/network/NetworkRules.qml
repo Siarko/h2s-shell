@@ -489,10 +489,12 @@ Singleton {
     }
 
     // The VPN profiles' details from `nmcli -t -f connection.uuid,vpn.service-type,vpn.data,
-    // wireguard.peers,GENERAL.IP-IFACE,IP4.ADDRESS,IP6.ADDRESS,IP4.DNS,IP6.DNS connection show
+    // wireguard.peers,ipv4.never-default,ipv6.never-default,GENERAL.IP-IFACE,IP4.ADDRESS,
+    // IP6.ADDRESS,IP4.DNS,IP6.DNS,IP4.GATEWAY,IP6.GATEWAY,IP4.ROUTE,IP6.ROUTE connection show
     // uuid A uuid B…` blocks (Nmcli.records): { uuid: { service ("" for WireGuard), server
-    // (host, or host:port; "" unknown), iface, addresses [], dns [] } } — the last three
-    // only while it is up. A plugin's server is in vpn.data ("remote = host:1194, …" for
+    // (host, or host:port; "" unknown), iface, addresses [], dns [], neverDefault4,
+    // neverDefault6, allowedIps [] (null: the peers not read), gateways [], routes [], up } } —
+    // iface, addresses, dns, gateways and routes only while it is up. A plugin's server is in vpn.data ("remote = host:1194, …" for
     // OpenVPN, "gateway = …" for most), WireGuard's in its first peer's endpoint. `iface` is
     // the tunnel's own (tun0): a plugin VPN's profile names the link under it as its device.
     function vpnDetails(blocks) {
@@ -519,10 +521,29 @@ Singleton {
                 : (data["remote"] ?? data["gateway"] ?? data["IPSec gateway"] ?? data["address"] ?? "").split(/[,\s]+/).filter(item => item !== "");
             const server = servers[0] ?? "";
             const list = key => [].concat(block[key] ?? []).filter(item => item !== "");
+            // "yes" / "no"; anything else (the field not read) unknown
+            const flag = key => block[key] === "yes" ? true : block[key] === "no" ? false : null;
+            // An active route: "dst = 10.0.0.0/24, nh = 0.0.0.0, mt = 50" → its destination
+            const destinations = key => list(key).map(route => /(?:^|,)\s*dst\s*=\s*([^,\s]+)/.exec(route)?.[1] ?? "")
+                .filter(destination => destination !== "");
+            const allowedIps = [];
+            const allowedPattern = /allowed-ips=([^\s,]+)/g;
+            while ((match = allowedPattern.exec(String(block["wireguard.peers"] ?? ""))) !== null)
+                allowedIps.push(...match[1].split(";").filter(address => address !== ""));
             details[uuid] = {
                 service: block["vpn.service-type"] ?? "", server: server ?? "", servers: servers,
                 iface: block["GENERAL.IP-IFACE"] ?? "", interfaceName: block["connection.interface-name"] ?? "",
-                addresses: list("IP4.ADDRESS").concat(list("IP6.ADDRESS")), dns: list("IP4.DNS").concat(list("IP6.DNS"))
+                addresses: list("IP4.ADDRESS").concat(list("IP6.ADDRESS")), dns: list("IP4.DNS").concat(list("IP6.DNS")),
+                // What decides whether it takes all traffic, which networks it carries and
+                // whether it brings DNS servers (ModuleRules.vpnRouting): the profile's
+                // never-default per family, WireGuard's peers' allowed-ips, and while up its
+                // gateways and routes. `up` the block came with the active part (GENERAL.*):
+                // the last ones were read
+                neverDefault4: flag("ipv4.never-default"), neverDefault6: flag("ipv6.never-default"),
+                allowedIps: Object.prototype.hasOwnProperty.call(block, "wireguard.peers") ? allowedIps : null,
+                gateways: [block["IP4.GATEWAY"] ?? "", block["IP6.GATEWAY"] ?? ""].filter(gateway => gateway !== "" && gateway !== "--"),
+                routes: destinations("IP4.ROUTE").concat(destinations("IP6.ROUTE")),
+                up: Object.prototype.hasOwnProperty.call(block, "GENERAL.IP-IFACE")
             };
         }
         return details;
@@ -937,13 +958,14 @@ Singleton {
     }
 
     // What a provider reports as its entries, checked: { entries, problems } — `entries`
-    // [{ id, name, state, attention, detail, active, status, busy }] in the provider's order, `problems`
-    // sentences for the log. An entry whose id, name or state is wrong (not an object; id
-    // not isVpnEntryId, or repeated; name not a string; state not one of vpnStates) is
-    // dropped. A wrong optional field is set to its default and reported: attention (null,
-    // or { reason: a non-empty string, action: a string, "" none }), detail
-    // (vpnProviderDetail), active (a bool; else whether state is not ""), status (text, at most 80;
-    // else ""), busy (a bool; else false).
+    // [{ id, name, state, attention, detail, active, status, busy, fullTunnel, setsDns, routes }]
+    // in the provider's order, `problems` sentences for the log. An entry whose id, name or
+    // state is wrong (not an object; id not isVpnEntryId, or repeated; name not a string;
+    // state not one of vpnStates) is dropped. A wrong optional field is set to its default
+    // and reported: attention (null, or { reason: a non-empty string, action: a string, ""
+    // none }), detail (vpnProviderDetail), active (a bool; else whether state is not ""),
+    // status (text, at most 80; else ""), busy (a bool; else false), fullTunnel, setsDns and
+    // routes (ModuleRules.vpnRoutingFields: null where absent or wrong — unknown).
     function vpnProviderEntries(providerId, raw) {
         const entries = [];
         const problems = [];
@@ -1013,10 +1035,13 @@ Singleton {
             const entryBusy = read("busy");
             if (entryBusy !== undefined && entryBusy !== null && typeof entryBusy !== "boolean")
                 problems.push(where + " (" + id + "): busy is not true or false");
+            const routing = ModuleRules.vpnRoutingFields({ fullTunnel: read("fullTunnel"), setsDns: read("setsDns"), routes: read("routes") });
+            routing.problems.forEach(problem => problems.push(where + " (" + id + "): " + problem));
             entries.push({
                 id: id, name: entryName.trim().slice(0, 200) || id, state: state, attention: attention,
                 detail: vpnProviderDetail(rawDetail), active: active,
-                status: typeof status === "string" ? status.trim().slice(0, 80) : "", busy: entryBusy === true
+                status: typeof status === "string" ? status.trim().slice(0, 80) : "", busy: entryBusy === true,
+                fullTunnel: routing.fields.fullTunnel, setsDns: routing.fields.setsDns, routes: routing.fields.routes
             });
         });
         if (list.length > 64)
@@ -1027,13 +1052,14 @@ Singleton {
     // One provider's entries as VPNs in the shape of NetworkManager's ({ uuid, name, type,
     // kind, state, active, … }), so the views and vpnWithNetworkPlan take both: `uuid` is the
     // id "<provider>:<entry>", `type` "provider", plus provider, entryId, typeName, glyph,
-    // attention, status, busy. `read` { providerId, typeName, glyph, entries (vpnProviderEntries') }
+    // attention, status, busy, fullTunnel, setsDns, routes. `read` { providerId, typeName, glyph, entries (vpnProviderEntries') }
     function vpnProviderVpns(read) {
         return (read?.entries ?? []).map(entry => ({
             uuid: vpnId(read.providerId, entry.id), name: entry.name, type: "provider", kind: "vpn",
             state: entry.state, active: entry.active, device: "", autoconnect: false, priority: 0, lastUsed: 0,
             provider: read.providerId, entryId: entry.id, typeName: read.typeName || "VPN", glyph: read.glyph || "",
-            attention: entry.attention, status: entry.status ?? "", busy: entry.busy === true
+            attention: entry.attention, status: entry.status ?? "", busy: entry.busy === true,
+            fullTunnel: entry.fullTunnel ?? null, setsDns: entry.setsDns ?? null, routes: entry.routes ?? null
         }));
     }
 

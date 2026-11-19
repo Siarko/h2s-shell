@@ -9,8 +9,9 @@ import QtQuick
 // version fits the shell's, the namespaces a module's contributions must stay in, the import
 // check (a warning, by the owner's decision), which of two modules with one id wins, the
 // state a module is in, and the contributions of several modules merged into the lists the
-// core's registries will read. No file, no process, no other singleton; ModuleHost does the
-// I/O. Nothing here throws on any input: a manifest is written by someone else.
+// core's registries will read. No file, no process, no other singleton but the pure
+// AddressRules; ModuleHost does the I/O. Nothing here throws on any input: a manifest is
+// written by someone else.
 //
 // This file holds what the API is: its version, the slots, the reserved ids, the states,
 // the limits, the API's views of the core's state, what a module hands the core at run
@@ -44,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.15"
+    readonly property string apiVersion: "1.16"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -79,13 +80,13 @@ Singleton {
         // its own rowExtras, cardExtras and pageUrl.
         { name: "network.vpn.row", since: "1.1",
           where: "the network popup's VPN section (panels/network/VpnSection.qml), under the row of each VPN of the module's provider",
-          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp: [names of the other VPNs up] }" },
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp: [names of the other VPNs up], otherVpns: [the same as Api.vpnsUp rows] (1.16) }" },
         { name: "network.vpn.card", since: "1.1",
           where: "Settings → System → Network → VPN, on the card of each VPN of the module's provider, while the card is open",
-          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, open: bool }" },
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns, open: bool }" },
         { name: "network.vpn.page", since: "1.1",
           where: "a page over Settings → System → Network → VPN, opened from the card's \"Settings…\", in the core's frame (Back, title, scrolling)",
-          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, close: function }" }
+          context: "{ slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns, close: function }" }
     ]
     readonly property var slotNames: slotTable.map(entry => entry.name)
 
@@ -709,7 +710,8 @@ Singleton {
     // (Nmcli.profiles) and Wi-Fi details (Nmcli.wifiDetails) → [{ id, name, kind, active }].
     // `id` is the profile's UUID — the key system.vpnWithNetworks uses, as names may repeat.
     // Only Wi-Fi (not a hotspot: mode "ap" is this computer's own network) and Ethernet, and
-    // not a port of a bridge or bond (the bridge is what joins). `active` only when fully up
+    // not a port of a bridge or bond (the bridge is what joins). A Wi-Fi profile only once
+    // its details are read: until then it could be a hotspot. `active` only when fully up
     // ("activated"), so a module does not act on a network still connecting. Those active
     // first, then the rest, each in the given order. Garbage is skipped, never thrown on.
     function apiNetworks(profiles, wifiDetails) {
@@ -717,39 +719,284 @@ Singleton {
         const active = [];
         const inactive = [];
         for (const profile of Array.isArray(profiles) ? profiles : []) {
-            if (!isObject(profile) || !isString(profile.uuid, 200))
-                continue;
-            if (profile.kind !== "wifi" && profile.kind !== "ethernet")
-                continue;
-            if (typeof profile.port === "string" && profile.port !== "")
+            if (!_joinable(profile))
                 continue;
             const wifi = has(details, profile.uuid) ? details[profile.uuid] : null;
-            if (profile.kind === "wifi" && isObject(wifi) && wifi.mode === "ap")
+            if (profile.kind === "wifi" && (!isObject(wifi) || wifi.mode === "ap"))
                 continue;
-            const network = { id: profile.uuid, name: typeof profile.name === "string" ? profile.name : "",
-                kind: profile.kind, active: profile.state === "activated" };
+            const network = networkRow(profile.uuid, profile.name, profile.kind, profile.state === "activated");
             (network.active ? active : inactive).push(network);
         }
         return active.concat(inactive);
     }
 
-    // Api.vpnsUp: the VPNs up now (VpnManager.activeVpns) → [{ name, type, provider }] —
-    // `type` "wireguard", "vpn" … or "provider", `provider` the providerId of a provider's VPN
-    // ("" for NetworkManager's). In the given order; garbage skipped, never thrown on.
-    function apiVpnsUp(activeVpns) {
+    // Api.networksReady: the profiles have been read, and the Wi-Fi details of every Wi-Fi
+    // profile apiNetworks looks at — so a list without a network means there is none. A
+    // details read that failed leaves it false (unknown, never "none")
+    function apiNetworksReady(listRead, profiles, wifiDetails) {
+        if (listRead !== true)
+            return false;
+        const details = isObject(wifiDetails) ? wifiDetails : {};
+        return (Array.isArray(profiles) ? profiles : []).every(profile =>
+            !_joinable(profile) || profile.kind !== "wifi" || (has(details, profile.uuid) && isObject(details[profile.uuid])));
+    }
+
+    // A profile apiNetworks may list: Wi-Fi or Ethernet with a UUID, not a port
+    function _joinable(profile) {
+        return isObject(profile) && isString(profile.uuid, 200) && (profile.kind === "wifi" || profile.kind === "ethernet")
+            && !(typeof profile.port === "string" && profile.port !== "");
+    }
+
+    // One row of Api.networks, each field of its kind (the name plain, on one line, capped)
+    function networkRow(id, name, kind, active) {
+        return { id: String(id), name: _plainLine(name, 200), kind: String(kind), active: active === true };
+    }
+
+    // Text from outside (a network's or a VPN's name) on one line: control characters
+    // become spaces, cut at `most`
+    function _plainLine(value, most) {
+        return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, " ").slice(0, most) : "";
+    }
+
+    // Api.vpnsUp: the VPNs up now (VpnManager.activeVpns) with their details (VpnManager
+    // .details, by uuid) → [{ name, type, provider, fullTunnel, setsDns, routes }] — `type`
+    // "wireguard", "vpn" … or "provider", `provider` the providerId of a provider's VPN ("" for
+    // NetworkManager's); the last three vpnRouting's. In the given order; garbage skipped,
+    // never thrown on.
+    function apiVpnsUp(activeVpns, details) {
+        const known = isObject(details) ? details : {};
         const list = [];
         for (const vpn of Array.isArray(activeVpns) ? activeVpns : []) {
             if (!isObject(vpn))
                 continue;
             const type = typeof vpn.type === "string" ? vpn.type : "";
-            list.push({ name: typeof vpn.name === "string" ? vpn.name : "", type: type,
-                provider: type === "provider" && typeof vpn.provider === "string" ? vpn.provider : "" });
+            const uuid = typeof vpn.uuid === "string" ? vpn.uuid : "";
+            list.push(vpnUpRow(vpn.name, type, type === "provider" ? vpn.provider : "",
+                               vpnRouting(vpn, uuid !== "" && has(known, uuid) ? known[uuid] : null)));
         }
         return list;
     }
 
-    // A JSON text of a list of plain objects → that list, the list and each entry frozen —
-    // what Api hands out (a module cannot change the core's copy)
+    // One row of Api.vpnsUp; `routing` { fullTunnel, setsDns, routes }, each checked again
+    // (vpnRoutingFields): what is wrong is unknown
+    function vpnUpRow(name, type, provider, routing) {
+        const fields = vpnRoutingFields(routing).fields;
+        return { name: _plainLine(name, 200), type: typeof type === "string" ? type.slice(0, 40) : "",
+            provider: typeof provider === "string" ? provider.slice(0, 32) : "",
+            fullTunnel: fields.fullTunnel, setsDns: fields.setsDns, routes: fields.routes };
+    }
+
+    // What a VPN does with the traffic → { fullTunnel, setsDns, routes }, each null where
+    // it is not known — never false for "not read":
+    //   fullTunnel  it takes the default route (all traffic not bound for a closer network)
+    //   setsDns     it brings DNS servers of its own while up
+    //   routes      the networks it carries, canonical ("10.0.0.0/8", "0.0.0.0/0" for all)
+    // A provider's VPN: the three its entry reported (NetworkRules.vpnProviderEntries).
+    // NetworkManager's, from its details (NetworkRules.vpnDetails): WireGuard by its peers'
+    // allowed-ips — a /0 of a family whose never-default is off is a full tunnel; a plugin
+    // VPN by what NetworkManager made of it while up — a gateway or a /0 route is a full
+    // tunnel, never-default on in both families is not. DNS servers and routes are known only
+    // from a reading made while it was up.
+    function vpnRouting(vpn, detail) {
+        if (!isObject(vpn))
+            return { fullTunnel: null, setsDns: null, routes: null };
+        if (vpn.type === "provider")
+            return vpnRoutingFields({ fullTunnel: vpn.fullTunnel, setsDns: vpn.setsDns, routes: vpn.routes }).fields;
+        if (!isObject(detail))
+            return { fullTunnel: null, setsDns: null, routes: null };
+        const up = detail.up === true;
+        const strings = value => Array.isArray(value) ? value.filter(item => typeof item === "string") : [];
+        const setsDns = up ? strings(detail.dns).length > 0 : null;
+        const neverDefault = family => family === 4 ? detail.neverDefault4 : detail.neverDefault6;
+        if (vpn.type === "wireguard") {
+            if (!Array.isArray(detail.allowedIps))
+                return { fullTunnel: null, setsDns: setsDns, routes: null };
+            const routes = _networks(detail.allowedIps);
+            let fullTunnel = false;
+            for (const family of [4, 6]) {
+                if (!routes.some(route => AddressRules.parseCidr(route)?.family === family && AddressRules.parseCidr(route)?.bits === 0))
+                    continue;
+                if (neverDefault(family) === false) {
+                    fullTunnel = true;
+                    break;
+                }
+                if (neverDefault(family) !== true)
+                    fullTunnel = null;
+            }
+            return { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes };
+        }
+        if (!up)
+            return { fullTunnel: null, setsDns: null, routes: null };
+        const routes = _networks(strings(detail.routes)).filter(route => !AddressRules.contains("fe80::/10", route));
+        const fullTunnel = neverDefault(4) === true && neverDefault(6) === true ? false
+            : strings(detail.gateways).length > 0 || routes.some(route => AddressRules.parseCidr(route)?.bits === 0);
+        return { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes };
+    }
+
+    // The three of vpnRouting as a provider (or a test) hands them, checked → { fields,
+    // problems }: fullTunnel and setsDns true, false or null (absent: null); routes null or a
+    // list of networks, each written canonically, the wrong ones left out (at most 64)
+    function vpnRoutingFields(given) {
+        const source = isObject(given) ? given : {};
+        const problems = [];
+        const flag = key => {
+            const value = has(source, key) ? source[key] : undefined;
+            if (value === undefined || value === null)
+                return null;
+            if (typeof value === "boolean")
+                return value;
+            problems.push(key + " is not true, false or null");
+            return null;
+        };
+        const fullTunnel = flag("fullTunnel");
+        const setsDns = flag("setsDns");
+        const rawRoutes = has(source, "routes") ? source.routes : undefined;
+        let routes = null;
+        if (Array.isArray(rawRoutes)) {
+            routes = _networks(rawRoutes);
+            const wrong = rawRoutes.slice(0, 64).filter(route => typeof route !== "string" || AddressRules.parseCidr(route) === null);
+            if (wrong.length > 0)
+                problems.push("routes: not networks, left out: " + wrong.slice(0, 3).map(route => show(route)).join(", "));
+        } else if (rawRoutes !== undefined && rawRoutes !== null) {
+            problems.push("routes is not a list of networks or null");
+        }
+        return { fields: { fullTunnel: fullTunnel, setsDns: setsDns, routes: routes }, problems: problems };
+    }
+
+    // Networks as texts → the readable ones written canonically ("192.168.1.0/24"), each once,
+    // at most 64
+    function _networks(list) {
+        const networks = [];
+        for (const item of Array.isArray(list) ? list.slice(0, 256) : []) {
+            const cidr = typeof item === "string" ? AddressRules.parseCidr(item.trim()) : null;
+            if (cidr !== null && !networks.includes(cidr.network))
+                networks.push(cidr.network);
+        }
+        return networks.slice(0, 64);
+    }
+
+    // Api.localNetworks: the networks this computer is on, from NetworkManager's devices
+    // (Nmcli.devices: { device, type, ipv4 [], ipv6 [] }, addresses with their prefix) →
+    // [{ device, kind, family, address, network }] — `kind` "wifi", "ethernet", "bridge",
+    // "modem" or "other", `family` 4 or 6, `address` this computer's (canonical, no prefix),
+    // `network` the one it lies in ("192.168.1.0/24"). Only global addresses (not loopback,
+    // link-local, multicast or unspecified); not on a VPN's device: a loopback, tun,
+    // WireGuard, IP tunnel or VPN device, or one named in `vpnInterfaces` (the VPNs' and the
+    // providers' interfaces). Each device and address once, in the given order, at most 64.
+    function apiLocalNetworks(devices, vpnInterfaces) {
+        const skipped = new Set((Array.isArray(vpnInterfaces) ? vpnInterfaces : []).filter(name => typeof name === "string" && name !== ""));
+        const rows = [];
+        const seen = new Set();
+        for (const device of Array.isArray(devices) ? devices : []) {
+            if (!isObject(device) || typeof device.device !== "string" || skipped.has(device.device))
+                continue;
+            if (localNetworkSkippedTypes.includes(device.type))
+                continue;
+            const kind = localNetworkKind(device.type);
+            const addresses = (Array.isArray(device.ipv4) ? device.ipv4 : []).concat(Array.isArray(device.ipv6) ? device.ipv6 : []);
+            for (const address of addresses) {
+                const row = localNetworkRow(device.device, kind, address);
+                if (row === null || seen.has(row.device + " " + row.address))
+                    continue;
+                seen.add(row.device + " " + row.address);
+                rows.push(row);
+            }
+        }
+        return rows.slice(0, 64);
+    }
+
+    // NetworkManager's device types that are a VPN's or nobody's network
+    readonly property var localNetworkSkippedTypes: ["loopback", "tun", "wireguard", "vpn", "ip-tunnel", "wifi-p2p"]
+
+    // A device type (NetworkManager's GENERAL.TYPE) as Api.localNetworks names it
+    function localNetworkKind(type) {
+        const kinds = { "wifi": "wifi", "ethernet": "ethernet", "bridge": "bridge", "gsm": "modem", "cdma": "modem", "modem": "modem" };
+        return typeof type === "string" && has(kinds, type) ? kinds[type] : "other";
+    }
+
+    // One row of Api.localNetworks — a device's name (1 to 15 printable characters, no "/" or
+    // space), a kind of localNetworkKind's, and an address with its prefix ("192.168.1.23/24")
+    // that is global — or null
+    function localNetworkRow(device, kind, address) {
+        if (typeof device !== "string" || !/^[^\u0000- \u007f/]{1,15}$/.test(device) || typeof address !== "string")
+            return null;
+        const parts = address.trim().split("/");
+        if (parts.length !== 2)
+            return null;
+        const host = AddressRules.parseCidr(parts[0]);
+        const network = AddressRules.parseCidr(address.trim());
+        if (host === null || network === null || !_globalAddress(host))
+            return null;
+        return { device: device, kind: ["wifi", "ethernet", "bridge", "modem"].includes(kind) ? kind : "other",
+            family: network.family, address: host.address, network: network.network };
+    }
+
+    // Not loopback, link-local, multicast, unspecified or broadcast: what `ip` calls scope
+    // global (a unique local IPv6 address and a private IPv4 one are)
+    function _globalAddress(host) {
+        const local = host.family === 4 ? ["0.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/3"]
+            : ["::/127", "fe80::/10", "ff00::/8", "::ffff:0:0/96"];
+        return !local.some(network => AddressRules.contains(network, host));
+    }
+
+    // Module test mode: what a suite says the network facts are (ModuleTestKit.setNetworks)
+    // over the defaults (both read, no network, no VPN) → { facts: { networksReady, networks,
+    // localNetworksReady, localNetworks, vpnsUp }, problems }. Rows go through the rows' own
+    // checks: networks { id, name, kind ("wifi" | "ethernet"), active }, localNetworks
+    // { device, kind, address: "<address>/<prefix>" } (family and network derived; one that
+    // is not global left out), vpnsUp { name, type, provider, fullTunnel, setsDns, routes }.
+    // A wrong field or row is left out and named in `problems`.
+    function testNetworkFacts(given) {
+        const source = isObject(given) ? given : {};
+        const problems = [];
+        if (given !== undefined && given !== null && !isObject(given))
+            problems.push("the network facts are not an object");
+        const known = ["networksReady", "networks", "localNetworksReady", "localNetworks", "vpnsUp"];
+        for (const key of Object.keys(source))
+            if (!known.includes(key))
+                problems.push(key + ": not a network fact");
+        const flag = key => {
+            if (!has(source, key) || source[key] === undefined)
+                return true;
+            if (typeof source[key] === "boolean")
+                return source[key];
+            problems.push(key + ": not true or false");
+            return true;
+        };
+        const rows = (key, make) => {
+            if (!has(source, key) || source[key] === undefined)
+                return [];
+            if (!Array.isArray(source[key])) {
+                problems.push(key + ": not a list");
+                return [];
+            }
+            const list = [];
+            source[key].slice(0, 64).forEach((row, index) => {
+                const made = isObject(row) ? make(row) : null;
+                if (made === null)
+                    problems.push(key + "[" + index + "]: left out");
+                else
+                    list.push(made);
+            });
+            return list;
+        };
+        const networks = rows("networks", row => isString(row.id, 200) && (row.kind === "wifi" || row.kind === "ethernet")
+            ? networkRow(row.id, row.name, row.kind, row.active) : null);
+        const localNetworks = rows("localNetworks", row => localNetworkRow(row.device, row.kind, row.address));
+        const vpnsUp = rows("vpnsUp", row => {
+            const checked = vpnRoutingFields(row);
+            checked.problems.forEach(problem => problems.push("vpnsUp: " + problem));
+            return vpnUpRow(row.name, row.type, row.type === "provider" ? row.provider : "", checked.fields);
+        });
+        return {
+            facts: { networksReady: flag("networksReady"), networks: networks, localNetworksReady: flag("localNetworksReady"),
+                localNetworks: localNetworks, vpnsUp: vpnsUp },
+            problems: problems
+        };
+    }
+
+    // A JSON text of a list of plain objects → that list, the list, each entry and the
+    // lists inside an entry frozen — what Api hands out (a module cannot change the core's copy)
     function frozenRows(text) {
         let rows = [];
         try {
@@ -759,7 +1006,15 @@ Singleton {
         }
         if (!Array.isArray(rows))
             rows = [];
-        return Object.freeze(rows.map(row => Object.freeze(row)));
+        const freeze = value => {
+            if (value !== null && typeof value === "object") {
+                for (const key of Object.keys(value))
+                    freeze(value[key]);
+                Object.freeze(value);
+            }
+            return value;
+        };
+        return Object.freeze(rows.map(row => freeze(row)));
     }
 
     // ---- What a module hands the core at run time ----
