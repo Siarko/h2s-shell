@@ -2048,3 +2048,17 @@ For the owner, from the autonomous run (2026-11-18 on):
   bar and tooltip are the public `ProgressBar` / `HoverTip`. Reviewed, fixed (a flaky wait in
   `NetworkExitTest` too); suites, stand-ins and lock bed passed on both machines.
 
+- **Name-line places on the network popup's rows; a pill's text size** — on `master`
+  2026-11-19, module API 1.32. `popup.network.wifi.row.title` (each Wi-Fi row, saved or not;
+  context with `ssid`, unsaved rows `networkId ""`) and `popup.network.connections.wired.row.title`;
+  `components/PopupRowTitle.qml`; elements on the line take their own clicks; one "saved" rule
+  (`ModuleRules.savedWifiProfile`, hotspots not saved); bidi controls stripped from context
+  names; public `Pill.textSize` ("small" | "body"). Reviewed, fixed; `tests/run-all.sh` passed
+  on both machines.
+- **The module off the shell's internals (M10)** — on the module's `main` 2026-11-19 (manifest
+  `api` 1.32, no deprecations). Every `qs.components` import gone onto the public elements;
+  six confirm buttons on the module's `ConfirmButton` (drops its question when hidden or when
+  its subject changes, tested); warning lines on `Notice`; "Funnel on" a warning button; the
+  operator no longer sees a lock beside "Switch"; the exit-node mark on the popup's network rows
+  too. Reviewed, fixed; suites, stand-ins and lock bed passed on both machines.
+

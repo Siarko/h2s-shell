@@ -21,7 +21,7 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the module: off the shell's internals (M10: done but the widget settings' pills, waiting for the public Pill's text size in core 1.32; then its mark on the popup's network rows), the last (M11)
+- [ ] the module: the last (M11)
 - [ ] the closing slice (Z), after the module is released
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
@@ -236,7 +236,6 @@ All by the owner, 2026-11-17.
   file(s) are picked, a row under that device's row names the file (or "N files") with a Send
   button; after Send, a progress bar of the send in that row (from the bus's outgoing files);
   the same for several files. The settings window does not open (M8).
-- The network popup's rows (2026-11-19, seen on a screen: the exit-node mark shows on the settings cards but not in the popup): the popup's Wi-Fi and wired network rows offer the same name-line place as the settings cards, so a module marks its networks there too.
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - Exit node "for now", details (2026-11-19): with no per-network choice for the networks up,
