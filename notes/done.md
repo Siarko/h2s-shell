@@ -1927,3 +1927,14 @@ For the owner, from the autonomous run (2026-11-18 on):
   gaps left for the VPN page slice); `tests/run-all.sh` and the Tailscale lock bed passed on
   both machines.
 
+- **The VPN page (U4c)** — on `master` 2026-11-19, module API 1.23. Own-provider places
+  `popup.network.connections.vpn.row` (after) and `settings.network_vpn.vpns.card.settings`
+  (prepend), context `{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }`, `scopeId`
+  the provider's module; `VpnManager.extrasFor` / slots gone; the Tailscale module's
+  `network.vpn.row` / `network.vpn.card` slots read through aliases (it now lists them as
+  deprecations, until M6); `VpnExtras` only for providers that are no module's. Card wiring
+  tests (title, active border, notice while busy); `SettingsCard` right-edge rule uses the
+  horizontal part of an alignment. Reviewed, no defect; `tests/run-all.sh` and the Tailscale
+  suites and lock bed passed on both machines. The Tailscale card is now built when it
+  opens (it rechecks Tailscale then, not on page open).
+

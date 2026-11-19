@@ -21,8 +21,6 @@ The codes in brackets (C1, U2, M3 …) are lookup keys into the slice table in
 
 Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
-- [ ] the VPN page (U4c); it also publishes `popup.network.connections.vpn.row` (named in
-      U2, not published: it needs the per-VPN context)
 - [ ] the Wi-Fi and Ethernet pages (U5); the card's button place (U6)
 - [ ] a module's icon (U7a); the mark on a closed card (U7b)
 - [ ] the module: its runner (M1), main and popup (M4), helpers and facts (M5), row and
@@ -276,6 +274,8 @@ All by the owner, 2026-11-17.
 - File chooser for modules (2026-11-18): the system's standard dialog is enough for now. No chooser of the shell's own in this round, and sending files is not extended. The better answer is wanted later: integration with file managers (backlog).
 
 ## Backlog / later
+
+- [ ] A VPN provider's id is matched against module ids without checking the module that registered it is that module (`VpnManager.register`): a module could register under another's id and get its elements under its VPNs (older than U4c). Also `VpnManager.ownExtrasOf` serves `rowExtras` for a module's provider too (unreachable for Tailscale)
 
 - [ ] `components/ReorderList.qml` binds a bare array (`root._shown`) to `ListView.model` — against the Repeater-crash rule (found in the ScriptModel key fix)
 
