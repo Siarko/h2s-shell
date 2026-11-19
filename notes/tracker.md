@@ -25,7 +25,37 @@ installed shell into a test tree (below). Module test mode (A3), privileged star
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
 with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
-Next: B1, D1, E1 (facts lane), then P1/P2, the places lane, the remaining module slices.
+B1 and D1 are on `master` (below). Next: E1 (the file chooser), then P1/P2, the places
+lane, the remaining module slices.
+
+- [x] **API plan, B1 the shared module object and popup inputs, D1 network facts**: on
+      `master` (2026-11-19; module API 1.15 and 1.16; each reviewed by a second agent on the
+      diff, fixed by other authors with cases that fail before; `tests/run-all.sh` passes on
+      Arch, tools from `PATH`, and on NixOS, tools from nix — NetworkManager 1.56 there, 1.58
+      on Arch, both accept the new fields; the Tailscale module's suites pass). B1:
+      `module.main` (null while off or while the main is built; not writable through the
+      handle — `moduleId` and `host` became readonly too), an `opener` `{ widgetType,
+      preset, edge, byTouch }` for a module's popup panel that declares `property var
+      opener` (decided by the same root-property scan at the first build and on reopen; a
+      failed write goes to the module's status), `availableHeight` / `fitsShownHeight` /
+      `popupAnimating` documented. D1: `Api.networksReady` (false after a failed read),
+      `Api.networks` (Wi-Fi rows only after their details), `Api.vpnsUp` rows with
+      `fullTunnel` / `setsDns` / `routes` (null when not read; `up` only when `GENERAL.STATE`
+      says activated; WireGuard from allowed-ips, `peer-routes`, `ipv6.method`, the /1
+      halves; routes beyond 256 unknown), `Api.localNetworks` + ready (from `nmcli device
+      show` and `ip -j -6 address show` flags, deprecated IPv6 left out, VPN addresses left
+      out, a /32 or /128 without a network), slot context `otherVpns`,
+      `ModuleTestKit.setNetworks`; `singletons/io/LatestQuery.qml` (a newer request drops
+      the answer under way) for the profile list, the VPN details and the devices. Left open:
+  - **Seen in the live shell after the merge:** `IpManager.qml` called its child queries
+    as `root._flagsQuery` / `root._devicesQuery` (ids, not properties): `Api.localNetworks`
+    never became ready. Being fixed with a test that runs the real reading on stand-ins.
+  - A click on another bar entry of the same widget type closes its popup ("Open points").
+  - `opener` is null when no bar widget opened the panel (tray, `open()` without data).
+  - Docker/libvirt bridges in `localNetworks`, the `kind` words, `setsDns`'s meaning
+    ("Open points"); the plugin VPN full-tunnel reading is unchecked on a machine.
+  - A VPN that reports no addresses of its own cannot be told apart from the device it
+    rides on (IPsec).
 
 - [x] **Module M2 programs and test mode, M3 privileged with a `what`; core: an environment
       for privileged runs in test mode**: on the module's `main` and core `master`
@@ -534,9 +564,9 @@ test queue; review what carries risk, look at one-line fixes yourself.
    - [x] program lookup with trust
    - [x] test mode
    - [x] privileged start (A4), the prompt says who and what for (A5)
-   - [ ] shared module object
    - [x] helpers (C1)
-   - [x] system facts (C2); network facts (D1) open
+   - [x] shared module object (B1)
+   - [x] system and network facts (C2, D1)
 4. UI anchors; today's slots (`components/ModuleSlot.qml`, `Api.slots`) moved onto them — open
 5. A module's public API for other modules, basic version — open
 6. Tailscale module migration — open
