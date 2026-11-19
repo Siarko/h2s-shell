@@ -7,8 +7,8 @@ import qs.components
 import qs.panels.settings
 import qs.singletons
 
-// components/SettingsCard.qml laid out in a window, beside NetworkProfileCard, the card the
-// settings pages use now: the same height closed with an empty line under the name; hidden
+// components/SettingsCard.qml laid out in a window, beside NetworkProfileCard, the network
+// pages' card built on it: the same height closed with an empty line under the name; hidden
 // secondary buttons take no room; the buttons line up on one right edge without each saying
 // so.
 TestCase {

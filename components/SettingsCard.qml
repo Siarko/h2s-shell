@@ -36,9 +36,8 @@ import qs.singletons
 //       }
 //   }
 //
-// The notice's button is available while `noticeAvailable`: NetworkProfileCard's is
-// unavailable while the card is busy, so a page moving from it binds `noticeAvailable:
-// !busy`.
+// The notice's button is available while `noticeAvailable`, bound to the page's busy state
+// (NetworkProfileCard: `noticeAvailable: !busy`).
 AnchorBlock {
     id: root
 
@@ -141,8 +140,7 @@ AnchorBlock {
                                 font.bold: root.active
                                 color: Theme.textPrimary
                             }
-                            // Shown empty too: the header keeps its height (as
-                            // NetworkProfileCard's)
+                            // Shown empty too: the header keeps its height
                             Text {
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
@@ -178,15 +176,22 @@ AnchorBlock {
 
                             // One column, each button at its own width on the right
                             // edge; the gap above only when a button shows, so hidden
-                            // ones take no room
-                            Grid {
+                            // ones take no room. A layout, not a positioner: it gives each
+                            // button a whole width, so its edges stand on whole pixels. A
+                            // button that names no alignment of its own goes on the right.
+                            ColumnLayout {
                                 id: _buttons
                                 visible: root.open
                                 Layout.alignment: Qt.AlignRight
                                 Layout.topMargin: implicitHeight > 0 ? 4 : 0
-                                columns: 1
                                 spacing: 4
-                                horizontalItemAlignment: Grid.AlignRight
+
+                                onChildrenChanged: {
+                                    for (const child of children) {
+                                        if (!child.Layout.alignment)
+                                            child.Layout.alignment = Qt.AlignRight;
+                                    }
+                                }
                             }
                         }
 

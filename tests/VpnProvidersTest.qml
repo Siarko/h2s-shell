@@ -713,21 +713,23 @@ TestCase {
             settings.clicked();
             assertEqual(settingsAsked, 1, "card: Settings… emits settingsRequested");
             // Where it sits, by structure — in no window nothing polishes, so the geometry
-            // is checked on screen (the Tailscale module's lock-bed test): the primary
-            // button's slot and Settings… in one column right of the text block, Settings…
-            // after the slot and right-aligned, the primary anchored right in its slot
-            const actions = settings.parent;
+            // is checked on screen (NetworkCardGeometryTest, the Tailscale module's lock-bed
+            // test): the primary button's slot and the secondary buttons' column in one
+            // column right of the text block, the buttons after the slot and right-aligned,
+            // the primary anchored right in its slot
+            const buttons = settings.parent;
             const slot = primary.parent.parent;
+            const actions = slot.parent;
             const stack = Array.from(actions.children);
-            assert(slot.parent === actions && stack.indexOf(slot) >= 0 && stack.indexOf(slot) < stack.indexOf(settings),
-                   "card: Settings… in the primary button's column, under it");
+            assert(buttons === card.buttonColumn && buttons.parent === actions && stack.indexOf(slot) >= 0
+                   && stack.indexOf(slot) < stack.indexOf(buttons), "card: Settings… in the primary button's column, under it");
             assert((settings.Layout.alignment & Qt.AlignRight) && (slot.Layout.alignment & Qt.AlignRight)
                    && primary.parent.anchors.right === slot.right, "card: Settings… on the primary button's right edge");
             const header = actions.parent;
             const titleBlock = Array.from(header.children).find(child => child !== actions && child.Layout.fillWidth);
             assert(titleBlock !== undefined && Array.from(header.children).indexOf(titleBlock) < Array.from(header.children).indexOf(actions),
                    "card: the text block on the left, filling the rest (it elides, never runs under the buttons)");
-            assert(card.color !== Theme.surface, "card: opened, not Theme.surface — its buttons (Theme.surface) stay visible as buttons");
+            assert(!Qt.colorEqual(card.frame.color, Theme.surface), "card: opened, not Theme.surface — its buttons (Theme.surface) stay visible as buttons");
             // Busy, or no primary button at all: the slot keeps its height, Settings… stays put
             const slotHeight = slot.implicitHeight;
             card.busy = true;
@@ -746,8 +748,10 @@ TestCase {
             const edit = suite._named(own, "profileEdit");
             const forget = suite._named(own, "profileForget");
             const ownStack = Array.from(edit.parent.children);
+            const ownColumn = Array.from(own.buttonColumn.parent.children);
             assert(edit.visible && forget.visible && !suite._named(own, "profileSettings").visible && forget.parent === edit.parent
-                   && ownStack.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownStack.indexOf(edit)
+                   && edit.parent === own.buttonColumn
+                   && ownColumn.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownColumn.indexOf(own.buttonColumn)
                    && ownStack.indexOf(edit) < ownStack.indexOf(forget) && (forget.Layout.alignment & Qt.AlignRight),
                    "card: a NetworkManager profile — Edit connection… then Forget, right-aligned under the primary");
             own.destroy();

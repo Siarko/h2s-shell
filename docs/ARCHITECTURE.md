@@ -610,7 +610,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   settings section, `components/SettingsSection.qml` (a titled group on a page: its title's
   line with its buttons, then its content), and the settings card,
   `components/SettingsCard.qml` (a framed item that opens: its header and notice line, then,
-  opened, its own rows); the settings row follows. A card takes no element inside itself:
+  opened, its own rows; the network pages' card for a saved profile, a hotspot or a VPN,
+  `panels/settings/NetworkProfileCard.qml`, is built on it); the settings row follows. A card takes no element inside itself:
   its opened part is its region `settings`, a block of kind `region` around its rows
   (`prepend` above them, `append` under them), whose elements are built only while the card
   is open and destroyed when it closes; they get the card's context and scope. A card made
