@@ -7,8 +7,8 @@ Machines are named only "the NixOS machine" and "the Arch machine".
 
 ## Now
 
-State on 2026-11-19: all done work is on `master` (core, module API 1.22) and `main`
-(module `h2s-shell-tailscale` 0.6.0, manifest `api` 1.14, not released since); the live
+State on 2026-11-19: all done work is on `master` (core, module API 1.32) and `main`
+(module `h2s-shell-tailscale` 0.6.0, manifest `api` 1.32, migration M1–M11 done, not released since); the live
 shell runs it on both machines. Development is on the Arch machine; runs that need `nix`
 go over SSH to the NixOS machine. One topic at a time: the API plan
 ([plans/api-next.md](plans/api-next.md), approved 2026-11-17; a slice's brief names the
