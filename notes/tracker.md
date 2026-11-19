@@ -49,7 +49,10 @@ lane, the remaining module slices.
       the answer under way) for the profile list, the VPN details and the devices. Left open:
   - **Seen in the live shell after the merge:** `IpManager.qml` called its child queries
     as `root._flagsQuery` / `root._devicesQuery` (ids, not properties): `Api.localNetworks`
-    never became ready. Being fixed with a test that runs the real reading on stand-ins.
+    never became ready. Fixed on `master` (the reading is `DeviceAddressReading.qml`,
+    `tests/DeviceAddressReadingTest.qml` runs it on stand-in `nmcli` and `ip`); the live log
+    is clean after a restart. A new development rule in `CLAUDE.md` came of it (a real I/O
+    path runs in a test against stand-ins).
   - A click on another bar entry of the same widget type closes its popup ("Open points").
   - `opener` is null when no bar widget opened the panel (tray, `open()` without data).
   - Docker/libvirt bridges in `localNetworks`, the `kind` words, `setsDns`'s meaning

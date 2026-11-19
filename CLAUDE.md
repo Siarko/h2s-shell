@@ -212,6 +212,11 @@ new kind.
   Logs filled with the same line every few seconds.
 - **Live tests wait on conditions, never on fixed sleeps;** a test that cannot fail is
   deleted. — Sleeps make tests flaky under load.
+- **A real I/O path runs in at least one test, against stand-ins.** What test mode or the
+  test kit hands a module in its place does not test it: the reading itself (the command,
+  its parsing, its steps) gets a suite that runs it on stand-in programs. — Two defects
+  passed every suite and showed only in the live shell, because test mode never reached
+  the real path.
 - **Tests never touch the real session, polkit, PAM, the network or a real daemon:** stand-ins
   only, and stand-ins never meet the real `pkexec`. — A test must not change the machine.
 - **Root helpers and scripts run as root are never loaded from a place the user can
