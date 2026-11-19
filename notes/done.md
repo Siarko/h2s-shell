@@ -2121,3 +2121,10 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   folder when its script is killed. The old whole-inbox `saveScript` and `timeLimits.save` are
   gone. Reviewed, fixed; module suites and stand-ins on both machines, the module's lock bed on
   NixOS. Only on stand-ins (no real curl / LocalAPI).
+- **The transfers list on the page (D4)** — on the module's `main` 2026-11-19. Sends and saves
+  as one keyed list in `TaildropSection.qml` (title rows with Cancel / Clear from
+  `transferOffers`, file rows with a bar, text and Skip / "Send now" / "Fetch now" from
+  `fileOffers`; incoming files as rows without buttons, `incomingRow`); the page-wide
+  Cancel / Clear, the send lines and the `saved` lines went. New `TaildropListTest`. Reviewed
+  (nothing medium or higher); module suites and stand-ins on both machines, the module's lock
+  bed on NixOS.
