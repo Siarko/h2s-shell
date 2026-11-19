@@ -273,8 +273,6 @@ All by the owner, 2026-11-17.
 
 ## Backlog / later
 
-- [ ] Wi-Fi password: Enter in the password field starts connecting to the network (the owner, 2026-11-19) — in the network popup and on the saved network's card
-
 - [ ] Two bar entries of one type and preset: the adopted "active" mark can land on the other cell than the popup sits over (rare)
 
 - [ ] `AnchorsTest` failed twice under load, each time once and never on rerun (a section's parts' order; an earlier one in U7a): find the wait that measures before layout

@@ -73,6 +73,14 @@ Singleton {
     // A Wi-Fi password NetworkManager takes for `security` (key management): WPA2/WPA3
     // personal 8–63 characters (or 64 hexadecimal digits, the key itself); others are not
     // checked here
+    // Whether Enter in a network's password field in the network popup connects, as the
+    // Connect button beside it would: that button is there (the network not in use) and
+    // says Connect (the network not connecting now — it is Cancel then), and a password is
+    // typed (Enter on an empty field does nothing)
+    function wifiEnterConnects(password: string, inUse: bool, connectingThis: bool): bool {
+        return String(password ?? "") !== "" && !inUse && !connectingThis;
+    }
+
     function isWifiPassword(text: string, security: string): bool {
         const password = String(text ?? "");
         if (security !== "wpa-psk" && security !== "sae")

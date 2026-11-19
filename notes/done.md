@@ -1625,6 +1625,11 @@ The tracker's state paragraphs as they stood when these moved:
       takes hover with the plain arrow, so a gap no longer tints the card; the question
       beside the lock in whole pixels (the lock's width rounded up, the room floored); the
       name's six-character minimum pinned on its own font (NetworkCardGeometryTest).
+- [x] Wi-Fi password: Enter in the password field (the owner, 2026-11-19), done 2026-11-19 —
+      in the network popup Enter connects as Connect does (`NetworkRules.wifiEnterConnects`:
+      a password typed, the network not in use, not connecting), on a saved network's card it
+      saves as Save does while Save is available. KeyedViewsTest drives both against stand-ins
+      (the row's `wifi`, the page's `profiles`); NetworkTest has the rule's cases.
 
 ## The tracker's open sections as worded before 2026-11-19
 

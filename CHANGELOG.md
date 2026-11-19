@@ -348,6 +348,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Enter in a Wi-Fi network's password field connects, as Connect beside it does (the
+  network popup), or saves the new password, as Save does (a saved network's card in
+  Settings) — only when that button could be pressed: never with the field empty.
 - Modules (no Settings → Modules page yet): the launcher finds modules in
   `~/.local/share/h2s-shell/modules`, each system data directory's `h2s-shell/modules` and the
   directories `H2S_SHELL_MODULE_PATH` names, and hands them to the shell in

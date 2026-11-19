@@ -26,6 +26,9 @@ Rectangle {
     signal passwordEdited(string text)
     signal revealToggled
 
+    // Where connecting goes: WifiManager (a stand-in in tests)
+    property var wifi: WifiManager
+
     readonly property string ssid: root.network.ssid ?? ""
     // The field follows the password kept for this row's network
     onPasswordTextChanged: if (pwInput.text !== passwordText) pwInput.text = passwordText
@@ -142,6 +145,9 @@ Rectangle {
                     revealed: root.showPassword
                     onRevealToggled: root.revealToggled()
                     onTextEdited: root.passwordEdited(text)
+                    objectName: "wifiPasswordField"
+                    // Enter: what Connect beside it does, while it says Connect
+                    onAccepted: if (NetworkRules.wifiEnterConnects(text, root.network.inUse === true, _connectButton._busy)) _connectButton.clicked()
                 }
 
                 // Spacer for saved/open networks (no password field)
@@ -167,15 +173,17 @@ Rectangle {
 
                 // Connect / Cancel button
                 SmallButton {
+                    id: _connectButton
+                    objectName: "wifiConnect"
                     visible: !root.network.inUse
-                    readonly property bool _busy: WifiManager.connecting && WifiManager.connectingTo === root.network.ssid
+                    readonly property bool _busy: root.wifi.connecting && root.wifi.connectingTo === root.network.ssid
                     label: _busy ? "Cancel" : "Connect"
                     kind: _busy ? "cancel" : "save"
                     onClicked: {
                         if (_busy)
-                            WifiManager.cancelConnect()
+                            root.wifi.cancelConnect()
                         else
-                            WifiManager.connectToWifi(root.network.ssid, root.needsPassword ? root.passwordText : "")
+                            root.wifi.connectToWifi(root.network.ssid, root.needsPassword ? root.passwordText : "")
                     }
                 }
 

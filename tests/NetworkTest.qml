@@ -234,6 +234,10 @@ TestCase {
             assert(rules.isWifiPassword("12345678", "wpa-psk") && !rules.isWifiPassword("1234567", "wpa-psk"), "Wi-Fi password: at least 8");
             assert(!rules.isWifiPassword("x".repeat(64), "sae") && rules.isWifiPassword("a".repeat(64), "sae"),
                    "Wi-Fi password: 64 characters only as the hexadecimal key");
+            assert(rules.wifiEnterConnects("secret123", false, false), "Enter in the popup's password field: connects, as Connect");
+            assert(!rules.wifiEnterConnects("", false, false), "… not with the field empty");
+            assert(!rules.wifiEnterConnects("secret123", true, false), "… nor for the network in use (no Connect button)");
+            assert(!rules.wifiEnterConnects("secret123", false, true), "… nor while it connects (the button is Cancel)");
                         // --- the connection editor ---
             const wiredBlock = { "connection.id": "Office", "connection.autoconnect": "yes", "connection.autoconnect-priority": "-999",
                 "connection.metered": "unknown", "connection.permissions": "", "ipv4.method": "manual",

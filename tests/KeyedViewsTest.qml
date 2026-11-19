@@ -122,6 +122,27 @@ TestCase {
         after = _savedCards(page);
         assert(after["uuid-Office"] === office && after["uuid-Airport"] !== undefined && _find(after["uuid-Airport"], "wifiPassword").text === "",
                "Wi-Fi: one added — a new card for it, Office's kept");
+
+        // Enter in a card's password field: what Save does, only while Save can be pressed.
+        // The writes go to a stand-in, never to NetworkManager
+        const writes = [];
+        page.profiles = { busy: false, setWifiPassword: (uuid, password, done) => writes.push(uuid + "=" + password) };
+        const save = _find(office, "wifiPasswordSave");
+        officePassword.text = "";
+        officePassword.input.accepted();
+        assert(!save.available && writes.length === 0, "Wi-Fi: Enter in an empty password field saves nothing (Save is not available)");
+        officePassword.text = "short";
+        officePassword.input.accepted();
+        assert(!save.available && writes.length === 0, "… nor with a password NetworkManager would refuse");
+        officePassword.text = "a long enough secret";
+        assert(save.available, "… a good one makes Save available");
+        officePassword.input.accepted();
+        assertEqual(writes.join(" "), "uuid-Office=a long enough secret", "… and Enter saves it, as Save does");
+        page.profiles = { busy: true, setWifiPassword: (uuid, password, done) => writes.push(uuid + "=" + password) };
+        officePassword.input.accepted();
+        assert(!save.available && writes.length === 1, "… not while the profiles are busy");
+        page.profiles = NetworkProfiles;
+        officePassword.text = "";
     }
 
     // --- The network popup: the networks in range ---
@@ -163,6 +184,29 @@ TestCase {
         assert(after["Office"] === before["Office"] && after["Office"].network.inUse === true && after["Office"].network.signal === 90,
                "Wi-Fi list: re-sorted by signal — the row moves with its network and shows it in use (not stale)");
         assert(list.itemAtIndex(0) === before["Office"], "… at the top");
+
+        // Enter in a network's password field: what Connect does, while it says Connect and
+        // a password is typed. The connects go to a stand-in, never to NetworkManager
+        const home = after["Home"];
+        const asked = [];
+        const standIn = { connecting: false, connectingTo: "", savedSsids: [], connectToWifi: (ssid, password) => asked.push(ssid + "=" + password),
+            cancelConnect: () => asked.push("cancel") };
+        home.wifi = standIn;
+        home.expanded = true;
+        const field = _find(home, "wifiPasswordField");
+        assert(home.needsPassword && field !== null && field.visible, "Wi-Fi list: a secured network not saved has a password field");
+        field.input.accepted();
+        assertEqual(asked.length, 0, "Enter with the field empty: nothing");
+        home.passwordText = "a long enough secret";
+        assertEqual(field.text, "a long enough secret", "… a password typed (the panel keeps it)");
+        field.input.accepted();
+        assertEqual(asked.join(" "), "Home=a long enough secret", "… Enter connects with it, as Connect does");
+        home.wifi = Object.assign({}, standIn, { connecting: true, connectingTo: "Home" });
+        assertEqual(_find(home, "wifiConnect").label, "Cancel", "… while it connects the button is Cancel");
+        field.input.accepted();
+        assertEqual(asked.length, 1, "… and Enter neither connects again nor cancels");
+        home.wifi = WifiManager;
+        home.passwordText = "";
     }
 
     function run() {

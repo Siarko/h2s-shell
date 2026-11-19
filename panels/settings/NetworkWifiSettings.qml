@@ -32,6 +32,9 @@ Item {
         WifiManager.releaseScan();
     }
 
+    // Where a saved network's new password goes: NetworkProfiles (a stand-in in tests)
+    property var profiles: NetworkProfiles
+
     // The saved network open for its settings, by UUID
     property string _open: ""
     // A shown password, by UUID, hidden again after a while
@@ -245,13 +248,17 @@ Item {
                                     }
                                     placeholder: _network._shown === undefined ? "••••••••  (type a new one to change it)" : ""
                                     problem: text !== "" && text !== _written && !NetworkRules.isWifiPassword(text, _network.network.security)
+                                    // Enter: Save, while Save can be pressed
+                                    onAccepted: if (_savePassword.available) _savePassword.clicked()
                                 }
                                 SmallButton {
+                                    id: _savePassword
+                                    objectName: "wifiPasswordSave"
                                     label: "Save"
                                     kind: "save"
-                                    available: !NetworkProfiles.busy && _password.text !== "" && _password.text !== _password._written
+                                    available: !root.profiles.busy && _password.text !== "" && _password.text !== _password._written
                                         && NetworkRules.isWifiPassword(_password.text, _network.network.security)
-                                    onClicked: NetworkProfiles.setWifiPassword(_network.network.uuid, _password.text, ok => {
+                                    onClicked: root.profiles.setWifiPassword(_network.network.uuid, _password.text, ok => {
                                         if (!ok)
                                             return;
                                         const shown = Object.assign({}, root._shownPasswords);
