@@ -139,12 +139,15 @@ TestCase {
         id: fakePopup
         property bool active: false
         property string contentType: ""
+        // The element that opened it, as Popup's own
+        property Item openedBy: null
         property var calls: []
 
         function open(element, persistent, contentType, contentData, byTouch) {
             calls.push("open persistent=" + persistent + " byTouch=" + byTouch);
             fakePopup.active = true;
             fakePopup.contentType = contentType;
+            fakePopup.openedBy = element;
         }
 
         function close() {
