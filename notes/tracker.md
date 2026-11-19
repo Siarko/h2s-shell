@@ -780,3 +780,10 @@ For the owner, from the autonomous run (2026-11-18 on):
   while the first's popup is open closes it instead of switching to it (only hover
   re-targets an open popup). Older than B1. Should a click on another entry switch the
   popup?
+- **Network facts for modules** (D1, the agent's choices): `Api.localNetworks` includes
+  Docker and libvirt bridges (`kind: "bridge"`), as the Tailscale module's own read does
+  today — leave them out? The `kind` words (wifi, ethernet, bridge, modem, other) and the
+  device types left out (loopback, tun, wireguard, vpn, ip-tunnel, wifi-p2p). `setsDns` on
+  a VPN means "has DNS servers of its own while up", not "takes over DNS" (priority, split
+  DNS). Unchecked on a machine: a plugin VPN taking the default route shows `IP4.GATEWAY`
+  or a /0 route; WireGuard's `ip4-auto-default-route` and `peer-routes` are not read.
