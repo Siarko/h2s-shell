@@ -2180,3 +2180,9 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `send` unchanged. Lock-bed scenario `notifier-progress` (real gdbus, the shell's own server;
   adversarial text round-trips). Reviewed (escaping held; a failed "done" and an unknown
   handle's leftovers fixed); `tests/run-all.sh` passed on both machines.
+- **A sender's announce brings its toast back (N4)** — on `master` 2026-11-20.
+  `NotificationRules.announced` / `announceEffect`: a raised `x-qs-announce` on a notification
+  carrying this run's `x-qs-progress-run` token (never given to modules or apps) restarts a shown
+  toast's time, or sends a toast no longer shown or queued back through the normal queue once;
+  toasts off, no toast screen, the centre open → nothing. `Notifications.screensOverride` (null;
+  for suites). Reviewed (nothing medium or higher); `tests/run-all.sh` passed on both machines.
