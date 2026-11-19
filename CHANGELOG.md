@@ -13,6 +13,12 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.22: the popups' places — `popup.network.connections`, `append`: an element in the network
+  popup under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list, its
+  context `{ wifiEnabled, wifiConnected, ethernetConnected }`; `popup.notifications`,
+  `prepend`: an element in the notifications popup under its header, above the list, its
+  context `{ count }`. The slots `network.popup.sections` and `notifications.popup.top` are
+  read as them (listed in the module's `deprecations`), where they showed before.
 - 1.21: the first place — `settings.general`, `append`: an element at the end of Settings →
   Behaviour → General, its context `{ editIndex }` (the profile being edited). The slot
   `settings.general.bottom` is read as it (listed in the module's `deprecations`), where it

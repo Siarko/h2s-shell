@@ -111,7 +111,7 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.21", "Api.version");
+        assertEqual(Api.version, "1.22", "Api.version");
 
         // --- module test mode (API 1.10): tests/run-modules.sh runs its suites in it ---
         assert(Api.testMode === true && ModuleTestKit.testMode, "Api.testMode: true under the module test runner");

@@ -114,7 +114,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.21 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.22 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
