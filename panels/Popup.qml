@@ -570,11 +570,24 @@ LazyLoader {
                             "notifications": notificationsComponent
                         })
 
+                    // The base of the panel's place, popup.<key> (components/AnchorBlock.qml),
+                    // for the shell's own panels; a module's panel gets "", which stops the walk
+                    // up: views a module builds are no places
+                    function anchorBaseOf(contentType) {
+                        if (_componentMap[contentType])
+                            return "popup." + contentType;
+                        return WidgetRegistry.popupModule(contentType) === "" && WidgetRegistry.popupPanelUrl(contentType) !== ""
+                            ? "popup." + contentType : "";
+                    }
+
                     function loadContent() {
                         const wired = _componentMap[popupLoader.contentType];
-                        // Clear both, since the loader is switched between the two kinds
+                        // Clear both, since the loader is switched between the two kinds; the
+                        // base set between, so the panel going never sees the new one and the
+                        // panel coming never the old
                         contentLoader.sourceComponent = null;
                         contentLoader.source = "";
+                        contentLoader.anchorBase = anchorBaseOf(popupLoader.contentType);
                         if (wired) {
                             contentLoader.sourceComponent = wired;
                         } else {
@@ -590,6 +603,8 @@ LazyLoader {
                     // further than the content while it shrinks
                     Loader {
                         id: contentLoader
+                        // Its panel's root takes its place's base from here (loadContent)
+                        property string anchorBase: ""
                         anchors.horizontalCenter: popupLoader._vertical ? undefined : parent.horizontalCenter
                         anchors.verticalCenter: popupLoader._vertical ? parent.verticalCenter : undefined
                         anchors.top: popup.edge === "top" ? parent.top : undefined

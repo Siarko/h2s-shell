@@ -11,41 +11,45 @@ import qs.singletons.network
 // .qml) by "<provider>:<entry>" — a provider's row adds what needs the user (its attention,
 // with the action's button), its status line, the kill switch's note (while it is up or
 // coming up), and the provider's extras (slot network.vpn.row). A NetworkManager VPN's row
-// is only the row.
-Column {
+// is only the row. A popup section block named "vpn", each VPN's row a row block ("row"):
+// named, not places yet (ModuleRules.anchorTable).
+PopupSection {
     id: root
 
+    anchor: "vpn"
     visible: VpnManager.vpns.length > 0
     spacing: 4
+    divider: true
 
-    RowLayout {
-        width: parent.width
-        spacing: 8
+    header: Component {
+        RowLayout {
+            spacing: 8
 
-        Text {
-            text: VpnManager.activeGlyph
-            textFormat: Text.PlainText
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeTitle
-            color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
-        }
+            Text {
+                text: VpnManager.activeGlyph
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeTitle
+                color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
+            }
 
-        Text {
-            text: "VPN"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSection
-            color: Theme.textPrimary
-            Layout.fillWidth: true
-        }
+            Text {
+                text: "VPN"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSection
+                color: Theme.textPrimary
+                Layout.fillWidth: true
+            }
 
-        Text {
-            text: VpnManager.activeVpns.length > 0 ? VpnManager.activeVpns.map(vpn => vpn.name).join(", ") : "Off"
-            textFormat: Text.PlainText
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
-            elide: Text.ElideRight
-            Layout.maximumWidth: 120
+            Text {
+                text: VpnManager.activeVpns.length > 0 ? VpnManager.activeVpns.map(vpn => vpn.name).join(", ") : "Off"
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: VpnManager.activeVpns.length > 0 ? Theme.accent : Theme.textDisabled
+                elide: Text.ElideRight
+                Layout.maximumWidth: 120
+            }
         }
     }
 
@@ -59,7 +63,7 @@ Column {
             values: VpnManager.vpns
         }
 
-        delegate: Column {
+        delegate: PopupRow {
             id: _vpn
             required property var modelData
             required property int index
@@ -70,6 +74,7 @@ Column {
             readonly property var attention: VpnManager.attentionOf(modelData)
             readonly property string lockdownNote: VpnLockdown.noteFor(modelData)
 
+            anchor: "row"
             width: root.width
             spacing: 2
 
@@ -199,12 +204,5 @@ Column {
                 vpn: _vpn.modelData
             }
         }
-    }
-
-    Rectangle {
-        width: parent.width
-        height: 1
-        color: Theme.textDisabled
-        opacity: 0.3
     }
 }

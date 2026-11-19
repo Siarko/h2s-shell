@@ -144,13 +144,20 @@ Singleton {
     readonly property var anchorTable: [
         { path: "settings.general", kind: "page", placements: ["append"], takes: "", marks: false,
           context: "{ editIndex: the profile being edited (for SettingEditor) }", scope: "", since: "1.21",
-          where: "Settings → Behaviour → General, at the end of the page", view: "panels/settings/GeneralSettings.qml" }
+          where: "Settings → Behaviour → General, at the end of the page", view: "panels/settings/GeneralSettings.qml" },
+        { path: "popup.network.connections", kind: "popupSection", placements: ["append"], takes: "", marks: false,
+          context: "{ wifiEnabled: bool, wifiConnected: bool, ethernetConnected: bool }", scope: "", since: "1.22",
+          where: "the network popup, under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list",
+          view: "panels/NetworkPanel.qml" },
+        { path: "popup.notifications", kind: "popupSection", placements: ["prepend"], takes: "", marks: false,
+          context: "{ count: the number of notifications in the list }", scope: "", since: "1.22",
+          where: "the notifications popup, under its header, above the list", view: "panels/NotificationPanel.qml" }
     ]
 
     // The kinds a view's root is: the one block with no name that is addressable, at the
-    // base its window or popup gives it (settings.general). Any other block with no name adds
-    // no level and is not addressable.
-    readonly property var anchorRootKinds: ["page"]
+    // base its window or popup gives it (settings.general, popup.notifications). Any other
+    // block with no name adds no level and is not addressable.
+    readonly property var anchorRootKinds: ["page", "popupSection"]
     // The block each kind is, as a view's file names it (slotAliasProblems)
     readonly property var anchorKindTypes: ({ page: ["SettingsPage"], section: ["SettingsSection"], card: ["SettingsCard"],
                                               row: ["SettingsRow", "PopupRow"], popupSection: ["PopupSection"], region: ["SettingsCard"] })

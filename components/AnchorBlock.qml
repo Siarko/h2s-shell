@@ -1,17 +1,17 @@
 import QtQuick
 import qs.singletons
 
-// The base of the shared blocks views are built from (SettingsPage, and the section, card,
-// row and popup section to come): a place modules can address. A view's author writes only
-// `anchor` — what the block holds ("saved", "vpns"), never where it stands — and the block's
-// path follows from where it stands (ModuleRules.anchorBlockPaths): the nearest enclosing
-// block's path plus its own name, found by walking up `parent` — a binding, so a block moved
-// under another parent has the new path. The view's root takes the base its window or popup
-// gives: the first item up the parents with a string `anchorBase` ("settings.general",
-// "popup.network"). A block with no anchor adds no level and is addressable only as the
-// view's root — a block of a root kind (ModuleRules.anchorRootKinds: a SettingsPage) right
-// at the base; a section with no anchor straight under a plain item is not. Never on the
-// lock screen (tests/lock-closure.sh).
+// The base of the shared blocks views are built from (SettingsPage, PopupSection, PopupRow,
+// and the section, card and settings row to come): a place modules can address. A view's
+// author writes only `anchor` — what the block holds ("saved", "vpns"), never where it
+// stands — and the block's path follows from where it stands (ModuleRules.anchorBlockPaths):
+// the nearest enclosing block's path plus its own name, found by walking up `parent` — a
+// binding, so a block moved under another parent has the new path. The view's root takes the
+// base its window or popup gives: the first item up the parents with a string `anchorBase`
+// ("settings.general", "popup.network"). A block with no anchor adds no level and is
+// addressable only as the view's root — a block of a root kind (ModuleRules.anchorRootKinds:
+// a SettingsPage, a PopupSection) right at the base; a section with no anchor straight under
+// a plain item is not. Never on the lock screen (tests/lock-closure.sh).
 //
 // On a place whose row's scope is "own-provider" (a VPN provider's card or row), a host shows
 // only the elements of the module `scopeId` names — the provider's module, which the view

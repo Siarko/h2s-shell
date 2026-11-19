@@ -17,59 +17,65 @@ Item {
     // triggers the success animation, then closes the popup, once the list is empty
     property bool clearing: false
 
-    ColumnLayout {
+    // A popup section block, the panel's root place popup.notifications: modules' elements
+    // under its header, above the list, given how many notifications it holds
+    // (ModuleRules.anchorTable)
+    PopupSection {
         anchors.fill: parent
         spacing: 8
+        inset: 8
+        fillHeight: true
+        context: ({ count: notificationList.count })
 
-        // Header
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 8
+        header: Component {
+            Item {
+                implicitHeight: _header.implicitHeight
 
-            Text {
-                text: "Notifications"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSection
-                font.bold: true
-                color: Theme.textPrimary
-                Layout.fillWidth: true
-            }
+                RowLayout {
+                    id: _header
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        leftMargin: 8
+                        rightMargin: 8
+                    }
 
-            Text {
-                text: "Clear all"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.textSecondary
-                visible: notificationList.count > 0
+                    Text {
+                        text: "Notifications"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSection
+                        font.bold: true
+                        color: Theme.textPrimary
+                        Layout.fillWidth: true
+                    }
 
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (notificationList.count > 0) {
-                            root.clearing = true;
-                            Notifications.dismissAll();
+                    Text {
+                        text: "Clear all"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBodyLarge
+                        color: Theme.textSecondary
+                        visible: notificationList.count > 0
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (notificationList.count > 0) {
+                                    root.clearing = true;
+                                    Notifications.dismissAll();
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Modules' content above the list (slot notifications.popup.top, ModuleRules.slotTable)
-        ModuleSlot {
-            Layout.fillWidth: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 8
-            name: "notifications.popup.top"
-            context: ({ count: notificationList.count })
-        }
-
         // Notification list
         ListView {
             id: notificationList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            width: parent.width
+            height: parent.height
             clip: true
             spacing: 6
             model: Notifications.notifications

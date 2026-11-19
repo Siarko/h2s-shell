@@ -3,7 +3,11 @@
     "name": "Anchors fixture popups",
     "version": "1.0.0",
     "api": "1.21",
-    "description": "Puts an element in the shell's network and notifications popups through their old slots",
+    "description": "Puts an element in the shell's network and notifications popups at their places, and one through each old slot there, read as that place",
+    "anchors": [
+        { "at": "popup.network.connections", "place": "append", "component": "Element.qml" },
+        { "at": "popup.notifications", "place": "prepend", "component": "Element.qml" }
+    ],
     "slots": [
         { "slot": "network.popup.sections", "component": "Slot.qml" },
         { "slot": "notifications.popup.top", "component": "Slot.qml" }

@@ -37,8 +37,15 @@ import qs.singletons.network
 //
 // The network and notifications popups as the popup's content loader holds them: where
 // their parts stand, with no module and with a fixture module's elements
-// (tests/fixtures/modules/anchors-popups) — the network popup in a network state the suite
-// holds (an Ethernet link up, Wi-Fi on and joined to nothing, a stand-in provider's two VPNs).
+// (tests/fixtures/modules/anchors-popups) at popup.network.connections, append, and
+// popup.notifications, prepend, and through the old slots read as them — the network popup
+// in a network state the suite holds (an Ethernet link up, Wi-Fi on and joined to nothing, a
+// stand-in provider's two VPNs); their blocks live against the table (the panel's root and
+// the VPN part named, not published), the elements' context, a change of it passed once.
+// Then the popups as the bar opens them (panels/Popup.qml): opened, moved to the other panel,
+// closed, five times; opened and closed at once, closed while the content is being made,
+// moved twice before it is made, a hover close called off — nothing left live, no element
+// failed.
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -163,6 +170,7 @@ TestCase {
     function _end() {
         _pinNetwork(false);
         _fakeVpn?.destroy();
+        _dropPopup();
         for (const view of _views)
             view?.destroy();
         _views = [];
@@ -645,6 +653,59 @@ TestCase {
         return [["text Notifications", 0, 8]].concat(withModules ? [["modules", 8, 8]] : [], [["list", 8, 0]]);
     }
 
+    // The popup places live under `prefix` against the table: each of its rows live, and
+    // every live path not in it among those named, not published
+    readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "popup.network.connections.vpn.row"]
+    function _popupLiveProblems(prefix) {
+        const problems = [];
+        const live = Object.keys(Anchors.live).filter(path => path === prefix || path.startsWith(prefix + "."));
+        for (const row of ModuleRules.anchorTable.filter(row => row.path === prefix || row.path.startsWith(prefix + "."))) {
+            if (!live.includes(row.path))
+                problems.push(row.path + " is in the table but not live");
+        }
+        for (const path of live) {
+            if (!ModuleRules.anchorRow(ModuleRules.anchorTable, path) && !_namedNotPublished.includes(path))
+                problems.push(path + " is live but neither in the table nor named, not published");
+        }
+        return problems;
+    }
+
+    // The suite's bar (two cells) and a popup on its screen, as the bar opens it
+    property var _popupBar: null
+    property var _realPopup: null
+    property var _popupCellA: null
+    property var _popupCellB: null
+    property int _popupCycles: 0
+
+    function _makePopup() {
+        _popupBar = Qt.createQmlObject("import QtQuick; import Quickshell; import Quickshell.Wayland; PanelWindow {"
+            + " anchors { top: true; left: true } implicitWidth: 300; implicitHeight: 40; color: \"transparent\";"
+            + " exclusionMode: ExclusionMode.Ignore; WlrLayershell.layer: WlrLayer.Overlay; WlrLayershell.namespace: \"h2s-tests\";"
+            + " WlrLayershell.keyboardFocus: WlrKeyboardFocus.None; property alias cellA: cellA; property alias cellB: cellB;"
+            + " Row { Item { id: cellA; width: 100; height: 40 } Item { id: cellB; width: 100; height: 40 } } }", suite);
+        _popupCellA = _popupBar.cellA;
+        _popupCellB = _popupBar.cellB;
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/Popup.qml"), Component.PreferSynchronous);
+        _realPopup = component.createObject(suite, { popupPosition: 0, popupLength: 0, barScreen: _popupBar.screen ?? Quickshell.screens[0], barEdge: "top" });
+        if (!_realPopup)
+            fail("the popup can be made (" + component.errorString() + ")");
+    }
+
+    function _dropPopup() {
+        _realPopup?.destroy();
+        _popupBar?.destroy();
+        _realPopup = _popupBar = _popupCellA = _popupCellB = null;
+    }
+
+    function _popupShown() {
+        return _realPopup?.active === true && _realPopup.item?.showPopup === true && !_realPopup.closing;
+    }
+
+    // The block at `path` in the suite's popup, or null
+    function _inPopup(path) {
+        return _realPopup?.item ? _blockAt(_realPopup.item.contentItem, path) : null;
+    }
+
     function _open(base) {
         const view = _viewComponent.createObject(suite, { base: base ?? "settings.fixture" });
         _views.push(view);
@@ -729,17 +790,22 @@ TestCase {
             _slotGrep.running = true;
         }, 80000);
         _then("the slot guard has read the shell's files", () => _slotUses !== null, () => {
-            assertEqual(JSON.stringify(_slotUses["network.popup.sections"]) + " " + JSON.stringify(_slotUses["network.vpn.row"]),
-                        "[\"panels/NetworkPanel.qml\"] [\"singletons/network/VpnManager.qml\"]",
-                        "the slot guard finds what still builds a slot (not comments, not the rules, not the tests)");
+            assertEqual(JSON.stringify(_slotUses["network.popup.sections"] ?? null) + " " + JSON.stringify(_slotUses["network.vpn.row"]),
+                        "null [\"singletons/network/VpnManager.qml\"]",
+                        "the slot guard finds what still builds a slot (not comments, not the rules, not the tests): the VPN row's, not the popup's any more");
             assertEqual(ModuleRules.slotAliasProblems(ModuleRules.anchorTable, ModuleRules.slotAliases, _slotUses, _viewTextsOf(ModuleRules.anchorTable)).join("; "), "",
                         "every slot read as its anchor in this shell's table: no longer built as a slot, its view builds the block and gives what the slot gave");
-            const published = [_row("popup.network.connections", "popupSection", ["append"], "{ wifiEnabled }", "", "panels/NetworkPanel.qml")];
+            const published = [_row("popup.network.connections.vpn.row", "row", ["after"], "{ vpnId }", "own-provider", "panels/network/VpnSection.qml")];
             const problems = ModuleRules.slotAliasProblems(published, ModuleRules.slotAliases, _slotUses, _viewTextsOf(published));
-            assert(_has(problems, "network.popup.sections → popup.network.connections: the slot is still built in panels/NetworkPanel.qml"),
+            assert(_has(problems, "network.vpn.row → popup.network.connections.vpn.row: the slot is still built in singletons/network/VpnManager.qml"),
                    "a table publishing a place whose slot is still built: caught — " + problems.join("; "));
-            assert(_has(problems, "builds no PopupSection") && _has(problems, "names no block \"connections\""), "… and its view building no such block");
-            assert(!_has(problems, "gives no"), "… what the slot gave is named there (the slot's own context)");
+            assert(_has(problems, "gives no vpnId") && _has(problems, "gives no otherVpns") && !_has(problems, "gives no vpn "),
+                   "… and what the slot gave and the block does not give (the VPN row names only `vpn`)");
+            assert(!_has(problems, "builds no") && !_has(problems, "names no block"), "… the block is there: a row named \"row\"");
+            const elsewhere = [_row("popup.network.connections", "popupSection", ["append"], "{}", "", "panels/network/LinkInfo.qml")];
+            const elsewhereProblems = ModuleRules.slotAliasProblems(elsewhere, ModuleRules.slotAliases, _slotUses, _viewTextsOf(elsewhere));
+            assert(_has(elsewhereProblems, "builds no PopupSection") && _has(elsewhereProblems, "names no block \"connections\"")
+                   && _has(elsewhereProblems, "gives no wifiEnabled"), "a row naming a view that builds no such block: caught — " + elsewhereProblems.join("; "));
             const missing = [_row("popup.network.connections", "popupSection", ["append"], "{}", "", "panels/NoSuchView.qml")];
             assert(_has(ModuleRules.slotAliasProblems(missing, ModuleRules.slotAliases, {}, _viewTextsOf(missing)), "panels/NoSuchView.qml cannot be read"),
                    "… a view that is not there: caught");
@@ -974,9 +1040,9 @@ TestCase {
             const page = _windowPage();
             assertEqual(_names(page.appendHost), "anchors-general:Element,anchors-general:Slot", "the settings window's General page: the module's elements at its end");
             assertEqual(page.appendHost.items[0].item.context.editIndex, _settingsWindow.editIndex, "… given the profile the window edits");
-            const live = Object.keys(Anchors.live).filter(path => path.startsWith("settings.") || path.startsWith("popup.")).sort();
-            assertEqual(live.join(","), ModuleRules.anchorTable.map(row => row.path).sort().join(","),
-                        "every place in the table is live with the shell's views built, and nothing else is (none named, not published)");
+            const live = Object.keys(Anchors.live).filter(path => path.startsWith("settings.")).sort();
+            assertEqual(live.join(","), ModuleRules.anchorTable.map(row => row.path).filter(path => path.startsWith("settings.")).sort().join(","),
+                        "every settings place in the table is live with the settings window built, and nothing else is (none named, not published)");
             _settingsWindow.selectedPage = "calendar";
         });
         const pageCycle = number => {
@@ -1037,21 +1103,60 @@ TestCase {
             console.log("  INFO: the network popup's parts (x y width height): " + _describeParts(parts));
             assertEqual(_partsProblems(parts, _networkExpected(false), panel.width).join("; "), "",
                         "the network popup's parts: the VPN part 4 apart, the rest 6, all as wide as the panel");
+            assertEqual(_live("popup.network"), "popup.network:1,popup.network.connections:1,popup.network.connections.vpn:1,popup.network.connections.vpn.row:2",
+                        "the network popup's blocks: the panel, its connections, the VPN part and a row per VPN");
+            assertEqual(_popupLiveProblems("popup.network").join("; "), "", "… every place of the network popup in the table live, the rest named, not published");
+            const connections = _blockAt(panel, "popup.network.connections");
+            assertEqual(connections.appendHost.count + " " + connections.appendHost.built, "0 false", "… with no module: its end builds nothing");
             Modules.host.load([fixtures + "/anchors-popups"], {});
         });
         _then("a module's elements in the network popup", () => _generalSettled() && _networkPinned()
+              && _ready(_blockAt(_popupView.loader.item, "popup.network.connections")?.appendHost ?? { items: [] }, 2)
               && _popupParts(_popupView.loader.item).length === _networkExpected(true).length, () => {
+            const status = Modules.status("anchors-popups");
+            assertEqual(status?.state + " " + status?.errors.length + " " + status?.warnings.length, "loaded 0 0", "the popups fixture: loaded in the shell's host, clean");
+            assertEqual(status?.deprecations.join("|"),
+                        "slots (\"network.popup.sections\"): use `anchors`: \"popup.network.connections\", \"append\" (goes with the shell's next tightening)|"
+                        + "slots (\"notifications.popup.top\"): use `anchors`: \"popup.notifications\", \"prepend\" (goes with the shell's next tightening)",
+                        "its popup slots: read as the places, listed among the deprecations");
+            assertEqual(Modules.host.slotContributions("network.popup.sections").length + Modules.host.slotContributions("notifications.popup.top").length, 0,
+                        "… no longer slot contributions");
             const panel = _popupView.loader.item;
+            const host = _blockAt(panel, "popup.network.connections").appendHost;
+            assertEqual(_names(host), "anchors-popups:Element,anchors-popups:Slot", "its element at the connections' end, then the one through the old slot");
+            const facts = { wifiEnabled: true, wifiConnected: false, ethernetConnected: true };
+            assertEqual(JSON.stringify(host.items[0].item.context), JSON.stringify(Object.assign({}, facts, { anchor: "popup.network.connections", placement: "append" })),
+                        "the element's context: whether Wi-Fi is on and joined and the cable is, anchor and placement");
+            assertEqual(JSON.stringify(host.items[1].item.context),
+                        JSON.stringify(Object.assign({}, facts, { slot: "network.popup.sections", anchor: "popup.network.connections", placement: "append" })),
+                        "… through the old slot: the same, with the slot's name");
             const parts = _popupParts(panel);
             console.log("  INFO: … with a module's elements: " + _describeParts(parts));
             assertEqual(_partsProblems(parts, _networkExpected(true), panel.width).join("; "), "",
-                        "… with a module's elements: under the Wi-Fi line, above the divider over the list, 6 apart");
+                        "… with a module's elements: under the Wi-Fi line, above the divider over the list, 6 apart (as the slot stood)");
+            // The cable out: the context follows, handed over once
+            const element = host.items[1].item;
+            const changes = element.contextChanges;
+            _pinned = false;
+            NetworkManager.ethernetState = "disconnected";
+            assertEqual(element.context.ethernetConnected + " " + (element.contextChanges - changes), "false 1", "the cable out: the context follows, passed once");
+            _pinned = true;
+            _pin();
+            assertEqual(element.context.ethernetConnected, true, "… back in: so is the context");
             _closePopupView();
             _openPopupView("notifications", "../panels/NotificationPanel.qml", 600);
         });
         _then("the notifications popup is laid out, with the module's elements",
-              () => _popupView.loader.item && _popupParts(_popupView.loader.item).length === _notificationsExpected(true).length, () => {
+              () => _popupView.loader.item && _ready(_blockAt(_popupView.loader.item, "popup.notifications")?.prependHost ?? { items: [] }, 2)
+              && _popupParts(_popupView.loader.item).length === _notificationsExpected(true).length, () => {
             const panel = _popupView.loader.item;
+            const host = _blockAt(panel, "popup.notifications").prependHost;
+            assertEqual(_names(host), "anchors-popups:Element,anchors-popups:Slot", "the notifications popup: the module's element under the header, then the one through the old slot");
+            assertEqual(JSON.stringify(host.items[0].item.context), JSON.stringify({ count: 0, anchor: "popup.notifications", placement: "prepend" }),
+                        "… its context: how many notifications the list holds, anchor and placement");
+            assertEqual(JSON.stringify(host.items[1].item.context), JSON.stringify({ count: 0, slot: "notifications.popup.top", anchor: "popup.notifications", placement: "prepend" }),
+                        "… through the old slot: the same, with the slot's name");
+            assertEqual(_live("popup"), "popup.notifications:1", "… the panel's root is the place popup.notifications, live once; the network popup's gone");
             const parts = _popupParts(panel);
             console.log("  INFO: the notifications popup's parts: " + _describeParts(parts));
             assertEqual(_partsProblems(parts, _notificationsExpected(true), panel.width, 600).join("; "), "",
@@ -1064,6 +1169,80 @@ TestCase {
             assertEqual(_partsProblems(_popupParts(panel), _notificationsExpected(false), panel.width, 600).join("; "), "",
                         "… with no module: the list 8 under the header");
             _closePopupView();
+            _makePopup();
+            Modules.host.load([fixtures + "/anchors-popups"], {});
+        });
+
+        // The popups as the bar opens them (panels/Popup.qml, its content made from
+        // Qt.callLater): opened, moved to the other panel by another cell, closed; over and over;
+        // opened and closed at once, before the content is made; moved before it is made; a
+        // hover close called off by opening again
+        _then("the module is back, the suite's popup made", () => _generalSettled() && Modules.status("anchors-popups")?.state === "loaded", () => {
+            _realPopup.open(_popupCellA, false, "network");
+        });
+        const popupCycle = number => {
+            _then("the network popup open (" + number + ")", () => _popupShown() && _ready(_inPopup("popup.network.connections")?.appendHost ?? { items: [] }, 2), () => {
+                assertEqual(_names(_inPopup("popup.network.connections").appendHost), "anchors-popups:Element,anchors-popups:Slot",
+                            "the network popup on screen: the module's elements at the connections' end (" + number + ")");
+                assertEqual(_popupLiveProblems("popup.network").join("; "), "", "… its places live (" + number + ")");
+                // Another cell's panel while it is open: the popup moves to it
+                _realPopup.open(_popupCellB, false, "notifications", null, number % 2 === 0);
+            });
+            _then("moved to the notifications popup (" + number + ")", () => _popupShown() && _live("popup.network") === ""
+                  && _ready(_inPopup("popup.notifications")?.prependHost ?? { items: [] }, 2), () => {
+                assertEqual(_names(_inPopup("popup.notifications").prependHost), "anchors-popups:Element,anchors-popups:Slot",
+                            "… moved to the notifications popup: its elements under the header, the network popup's blocks gone (" + number + ")");
+                _realPopup.close();
+            });
+            _then("the popup closed (" + number + ")", () => !_realPopup.active && _live("popup") === "", () => {
+                _popupCycles++;
+                _realPopup.open(number % 2 === 0 ? _popupCellA : _popupCellB, false, "network", null, number % 3 === 0);
+            });
+        };
+        for (let i = 1; i <= 5; i++)
+            popupCycle(i);
+        _then("five times opened, moved and closed", () => _popupShown() && _ready(_inPopup("popup.network.connections")?.appendHost ?? { items: [] }, 2), () => {
+            assertEqual(_popupCycles, 5, "the popup opened, moved to the other panel and closed five times, built each time");
+            _realPopup.close();
+        });
+        _then("closed after the cycles", () => !_realPopup.active && _live("popup") === "", () => {
+            // Opened and closed at once, before the content is made (it is made from Qt.callLater)
+            for (let i = 0; i < 5; i++) {
+                _realPopup.open(_popupCellA, false, i % 2 === 0 ? "network" : "notifications");
+                _realPopup.close();
+            }
+            _waitUntil = Date.now() + 400;
+        });
+        _then("popups closed before their content was made leave nothing", () => Date.now() >= _waitUntil && !_realPopup.active && _live("popup") === "", () => {
+            // Opened, then closed on the next turn, while the content may still be being made
+            _realPopup.open(_popupCellA, false, "network");
+            Qt.callLater(() => _realPopup.close());
+            _waitUntil = Date.now() + 400;
+        });
+        _then("a popup closed while its content was being made leaves nothing", () => Date.now() >= _waitUntil && !_realPopup.active && _live("popup") === "", () => {
+            // Moved to another panel and back before either is made
+            _realPopup.open(_popupCellA, false, "network");
+            _realPopup.open(_popupCellB, false, "notifications");
+            _realPopup.open(_popupCellA, false, "network");
+        });
+        _then("the popup moved twice before it was made shows the last panel", () => _popupShown()
+              && _ready(_inPopup("popup.network.connections")?.appendHost ?? { items: [] }, 2), () => {
+            assertEqual(_live("popup.notifications"), "", "… and nothing of the panel it passed through");
+            // A hover close, called off by the pointer coming back: it stays open
+            _realPopup._hoverClose.restart();
+            _realPopup.open(_popupCellA, false, "network");
+            _waitUntil = Date.now() + 300;
+        });
+        _then("a hover close called off", () => Date.now() >= _waitUntil, () => {
+            assert(_realPopup.active && !_realPopup.closing, "a hover close called off by opening again: the popup stays");
+            assertEqual(_inPopup("popup.network.connections")?.appendHost.items.length, 2, "… its elements with it");
+            _realPopup._hoverClose.restart();
+        });
+        _then("a hover close", () => !_realPopup.active && _live("popup") === "", () => {
+            const status = Modules.status("anchors-popups");
+            assertEqual(status?.state + " " + status?.errors.length, "loaded 0", "no element failed meanwhile");
+            _dropPopup();
+            Modules.host.unload();
             _pinNetwork(false);
             _fakeVpn.destroy();
             _fakeVpn = null;

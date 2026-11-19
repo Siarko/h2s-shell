@@ -578,8 +578,11 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
 - **Anchors**: the places in the shell's views where a module puts elements, replacing the
   slots view by view. A view is built from shared blocks on one base,
   `components/AnchorBlock.qml` — so far the settings page, `components/SettingsPage.qml`
-  (it scrolls, keeps the page's margins, draws the heading and a banner, then the content);
-  the section, card, row and popup section follow. A view's author writes only a block's
+  (it scrolls, keeps the page's margins, draws the heading and a banner, then the content),
+  the popup section, `components/PopupSection.qml` (a group in a popup panel: its header
+  line, its content in a column, its closing divider; a panel's root is one too), and the
+  popup row, `components/PopupRow.qml` (one line of a popup, with what goes under it); the
+  settings section, card and row follow. A view's author writes only a block's
   `anchor`, a word for what it holds (`saved`, `vpns`), never where it stands or its title's
   words. The block's path follows from where it stands, found by walking up `parent` (a
   binding: a block moved has the new path):
@@ -589,8 +592,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   own; a block repeated per item is named by its kind (`card`, `row`), its item in the
   element's context; a card's regions `actions` and `settings` last. A block with no anchor
   adds no level and has no path of its own — except the view's root, a block of a root kind
-  (`ModuleRules.anchorRootKinds`: the settings page) right at the base, whose path is the
-  base itself; sections with no anchor straight under a plain item are not the page. Addressable are settings pages and popup content; never the bar, the lock
+  (`ModuleRules.anchorRootKinds`: the settings page, the popup section) right at the base,
+  whose path is the base itself; sections with no anchor straight under a plain item are not
+  the page. Addressable are settings pages and popup content; never the bar, the lock
   screen or the screensaver (the anchor blocks and `AnchorContent` are among the names
   `tests/lock-closure.sh` looks for). The rule is `ModuleRules.anchorPathProblem`. A module
   names a path, a placement and its file in its manifest's `anchors`
@@ -621,15 +625,23 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   the block and names those keys (`ModuleRules.slotAliasProblems`).
   The settings window's page loader gives a core page's root its base, `settings.<page id>`
   (`anchorBase`, set before the page is built, so a page never sees another's base); a
-  module's page gets none. The places offered so far:
+  module's page gets none; the popup gives a panel of the shell's its base the same way,
+  `popup.<key>` (`panels/Popup.qml`, set before the panel is made from `Qt.callLater`), a
+  module's panel none. The places offered so far:
 
   | Path | Placements | Context | Where | Since |
   |---|---|---|---|---|
   | `settings.general` | `append` | `editIndex` (the profile being edited) | Settings → Behaviour → General, at the end of the page (`panels/settings/GeneralSettings.qml`); the slot `settings.general.bottom` is read as it | 1.21 |
+  | `popup.network.connections` | `append` | `wifiEnabled`, `wifiConnected`, `ethernetConnected` | the network popup, under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list (`panels/NetworkPanel.qml`); the slot `network.popup.sections` is read as it | 1.22 |
+  | `popup.notifications` | `prepend` | `count` (the notifications in the list) | the notifications popup, under its header, above the list (`panels/NotificationPanel.qml`); the slot `notifications.popup.top` is read as it | 1.22 |
+
+  Named but not places yet: `popup.network` (the network panel's root), its VPN part
+  `popup.network.connections.vpn` and each VPN's row in it, `….vpn.row` (the VPN slots
+  `network.vpn.row` and `network.vpn.card` stay slots for now).
 
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view, and the shell's
   views against the table: every place in it live once they are built, and where the rows of
-  a converted page stand.
+  a converted page and the parts of a converted popup stand.
 
 Writing a module, from the author's side (everything through `import qs.api`; nothing from
 `qs.singletons` — importing it, or a directory outside the module's own, is an error in its
@@ -649,7 +661,7 @@ are one warning, "imports not checked in N files"):
 //   "settings": [{ "key": "mod.example.greeting", "label": "Greeting", "type": "string", "default": "hi" }],
 //   "facts": [{ "fact": "example.up", "label": "Example up", "type": "bool" }],
 //   "settingsPages": [{ "id": "example", "label": "Example", "component": "Page.qml", "tab": "system" }],
-//   "slots": [{ "slot": "network.popup.sections", "component": "NetworkLine.qml" }]
+//   "anchors": [{ "at": "popup.network.connections", "place": "append", "component": "NetworkLine.qml" }]
 
 // Widget.qml — a bar cell; PopupWidget opens the popup the manifest names
 import QtQuick
@@ -671,7 +683,7 @@ ColumnLayout {
     SettingEditor { key: "mod.example.greeting"; editIndex: parent.editIndex; Layout.fillWidth: true }
 }
 
-// NetworkLine.qml — a slot contribution; `context` as the slot table says
+// NetworkLine.qml — an element at a place; `context` as the anchor table says
 import QtQuick
 import qs.api
 Text { property var module: null; property var context: null

@@ -168,7 +168,7 @@ TestCase {
         assertEqual(JSON.stringify(WidgetPresets.defaults), JSON.stringify(WidgetPresets.coreDefaults), when + ": WidgetPresets.defaults the core's");
         assert(!Object.keys(Profiles.facts).some(fact => fact.startsWith("good.")), when + ": no module fact in Profiles.facts");
         assert(_window.pages === _window.corePages, when + ": the settings window's pages are the core's list");
-        assertEqual(Modules.host.slotContributions("network.popup.sections").length, 0, when + ": no slot contribution");
+        assertEqual(Modules.host.slotContributions("network.vpn.card").length, 0, when + ": no slot contribution");
     }
 
     function runAsync() {
@@ -253,12 +253,12 @@ TestCase {
             _goodState = _main.goodState;
             assert(_goodState.ticking && _goodState.registrations.length === 1, "good's timer runs, its registration is in");
             // Slots
-            const sections = _slot("network.popup.sections", { wifiEnabled: false });
+            const sections = _slot("network.vpn.card", { wifiEnabled: false });
             assertEqual(sections.count, 1, "a slot: good's contribution");
             const built = sections.items[0];
             assert(built?.ready, "… built");
             assertEqual(built?.item.module, handle, "… with its module's handle");
-            assertEqual(built?.item.context.slot + "," + built?.item.context.wifiEnabled, "network.popup.sections,false", "… with the context, slot added");
+            assertEqual(built?.item.context.slot + "," + built?.item.context.wifiEnabled, "network.vpn.card,false", "… with the context, slot added");
             assert(built.implicitHeight > 0, "… with its size (the slot's follows when laid out)");
             const changes = built.item.contextChanges;
             sections.context = { wifiEnabled: false };
@@ -266,17 +266,17 @@ TestCase {
             sections.context = { wifiEnabled: true };
             assertEqual(built.item.contextChanges, changes + 1, "… a changed one: passed");
             assertEqual(built.item.context.wifiEnabled, true, "… and current");
-            const broken = _slot("notifications.popup.top");
+            const broken = _slot("network.vpn.row");
             assertEqual(broken.count, 1, "a contribution that does not compile: counted");
             assert(broken.items.length === 1 && !broken.items[0].ready, "… not shown");
             assertEqual(broken.implicitHeight, 0, "… the slot takes no room for it");
             assertEqual(Modules.status("broken-slot")?.state, "loaded", "… which stays loaded");
             // The VPN seam after the merge: a Component per module for a slot
-            assert(Modules.slotComponent("network.popup.sections", "good") !== null, "slotComponent: good's contribution as a Component");
-            assert(Modules.slotComponent("network.popup.sections", "good") === Modules.slotComponent("network.popup.sections", "good"), "… the same Component while it stays");
-            assertEqual(Modules.slotComponent("network.popup.sections", "broken-slot"), null, "… none for a module without one");
-            assertEqual(Modules.slotUrl("network.popup.sections", "good"), "file://" + fixtures + "/good/GoodSlot.qml", "slotUrl");
-            const wrapped = Modules.slotComponent("network.popup.sections", "good").createObject(suite, { context: { slot: "x", n: 1 } });
+            assert(Modules.slotComponent("network.vpn.card", "good") !== null, "slotComponent: good's contribution as a Component");
+            assert(Modules.slotComponent("network.vpn.card", "good") === Modules.slotComponent("network.vpn.card", "good"), "… the same Component while it stays");
+            assertEqual(Modules.slotComponent("network.vpn.card", "broken-slot"), null, "… none for a module without one");
+            assertEqual(Modules.slotUrl("network.vpn.card", "good"), "file://" + fixtures + "/good/GoodSlot.qml", "slotUrl");
+            const wrapped = Modules.slotComponent("network.vpn.card", "good").createObject(suite, { context: { slot: "x", n: 1 } });
             assert(wrapped?.ready && wrapped.item.context.n === 1 && wrapped.item.module === handle, "… built, with the handle and the context set on it");
             wrapped?.destroy();
             // API 1.2: `shown` passed to a contribution that declares it, following where it sits
@@ -405,9 +405,9 @@ TestCase {
             _goodState.widgetSawMain = null;
             SystemSleep.reportResumed();
             assertEqual(_resumes, 1, "resumed(): not told while the module is off");
-            assert(_has(Modules.status("broken-slot")?.errors, "slot notifications.popup.top"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
-            assertEqual(_slots["network.popup.sections"].count, 0, "its slot contribution gone");
-            assertEqual(_slots["network.popup.sections"].implicitHeight, 0, "… the slot empty again");
+            assert(_has(Modules.status("broken-slot")?.errors, "slot network.vpn.row"), "the contribution that did not compile: recorded in its module's status: " + Modules.status("broken-slot")?.errors.join("; "));
+            assertEqual(_slots["network.vpn.card"].count, 0, "its slot contribution gone");
+            assertEqual(_slots["network.vpn.card"].implicitHeight, 0, "… the slot empty again");
             assert(!_goodState.ticking, "its singleton's timer stopped (it follows module.active)");
             assertEqual(_goodState.registrations.length, 0, "its registration removed with the main");
             assertEqual(handle.setFact("ready", true) !== "", true, "setFact refused while off");
@@ -430,7 +430,7 @@ TestCase {
             assert(main.goodState.ticking, "… its timer running again");
             assertEqual(Profiles.facts["good.ready"], true, "… its fact back");
             assertEqual(WidgetRegistry.entry("good")?.module, "good", "… its widget back");
-            assertEqual(_slots["network.popup.sections"].count, 1, "… its slot contribution back");
+            assertEqual(_slots["network.vpn.card"].count, 1, "… its slot contribution back");
             assert(_window.pages.some(each => each.id === "good"), "… its settings page back");
             Modules.host.unload();
         });

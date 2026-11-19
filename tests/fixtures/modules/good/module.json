@@ -22,7 +22,7 @@
         { "fact": "good.level", "label": "Good fixture level", "type": "percent" }
     ],
     "slots": [
-        { "slot": "network.popup.sections", "component": "GoodSlot.qml" }
+        { "slot": "network.vpn.card", "component": "GoodSlot.qml" }
     ],
     "optionalPrograms": ["pkexec"],
     "testPrograms": "tests/programs",

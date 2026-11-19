@@ -826,7 +826,9 @@ TestCase {
     function _anchors(rules) {
         // --- the table ---
         assertEqual(rules.anchorTable.map(entry => entry.path + " " + entry.kind + " " + entry.placements.join("/") + " " + entry.view).join("; "),
-                    "settings.general page append panels/settings/GeneralSettings.qml", "the anchor table: the views converted so far (1.21: the General page)");
+                    "settings.general page append panels/settings/GeneralSettings.qml; popup.network.connections popupSection append panels/NetworkPanel.qml; "
+                    + "popup.notifications popupSection prepend panels/NotificationPanel.qml",
+                    "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups)");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
         const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
                                                                  context: "{ editIndex }", scope: "", since: "1.20", where: "a page",
@@ -863,6 +865,10 @@ TestCase {
         const paths = (parent, isBase, anchor, kind) => JSON.stringify(rules.anchorBlockPaths(parent, isBase, anchor, kind ?? "section"));
         assertEqual(paths("settings.general", true, "", "page"), JSON.stringify({ path: "settings.general", childPath: "settings.general" }),
                     "a view's root (a page) with no anchor: the base is its path");
+        assertEqual(paths("popup.notifications", true, "", "popupSection"), JSON.stringify({ path: "popup.notifications", childPath: "popup.notifications" }),
+                    "… a popup section with no anchor at the base: the panel's root, the base its path");
+        assertEqual(paths("popup.network.connections", false, "", "popupSection"), JSON.stringify({ path: "", childPath: "popup.network.connections" }),
+                    "… a popup section with no anchor inside a block: not addressable, adds no level");
         assertEqual(paths("settings.general", true, "", "section") + paths("settings.general", true, "", undefined),
                     JSON.stringify({ path: "", childPath: "settings.general" }).repeat(2),
                     "… a section (or a block of no kind) with no anchor right at the base: not addressable, adds no level");
