@@ -46,6 +46,9 @@ TestCase {
     property var _widgetLoader: null
     property int _cycles: 0
     property int _builtBefore: 0
+    // The panel-opener fixture's singleton, and how often the suite's popup said opened()
+    property var _openerState: null
+    property int _openedCount: 0
 
     function _then(description, condition, action, timeoutMs) {
         _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 15000 });
@@ -94,9 +97,9 @@ TestCase {
     }
 
     // The suite's bar: a layer surface in a corner (it moves no windows), the two widgets
-    // built from good's URL as the bar builds them (the handle and the preset set), and a
-    // popup on the same screen
-    function _makeBar() {
+    // built from the URL of a module's widget type (good's unless named) as the bar builds
+    // them (the handle and the preset set), and a popup on the same screen
+    function _makeBar(type) {
         _barWindow = Qt.createQmlObject("import QtQuick; import Quickshell; import Quickshell.Wayland; PanelWindow {"
             + " anchors { top: true; left: true } implicitWidth: 300; implicitHeight: 40; color: \"transparent\";"
             + " exclusionMode: ExclusionMode.Ignore; WlrLayershell.layer: WlrLayer.Overlay; WlrLayershell.namespace: \"h2s-tests\";"
@@ -104,7 +107,7 @@ TestCase {
         const popupComponent = Qt.createComponent(Qt.resolvedUrl("../panels/Popup.qml"), Component.PreferSynchronous);
         _popup = popupComponent.createObject(suite, { popupPosition: 0, popupLength: 0, barScreen: _barWindow.screen ?? Quickshell.screens[0], barEdge: "top" });
         assert(_popup !== null, "the popup can be made (" + popupComponent.errorString() + ")");
-        const url = WidgetRegistry.widgetUrl("good");
+        const url = WidgetRegistry.widgetUrl(type ?? "good");
         const widgetComponent = Qt.createComponent(url, Component.PreferSynchronous);
         const make = preset => {
             const widget = widgetComponent.createObject(_barWindow.row, Modules.initialProperties(url, { preset: preset }));
@@ -115,7 +118,7 @@ TestCase {
         };
         _widgetA = make("Alpha");
         _widgetB = make("Beta");
-        assert(_widgetA !== null && _widgetB !== null, "good's widget built twice (" + widgetComponent.errorString() + ")");
+        assert(_widgetA !== null && _widgetB !== null, (type ?? "good") + "'s widget built twice (" + widgetComponent.errorString() + ")");
         assertEqual(_widgetA.preset + "," + _widgetB.preset, "Alpha,Beta", "… one per preset");
     }
 
@@ -305,6 +308,20 @@ TestCase {
                 handle.main = null;
             } catch (error) {}
             assert(handle.main === _main, "… read-only");
+            // Written as another module could, through Api.module: nothing changes
+            const reached = Api.module("good");
+            try {
+                reached._main = null;
+            } catch (error) {}
+            assert(handle.main === _main, "… nor through a store of the handle's (`_main`)");
+            try {
+                reached.moduleId = "broken-slot";
+            } catch (error) {}
+            assertEqual(handle.moduleId, "good", "its moduleId: read-only");
+            try {
+                reached.host = null;
+            } catch (error) {}
+            assert(handle.host === Modules.host && handle.active, "its host: read-only");
 
             // API 1.15: what a popup panel is given
             _makeBar();
@@ -439,7 +456,41 @@ TestCase {
             const missing = names.filter((name, index) => names.indexOf(name) === index && ModuleRules.idPattern.test(name)
                                           && !ModuleRules.reservedIds.includes(name));
             assertEqual(missing.join(", "), "", "every IPC target, widget type, popup key and settings page id of the core is a reserved id");
+            Modules.host.load([fixtures + "/panel-opener"], {});
         });
+
+        // (API 1.15) A popup panel whose root declares `opener` readonly: never given one —
+        // its status says so — and opened again from another entry by hover, the popup still
+        // moves there, stays open and says opened()
+        _then("panel-opener settles", _settled, () => {
+            const status = Modules.status("panel-opener");
+            assertEqual(status?.state, "loaded", "panel-opener: loaded");
+            assert(_has(status?.warnings, "ReadonlyOpenerPanel.qml: its root declares `readonly property var opener`"),
+                   "… with a warning naming its panel's readonly opener: " + JSON.stringify(status?.warnings));
+            _makeBar("panel-opener");
+            _openerState = _widgetA.openerState;
+            _popup.opened.connect(() => suite._openedCount++);
+            _widgetA.togglePopup(false);
+        });
+        _then("its popup shows, opened from the entry on Alpha",
+              () => _popup?.active === true && _popup.item?.showPopup === true && _openerState.panel !== null && _popup.item.animating === false, () => {
+            assertEqual(_openerState.panel.opener, null, "a readonly opener: not given one at its first build");
+            const before = _openedCount;
+            _widgetB.popupMode = "hover";
+            _widgetB.hover(true);
+            assertEqual(_openedCount, before + 1, "opened again from Beta by hover: opened() said");
+            assertEqual(_popup.popupPosition, _widgetB.mapToItem(null, 0, 0).x, "… the popup moved to Beta's entry");
+            assert(_popup.active && !_popup.closing, "… and stays open");
+            assertEqual(_openerState.panel.opener, null, "… its opener not written (decided as at its first build)");
+            assert(!_has(Modules.status("panel-opener")?.errors, "opener"), "… no error: nothing was tried");
+            _widgetB.popupMode = "click";
+            _widgetB.togglePopup(false);
+        });
+        _then("its popup closes", () => _popup?.active === false && _openerState.panel === null, () => {
+            _dropBar();
+            Modules.host.unload();
+        });
+        _then("panel-opener unloaded", () => Modules.host.statuses.length === 0, () => {});
 
         // The VPN slots (API 1.1): a module's provider (providerId = its id) fills them through
         // its manifest; a provider that is no module's keeps its own. After the VPN provider

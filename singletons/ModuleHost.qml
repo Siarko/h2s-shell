@@ -307,6 +307,16 @@ Scope {
         return ModuleMergeRules.slotContributions(slots, name);
     }
 
+    // The object made from a module's main while it exists (a handle's `main`), or null:
+    // set right after it is created, cleared before it is destroyed. `revision`
+    // (mainsRevision) only makes a binding follow it
+    function mainOf(id, revision) {
+        return _record(id)?.main ?? null;
+    }
+
+    // Counts every change of a module's main object (mainOf)
+    property int mainsRevision: 0
+
     // The object created from a loaded module's main, or null
     function mainObject(id) {
         const record = _record(id);
@@ -332,6 +342,7 @@ Scope {
             console.error("[Modules] the module handle does not load:", component.errorString());
             return null;
         }
+        // Its identity is fixed here, for good (readonly in the handle)
         const made = component.createObject(root, { moduleId: id, host: root });
         if (made)
             _handles.set(id, made);
@@ -684,6 +695,9 @@ Scope {
             const moduleWarning = ModuleFileRules.manifestFiles(record.manifest).includes(name) ? ModuleSourceRules.modulePropertyWarning(name, text) : "";
             if (moduleWarning !== "")
                 record.warnings.push(moduleWarning);
+            const openerWarning = (record.manifest.widgets ?? []).some(widget => widget.popupPanel === name) ? ModuleSourceRules.openerPropertyWarning(name, text) : "";
+            if (openerWarning !== "")
+                record.warnings.push(openerWarning);
             importLines.push(...ModuleSourceRules.importWarnings(name, text, (record.manifest.tests ?? []).includes(name)));
         }
         // Its other QML files, in subdirectories or built by a Loader, for their imports
@@ -998,26 +1012,22 @@ Scope {
         record.component = component;
         record.main = object;
         // module.main: set right after the main is made, before _publish builds its views
-        const owner = handle(record.manifest.id);
-        if (owner)
-            owner._main = object;
+        mainsRevision++;
     }
 
     function _destroyMain(record) {
-        if (record.main) {
-            // module.main cleared before the main goes (only this record's: a duplicate's
-            // record has no main of its own)
-            const owner = _handles.get(record.manifest.id);
-            if (owner && owner._main === record.main)
-                owner._main = null;
+        const main = record.main;
+        // module.main cleared before the main goes
+        record.main = null;
+        record.component = null;
+        if (main) {
+            mainsRevision++;
             try {
-                record.main.destroy();
+                main.destroy();
             } catch (error) {
                 console.error("[Modules] destroying the main of " + record.manifest.id + " threw:", error);
             }
         }
-        record.main = null;
-        record.component = null;
     }
 
     function _publish() {

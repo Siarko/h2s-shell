@@ -269,7 +269,10 @@ import qs.singletons.network
 //                          Component.onCompleted. Two entries of the widget on different
 //                          presets each open it with their own. While the panel stays open
 //                          and is opened again from another entry (by hover), it is given
-//                          the new opener; an unchanged one is not set again
+//                          the new opener; an unchanged one is not set again. Only a
+//                          `property var opener` of the root itself is given it: not a
+//                          readonly one or one of another type (its status warns), nor one
+//                          inherited from a base type
 //   availableHeight        `property real availableHeight` — the most height the panel may
 //                          take before it must scroll (to a gap short of the screen's edge,
 //                          or along a bar at a side); kept current

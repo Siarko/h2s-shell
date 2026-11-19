@@ -961,6 +961,13 @@ TestCase {
         assert(ModuleSourceRules.modulePropertyWarning("W.qml", "Item {\n    property int module\n}\n").includes("only `property var module`"), "modulePropertyWarning: property int module");
         assert(ModuleSourceRules.modulePropertyWarning("W.qml", "Item {\n    readonly property var module: null\n}\n").includes("readonly"), "modulePropertyWarning: readonly");
         assertEqual(ModuleSourceRules.modulePropertyWarning("W.qml", "Item {\n    property var module: null\n    Item { property int module }\n}\n"), "", "modulePropertyWarning: the right spelling (a nested object's is not the root's)");
+        // A popup panel's `opener` the same (API 1.15)
+        assertEqual(ModuleSourceRules.rootProperties("Item {\n    readonly property var opener: null\n    property string opener2\n}\n").join(","), "opener2", "rootProperties: a readonly opener is not one");
+        assertEqual(ModuleSourceRules.rootProperties("Item {\n    property string opener\n}\n").length, 0, "rootProperties: `property string opener` is not one");
+        assertEqual(ModuleSourceRules.rootProperties("Base {\n    property var module\n}\n").join(","), "module", "rootProperties: an inherited opener is not the root's own");
+        assert(ModuleSourceRules.openerPropertyWarning("P.qml", "Item {\n    readonly property var opener: null\n}\n").includes("only `property var opener` is given the widget that opened it"), "openerPropertyWarning: readonly");
+        assert(ModuleSourceRules.openerPropertyWarning("P.qml", "Item {\n    property int opener\n}\n").startsWith("P.qml: its root declares `property int opener`"), "openerPropertyWarning: property int opener");
+        assertEqual(ModuleSourceRules.openerPropertyWarning("P.qml", "Item {\n    property var opener: null\n    property var openers\n}\n"), "", "openerPropertyWarning: the right spelling, another name beginning alike");
 
         // The file check's texts (A1: read in the check's process, never on the GUI thread)
         const texts = ModuleFileRules.fileTexts(["0:{\"a\":", "0:1}", "0\tok", "1:half", "2\tis not a regular file", "3:", "3\tok", "4:x", "4:", "4\tok"]);

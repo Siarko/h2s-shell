@@ -22,9 +22,10 @@ import qs.singletons
 QtObject {
     id: root
 
-    // Set by the host
-    property string moduleId: ""
-    property var host: null
+    // Set by the host when it makes the handle, read-only from then on: a module cannot
+    // turn another's handle into its own
+    readonly property string moduleId: ""
+    readonly property var host: null
 
     // ---- Who it is ---- (moduleId above: its id; QML reserves the name `id`)
     // Its status (Modules.status: state, errors, warnings, …), as `qs ipc call modules list`
@@ -36,9 +37,8 @@ QtObject {
     // for a module without one. Set by the host right after the main is created, so before
     // any of its widgets, popups or pages are built; cleared before the main is destroyed, so
     // views read through it allowing null (`module.main?.client`). Turned on again, it is a
-    // new object.
-    readonly property var main: _main
-    property var _main: null
+    // new object. The host's to set (ModuleHost.mainOf): not writable through the handle.
+    readonly property var main: host ? host.mainOf(moduleId, host.mainsRevision) : null
 
     // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
     // the module is active: re-read what may have changed while it slept, restart what a

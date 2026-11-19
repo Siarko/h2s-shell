@@ -18,7 +18,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   widgets, popups and pages are built, null while it is off, a new object when it is turned
   on again), and a popup panel's `opener` (the bar widget that opened it, frozen
   `{ widgetType, preset, edge, byTouch }`, so two bar entries on different presets each
-  see their own), given when the panel declares it. `availableHeight`, `fitsShownHeight`
+  see their own), given when the panel declares `property var opener` (a readonly one or
+  another type is not, and its status warns). `availableHeight`, `fitsShownHeight`
   and `popupAnimating`, given before without a word, are now part of the API.
 - 1.14: `module.privileged.start`'s `options.environment`, in module test mode only — the
   variables (CommandRunner's shape, read once into a copy) reach the stand-in pkexec and the

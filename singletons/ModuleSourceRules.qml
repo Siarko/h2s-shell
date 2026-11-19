@@ -26,8 +26,9 @@ Singleton {
 
     // The writable properties the root object of a QML file declares directly (not a nested
     // object's; not readonly ones), by name. `module` counts only as `property var module`
-    // (the handle is an object; another type would make the Loader warn and drop it —
-    // modulePropertyWarning says so in the module's status). Never throws.
+    // and `opener` only as `property var opener` (objects; another type would make the Loader
+    // warn and drop them — modulePropertyWarning and openerPropertyWarning say so in the
+    // module's status). Never throws.
     //
     // A pragmatic reader, not a QML parser: it skips comments, strings and template literals,
     // and a regular-expression literal where one can start (after one of ( , = : [ ! & | ? { } ;
@@ -42,22 +43,34 @@ Singleton {
         while ((match = pattern.exec(rootText)) !== null) {
             if (/\breadonly\s+property/.test(match[0]) || names.includes(match[3]))
                 continue;
-            if (match[3] === "module" && match[2] !== "var")
+            if (varOnlyProperties.includes(match[3]) && match[2] !== "var")
                 continue;
             names.push(match[3]);
         }
         return names;
     }
 
+    // The properties the core gives only as `property var <name>`
+    readonly property var varOnlyProperties: ["module", "opener"]
+
     // A warning when a file's root object declares `module` in a way that never gets the
     // handle (readonly, or a type other than var); "" otherwise
     function modulePropertyWarning(file, text) {
-        const pattern = /(?:^|[\s;])((?:required|default|readonly)\s+)*property\s+([A-Za-z_][\w.]*(?:<[\w.]+>)?)\s+module\b/g;
+        return _varPropertyWarning(file, text, "module", "the module's handle");
+    }
+
+    // The same for a popup panel's `opener` (the widget that opened it)
+    function openerPropertyWarning(file, text) {
+        return _varPropertyWarning(file, text, "opener", "the widget that opened it");
+    }
+
+    function _varPropertyWarning(file, text, name, given) {
+        const pattern = new RegExp("(?:^|[\\s;])((?:required|default|readonly)\\s+)*property\\s+([A-Za-z_][\\w.]*(?:<[\\w.]+>)?)\\s+" + name + "\\b", "g");
         const rootText = _rootText(text);
         let match;
         while ((match = pattern.exec(rootText)) !== null) {
             if (/\breadonly\s+property/.test(match[0]) || match[2] !== "var")
-                return file + ": its root declares `" + match[0].trim() + "` — only `property var module` is given the module's handle";
+                return file + ": its root declares `" + match[0].trim() + "` — only `property var " + name + "` is given " + given;
         }
         return "";
     }

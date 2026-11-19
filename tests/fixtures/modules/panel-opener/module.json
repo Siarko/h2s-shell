@@ -1,0 +1,11 @@
+{
+    "id": "panel-opener",
+    "name": "Panel opener fixture",
+    "version": "0.1.0",
+    "api": "1.15",
+    "description": "A popup panel whose root declares `opener` readonly: never given one, a warning in its status, and the popup still opens again from another entry",
+    "widgets": [
+        { "type": "panel-opener", "name": "Panel opener", "widget": "OpenerWidget.qml", "popup": "panel-opener",
+          "popupPanel": "ReadonlyOpenerPanel.qml" }
+    ]
+}

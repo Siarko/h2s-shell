@@ -122,12 +122,12 @@ LazyLoader {
         popupLoader.opener = ModuleRules.popupOpener(contentData, barEdge, byTouch);
         popupLoader.contentType = contentType;
         popupLoader.contentData = contentData;
-        if (samePanel && popupLoader.item)
-            popupLoader.item._passOpener();
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = _vertical ? mapped.y : mapped.x;
         popupLoader.popupLength = _vertical ? element.height : element.width;
         popupLoader.closing = false;
+        if (samePanel && popupLoader.item)
+            popupLoader.item._passOpener();
         // New content in an open popup too (another tray icon's menu): its size settling
         // is the popup's to animate, not the panel animating (_contentResized)
         if (popupLoader.item)
@@ -292,11 +292,23 @@ LazyLoader {
 
         property bool showPopup: false
 
-        // A panel that declares `opener` and stays on screen: the widget that opened it again
+        // A module's panel that stays on screen: the widget that opened it again — when its
+        // root declares `property var opener`, decided as its first build was given it
+        // (Modules.initialProperties: a readonly or inherited one is not). Never throws, so
+        // open() goes on: a value it cannot take is an error in the module's status
         function _passOpener() {
             const item = contentLoader.item;
-            if (item && typeof item.opener !== "undefined" && !ModuleRules.sameOpener(item.opener, popupLoader.opener))
+            const owner = WidgetRegistry.popupModule(popupLoader.contentType);
+            if (!item || owner === "")
+                return;
+            const url = String(contentLoader.source);
+            if (!ModuleRules.has(Modules.initialProperties(url, { opener: null }), "opener") || ModuleRules.sameOpener(item.opener, popupLoader.opener))
+                return;
+            try {
                 item.opener = popupLoader.opener;
+            } catch (error) {
+                Modules.reportError(owner, "its popup panel's `opener` could not be set: " + error);
+            }
         }
         // Deferred so the panel and its Repeaters are created on the main event loop, after
         // this window's incubation — see "The Repeater crash" in docs/ARCHITECTURE.md
