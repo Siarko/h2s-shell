@@ -406,12 +406,16 @@ Singleton {
         return kinds;
     }
 
-    // The last provider failure turned into a notification ({ title, body }), for the tests
+    // The last provider failure turned into a notification ({ title, body, options: what
+    // Notifier.send was given }), for the tests
     property var lastProviderNotice: null
 
+    // A provider's failure texts come from outside the shell (a module, its daemon's error):
+    // sent as plain text, never read as markup, so a provider need not clean them
     function _notify(notice) {
-        lastProviderNotice = notice;
-        Notifier.send(notice.title, { body: notice.body });
+        const options = { body: notice.body, format: "plain" };
+        lastProviderNotice = { title: notice.title, body: notice.body, options: options };
+        Notifier.send(notice.title, options);
     }
 
     function _providerFailed(providerId, entryId, what, reason) {

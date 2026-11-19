@@ -465,7 +465,9 @@ import qs.singletons.network
 //                          and routes, 1.16: Api.vpnsUp's; absent is null, unknown);
 //                          connect(entryId, request),
 //                          disconnect(entryId, request), attend(entryId);
-//                          failed(entryId, what, reason). Its module's elements under its
+//                          failed(entryId, what, reason) — (1.28) the shell sends `what` and
+//                          `reason` as a plain notification (one-line title, the reason's
+//                          line breaks kept, never read as markup). Its module's elements under its
 //                          VPNs' rows and in their cards are the own-provider places
 //                          popup.network.connections.vpn.row and
 //                          settings.network_vpn.vpns.card.settings (1.23; the old slots

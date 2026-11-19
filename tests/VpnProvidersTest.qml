@@ -422,6 +422,12 @@ TestCase {
         VpnManager.connect("vpt:one");
         assert(VpnManager.lastProviderNotice !== null && VpnManager.lastProviderNotice.title === "Connecting One failed"
                && VpnManager.lastProviderNotice.body === "the daemon is not running", "failure: the provider's signal becomes a notification");
+        fake.failNext = "<b>bad</b> & worse\nsecond line";
+        VpnManager.connect("vpt:one");
+        const sent = VpnManager.lastProviderNotice?.options;
+        const shown = Notifier.prepared(VpnManager.lastProviderNotice?.title, sent);
+        assert(sent?.format === "plain" && JSON.stringify(shown.options.body) === JSON.stringify("&lt;b&gt;bad&lt;/b&gt; &amp; worse\nsecond line"),
+               "failure: the provider's texts sent as plain text, its markup shown as written — " + JSON.stringify(shown.options.body));
 
         // Attention: shown, its action dispatched, cleared by the provider
         fake.attentionOnConnect = { reason: "Log in to continue", action: "Log in" };

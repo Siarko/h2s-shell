@@ -15,6 +15,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
 - 1.28: a plain notification's body (`format: "plain"`) keeps its line breaks — CR and CRLF
   become one, at most 20 lines, the last kept one ending in "…"; the summary stays one line.
+  A VPN provider's `failed(entryId, what, reason)` is sent as such a plain notification: a
+  provider need not clean its texts of markup.
 - 1.27: the mark on a card — `module.setMark(path, itemId, label)` and
   `module.clearMark(path, itemId)`: the card of an item shows the module's icon at the end of its
   name's line, closed and open, after the name (cut first), with "<module's name>: <label>" as
@@ -702,6 +704,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - A notification from a module that sends plain text keeps the line breaks of its
   body instead of running every line into one.
+- A VPN's failure notification shows the provider's reason as written: a "<" or "&" in it
+  is no longer read as markup.
 - A module's command run that is cancelled before its answer comes — one refused, or one
   whose program cannot start — is now answered with `cancelled: true`, as any other
   cancelled run is.
