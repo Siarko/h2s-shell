@@ -4,8 +4,10 @@
 # Prints the words it was given on stderr, one per line after "pkexec:", then runs them —
 # unless the program it is handed (the word after the shell's `timeout -k <s> <limit>`) is
 # named "dismiss" (exit 126, as pkexec for a dismissed prompt) or "refuse" (127, not
-# authorised)
+# authorised). Prints PRIVILEGED_FIXTURE from its environment as "pkexec-env:<value>" on stderr
+# (module.privileged.start's options.environment, test mode only).
 for word; do printf 'pkexec:%s\n' "$word" >&2; done
+printf 'pkexec-env:%s\n' "${PRIVILEGED_FIXTURE-}" >&2
 case "${5##*/}" in
     dismiss) exit 126 ;;
     refuse) exit 127 ;;

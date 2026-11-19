@@ -41,7 +41,7 @@ TestCase {
         // --- the options ---
         const good = { what: "Connect", timeoutMs: 30000 };
         assertEqual(JSON.stringify(rules.options(good)), JSON.stringify({ problem: "", what: "Connect", timeoutMs: 30000, notifyFailures: true,
-                                                                        callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
+                                                                        environment: {}, callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } }),
                     "options: what and timeoutMs, notifyFailures true by default");
         for (const given of [undefined, null, "x", [1]])
             assert(rules.options(given).problem !== "", "options: not an object (" + JSON.stringify(given) + ") → a problem");
@@ -52,6 +52,29 @@ TestCase {
         assert(rules.options({ what: "x", timeoutMs: 1000, notifyFailures: "yes" }).problem.startsWith("notifyFailures"), "notifyFailures not a bool → a problem");
         assert(rules.options({ what: "x", timeoutMs: 1000, done: "no" }).problem.startsWith("done"), "done not a function → a problem");
         assertEqual(rules.options({ what: "x", timeoutMs: 1000, notifyFailures: false }).notifyFailures, false, "notifyFailures false");
+        // The environment (1.14): module test mode only, CommandRunner's shape, a plain copy
+        const answersDone = () => {};
+        const environmentGiven = { TS_FAKE_STATE: "running", DROPPED: null };
+        const inTest = rules.options({ what: "x", timeoutMs: 1000, environment: environmentGiven }, true);
+        assert(inTest.problem === "" && JSON.stringify(inTest.environment) === JSON.stringify(environmentGiven) && inTest.environment !== environmentGiven,
+               "environment in test mode: taken, as a copy: " + JSON.stringify(inTest));
+        const outside = rules.options({ what: "x", timeoutMs: 1000, environment: environmentGiven, done: answersDone }, false);
+        assert(outside.problem === "environment is taken in module test mode only" && JSON.stringify(outside.environment) === "{}"
+               && outside.callbacks.done === answersDone, "environment outside test mode: a problem, none kept, done still owed: " + JSON.stringify(outside));
+        assertEqual(rules.options({ what: "x", timeoutMs: 1000, environment: environmentGiven }).problem, "environment is taken in module test mode only",
+                    "environment, test mode not said: refused");
+        assertEqual(rules.options({ what: "x", timeoutMs: 1000, environment: null }, false).problem, "", "environment null outside test mode: as not given");
+        for (const wrong of ["A=1", [1], { "A=B": "x" }, { "": "x" }, { A: 1 }, { A: "a\u0000b" }])
+            assert(rules.options({ what: "x", timeoutMs: 1000, environment: wrong }, true).problem.startsWith("the environment"),
+                   "environment " + JSON.stringify(wrong) + " in test mode → a problem");
+        const flipping = {};
+        let valueReads = 0;
+        Object.defineProperty(flipping, "A", { get() { return ++valueReads === 1 ? "first" : "switched"; }, enumerable: true });
+        const flipped = rules.options({ what: "x", timeoutMs: 1000, environment: flipping }, true);
+        assert(valueReads === 1 && flipped.environment.A === "first", "environment: each value read once, the copy kept: " + JSON.stringify(flipped.environment));
+        const refusedEnvironment = rules.refusal({ argv: ["/usr/bin/true"], options: outside, active: true, locked: false, available: true, unavailableReason: "" });
+        assert(refusedEnvironment.error.startsWith("environment") && refusedEnvironment.blocked === "", "outside test mode the run is refused with an error: " + JSON.stringify(refusedEnvironment));
+
         // Each option read once: a getter cannot pass the check and then hand over another value
         const reads = {};
         const counted = {};

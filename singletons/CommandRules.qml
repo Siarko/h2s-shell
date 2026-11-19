@@ -148,19 +148,11 @@ Singleton {
                 result.keepOutput = read.keepOutput;
         }
         if (has("environment")) {
-            // Copied first (each value read once), then the copy checked and kept
-            let copy = read.environment;
-            try {
-                if (typeof copy === "object" && !Array.isArray(copy))
-                    copy = Object.assign({}, copy);
-            } catch (error) {
-                copy = "unreadable";
-            }
-            const problem = environmentProblem(copy);
-            if (problem !== "")
-                result.problem = problem;
+            const snapshot = environmentSnapshot(read.environment);
+            if (snapshot.problem !== "")
+                result.problem = snapshot.problem;
             else
-                result.environment = copy;
+                result.environment = snapshot.environment;
         }
         for (const name of _callbackNames) {
             if (has(name) && typeof read[name] !== "function")
@@ -169,6 +161,21 @@ Singleton {
         for (const name of _callbackNames)
             result.callbacks[name] = typeof read[name] === "function" && (result.problem === "" || name === "done") ? read[name] : null;
         return result;
+    }
+
+    // An environment as given → { problem, environment }: copied first (each value read
+    // once), then the copy checked (environmentProblem); `environment` is the copy, or {}
+    // when there is a problem
+    function environmentSnapshot(given) {
+        let copy = given;
+        try {
+            if (typeof copy === "object" && copy !== null && !Array.isArray(copy))
+                copy = Object.assign({}, copy);
+        } catch (error) {
+            copy = "unreadable";
+        }
+        const problem = environmentProblem(copy);
+        return { problem: problem, environment: problem === "" && copy !== undefined && copy !== null ? copy : {} };
     }
 
     // "" for { NAME: "value" } — or null as a value, which takes the variable away

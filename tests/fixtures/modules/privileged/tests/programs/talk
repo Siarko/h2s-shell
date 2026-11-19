@@ -4,7 +4,12 @@
 #   talk sleep <seconds>       prints "started", then sleeps (TERM ends it at once)
 #   talk hold <seconds>        prints "started", then sleeps ignoring TERM (as a process run as
 #                              root, which the shell cannot signal: only KILL ends it here)
+#   talk env <name>            prints "<name>=<value>" from its environment ("" when unset)
 case "$1" in
+    env)
+        eval "value=\${$2-}"
+        echo "$2=$value"
+        ;;
     lines)
         i=1
         while [ "$i" -le "$2" ]; do

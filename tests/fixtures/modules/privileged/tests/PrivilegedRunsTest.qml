@@ -193,6 +193,28 @@ TestCase {
             assert(result.ok && result.blocked === "" && words[4] === shell, "it ran through pkexec: " + JSON.stringify(result));
             assertEqual(result.stdout, "sh ran: -c echo hi", "… with its words as given");
         });
+        _then("the queue is idle", () => _idle(), () => _environment());
+    }
+
+    // --- An environment (1.14, test mode only): it reaches the stand-in pkexec and the
+    // command it runs; one of the wrong kind is refused, nothing run ---
+    function _environment() {
+        _runs = {};
+        const talk = _path("talk");
+        _start("environment", [talk, "env", "PRIVILEGED_FIXTURE"], { environment: { PRIVILEGED_FIXTURE: "given here" } });
+        _start("no environment", [talk, "env", "PRIVILEGED_FIXTURE"]);
+        _start("bad environment", [talk, "env", "PRIVILEGED_FIXTURE"], { environment: { "A=B": "x" } });
+        _then("the runs with an environment are answered", () => _done("environment", "no environment", "bad environment"), () => {
+            const given = _runs.environment.result;
+            assert(given.ok && given.stderr.split("\n").includes("pkexec-env:given here"), "the stand-in pkexec has it: " + JSON.stringify(given));
+            assertEqual(given.stdout, "PRIVILEGED_FIXTURE=given here", "… and the command it ran, through the shell's timeout");
+            const none = _runs["no environment"].result;
+            assert(none.ok && none.stderr.split("\n").includes("pkexec-env:") && none.stdout === "PRIVILEGED_FIXTURE=",
+                   "none given: not set: " + JSON.stringify(none));
+            const bad = _runs["bad environment"].result;
+            assert(!bad.ok && bad.error.startsWith("the environment") && _pkexecWords(bad).length === 0 && bad.stdout === "",
+                   "a name with \"=\": an error, nothing run: " + JSON.stringify(bad));
+        });
         _then("the queue is idle", () => _idle(), () => _swapped());
     }
 

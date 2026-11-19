@@ -99,19 +99,22 @@ Singleton {
 
     // ---- What a run is asked with ----
 
-    // → { problem, what (cleaned), timeoutMs, notifyFailures, callbacks }, every field read
-    // once (CommandRules.readOnce): what is checked is what is used. `callbacks`: { onStdout,
-    // onStderr, onLine, done } as read, each a function or null — `done` even when `problem`
-    // is set, as an answer is owed. `problem` is "" when every option given is of its kind
-    // and the two needed ones are there; `what` may still be empty (refusal: "no-purpose")
-    function options(given) {
-        const result = { problem: "", what: "", timeoutMs: 0, notifyFailures: true,
+    // → { problem, what (cleaned), timeoutMs, notifyFailures, environment, callbacks }, every
+    // field read once (CommandRules.readOnce): what is checked is what is used. `callbacks`:
+    // { onStdout, onStderr, onLine, done } as read, each a function or null — `done` even when
+    // `problem` is set, as an answer is owed. `problem` is "" when every option given is of
+    // its kind and the two needed ones are there; `what` may still be empty (refusal:
+    // "no-purpose"). `environment` (API 1.14, CommandRunner's shape, a plain copy) is taken
+    // only in module test mode (`testMode`), for the stand-in pkexec and the command it runs:
+    // outside it a run never takes an environment its module chose, and one given is a problem
+    function options(given, testMode) {
+        const result = { problem: "", what: "", timeoutMs: 0, notifyFailures: true, environment: {},
                          callbacks: { onStdout: null, onStderr: null, onLine: null, done: null } };
         if (given === undefined || given === null || typeof given !== "object" || Array.isArray(given)) {
             result.problem = "the options are not an object (what and timeoutMs are needed)";
             return result;
         }
-        const read = CommandRules.readOnce(given, ["what", "timeoutMs", "notifyFailures"].concat(_callbackNames));
+        const read = CommandRules.readOnce(given, ["what", "timeoutMs", "notifyFailures", "environment"].concat(_callbackNames));
         result.what = cleanWhat(read.what);
         const limit = read.timeoutMs;
         if (typeof limit !== "number" || !isFinite(limit))
@@ -126,6 +129,17 @@ Singleton {
                 result.problem = "notifyFailures is not true or false";
             else
                 result.notifyFailures = notify;
+        }
+        if (read.environment !== undefined && read.environment !== null) {
+            if (testMode !== true) {
+                result.problem = "environment is taken in module test mode only";
+            } else {
+                const snapshot = CommandRules.environmentSnapshot(read.environment);
+                if (snapshot.problem !== "")
+                    result.problem = snapshot.problem;
+                else
+                    result.environment = snapshot.environment;
+            }
         }
         for (const name of _callbackNames) {
             if (read[name] !== undefined && read[name] !== null && typeof read[name] !== "function")

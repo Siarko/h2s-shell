@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.13" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.14" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -369,6 +369,15 @@ import qs.singletons.network
 //                                            "<what> failed" under the module's name
 //                            done(result)    called once, after start() has returned —
 //                                            never while the module is off
+//                            environment     (1.14) TEST MODE ONLY: variables for the
+//                                            stand-in pkexec and the command it runs, as
+//                                            CommandRunner's ({ NAME: "value" }, null
+//                                            takes one away; read once into a copy) — so
+//                                            a module's suites can give each scenario its
+//                                            own stand-in state. Outside module test mode
+//                                            a run given one is refused (`error`), nothing
+//                                            run: a real privileged run never takes an
+//                                            environment its module chose
 //                          result, frozen: { ok (exit 0), code (-1 without one), stdout,
 //                          stderr, dismissed (pkexec's 126: the prompt dismissed or the
 //                          password not accepted — nothing is shown; also a run refused for
@@ -405,8 +414,9 @@ import qs.singletons.network
 //                                            when the run's turn comes — not an executable
 //                                            file
 //                            error           options of the wrong kind, timeoutMs missing or
-//                                            out of range, argv not an array of strings,
-//                                            not available (the reason)
+//                                            out of range, an environment outside test
+//                                            mode, argv not an array of strings, not
+//                                            available (the reason)
 //                          The words pkexec gets: `<pkexec> <timeout> -k 3 <limit> <argv…>`.
 //                          The shell's own `timeout` runs inside pkexec, as root, and ends the
 //                          command at its limit (TERM, KILL 3 s later) even when the shell is

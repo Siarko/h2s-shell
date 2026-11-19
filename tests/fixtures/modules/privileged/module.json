@@ -2,7 +2,7 @@
     "id": "privileged",
     "name": "Privileged fixture",
     "version": "0.1.0",
-    "api": "1.11",
+    "api": "1.14",
     "description": "Runs its stand-ins as administrator through module.privileged, in module test mode (tests/fixtures/modules)",
     "main": "Main.qml",
     "optionalPrograms": ["pkexec", "talk", "sh", "dismiss", "refuse", "absent"],

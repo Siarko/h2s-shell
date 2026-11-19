@@ -105,7 +105,7 @@ Singleton {
     // only; PrivilegedRules.options): the words judged, the words shown and the words
     // handed to pkexec are that one copy.
     function start(handle, argv, options, facts) {
-        const parsed = PrivilegedRules.options(options);
+        const parsed = PrivilegedRules.options(options, facts?.testMode === true);
         const snapshot = CommandRules.argvSnapshot(argv, true);
         const words = snapshot.words;
         const job = {
@@ -146,8 +146,10 @@ Singleton {
         }
         job.argv = PrivilegedRules.pkexecArgv(facts.tools.pkexec, facts.tools.timeout, parsed.timeoutMs, PrivilegedRules.killAfterMs, words);
         job.program = words[0];
-        // In test mode only the module's own stand-in may be the pkexec
+        // In test mode only the module's own stand-in may be the pkexec; the environment a
+        // suite gave (PrivilegedRules.options: test mode only) is the stand-in's
         job.standIns = job.testMode ? [facts.tools.pkexec] : [];
+        job.environment = job.testMode ? parsed.environment : {};
         job.queued = true;
         _jobs.set(job.id, job);
         _dispatch({ type: "add", id: job.id, owner: job.owner });
