@@ -13,6 +13,14 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.23: the VPN places, own-provider (only the elements of the module that is the VPN's
+  provider) — `popup.network.connections.vpn.row`, `after`: an element under the row of each
+  of the provider's VPNs in the network popup; `settings.network_vpn.vpns.card.settings`,
+  `prepend`: an element in the opened card of each of them on Settings → System → Network →
+  VPN, above the card's own rows, built while the card is open. Their context is the VPN's
+  `{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }`. The slots `network.vpn.row` and
+  `network.vpn.card` are read as them (listed in the module's `deprecations`; the card's
+  context still has `open: true`), where they showed before.
 - 1.22: the popups' places — `popup.network.connections`, `append`: an element in the network
   popup under the VPN, Ethernet and Wi-Fi parts, above the divider over the network list, its
   context `{ wifiEnabled, wifiConnected, ethernetConnected }`; `popup.notifications`,

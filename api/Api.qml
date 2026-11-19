@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.22" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.23" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -69,6 +69,20 @@ import qs.singletons.network
 //                                                     { count: the notifications in the list }.
 //                                                     The slot notifications.popup.top is read
 //                                                     as it
+//                            popup.network.connections.vpn.row (1.23)  under the row of each
+//                                                     VPN of the module's provider in the
+//                                                     network popup: after; own-provider;
+//                                                     context { vpnId, entryId, vpn, provider:
+//                                                     the provider object, otherVpnsUp,
+//                                                     otherVpns }. The slot network.vpn.row is
+//                                                     read as it
+//                            settings.network_vpn.vpns.card.settings (1.23)  in the opened card
+//                                                     of each VPN of the module's provider on
+//                                                     Settings → System → Network → VPN, above
+//                                                     the card's own rows, while the card is
+//                                                     open: prepend; own-provider; context as
+//                                                     the row's. The slot network.vpn.card is
+//                                                     read as it (its context adds open: true)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
 //                          (1.19): a module keeps to its own handle — another module is
 //                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose
@@ -361,11 +375,14 @@ import qs.singletons.network
 //                          and routes, 1.16: Api.vpnsUp's; absent is null, unknown);
 //                          connect(entryId, request),
 //                          disconnect(entryId, request), attend(entryId);
-//                          failed(entryId, what, reason). Its three VPN slots
-//                          (network.vpn.row, .card, .page) are manifest `slots`
-//                          contributions like any other (Api.slots). Their context's
-//                          `otherVpns` (1.16): the other VPNs up as Api.vpnsUp's rows,
-//                          beside `otherVpnsUp` (their names).
+//                          failed(entryId, what, reason). Its module's elements under its
+//                          VPNs' rows and in their cards are the own-provider places
+//                          popup.network.connections.vpn.row and
+//                          settings.network_vpn.vpns.card.settings (1.23; the old slots
+//                          network.vpn.row and .card are read as them); its framed page the
+//                          slot network.vpn.page. Their context's `otherVpns` (1.16): the
+//                          other VPNs up as Api.vpnsUp's rows, beside `otherVpnsUp` (their
+//                          names).
 //
 // A module's popup panel (the manifest's `popupPanel`, 1.15): built when its popup opens and
 // destroyed when it closes; it gets its module's handle as `module` (`property var module`)
