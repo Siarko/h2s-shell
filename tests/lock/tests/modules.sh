@@ -63,7 +63,7 @@ check "key-collision: loaded" module_state_is key-collision loaded
 check "key-collision: the core's key refused" grep -q "lockscreen.enabled" <<< "$(module_field key-collision errors)"
 check "bad-manifest: failed" module_state_is bad-manifest failed
 check "bad-manifest-fields: failed" module_state_is bad-manifest-fields failed
-check "forbidden-import: loaded, with a warning" grep -q "qs.singletons" <<< "$(module_field forbidden-import warnings)"
+check "forbidden-import: loaded, the shell's singletons imported an error" grep -q "qs.singletons" <<< "$(module_field forbidden-import errors)"
 check "forbidden-import: loaded" module_state_is forbidden-import loaded
 check "duplicate-id: loaded" module_state_is duplicate-id loaded
 check "duplicate-id-2: reported as a duplicate" module_state_is duplicate-id-2 duplicate
