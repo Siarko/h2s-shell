@@ -1987,3 +1987,12 @@ For the owner, from the autonomous run (2026-11-18 on):
   status lists only the `qs.components` import now. Reviewed, fixed; suites, stand-ins and
   lock bed passed on both machines.
 
+- **The owner's answers, first round (core)** — on `master` 2026-11-19, module API 1.28. Plain
+  notifications keep line breaks in the body (20 lines, 1000 characters); VPN provider failures
+  sent as plain text; the public `SmallButton.defaultSize` (a card passes `m`, a module's own
+  `size` wins); an opened card ends 8 px under its last line; marks removed before any release,
+  replaced by the name-line places `settings.network_wifi.saved.card.title` and
+  `settings.network_ethernet.profiles.card.title` (closed and open, clipped to the line, a
+  quarter of the card, the name cut first). Reviewed (low findings left for the next round);
+  `tests/run-all.sh` passed on both machines.
+
