@@ -749,6 +749,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- With two bar entries of one widget type, a click on the second while the first's popup is
+  open switches the popup to it, as hovering does, instead of closing it; only the entry
+  that opened the popup shows as active.
 - A notification from a module that sends plain text keeps the line breaks of its
   body instead of running every line into one.
 - An opened wired profile's or hotspot's card no longer leaves extra space under its last

@@ -62,6 +62,10 @@ LazyLoader {
     // ModuleRules.popupOpener); null when no bar widget did. Set before the content is
     // switched, so a new panel is built with it.
     property var opener: null
+    // The element that opened it last (a bar cell): of two bar entries of one widget type,
+    // only this one's click closes the popup, the other's switches it there. Typed, so it
+    // reads null once that element is gone.
+    property Item openedBy: null
 
     // A module's panel whose module was turned off: the popup closes (its panel was built
     // from the module's file, which must not stay on screen)
@@ -122,6 +126,7 @@ LazyLoader {
         popupLoader.opener = ModuleRules.popupOpener(contentData, barEdge, byTouch);
         popupLoader.contentType = contentType;
         popupLoader.contentData = contentData;
+        popupLoader.openedBy = element;
         const mapped = element.mapToItem(null, 0, 0);
         popupLoader.popupPosition = _vertical ? mapped.y : mapped.x;
         popupLoader.popupLength = _vertical ? element.height : element.width;

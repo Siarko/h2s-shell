@@ -352,7 +352,21 @@ TestCase {
             const same = _goodState.panel.opener;
             _widgetB.hover(true);
             assert(_goodState.panel.opener === same, "… opened again from the same entry: the object unchanged");
+            assert(_widgetB.popupOpen && !_widgetA.popupOpen, "popupOpen: only the entry that opened it");
             _widgetB.popupMode = "click";
+            // A click on the other entry of the same type switches the popup to it, as hover does
+            _widgetA.togglePopup(false);
+        });
+        _then("a click on the other entry switches the popup to it", () => _goodState.panel?.opener?.preset === "Alpha", () => {
+            assertEqual(_goodState.panelsBuilt, _builtBefore, "… not closed, the panel not built again");
+            assert(_popup.active && !_popup.closing, "… the popup stays open");
+            assert(_widgetA.popupOpen && !_widgetB.popupOpen, "… open from the entry on Alpha now");
+            _widgetB.togglePopup(false);
+        });
+        _then("and back, by a click on the first", () => _goodState.panel?.opener?.preset === "Beta", () => {
+            assertEqual(_goodState.panelsBuilt, _builtBefore, "… still the same panel");
+            assert(_widgetB.popupOpen && !_popup.closing, "… open from Beta");
+            // A click on the entry that opened it closes it
             _widgetB.togglePopup(false);
         });
         _then("the popup closes", _popupGone, () => {

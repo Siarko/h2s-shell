@@ -15,7 +15,8 @@ BarWidget {
     // A setting of the active shell profile, per widget type (writable for tests only)
     property string popupMode: Profiles.value("widgets." + widgetType + ".popupMode") ?? WidgetRegistry.defaultPopupMode
 
-    readonly property bool popupOpen: !!popup?.active && popup?.contentType === popupContent
+    // Open from this entry: another entry of the same widget type showing it does not count
+    readonly property bool popupOpen: !!popup?.active && popup?.contentType === popupContent && popup?.openedBy === root
 
     active: popupOpen
 
@@ -28,11 +29,11 @@ BarWidget {
 
     // Opened by click it stays until clicked again; opened by hover it closes when the
     // pointer leaves the popup. Opened by a tap it stays too, and a tap outside closes it
-    // (Popup, touchOpened).
+    // (Popup, touchOpened). A click on another entry of the same type switches it there.
     function togglePopup(byTouch) {
         if (!popup)
             return;
-        if (popupOpen)
+        if (PointerRules.popupClick(!!popup.active, popup.contentType === popupContent, popup.openedBy === root) === "close")
             popup.close();
         else
             popup.open(root, true, popupContent, _openerData(), byTouch);

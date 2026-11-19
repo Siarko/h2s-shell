@@ -24,4 +24,11 @@ Singleton {
     function tapTogglesPopup(popupMode: string, byTouch: bool): bool {
         return popupMode === "click" || (popupMode === "hover" && byTouch);
     }
+
+    // What a click (or tap) that toggles a popup does: "close" when the popup is open with
+    // this widget's content and this widget opened it, else "open" — from another bar entry
+    // of the same widget type it switches the open popup there, as hovering does.
+    function popupClick(popupActive: bool, sameContent: bool, openedHere: bool): string {
+        return popupActive && sameContent && openedHere ? "close" : "open";
+    }
 }

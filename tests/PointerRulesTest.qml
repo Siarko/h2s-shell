@@ -17,5 +17,12 @@ TestCase {
         assert(PointerRules.tapTogglesPopup("hover", true), "hover mode: a tap does, a finger cannot hover");
         assert(!PointerRules.tapTogglesPopup("none", false), "no popup: a click");
         assert(!PointerRules.tapTogglesPopup("none", true), "no popup: a tap");
+
+        // --- what such a press does ---
+        assertEqual(PointerRules.popupClick(false, false, false), "open", "nothing open: it opens");
+        assertEqual(PointerRules.popupClick(true, true, true), "close", "open from this entry: it closes");
+        assertEqual(PointerRules.popupClick(true, true, false), "open", "open from another entry of the same type: it switches here");
+        assertEqual(PointerRules.popupClick(true, false, false), "open", "another widget's popup open: this one's opens");
+        assertEqual(PointerRules.popupClick(false, true, true), "open", "closed, this entry the last to open it: it opens");
     }
 }
