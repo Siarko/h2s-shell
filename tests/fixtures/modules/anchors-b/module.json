@@ -1,0 +1,11 @@
+{
+    "id": "anchors-b",
+    "name": "Anchors fixture B",
+    "version": "1.0.0",
+    "api": "1.20",
+    "description": "A second module at AnchorsTest's fixture page: elements of several modules in one place, by module id; an own-provider row shows each provider its own",
+    "anchors": [
+        { "at": "settings.fixture", "place": "append", "component": "Element.qml" },
+        { "at": "settings.fixture.vpn", "place": "append", "component": "Element.qml" }
+    ]
+}

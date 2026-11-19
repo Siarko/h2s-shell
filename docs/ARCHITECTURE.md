@@ -588,7 +588,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   the parents with a string `anchorBase`); then the names of the enclosing blocks and its
   own; a block repeated per item is named by its kind (`card`, `row`), its item in the
   element's context; a card's regions `actions` and `settings` last. A block with no anchor
-  adds no level. Addressable are settings pages and popup content; never the bar, the lock
+  adds no level and has no path of its own — except the view's root, a block of a root kind
+  (`ModuleRules.anchorRootKinds`: the settings page) right at the base, whose path is the
+  base itself; sections with no anchor straight under a plain item are not the page. Addressable are settings pages and popup content; never the bar, the lock
   screen or the screensaver (the anchor blocks and `AnchorContent` are among the names
   `tests/lock-closure.sh` looks for). The rule is `ModuleRules.anchorPathProblem`. A module
   names a path, a placement and its file in its manifest's `anchors`
@@ -602,12 +604,21 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   loading. Each placement a kind has is a host, `components/AnchorContent.qml` — the slot's
   machinery: a `Repeater` on a `ScriptModel` keyed by module and file, each element in a
   `ModuleContribution` guard, given `module` and `context` (`{ anchor, placement, …the
-  block's context }`); its list is built only while the module host lists elements for it.
+  block's context }`); its list is built only while the module host lists elements for it,
+  and only on a block of its row's kind that has that placement (`ModuleRules.anchorBlockFits`).
+  A row of scope `own-provider` (the card or row of a VPN provider's item) shows only the
+  elements of the module the block's `scopeId` names — the view sets it on the item's block
+  to the provider's module id, the blocks inside take it; with none the place shows nothing.
   Several modules at one place: by module id, a module's in its manifest's order
   (`ModuleMergeRules.anchorContent`, the one place that orders them). Blocks report
   themselves to `singletons/Anchors.qml` (`live`: path → count), which only the suites read.
   A slot whose view has been converted is read as its anchor (`ModuleRules.slotAliases`: the
-  element's context keeps `slot`) and listed in the module's `deprecations`.
+  element's context keeps `slot`) and listed in the module's `deprecations`; the converted
+  block's `context` must give the keys the slot gave (the alias's `needs`: `wifiEnabled` in
+  the network popup), and the slot's `ModuleSlot` goes. Each table row names the file that
+  builds its block (`view`); `tests/AnchorsTest.qml` checks, for every alias whose place is
+  published, that no file outside the tests still names the slot and that the view builds
+  the block and names those keys (`ModuleRules.slotAliasProblems`).
   `tests/AnchorsTest.qml` checks the blocks and hosts on a fixture view.
 
 Writing a module, from the author's side (everything through `import qs.api`; nothing from

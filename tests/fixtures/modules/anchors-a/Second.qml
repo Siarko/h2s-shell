@@ -1,7 +1,7 @@
 import QtQuick
 import qs.api
 
-// An element at an anchor (tests/AnchorsTest.qml): says where it stands
+// A second element of one module at one place (tests/AnchorsTest.qml): says where it stands
 Text {
     id: element
 
@@ -12,8 +12,8 @@ Text {
     property int contextChanges: 0
     onContextChanged: contextChanges += 1
 
-    objectName: "places-b:Element"
-    text: "beta " + (context?.anchor ?? "?") + " " + (context?.placement ?? "?")
+    objectName: "anchors-a:Second"
+    text: "alpha " + (context?.anchor ?? "?") + " " + (context?.placement ?? "?")
     textFormat: Text.PlainText
     font.family: Api.theme.fontFamily
     font.pixelSize: Api.theme.fontSizeSmall

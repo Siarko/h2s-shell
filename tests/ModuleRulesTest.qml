@@ -828,15 +828,17 @@ TestCase {
         assertEqual(rules.anchorTable.length, 0, "the anchor table: empty until a view is converted");
         assertEqual(rules.anchorTableProblems(rules.anchorTable).join("; "), "", "… and well formed");
         const row = (path, placements, extra) => Object.assign({ path: path, kind: "page", placements: placements, takes: "", marks: false,
-                                                                 context: "{ editIndex }", scope: "", since: "1.20", where: "a page" }, extra ?? {});
+                                                                 context: "{ editIndex }", scope: "", since: "1.20", where: "a page",
+                                                                 view: "panels/settings/GeneralSettings.qml" }, extra ?? {});
         const table = [row("settings.general", ["append"]), row("popup.notifications", ["prepend"], { kind: "popupSection" }),
                        row("settings.fixture.box", ["before", "after", "prepend", "append"], { kind: "section" }),
                        row("settings.network_vpn.vpns.card.settings", ["prepend"], { kind: "region", scope: "own-provider" })];
         assertEqual(rules.anchorTableProblems(table).join("; "), "", "a suite's table, well formed");
         const badTable = rules.anchorTableProblems([row("settings.general", []), row("settings.general", ["inside"]), 5,
-                                                    row("bar.clock", ["append"], { kind: "widget", scope: "mine", since: "1", marks: "no", where: "" })]);
+                                                    row("bar.clock", ["append"], { kind: "widget", scope: "mine", since: "1", marks: "no", where: "", view: "../x.qml" }),
+                                                    row("settings.other", ["append"], { view: undefined })]);
         for (const fragment of ["placements are not", "twice", "not an object", "does not start with", "kind \"widget\"", "scope \"mine\"",
-                                "since \"1\"", "marks is", "where not empty"])
+                                "since \"1\"", "marks is", "where not empty", "view \"../x.qml\" is not a file", "view undefined is not a file"])
             assert(_has(badTable, fragment), "a bad table row: " + fragment);
         assertEqual(rules.anchorTableProblems(null).length, 1, "… not a list: one problem, no throw");
         assertEqual(JSON.stringify(rules.anchorRow(table, "popup.notifications")?.placements), "[\"prepend\"]", "anchorRow: the row of a path");
@@ -857,9 +859,14 @@ TestCase {
             assert(rules.anchorNameProblem(bad) !== "", "not a block's name: " + JSON.stringify(bad));
 
         // --- where a block stands ---
-        const paths = (parent, isBase, anchor) => JSON.stringify(rules.anchorBlockPaths(parent, isBase, anchor));
-        assertEqual(paths("settings.general", true, ""), JSON.stringify({ path: "settings.general", childPath: "settings.general" }),
-                    "a view's root with no anchor: the base is its path");
+        const paths = (parent, isBase, anchor, kind) => JSON.stringify(rules.anchorBlockPaths(parent, isBase, anchor, kind ?? "section"));
+        assertEqual(paths("settings.general", true, "", "page"), JSON.stringify({ path: "settings.general", childPath: "settings.general" }),
+                    "a view's root (a page) with no anchor: the base is its path");
+        assertEqual(paths("settings.general", true, "", "section") + paths("settings.general", true, "", undefined),
+                    JSON.stringify({ path: "", childPath: "settings.general" }).repeat(2),
+                    "… a section (or a block of no kind) with no anchor right at the base: not addressable, adds no level");
+        assertEqual(paths("settings.general.box", false, "", "page"), JSON.stringify({ path: "", childPath: "settings.general.box" }),
+                    "… a page with no anchor inside a block: not the view's root, not addressable");
         assertEqual(paths("settings.general", true, "box"), JSON.stringify({ path: "settings.general.box", childPath: "settings.general.box" }),
                     "… with an anchor: a level under the base");
         assertEqual(paths("settings.general.box", false, "card"), JSON.stringify({ path: "settings.general.box.card", childPath: "settings.general.box.card" }),
@@ -869,8 +876,18 @@ TestCase {
         assertEqual(paths("settings.general.box.card", false, "settings"), JSON.stringify({ path: "", childPath: "" }),
                     "a block named like a region: not addressable, nor anything in it");
         assertEqual(paths("settings.general", false, "Bad name"), JSON.stringify({ path: "", childPath: "" }), "… a name that is not one: the same");
-        assertEqual(paths("", true, "box") + paths(undefined, false, "") + paths("nowhere", true, ""), JSON.stringify({ path: "", childPath: "" }).repeat(3),
+        assertEqual(paths("", true, "box") + paths(undefined, false, "") + paths("nowhere", true, "", "page"), JSON.stringify({ path: "", childPath: "" }).repeat(3),
                     "no base and no enclosing block (or a base that is not a place): nothing addressable");
+
+        // --- which block's host shows a row's elements ---
+        const sectionRow = row("settings.fixture.box", ["before", "append"], { kind: "section" });
+        assert(rules.anchorBlockFits(sectionRow, "section", ["before", "after", "prepend", "append"], "append"),
+               "anchorBlockFits: a block of the row's kind with the placement");
+        assert(!rules.anchorBlockFits(sectionRow, "card", ["before", "append"], "append"), "… not one of another kind");
+        assert(!rules.anchorBlockFits(sectionRow, "section", ["prepend"], "append"), "… not a placement the block has no host for");
+        assert(!rules.anchorBlockFits(sectionRow, "section", ["prepend", "after"], "after"), "… not a placement the row does not take");
+        assert(!rules.anchorBlockFits(null, "section", ["append"], "append") && !rules.anchorBlockFits(sectionRow, undefined, null, "append"),
+               "… no row, no kind, no placements: no (no throw)");
 
         // --- today's slots ---
         assertEqual(rules.slotAliases.map(alias => alias.slot).join(","), rules.slotNames.filter(name => name !== "network.vpn.page").join(","),
@@ -878,11 +895,33 @@ TestCase {
         for (const alias of rules.slotAliases) {
             assert(rules.anchorPathProblem(alias.at) === "" && rules.anchorPlacements.includes(alias.place) && rules.isObject(alias.context),
                    "an alias names a place and a placement: " + alias.slot + " → " + alias.at + ", " + alias.place);
+            const slotContext = rules.slotTable.find(entry => entry.name === alias.slot).context;
+            assert(Array.isArray(alias.needs) && alias.needs.length > 0
+                   && alias.needs.concat(Object.keys(alias.context)).every(key => new RegExp("\\b" + key + "\\b").test(slotContext)),
+                   "… what the block's context must give: keys the slot's context documents — " + alias.slot);
             assert(!/lock|screensaver/.test(alias.at), "… never on the lock screen");
         }
         assertEqual(rules.slotAlias("network.vpn.card")?.at + " " + rules.slotAlias("network.vpn.card")?.place + " " + rules.slotAlias("network.vpn.card")?.context.open,
                     "settings.network_vpn.vpns.card.settings prepend true", "slotAlias: the VPN card's, its context still saying open");
         assertEqual(rules.slotAlias("network.vpn.page") + "," + rules.slotAlias("constructor"), "null,null", "… none for the page or a name that is no slot");
+
+        // --- the guard for slots read as anchors (tests/AnchorsTest.qml runs it on the files) ---
+        const generalRow = [row("settings.general", ["append"])];
+        const converted = "SettingsPage {\n    context: ({ editIndex: root.editIndex })\n}";
+        assertEqual(rules.slotAliasProblems([], rules.slotAliases, { "settings.general.bottom": ["x.qml"] }, {}).join("; "), "",
+                    "slotAliasProblems: an alias whose place is not published is not checked");
+        assertEqual(rules.slotAliasProblems(generalRow, rules.slotAliases, {}, { "panels/settings/GeneralSettings.qml": converted }).join("; "), "",
+                    "… a converted view: no slot left, the page built, editIndex in its context");
+        const still = rules.slotAliasProblems(generalRow, rules.slotAliases, { "settings.general.bottom": ["panels/settings/GeneralSettings.qml"] },
+                                              { "panels/settings/GeneralSettings.qml": "ColumnLayout {\n}" });
+        for (const fragment of ["the slot is still built in panels/settings/GeneralSettings.qml", "builds no SettingsPage",
+                                "gives no editIndex in the block's context"])
+            assert(_has(still, fragment), "… a view not converted: " + fragment + " — " + still.join("; "));
+        const cardRow = [row("settings.network_vpn.vpns.card.settings", ["prepend"], { kind: "region", scope: "own-provider", view: "panels/settings/VpnSettings.qml" })];
+        const cardProblems = rules.slotAliasProblems(cardRow, rules.slotAliases, {}, { "panels/settings/VpnSettings.qml": "SettingsCard {\n    anchor: \"vpns\"\n}" });
+        assert(_has(cardProblems, "names no block \"card\"") && _has(cardProblems, "gives no vpnId"),
+               "… a region: its card named \"card\" in the view, the item's keys given — " + cardProblems.join("; "));
+        assert(_has(rules.slotAliasProblems(cardRow, rules.slotAliases, {}, {}), "cannot be read"), "… a view not read: said so");
 
         // --- the manifest's anchors ---
         const read = (anchors) => {

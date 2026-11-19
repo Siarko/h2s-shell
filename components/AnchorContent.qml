@@ -4,7 +4,9 @@ import qs.singletons
 
 // A block's host for one placement (components/AnchorBlock.qml): the modules' elements at
 // the block's path and `placement`, top to bottom in the one order (ModuleMergeRules.
-// anchorContent: by module id, a module's in its manifest's order).
+// anchorContent: by module id, a module's in its manifest's order) — on an own-provider place
+// only the block's `scopeId` module's; nothing on a block not of its row's kind or without
+// this placement.
 //
 //   AnchorContent { block: root; placement: "append"; Layout.fillWidth: true }
 //
@@ -25,8 +27,13 @@ Item {
 
     readonly property string path: block?.path ?? ""
     readonly property var host: block?.host ?? null
-    // [{ module, at, place, component, context, key }], in the one order
-    readonly property var contributions: host && path !== "" && placement !== "" ? host.anchorContent(path, placement) : []
+    // The provider module an own-provider place shows (the block's)
+    readonly property string scopeId: block?.scopeId ?? ""
+    // [{ module, at, place, component, context, key }], in the one order: none unless the
+    // block is of its row's kind and has this placement (ModuleRules.anchorBlockFits)
+    readonly property var contributions: host && path !== "" && placement !== ""
+        && ModuleRules.anchorBlockFits(ModuleRules.anchorRow(host.anchorTable, path), block.kind, block.placements, placement)
+        ? host.anchorContent(path, placement, scopeId) : []
     readonly property int count: contributions.length
     // The elements built now (ModuleContribution items), and whether the list exists at all —
     // for the core's tests

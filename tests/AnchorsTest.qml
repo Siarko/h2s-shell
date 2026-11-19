@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.api
 import qs.components
@@ -10,13 +11,20 @@ import qs.singletons
 // SettingsPage.qml) on a fixture view, with a host of the suite's own (ModuleHost) and a
 // table of its own: a page (settings.fixture) holding a block with a host at each of the four
 // placements (AnchorFixtureBlock, "box") and one with no anchor. Two fixture modules
-// (tests/fixtures/modules/places-a, places-b) put elements there: each placement in
+// (tests/fixtures/modules/anchors-a, anchors-b) put elements there: each placement in
 // the one order, top to bottom; several modules by module id; the documented context and the
 // module's handle; a place not offered and a placement not taken in the module's status; a
 // module turned off takes its elements, on brings them back, the other module's element
 // stays the same object; a reload builds them anew; a slot read as its anchor; Anchors.live
 // following the blocks; the view opened and closed over and over. Asynchronous; after
 // ModuleRegistriesTest, since both turn modules off through Config.disabledModules.
+//
+// A second fixture view whose root is no page (a plain item at the base holding blocks):
+// sections with no anchor are not addressable (only a page is the view's root), a block of
+// another kind than its row's or without the placement shows nothing, and an own-provider
+// row shows each block only its scope's module. The table set anew is merged anew; a slot
+// read as its anchor is no longer built as a slot (ModuleRules.slotAliasProblems, on the
+// shell's files).
 TestCase {
     id: suite
     suiteName: "Anchors"
@@ -30,7 +38,8 @@ TestCase {
     readonly property var table: [
         _row("settings.fixture", "page", ["prepend", "append"], "{ editIndex }"),
         _row("settings.fixture.box", "section", ["before", "after", "prepend", "append"], "{ boxed }"),
-        _row("settings.general", "page", ["append"], "{ editIndex }")
+        _row("settings.general", "page", ["append"], "{ editIndex }"),
+        _row("settings.fixture.vpn", "row", ["append"], "{ vpnId }", "own-provider")
     ]
 
     property ModuleHost host: ModuleHost {
@@ -46,10 +55,59 @@ TestCase {
     property var _alphaElement: null
     property int _cycles: 0
     property real _waitUntil: 0
+    property var _plain: null
+    property int _liveChanges: 0
+    // What the slot guard read: { slot: [files] }, { file: text }
+    property var _slotUses: null
+    property var _viewTexts: ({})
 
-    function _row(path, kind, placements, context) {
-        return { path: path, kind: kind, placements: placements, takes: "", marks: false, context: context, scope: "", since: "1.20",
-                 where: "AnchorsTest's fixture view" };
+    function _row(path, kind, placements, context, scope, view) {
+        return { path: path, kind: kind, placements: placements, takes: "", marks: false, context: context, scope: scope ?? "", since: "1.20",
+                 where: "AnchorsTest's fixture view", view: view ?? "tests/AnchorsTest.qml" };
+    }
+
+    property Connections _liveWatch: Connections {
+        target: Anchors
+        function onLiveChanged() {
+            suite._liveChanges++;
+        }
+    }
+
+    // The files outside the tests that still name a slot read as an anchor: a quoted slot
+    // name on a line that is not a comment, beside the rules that list them
+    property Process _slotGrep: Process {
+        command: ["sh", "-c", "cd \"$1\" && shift && for slot; do grep -rnF --include=*.qml \"\\\"$slot\\\"\" . | grep -v '^\\./tests/' "
+                  + "| grep -v '^\\./singletons/ModuleRules\\.qml:' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' | cut -d: -f1 | sort -u "
+                  + "| sed \"s|^\\./|$slot\\t|\"; done; echo END",
+                  "sh", Quickshell.shellDir].concat(ModuleRules.slotAliases.map(alias => alias.slot))
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const uses = {};
+                for (const line of text.split("\n")) {
+                    const [slot, file] = line.split("\t");
+                    if (file)
+                        (uses[slot] = uses[slot] ?? []).push(file);
+                }
+                suite._slotUses = text.includes("END") ? uses : {};
+            }
+        }
+    }
+
+    function _viewText(file) {
+        if (!Object.prototype.hasOwnProperty.call(_viewTexts, file)) {
+            const reader = Qt.createQmlObject("import Quickshell.Io; FileView { blockLoading: true; path: " + JSON.stringify(Quickshell.shellDir + "/" + file) + " }", suite);
+            const text = reader.text();
+            reader.destroy();
+            _viewTexts[file] = text === "" ? undefined : text;
+        }
+        return _viewTexts[file];
+    }
+
+    function _viewTextsOf(table) {
+        const texts = {};
+        for (const row of table)
+            texts[row.view] = _viewText(row.view);
+        return texts;
     }
 
     function _then(description, condition, action, timeoutMs) {
@@ -162,6 +220,96 @@ TestCase {
         }
     }
 
+    // The view whose root is no page: blocks straight under a plain item at the base
+    property Component _plainViewComponent: Component {
+        PanelWindow {
+            id: plainWindow
+
+            property alias sections: sections
+            property alias wrongKind: wrongKind
+            property alias fewer: fewer
+            property alias vpnA: vpnA
+            property alias vpnB: vpnB
+            property alias vpnNone: vpnNone
+
+            anchors {
+                top: true
+                right: true
+            }
+            implicitWidth: 400
+            implicitHeight: 700
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-tests"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            Item {
+                property string anchorBase: "settings.fixture"
+                anchors.fill: parent
+
+                Column {
+                    width: parent.width
+
+                    // Three sections with no anchor: none is the page
+                    Repeater {
+                        id: sections
+                        model: 3
+                        AnchorFixtureBlock {
+                            host: suite.host
+                            width: 400
+                        }
+                    }
+
+                    // At the box's path, but a card: its row is a section's
+                    AnchorFixtureBlock {
+                        id: wrongKind
+                        anchor: "box"
+                        kind: "card"
+                        host: suite.host
+                        width: 400
+                    }
+
+                    // At the box's path, with only a prepend host of its own
+                    AnchorFixtureBlock {
+                        id: fewer
+                        anchor: "box"
+                        placements: ["prepend"]
+                        host: suite.host
+                        width: 400
+                    }
+
+                    // Items of two providers, and one of none, on the own-provider row
+                    AnchorFixtureBlock {
+                        id: vpnA
+                        anchor: "vpn"
+                        kind: "row"
+                        scopeId: "anchors-a"
+                        host: suite.host
+                        width: 400
+                    }
+
+                    AnchorFixtureBlock {
+                        id: vpnB
+                        anchor: "vpn"
+                        kind: "row"
+                        scopeId: "anchors-b"
+                        host: suite.host
+                        width: 400
+                    }
+
+                    AnchorFixtureBlock {
+                        id: vpnNone
+                        anchor: "vpn"
+                        kind: "row"
+                        host: suite.host
+                        width: 400
+                    }
+                }
+            }
+        }
+    }
+
     function _open(base) {
         const view = _viewComponent.createObject(suite, { base: base ?? "settings.fixture" });
         _views.push(view);
@@ -187,9 +335,9 @@ TestCase {
         return hostItem.items.length === count && hostItem.items.every(item => item.ready);
     }
 
-    // The elements of view `view` all built (on the page's end, places-b's too while it is on)
+    // The elements of view `view` all built (on the page's end, anchors-b's too while it is on)
     function _allBuilt(view) {
-        const appended = host.status("places-b")?.state === "loaded" ? 3 : 2;
+        const appended = host.status("anchors-b")?.state === "loaded" ? 3 : 2;
         return _ready(view.page.prependHost, 1) && _ready(view.page.appendHost, appended) && _ready(view.box.beforeHost, 1)
             && _ready(view.box.prependHost, 1) && _ready(view.box.appendHost, 1) && _ready(view.box.afterHost, 1);
     }
@@ -233,25 +381,50 @@ TestCase {
             assert(Object.isFrozen(Api.anchors) && Api.anchors.every(row => Object.isFrozen(row) && Object.isFrozen(row.placements)), "… frozen, each row and its placements");
             assertEqual(ModuleRules.anchorTableProblems(table).join("; "), "", "the suite's table is well formed");
 
+            // A block reports itself once, when it is complete
+            _liveChanges = 0;
+            const early = Qt.createQmlObject("import QtQuick; import qs.components; Item { property string anchorBase: \"settings.fixture\"; "
+                                             + "SettingsPage { anchor: \"early\"; AnchorFixtureBlock { anchor: \"inner\" } } }", suite);
+            assertEqual(_live("settings.fixture.early"), "settings.fixture.early:1,settings.fixture.early.inner:1", "blocks built: each reported once");
+            assertEqual(_liveChanges, 2, "… one change each, nothing reported while they were being built");
+            early.destroy();
+
             host.anchorTable = table;
             _view = _open();
+            _slotGrep.running = true;
         }, 80000);
+        _then("the slot guard has read the shell's files", () => _slotUses !== null, () => {
+            assertEqual(JSON.stringify(_slotUses["network.popup.sections"]) + " " + JSON.stringify(_slotUses["network.vpn.row"]),
+                        "[\"panels/NetworkPanel.qml\"] [\"singletons/network/VpnManager.qml\"]",
+                        "the slot guard finds what still builds a slot (not comments, not the rules, not the tests)");
+            assertEqual(ModuleRules.slotAliasProblems(ModuleRules.anchorTable, ModuleRules.slotAliases, _slotUses, _viewTextsOf(ModuleRules.anchorTable)).join("; "), "",
+                        "every slot read as its anchor in this shell's table: no longer built as a slot, its view builds the block and gives what the slot gave");
+            const published = [_row("popup.network.connections", "popupSection", ["append"], "{ wifiEnabled }", "", "panels/NetworkPanel.qml")];
+            const problems = ModuleRules.slotAliasProblems(published, ModuleRules.slotAliases, _slotUses, _viewTextsOf(published));
+            assert(_has(problems, "network.popup.sections → popup.network.connections: the slot is still built in panels/NetworkPanel.qml"),
+                   "a table publishing a place whose slot is still built: caught — " + problems.join("; "));
+            assert(_has(problems, "builds no PopupSection") && _has(problems, "names no block \"connections\""), "… and its view building no such block");
+            assert(!_has(problems, "gives no"), "… what the slot gave is named there (the slot's own context)");
+            const missing = [_row("popup.network.connections", "popupSection", ["append"], "{}", "", "panels/NoSuchView.qml")];
+            assert(_has(ModuleRules.slotAliasProblems(missing, ModuleRules.slotAliases, {}, _viewTextsOf(missing)), "panels/NoSuchView.qml cannot be read"),
+                   "… a view that is not there: caught");
+        });
         _then("the view is up with no module", () => _view.page.flickable.contentHeight > 100, () => {
             assertEqual(_view.page.path + " " + _view.box.path + " " + _view.plain.path, "settings.fixture settings.fixture.box ",
                         "paths: the page takes the base, the box adds its name, a block with no anchor has none");
             assertEqual(_view.box.host, host, "a block's module host: the enclosing block's");
             assertEqual(_live("settings.fixture"), "settings.fixture:1,settings.fixture.box:1", "Anchors.live: the page and the box, once each; not the block with no anchor");
-            assert(table.filter(row => row.path.startsWith("settings.fixture")).every(row => Anchors.live[row.path] > 0),
-                   "every fixture table path the view builds is live");
+            assert(table.filter(row => row.path.startsWith("settings.fixture") && row.path !== "settings.fixture.vpn").every(row => Anchors.live[row.path] > 0),
+                   "every fixture table path the view builds is live (the own-provider row is the view with no page's)");
             const hosts = [_view.page.prependHost, _view.page.appendHost, _view.box.beforeHost, _view.box.afterHost, _view.box.prependHost,
                            _view.box.appendHost, _view.plain.appendHost];
             assertEqual(hosts.map(each => each.count + (each.built ? "b" : "") + each.implicitHeight).join(","), "00,00,00,00,00,00,00",
                         "with no module: no host has a size or builds anything, not even its list");
-            host.load([fixtures + "/places-b", fixtures + "/places-a"], {});
+            host.load([fixtures + "/anchors-b", fixtures + "/anchors-a"], {});
         });
         _then("the fixture modules settle", _settled, () => {
-            const alpha = host.status("places-a");
-            const beta = host.status("places-b");
+            const alpha = host.status("anchors-a");
+            const beta = host.status("anchors-b");
             assertEqual(alpha?.state + " " + beta?.state, "loaded loaded", "both modules loaded");
             assert(_has(alpha?.errors, "anchors: \"settings.nowhere\" is not a place this shell offers (module API " + ModuleRules.apiVersion + ")"),
                    "a place this shell does not offer: an error in the module's status — " + alpha?.errors.join("; "));
@@ -265,21 +438,31 @@ TestCase {
             assertEqual(host.slotContributions("settings.general.bottom").length, 0, "the slot read as an anchor is not a slot contribution any more");
             assertEqual(host.anchorContent("settings.nowhere", "append").length + host.anchorContent("settings.fixture", "before").length, 0,
                         "the host lists nothing for a place not offered or a placement not taken");
+            // The table set anew: the modules' anchors and their errors follow
+            host.anchorTable = table.concat([_row("settings.nowhere", "page", ["append"], "{}")]);
+            assertEqual(host.status("anchors-a")?.errors.length + "," + host.anchorContent("settings.nowhere", "append").length, "1,1",
+                        "a place added to the table: no longer an error, its element listed");
+            host.anchorTable = table;
+            assertEqual(host.status("anchors-a")?.errors.length + "," + host.anchorContent("settings.nowhere", "append").length, "2,0",
+                        "… taken out again: the error back, nothing listed");
+            assertEqual(host.anchorContent("settings.fixture.vpn", "append").length, 0, "an own-provider place with no scope: nothing");
+            assertEqual(host.anchorContent("settings.fixture.vpn", "append", "anchors-b").map(entry => entry.module).join(","), "anchors-b",
+                        "… with one: that module's only");
         });
         _then("every element is built and laid out", () => _inOrder(_view), () => {
             const sequence = _sequence(_view);
             console.log("  INFO: top to bottom: " + sequence.map(entry => entry[0] + " " + Math.round(entry[1])).join(" · "));
-            assertEqual(_names(_view.page.appendHost), "places-a:Element,places-a:Second,places-b:Element",
+            assertEqual(_names(_view.page.appendHost), "anchors-a:Element,anchors-a:Second,anchors-b:Element",
                         "several modules at one place: by module id (loaded beta first), a module's together in its manifest's order");
             assertEqual(_names(_view.page.prependHost) + " " + _names(_view.box.beforeHost) + " " + _names(_view.box.afterHost),
-                        "places-a:Element places-a:Element places-a:Element", "each placement its element");
+                        "anchors-a:Element anchors-a:Element anchors-a:Element", "each placement its element");
             const appended = _view.page.appendHost.items[0].item;
             assertEqual(JSON.stringify(appended.context), JSON.stringify({ editIndex: 2, anchor: "settings.fixture", placement: "append" }),
                         "an element's context: the block's, with anchor and placement");
             assertEqual(JSON.stringify(_view.box.beforeHost.items[0].item.context), JSON.stringify({ boxed: true, anchor: "settings.fixture.box", placement: "before" }),
                         "… the box's own context at its places");
-            assertEqual(appended.module, host.handle("places-a"), "each element gets its own module's handle");
-            assertEqual(_view.page.appendHost.items[2].item.module, host.handle("places-b"), "… the other module's its own");
+            assertEqual(appended.module, host.handle("anchors-a"), "each element gets its own module's handle");
+            assertEqual(_view.page.appendHost.items[2].item.module, host.handle("anchors-b"), "… the other module's its own");
             assert(appended.shown, "… and `shown`: on screen");
             assertEqual(appended.text, "alpha settings.fixture append", "the element shows (plain text)");
             const model = _view.page.appendHost.repeaterModel;
@@ -290,28 +473,28 @@ TestCase {
             _betaElement = _betaItem.item;
             _betaContexts = _betaElement.contextChanges;
             _alphaElement = appended;
-            assert(host.setEnabled("places-a", false), "places-a turned off");
+            assert(host.setEnabled("anchors-a", false), "anchors-a turned off");
         });
-        _then("places-a is off", () => host.status("places-a")?.state === "disabled" && _view.page.appendHost.items.length === 1, () => {
-            assertEqual(_names(_view.page.appendHost), "places-b:Element", "its elements are gone; the other module's stays");
+        _then("anchors-a is off", () => host.status("anchors-a")?.state === "disabled" && _view.page.appendHost.items.length === 1, () => {
+            assertEqual(_names(_view.page.appendHost), "anchors-b:Element", "its elements are gone; the other module's stays");
             assert(_view.page.appendHost.items[0] === _betaItem && _betaItem.item === _betaElement, "… the same object: not rebuilt");
             assertEqual(_betaElement.contextChanges, _betaContexts, "… its context not handed over again");
             const emptied = [_view.page.prependHost, _view.box.beforeHost, _view.box.afterHost, _view.box.prependHost, _view.box.appendHost];
             assertEqual(emptied.map(each => each.count + (each.built ? "b" : "") + each.implicitHeight).join(","), "00,00,00,00,00",
                         "the hosts it alone filled: empty, no size, their lists gone");
-            assert(host.setEnabled("places-a", true), "places-a turned on");
+            assert(host.setEnabled("anchors-a", true), "anchors-a turned on");
         });
-        _then("places-a is on again", () => host.status("places-a")?.state === "loaded" && _inOrder(_view), () => {
-            assertEqual(_names(_view.page.appendHost), "places-a:Element,places-a:Second,places-b:Element", "its elements are back, in the one order");
+        _then("anchors-a is on again", () => host.status("anchors-a")?.state === "loaded" && _inOrder(_view), () => {
+            assertEqual(_names(_view.page.appendHost), "anchors-a:Element,anchors-a:Second,anchors-b:Element", "its elements are back, in the one order");
             assert(_view.page.appendHost.items[2].item === _betaElement, "… the other module's element still the same object");
             _alphaElement = _view.page.appendHost.items[0].item;
-            host.load([fixtures + "/places-a", fixtures + "/places-b"], {});
+            host.load([fixtures + "/anchors-a", fixtures + "/anchors-b"], {});
         });
-        _then("reloaded", () => _settled() && host.status("places-a")?.state === "loaded" && _inOrder(_view)
+        _then("reloaded", () => _settled() && host.status("anchors-a")?.state === "loaded" && _inOrder(_view)
                                 && _view.page.appendHost.items[0].item !== _alphaElement, () => {
-            assertEqual(_names(_view.page.appendHost), "places-a:Element,places-a:Second,places-b:Element", "a reload: the same elements, in the same order");
+            assertEqual(_names(_view.page.appendHost), "anchors-a:Element,anchors-a:Second,anchors-b:Element", "a reload: the same elements, in the same order");
             assert(_view.page.appendHost.items[0].item !== _alphaElement, "… built anew");
-            assert(_view.page.appendHost.items[0].item.module === host.handle("places-a"), "… with the module's handle");
+            assert(_view.page.appendHost.items[0].item.module === host.handle("anchors-a"), "… with the module's handle");
             // A block renamed (or moved) has its new path at once
             _view.box.anchor = "renamed";
             assertEqual(_view.box.path, "settings.fixture.renamed", "a block renamed: its path follows");
@@ -332,7 +515,7 @@ TestCase {
             assertEqual(_live("settings.general"), "settings.general:1,settings.general.box:1",
                         "the General fixture: the page, and its box live but named, not published");
             const slotElement = _views[2].page.appendHost.items[0].item;
-            assertEqual(slotElement?.objectName, "places-a:Element", "a slot read as its anchor: the module's slot file at the place");
+            assertEqual(slotElement?.objectName, "anchors-a:Element", "a slot read as its anchor: the module's slot file at the place");
             assertEqual(JSON.stringify(slotElement?.context), JSON.stringify({ editIndex: 2, slot: "settings.general.bottom", anchor: "settings.general", placement: "append" }),
                         "… its context carrying the slot's name, as the old name promised");
             assertEqual(_views[2].box.beforeHost.count, 0, "… a block whose path is not in the table takes nothing");
@@ -345,6 +528,30 @@ TestCase {
             _view = null;
         });
         _then("the last view closed", () => _live("settings.fixture") === "", () => {
+            _plain = _plainViewComponent.createObject(suite);
+            _views.push(_plain);
+        });
+        _then("the view with no page is built", () => _ready(_plain.vpnA.appendHost, 1) && _ready(_plain.vpnB.appendHost, 1)
+                                                       && _ready(_plain.fewer.prependHost, 1), () => {
+            assertEqual(_live("settings.fixture"), "settings.fixture.box:2,settings.fixture.vpn:3",
+                        "sections with no anchor straight under a plain item: not addressable, not the page");
+            const empty = hostItem => hostItem.count + (hostItem.built ? "b" : "");
+            const sections = [0, 1, 2].map(index => _plain.sections.itemAt(index));
+            assertEqual(sections.map(section => [section.path, empty(section.prependHost), empty(section.appendHost)].join("/")).join(" "),
+                        "/0/0 /0/0 /0/0", "… none builds the page's elements");
+            const wrong = _plain.wrongKind;
+            assertEqual([wrong.beforeHost, wrong.prependHost, wrong.appendHost, wrong.afterHost].map(empty).join(","), "0,0,0,0",
+                        "a block of another kind than its row's: shows nothing");
+            const fewer = _plain.fewer;
+            assertEqual([fewer.beforeHost, fewer.prependHost, fewer.appendHost, fewer.afterHost].map(empty).join(","), "0,1b,0,0",
+                        "a block shows only the placements it has");
+            assertEqual(_names(_plain.vpnA.appendHost) + " " + _names(_plain.vpnB.appendHost) + " " + empty(_plain.vpnNone.appendHost),
+                        "anchors-a:Element anchors-b:Element 0", "an own-provider row: each item only its provider module's element, none with no provider");
+            assertEqual(_plain.vpnA.appendHost.items[0].item.context.anchor, "settings.fixture.vpn", "… at the row's path");
+            _close(_plain);
+            _plain = null;
+        });
+        _then("the view with no page closed", () => _live("settings.fixture") === "", () => {
             _view = _open();
         });
 
@@ -356,11 +563,11 @@ TestCase {
                 _close(_view);
                 _view = null;
                 if (_cycles === 5)
-                    host.setEnabled("places-b", false);
+                    host.setEnabled("anchors-b", false);
                 if (_cycles === 7)
-                    host.setEnabled("places-b", true);
+                    host.setEnabled("anchors-b", true);
             });
-            _then("… opened again", () => host.status("places-b")?.state === (number >= 5 && number < 7 ? "disabled" : "loaded"), () => {
+            _then("… opened again", () => host.status("anchors-b")?.state === (number >= 5 && number < 7 ? "disabled" : "loaded"), () => {
                 _view = _open();
             });
         };
@@ -376,7 +583,7 @@ TestCase {
             _waitUntil = Date.now() + 300;
         });
         _then("views closed before they were built leave nothing live", () => Date.now() >= _waitUntil && _live("settings.fixture") === "", () => {
-            assertEqual(host.status("places-a")?.errors.length, 2, "no element failed meanwhile (the module's errors are its two anchors)");
+            assertEqual(host.status("anchors-a")?.errors.length, 2, "no element failed meanwhile (the module's errors are its two anchors)");
         });
         _clock.start();
     }

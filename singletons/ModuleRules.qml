@@ -124,7 +124,7 @@ Singleton {
     readonly property int maxAnchorPathLength: 200
 
     // The anchors this shell offers: { path, kind, placements, takes, marks, context, scope,
-    // since, where } —
+    // since, where, view } —
     //   kind        one of anchorKinds
     //   placements  the placements published for the path (a block can take more; one is
     //               published when a module needs it)
@@ -133,23 +133,43 @@ Singleton {
     //   marks       a card that shows a module's mark while closed
     //   context     what an element's `context` holds besides { anchor, placement }
     //   scope       "" — every module's elements; "own-provider" — on an item of a VPN
-    //               provider, only the elements of the module that is that provider
+    //               provider, only the elements of the module that is that provider (the
+    //               block's scopeId, components/AnchorBlock.qml; none without one)
     //   since       the API version that published it
     //   where       where it shows, for people
+    //   view        the file that builds the block, from the shell's directory
+    //               ("panels/NetworkPanel.qml"): what tests/AnchorsTest.qml reads to check that
+    //               a slot read as this place is no longer built as a slot there
     // Api.anchors is its frozen copy.
     readonly property var anchorTable: []
+
+    // The kinds a view's root is: the one block with no name that is addressable, at the
+    // base its window or popup gives it (settings.general). Any other block with no name adds
+    // no level and is not addressable.
+    readonly property var anchorRootKinds: ["page"]
+    // The block each kind is, as a view's file names it (slotAliasProblems)
+    readonly property var anchorKindTypes: ({ page: ["SettingsPage"], section: ["SettingsSection"], card: ["SettingsCard"],
+                                              row: ["SettingsRow", "PopupRow"], popupSection: ["PopupSection"], region: ["SettingsCard"] })
 
     // Today's slots, read as anchors once their view is converted (the alias's `at` in
     // anchorTable): a manifest's `slots` entry for one becomes that anchor's element, listed in
     // the module's deprecations, its context also carrying `slot` (and what `context` adds
     // here, as the old name promised). network.vpn.page has none: a provider's page is its
     // settingsPage.
+    //   context  fixed values the old slot's context held
+    //   needs    the keys of the old slot's context that change with the view (wifiEnabled
+    //            in the network popup): the converted block's `context` must provide each,
+    //            so an element written for the slot still finds them. tests/AnchorsTest.qml
+    //            checks that the row's view names each one (slotAliasProblems).
     readonly property var slotAliases: [
-        { slot: "network.popup.sections", at: "popup.network.connections", place: "append", context: {} },
-        { slot: "notifications.popup.top", at: "popup.notifications", place: "prepend", context: {} },
-        { slot: "settings.general.bottom", at: "settings.general", place: "append", context: {} },
-        { slot: "network.vpn.row", at: "popup.network.connections.vpn.row", place: "after", context: {} },
-        { slot: "network.vpn.card", at: "settings.network_vpn.vpns.card.settings", place: "prepend", context: { open: true } }
+        { slot: "network.popup.sections", at: "popup.network.connections", place: "append", context: {},
+          needs: ["wifiEnabled", "wifiConnected", "ethernetConnected"] },
+        { slot: "notifications.popup.top", at: "popup.notifications", place: "prepend", context: {}, needs: ["count"] },
+        { slot: "settings.general.bottom", at: "settings.general", place: "append", context: {}, needs: ["editIndex"] },
+        { slot: "network.vpn.row", at: "popup.network.connections.vpn.row", place: "after", context: {},
+          needs: ["vpnId", "entryId", "vpn", "provider", "otherVpnsUp", "otherVpns"] },
+        { slot: "network.vpn.card", at: "settings.network_vpn.vpns.card.settings", place: "prepend", context: { open: true },
+          needs: ["vpnId", "entryId", "vpn", "provider", "otherVpnsUp", "otherVpns"] }
     ]
 
     // A slot's alias ({ slot, at, place, context }), or null
@@ -197,14 +217,16 @@ Singleton {
     // addressable), `childPath` what the blocks inside it build on. `parentPath` is the
     // nearest enclosing block's childPath, or the base a window or popup gives its view's
     // root (`parentIsBase`). A block with no anchor adds no level, and is addressable only as
-    // the view's root (the page itself: settings.general); a name that is not one makes it
-    // and everything inside it unaddressable.
-    function anchorBlockPaths(parentPath, parentIsBase, anchor) {
+    // the view's root: a block of a root kind (anchorRootKinds, `kind`) right at the base (the
+    // page itself: settings.general) — anything else with no name at the base, a section
+    // straight under a plain item, is not; a name that is not one makes it and everything
+    // inside it unaddressable.
+    function anchorBlockPaths(parentPath, parentIsBase, anchor, kind) {
         const none = { path: "", childPath: "" };
         if (typeof parentPath !== "string" || parentPath === "" || anchorPathProblem(parentPath) !== "")
             return none;
         if (anchor === undefined || anchor === null || anchor === "")
-            return { path: parentIsBase === true ? parentPath : "", childPath: parentPath };
+            return { path: parentIsBase === true && anchorRootKinds.includes(kind) ? parentPath : "", childPath: parentPath };
         if (anchorNameProblem(anchor) !== "")
             return none;
         const path = parentPath + "." + anchor;
@@ -214,6 +236,55 @@ Singleton {
     // The table's row for `path`, or null
     function anchorRow(table, path) {
         return (Array.isArray(table) ? table : []).find(row => isObject(row) && row.path === path) ?? null;
+    }
+
+    // Whether a block's host at `placement` shows the elements of `row` (the table's row for
+    // the block's path): only when the block is of the row's kind and has a host there — a
+    // block that merely shares a path (another kind, a placement it does not have) shows none
+    function anchorBlockFits(row, kind, placements, placement) {
+        return isObject(row) && typeof kind === "string" && row.kind === kind && Array.isArray(placements)
+            && placements.includes(placement) && (row.placements ?? []).includes(placement);
+    }
+
+    // What is wrong with the slots read as anchors (an alias whose `at` is in `table`): one
+    // text per problem. `slotUses` { slot: [files outside the tests still naming it] };
+    // `viewTexts` { file: its text, or undefined when it cannot be read } for each row's view.
+    // A slot read as its anchor must no longer be built as a slot; its row's view must build
+    // the block (the kind's type, and the block's name unless it is the view's root) and name
+    // in it what the alias needs.
+    function slotAliasProblems(table, aliases, slotUses, viewTexts) {
+        const problems = [];
+        for (const alias of Array.isArray(aliases) ? aliases : []) {
+            const row = anchorRow(table, alias?.at);
+            if (!row)
+                continue;
+            const where = alias.slot + " → " + alias.at;
+            const uses = (slotUses ?? {})[alias.slot] ?? [];
+            if (uses.length > 0)
+                problems.push(where + ": the slot is still built in " + uses.join(", "));
+            if (typeof row.view !== "string" || row.view === "") {
+                problems.push(where + ": the row names no view");
+                continue;
+            }
+            const text = (viewTexts ?? {})[row.view];
+            if (typeof text !== "string") {
+                problems.push(where + ": its view " + row.view + " cannot be read");
+                continue;
+            }
+            const types = anchorKindTypes[row.kind] ?? [];
+            if (!types.some(type => new RegExp("\\b" + type + "\\s*\\{").test(text)))
+                problems.push(where + ": " + row.view + " builds no " + (types.join(" or ") || row.kind));
+            const parts = alias.at.split(".");
+            const named = parts.filter((part, index) => index >= 2 && !anchorRegions.includes(part));
+            const name = named[named.length - 1];
+            if (name !== undefined && !new RegExp("\\banchor:\\s*\"" + name + "\"").test(text))
+                problems.push(where + ": " + row.view + " names no block \"" + name + "\"");
+            for (const key of Array.isArray(alias.needs) ? alias.needs : []) {
+                if (!new RegExp("\\b" + key + "\\s*:").test(text))
+                    problems.push(where + ": " + row.view + " gives no " + key + " in the block's context (the slot gave it)");
+            }
+        }
+        return problems;
     }
 
     // What is wrong with an anchor table (anchorTable, or a suite's): one text per problem
@@ -242,6 +313,8 @@ Singleton {
                 problems.push(where + ": placements are not some of " + anchorPlacements.join(", "));
             if (typeof row.takes !== "string" || typeof row.context !== "string" || typeof row.where !== "string" || row.where === "")
                 problems.push(where + ": takes, context and where are texts (where not empty)");
+            if (typeof row.view !== "string" || !/^[a-z][a-zA-Z0-9_/]*\.qml$/.test(row.view) || row.view.includes("//"))
+                problems.push(where + ": view " + show(row.view) + " is not a file of the shell (\"panels/NetworkPanel.qml\")");
             if (typeof row.marks !== "boolean")
                 problems.push(where + ": marks is true or false");
             if (!anchorScopes.includes(row.scope))

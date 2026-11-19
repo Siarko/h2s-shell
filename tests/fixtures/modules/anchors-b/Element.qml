@@ -12,8 +12,8 @@ Text {
     property int contextChanges: 0
     onContextChanged: contextChanges += 1
 
-    objectName: "places-a:Element"
-    text: "alpha " + (context?.anchor ?? "?") + " " + (context?.placement ?? "?")
+    objectName: "anchors-b:Element"
+    text: "beta " + (context?.anchor ?? "?") + " " + (context?.placement ?? "?")
     textFormat: Text.PlainText
     font.family: Api.theme.fontFamily
     font.pixelSize: Api.theme.fontSizeSmall

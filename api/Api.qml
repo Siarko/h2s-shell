@@ -30,7 +30,7 @@ import qs.singletons.network
 //                          module's deprecations
 //   Api.anchors            (1.20) the places in the shell's views a module may put elements
 //                          at, frozen [{ path, kind, placements, takes, marks, context, scope,
-//                          since, where }] (ModuleRules.anchorTable, the reference). A path is
+//                          since, where, view }] (ModuleRules.anchorTable, the reference). A path is
 //                          <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
 //                          "popup" (the bar has none, nor the lock screen); view a settings
 //                          page's id or a popup's key; block a block's name, what it holds
@@ -47,8 +47,12 @@ import qs.singletons.network
 //                          when it declares them. Several modules at one place: by module id,
 //                          a module's in its manifest's order. A path this shell does not offer
 //                          or a placement it does not take is an error in the module's status;
-//                          the rest of the module loads. Today the list is empty: the shell's
-//                          views get their anchors one by one
+//                          the rest of the module loads. A row of scope "own-provider" (on
+//                          the card or row of a VPN provider's item) shows only the elements
+//                          of the module that is that item's provider. A slot read as its
+//                          anchor keeps its context: the converted block gives the keys the
+//                          slot gave (ModuleRules.slotAliases' `needs`). Today the list is
+//                          empty: the shell's views get their anchors one by one
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
 //                          (1.19): a module keeps to its own handle — another module is
 //                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose

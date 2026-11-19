@@ -46,7 +46,9 @@ fixture_count=$(fixture_modules | grep -c .)
 [ "$fixture_count" -ge 2 ] || abort "found $fixture_count fixture modules in $fixtures: nothing to compare the launcher's list with"
 
 check "the launcher handed the shell one canonical directory per fixture ($fixture_count)" test "$(handed_modules)" = "$(fixture_modules)"
-check "… in the fixtures' directory" test "$(process_env "$SHELL_PID" H2S_SHELL_MODULES | cut -d: -f1)" = "$fixtures/bad-manifest"
+handed_outside() { handed_modules | grep -v "^$fixtures/[^/]*$"; }
+check "… each in the fixtures' directory, $fixture_count of them" \
+    test -z "$(handed_outside)" -a "$(handed_modules | grep -c .)" = "$fixture_count"
 check "no safe mode" test -z "$(process_env "$SHELL_PID" H2S_SHELL_SAFE_MODE)"
 check_within 10 "the modules have settled (the program check answered)" modules_settled
 log "modules list: $(shell_ipc modules list | head -c 3000)"

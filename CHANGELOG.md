@@ -21,8 +21,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   as a slot's does; several modules at one place by module id. `Api.anchors` lists the places
   offered — none yet: the shell's views get them one by one. A place not offered, or a
   placement it does not take, is an error in the module's status; the rest of the module
-  loads. A slot whose view is built from anchor blocks is read as its anchor (its context
-  keeps `slot`) and listed in the module's `deprecations`.
+  loads. On a VPN provider's card or row, a place shows only the elements of the module that
+  is that provider. A slot whose view is built from anchor blocks is read as its anchor (its
+  context keeps `slot` and what the slot gave) and listed in the module's `deprecations`.
 - 1.19: reach closed, the old ways listed — `Api.moduleStatus(id)` gives another module's
   plain state, frozen `{ id, name, version, state, active }` (null for no such module).
   `Api.module(id)` and the handle's `host` still work and are listed in the module's

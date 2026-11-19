@@ -151,8 +151,13 @@ Scope {
     // slots read as anchors. What the anchor blocks' hosts show (anchorContent)
     property var anchors: []
     // The anchors offered: ModuleRules.anchorTable (a suite's host is given its own). A
-    // manifest's anchor not in it is an error in the module's status; only its paths take content
+    // manifest's anchor not in it is an error in the module's status; only its paths take
+    // content. Set anew, the loaded modules' anchors and those errors are worked out again
     property var anchorTable: ModuleRules.anchorTable
+    onAnchorTableChanged: {
+        if (_records.length > 0 && !_dying)
+            _publish();
+    }
     // The loaded modules' facts, { "<id>.<name>": plain value } (setFact; checked against
     // the declared type): what Profiles adds to its facts
     property var factValues: ({})
@@ -586,7 +591,6 @@ Scope {
             return;
         }
         record.warnings.push(...ModuleMergeRules.unknownSlotWarnings(manifest));
-        record.errors.push(...ModuleMergeRules.anchorErrors(manifest, anchorTable));
         const qmldir = answers["qmldir"];
         if (qmldir === "ok") {
             record.qmldirText = texts["qmldir"] ?? "";
@@ -1310,6 +1314,9 @@ Scope {
         const loaded = [];
         statuses = _records.map(record => {
             const errors = record.errors.slice();
+            // Against the table now, so a suite's table set later counts (onAnchorTableChanged)
+            if (record.manifest.valid && record.compatible)
+                errors.push(...ModuleMergeRules.anchorErrors(record.manifest, anchorTable));
             if (record.state === "failed" && record.mainFileError !== "")
                 errors.push(record.mainFileError);
             if (record.state === "failed" && record.mainError !== "")
