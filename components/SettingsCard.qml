@@ -44,6 +44,13 @@ import qs.singletons
 //
 // The notice's button is available while `noticeAvailable`, bound to the page's busy state
 // (NetworkProfileCard: `noticeAvailable: !busy`).
+//
+// On a path whose row takes marks (ModuleRules.anchorTable's `marks`), the modules' marks on
+// the card's item (`markItem`, the id the card's context names: `networkId`) stand at the end
+// of the name's line, after the name, closed and open: each module's icon (ModuleIcon), the
+// first three in module id order (ModuleRules.cardMarks), the module's name and the mark's
+// label as its tooltip. The name is cut first; the icons keep their place. A mark takes no
+// click: the header keeps it.
 AnchorBlock {
     id: root
 
@@ -60,6 +67,13 @@ AnchorBlock {
     property bool noticeAvailable: true
     property real spacing: 6
     property real hostGap: 6
+    // The item the modules' marks name on this card's path ("" none: no marks)
+    property string markItem: ""
+    // The marks it shows: [{ module, label }] (none on a path that takes no marks)
+    readonly property var marks: {
+        const row = host && path !== "" ? ModuleRules.anchorRow(host.anchorTable, path) : null;
+        return row?.marks === true ? ModuleRules.cardMarks(host.marks ?? [], path, markItem) : [];
+    }
     // Its own rows, shown while open
     default property alias content: _rows.data
     // Right of the name, level with it
@@ -83,6 +97,8 @@ AnchorBlock {
     readonly property alias beforeHost: _before
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
+    readonly property alias titleText: _title
+    readonly property alias markRow: _markRow
 
     kind: "card"
     placements: ["before", "after"]
@@ -99,6 +115,9 @@ AnchorBlock {
     implicitWidth: _column.implicitWidth
     implicitHeight: _column.implicitHeight
 
+    // The marks by module: one icon per module, kept while its mark stays
+    KeyedModel { id: _marks; values: root.marks; keyProp: "module" }
+
     ColumnLayout {
         id: _column
         width: root.width
@@ -109,7 +128,8 @@ AnchorBlock {
             block: root
             placement: "before"
             Layout.fillWidth: true
-            Layout.bottomMargin: count > 0 ? root.hostGap : 0
+            // Only for what was built and shows: a refused or failed element has no size
+            Layout.bottomMargin: implicitHeight > 0 ? root.hostGap : 0
         }
 
         Rectangle {
@@ -153,7 +173,10 @@ AnchorBlock {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignTop
                             spacing: 1
+                            // The name, and after it the modules' marks: room is kept for
+                            // them on the right (the padding), so the name is cut first
                             Text {
+                                id: _title
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
                                 text: root.title
@@ -162,6 +185,32 @@ AnchorBlock {
                                 font.pixelSize: Theme.fontSizeBody
                                 font.bold: root.active
                                 color: Theme.textPrimary
+                                rightPadding: _markRow.visible ? _markRow.width + _markRow.gap : 0
+
+                                Row {
+                                    id: _markRow
+                                    readonly property real gap: 6
+                                    // Right after the name as drawn: its whole width, or what is
+                                    // left of the line beside the marks
+                                    x: Math.max(0, Math.min(_title.implicitWidth, _title.width) - _title.rightPadding) + gap
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: root.marks.length > 0
+                                    spacing: 4
+
+                                    Repeater {
+                                        model: _marks.model
+
+                                        ModuleIcon {
+                                            required property string modelData
+                                            readonly property var mark: _marks.byKey[modelData] ?? ({})
+                                            objectName: "mark:" + modelData
+                                            moduleId: modelData
+                                            host: root.host
+                                            color: Theme.textPrimary
+                                            tip: ModuleRules.markTip(root.host?.status(modelData)?.name ?? modelData, mark.label ?? "")
+                                        }
+                                    }
+                                }
                             }
                             // Shown empty too: the header keeps its height
                             Text {
@@ -365,7 +414,8 @@ AnchorBlock {
             block: root
             placement: "after"
             Layout.fillWidth: true
-            Layout.topMargin: count > 0 ? root.hostGap : 0
+            // Only for what was built and shows: a refused or failed element has no size
+            Layout.topMargin: implicitHeight > 0 ? root.hostGap : 0
         }
     }
 }

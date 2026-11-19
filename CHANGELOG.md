@@ -13,6 +13,18 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.27: the mark on a card — `module.setMark(path, itemId, label)` and
+  `module.clearMark(path, itemId)`: the card of an item shows the module's icon at the end of its
+  name's line, closed and open, after the name (cut first), with "<module's name>: <label>" as
+  its tooltip and accessible name (plain text, one line, 40 characters). The places that take
+  marks are `settings.network_wifi.saved.card` and `settings.network_ethernet.profiles.card`
+  (`Api.anchors`' `marks`; they take no element), the item being the card's `networkId`. A
+  card shows the first three modules' marks, in module id order; a mark does nothing on a click.
+  `setMark` → false, with one warning in the module's status, for a path that takes no marks,
+  an id or label that is no text, or a module's 201st mark on a path; false while the module
+  is off. The shell does not store marks: a module going off takes its marks with it, and sets
+  them again when it starts. A card's `before` and `after` hosts add their gap only for an
+  element built and shown (one that failed takes no room).
 - 1.26: a module's icon — the manifest's `icon`: one glyph of the shell's icon font
   (`{ "glyph": "…" }`, drawn in its place's text colour), an SVG file (`{ "svg": "icon.svg" }`,
   painted in its place's text colour, or in its own colours with `"colors": "own"`) or a PNG or

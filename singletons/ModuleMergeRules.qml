@@ -414,7 +414,8 @@ Singleton {
                 errors.push("anchors: " + ModuleRules.show(entry.at) + " is not a place this shell offers (module API " + ModuleRules.apiVersion + ")");
             else if (!(row.placements ?? []).includes(entry.place))
                 errors.push("anchors: " + ModuleRules.show(entry.at) + " does not take " + ModuleRules.show(entry.place)
-                            + " (it takes: " + (row.placements ?? []).join(", ") + ")");
+                            + ((row.placements ?? []).length > 0 ? " (it takes: " + row.placements.join(", ") + ")"
+                               : " (it takes no element, only marks: module.setMark)"));
         }
         return errors;
     }

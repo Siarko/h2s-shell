@@ -342,6 +342,26 @@ QtObject {
         Shell.openSettings(pageId);
     }
 
+    // (1.27) Marks an item's card: the card shows the module's icon at the end of its name's
+    // line, closed and open, with `label` as the icon's accessible name and tooltip, shown as
+    // "<module's name>: <label>" (plain text, one line, at most 40 characters). `path` a card's
+    // path whose row takes marks (Api.anchors' `marks`: the saved Wi-Fi networks' and the
+    // wired profiles' cards), `itemId` the item's id as in the card's context (`networkId`).
+    // → true when kept; false while the module is off, and for a path that takes no marks,
+    // an id that is not a text or a label that is not one, or the 201st mark on a path —
+    // then one warning in its status. Set again for the same item, the label is replaced. A
+    // card shows the first three modules' marks, in module id order. A mark does nothing on
+    // a click. The shell does not store marks: they go when the module goes off, and it sets
+    // them again when it starts
+    function setMark(path, itemId, label) {
+        return host ? host.setMark(moduleId, path, itemId, label) === true : false;
+    }
+
+    // (1.27) Takes the module's mark off an item's card
+    function clearMark(path, itemId) {
+        host?.clearMark(moduleId, path, itemId);
+    }
+
     // Something that failed at run time, shown among its status's errors (Settings → Modules)
     function reportError(text) {
         host?.reportError(moduleId, text);

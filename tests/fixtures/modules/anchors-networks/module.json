@@ -2,8 +2,9 @@
     "id": "anchors-networks",
     "name": "Anchors networks fixture",
     "version": "1.0.0",
-    "api": "1.25",
-    "description": "Puts an element in the opened card of each saved Wi-Fi network and each wired profile, under the page's own rows, and a button among the card's buttons (tests/AnchorsTest.qml)",
+    "api": "1.27",
+    "description": "Puts an element in the opened card of each saved Wi-Fi network and each wired profile, under the page's own rows, and a button among the card's buttons; its icon marks cards (tests/AnchorsTest.qml)",
+    "icon": { "svg": "icon.svg" },
     "main": "Main.qml",
     "anchors": [
         { "at": "settings.network_wifi.saved.card.settings", "place": "append", "component": "Element.qml" },

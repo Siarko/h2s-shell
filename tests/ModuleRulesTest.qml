@@ -835,11 +835,16 @@ TestCase {
                     + "settings.network_vpn.vpns.card.settings region prepend panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_wifi.saved.card.settings region append panels/settings/NetworkWifiSettings.qml; "
                     + "settings.network_ethernet.profiles.card.settings region append panels/settings/NetworkEthernetSettings.qml; "
+                    + "settings.network_wifi.saved.card card  panels/settings/NetworkWifiSettings.qml; "
+                    + "settings.network_ethernet.profiles.card card  panels/settings/NetworkEthernetSettings.qml; "
                     + "settings.network_vpn.vpns.card.actions region append panels/settings/NetworkVpnSettings.qml; "
                     + "settings.network_wifi.saved.card.actions region append panels/settings/NetworkWifiSettings.qml; "
                     + "settings.network_ethernet.profiles.card.actions region append panels/settings/NetworkEthernetSettings.qml",
                     "the anchor table: the views converted so far (1.21: the General page; 1.22: the network and notifications popups; 1.23: the VPN rows and cards; "
-                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards)");
+                    + "1.24: the saved networks' and wired profiles' cards; 1.25: the buttons of those cards; 1.27: the marks on the saved networks' cards)");
+        assertEqual(rules.anchorTable.filter(entry => entry.marks).map(entry => entry.path + " " + entry.placements.length + " " + entry.since).join(","),
+                    "settings.network_wifi.saved.card 0 1.27,settings.network_ethernet.profiles.card 0 1.27",
+                    "… the saved Wi-Fi networks' and wired profiles' cards take marks, no element");
         assertEqual(rules.anchorTable.filter(entry => entry.scope === "own-provider").map(entry => entry.path).join(","),
                     "popup.network.connections.vpn.row,settings.network_vpn.vpns.card.settings,settings.network_vpn.vpns.card.actions",
                     "… the VPN places own-provider, the others not");
@@ -858,11 +863,69 @@ TestCase {
                                                     row("bar.clock", ["append"], { kind: "widget", scope: "mine", since: "1", marks: "no", where: "", view: "../x.qml" }),
                                                     row("settings.other", ["append"], { view: undefined }),
                                                     row("settings.x.card.settings", ["append"], { kind: "region", takes: "Dropdown" }),
-                                                    row("settings.x.card.actions", ["append"], { kind: "region" })]);
+                                                    row("settings.x.card.actions", ["append"], { kind: "region" }),
+                                                    row("settings.y.card.settings", ["append"], { kind: "region", marks: true })]);
         for (const fragment of ["placements are not", "twice", "not an object", "does not start with", "kind \"widget\"", "scope \"mine\"",
                                 "since \"1\"", "marks is", "where not empty", "view \"../x.qml\" is not a file", "view undefined is not a file",
-                                "takes \"Dropdown\" is not", "settings.x.card.actions): a card's actions take a SmallButton"])
+                                "takes \"Dropdown\" is not", "settings.x.card.actions): a card's actions take a SmallButton",
+                                "settings.y.card.settings): only a card takes marks"])
             assert(_has(badTable, fragment), "a bad table row: " + fragment);
+        assertEqual(rules.anchorTableProblems([row("settings.y.card", [], { kind: "card", marks: true })]).join("; "), "",
+                    "… a card that takes marks may offer no placement");
+
+        // --- the marks on a card (API 1.27) ---
+        const marked = [row("settings.saved.card", [], { kind: "card", marks: true }), row("settings.general", ["append"])];
+        let marks = [];
+        const set = (module, path, itemId, label) => {
+            const result = rules.setMark(marked, marks, module, path, itemId, label);
+            marks = result.marks;
+            return result;
+        };
+        assert(set("tailscale", "settings.saved.card", "uuid-1", "Exit node: home").ok, "setMark: kept on a card that takes marks");
+        assertEqual(JSON.stringify(marks), JSON.stringify([{ module: "tailscale", path: "settings.saved.card", itemId: "uuid-1", label: "Exit node: home" }]),
+                    "… { module, path, itemId, label }");
+        assert(set("tailscale", "settings.saved.card", "uuid-1", "Exit node: office").ok && marks.length === 1 && marks[0].label === "Exit node: office",
+               "… set again for the item: the label replaced, counted once");
+        const refusedPath = set("tailscale", "settings.general", "uuid-1", "x");
+        assert(!refusedPath.ok && refusedPath.warning === "marks: \"settings.general\" takes no marks" && marks.length === 1,
+               "… a path that takes no marks: false, a warning, nothing kept — " + refusedPath.warning);
+        assert(!set("tailscale", "settings.unknown.card", "uuid-1", "x").ok, "… a path not offered: false");
+        assert(_has([set("tailscale", "settings.saved.card", "", "x").warning, set("tailscale", "settings.saved.card", 7, "x").warning], "is not an item's id"),
+               "… an item id that is no text: refused");
+        assert(set("tailscale", "settings.saved.card", "uuid-2", null).warning.includes("is not a text"), "… a label that is no text: refused");
+        set("tailscale", "settings.saved.card", "uuid-3", "  two\nlines <b>and</b> a very long label that goes on and on  ");
+        assertEqual(marks.find(entry => entry.itemId === "uuid-3").label, "two lines <b>and</b> a very long label t",
+                    "… the label plain: one line, trimmed, cut at 40 characters (markup kept as text)");
+        assertEqual(rules.codePoints(set("tailscale", "settings.saved.card", "uuid-4", "\u{F0001}".repeat(45)).marks.find(entry => entry.itemId === "uuid-4").label).length,
+                    40, "… 40 characters counted as code points");
+        marks = [];
+        for (let i = 0; i < rules.maxMarksPerPath; i++)
+            set("tailscale", "settings.saved.card", "item-" + i, "");
+        const overCap = set("tailscale", "settings.saved.card", "item-200", "");
+        assert(!overCap.ok && overCap.warning.includes("more than 200") && marks.length === 200, "… the 201st mark of a module on a path: false, a warning, not kept");
+        assert(set("tailscale", "settings.saved.card", "item-5", "again").ok, "… one of the 200 set again: kept");
+        assert(set("other", "settings.saved.card", "item-200", "").ok, "… another module's marks are counted apart");
+        marks = [];
+        for (const module of ["zeta", "alpha", "mid", "beta"])
+            set(module, "settings.saved.card", "uuid-1", module + " label");
+        set("gamma", "settings.saved.card", "uuid-2", "elsewhere");
+        assertEqual(JSON.stringify(rules.cardMarks(marks, "settings.saved.card", "uuid-1")),
+                    JSON.stringify([{ module: "alpha", label: "alpha label" }, { module: "beta", label: "beta label" }, { module: "mid", label: "mid label" }]),
+                    "cardMarks: the card's item's marks, in module id order, the first three");
+        assertEqual(rules.cardMarks(marks, "settings.saved.card", "uuid-2").map(entry => entry.module).join(","), "gamma", "… only that item's");
+        assertEqual(rules.cardMarks(marks, "settings.other.card", "uuid-1").length + rules.cardMarks(marks, "settings.saved.card", "").length
+                    + rules.cardMarks(null, "settings.saved.card", "uuid-1").length + rules.cardMarks([5, null], "settings.saved.card", "uuid-1").length, 0,
+                    "… another path, no item, no list, garbage: none, no throw");
+        marks = rules.clearMark(marks, "alpha", "settings.saved.card", "uuid-1");
+        assertEqual(rules.cardMarks(marks, "settings.saved.card", "uuid-1").map(entry => entry.module).join(","), "beta,mid,zeta",
+                    "clearMark: that module's mark on that item gone, the fourth shows");
+        marks = rules.dropMarks(marks, "beta");
+        assertEqual(marks.map(entry => entry.module).sort().join(","), "gamma,mid,zeta", "dropMarks: a module off, all its marks gone");
+        assertEqual(ModuleMergeRules.anchorErrors({ anchors: [{ at: "settings.saved.card", place: "before", component: "A.qml" }] }, marked).join(""),
+                    "anchors: \"settings.saved.card\" does not take \"before\" (it takes no element, only marks: module.setMark)",
+                    "anchorErrors: an element on a card that takes only marks, refused, said so");
+        assertEqual(rules.markTip("Tailscale", "Exit node: home") + " | " + rules.markTip("Tailscale", "") + " | " + rules.markTip("Two\nlines", "x"),
+                    "Tailscale: Exit node: home | Tailscale | Two lines: x", "markTip: \"<name>: <label>\", the name alone with no label, on one line");
         assertEqual(rules.anchorTableProblems(null).length, 1, "… not a list: one problem, no throw");
         assertEqual(JSON.stringify(rules.anchorRow(table, "popup.notifications")?.placements), "[\"prepend\"]", "anchorRow: the row of a path");
         assertEqual(rules.anchorRow(table, "popup.network") + "," + rules.anchorRow(null, "x"), "null,null", "… none: null");

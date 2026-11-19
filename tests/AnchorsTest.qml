@@ -1015,10 +1015,10 @@ TestCase {
     // The popup places live under `prefix` against the table: each of its rows live, and
     // every live path not in it among those named, not published
     readonly property var _namedNotPublished: ["popup.network", "popup.network.connections.vpn", "settings.network_vpn.vpns", "settings.network_vpn.vpns.card",
-                                               "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
+                                               "settings.network_wifi.saved", "settings.network_wifi.hotspots",
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
                                                "settings.network_wifi.hotspots.card.actions",
-                                               "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card"]
+                                               "settings.network_ethernet.profiles"]
     function _popupLiveProblems(prefix) {
         const problems = [];
         const live = Object.keys(Anchors.live).filter(path => path === prefix || path.startsWith(prefix + "."));
@@ -1408,6 +1408,78 @@ TestCase {
     property var _keptNetwork: null
     property int _keptNetworkChanges: 0
     property var _keptWired: null
+    // The marks on the network cards (1.27): the names' lines before any mark, a mark's icon
+    // kept across reads, the card whose name is made long
+    property var _marksBefore: null
+    property var _keptMark: null
+    property var _longNameCard: null
+
+    // A card's mark icons shown, left to right
+    function _markIcons(card) {
+        const icons = (card?.markRow?.children ?? []).filter(child => String(child.objectName).startsWith("mark:") && child.visible);
+        return card?.markRow?.visible ? icons.sort((a, b) => a.x - b.x) : [];
+    }
+
+    // The modules whose marks a card shows, left to right
+    function _markNames(card) {
+        return _markIcons(card).map(icon => icon.moduleId).join(",");
+    }
+
+    // Where a card's name stands in the card, rounded
+    function _titleLine(card) {
+        const title = card.titleText;
+        const point = title.mapToItem(card, 0, 0);
+        return [point.x, point.y, title.width, title.height].map(value => Math.round(value * 100) / 100);
+    }
+
+    // What is wrong with where a card's marks stand: on the name's line, after the name as
+    // drawn, inside its column, clear of the card's own parts (the buttons, the lock, the
+    // arrow, the line under the name)
+    function _markProblems(card) {
+        const problems = [];
+        const row = card.markRow;
+        const title = card.titleText;
+        const icons = _markIcons(card);
+        if (icons.length === 0)
+            return ["no mark shown"];
+        const rect = item => {
+            const point = item.mapToItem(card, 0, 0);
+            return { left: point.x, top: point.y, right: point.x + item.width, bottom: point.y + item.height };
+        };
+        const marks = rect(row);
+        const line = rect(title);
+        if (Math.abs((marks.top + marks.bottom) / 2 - (line.top + line.bottom) / 2) > 0.5)
+            problems.push("not centred on the name's line (" + marks.top + "–" + marks.bottom + " against " + line.top + "–" + line.bottom + ")");
+        if (marks.top < line.top - 0.5 || marks.bottom > line.bottom + 0.5)
+            problems.push("taller than the name's line");
+        if (row.x < title.leftPadding + title.contentWidth - 0.5)
+            problems.push("over the name (at " + row.x + ", the name drawn " + title.contentWidth + " wide)");
+        if (marks.right > line.right + 0.5)
+            problems.push("past the name's column (" + marks.right + " > " + line.right + ")");
+        if (icons.some(icon => Math.abs(icon.width - title.height) > 0.5 || Math.abs(icon.height - title.height) > 0.5))
+            problems.push("an icon not a square as tall as the name's line");
+        const own = [];
+        const walk = item => {
+            for (const child of item?.children ?? []) {
+                if (!child.visible)
+                    continue;
+                if (/^profile|^alignedTop|^alignedPlain/.test(String(child.objectName)) || String(child).startsWith("PrivilegedMark")
+                        || (typeof child.text === "string" && (child.text === "▸" || child.text === "▾")))
+                    own.push(child);
+                walk(child);
+            }
+        };
+        walk(card);
+        for (const part of own) {
+            const other = rect(part);
+            if (other.right > other.left && other.left < marks.right - 0.5 && other.right > marks.left + 0.5
+                    && other.top < marks.bottom - 0.5 && other.bottom > marks.top + 0.5)
+                problems.push("over " + (part.objectName || part.text || String(part)));
+        }
+        if (own.length === 0)
+            problems.push("none of the card's own parts found");
+        return problems;
+    }
     // The parts of the two pages with no module, to compare with them under one
     property var _wifiPartsBefore: []
     property var _ethernetPartsBefore: []
@@ -2685,9 +2757,10 @@ TestCase {
                         "… their places in the table live, the rest named, not published");
             const cards = Object.values(_profileCards(_wifiPage)).concat(Object.values(_profileCards(_ethernetPage)));
             assert(cards.every(card => !card.settingsRegion.appendHost.built && !card.settingsRegion.prependHost.built), "no module: nothing built in any card");
-            Modules.host.load([fixtures + "/anchors-networks"], {});
+            Modules.host.load([fixtures + "/anchors-networks", fixtures + "/anchors-marks"], {});
         });
         _then("the network fixture loaded, its element in each open card", () => _generalSettled() && Modules.status("anchors-networks")?.state === "loaded"
+              && Modules.status("anchors-marks")?.state === "loaded"
               && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].settingsRegion.appendHost, 1)
               && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].settingsRegion.appendHost, 1)
               && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].actionsRegion.appendHost, 1)
@@ -2747,6 +2820,58 @@ TestCase {
             assert(spot && !spot.settingsRegion.appendHost.built, "the hotspot's card: none");
             assertEqual(_networkLive(), "settings.network_ethernet.profiles.card.settings|anchors-wired:1,settings.network_wifi.saved.card.settings|anchors-home:1",
                         "the elements standing: one per open card");
+            // The marks (1.27): two modules on Office's card (closed), one on Lab's (closed)
+            // and on Home's (open); one on a hotspot's card, which takes none
+            assert(Object.values(wifiCards).concat(Object.values(ethernetCards)).every(card => !card.markRow.visible && card.titleText.rightPadding === 0),
+                   "no mark set: no card shows one, the name has the whole line");
+            _wifiPartsBefore = _pageParts(_wifiPage);
+            _ethernetPartsBefore = _pageParts(_ethernetPage);
+            _marksBefore = { office: _titleLine(wifiCards["anchors-office"]), lab: _titleLine(ethernetCards["anchors-lab"]) };
+            const networksModule = Modules.handle("anchors-networks");
+            const marksModule = Modules.handle("anchors-marks");
+            assert(networksModule.setMark("settings.network_wifi.saved.card", "anchors-office", "Exit node: home"), "setMark: on a saved network's card, kept");
+            assert(marksModule.setMark("settings.network_wifi.saved.card", "anchors-office", "Marked"), "… a second module's on the same card");
+            assert(networksModule.setMark("settings.network_ethernet.profiles.card", "anchors-lab", "Exit node: lab"), "… on a wired profile's card");
+            assert(networksModule.setMark("settings.network_wifi.saved.card", "anchors-home", "Open card"), "… on the open card");
+            assert(!networksModule.setMark("settings.network_wifi.hotspots.card", "anchors-spot", "Hotspot"), "… on a hotspot's card, which takes none: false");
+        });
+        _then("the marks shown", () => _cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-office"].markRow.visible
+              && _cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-lab"].markRow.visible
+              && _cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].markRow.visible && _networkPagesSteady(), () => {
+            const wifiCards = _cardsAt(_wifiPage, "settings.network_wifi.saved.card");
+            const ethernetCards = _cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card");
+            const office = wifiCards["anchors-office"];
+            const lab = ethernetCards["anchors-lab"];
+            assertEqual(_markNames(office), "anchors-marks,anchors-networks", "Office's card, closed: both modules' icons, in module id order");
+            assertEqual(_markIcons(office).map(icon => icon.tip + " (" + icon.shownAs + ")").join(" | "),
+                        "Anchors marks fixture: Marked (glyph) | Anchors networks fixture: Exit node: home (svg)",
+                        "… each its module's icon, its tooltip the module's name and the label");
+            assertEqual(_markIcons(office).map(icon => icon.Accessible.name).join(" | "), "Anchors marks fixture: Marked | Anchors networks fixture: Exit node: home",
+                        "… and its accessible name");
+            assertEqual(_markNames(lab) + " " + _markNames(wifiCards["anchors-home"]), "anchors-networks anchors-networks",
+                        "Lab's card, closed: its one mark; Home's, open: its mark too");
+            assertEqual(_markNames(wifiCards["anchors-cafe"]) + "|" + _markNames(ethernetCards["anchors-wired"]) + "|"
+                        + _markNames(_cardsAt(_wifiPage, "settings.network_wifi.hotspots.card")["anchors-spot"]), "||", "the other cards: none (a hotspot's takes none)");
+            assert(_has(Modules.status("anchors-networks").warnings, "marks: \"settings.network_wifi.hotspots.card\" takes no marks"),
+                   "the refused mark: one warning in the module's status — " + JSON.stringify(Modules.status("anchors-networks").warnings));
+            for (const [name, card] of [["Office", office], ["Lab", lab], ["Home", wifiCards["anchors-home"]]])
+                assertEqual(_markProblems(card).join("; "), "", name + ": the marks at the end of the name's line, after the name, clear of the card's own parts");
+            assertEqual(JSON.stringify(_titleLine(office)), JSON.stringify(_marksBefore.office), "Office: the name where it stood, at its whole width");
+            assertEqual(JSON.stringify(_titleLine(lab)), JSON.stringify(_marksBefore.lab), "Lab: the same");
+            assertEqual(_describeParts(_pageParts(_wifiPage)), _describeParts(_wifiPartsBefore), "the Wi-Fi page measures as it did: a mark takes no room");
+            assertEqual(_describeParts(_pageParts(_ethernetPage)), _describeParts(_ethernetPartsBefore), "… the Ethernet page too");
+            _keptMark = _markIcons(office)[1];
+            // A long name: cut first, the icons keep their place
+            _longNameCard = office;
+            office.title = "A very long network name that cannot fit on the line beside the card's buttons and its marks";
+        });
+        _then("a long name cut, the marks kept", () => _longNameCard.titleText.truncated && _networkPagesSteady(), () => {
+            assertEqual(_markProblems(_longNameCard).join("; "), "", "a long name: cut, the marks at the line's end, clear of the buttons");
+            assertEqual(Math.round(_longNameCard.markRow.x + _longNameCard.markRow.width), Math.round(_longNameCard.titleText.width),
+                        "… the marks end where the name's line ends");
+            const card = _longNameCard;
+            card.title = Qt.binding(() => card.network.ssid + (card.network.name !== card.network.ssid ? "  (" + card.network.name + ")" : ""));
+            _longNameCard = null;
             _wifiPage.loader.item._open = "anchors-office";
             _ethernetPage.loader.item._open = "anchors-lab";
         });
@@ -2765,6 +2890,9 @@ TestCase {
             _keptWired = lab.settingsRegion.appendHost.items[0].item;
             assertEqual(_keptNetwork.context.networkId + " " + _keptNetwork.context.active + " " + _keptWired.context.networkId,
                         "anchors-office false anchors-lab", "… with its own network: Office, not up; Lab");
+            assertEqual(_markNames(office) + " " + _markNames(lab), "anchors-marks,anchors-networks anchors-networks", "the marks shown on the opened cards too");
+            assertEqual(_markIcons(office)[1], _keptMark, "… the same icon: opening the card made no new one");
+            assertEqual(_markProblems(office).join("; ") + _markProblems(lab).join("; "), "", "… still clear of the card's parts, the stacked buttons included");
             _keptNetworkChanges = _keptNetwork.contextChanges;
             // A new read: new objects; Office comes up, Cafe forgotten, Airport saved; Lab used
             // last, Wired no longer up
@@ -2783,6 +2911,10 @@ TestCase {
             assertEqual(_keptNetwork.context.networkId + " " + _keptNetwork.context.active + " " + (_keptNetwork.contextChanges - _keptNetworkChanges),
                         "anchors-office true 1", "… still Office's, up now, its context handed once");
             assertEqual(ethernetCards["anchors-lab"].settingsRegion.appendHost.items[0]?.item, _keptWired, "the wired profiles reordered: Lab's element the same object");
+            assertEqual(["anchors-office", "anchors-home", "anchors-airport"].map(id => _markNames(wifiCards[id]) || "-").join(" "),
+                        "anchors-marks,anchors-networks anchors-networks -", "the marks follow their networks, read anew with new objects and reordered");
+            assertEqual(_markIcons(wifiCards["anchors-office"])[1], _keptMark, "… Office's the same icon");
+            assertEqual(_markNames(ethernetCards["anchors-lab"]), "anchors-networks", "… Lab's too");
             assertEqual(_live("settings.network_wifi.saved.card") + " " + _live("settings.network_ethernet.profiles.card"),
                         "settings.network_wifi.saved.card:3,settings.network_wifi.saved.card.actions:3,settings.network_wifi.saved.card.settings:3 "
                         + "settings.network_ethernet.profiles.card:2,settings.network_ethernet.profiles.card.actions:2,settings.network_ethernet.profiles.card.settings:2", "… a card per network, Cafe's gone");
@@ -2798,13 +2930,28 @@ TestCase {
                         "settings.network_wifi.saved.card:2,settings.network_wifi.saved.card.actions:2,settings.network_wifi.saved.card.settings:2 "
                         + "settings.network_ethernet.profiles.card:1,settings.network_ethernet.profiles.card.actions:1,settings.network_ethernet.profiles.card.settings:1",
                         "a network gone: its card, and the element in it, gone with it");
+            assertEqual(_markNames(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"]), "anchors-networks", "… Home's mark still there");
             _keptNetwork = null;
             _keptWired = null;
+            _keptMark = null;
+            // A module turned off: its marks go at once; on again, not back (a module sets them
+            // again when it starts)
+            assert(Modules.host.setEnabled("anchors-networks", false), "anchors-networks turned off");
+        });
+        _then("the module off: its marks gone", () => Modules.status("anchors-networks")?.state === "disabled"
+              && !_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].markRow.visible, () => {
+            assertEqual(Modules.host.marks.map(mark => mark.module + " " + mark.itemId).join(","), "anchors-marks anchors-office",
+                        "the host holds none of its marks, the other module's still");
+            assert(!Modules.handle("anchors-networks").setMark("settings.network_wifi.saved.card", "anchors-home", "Off"), "… a mark set while off: false");
+            assert(Modules.host.setEnabled("anchors-networks", true), "… turned on again");
+        });
+        _then("the module on again", () => Modules.status("anchors-networks")?.state === "loaded" && _networkPagesSteady(), () => {
+            assertEqual(_markNames(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"]), "", "… its marks not back: they are not stored");
+            _wifiPage.loader.item._open = "anchors-airport";
             // Airport's details not read yet (it could be a hotspot): its card no place
             const unread = Object.assign({}, _wifiDetailsHeld);
             delete unread["anchors-airport"];
             _holdWifiDetails(unread);
-            _wifiPage.loader.item._open = "anchors-airport";
         });
         _then("a network whose details are unread, open", () => _profileCards(_wifiPage)["anchors-airport"]?.settingsRegion.visible
               && _profileCards(_wifiPage)["anchors-airport"].path === "" && _networkPagesSteady(), () => {
@@ -2967,7 +3114,8 @@ TestCase {
 
         // A card whose only module element is refused (tests/fixtures/modules/anchors-refused:
         // no button, in a saved card's and in its own provider card's buttons) measures as
-        // without it: no room, no gap
+        // without it: no room, no gap; one that fails to build before and after a saved card
+        // adds no gap either
         _then("the buttons' fixture unloaded", () => host.statuses.length === 0, () => {
             host.load([fixtures + "/anchors-refused"], {});
             _openCards(_cardItems(["one"]), [{ id: "v1", provider: "anchors-refused" }]);
@@ -2979,8 +3127,14 @@ TestCase {
         });
         _then("both cards open, their element refused", () => _savedCard(0).actionsRegion.visible && _vpnCard(0).actionsRegion.visible
               && _savedCard(0).actionsRegion.appendHost.items.length === 1 && _vpnCard(0).actionsRegion.appendHost.items.length === 1
-              && host.status("anchors-refused")?.errors.length === 2 && _cardsSteady(), () => {
+              && host.status("anchors-refused")?.errors.length === 4 && _cardsSteady(), () => {
             const card = _savedCard(0);
+            assertEqual(card.beforeHost.count + " " + card.afterHost.count + " " + card.beforeHost.implicitHeight + " " + card.afterHost.implicitHeight, "1 1 0 0",
+                        "an element that fails to build before and after the card: listed, no size");
+            assert(_has(host.status("anchors-refused").errors, "anchors: settings.cards.saved.card, before: ")
+                   && _has(host.status("anchors-refused").errors, "anchors: settings.cards.saved.card, after: "), "… each failure in the module's status");
+            assertEqual(Math.round(card.frame.mapToItem(card, 0, 0).y * 100) / 100 + " " + Math.round((card.height - card.frame.height) * 100) / 100, "0 0",
+                        "… no gap above or under the frame: the card as tall as its frame");
             assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit"), _blockChild(card, "ownForget")]).join("; "), "",
                         "a saved card whose only module element is refused: Edit, then Forget 4 under it, no gap added");
             assertEqual(_vpnCard(0).actionsRegion.height, 0, "… a card with no button of its own: the stack takes no room");

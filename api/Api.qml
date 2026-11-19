@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.26" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.27" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -30,8 +30,9 @@ import qs.singletons.network
 //                          module's deprecations
 //   Api.anchors            (1.20) the places in the shell's views a module may put elements
 //                          at, frozen [{ path, kind, placements, takes, marks, context, scope,
-//                          since, where, view }] (ModuleRules.anchorTable, the reference). A path is
-//                          <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
+//                          since, where, view }] (ModuleRules.anchorTable, the reference;
+//                          `marks` (1.27): a card that shows modules' marks, module.setMark).
+//                          A path is <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
 //                          "popup" (the bar has none, nor the lock screen); view a settings
 //                          page's id or a popup's key; block a block's name, what it holds
 //                          (a block repeated per item named by its kind, card or row: the item
@@ -116,6 +117,13 @@ import qs.singletons.network
 //                                                     label is cut), in size "m" whatever it
 //                                                     asks for; any kind, with or without
 //                                                     confirm
+//                            settings.network_wifi.saved.card,
+//                            settings.network_ethernet.profiles.card (1.27)  the saved Wi-Fi
+//                                                     networks' and the wired profiles' cards
+//                                                     themselves, closed and open: no element
+//                                                     (no placement), only marks (`marks`
+//                                                     true): module.setMark(path, networkId,
+//                                                     label), below
 //                          A saved Wi-Fi network's card is a place only once its details are
 //                          read (until then Api.networks leaves it out: it could be a hotspot)
 //   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
@@ -262,6 +270,23 @@ import qs.singletons.network
 //                          text, the picture fitted inside. A wrong icon, or a file that
 //                          cannot be drawn, is an error in the module's status and null here;
 //                          with none the shell shows the first letter of the module's name
+//   module.setMark(path, itemId, label), module.clearMark(path, itemId)   (1.27, on its
+//                          handle) a mark on an item's card: the card shows the module's icon
+//                          (module.icon, or its name's first letter) at the end of its name's
+//                          line, after the name, closed and open; the name is cut first, the
+//                          icons keep their place. `path` a place whose `marks` is true
+//                          (Api.anchors), `itemId` the item's id as in the card's context
+//                          (networkId); `label` what it stands for, shown as the icon's
+//                          tooltip and accessible name "<module's name>: <label>" — plain text,
+//                          one line, at most 40 characters ("Exit node: home"). setMark →
+//                          true when kept; false while the module is off, and — with one
+//                          warning in its status — for a path that takes no marks, an id that
+//                          is not a short text, a label that is not a text, or its 201st mark
+//                          on one path. Set again for the same item, the label is replaced. A
+//                          card shows the first three modules' marks, in module id order; a
+//                          mark does nothing on a click (the card's header keeps it). Not
+//                          stored: a module going off takes its marks with it at once, and
+//                          sets them again when it starts
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
 //   Api.networks           (1.3) the saved networks this computer joins, frozen:

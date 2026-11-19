@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.26"
+    readonly property string apiVersion: "1.27"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -136,7 +136,9 @@ Singleton {
     //   takes       what an element there must be (anchorTakes: "" anything; "SmallButton" on
     //               a card's actions — another is refused when it is built, an error in its
     //               module's status: components/ModuleContribution.qml)
-    //   marks       a card that shows a module's mark while closed
+    //   marks       (1.27) a card that shows the modules' marks (module.setMark): its
+    //               placements may then be none — a module marks the card, puts nothing in
+    //               it there (cardMarks)
     //   context     what an element's `context` holds besides { anchor, placement }
     //   scope       "" — every module's elements; "own-provider" — on an item of a VPN
     //               provider, only the elements of the module that is that provider (the
@@ -173,6 +175,14 @@ Singleton {
         { path: "settings.network_ethernet.profiles.card.settings", kind: "region", placements: ["append"], takes: "", marks: false,
           context: "{ networkId: the profile's UUID (Api.networks' id), name, kind: \"ethernet\", active: fully up }", scope: "", since: "1.24",
           where: "Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows",
+          view: "panels/settings/NetworkEthernetSettings.qml" },
+        { path: "settings.network_wifi.saved.card", kind: "card", placements: [], takes: "", marks: true,
+          context: "{ networkId, name, kind: \"wifi\", active } — the mark's item is networkId", scope: "", since: "1.27",
+          where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: a module's icon at the end of the name's line",
+          view: "panels/settings/NetworkWifiSettings.qml" },
+        { path: "settings.network_ethernet.profiles.card", kind: "card", placements: [], takes: "", marks: true,
+          context: "{ networkId, name, kind: \"ethernet\", active } — the mark's item is networkId", scope: "", since: "1.27",
+          where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: a module's icon at the end of the name's line",
           view: "panels/settings/NetworkEthernetSettings.qml" },
         { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton", marks: false,
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.25",
@@ -360,7 +370,8 @@ Singleton {
             seen.add(row.path);
             if (!anchorKinds.includes(row.kind))
                 problems.push(where + ": kind " + show(row.kind) + " is not one of " + anchorKinds.join(", "));
-            if (!Array.isArray(row.placements) || row.placements.length === 0
+            // None only on a card that takes marks: a row must offer something
+            if (!Array.isArray(row.placements) || (row.placements.length === 0 && row.marks !== true)
                     || !row.placements.every(place => anchorPlacements.includes(place))
                     || new Set(row.placements).size !== row.placements.length)
                 problems.push(where + ": placements are not some of " + anchorPlacements.join(", "));
@@ -374,6 +385,8 @@ Singleton {
                 problems.push(where + ": view " + show(row.view) + " is not a file of the shell (\"panels/NetworkPanel.qml\")");
             if (typeof row.marks !== "boolean")
                 problems.push(where + ": marks is true or false");
+            else if (row.marks && row.kind !== "card")
+                problems.push(where + ": only a card takes marks");
             if (!anchorScopes.includes(row.scope))
                 problems.push(where + ": scope " + show(row.scope) + " is not \"\" or \"own-provider\"");
             if (!parseApi(row.since))
@@ -426,6 +439,79 @@ Singleton {
                 return letter.toUpperCase();
         }
         return "?";
+    }
+
+    // ---- The marks on a card (API 1.27) ----
+    //
+    // A module marks an item's card (module.setMark(path, itemId, label)): the card shows the
+    // module's icon at the end of its name's line, closed and open, with `label` as its
+    // accessible name and tooltip ("Tailscale: Exit node: home"). Only on a path whose row
+    // takes marks; the host holds them while the module is on, and drops its marks when it
+    // goes off (they are not stored).
+
+    // Of one module on one path, at most this many marks are kept
+    readonly property int maxMarksPerPath: 200
+    // A card shows at most this many modules' marks
+    readonly property int maxCardMarks: 3
+    // A mark's label, in characters (code points)
+    readonly property int maxMarkLabel: 40
+
+    // A module's mark set: { ok, marks (the list after), warning ("" none) }. `marks`:
+    // [{ module, path, itemId, label }]. Refused (ok false, the list unchanged, a warning):
+    // a path whose row takes no marks, an item id that is not a short text, a label that is
+    // no text, the module's 201st mark on the path. The label is made plain — one line,
+    // control characters as spaces, trimmed, cut at maxMarkLabel. Set again for the same
+    // item: the label replaced, counted once.
+    function setMark(table, marks, module, path, itemId, label) {
+        const list = Array.isArray(marks) ? marks : [];
+        const refuse = warning => ({ ok: false, marks: list, warning: warning });
+        const row = anchorRow(table, path);
+        if (!row || row.marks !== true)
+            return refuse("marks: " + show(path) + " takes no marks");
+        if (!isString(itemId, 200))
+            return refuse("marks: " + show(itemId) + " is not an item's id (a text of at most 200 characters)");
+        if (typeof label !== "string")
+            return refuse("marks: the label on " + show(path) + " is not a text");
+        const plain = codePoints(_plainLine(label, maxMarkLabel * 4).trim()).slice(0, maxMarkLabel).join("").trim();
+        const mark = { module: String(module), path: path, itemId: itemId, label: plain };
+        const index = list.findIndex(entry => entry.module === mark.module && entry.path === path && entry.itemId === itemId);
+        if (index >= 0) {
+            const next = list.slice();
+            next[index] = mark;
+            return { ok: true, marks: next, warning: "" };
+        }
+        if (list.filter(entry => entry.module === mark.module && entry.path === path).length >= maxMarksPerPath)
+            return refuse("marks: more than " + maxMarksPerPath + " on " + show(path) + " (the others are not kept)");
+        return { ok: true, marks: list.concat([mark]), warning: "" };
+    }
+
+    // The list without a module's mark on one item
+    function clearMark(marks, module, path, itemId) {
+        return (Array.isArray(marks) ? marks : []).filter(entry => !(entry.module === module && entry.path === path && entry.itemId === itemId));
+    }
+
+    // The list without any of a module's marks (it went off)
+    function dropMarks(marks, module) {
+        return (Array.isArray(marks) ? marks : []).filter(entry => entry.module !== module);
+    }
+
+    // What one card shows: the marks on its path and item → [{ module, label }], in module
+    // id order, the first maxCardMarks
+    function cardMarks(marks, path, itemId) {
+        if (typeof path !== "string" || path === "" || typeof itemId !== "string" || itemId === "")
+            return [];
+        return (Array.isArray(marks) ? marks : [])
+            .filter(entry => isObject(entry) && entry.path === path && entry.itemId === itemId && typeof entry.module === "string")
+            .sort((first, second) => first.module < second.module ? -1 : first.module > second.module ? 1 : 0)
+            .slice(0, maxCardMarks)
+            .map(entry => ({ module: entry.module, label: String(entry.label ?? "") }));
+    }
+
+    // A mark's accessible name and tooltip: "<module's name>: <label>", the name alone with
+    // no label
+    function markTip(name, label) {
+        const plainName = _plainLine(String(name ?? ""), 100).trim();
+        return label ? plainName + ": " + label : plainName;
     }
 
     // Ids a module cannot take: the core's own namespaces (settings groups and key prefixes,
