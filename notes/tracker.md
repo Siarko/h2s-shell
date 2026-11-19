@@ -930,3 +930,10 @@ For the owner, from the autonomous run (2026-11-18 on):
 - **Spacing of modules' elements in a settings page** (U1a, copied from today's General
   slot): 16 px between the page and the hosts before and after it, 4 px between elements
   in one host. Status texts quote paths in JSON quotes (the code's style), not backticks.
+- **The popups on anchor blocks** (U2, to look at once by hand): network popup with
+  Tailscale up — the VPN header, rows 4 apart, Tailscale's exit-node chooser right under its
+  row, Ethernet and Wi-Fi spacing unchanged, the divider over the network list only while
+  Wi-Fi is on, the list not cut short, with a hotspot on the hotspot line and "Turn off
+  hotspot"; notifications popup — header and "Clear all" 8 px in, the list filling to the
+  bottom and scrolling, cards sliding in and out, "All caught up" after Clear all then the
+  popup closing; moving the pointer between bar cells with a popup open.
