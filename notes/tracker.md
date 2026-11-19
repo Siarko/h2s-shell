@@ -40,11 +40,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To look at on a screen**
 
-- **The Wi-Fi and Ethernet settings pages on anchor blocks** (U5): the "Saved networks"
-  and "Hotspots" titles with their buttons at the right edge, the cards' spacing, an opened
-  card with the password row, the "None yet" lines on a machine with none; Ethernet: "Wired
-  profiles" as far under the device card as before, an opened profile card.
-
 - **The popups on anchor blocks** (U2). Network popup with Tailscale up: VPN header, rows
   4 px apart, the exit-node chooser right under its row, Ethernet and Wi-Fi spacing
   unchanged, the divider over the network list only while Wi-Fi is on, the list not cut
@@ -236,6 +231,12 @@ All by the owner, 2026-11-17.
   dependencies are to be added. P1's other choices stand (a malformed entry fails the module;
   a function handed to a provider is the dependent's job; a failed provider stays failed
   until turned off and on).
+- The Wi-Fi settings page (2026-11-19, looked at on a screen: the pages are fine): the Wi-Fi
+  switch moves into the page's heading; the "Wi-Fi … Off" row under it goes (the switch shows
+  the state).
+- Network cards (2026-11-19): the main button, Edit and Forget stand in one row on the name
+  line, also while the card is closed (saved Wi-Fi, hotspot, wired; nothing stacked when
+  opened). Order: main, Edit, Forget.
 - Contrast of warning/success buttons under the pointer: left as is until the themes' rework.
 - Exit node "for now" (2026-11-19): the popup's chooser has a "Default" choice that drops the manual override and goes back to the per-network setting. The manual choice is kept only in memory: it ends when the shell or the computer restarts and when the computer wakes from sleep or hibernation (M9).
 - No terminal setting of its own: a global "default programs" setting later.
