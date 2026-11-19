@@ -25,9 +25,27 @@ installed shell into a test tree (below). Module test mode (A3), privileged star
 the prompt saying who and what for (A5) are on `master` (below). The commands lane is done
 with helpers (C1) and the notification (A6). System facts (C2) are on `master`. The
 module's M2 and M3 are on its `main` (below): its privileged runs show the full prompt.
-B1, D1 and E1 are on `master` (below): the facts lane is done. P1 is on `master`. Next:
-P2 (reach closed), a look at the lock bed's restart scenarios, then the places lane and the
-remaining module slices.
+B1, D1 and E1 are on `master` (below): the facts lane is done. P1 and P2 are on `master`:
+the dependencies lane is done. Next: the places lane (U0 …), then the remaining module
+slices.
+
+- [x] **API plan, P2 reach closed**: on `master` (2026-11-19; module API 1.19; reviewed by a
+      second agent on the diff, fixed by another author with cases that fail before;
+      `tests/run-all.sh` passes on Arch, tools from `PATH`, and on NixOS, tools from nix;
+      the Tailscale module's suites pass and its status is unchanged).
+      `Api.moduleStatus(id)` (frozen `{ id, name, version, state, active }`); `Api.module(id)`
+      and `module.host` listed in the calling module's `deprecations` (a source scan of
+      every QML and JS file: comments, strings, regex literals skipped, template
+      substitutions read; `ModuleSourceRules.codeText`, computed once per file); importing
+      `qs.singletons` or a directory outside the module is an error in the status (it still
+      loads), also through a script's `.import`. P1's low findings: a module turned off and
+      on in one turn stays pending until its old main is gone; a main deleted elsewhere no
+      longer leaves its provider waiting; the watcher holds the main from outside it. The
+      scan is about 15× faster than before (1 MB in ~0.15 s on the host). Left open:
+  - `name` from `moduleStatus` is the manifest's raw text: callers render it plain.
+  - A handle kept under another name than `module` is not found by the scan.
+  - A JavaScript reference to a deleted object never reads as null in this engine: the
+    `!entry.main` branch in `_reap` never runs (only a throwing `destroy()` catches it).
 
 - [x] **API plan, P1 `exports` and `uses`**: on `master` (2026-11-19; module API 1.18;
       reviewed by a second agent on the diff, fixed by another author with cases that fail
