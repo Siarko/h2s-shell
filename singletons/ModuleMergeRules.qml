@@ -72,6 +72,220 @@ Singleton {
         return "loaded";
     }
 
+    // ---- Modules that use other modules (API 1.18) ----
+
+    // Whether a provider whose `exports` has version `has` serves a dependent asking for
+    // `wanted`: the same major, the provider's minor at least the one asked for (what a minor
+    // may change is the provider's rule) → { fits, reason }
+    function usesFit(wanted, has) {
+        const asked = ModuleRules.parseApi(wanted);
+        const given = ModuleRules.parseApi(has);
+        if (!asked || !given)
+            return { fits: false, reason: "has " + (typeof has === "string" ? has : ModuleRules.show(has)) };
+        return asked.major === given.major && given.minor >= asked.minor ? { fits: true, reason: "" } : { fits: false, reason: "has " + has };
+    }
+
+    // Why a provider in state `state` serves no dependent, in a few words
+    function _notLoadedReason(state) {
+        switch (state) {
+        case "disabled": return "turned off";
+        case "failed": return "failed";
+        case "incompatible": return "incompatible with this shell";
+        case "missing-program": return "missing a program";
+        case "missing-module": return "missing a module";
+        case "safe-mode": return "not loaded (safe mode)";
+        default: return "not loaded (" + ModuleRules.show(state) + ")";
+        }
+    }
+
+    // The order the modules load in and the state each ends in, from what `uses` asks for.
+    // `manifests`: checked manifests ({ id, uses: [{ id, version }], exports: { version } |
+    // null }); a second one with an id already given is ignored (the host gives the ones that
+    // count). `states`: { <id>: { state, exports } } — `state` what the module's own checks
+    // say (stateOf), `exports` "" when its exports object is there, a text when it is not
+    // (exportsOf), undefined while not known (taken as there: the host asks again once the
+    // main is made).
+    // → { order: [ids], providers first, then by id; destroyed in the reverse order,
+    //     modules: [{ id, state, reasons: [text] }] in that order,
+    //     cycles: [[ids]] }
+    // A module whose own state is not "loaded" keeps it. One that would load:
+    //   in a cycle of uses                    → failed, "uses form a cycle: a → b → a", or
+    //                                            "uses itself"
+    //   a provider pending                    → pending (it waits for it)
+    //   a provider missing or not loaded, exporting nothing or an older version, or without
+    //   its exports object                    → missing-module, one reason per provider:
+    //     "needs module tailscale 1.0: not installed" / "turned off" / "failed" /
+    //     "exports no API" / "has 0.9" / "gives no exports object"
+    // Pure, and never throws on any input.
+    function dependencyPlan(manifests, states) {
+        const known = new Map();
+        for (const manifest of Array.isArray(manifests) ? manifests : []) {
+            const id = manifest?.id;
+            if (typeof id !== "string" || id === "" || known.has(id))
+                continue;
+            known.set(id, { id: id, exports: ModuleRules.isObject(manifest.exports) ? manifest.exports : null,
+                            uses: (Array.isArray(manifest.uses) ? manifest.uses : [])
+                                .filter(use => use && typeof use.id === "string" && typeof use.version === "string") });
+        }
+        const ids = Array.from(known.keys()).sort();
+        const edges = id => Array.from(new Set(known.get(id).uses.map(use => use.id).filter(other => known.has(other)))).sort();
+
+        // The cycles: strongly connected components (Tarjan) of more than one module, or of
+        // one that uses itself
+        let counter = 0;
+        const index = new Map();
+        const low = new Map();
+        const stack = [];
+        const onStack = new Set();
+        const cycles = [];
+        const visit = id => {
+            index.set(id, counter);
+            low.set(id, counter);
+            counter++;
+            stack.push(id);
+            onStack.add(id);
+            for (const other of edges(id)) {
+                if (!index.has(other)) {
+                    visit(other);
+                    low.set(id, Math.min(low.get(id), low.get(other)));
+                } else if (onStack.has(other)) {
+                    low.set(id, Math.min(low.get(id), index.get(other)));
+                }
+            }
+            if (low.get(id) === index.get(id)) {
+                const component = [];
+                let member;
+                do {
+                    member = stack.pop();
+                    onStack.delete(member);
+                    component.push(member);
+                } while (member !== id);
+                if (component.length > 1 || edges(id).includes(id))
+                    cycles.push(component.sort());
+            }
+        };
+        for (const id of ids) {
+            if (!index.has(id))
+                visit(id);
+        }
+        const cycleText = new Map();
+        for (const component of cycles) {
+            const members = new Set(component);
+            for (const id of component) {
+                const path = _cyclePath(id, members, edges);
+                cycleText.set(id, path.length <= 2 ? "uses itself" : "uses form a cycle: " + path.join(" → "));
+            }
+        }
+
+        // The order: each module after the ones it uses (depth first, by id), a cycle's
+        // members where the walk meets them
+        const order = [];
+        const placed = new Set();
+        const entered = new Set();
+        const place = id => {
+            if (placed.has(id) || entered.has(id))
+                return;
+            entered.add(id);
+            for (const other of edges(id))
+                place(other);
+            placed.add(id);
+            order.push(id);
+        };
+        for (const id of ids)
+            place(id);
+
+        // The states, in that order: a provider's is known before its dependents'
+        const final = new Map();
+        const result = [];
+        const stateOf = id => {
+            const given = states && ModuleRules.isObject(states) && ModuleRules.has(states, id) ? states[id] : null;
+            return typeof given?.state === "string" ? given.state : "failed";
+        };
+        const exportsProblem = id => {
+            const given = states && ModuleRules.isObject(states) && ModuleRules.has(states, id) ? states[id] : null;
+            return typeof given?.exports === "string" ? given.exports : "";
+        };
+        for (const id of order) {
+            const own = stateOf(id);
+            let state = own;
+            const reasons = [];
+            if (own === "loaded" && cycleText.has(id)) {
+                state = "failed";
+                reasons.push(cycleText.get(id));
+            } else if (own === "loaded") {
+                let waiting = false;
+                for (const use of known.get(id).uses) {
+                    const needs = "needs module " + use.id + " " + use.version + ": ";
+                    if (!known.has(use.id)) {
+                        reasons.push(needs + "not installed");
+                        continue;
+                    }
+                    const providerState = final.get(use.id) ?? stateOf(use.id);
+                    if (providerState === "pending") {
+                        waiting = true;
+                        continue;
+                    }
+                    if (providerState !== "loaded") {
+                        reasons.push(needs + _notLoadedReason(providerState));
+                        continue;
+                    }
+                    const provider = known.get(use.id);
+                    if (!provider.exports) {
+                        reasons.push(needs + "exports no API");
+                        continue;
+                    }
+                    const fit = usesFit(use.version, provider.exports.version);
+                    if (!fit.fits) {
+                        reasons.push(needs + fit.reason);
+                        continue;
+                    }
+                    if (exportsProblem(use.id) !== "")
+                        reasons.push(needs + "gives no exports object");
+                }
+                if (reasons.length > 0)
+                    state = "missing-module";
+                else if (waiting)
+                    state = "pending";
+            }
+            final.set(id, state);
+            result.push({ id: id, state: state, reasons: reasons });
+        }
+        return { order: order, modules: result, cycles: cycles };
+    }
+
+    // One cycle through `start` inside a component (`members`): the shortest way back to it,
+    // as [start, …, start]
+    function _cyclePath(start, members, edges) {
+        const previous = new Map();
+        const queue = [start];
+        const seen = new Set([start]);
+        while (queue.length > 0) {
+            const id = queue.shift();
+            for (const other of edges(id)) {
+                if (!members.has(other))
+                    continue;
+                if (other === start) {
+                    const path = [start];
+                    for (let step = id; step !== start; step = previous.get(step))
+                        path.splice(1, 0, step);
+                    path.push(start);
+                    return path;
+                }
+                if (!seen.has(other)) {
+                    seen.add(other);
+                    previous.set(other, id);
+                    queue.push(other);
+                }
+            }
+        }
+        return [start];
+    }
+
+    // The plan's entry for one module, or null
+    function planned(plan, id) {
+        return (plan?.modules ?? []).find(entry => entry.id === id) ?? null;
+    }
+
     // A module's contributions count only while it is loaded
     function contributes(state) {
         return state === "loaded";

@@ -537,6 +537,19 @@ the `qs.api` facade, the registries taking modules' contributions, and slots.
   place showing nothing, closes its popup, takes its pages, settings, facts and slot content.
   The core builds a module's objects by URL and gives each the module's handle as `module`
   (only when its root object declares it: `Modules.initialProperties`).
+- **A module's API for other modules**: a provider declares `"exports": { "version": "1.0" }`
+  in its manifest and gives the object as its main's `exports` property (a plain `QtObject`,
+  no `parent`, read once when the main is made); a dependent declares
+  `"uses": { "<id>": "1.0" }` (same major, the provider's minor at least the one asked for;
+  all required) and gets `module.uses.<id>`, that object and nothing else of the provider.
+  `ModuleMergeRules.dependencyPlan` gives the order — providers first, otherwise by id — and
+  the state each ends in: a provider missing, not loaded, exporting nothing or an older
+  version, or whose main gives no `exports` object leaves its dependent `missing-module`, one
+  reason per provider in its errors ("needs module tailscale 1.0: turned off"); a provider
+  pending leaves it pending; a cycle of `uses` fails every module in it, the cycle named. The
+  host destroys in the reverse of that order and makes in it: a provider turned off,
+  failing or reloaded (`load()` again) takes its dependents off first, and they come back
+  after it, so `module.uses` never changes under a live main.
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel
   lets modules in; the names and contexts are `ModuleRules.slotTable`. Never on the lock
   screen (a suite checks `screensaver/`, `singletons/lock/`, `Lockscreen`, `pam/` and the
@@ -876,7 +889,7 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `tests/ModuleRulesTest.qml` (the rules), `tests/SystemFactsTest.qml` (the system facts
   from made-up readings, the reader on made-up files), `tests/ModulesTest.qml` (the host on
   the fixtures in `tests/fixtures/modules`: guard, file check, start guard, program lookup,
-  data directories),
+  data directories, and `provider` / `consumer` for `exports` and `uses`),
   `tests/ModuleRegistriesTest.qml` (the registries, slots and the turning-off contract on
   the shell's own host), `tests/QuickshellPinTest.qml` (the Quickshell behaviour it all rests
   on — if it fails after a Quickshell upgrade, modules are broken by the upgrade), and the

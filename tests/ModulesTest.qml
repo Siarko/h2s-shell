@@ -113,7 +113,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.17 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.18 Good fixture", "good: version, API, name");
             assertEqual(good?.directory, fixtures + "/good", "good: its canonical directory");
             const main = host.mainObject("good");
             assert(main !== null, "good: its main was created");
@@ -756,9 +756,80 @@ TestCase {
             _dataHost.destroy();
             _dataHost = null;
             _sh("rm -rf \"$1\"", [_scratch], () => {});
+
+            // (API 1.18) A module's API for other modules: the consumer fixture uses the
+            // provider's exports. The consumer comes first on the search path: the order is
+            // the plan's, not the path's
+            const probeComponent = Qt.createComponent("file://" + fixtures + "/provider/ProviderProbe.qml", Component.PreferSynchronous);
+            suite._providerProbe = probeComponent.status === Component.Ready ? probeComponent.createObject(suite) : null;
+            _created.push(_providerProbe);
+            assert(_providerProbe !== null, "the provider's probe is built (it shares the fixture's singleton)");
+            _providerProbe.state.log = [];
+            host.load(_dirs(["consumer", "provider"]), {});
+        });
+        _then("the provider and the consumer load", () => _settled() && _status("consumer")?.state !== "pending", () => {
+            const providerStatus = _expectState("provider", "loaded");
+            const consumerStatus = _expectState("consumer", "loaded");
+            assertEqual((providerStatus?.errors ?? []).concat(consumerStatus?.errors ?? []).length, 0, "uses: no errors on either");
+            assertEqual(host._order.join(","), "provider,consumer", "the provider is planned before its dependent");
+            const providerMain = host.mainObject("provider");
+            const consumerMain = host.mainObject("consumer");
+            assert(providerMain !== null && consumerMain !== null, "both mains made");
+            assertEqual(_providerProbe.state.log.join("|"), "provider up|hello consumer up", "the provider's main came first; the consumer used its export while being built");
+            assertEqual(consumerMain.answer, "hello, consumer up", "… and got its answer");
+            const given = consumerMain.usesAtStart;
+            assertEqual(Object.keys(given ?? {}).join(","), "provider", "module.uses holds the modules it uses, nothing else");
+            assert(given.provider === providerMain.exports, "module.uses.provider is the provider's exports object");
+            assert(given.provider !== providerMain, "… not its main");
+            assertEqual(given.provider.secret, undefined, "… nothing of the main through it");
+            assert(!("parent" in given.provider), "… and no `parent` to climb to the main");
+            assertEqual(given.provider.greeting, "hello from the provider", "… its exported properties are there");
+            assert(Object.isFrozen(given), "module.uses is frozen");
+            assert(host.handle("consumer").uses.provider === providerMain.exports, "the handle's uses: the same object");
+            assertEqual(Object.keys(host.handle("provider").uses).length, 0, "a module that uses nothing: module.uses empty");
+            suite._oldExports = providerMain.exports;
+
+            // The provider turned off: the consumer goes first, then the provider
+            assert(host.setEnabled("provider", false), "setEnabled(provider, false)");
+        });
+        _then("the consumer follows the provider off", () => _status("consumer")?.state === "missing-module" && _status("provider")?.state === "disabled"
+              && _providerProbe.state.log.includes("provider gone"), () => {
+            const consumerStatus = _status("consumer");
+            assert(_has(consumerStatus?.errors, "needs module provider 1.1: turned off"), "missing-module, with the reason: " + consumerStatus?.errors.join("; "));
+            assertEqual(host.mainObject("consumer"), null, "the consumer's main destroyed");
+            assertEqual(host.handle("consumer").active, false, "… its handle inactive");
+            assertEqual(Object.keys(host.handle("consumer").uses).length, 0, "… and its module.uses empty while it is off");
+            assertEqual(_providerProbe.state.log.slice(2).join("|"), "hello consumer gone|provider gone",
+                        "the consumer's main went first, still able to use the provider's object; then the provider's");
+            assert(host.setEnabled("provider", true), "setEnabled(provider, true)");
+        });
+        _then("the provider comes back, then the consumer", () => _status("consumer")?.state === "loaded", () => {
+            _expectState("provider", "loaded");
+            const consumerMain = host.mainObject("consumer");
+            assert(consumerMain?.usesAtStart?.provider === host.mainObject("provider")?.exports, "the new consumer main got the new provider main's exports");
+            assert(consumerMain?.usesAtStart?.provider !== suite._oldExports, "… not the old object");
+            assertEqual(_providerProbe.state.log.slice(4).join("|"), "provider up|hello consumer up", "the provider first, then the consumer");
+            _providerProbe.state.log = [];
+            // A reload of the shell rebuilds everything in the same order
+            host.load(_dirs(["consumer", "provider"]), {});
+        });
+        _then("the reload settles", () => _settled() && _status("consumer")?.state === "loaded" && _providerProbe.state.log.length >= 4, () => {
+            assertEqual(_providerProbe.state.log.join("|"), "hello consumer gone|provider gone|provider up|hello consumer up",
+                        "a reload: the consumer's main destroyed before the provider's, the provider's made before the consumer's");
+            // Without the provider installed
+            host.load(_dirs(["consumer"]), {});
+        });
+        _then("the consumer alone settles", () => _settled() && _status("consumer")?.state !== "pending", () => {
+            const consumerStatus = _expectState("consumer", "missing-module");
+            assert(_has(consumerStatus?.errors, "needs module provider 1.1: not installed"), "a provider not installed: said: " + consumerStatus?.errors.join("; "));
+            assertEqual(host.mainObject("consumer"), null, "… no main");
+            host.unload();
         });
         _clock.start();
     }
+
+    property var _providerProbe: null
+    property var _oldExports: null
 
     property var _goodState: null
     property var _dataHost: null

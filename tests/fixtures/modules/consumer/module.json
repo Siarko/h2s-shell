@@ -1,0 +1,9 @@
+{
+    "id": "consumer",
+    "name": "Consumer fixture",
+    "version": "1.0.0",
+    "api": "1.18",
+    "description": "A module that uses the provider fixture's API (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "uses": { "provider": "1.1" }
+}

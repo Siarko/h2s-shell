@@ -713,6 +713,155 @@ TestCase {
         _m2(rules, alpha, zeta);
         _api13(rules);
         _api116(rules);
+        _dependencies(rules);
+    }
+
+    // API 1.18: a module's API for other modules — `exports` and `uses` in the manifest, the
+    // dependency plan (order, each reason, cycles, duplicates), what a main may offer
+    function _dependencies(rules) {
+        // --- the manifest ---
+        const provider = ModuleManifestRules.parseManifest(_manifest({ id: "prov", exports: { version: "1.2" } }));
+        assert(provider.valid && provider.exports?.version === "1.2" && provider.warnings.length === 0, "exports: { version } read, no warning");
+        const plain = ModuleManifestRules.parseManifest(_manifest());
+        assert(plain.exports === null && plain.uses.length === 0, "none given: exports null, uses []");
+        for (const bad of [7, "1.0", [], { version: "1" }, { version: 1.2 }, {}]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest({ exports: bad }));
+            assert(!parsed.valid && parsed.exports === null && _has(parsed.errors, "exports"), "exports " + JSON.stringify(bad) + ": the module fails, said: " + parsed.errors.join("; "));
+        }
+        assert(_has(ModuleManifestRules.parseManifest(_manifest({ exports: { version: "1.0", extra: 1 } })).warnings, "exports: unknown field \"extra\""),
+               "exports: an unknown field is a warning");
+        const user = ModuleManifestRules.parseManifest(_manifest({ uses: { zeta: "1.0", alpha: "2.3" } }));
+        assert(user.valid, "uses: valid");
+        assertEqual(JSON.stringify(user.uses), "[{\"id\":\"zeta\",\"version\":\"1.0\"},{\"id\":\"alpha\",\"version\":\"2.3\"}]", "uses: [{ id, version }] in the manifest's order");
+        for (const bad of [[], "zeta", 3, { "Zeta": "1.0" }, { "battery": "1.0" }, { "zeta": "1" }, { "zeta": 1 }, { "constructor": "1.0" }]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest({ uses: bad }));
+            assert(!parsed.valid && _has(parsed.errors, "uses"), "uses " + JSON.stringify(bad) + ": the module fails, said: " + parsed.errors.join("; "));
+        }
+        assert(ModuleManifestRules.parseManifest(_manifest({ uses: { tailscale: "1.0" } })).valid, "uses itself: read (the plan names it)");
+        assert(!ModuleManifestRules.parseManifest('{"id":"x","name":"X","version":"1","api":"1.0","uses":{"__proto__":"1.0"}}').valid,
+               "uses: \"__proto__\" is no module id");
+        assert(rules.states.includes("missing-module"), "the states include missing-module");
+
+        // --- the version check ---
+        assert(ModuleMergeRules.usesFit("1.1", "1.2").fits && ModuleMergeRules.usesFit("1.2", "1.2").fits, "uses: the same major, the provider's minor at least the one asked");
+        assertEqual(ModuleMergeRules.usesFit("1.3", "1.2").reason, "has 1.2", "… an older minor: \"has 1.2\"");
+        assert(!ModuleMergeRules.usesFit("1.0", "2.0").fits && !ModuleMergeRules.usesFit("2.0", "1.9").fits, "… another major: not");
+        assert(!ModuleMergeRules.usesFit("1.0", "x").fits && !ModuleMergeRules.usesFit(null, "1.0").fits, "… unreadable: not");
+
+        // --- the plan ---
+        const module = (id, uses, exportsVersion) => ({ id: id, uses: Object.keys(uses ?? {}).map(other => ({ id: other, version: uses[other] })),
+                                                        exports: exportsVersion ? { version: exportsVersion } : null });
+        const all = (ids, state) => {
+            const states = {};
+            for (const id of ids)
+                states[id] = { state: state ?? "loaded", exports: "" };
+            return states;
+        };
+        const summary = plan => plan.modules.map(entry => entry.id + ":" + entry.state).join(",");
+        const reasons = (plan, id) => (ModuleMergeRules.planned(plan, id)?.reasons ?? []).join("; ");
+
+        let plan = ModuleMergeRules.dependencyPlan([module("app", { lib: "1.0" }), module("lib", { base: "1.0" }, "1.0"), module("base", {}, "1.4"),
+                                                    module("alone")], all(["app", "lib", "base", "alone"]));
+        assertEqual(plan.order.join(","), "alone,base,lib,app", "order: by id, each after what it uses");
+        assertEqual(summary(plan), "alone:loaded,base:loaded,lib:loaded,app:loaded", "all there and fitting: all loaded, in that order");
+        assertEqual(plan.cycles.length, 0, "… no cycle");
+
+        plan = ModuleMergeRules.dependencyPlan([module("app", { lib: "1.0" })], all(["app"]));
+        assertEqual(summary(plan), "app:missing-module", "a provider not there: missing-module");
+        assertEqual(reasons(plan, "app"), "needs module lib 1.0: not installed", "… \"not installed\"");
+
+        const pair = [module("app", { lib: "1.3" }), module("lib", {}, "1.2")];
+        plan = ModuleMergeRules.dependencyPlan(pair, all(["app", "lib"]));
+        assertEqual(summary(plan) + " " + reasons(plan, "app"), "lib:loaded,app:missing-module needs module lib 1.3: has 1.2", "an older exports version: \"has 1.2\"");
+        plan = ModuleMergeRules.dependencyPlan([module("app", { lib: "1.0" }), module("lib", {}, "2.0")], all(["app", "lib"]));
+        assertEqual(reasons(plan, "app"), "needs module lib 1.0: has 2.0", "another major: \"has 2.0\"");
+        plan = ModuleMergeRules.dependencyPlan([module("app", { lib: "1.0" }), module("lib")], all(["app", "lib"]));
+        assertEqual(reasons(plan, "app"), "needs module lib 1.0: exports no API", "a provider without exports: \"exports no API\"");
+
+        const fits = [module("app", { lib: "1.0" }), module("lib", {}, "1.0")];
+        for (const [state, said] of [["disabled", "turned off"], ["failed", "failed"], ["incompatible", "incompatible with this shell"],
+                                     ["missing-program", "missing a program"], ["safe-mode", "not loaded (safe mode)"]]) {
+            const states = all(["app", "lib"]);
+            states.lib.state = state;
+            plan = ModuleMergeRules.dependencyPlan(fits, states);
+            assertEqual(summary(plan) + " " + reasons(plan, "app"), "lib:" + state + ",app:missing-module needs module lib 1.0: " + said,
+                        "a provider " + state + ": the dependent missing-module, \"" + said + "\"");
+        }
+        let states = all(["app", "lib"]);
+        states.lib.state = "pending";
+        assertEqual(summary(ModuleMergeRules.dependencyPlan(fits, states)), "lib:pending,app:pending", "a provider pending: the dependent waits (pending)");
+        states = all(["app", "lib"]);
+        states.lib.exports = "it declares exports but its main has no `exports` property";
+        plan = ModuleMergeRules.dependencyPlan(fits, states);
+        assertEqual(summary(plan) + " " + reasons(plan, "app"), "lib:loaded,app:missing-module needs module lib 1.0: gives no exports object",
+                    "a provider whose main gives no exports object: loaded itself, its dependent missing-module");
+        states = all(["app", "lib"]);
+        states.lib.exports = undefined;
+        assertEqual(summary(ModuleMergeRules.dependencyPlan(fits, states)), "lib:loaded,app:loaded", "… not known yet (its main not made): taken as there");
+        for (const state of ["disabled", "pending", "failed", "incompatible"]) {
+            states = all(["app", "lib"]);
+            states.app.state = state;
+            states.lib.state = "disabled";
+            plan = ModuleMergeRules.dependencyPlan(fits, states);
+            assertEqual(ModuleMergeRules.planned(plan, "app").state + "|" + reasons(plan, "app"), state + "|", "a dependent " + state + " itself keeps that state, no reason added");
+        }
+
+        // A chain: a provider failing leaves its dependent missing a module, and that one's too
+        states = all(["top", "mid", "low"]);
+        states.low.state = "failed";
+        plan = ModuleMergeRules.dependencyPlan([module("top", { mid: "1.0" }), module("mid", { low: "1.0" }, "1.0"), module("low", {}, "1.0")], states);
+        assertEqual(summary(plan), "low:failed,mid:missing-module,top:missing-module", "a chain follows its provider");
+        assertEqual(reasons(plan, "top"), "needs module mid 1.0: missing a module", "… \"missing a module\"");
+        // Several reasons at once
+        plan = ModuleMergeRules.dependencyPlan([module("app", { gone: "1.0", old: "1.5" }), module("old", {}, "1.0")], all(["app", "old"]));
+        assertEqual(reasons(plan, "app"), "needs module gone 1.0: not installed; needs module old 1.5: has 1.0", "one reason per provider, in the manifest's order");
+
+        // Cycles
+        plan = ModuleMergeRules.dependencyPlan([module("a", { b: "1.0" }, "1.0"), module("b", { a: "1.0" }, "1.0"), module("c", { a: "1.0" })],
+                                               all(["a", "b", "c"]));
+        assertEqual(summary(plan), "b:failed,a:failed,c:missing-module", "a cycle: both failed; one using it missing-module (after them)");
+        assertEqual(reasons(plan, "a"), "uses form a cycle: a → b → a", "… the cycle named, from the module");
+        assertEqual(reasons(plan, "b"), "uses form a cycle: b → a → b", "… from the other");
+        assertEqual(reasons(plan, "c"), "needs module a 1.0: failed", "… its dependent: the provider failed");
+        assertEqual(JSON.stringify(plan.cycles), "[[\"a\",\"b\"]]", "… listed");
+        plan = ModuleMergeRules.dependencyPlan([module("x", { y: "1.0" }, "1.0"), module("y", { z: "1.0" }, "1.0"), module("z", { x: "1.0" }, "1.0")],
+                                               all(["x", "y", "z"]));
+        assertEqual(reasons(plan, "x") + " | " + reasons(plan, "z"), "uses form a cycle: x → y → z → x | uses form a cycle: z → x → y → z", "a cycle of three named in its order");
+        plan = ModuleMergeRules.dependencyPlan([module("self", { self: "1.0" }, "1.0")], all(["self"]));
+        assertEqual(summary(plan) + " " + reasons(plan, "self"), "self:failed uses itself", "a module using itself: failed, \"uses itself\"");
+        states = all(["a", "b"]);
+        states.a.state = "disabled";
+        plan = ModuleMergeRules.dependencyPlan([module("a", { b: "1.0" }, "1.0"), module("b", { a: "1.0" }, "1.0")], states);
+        assertEqual(summary(plan), "b:failed,a:disabled", "a cycle: a member turned off stays off; the other fails");
+
+        // Duplicates: the first manifest of an id counts; one provider serves several
+        plan = ModuleMergeRules.dependencyPlan([module("lib", {}, "1.0"), module("lib", { gone: "1.0" }, "0.1"), module("one", { lib: "1.0" }),
+                                                module("two", { lib: "1.0" })], all(["lib", "one", "two"]));
+        assertEqual(summary(plan), "lib:loaded,one:loaded,two:loaded", "a second manifest of an id ignored; two dependents of one provider both loaded");
+        assertEqual(plan.order.length, 3, "… one entry per id");
+
+        // Hostile input: no throw, nothing planned from garbage
+        for (const input of [null, undefined, 7, "x", [null, 7, "a", { id: 3 }, { id: "" }, { id: "ok", uses: "no" }, { id: "ok2", uses: [null, { id: 1 }] }]]) {
+            plan = ModuleMergeRules.dependencyPlan(input, null);
+            assert(Array.isArray(plan.order) && Array.isArray(plan.modules), "dependencyPlan(" + JSON.stringify(input) + "): no throw");
+        }
+        assertEqual(summary(ModuleMergeRules.dependencyPlan([{ id: "ok", uses: "no" }], {})), "ok:failed", "a module whose state is not given: failed");
+        assertEqual(ModuleMergeRules.planned(null, "x"), null, "planned(nothing): null");
+
+        // --- what a main may offer as exports ---
+        const qtObject = extra => Object.assign({ objectName: "", destroy: () => {} }, extra ?? {});
+        const offered = qtObject();
+        assertEqual(rules.exportsOf({ exports: offered }).object, offered, "a plain QtObject of its own: given");
+        assertEqual(rules.exportsOf({ exports: offered }).problem, "", "… no problem");
+        assert(_has([rules.exportsOf(null).problem], "no main"), "no main: said");
+        assert(_has([rules.exportsOf({}).problem], "no `exports` property"), "no exports property: said");
+        assert(_has([rules.exportsOf({ exports: null }).problem], "null"), "exports null: said");
+        const mainItself = qtObject();
+        mainItself.exports = mainItself;
+        assert(_has([rules.exportsOf(mainItself).problem], "the main itself"), "the main itself: refused");
+        assert(_has([rules.exportsOf({ exports: { greet: () => "hi" } }).problem], "not a QtObject"), "plain data: refused");
+        assert(_has([rules.exportsOf({ exports: qtObject({ parent: null }) }).problem], "`parent`"), "something with a parent (an Item): refused");
+        assertEqual(rules.exportsOf({ exports: 7 }).object, null, "a number: nothing given");
     }
 
     // API 1.3: Api.networks and Api.vpnsUp — the pure mappings, on realistic and hostile input

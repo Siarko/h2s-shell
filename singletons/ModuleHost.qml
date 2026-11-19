@@ -24,6 +24,9 @@ import qs.singletons.io
 // under checkTimeoutMs.
 // Turning a module off (setEnabled, stored in Config.disabledModules) destroys its main, drops
 // its contributions and facts and turns its handle's `active` off; on again, they come back.
+// (API 1.18) A module that `uses` others loads after them and gets their exports objects
+// (usesOf); one of them leaving — turned off, failed, the shell reloading — turns it off
+// first (missing-module), and it comes back after the provider does.
 //
 // The shell's one instance is in Modules (the singleton, fed from the environment); the
 // suites make their own (tests/ModulesTest.qml), so this takes its directories through load()
@@ -254,7 +257,8 @@ Scope {
 
     // Destroys every module's main and forgets them all
     function unload() {
-        for (const record of _records)
+        // Dependents before their providers
+        for (const record of _teardownOrder())
             _destroyMain(record);
         _records = [];
         directories = [];
@@ -322,6 +326,26 @@ Scope {
         const record = _record(id);
         return record?.state === "loaded" ? record.main ?? null : null;
     }
+
+    // (API 1.18) What a module gets of the modules its manifest `uses` (its handle's `uses`):
+    // frozen { <id>: that module's exports object }, while the module is active — its
+    // providers are then loaded, their mains made first, and stay until it is off — and an
+    // empty frozen object otherwise. Nothing else of a provider: not its main, not its
+    // handle. `active` and `revision` (activeIds, mainsRevision) only make a binding follow
+    function usesOf(id, active, revision) {
+        const record = _record(id);
+        if (!record || !activeIds.includes(id))
+            return _noUses;
+        const given = {};
+        for (const use of record.manifest.uses ?? []) {
+            const provider = _record(use.id);
+            if (provider?.exportsObject)
+                given[use.id] = provider.exportsObject;
+        }
+        return Object.freeze(given);
+    }
+
+    readonly property var _noUses: Object.freeze({})
 
     // The checked manifest (ModuleManifestRules.parseManifest, less what the file check dropped)
     // read from a directory, or null
@@ -517,6 +541,9 @@ Scope {
             // answer ({ files, skipped, more, failed })
             scanListing: null,
             main: null, component: null, mainError: "", state: "", facts: ({}), runtimeErrors: [],
+            // (1.18) Its main's exports object while the main lives (null: none), why there is
+            // none when it declares exports, and why it does not load for the modules it uses
+            exportsObject: null, exportsProblem: "", dependencyReasons: [],
             rootProperties: ({}),
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
             testVerdicts: null
@@ -913,11 +940,18 @@ Scope {
         }
     }
 
-    // Brings every module to the state it should be in, then publishes
+    // Brings every module to the state it should be in, then publishes. A module that uses
+    // others (API 1.18) is planned after them (ModuleMergeRules.dependencyPlan): what leaves
+    // goes first, in the reverse of that order — a dependent's main before its providers' —
+    // then what comes is made in that order, a provider's main (and its exports) before its
+    // dependents'
     function _apply() {
         const unknownPrograms = [];
         const unknownStandIns = [];
         const unknownData = [];
+        // Each module's own state, from its own checks: record → { base (before its main),
+        // state (a main that failed counted), facts }
+        const own = new Map();
         for (const record of _records) {
             const manifest = record.manifest;
             // Every one is looked up before the module loads; only a required one missing
@@ -933,36 +967,64 @@ Scope {
                 dataDirectoryKnown: _dataDirectoryKnown(manifest.id),
                 mainError: ""
             };
-            let state = ModuleMergeRules.stateOf(facts);
+            const base = ModuleMergeRules.stateOf(facts);
             // Waiting for its data directory alone: asked for below
-            if (state === "pending" && !facts.dataDirectoryKnown
+            if (base === "pending" && !facts.dataDirectoryKnown
                     && ModuleMergeRules.stateOf(Object.assign({}, facts, { dataDirectoryKnown: true })) === "loaded")
                 unknownData.push(manifest.id);
-            if (state === "loaded") {
-                _setActive(manifest.id, true);
-                if (!record.main && record.mainError === "" && manifest.main !== "")
-                    _createMain(record);
-                if (record.mainError !== "") {
-                    state = "failed";
-                    _setActive(manifest.id, false);
-                }
-            } else {
-                if (record.shadowedBy === "")
-                    _setActive(manifest.id, false);
-                _destroyMain(record);
-                // Off, or waiting: a later start tries the main again
-                record.mainError = "";
-                if (state === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown) {
-                    if (!_fromStandIns(record))
-                        unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
-                    else if (programs.some(program => _verdictFor(record, program) === undefined))
-                        unknownStandIns.push(record);
-                }
+            // Its main failed before: failed until it is turned off and on, or reloaded
+            own.set(record, { base: base, state: base === "loaded" && record.mainError !== "" ? "failed" : base, facts: facts });
+            if (base === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown) {
+                if (!_fromStandIns(record))
+                    unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
+                else if (programs.some(program => _verdictFor(record, program) === undefined))
+                    unknownStandIns.push(record);
             }
-            if (state !== "loaded" && Object.keys(record.facts).length > 0)
-                record.facts = {};
-            record.state = state;
-            record.missingPrograms = facts.missingPrograms;
+        }
+        // The modules that count (not shadowed, with an id) are planned; the others never load
+        const counted = _records.filter(record => record.shadowedBy === "" && record.manifest.id);
+        const byId = new Map(counted.map(record => [record.manifest.id, record]));
+        const planNow = () => ModuleMergeRules.dependencyPlan(counted.map(record => record.manifest), _planStates(counted, own));
+        const plan = planNow();
+        _order = plan.order.slice();
+        const ordered = plan.order.map(id => byId.get(id)).concat(_records.filter(record => !counted.includes(record)));
+        const finalState = record => counted.includes(record) ? ModuleMergeRules.planned(plan, record.manifest.id) : { state: own.get(record).state, reasons: [] };
+
+        // What does not stay loaded leaves, dependents first
+        for (const record of ordered.slice().reverse()) {
+            const entry = finalState(record);
+            if (entry.state !== "loaded")
+                _settle(record, own.get(record), entry);
+        }
+        // What is loaded comes, providers first: each checked again against what was made
+        // before it (a provider whose main just failed, or gave no exports object)
+        for (const record of ordered) {
+            let entry = finalState(record);
+            if (entry.state !== "loaded")
+                continue;
+            if (counted.includes(record) && (record.manifest.uses ?? []).length > 0)
+                entry = ModuleMergeRules.planned(planNow(), record.manifest.id);
+            if (entry.state !== "loaded") {
+                _settle(record, own.get(record), entry);
+                continue;
+            }
+            const manifest = record.manifest;
+            _setActive(manifest.id, true);
+            if (!record.main && record.mainError === "" && manifest.main !== "")
+                _createMain(record);
+            if (record.mainError !== "") {
+                own.get(record).state = "failed";
+                _setActive(manifest.id, false);
+                record.state = "failed";
+                if (Object.keys(record.facts).length > 0)
+                    record.facts = {};
+            } else {
+                record.state = "loaded";
+            }
+            // Declared exports and no main to give them: its dependents count it as missing
+            record.exportsProblem = manifest.exports && !record.main && record.mainError === "" ? ModuleRules.exportsOf(null).problem : record.exportsProblem;
+            record.dependencyReasons = [];
+            record.missingPrograms = own.get(record).facts.missingPrograms;
         }
         if (unknownPrograms.length > 0)
             _checkPrograms(unknownPrograms);
@@ -971,6 +1033,47 @@ Scope {
         if (unknownData.length > 0)
             _makeDataDirectories(unknownData);
         _publish();
+    }
+
+    // A module brought to a state other than loaded: off, its main destroyed, its facts gone
+    function _settle(record, known, entry) {
+        if (record.shadowedBy === "")
+            _setActive(record.manifest.id, false);
+        _destroyMain(record);
+        // Off, or waiting: a later start tries the main again (not when its own main failed)
+        if (known.base !== "loaded")
+            record.mainError = "";
+        if (Object.keys(record.facts).length > 0)
+            record.facts = {};
+        record.state = entry.state;
+        record.dependencyReasons = entry.reasons.slice();
+        record.missingPrograms = known.facts.missingPrograms;
+    }
+
+    // What dependencyPlan is told of each module: its own state, and whether its exports
+    // object is there ("" yes, a text no, undefined not known until its main is made)
+    function _planStates(counted, own) {
+        const states = {};
+        for (const record of counted) {
+            let exportsKnown;
+            if (!record.manifest.exports)
+                exportsKnown = "";
+            else if (record.main)
+                exportsKnown = record.exportsProblem;
+            else if (record.manifest.main === "")
+                exportsKnown = ModuleRules.exportsOf(null).problem;
+            states[record.manifest.id] = { state: own.get(record).state, exports: exportsKnown };
+        }
+        return states;
+    }
+
+    // The ids in the order of the last plan (providers first): unload() destroys in reverse
+    property var _order: []
+
+    // The records, dependents before their providers
+    function _teardownOrder() {
+        const rank = new Map(_order.map((id, index) => [id, index]));
+        return _records.slice().sort((a, b) => (rank.get(b.manifest.id) ?? -1) - (rank.get(a.manifest.id) ?? -1));
     }
 
     function _setActive(id, active) {
@@ -1011,6 +1114,13 @@ Scope {
         }
         record.component = component;
         record.main = object;
+        // (1.18) Its exports object, read once: what its dependents get as module.uses.<id>
+        // for as long as this main lives
+        if (record.manifest.exports) {
+            const offered = ModuleRules.exportsOf(object);
+            record.exportsObject = offered.object;
+            record.exportsProblem = offered.problem;
+        }
         // module.main: set right after the main is made, before _publish builds its views
         mainsRevision++;
     }
@@ -1020,6 +1130,8 @@ Scope {
         // module.main cleared before the main goes
         record.main = null;
         record.component = null;
+        record.exportsObject = null;
+        record.exportsProblem = "";
         if (main) {
             mainsRevision++;
             try {
@@ -1045,6 +1157,9 @@ Scope {
                                                            _programsTimedOut.includes(program) ? checkTimeoutMs / 1000 : 0));
             if (record.state === "safe-mode" && safeModeReason !== "")
                 errors.push(safeModeReason);
+            errors.push(...(record.dependencyReasons ?? []));
+            if (record.state === "loaded" && record.exportsProblem)
+                errors.push("exports: " + record.exportsProblem);
             errors.push(...record.runtimeErrors);
             if (ModuleMergeRules.contributes(record.state))
                 loaded.push({ id: record.manifest.id, directory: record.directory, manifest: record.manifest });
@@ -1105,7 +1220,7 @@ Scope {
     function _hostFailed(error) {
         console.error("[Modules] the module host failed, running without modules:", error);
         try {
-            for (const record of _records)
+            for (const record of _teardownOrder())
                 _destroyMain(record);
         } catch (ignored) {}
         _records = [];

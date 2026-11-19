@@ -40,6 +40,14 @@ QtObject {
     // new object. The host's to set (ModuleHost.mainOf): not writable through the handle.
     readonly property var main: host ? host.mainOf(moduleId, host.mainsRevision) : null
 
+    // (API 1.18) The modules its manifest `uses`, each as the object that module offers
+    // (its main's `exports`), frozen: { <id>: exports object } — `module.uses.tailscale`. Set
+    // before its main is made and kept while the module is active: a provider turned off or
+    // reloaded first turns this module off (missing-module), so the objects never change
+    // under a live main. Empty while the module is off. Nothing else of a provider is given.
+    // The host's to set (ModuleHost.usesOf): not writable through the handle.
+    readonly property var uses: host ? host.usesOf(moduleId, host.activeIds, host.mainsRevision) : Object.freeze({})
+
     // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
     // the module is active: re-read what may have changed while it slept, restart what a
     // long sleep broke — instead of a clock that watches for jumps

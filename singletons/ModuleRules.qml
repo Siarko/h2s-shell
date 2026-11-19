@@ -45,7 +45,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.17"
+    readonly property string apiVersion: "1.18"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -123,11 +123,16 @@ Singleton {
     //   incompatible     written for another module API: another major, a newer minor than
     //                    the shell's, or one below the shell's floor (apiFloor)
     //   missing-program  a program in requires.programs is not on PATH
+    //   missing-module   (1.18) a module in its manifest's `uses` is not there, not loaded,
+    //                    exports no API or an older one (ModuleMergeRules.dependencyPlan;
+    //                    the reasons in its errors)
     //   duplicate        another module with the same id came first (search-path order)
-    //   pending          waiting for the check of its required programs
+    //   pending          waiting for the check of its required programs, or for a module
+    //                    it uses
     //   safe-mode        the shell started in safe mode: no module is loaded
+    // A module in a cycle of `uses` (itself included) is failed, the cycle named.
     readonly property var states: ["loaded", "disabled", "failed", "incompatible", "missing-program",
-                                   "duplicate", "pending", "safe-mode"]
+                                   "missing-module", "duplicate", "pending", "safe-mode"]
 
     // ---- Small helpers ----
 
@@ -1328,6 +1333,40 @@ Singleton {
         const folded = String(value).replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, " ");
         const characters = PrivilegedRules.characters(folded).filter(character => !PrivilegedRules.unprintableCode(character.codePointAt(0)));
         return characters.length > cap ? characters.slice(0, cap - 1).join("") + "…" : characters.join("");
+    }
+
+    // ---- A module's API for other modules (API 1.18) ----
+
+    // What a provider's main offers as its `exports` (the manifest declares `exports`): the
+    // object, or why there is none — and then its dependents count it as missing. A plain
+    // QtObject of its own: not the main, nor anything with a `parent` (an Item), which would
+    // lead a dependent up to the main. → { object, problem ("" when fine) }
+    function exportsOf(main) {
+        if (!main)
+            return { object: null, problem: "it declares exports but has no main to give them" };
+        let value;
+        try {
+            value = main.exports;
+        } catch (error) {
+            return { object: null, problem: "its main's `exports` could not be read: " + error };
+        }
+        if (value === undefined)
+            return { object: null, problem: "it declares exports but its main has no `exports` property" };
+        if (value === null)
+            return { object: null, problem: "its main's `exports` is null" };
+        if (value === main)
+            return { object: null, problem: "its main's `exports` is the main itself: it must be a QtObject of its own" };
+        if (typeof value !== "object" || !_isQtObject(value))
+            return { object: null, problem: "its main's `exports` is not a QtObject" };
+        let hasParent = true;
+        try {
+            hasParent = "parent" in value;
+        } catch (error) {
+            hasParent = true;
+        }
+        if (hasParent)
+            return { object: null, problem: "its main's `exports` has a `parent` (an Item?): it must be a plain QtObject" };
+        return { object: value, problem: "" };
     }
 
     // An object of Qt's (a QtObject, an Item) rather than plain data

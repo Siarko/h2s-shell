@@ -57,6 +57,18 @@ import QtQuick
 //                 there, as a stand-in (ModuleRules.programSource); ignored otherwise.
 //   setupHints    optional list of strings: how to get the module working.
 //   tests         optional list of .qml test suites (tests/run-modules.sh runs them).
+//   exports       optional (API 1.18): { version: "major.minor" } — the module offers other
+//                 modules an API object of its own: its main's `exports` property, a plain
+//                 QtObject. The version is the module's own API's, not the module's: a
+//                 dependent asking for "1.2" gets it from "1.2" up to "1.<anything>", never
+//                 from "2.0" (ModuleMergeRules.usesFit). Malformed: the module fails.
+//   uses          optional (API 1.18): { <module id>: "major.minor" } — the modules whose
+//                 exports it needs, each with the least version of their `exports`. All are
+//                 required: without one the module does not load (state missing-module,
+//                 ModuleMergeRules.dependencyPlan), and it loads after them. The module gets
+//                 each one's `exports` object as module.uses.<id>, nothing else of it. An id
+//                 that is not a module id (or a reserved one) or a version that is not
+//                 "major.minor": the module fails.
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
 // leading "/", ending in .qml. Any other field is kept (in `raw`) and reported as a warning,
@@ -99,7 +111,8 @@ Singleton {
     // ---- The manifest ----
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
-        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests"]
+        "settingsPages", "settings", "facts", "slots", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
+        "exports", "uses"]
 
     // A list field: its entries (at most maxEntries), or [] with an error when it is not a list
     function _list(raw, field, errors) {
@@ -350,6 +363,7 @@ Singleton {
     //   widgets, settingsPages, settings, facts, slots   the entries kept, checked
     //   programs, optionalPrograms, testPrograms ("" for none, else without a trailing "/"),
     //   setupHints, tests
+    //   exports      (1.18) { version } or null; uses (1.18) [{ id, version }]
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
     //   errors, warnings
@@ -359,6 +373,7 @@ Singleton {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
+            exports: null, uses: [],
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -430,6 +445,8 @@ Singleton {
             else
                 warnings.push("description is not a text of at most 1000 characters (ignored)");
         }
+        _readExports(raw, result, errors, warnings);
+        _readUses(raw, result, errors);
         result.valid = errors.length === 0;
         // Without a usable id the namespaces cannot be checked: nothing more is read
         if (result.id === "")
@@ -509,6 +526,56 @@ Singleton {
             }
         }
         return result;
+    }
+
+    // `exports` (API 1.18): { version } → result.exports, or an error (the module fails: a
+    // declaration other modules rely on is not guessed at)
+    function _readExports(raw, result, errors, warnings) {
+        const given = ModuleRules.get(raw, "exports");
+        if (given === undefined)
+            return;
+        if (!ModuleRules.isObject(given)) {
+            errors.push("exports: not an object such as { \"version\": \"1.0\" }");
+            return;
+        }
+        for (const key of Object.keys(given)) {
+            if (key !== "version")
+                warnings.push("exports: unknown field " + ModuleRules.show(key) + " (ignored)");
+        }
+        const version = ModuleRules.get(given, "version");
+        if (version === undefined)
+            errors.push("exports: missing \"version\"");
+        else if (!ModuleRules.parseApi(version))
+            errors.push("exports.version " + ModuleRules.show(version) + " is not \"major.minor\"");
+        else
+            result.exports = { version: version };
+    }
+
+    // `uses` (API 1.18): { <id>: "major.minor" } → result.uses, [{ id, version }] in the
+    // manifest's order, or errors (the module fails: it would run without what it needs).
+    // Using itself is left to the dependency plan, which names it as a cycle.
+    function _readUses(raw, result, errors) {
+        const given = ModuleRules.get(raw, "uses");
+        if (given === undefined)
+            return;
+        if (!ModuleRules.isObject(given)) {
+            errors.push("uses: not an object such as { \"tailscale\": \"1.0\" }");
+            return;
+        }
+        const ids = Object.keys(given);
+        if (ids.length > ModuleRules.maxEntries) {
+            errors.push("uses: " + ids.length + " modules, at most " + ModuleRules.maxEntries);
+            return;
+        }
+        for (const id of ids) {
+            const version = given[id];
+            if (!ModuleRules.idPattern.test(id) || ModuleRules.reservedIds.includes(id))
+                errors.push("uses: " + ModuleRules.show(id) + " is not a module id");
+            else if (!ModuleRules.parseApi(version))
+                errors.push("uses." + id + ": " + ModuleRules.show(version) + " is not a version \"major.minor\"");
+            else
+                result.uses.push({ id: id, version: version });
+        }
     }
 
     // Marks every entry after the first with the same `field` as repeated, with an error

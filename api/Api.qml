@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.17" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.18" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -583,6 +583,38 @@ import qs.singletons.network
 //                          answerChooser(moduleId, paths), cancelChooser(moduleId)); the
 //                          lock is the test kit's (setSessionLocked, or setChooserLocked for
 //                          the chooser alone).
+//
+// A module's API for other modules (1.18; the manifest's fields: singletons/ModuleManifestRules.qml,
+// the plan: ModuleMergeRules.dependencyPlan).
+//   "exports": { "version": "1.0" }   in the provider's module.json: it offers other modules an
+//                          object of its own, its main's `exports` property — a plain QtObject
+//                          (`readonly property QtObject exports: QtObject { … }`), read once
+//                          when the main is made. Not the main, nothing with a `parent` (an
+//                          Item): a dependent must not be able to climb to the main. The version
+//                          is the provider's own API's, "major.minor"; what a minor of it may
+//                          change is the provider's rule. Declared and not given (no main, no
+//                          such property, the wrong kind): an error in the provider's status,
+//                          the provider still loads, and its dependents count it as missing.
+//   "uses": { "<id>": "1.0" }   in a dependent's module.json: the modules whose exports it
+//                          needs, each with the least version: the same major, the provider's
+//                          minor at least the one asked for. All are required. A dependent's
+//                          main is made after its providers' and destroyed before them.
+//   module.uses            (on its handle) frozen { <id>: that module's exports object } — the
+//                          object, nothing else of the provider. Set before the main is made;
+//                          it never changes under a live main and is never missing while the
+//                          module runs; empty while it is off. A provider turned off, failing
+//                          or reloaded turns its dependents off first (state missing-module),
+//                          and they come back after it. A dependent listens to the object
+//                          from what lives under its main (a `Connections` there goes with
+//                          it) and hands it no function to call later: the shell cannot see a
+//                          function held by the provider, which could then call into a module
+//                          that is off.
+//   state "missing-module" a module it uses is not there or not usable, one reason per module
+//                          in its errors: "needs module tailscale 1.0: not installed" /
+//                          "turned off" / "failed" / "exports no API" / "has 0.9" / "gives no
+//                          exports object". Waiting for one: "pending". A cycle of `uses`
+//                          (a module using itself too): each module in it fails, the cycle
+//                          named ("uses form a cycle: a → b → a", "uses itself").
 //
 // `import qs.components` is deprecated (1.7): with the base types here, qs.api has
 // everything a module took from the shell's internal components, which may change in any

@@ -1,0 +1,9 @@
+{
+    "id": "provider",
+    "name": "Provider fixture",
+    "version": "2.0.0",
+    "api": "1.18",
+    "description": "A module that offers other modules an API object of its own (tests/fixtures/modules, ModulesTest)",
+    "main": "Main.qml",
+    "exports": { "version": "1.2" }
+}

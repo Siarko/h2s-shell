@@ -13,6 +13,15 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.18: a module's API for other modules — `"exports": { "version": "1.0" }` in a provider's
+  manifest offers its main's `exports` property (a plain `QtObject`) to other modules;
+  `"uses": { "<id>": "1.0" }` in a dependent's (same major, the provider's minor at least
+  the one asked for; all required) gives it `module.uses.<id>`, that object and nothing else
+  of the provider. A dependent loads after its providers and goes before them: a provider
+  turned off, failing or reloaded turns it off first, and it comes back after. A new state,
+  `missing-module`, with the reason ("needs module tailscale 1.0: turned off", "not
+  installed", "failed", "exports no API", "has 0.9", "gives no exports object"); a cycle
+  of `uses` fails each module in it, the cycle named.
 - 1.17: a file chooser — `module.chooseFiles({ mode, title, startDirectory }, done)` on the
   handle (`mode` `"open"`, `"openMany"` or `"folder"`; `done` gets frozen `{ paths, cancelled,
   blocked, error }`, absolute paths): the system's dialog, hosted by the shell so a popup can
