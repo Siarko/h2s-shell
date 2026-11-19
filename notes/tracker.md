@@ -231,6 +231,8 @@ All by the owner, 2026-11-17.
 - Network cards (2026-11-19): the main button, Edit and Forget stand in one row on the name
   line, also while the card is closed (saved Wi-Fi, hotspot, wired; nothing stacked when
   opened). Order: main, Edit, Forget.
+  When the row does not fit (a narrow window, a long question while a button asks), it moves to
+  its own line under the name, right-aligned, the question getting the card's width.
 - Taildrop send from the popup (2026-11-19, seen on a screen: picking a file opens the settings
   window where Send must be clicked — impractical): everything stays in the popup. After the
   file(s) are picked, a row under that device's row names the file (or "N files") with a Send
