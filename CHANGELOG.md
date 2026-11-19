@@ -627,6 +627,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Changed
 - Settings → System → Network → Wi-Fi: the Wi-Fi switch is on the page's heading; the
   "Wi-Fi" row under it is gone.
+- Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand
+  in one row on the name's line, also while the card is closed — the main one (Connect,
+  Disconnect, Turn on), "Settings…", "Edit" (was "Edit connection…"), what a module adds,
+  then "Forget" or "Delete". A long name is cut first.
 - Sizes of a terabyte and more show in TB ("1.8 TB" instead of "1843.2 GB"), on the disk
   card among others.
 - The connection editor no longer takes an IPv4 address written with leading zeros

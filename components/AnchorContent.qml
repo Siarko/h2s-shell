@@ -21,13 +21,12 @@ import qs.singletons
 // module and file stay, whatever comes and goes before it (a KeyedModel of
 // ModuleMergeRules.contributionKey).
 //
-// `stacked`: each element at its own width on the host's right edge, at most `maxElementWidth`
-// wide — a card's buttons (SettingsCard's `actions`); otherwise each is as wide as the host.
-// `inline`: side by side, left to right, 4 apart, each at its own width (at most
-// `maxElementWidth`) and given `elementHeight` as its height, cut to it — a card's name line
-// (SettingsCard's `title`); the host's own width may be less than its elements', and it cuts
-// them on the right. Either way an element whose module hides it (`visible: false`) takes no
-// room and no gap.
+// `inline`: side by side, left to right, `spacing` apart, each at its own width (at most
+// `maxElementWidth`) — a card's buttons' row (SettingsCard's `actions`, centred on the row)
+// and its name line (SettingsCard's `title`: given `elementHeight` as its height, cut to it);
+// the host's own width may be less than its elements'. Otherwise each is as wide as the host,
+// top to bottom. Either way an element whose module hides it (`visible: false`) takes no room
+// and no gap.
 // On a place whose row `takes` an element (a SmallButton), another is refused
 // (ModuleContribution). `elementProperties` are given to each element that declares them (the
 // stack's default button size: the public button's `defaultSize`, which a button's own
@@ -42,12 +41,12 @@ Item {
     // Whether it shows its elements at all: false builds none and destroys those built (a
     // card's region while the card is closed)
     property bool active: true
-    // Each element at its own width on the right edge, at most maxElementWidth (a card's
-    // stacked buttons), instead of as wide as the host
-    property bool stacked: false
-    property real maxElementWidth: Infinity
-    // Side by side, each `elementHeight` tall (a card's name line), instead of top to bottom
+    // Side by side, each at its own width, at most maxElementWidth (a card's buttons, its name
+    // line), instead of top to bottom as wide as the host
     property bool inline: false
+    property real maxElementWidth: Infinity
+    // Inline, the height each element is given and cut to (a card's name line); 0: each its
+    // own, centred
     property real elementHeight: 0
     // Given to each element that declares them ({ defaultSize: "m" })
     property var elementProperties: ({})
@@ -90,11 +89,15 @@ Item {
         id: _loader
         width: root.width
         active: root.count > 0
-        sourceComponent: root.inline ? _inline : root.stacked ? _stack : _column
+        sourceComponent: root.inline ? _inline : _column
     }
 
-    // Inline: a layout as the stack is, so a hidden element takes no gap either; each element
-    // given the line's height (ModuleContribution's `givenHeight`) and cut to it
+    // Inline: a layout, not a positioner — it gives each element a whole width, so its edges
+    // stand on whole pixels, as the card's own buttons do. The gaps are the elements' own left
+    // margins, each but the first shown: an element its module hides gets no size and no gap —
+    // a layout gives the spacing even to an item of no size, and leaves out only one that is
+    // not visible, which a wrapper cannot follow (ModuleContribution's `elementShown`). Given a
+    // height, each element is given it (ModuleContribution's `givenHeight`) and cut to it
     Component {
         id: _inline
 
@@ -102,7 +105,7 @@ Item {
             property alias repeater: _inlineRepeater
             // The index of the first element shown (-1 none)
             readonly property int firstShown: root.items.findIndex(item => item.elementShown)
-            height: root.elementHeight
+            height: root.elementHeight > 0 ? root.elementHeight : implicitHeight
             spacing: 0
 
             Repeater {
@@ -122,11 +125,13 @@ Item {
                     takes: root.takes
                     properties: root.elementProperties
                     context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
-                    givenHeight: true
-                    clip: true
+                    givenHeight: root.elementHeight > 0
+                    clip: root.elementHeight > 0
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredHeight: root.elementHeight
-                    Layout.maximumHeight: elementShown ? root.elementHeight : 0
+                    Layout.preferredHeight: root.elementHeight > 0 ? root.elementHeight : -1
+                    // Hidden by its module: kept to no size (one of 0 alone falls back to the
+                    // last size it was given)
+                    Layout.maximumHeight: elementShown ? (root.elementHeight > 0 ? root.elementHeight : Infinity) : 0
                     Layout.maximumWidth: elementShown ? root.maxElementWidth : 0
                     Layout.leftMargin: elementShown && index > _inlined.parent.firstShown ? root.spacing : 0
                 }
@@ -160,50 +165,6 @@ Item {
                     properties: root.elementProperties
                     context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
                     width: root.width
-                }
-            }
-        }
-    }
-
-    // Stacked: a layout, not a positioner — it gives each element a whole width, so its edges
-    // stand on whole pixels, as the card's own buttons do
-    Component {
-        id: _stack
-
-        // The gaps are the elements' own top margins, each but the first shown: an element its
-        // module hides gets no size and no gap — a layout gives the spacing even to an item of
-        // no size, and leaves out only one that is not visible, which a wrapper cannot follow
-        // (ModuleContribution's `elementShown`)
-        ColumnLayout {
-            property alias repeater: _repeater
-            // The index of the first element shown (-1 none)
-            readonly property int firstShown: root.items.findIndex(item => item.elementShown)
-            width: root.width
-            spacing: 0
-
-            Repeater {
-                id: _repeater
-                model: _contributions.model
-
-                ModuleContribution {
-                    id: _stacked
-                    required property string modelData
-                    required property int index
-                    readonly property var contribution: _contributions.byKey[modelData] ?? ({})
-                    host: root.host
-                    moduleId: contribution.module ?? ""
-                    url: contribution.component ?? ""
-                    anchor: root.path
-                    placement: root.placement
-                    takes: root.takes
-                    properties: root.elementProperties
-                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
-                    Layout.alignment: Qt.AlignRight
-                    // Hidden by its module: kept to no size (one of 0 alone falls back to the
-                    // last size it was given)
-                    Layout.maximumWidth: elementShown ? root.maxElementWidth : 0
-                    Layout.maximumHeight: elementShown ? Infinity : 0
-                    Layout.topMargin: elementShown && index > _stacked.parent.firstShown ? root.spacing : 0
                 }
             }
         }

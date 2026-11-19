@@ -102,23 +102,27 @@ import qs.singletons.network
 //                            settings.network_vpn.vpns.card.actions,
 //                            settings.network_wifi.saved.card.actions,
 //                            settings.network_ethernet.profiles.card.actions (1.25)  the
-//                                                     buttons of the same opened cards: append,
-//                                                     under the card's own ("Settings…", "Edit
-//                                                     connection…"), above "Forget" / "Delete",
-//                                                     which stays last; context as the card's
-//                                                     settings (the VPN's own-provider). These
-//                                                     take a SmallButton only (`takes`): another
-//                                                     element is built once (its startup code
-//                                                     runs), then destroyed, not shown; an error
-//                                                     in the module's status says so. A button
-//                                                     with `visible: false` takes no room. Each
-//                                                     button at its
-//                                                     own width on the stack's right edge, at
-//                                                     most a third of the card wide (a longer
-//                                                     label is cut), in the size it sets
-//                                                     (1.28; "m", the card's own buttons'
-//                                                     size, when it sets none); any kind,
-//                                                     with or without confirm
+//                                                     buttons of the same cards: append, (1.29)
+//                                                     closed and open, in the row of buttons on
+//                                                     the name's line, after the card's own
+//                                                     ("Settings…", "Edit"), before "Forget" /
+//                                                     "Delete", which stays last; context as
+//                                                     the card's settings (the VPN's
+//                                                     own-provider). These take a SmallButton
+//                                                     only (`takes`): another element is built
+//                                                     once (its startup code runs), then
+//                                                     destroyed, not shown; an error in the
+//                                                     module's status says so. A button with
+//                                                     `visible: false` takes no room. Each
+//                                                     button at its own width, 6 apart, centred
+//                                                     on the line, at most a third of the card
+//                                                     wide (a longer label is cut), in the size
+//                                                     it sets (1.28; "m", the card's own
+//                                                     buttons' size, when it sets none); any
+//                                                     kind, with or without confirm. The card's
+//                                                     own buttons keep their room and the name
+//                                                     is cut first; the modules' buttons beyond
+//                                                     the room left are cut on the right
 //                            settings.network_wifi.saved.card.title,
 //                            settings.network_ethernet.profiles.card.title (1.28)  the name's
 //                                                     line of the same cards, closed and open:

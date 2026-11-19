@@ -8,9 +8,9 @@ import qs.panels.settings
 import qs.singletons
 
 // components/SettingsCard.qml laid out in a window, beside NetworkProfileCard, the network
-// pages' card built on it: the same height closed with an empty line under the name; hidden
-// secondary buttons take no room; the buttons line up on one right edge without each saying
-// so.
+// pages' card built on it: the same height closed with an empty line under the name, its
+// buttons on that line too; hidden buttons take no room; the buttons stand in one row on the
+// name's line, 6 apart and centred on it, without each saying so — closed as open.
 TestCase {
     id: suite
     suiteName: "SettingsCard"
@@ -50,7 +50,7 @@ TestCase {
             }
 
             // Open with nothing inside and no gap under the header (spacing 0), its two
-            // secondary buttons hidden: as tall as closed
+            // buttons hidden: as tall as closed
             SettingsCard {
                 id: hiddenButtons
                 Layout.fillWidth: true
@@ -63,12 +63,11 @@ TestCase {
                 ]
             }
 
-            // Open, two buttons of different widths, no alignment of their own
+            // Closed, two buttons of different widths, no alignment of their own
             SettingsCard {
                 id: twoButtons
                 Layout.fillWidth: true
                 title: "Cafe"
-                open: true
                 buttons: [
                     SmallButton { objectName: "short"; label: "Edit…" },
                     SmallButton { objectName: "long"; label: "Forget this network" }
@@ -113,13 +112,22 @@ TestCase {
 
         assertEqual(emptyLine.height, withLine.height, "closed, an empty line under the name keeps its height");
         assertEqual(emptyLine.height, profileCard.height, "… as tall as NetworkProfileCard closed");
-        assertEqual(hiddenButtons.height, emptyLine.height, "open, hidden secondary buttons take no room (nothing else inside: as tall as closed)");
-        assertEqual(hiddenButtons.buttonColumn.implicitHeight, 0, "… their column is empty");
-        const rightOf = button => button.mapToItem(twoButtons, button.width, 0).x;
-        assertEqual(Math.round(rightOf(shortButton)), Math.round(rightOf(longButton)),
-                    "the secondary buttons on one right edge, each at its own width");
-        assertEqual(Math.round(longButton.mapToItem(twoButtons, 0, 0).y - shortButton.mapToItem(twoButtons, 0, 0).y),
-                    Math.round(shortButton.height + 4), "… stacked, 4 px apart");
+        assertEqual(hiddenButtons.height, emptyLine.height, "open, hidden buttons take no room (nothing else inside: as tall as closed)");
+        assertEqual(hiddenButtons.buttonGroup.implicitWidth + " " + hiddenButtons.buttonRow.implicitWidth, "0 0", "… their row is empty");
+        const profileForget = _named(profileCard, "profileForget");
+        assert(profileForget !== null && profileForget.visible && _named(profileCard, "profileEdit").visible,
+               "NetworkProfileCard closed: Edit and Forget shown on the name's line");
+        const at = button => button.mapToItem(twoButtons, 0, 0);
+        assertEqual(Math.round(at(longButton).x - (at(shortButton).x + shortButton.width)), 6, "closed: the buttons side by side, 6 apart");
+        assertEqual(Math.round(at(shortButton).y + shortButton.height / 2), Math.round(at(longButton).y + longButton.height / 2), "… centred on one line");
+        assertEqual(Math.round(at(shortButton).y + shortButton.height / 2), Math.round(twoButtons.titleText.mapToItem(twoButtons, 0, 0).y + twoButtons.buttonRow.height / 2),
+                    "… the name's line");
+        const closedAt = [at(shortButton).x, at(shortButton).y, at(longButton).x, at(longButton).y].map(Math.round).join(",");
+        twoButtons.open = true;
+        assert(_until(() => twoButtons.settingsRegion.visible), "opened");
+        _driver.wait(50);
+        assertEqual([at(shortButton).x, at(shortButton).y, at(longButton).x, at(longButton).y].map(Math.round).join(","), closedAt,
+                    "opened: the buttons where they stood closed");
         finish();
     }
 }

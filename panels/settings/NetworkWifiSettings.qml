@@ -145,9 +145,10 @@ Item {
             // A section named "saved": each card the place settings.network_wifi.saved.card,
             // its opened part …card.settings, whose `append` shows any module's elements under
             // the page's rows, and its buttons …card.actions, whose `append` shows any module's
-            // buttons under "Edit connection…", above "Forget" — with the network in their
-            // context (as Api.networks names it). A card is a place only while Api.networks
-            // names its network: not while its details are unread (it could be a hotspot)
+            // buttons in the row on the card's name line, after "Edit", before "Forget" — with
+            // the network in their context (as Api.networks names it). A card is a place only
+            // while Api.networks names its network: not while its details are unread (it could
+            // be a hotspot)
             SettingsSection {
                 anchor: "saved"
                 title: "Saved networks"

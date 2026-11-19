@@ -10,13 +10,13 @@ import qs.singletons
 // panels/settings/NetworkProfileCard.qml laid out in a window as each of its four uses —
 // a Wi-Fi network, a wired profile, a hotspot, a VPN provider's entry —, closed and open:
 // where its named parts stand. The positions follow from the card's layout (margins 8, 6
-// between lines, the primary controls level with the name and its line, the secondary
-// buttons stacked 4 apart under them on one right edge, the arrow at the right) and from
+// between lines, the buttons in one row on the name's line, closed and open, 6 apart and
+// centred on it, the lock 10 left of the primary button, the arrow at the right) and from
 // the sizes of the parts themselves, so they hold whatever the fonts; each card's numbers
 // are also printed ("geometry: …"), for comparing two versions of the card on one machine.
 // The card's wiring: the name is the profile's, one in use bold with the accent's border, the
-// notice's button waiting while busy; the shared card's stacked buttons on one right edge, one
-// that names only a vertical alignment too. Then the header: a click asks to toggle, the
+// notice's button waiting while busy; the shared card's buttons centred on the row, one that
+// names a vertical alignment of its own keeping it. Then the header: a click asks to toggle, the
 // pointer over it tints the card.
 TestCase {
     id: suite
@@ -123,7 +123,7 @@ TestCase {
                 }
             }
 
-            // The shared card with stacked buttons, one naming only a vertical alignment
+            // The shared card with buttons, one naming a vertical alignment of its own
             SettingsCard {
                 id: alignedCard
                 width: suite.cardWidth
@@ -252,44 +252,33 @@ TestCase {
         expectNear(subtitle.y, title.bottom + 1, "its line 1 under the name");
         expectNear(subtitle.width, title.width, "the name and its line as wide");
 
-        // The arrow at the right margin, as tall as the primary slot: the name and its line,
-        // or the primary controls if taller
-        const primaryHeight = Math.max(primary ? primary.height : 0, parts.mark ? parts.mark.height : 0);
-        const slot = Math.max(primaryHeight, subtitle.bottom - title.y);
+        // The buttons in one row on the name's line, closed and open: the lock, the primary
+        // button, "Settings…", "Edit", "Forget" — those that show
+        const row = ["mark", "primary", "settings", "edit", "forget"].filter(name => parts[name]);
+        // The arrow at the right margin, as tall as the header's line: the name and its line,
+        // or the buttons if taller
+        const rowHeight = Math.max(0, ...row.map(name => parts[name].height));
+        const slot = Math.max(rowHeight, subtitle.bottom - title.y);
         expectNear(arrow.right, width - 8, "the arrow at the right margin");
         expectNear(arrow.y, 8, "the arrow at the top margin");
-        expectNear(arrow.height, slot, "the arrow as tall as the primary slot");
+        expectNear(arrow.height, slot, "the arrow as tall as the header's line");
 
-        // The primary controls right of the name, centred in the slot, 10 left of the arrow
-        const rightEdge = arrow.x - 10;
-        if (primary) {
-            expectNear(primary.right, rightEdge, "the primary button 10 left of the arrow");
-            expectNear(primary.y, 8 + (slot - primary.height) / 2, "the primary button centred in the slot");
+        // Right to left from 10 left of the arrow: the buttons 6 apart, the lock 10 left of the
+        // primary button, each centred on the line
+        let rowLeft = arrow.x - 10;
+        for (const name of row.slice().reverse()) {
+            const gap = rowLeft === arrow.x - 10 ? 0 : name === "mark" ? 10 : 6;
+            expectNear(parts[name].right, rowLeft - gap, name + (gap === 0 ? " 10 left of the arrow" : " " + gap + " left of the next"));
+            expectNear(parts[name].y, 8 + (slot - parts[name].height) / 2, name + " centred on the name's line");
+            rowLeft = parts[name].x;
         }
-        if (parts.mark) {
+        if (parts.mark)
             assert(primary !== undefined, where + ": the lock beside a primary button");
-            expectNear(parts.mark.right, primary.x - 10, "the lock 10 left of the primary button");
-            expectNear(parts.mark.y, 8 + (slot - parts.mark.height) / 2, "the lock centred in the slot");
-        }
-
-        // The secondary buttons, opened: stacked 4 apart under the slot, on its right edge
-        const stack = ["settings", "edit", "forget"].filter(name => parts[name]);
-        if (!open)
-            assertEqual(stack.length, 0, where + ": no secondary buttons");
-        let stackBottom = 8 + slot;
-        let stackLeft = parts.mark ? parts.mark.x : primary ? primary.x : rightEdge;
-        for (const name of stack) {
-            expectNear(parts[name].y, stackBottom + 4, name + " 4 under what is above it");
-            expectNear(parts[name].right, rightEdge, name + " on the primary's right edge");
-            stackBottom = parts[name].bottom;
-            stackLeft = Math.min(stackLeft, parts[name].x);
-        }
-        // The name stops 10 short of the widest control (a layout gives it a whole width:
-        // up to 1 more)
-        const nameEnd = Math.min(stackLeft, rightEdge) - 10;
+        // The name stops 10 short of the row (a layout gives it a whole width: up to 1 more)
+        const nameEnd = rowLeft - 10;
         assert(title.right <= nameEnd + 0.01 && title.right > nameEnd - 1, where + ": the name 10 short of the buttons ("
                + title.right + ", " + _round(nameEnd) + ")");
-        let bottom = Math.max(subtitle.bottom, stackBottom);
+        let bottom = Math.max(subtitle.bottom, 8 + slot);
 
         // The notice line, 6 under the header: its text at the margin, its button on the right,
         // both centred on the line
@@ -343,6 +332,11 @@ TestCase {
         assert(_until(() => _window.visible && cards.every(card => card.height > 0)), "the window is shown and the cards laid out");
         assert(_settle(cards), "closed: the cards stand still");
         cards.forEach((card, index) => _check(card, kinds[index], false));
+        // Closed, every button on the name's line: nothing waits for the card to open
+        const closed = cards.map(card => _parts(card));
+        assert(closed[0].primary && closed[0].edit && closed[0].forget && closed[1].primary && closed[1].edit && closed[1].forget
+               && closed[2].primary && closed[2].edit && closed[2].forget && closed[3].primary && closed[3].settings && closed[3].mark,
+               "closed: each card's buttons on its name's line");
 
         // The card's wiring (NetworkProfileCard on SettingsCard): the name is the profile's, a
         // profile in use has its name bold and the border in the accent's colour
@@ -354,19 +348,25 @@ TestCase {
         assert(wifiTitle !== null && !wifiTitle.font.bold && Qt.colorEqual(wifiCard.frame.border.color, Theme.outline),
                "wiring: a profile not in use — its name plain, the border the outline's");
 
-        // What each kind shows: the Wi-Fi network Connect, Edit connection… and Forget; the
+        // What each kind shows: the Wi-Fi network Connect, Edit and Forget; the
         // wired profile in use Disconnect; the hotspot its asking Turn on; the provider
-        // Disconnect, Settings…, the lock and the notice, no Edit connection… or Forget
+        // Disconnect, Settings…, the lock and the notice, no Edit or Forget —
+        // opened, the buttons where they stood closed
         cards.forEach(card => card.open = true);
         assert(_settle(cards), "open: the cards stand still");
         cards.forEach((card, index) => _check(card, kinds[index], true));
+        cards.forEach((card, index) => {
+            const opened = _parts(card);
+            const moved = ["mark", "primary", "settings", "edit", "forget"].filter(name => JSON.stringify(opened[name] ?? null) !== JSON.stringify(closed[index][name] ?? null));
+            assertEqual(moved.join(","), "", kinds[index] + ": opened, its buttons where they stood closed");
+        });
         const wifi = _parts(wifiCard), wired = _parts(wiredCard), hotspot = _parts(hotspotCard), provider = _parts(providerCard);
         assert(wifi.primary && wifi.edit && wifi.forget && !wifi.settings && wifi.autoconnect && wifi.priority && wifi.pageRow,
-               "Wi-Fi open: Connect, Edit connection…, Forget, both rows and the page's");
+               "Wi-Fi open: Connect, Edit, Forget, both rows and the page's");
         assert(wired.primary && wired.edit && wired.forget && wired.autoconnect && wired.priority && !wired.mark,
-               "wired open: Disconnect, Edit connection…, Forget, both rows");
+               "wired open: Disconnect, Edit, Forget, both rows");
         assert(hotspot.primary && hotspot.edit && hotspot.forget && hotspot.autoconnect && !hotspot.priority,
-               "hotspot open: its asking Turn on, Edit connection…, Forget, no priority");
+               "hotspot open: its asking Turn on, Edit, Forget, no priority");
         assert(provider.primary && provider.settings && !provider.edit && !provider.forget && provider.mark && provider.notice
                && !provider.autoconnect && provider.pageRow, "provider open: Disconnect, Settings…, the lock, the notice, the page's row");
 
@@ -377,8 +377,25 @@ TestCase {
         assert(!noticeButton.available, "wiring: … unavailable while it is busy");
         providerCard.busy = false;
 
-        // The shared card's stacked buttons: each on the primary controls' right edge, also one
-        // that names only a vertical alignment of its own
+        // A long question asked by the primary button: cut to the room the other buttons
+        // leave, the name cut to nothing first, the arrow still at the right margin
+        hotspotCard.useQuestion = "Leaves a network with a long name: no internet to share. Turn on?";
+        const asking = _find(hotspotCard, item => item.label === hotspotCard.useLabel && typeof item.confirmed === "function");
+        asking.asking = true;
+        assert(_settle(cards), "the hotspot asking: the cards stand still");
+        const asked = _parts(hotspotCard);
+        const askedButton = _rect(hotspotCard, asking);
+        assert(asking.fullWidth > asking.maximumWidth && Math.abs(askedButton.width - asking.maximumWidth) < 0.6,
+               "the hotspot asking: its question cut to the room left (" + askedButton.width + ", " + _round(asking.maximumWidth) + ", " + asking.fullWidth + ")");
+        assert(Math.abs(asked.arrow.right - (suite.cardWidth - 8)) < 0.6 && Math.abs(asked.edit.right - (asked.forget.x - 6)) < 0.6
+               && Math.abs(askedButton.right - (asked.edit.x - 6)) < 0.6 && askedButton.x >= asked.title.x + 10 - 0.6,
+               "… the row in the card: the question, Edit and Forget 6 apart, the arrow at the margin ("
+               + [askedButton.x, askedButton.right, asked.edit.x, asked.forget.x, asked.arrow.right].join(", ") + ")");
+        asking.asking = false;
+        hotspotCard.useQuestion = "Turn on? The Wi-Fi drops";
+
+        // The shared card's buttons: one naming no vertical alignment centred on the row, one
+        // naming its own (top) keeping it
         alignedCard.open = true;
         let alignedLast = "";
         const alignedSteady = () => {
@@ -393,10 +410,13 @@ TestCase {
         const alignedPrimary = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedPrimary"));
         const alignedTop = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedTop"));
         const alignedPlain = _rect(alignedCard, _find(alignedCard, item => item.objectName === "alignedPlain"));
-        assert(Math.abs(alignedPlain.right - alignedPrimary.right) < 0.6,
-               "a stacked button naming no alignment: on the primary's right edge (" + alignedPlain.right + ", " + alignedPrimary.right + ")");
-        assert(Math.abs(alignedTop.right - alignedPrimary.right) < 0.6,
-               "a stacked button naming only a vertical alignment: on the right edge too (" + alignedTop.right + ", " + alignedPrimary.right + ")");
+        const alignedSlot = alignedCard.buttonRow.height;
+        assert(alignedSlot > alignedPlain.height + 1, "the shared card's line taller than its buttons (" + alignedSlot + ", " + alignedPlain.height + ")");
+        assert(Math.abs(alignedPlain.y - (8 + (alignedSlot - alignedPlain.height) / 2)) < 0.6 && Math.abs(alignedPlain.y - alignedPrimary.y) < 0.6,
+               "a button naming no alignment: centred on the row, as the primary (" + alignedPlain.y + ", " + alignedPrimary.y + ")");
+        assert(Math.abs(alignedTop.y - 8) < 0.6, "a button naming a vertical alignment: kept (" + alignedTop.y + ")");
+        assert(Math.abs(alignedTop.right - (alignedPlain.x - 6)) < 0.6 && Math.abs(alignedPrimary.right - (alignedTop.x - 6)) < 0.6,
+               "… in the row's order, 6 apart (" + [alignedPrimary.right, alignedTop.x, alignedTop.right, alignedPlain.x].join(", ") + ")");
         alignedCard.open = false;
 
         // The header: a click on the name asks to toggle; the pointer over it tints the card

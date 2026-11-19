@@ -183,15 +183,15 @@ Singleton {
           view: "panels/settings/NetworkEthernetSettings.qml" },
         { path: "settings.network_vpn.vpns.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }", scope: "own-provider", since: "1.25",
-          where: "Settings → System → Network → VPN, the opened card of each VPN of the module's provider, its buttons under the card's own (\"Settings…\")",
+          where: "Settings → System → Network → VPN, the card of each VPN of the module's provider, closed and open: in the row of buttons on its name's line, after the card's own (\"Settings…\", \"Edit\"), before \"Delete\"",
           view: "panels/settings/NetworkVpnSettings.qml" },
         { path: "settings.network_wifi.saved.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ networkId, name, kind: \"wifi\", active }", scope: "", since: "1.25",
-          where: "Settings → System → Network → Wi-Fi, the opened card of each saved network, its buttons under \"Edit connection…\", above \"Forget\"",
+          where: "Settings → System → Network → Wi-Fi, each saved network's card, closed and open: in the row of buttons on its name's line, after \"Edit\", before \"Forget\"",
           view: "panels/settings/NetworkWifiSettings.qml" },
         { path: "settings.network_ethernet.profiles.card.actions", kind: "region", placements: ["append"], takes: "SmallButton",
           context: "{ networkId, name, kind: \"ethernet\", active }", scope: "", since: "1.25",
-          where: "Settings → System → Network → Ethernet, the opened card of each wired profile, its buttons under \"Edit connection…\", above \"Forget\"",
+          where: "Settings → System → Network → Ethernet, each wired profile's card, closed and open: in the row of buttons on its name's line, after \"Edit\", before \"Forget\"",
           view: "panels/settings/NetworkEthernetSettings.qml" }
     ]
 

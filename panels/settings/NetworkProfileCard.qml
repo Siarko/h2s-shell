@@ -5,8 +5,8 @@ import qs.singletons
 import qs.singletons.network
 
 // A saved connection profile on its kind's page (System → Network → Wi-Fi, Ethernet): its
-// name and a line about it, connect or disconnect at once, and, opened, edit connection and
-// forget (under that button), connect automatically and priority — plus what the page adds (its
+// name and a line about it, and on its line connect or disconnect, edit connection and forget,
+// in one row; opened, connect automatically and priority — plus what the page adds (its
 // children, the card's `content` after its own rows: the Wi-Fi password). The page's rows are
 // the card's rows, not a column of their own: with none, or none shown, nothing is left under
 // the card's own. Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
@@ -14,7 +14,7 @@ import qs.singletons.network
 // device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
 // entry (VpnManager) uses it too, as `external`: the page connects it, no editor, no delete.
 // Built on SettingsCard: the frame, the header, the notice line and the two regions are
-// its; this card gives them a profile's buttons and rows — "Forget" as the last button, under
+// its; this card gives them a profile's buttons and rows — "Forget" as the last button, after
 // what modules add to the card's `actions`.
 SettingsCard {
     id: root
@@ -46,8 +46,8 @@ SettingsCard {
     property bool external: false
     property bool editable: !external
     property bool deletable: !external
-    // Its own settings elsewhere (a VPN provider's page): "Settings…" under the primary
-    // button, opened, emitting settingsRequested
+    // Its own settings elsewhere (a VPN provider's page): "Settings…" after the primary
+    // button, emitting settingsRequested
     property bool hasSettings: false
     property string settingsTooltip: ""
     // An operation runs: the button waits
@@ -70,7 +70,7 @@ SettingsCard {
 
     primary: [
         PrivilegedMark {
-            anchors.verticalCenter: parent.verticalCenter
+            id: _mark
             need: root.need
         },
         // As in the network popup: connect in the confirm colour, disconnect in the delete
@@ -101,6 +101,8 @@ SettingsCard {
             fontSize: Theme.fontSizeBody
             confirmLabel: root.useQuestion
             cancelTip: "Cancel"
+            // A long question is cut to the room the other buttons leave
+            maximumWidth: root.primaryRoom - (_mark.visible ? _mark.implicitWidth + 10 : 0)
             available: !root.busy
             onConfirmed: {
                 if (root.external)
@@ -111,7 +113,7 @@ SettingsCard {
         }
     ]
 
-    // Shown while open (the card's), under the primary button
+    // After the primary button, in the same row
     buttons: [
         SmallButton {
             objectName: "profileSettings"
@@ -123,18 +125,18 @@ SettingsCard {
         SmallButton {
             objectName: "profileEdit"
             visible: root.editable
-            label: "Edit connection…"
+            label: "Edit"
             tooltip: root.editTooltip
             onClicked: root.editRequested()
         }
     ]
 
-    // Last, under the modules' buttons (the card's `actions`)
+    // Last, after the modules' buttons (the card's `actions`)
     lastButtons: [
         DeleteButton {
             objectName: "profileForget"
             visible: root.deletable
-            // The stack's size: as tall as the buttons above it
+            // The row's size: as tall as the buttons beside it
             fontSize: Theme.fontSizeBody
             label: root.forgetLabel
             confirmLabel: root.forgetLabel + "?"

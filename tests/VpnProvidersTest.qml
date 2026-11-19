@@ -705,67 +705,66 @@ TestCase {
                    "row: with a status — taller, holding both lines (" + rowWith.height + ")");
             assert(suite._texts(suite._card).includes("A note") && suite._texts(suite._card).includes("Disconnect"),
                    "views: a provider's card — its notice, its button");
-            // Its "Settings…", opened: a button (SmallButton) under the primary one, on its
-            // right edge; the text block stops short of the buttons
+            // Its "Settings…": a button (SmallButton) after the primary one, on the name's line,
+            // closed and open; the text block stops short of the buttons
             const card = suite._card;
             const primary = suite._named(card, "profilePrimary");
             const settings = suite._named(card, "profileSettings");
-            assert(primary !== null && settings !== null && !settings.visible, "card: closed — no Settings…");
+            assert(primary !== null && settings !== null && !settings.visible, "card: no page of its own — no Settings…");
             let settingsAsked = 0;
             card.settingsRequested.connect(() => settingsAsked++);
             card.hasSettings = true;
-            card.open = true;
             assert(settings.visible && settings.label === "Settings…" && settings.kind === "normal" && typeof settings.clicked === "function"
-                   && settings.radius === Theme.button.radius, "card: opened — Settings… is a SmallButton (the shell's normal button)");
+                   && settings.radius === Theme.button.radius, "card: closed — Settings… shown, a SmallButton (the shell's normal button)");
+            card.open = true;
+            assert(settings.visible, "card: opened — Settings… still shown");
             assert(!suite._named(card, "profileEdit").visible && !suite._named(card, "profileForget").visible,
-                   "card: external — no Edit connection…, no Forget");
+                   "card: external — no Edit, no Forget");
             settings.clicked();
             assertEqual(settingsAsked, 1, "card: Settings… emits settingsRequested");
             // Where it sits, by structure — in no window nothing polishes, so the geometry
             // is checked on screen (NetworkCardGeometryTest, the Tailscale module's lock-bed
-            // test): the primary button's slot and the secondary buttons' column in one
-            // column right of the text block, the buttons (the card's region `actions`) after
-            // the slot and right-aligned, the primary anchored right in its slot
+            // test): one row of buttons right of the text block — the primary button's group,
+            // then the card's region `actions` holding the card's own buttons
             const buttons = settings.parent;
-            const slot = primary.parent.parent;
-            const actions = slot.parent;
-            const stack = Array.from(actions.children);
-            assert(buttons === card.buttonColumn && buttons.parent.parent === card.actionsRegion && card.actionsRegion.parent === actions
-                   && stack.indexOf(slot) >= 0 && stack.indexOf(slot) < stack.indexOf(card.actionsRegion),
-                   "card: Settings… in the primary button's column, under it");
-            assert((settings.Layout.alignment & Qt.AlignRight) && (slot.Layout.alignment & Qt.AlignRight)
-                   && primary.parent.anchors.right === slot.right, "card: Settings… on the primary button's right edge");
-            const header = actions.parent;
-            const titleBlock = Array.from(header.children).find(child => child !== actions && child.Layout.fillWidth);
-            assert(titleBlock !== undefined && Array.from(header.children).indexOf(titleBlock) < Array.from(header.children).indexOf(actions),
-                   "card: the text block on the left, filling the rest (it elides, never runs under the buttons)");
+            const row = card.buttonRow;
+            const rowParts = Array.from(row.children);
+            assert(buttons === card.buttonGroup && buttons.parent.parent === card.actionsRegion && card.actionsRegion.parent === row
+                   && rowParts.indexOf(primary.parent) >= 0 && rowParts.indexOf(primary.parent) < rowParts.indexOf(card.actionsRegion),
+                   "card: Settings… in the row of buttons, after the primary button");
+            assert((settings.Layout.alignment & Qt.AlignVCenter) && (primary.Layout.alignment & Qt.AlignVCenter),
+                   "card: the buttons centred on the name's line");
+            const header = row.parent;
+            const titleBlock = Array.from(header.children).find(child => child !== row && child.Layout.fillWidth);
+            assert(titleBlock !== undefined && Array.from(header.children).indexOf(titleBlock) < Array.from(header.children).indexOf(row)
+                   && !row.Layout.fillWidth, "card: the text block on the left, filling the rest (it elides, never runs under the buttons)");
             assert(!Qt.colorEqual(card.frame.color, Theme.surface), "card: opened, not Theme.surface — its buttons (Theme.surface) stay visible as buttons");
-            // Busy, or no primary button at all: the slot keeps its height, Settings… stays put
-            const slotHeight = slot.implicitHeight;
+            // Busy, or no primary button at all: the line keeps its height, Settings… stays put
+            const lineHeight = row.Layout.preferredHeight;
             card.busy = true;
-            assertEqual(slot.implicitHeight, slotHeight, "card: busy — the primary's slot keeps its height (Settings… does not move)");
+            assertEqual(row.Layout.preferredHeight, lineHeight, "card: busy — the buttons' line keeps its height (Settings… does not move)");
             card.busy = false;
             card.canUse = false;
             card.profile = Object.assign({}, card.profile, { active: false });
-            assert(!primary.visible && slot.implicitHeight === slotHeight, "card: no primary button — its slot keeps the text block's height");
+            assert(!primary.visible && row.Layout.preferredHeight === lineHeight, "card: no primary button — the line keeps the text block's height");
             card.profile = suite._vpn("vpt:two");
             card.canUse = true;
             card.open = false;
-            // A NetworkManager profile's (Wi-Fi, Ethernet, a VPN of its own): Edit connection…
-            // and Forget, buttons in the same column, under the primary one
-            const own = suite._make("../panels/settings/NetworkProfileCard.qml", { width: 300, open: true,
+            // A NetworkManager profile's (Wi-Fi, Ethernet, a VPN of its own): Edit and Forget,
+            // in the same row after the primary one, closed too
+            const own = suite._make("../panels/settings/NetworkProfileCard.qml", { width: 300,
                 profile: { uuid: "x", name: "Home", active: false, autoconnect: false, priority: 0, device: "" } });
             const edit = suite._named(own, "profileEdit");
             const forget = suite._named(own, "profileForget");
-            const ownStack = Array.from(own.buttonColumn.parent.children);
-            const ownColumn = Array.from(own.actionsRegion.parent.children);
-            assert(edit.visible && forget.visible && !suite._named(own, "profileSettings").visible
-                   && edit.parent === own.buttonColumn && forget.parent === own.lastButtonColumn
-                   && ownColumn.indexOf(suite._named(own, "profilePrimary").parent.parent) < ownColumn.indexOf(own.actionsRegion)
-                   && ownStack.indexOf(own.buttonColumn) < ownStack.indexOf(own.actionsRegion.appendHost)
-                   && ownStack.indexOf(own.actionsRegion.appendHost) < ownStack.indexOf(own.lastButtonColumn)
-                   && (forget.Layout.alignment & Qt.AlignRight),
-                   "card: a NetworkManager profile — Edit connection…, the modules' buttons, then Forget, right-aligned under the primary");
+            const ownGroups = Array.from(own.buttonGroup.parent.children);
+            const ownRow = Array.from(own.buttonRow.children);
+            assert(edit.visible && forget.visible && edit.label === "Edit" && !suite._named(own, "profileSettings").visible
+                   && edit.parent === own.buttonGroup && forget.parent === own.lastButtonGroup
+                   && ownRow.indexOf(suite._named(own, "profilePrimary").parent) < ownRow.indexOf(own.actionsRegion)
+                   && ownGroups.indexOf(own.buttonGroup) < ownGroups.indexOf(own.actionsRegion.appendHost)
+                   && ownGroups.indexOf(own.actionsRegion.appendHost) < ownGroups.indexOf(own.lastButtonGroup)
+                   && (forget.Layout.alignment & Qt.AlignVCenter),
+                   "card: a NetworkManager profile, closed — Edit, the modules' buttons, then Forget, in the row after the primary");
             own.destroy();
             suite._rowOne = suite._row("vpt:one");
             suite._extrasOne = suite._extrasOf(suite._rowOne);

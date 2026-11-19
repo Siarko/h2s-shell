@@ -390,6 +390,8 @@ TestCase {
             property string openId: ""
             property var vpns: []
             property string vpnOpenId: ""
+            // Wide enough for a row of the buttons' fixture's buttons where asked
+            property int viewWidth: 400
             property alias page: cardsPage
             property alias saved: savedSection
             property alias intro: savedIntro
@@ -400,7 +402,7 @@ TestCase {
                 top: true
                 left: true
             }
-            implicitWidth: 400
+            implicitWidth: viewWidth
             implicitHeight: 1000
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -557,12 +559,17 @@ TestCase {
         return item.mapToItem(_cards.page, 0, 0).y;
     }
 
+    function _xIn(item) {
+        return item.mapToItem(_cards.page, 0, 0).x;
+    }
+
     // Whether the cards view stands still: every card and every element where it stood at the
     // last look (a layout places its children in its polish pass, after they are built)
     property string _lastCards: ""
     function _cardsSteady() {
         const parts = [];
-        const add = item => parts.push(Math.round(_yIn(item) * 100) / 100 + ":" + Math.round(item.height * 100) / 100);
+        const add = item => parts.push(Math.round(_xIn(item) * 100) / 100 + "," + Math.round(_yIn(item) * 100) / 100 + ":"
+                                       + Math.round(item.width * 100) / 100 + "x" + Math.round(item.height * 100) / 100);
         const section = _cards.saved;
         for (const host of [section.beforeHost, section.prependHost, section.appendHost, section.afterHost])
             host.items.forEach(add);
@@ -621,8 +628,8 @@ TestCase {
         return problems;
     }
 
-    function _openCards(items, vpns) {
-        _cards = _cardsViewComponent.createObject(suite);
+    function _openCards(items, vpns, viewWidth) {
+        _cards = _cardsViewComponent.createObject(suite, { viewWidth: viewWidth ?? 400 });
         _views.push(_cards);
         // Assigned, not given to createObject: that would hand the view copies of the items
         _cards.items = items;
@@ -1223,32 +1230,33 @@ TestCase {
         return main ? Object.keys(main.live).sort().map(key => key + ":" + main.live[key]).join(",") : "?";
     }
 
-    // What is wrong with where a card's buttons stand: `items` top to bottom, the first 4 under
-    // the primary controls' slot (the region's top), each 4 under the one above, each ending
-    // on the stack's right edge (the region's), each a whole number of pixels wide, the region
-    // ending with the last
-    function _stackProblems(card, items) {
+    // What is wrong with where a card's buttons stand: `items` left to right in one row on the
+    // name's line, the row starting with the first, each 6 after the one before, each centred
+    // on the line, each a whole number of pixels wide, the row ending with the last
+    function _rowProblems(card, items) {
         const problems = [];
-        const region = card.actionsRegion;
+        const row = card.buttonRow;
         const at = item => {
             const corner = item.mapToItem(card, 0, 0);
-            return { y: corner.y, right: corner.x + item.width, bottom: corner.y + item.height, width: item.width };
+            return { x: corner.x, y: corner.y, right: corner.x + item.width, width: item.width, height: item.height };
         };
-        const edge = at(region).right;
-        let bottom = at(region).y;
+        const line = at(row);
+        let right = null;
         for (const item of items) {
             const name = item.objectName !== "" ? item.objectName : item.label;
             const where = at(item);
-            if (Math.abs(where.y - (bottom + 4)) > 0.01)
-                problems.push(name + " at " + where.y + ", not 4 under " + bottom);
-            if (Math.abs(where.right - edge) > 0.01)
-                problems.push(name + " ends at " + where.right + ", not on the stack's right edge (" + edge + ")");
+            if (right === null && Math.abs(where.x - line.x) > 0.01)
+                problems.push(name + " at " + where.x + ", not at the row's start (" + line.x + ")");
+            if (right !== null && Math.abs(where.x - (right + 6)) > 0.01)
+                problems.push(name + " at " + where.x + ", not 6 after " + right);
+            if (Math.abs(where.y - (line.y + (line.height - where.height) / 2)) > 0.51)
+                problems.push(name + " at y " + where.y + ", not centred on the name's line (" + line.y + ", " + line.height + ")");
             if (Math.abs(where.width - Math.round(where.width)) > 0.001)
                 problems.push(name + " " + where.width + " wide: not on whole pixels");
-            bottom = where.bottom;
+            right = where.right;
         }
-        if (Math.abs(at(region).bottom - bottom) > 0.01)
-            problems.push("the stack ends at " + at(region).bottom + ", not with its last button (" + bottom + ")");
+        if (right !== null && Math.abs(line.right - right) > 0.01)
+            problems.push("the row ends at " + line.right + ", not with its last button (" + right + ")");
         return problems;
     }
 
@@ -1312,10 +1320,10 @@ TestCase {
         return sections;
     }
 
-    // What is wrong with where an open network card's parts stand, in its frame: the primary
-    // button on the stack's right edge; the stack (Edit connection…, `buttons` a module added,
-    // Forget) 4 apart; the rows 8 in and across the card — "Connect automatically" 6 under the
-    // header (the name's line or the stack, whichever ends lower), priority 12 under it (the
+    // What is wrong with where an open network card's parts stand, in its frame: the buttons'
+    // row on the name's line (the primary button, Edit, `buttons` a module added, Forget) 6
+    // apart; the rows 8 in and across the card — "Connect automatically" 6 under the
+    // header (the name's line or the buttons, whichever ends lower), priority 12 under it (the
     // switch keeps 6 under itself), then the page's: the Wi-Fi password's title 6 under
     // priority and its field's line 4 under that, the field 6 short of Save at the right
     // margin; the frame 8 under the last (`element`, a module's element under the rows, if
@@ -1331,15 +1339,15 @@ TestCase {
             if (Math.abs(actual - expected) > 0.01)
                 problems.push(name + " " + Math.round(actual * 100) / 100 + ", not " + Math.round(expected * 100) / 100);
         };
-        const stack = [_blockChild(card, "profileEdit")].concat(buttons ?? [], [_blockChild(card, "profileForget")]);
-        problems.push(..._stackProblems(card, stack));
-        expect("the primary button's right", at(_blockChild(card, "profilePrimary")).right, at(card.actionsRegion).right);
+        const primary = _blockChild(card, "profilePrimary");
+        const buttonRow = (primary?.visible ? [primary] : []).concat([_blockChild(card, "profileEdit")], buttons ?? [], [_blockChild(card, "profileForget")]);
+        problems.push(..._rowProblems(card, buttonRow));
         const subtitle = _textItem(card, card.subtitle);
         const autoconnect = _shownItem(card, item => item.label === card.autoconnectLabel && typeof item.toggled === "function");
         const priorityText = _textItem(card, "Priority");
         if (!subtitle || !autoconnect || !priorityText)
             return problems.concat(["the name's line, Connect automatically and Priority show"]);
-        const headerBottom = Math.max(at(subtitle).bottom, at(card.actionsRegion).bottom);
+        const headerBottom = Math.max(at(subtitle).bottom, at(card.buttonRow).bottom);
         const width = frame.width;
         const row = (name, item, top) => {
             expect(name + " at y", at(item).y, top);
@@ -2655,11 +2663,14 @@ TestCase {
                 const actions = cards[id].actionsRegion;
                 assertEqual(_names(actions.appendHost) || "-", button ? "anchors-vpn-a:Button" : "-",
                             "… its buttons: " + (button ? "its provider module's button" : "no module's (own-provider)"));
-                assert(vpnIds.filter(other => other !== id).every(other => !cards[other].actionsRegion.appendHost.built), "… no button built in the closed cards");
+                assertEqual(vpnIds.filter(other => other !== id && cards[other].actionsRegion.appendHost.built).join(","),
+                            vpnIds.filter(other => other !== id && other.startsWith("anchors-vpn-a:")).join(","),
+                            "… in the closed cards, its provider module's button only in that provider's (closed and open)");
                 if (button) {
-                    const own = ["profileSettings", "profileEdit"].map(name => _blockChild(cards[id], name)).filter(item => item?.visible);
-                    assertEqual(_stackProblems(cards[id], own.concat([actions.appendHost.items[0].item])).join("; "), "",
-                                "… under the card's own buttons, 4 apart, on their right edge");
+                    const own = ["profilePrimary", "profileSettings", "profileEdit"].map(name => _blockChild(cards[id], name)).filter(item => item?.visible);
+                    const last = [_blockChild(cards[id], "profileForget")].filter(item => item?.visible);
+                    assertEqual(_rowProblems(cards[id], own.concat([actions.appendHost.items[0].item], last)).join("; "), "",
+                                "… after the card's own buttons, before Delete, 6 apart, on the name's line");
                     assertEqual(actions.appendHost.items[0].item.context.vpnId + " " + actions.appendHost.items[0].item.context.anchor,
                                 id + " settings.network_vpn.vpns.card.actions", "… the VPN in its context, at the region's path");
                 }
@@ -2785,7 +2796,7 @@ TestCase {
             assertEqual(_pagePartsProblems(_wifiPage, _wifiPageExpected).join("; "), "", "… and with a card open");
             assertEqual(_pagePartsProblems(_ethernetPage, _ethernetPageExpected).join("; "), "", "… on both pages");
             assertEqual(_openCardRowsProblems(_profileCards(_wifiPage)["anchors-home"], true).join("; "), "",
-                        "Home open: its buttons stacked on the primary's edge, its rows and the password where the rules put them");
+                        "Home open: its buttons in one row on the name's line, its rows and the password where the rules put them");
             assertEqual(_openCardRowsProblems(_profileCards(_ethernetPage)["anchors-wired"], false).join("; "), "", "Wired open: the same, with no row of the page's");
             assertEqual(_titleButtonProblems(_wifiPage, 2).join("; "), "", "… the title buttons still at their line's right edge");
             _wifiPartsBefore = _pageParts(_wifiPage);
@@ -2810,8 +2821,8 @@ TestCase {
               && Modules.status("anchors-title")?.state === "loaded"
               && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].settingsRegion.appendHost, 1)
               && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].settingsRegion.appendHost, 1)
-              && _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")["anchors-home"].actionsRegion.appendHost, 1)
-              && _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")["anchors-wired"].actionsRegion.appendHost, 1)
+              && ["anchors-home", "anchors-office", "anchors-cafe"].every(id => _ready(_cardsAt(_wifiPage, "settings.network_wifi.saved.card")[id].actionsRegion.appendHost, 1))
+              && ["anchors-wired", "anchors-lab"].every(id => _ready(_cardsAt(_ethernetPage, "settings.network_ethernet.profiles.card")[id].actionsRegion.appendHost, 1))
               && _networkPagesSteady(), () => {
             const status = Modules.status("anchors-networks");
             assertEqual(status.errors.length + " " + status.warnings.length + " " + status.deprecations.length, "0 0 0", "the network fixture: loaded, clean");
@@ -2837,26 +2848,26 @@ TestCase {
                          wiredElement.item.context.active].join(" "),
                         "settings.network_ethernet.profiles.card.settings anchors-wired Wired ethernet true", "… Wired, on its page's path");
             assertEqual(homeElement.item.module, Modules.handle("anchors-networks"), "… its module's handle");
-            // Its button among the card's: under "Edit connection…", above "Forget", 4 apart on
-            // one right edge
+            // Its button among the card's, closed and open: in the row on the name's line, after
+            // "Edit", before "Forget", 6 apart
             const homeButton = home.actionsRegion.appendHost.items[0];
             const wiredButton = wired.actionsRegion.appendHost.items[0];
-            assertEqual(_names(home.actionsRegion.appendHost) + " " + _names(wired.actionsRegion.appendHost), "anchors-networks:Button anchors-networks:Button",
-                        "the module's button among each open card's buttons");
-            for (const card of [home, wired]) {
-                const stack = [_blockChild(card, "profileEdit"), card.actionsRegion.appendHost.items[0].item, _blockChild(card, "profileForget")];
-                assertEqual(_stackProblems(card, stack).join("; "), "", card.title + ": Edit connection…, the module's button, Forget — 4 apart, on one right edge");
+            assertEqual(["anchors-home", "anchors-office", "anchors-cafe"].map(id => _names(wifiCards[id].actionsRegion.appendHost)).join(" ") + " "
+                        + ["anchors-wired", "anchors-lab"].map(id => _names(ethernetCards[id].actionsRegion.appendHost)).join(" "),
+                        Array(5).fill("anchors-networks:Button").join(" "), "the module's button among every card's buttons, open or closed");
+            for (const card of [home, wired, wifiCards["anchors-office"], wifiCards["anchors-cafe"], ethernetCards["anchors-lab"]]) {
+                const primary = _blockChild(card, "profilePrimary");
+                const row = (primary?.visible ? [primary] : []).concat([_blockChild(card, "profileEdit"), card.actionsRegion.appendHost.items[0].item, _blockChild(card, "profileForget")]);
+                assertEqual(_rowProblems(card, row).join("; "), "", card.title + (card.open ? " open" : " closed") + ": its main button, Edit, the module's button, Forget — 6 apart on the name's line");
             }
             assertEqual([homeButton.item.context.anchor, homeButton.item.context.networkId, wiredButton.item.context.anchor, wiredButton.item.context.networkId].join(" "),
                         "settings.network_wifi.saved.card.actions anchors-home settings.network_ethernet.profiles.card.actions anchors-wired",
                         "… the network in its context, at the region's path");
-            assert(!wifiCards["anchors-office"].actionsRegion.appendHost.built && !ethernetCards["anchors-lab"].actionsRegion.appendHost.built,
-                   "… no button built in a closed card");
-            // The card taller by the element and its gap, and by the button and its gap (the
-            // stack is taller than the name and its line)
-            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing + homeButton.height + 4).join("; "), "",
-                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element, the button and their gaps");
-            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing + wiredButton.height + 4).join("; "), "",
+            // The card taller by the element and its gap only: the button stands on the name's
+            // line
+            assertEqual(_shiftedProblems(_wifiPartsBefore, _pageParts(_wifiPage), "card Home", homeElement.height + home.spacing).join("; "), "",
+                        "the Wi-Fi page otherwise as it was: only the open card taller, by the element and its gap");
+            assertEqual(_shiftedProblems(_ethernetPartsBefore, _pageParts(_ethernetPage), "card Wired", wiredElement.height + wired.spacing).join("; "), "",
                         "… the Ethernet page too");
             assertEqual(_openCardRowsProblems(home, true, [homeButton.item], homeElement).join("; "), "",
                         "Home: its rows where the rules put them, the module's element 6 under the password, the frame 8 under it");
@@ -2901,8 +2912,11 @@ TestCase {
                    "a wide element: the place a quarter of the card wide (" + office.titleRegion.width + ", the card " + office.width + "), the element cut on the right");
             for (const [name, card] of [["Office", office], ["Lab", lab], ["Home", wifiCards["anchors-home"]], ["Wired", ethernetCards["anchors-wired"]], ["Cafe", cafe]])
                 assertEqual(_titleProblems(card).join("; "), "", name + ": the elements on the name's line, as tall as it, after the name, clear of the card's own parts");
-            assertEqual(JSON.stringify(_titleLine(office)), JSON.stringify(_titleLinesBefore.office), "Office: the name's line where it stood, as wide");
-            assertEqual(JSON.stringify(_titleLine(lab)), JSON.stringify(_titleLinesBefore.lab), "Lab: the same");
+            // The name's line where it stood, narrower only by the module's button in the
+            // buttons' row and its gap: the elements on it take none of the card's room
+            const narrowed = (card, before) => JSON.stringify(before.slice(0, 2).concat([before[2] - Math.round(card.actionsRegion.appendHost.width) - card.buttonGap, before[3]]));
+            assertEqual(JSON.stringify(_titleLine(office)), narrowed(office, _titleLinesBefore.office), "Office: the name's line where it stood, narrower by the module's button only");
+            assertEqual(JSON.stringify(_titleLine(lab)), narrowed(lab, _titleLinesBefore.lab), "Lab: the same");
             _keptTitle = ownTitle.item;
             _keptTitleChanges = _keptTitle.contextChanges;
             // A long name: cut first, the elements keep their place
@@ -3062,47 +3076,43 @@ TestCase {
 
         // A card's buttons (settings.cards.saved.card.actions, append; the fixture view's cards
         // have "Edit" and, last, "Forget") with a fixture module (tests/fixtures/modules/
-        // anchors-buttons): a button of each kind under the card's own, in its manifest's
-        // order, above "Forget", 4 apart on one right edge, at most a third of the card, in its
-        // own size or the stack's; one element that is no button refused; built only while the card is
-        // open; a click reaching the module; the cards reordered, the open one taken out; an
-        // own-provider card's buttons only its provider module's
+        // anchors-buttons): a button of each kind after the card's own, in its manifest's
+        // order, before "Forget", 6 apart in one row on the name's line, at most a third of the
+        // card, in its own size or the row's; one element that is no button refused; built
+        // closed and open, the same objects when the card opens; a click reaching the module;
+        // the cards reordered, one taken out; an own-provider card's buttons only its provider
+        // module's. The view wide enough for a row of them all
         const cardButtons = card => card?.actionsRegion.appendHost.items.filter(item => item.ready) ?? [];
+        const ownRow = (card, buttons) => [_blockChild(card, "ownEdit")].concat(buttons, [_blockChild(card, "ownForget")]);
         _then("the network pages gone", () => _live("settings.network") === "", () => {
             _tracker.reset();
             host.load([fixtures + "/anchors-buttons"], {});
-            _openCards(_cardItems(["one", "two", "three"]), [{ id: "v1", provider: "anchors-buttons" }, { id: "v2", provider: "anchors-cards-a" }]);
+            _openCards(_cardItems(["one", "two", "three"]), [{ id: "v1", provider: "anchors-buttons" }, { id: "v2", provider: "anchors-cards-a" }], 1200);
         });
-        _then("the buttons' fixture loaded, the cards closed", () => _settled() && host.status("anchors-buttons")?.state === "loaded"
-              && _savedCardList().length === 3 && _cardsSteady(), () => {
-            assertEqual(host.status("anchors-buttons").errors.length, 0, "the buttons' fixture: loaded, clean (nothing refused before it is built)");
-            assertEqual(_savedCard(0).actionsRegion.path, "settings.cards.saved.card.actions", "a card's buttons: the region …card.actions");
-            assert(_savedCardList().every(card => !card.actionsRegion.visible && !card.actionsRegion.appendHost.built), "closed cards: no button built");
-            assertEqual(_buttonsLive(), "", "… none standing");
-            _cards.openId = "two";
-        });
-        _then("the second card open, its buttons built", () => cardButtons(_savedCard(1)).length === 6 && _cardsSteady()
+        _then("the buttons' fixture loaded, its buttons in the closed cards", () => _settled() && host.status("anchors-buttons")?.state === "loaded"
+              && _savedCardList().length === 3 && _savedCardList().every(card => cardButtons(card).length === 6) && _cardsSteady()
               && _has(host.status("anchors-buttons")?.errors, "takes a SmallButton"), () => {
+            assertEqual(_savedCard(0).actionsRegion.path, "settings.cards.saved.card.actions", "a card's buttons: the region …card.actions");
+            assert(_savedCardList().every(card => !card.open && card.actionsRegion.visible), "closed cards: the region shown");
             const card = _savedCard(1);
             const appended = card.actionsRegion.appendHost;
             const buttons = cardButtons(card).map(item => item.item);
             assertEqual(buttons.map(button => button.objectName.replace("anchors-buttons:", "")).join(","), "Primary,Secondary,Danger,Warning,Success,Long",
-                        "the open card: the module's buttons in its manifest's order");
-            assertEqual(appended.items.length + " " + appended.items.filter(item => !item.ready && !item.visible && item.height === 0).length, "7 1",
+                        "a closed card: the module's buttons in its manifest's order");
+            assertEqual(appended.items.length + " " + appended.items.filter(item => !item.ready && !item.visible && item.width === 0).length, "7 1",
                         "… the element that is no button refused: nothing shown, no room taken");
             assert(_has(host.status("anchors-buttons").errors, "anchors: \"settings.cards.saved.card.actions\" takes a SmallButton"),
                    "… and said in the module's status: " + JSON.stringify(host.status("anchors-buttons").errors));
-            assertEqual(host.status("anchors-buttons").errors.length, 1, "… once");
-            assertEqual(_buttonsLive().split(",").filter(entry => entry.endsWith("|two:1")).length, 6, "… the buttons made, in the open card only");
-            const edit = _blockChild(card, "ownEdit");
-            const forget = _blockChild(card, "ownForget");
-            assertEqual(_stackProblems(card, [edit].concat(buttons, [forget])).join("; "), "",
-                        "the card's Edit, the module's buttons, then Forget last: 4 apart, on one right edge, on whole pixels");
+            assertEqual(host.status("anchors-buttons").errors.length, 1, "… once, for all the cards");
+            assertEqual(["one", "two", "three"].map(id => _buttonsLive().split(",").filter(entry => entry.endsWith("|" + id + ":1")).length).join(" "), "6 6 6",
+                        "… the buttons made in every card");
+            assertEqual(_rowProblems(card, ownRow(card, buttons)).join("; "), "",
+                        "the card's Edit, the module's buttons, then Forget last: 6 apart on the name's line, on whole pixels");
             assertEqual(buttons.map(button => button.kind).join(","), "primary,secondary,danger,warning,success,secondary", "… a button of each kind");
             assertEqual(buttons.map(button => _child(button, "QQuickLoader").item.kind).join(","),
                         ["primary", "secondary", "danger", "warning", "success", "secondary"].map(kind => ApiElementRules.buttonKind(kind).value).join(","),
                         "… each drawn as its kind");
-            assertEqual(buttons.map(button => button.size).join(","), "s,m,m,m,m,m", "… the one that sets its size: s; the others, setting none: the stack's m");
+            assertEqual(buttons.map(button => button.size).join(","), "s,m,m,m,m,m", "… the one that sets its size: s; the others, setting none: the row's m");
             assertEqual(buttons.map(button => _child(button, "QQuickLoader").item.fontSize).join(","),
                         [Theme[ApiElementRules.textSize("s").value]].concat(Array(5).fill(Theme[ApiElementRules.textSize("m").value])).join(","),
                         "… and drawn so");
@@ -3124,59 +3134,62 @@ TestCase {
             _driver.mouseClick(buttons[2], 5, 5);
             assertEqual(host.mainObject("anchors-buttons").clicks.length, 2, "… and acts on the second click");
             _keptButtons = buttons;
-            // A button the module hides takes no room and no gap
-            _nextButtonY = _yIn(buttons[2]);
+            // A button the module hides takes no room and no gap: the row, on the right, closes
+            // up from the left
+            _nextButtonY = _xIn(buttons[0]);
             buttons[1].visible = false;
         });
-        _then("a button hidden, the next one moved", () => Math.abs(_yIn(_keptButtons[2]) - _nextButtonY) > 0.01 && _cardsSteady(), () => {
+        _then("a button hidden, the one before it moved", () => Math.abs(_xIn(_keptButtons[0]) - _nextButtonY) > 0.01 && _cardsSteady(), () => {
             const card = _savedCard(1);
             const shown = _keptButtons.filter((button, index) => index !== 1);
-            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(shown, [_blockChild(card, "ownForget")])).join("; "), "",
-                        "a hidden button takes no room: the next one up in its place, 4 under the one above");
+            assertEqual(_rowProblems(card, ownRow(card, shown)).join("; "), "",
+                        "a hidden button takes no room: the row closes up, 6 between the buttons left");
             _keptButtons[1].visible = true;
         });
-        _then("the button shown again, the next one back", () => Math.abs(_yIn(_keptButtons[2]) - _nextButtonY) < 0.01 && _cardsSteady(), () => {
+        _then("the button shown again, the one before it back", () => Math.abs(_xIn(_keptButtons[0]) - _nextButtonY) < 0.01 && _cardsSteady(), () => {
             const card = _savedCard(1);
-            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(_keptButtons, [_blockChild(card, "ownForget")])).join("; "), "",
-                        "… shown again, back in its place");
-            _cards.openId = "";
-        });
-        _then("the card closed: its buttons gone", () => !_savedCard(1).actionsRegion.appendHost.built && _buttonsLive() === "", () => {
-            assert(!_savedCard(1).actionsRegion.visible, "the region hidden with the card closed");
+            assertEqual(_rowProblems(card, ownRow(card, _keptButtons)).join("; "), "", "… shown again, back in its place");
+            _nextButtonY = _xIn(_keptButtons[0]);
             _cards.openId = "two";
         });
-        _then("open again", () => cardButtons(_savedCard(1)).length === 6 && _cardsSteady(), () => {
-            assert(cardButtons(_savedCard(1)).every(item => !_keptButtons.includes(item.item)), "opened again: its buttons made anew");
+        _then("the card opened", () => _savedCard(1).settingsRegion.visible && _cardsSteady(), () => {
+            const card = _savedCard(1);
+            const buttons = cardButtons(card).map(item => item.item);
+            assert(buttons.length === 6 && buttons.every((button, index) => button === _keptButtons[index]), "opened: its buttons the same objects");
+            assertEqual(_rowProblems(card, ownRow(card, buttons)).join("; ") + (Math.abs(_xIn(buttons[0]) - _nextButtonY) < 0.01 ? "" : "moved"), "",
+                        "… where they stood closed");
+            _cards.openId = "";
+        });
+        _then("the card closed again", () => !_savedCard(1).settingsRegion.visible && _cardsSteady(), () => {
+            assert(cardButtons(_savedCard(1)).every((item, index) => item.item === _keptButtons[index]), "closed again: its buttons kept");
             assertEqual(host.status("anchors-buttons").errors.length, 1, "… the refusal not said again");
-            _keptButtons = cardButtons(_savedCard(1)).map(item => item.item);
             _cardObjects = { one: _savedCard(0), two: _savedCard(1), three: _savedCard(2) };
             _cards.items = _cardItems(["three", "two", "one"]);
         });
         _then("the cards reordered", () => _savedCard(0)?.cardItem.id === "three" && _cardsSteady()
               && _yIn(_savedCard(0).frame) < _yIn(_savedCard(1).frame), () => {
             const card = _savedCard(1);
-            assert(card === _cardObjects.two, "the open card the same card");
+            assert(card === _cardObjects.two, "the card the same card");
             const buttons = cardButtons(card).map(item => item.item);
             assert(buttons.length === 6 && buttons.every((button, index) => button === _keptButtons[index]) && buttons.every(button => button.context.itemId === "two"),
                    "… its buttons the same objects, still its item's");
-            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit")].concat(buttons, [_blockChild(card, "ownForget")])).join("; "), "",
-                        "… where they stood in the card");
+            assertEqual(_rowProblems(card, ownRow(card, buttons)).join("; "), "", "… where they stood in the card");
             _cards.items = _cardItems(["three", "one"]);
         });
-        _then("the open card taken out", () => _savedCardList().length === 2 && _buttonsLive() === "", () => {
-            assert(_savedCardList().every(card => !card.actionsRegion.appendHost.built), "its buttons gone with it, none built elsewhere");
+        _then("a card taken out", () => _savedCardList().length === 2 && !_buttonsLive().includes("|two:"), () => {
+            assertEqual(["one", "three"].map(id => _buttonsLive().split(",").filter(entry => entry.endsWith("|" + id + ":1")).length).join(" "), "6 6",
+                        "its buttons gone with it, the other cards' kept");
             _keptButtons = [];
-            _cards.openId = "";
+        });
+        _then("the module's own provider card", () => cardButtons(_vpnCard(0)).length === 1 && _cardsSteady(), () => {
+            assertEqual(_names(_vpnCard(0).actionsRegion.appendHost), "anchors-buttons:Primary", "an own-provider card, closed: its provider module's button");
+            assertEqual(_rowProblems(_vpnCard(0), [cardButtons(_vpnCard(0))[0].item]).join("; "), "", "… alone in the row, on the name's line");
+            assert(!_vpnCard(1).actionsRegion.appendHost.built, "another provider's card: none of the module's buttons");
+            assertEqual(_vpnCard(1).actionsRegion.width, 0, "… and its row takes no room");
             _cards.vpnOpenId = "v1";
         });
-        _then("the module's own provider card open", () => _vpnCard(0)?.actionsRegion.visible && cardButtons(_vpnCard(0)).length === 1 && _cardsSteady(), () => {
-            assertEqual(_names(_vpnCard(0).actionsRegion.appendHost), "anchors-buttons:Primary", "an own-provider card: its provider module's button");
-            assertEqual(_stackProblems(_vpnCard(0), [cardButtons(_vpnCard(0))[0].item]).join("; "), "", "… alone in the stack, 4 under the primary slot");
-            _cards.vpnOpenId = "v2";
-        });
-        _then("another provider's card open", () => _vpnCard(1)?.actionsRegion.visible && !_vpnCard(0).actionsRegion.appendHost.built && _cardsSteady(), () => {
-            assert(!_vpnCard(1).actionsRegion.appendHost.built, "another provider's card: none of the module's buttons");
-            assertEqual(_vpnCard(1).actionsRegion.height, 0, "… and its stack takes no room");
+        _then("the module's own provider card open", () => _vpnCard(0)?.settingsRegion.visible && cardButtons(_vpnCard(0)).length === 1 && _cardsSteady(), () => {
+            assertEqual(_rowProblems(_vpnCard(0), [cardButtons(_vpnCard(0))[0].item]).join("; "), "", "opened: its button still alone in the row");
             _close(_cards);
             _cards = null;
         });
@@ -3197,7 +3210,7 @@ TestCase {
             _cards.openId = "one";
             _cards.vpnOpenId = "v1";
         });
-        _then("both cards open, their element refused", () => _savedCard(0).actionsRegion.visible && _vpnCard(0).actionsRegion.visible
+        _then("both cards open, their element refused", () => _savedCard(0).settingsRegion.visible && _vpnCard(0).settingsRegion.visible
               && _savedCard(0).actionsRegion.appendHost.items.length === 1 && _vpnCard(0).actionsRegion.appendHost.items.length === 1
               && host.status("anchors-refused")?.errors.length === 4 && _cardsSteady(), () => {
             const card = _savedCard(0);
@@ -3207,9 +3220,9 @@ TestCase {
                    && _has(host.status("anchors-refused").errors, "anchors: settings.cards.saved.card, after: "), "… each failure in the module's status");
             assertEqual(Math.round(card.frame.mapToItem(card, 0, 0).y * 100) / 100 + " " + Math.round((card.height - card.frame.height) * 100) / 100, "0 0",
                         "… no gap above or under the frame: the card as tall as its frame");
-            assertEqual(_stackProblems(card, [_blockChild(card, "ownEdit"), _blockChild(card, "ownForget")]).join("; "), "",
-                        "a saved card whose only module element is refused: Edit, then Forget 4 under it, no gap added");
-            assertEqual(_vpnCard(0).actionsRegion.height, 0, "… a card with no button of its own: the stack takes no room");
+            assertEqual(_rowProblems(card, [_blockChild(card, "ownEdit"), _blockChild(card, "ownForget")]).join("; "), "",
+                        "a saved card whose only module element is refused: Edit, then Forget 6 after it, no gap added");
+            assertEqual(_vpnCard(0).actionsRegion.width + " " + _vpnCard(0).buttonRow.implicitWidth, "0 0", "… a card with no button of its own: the row takes no room");
             _close(_cards);
             _cards = null;
         });

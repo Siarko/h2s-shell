@@ -210,7 +210,8 @@ Item {
             // opened part …card.settings, whose `prepend` shows the elements of the VPN's
             // provider module only (scope own-provider: the card's scopeId), with the VPN in
             // their context — where the module's old slot network.vpn.card stood; its buttons
-            // …card.actions, whose `append` shows that module's buttons under the card's own
+            // …card.actions, whose `append` shows that module's buttons in the row on the
+            // card's name line, after the card's own, before "Delete"
             SettingsSection {
                 anchor: "vpns"
                 topMargin: 0
@@ -281,7 +282,7 @@ Item {
                         onUseRequested: VpnManager.connect(vpn.uuid)
                         onStopRequested: VpnManager.disconnect(vpn.uuid)
                         onNoticeActionRequested: VpnManager.attend(vpn.uuid)
-                        // A provider's page: "Settings…", under the card's primary button
+                        // A provider's page: "Settings…", after the card's primary button
                         hasSettings: _settingsPage !== "" || _pageUrl !== ""
                         settingsTooltip: "Its own settings: " + VpnManager.typeName(vpn)
                         onSettingsRequested: {

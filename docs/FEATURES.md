@@ -275,9 +275,9 @@ hardware, MAC, speed, Wi-Fi signal and channel, addresses, gateway, DNS, search 
 MTU (bridges, containers' and tunnels folded under "Other devices"), and the hostname, a
 global DNS and the connectivity check — through `nmcli` and NetworkManager's D-Bus
 properties (`busctl`); a change refused for want of rights goes to the polkit prompt.
-**Wi-Fi** (shown when the computer has Wi-Fi): the radio, the network in use, the saved
-networks with connect, autoconnect, priority, the password (shown for 30 s, or changed)
-and forget, a hidden network, and "Find networks": the networks in range sliding in from
+**Wi-Fi** (shown when the computer has Wi-Fi): the radio's switch on the page's heading, the
+network in use, the saved networks with connect, edit and forget on each card's name line,
+autoconnect, priority and the password (shown for 30 s, or changed) when it is opened, a hidden network, and "Find networks": the networks in range sliding in from
 the right — the popup's own list (`panels/network/WifiNetworkList.qml`), so connecting works
 the same in both; the Overview's Wi-Fi card and summary line lead there. **Hotspots**:
 this computer's own networks (Wi-Fi profiles in access-point mode, IPv4 "Be the router"),
@@ -292,7 +292,7 @@ popup lists the saved hotspots under the hidden network (`panels/network/Hotspot
 each with "Turn on".
 **Ethernet** (with a wired device): each device's card or "Cable unplugged", and the wired
 profiles with use or disconnect, autoconnect, priority and forget.
-**The connection editor** (a profile → Edit connection…,
+**The connection editor** (a profile → Edit,
 `panels/settings/NetworkConnectionEditor.qml`): general, IPv4, IPv6, DNS, routing (only
 its own network, route metric, require the family), "Be the router" (this computer's
 address, the range handed out, the lease time), and the Wi-Fi's or the cable's own
