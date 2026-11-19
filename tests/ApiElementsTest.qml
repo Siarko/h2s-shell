@@ -27,7 +27,7 @@ TestCase {
         "SmallButton": ["apiElement", "asked", "asking", "available", "cancelTip", "checked", "clicked", "confirm", "confirmLabel", "defaultSize", "kind", "label", "size", "tooltip"],
         "Dropdown": ["options", "picked", "placeholder", "size", "value"],
         "InputField": ["accepted", "editingFinished", "password", "placeholder", "problem", "revealToggled", "revealed", "size", "text", "textEdited"],
-        "Pill": ["clicked", "label", "picked", "size", "tooltip"],
+        "Pill": ["clicked", "label", "picked", "size", "textSize", "tooltip"],
         "Checkbox": ["checked", "label", "toggled"],
         "ToggleSwitch": ["checked", "toggled"],
         "PrivilegedMark": ["need"],
@@ -69,6 +69,12 @@ TestCase {
         { size: "s", inside: "s" },
         { size: "m", inside: "m" },
         { size: "l", inside: "l" }
+    ]
+
+    // (1.32) A public pill's text sizes, and the theme's type size each is
+    readonly property var pillTextSizes: [
+        { size: "small", inside: "fontSizeSmall" },
+        { size: "body", inside: "fontSizeBody" }
     ]
 
     // What a public mark is told, what that is inside, and whether anything shows
@@ -360,7 +366,7 @@ TestCase {
                 onClicked: clicks++
             }
             Public.Pill { id: pickedPill; label: "Picked"; picked: true }
-            Public.Pill { id: mistypedPill; label: "Typo"; size: "xs" }
+            Public.Pill { id: mistypedPill; label: "Typo"; size: "xs"; textSize: "huge" }
             Public.Checkbox {
                 id: checkbox
                 property int toggles: 0
@@ -1111,6 +1117,11 @@ TestCase {
         assertEqual(Object.keys(rules.pillSizes).sort().join(" "), pillSizes.map(entry => entry.size).sort().join(" "), "and those are all a pill's sizes");
         for (const word of ["xs", "", "huge", "toString", undefined, 3])
             assertEqual(JSON.stringify(rules.pillSize(word)), JSON.stringify({ value: "m", known: false }), "a pill's size " + JSON.stringify(word) + " is not one: the default, m");
+        for (const entry of pillTextSizes)
+            assertEqual(JSON.stringify(rules.pillTextSize(entry.size)), JSON.stringify({ value: entry.inside, known: true }), "a pill's text size " + entry.size + " is the theme's " + entry.inside);
+        assertEqual(Object.keys(rules.pillTextSizes).sort().join(" "), pillTextSizes.map(entry => entry.size).sort().join(" "), "and those are all a pill's text sizes");
+        for (const word of ["s", "m", "", "huge", "12", "toString", undefined, 12])
+            assertEqual(JSON.stringify(rules.pillTextSize(word)), JSON.stringify({ value: "fontSizeSmall", known: false }), "a pill's text size " + JSON.stringify(word) + " is not one: the default, small");
         for (const entry of needs) {
             assertEqual(JSON.stringify(rules.markNeed(entry.need)), JSON.stringify({ value: entry.inside, known: true }), "a mark's need \"" + entry.need + "\" is \"" + entry.inside + "\" inside");
             assertEqual(rules.markShown(entry.need), entry.shown, "… and " + (entry.shown ? "shows" : "shows nothing"));
@@ -1156,6 +1167,14 @@ TestCase {
         }
         assert(Theme.pill.minHeight < Theme.pill.mediumHeight && Theme.pill.mediumHeight < Theme.pill.largeHeight, "the three heights differ in the theme");
         assertEqual(pill.height, Theme.pill.mediumHeight, "a pill that names no size is m: the theme's medium height");
+        assertEqual(pill.textSize + " " + _within(pill).fontSize + " " + _texts(_within(pill))[0].font.pixelSize, "small " + Theme.fontSizeSmall + " " + Theme.fontSizeSmall,
+            "a pill that names no text size: small, its label in the theme's small size (as before 1.32)");
+        for (const entry of pillTextSizes) {
+            pickedPill.textSize = entry.size;
+            assertEqual(_within(pickedPill).fontSize + " " + _texts(_within(pickedPill))[0].font.pixelSize, Theme[entry.inside] + " " + Theme[entry.inside],
+                "a pill of text size " + entry.size + ": its label in the theme's " + entry.inside);
+        }
+        pickedPill.textSize = "small";
 
         // --- what is passed on ---
         assertEqual(_within(dropdown).value + " " + _within(dropdown).options.length + " " + _within(unchosen).placeholder, "a 2 <b>x</b>", "a dropdown's value, options and placeholder reach the one inside");
@@ -1196,7 +1215,8 @@ TestCase {
         assertEqual(_within(unchosen).fontSize + " " + _within(field).fontSize, Theme.fontSizeBody + " " + Theme.fontSizeBody, "a dropdown and a field have no size l: m");
         unchosen.size = "m";
         field.size = "m";
-        for (const key of ["Pill.size=xs", "Dropdown.size=l", "InputField.size=l", "PrivilegedMark.need=perhaps"])
+        assertEqual(_within(mistypedPill).fontSize, Theme.fontSizeSmall, "a pill of a text size that does not exist shows as small");
+        for (const key of ["Pill.size=xs", "Pill.textSize=huge", "Dropdown.size=l", "InputField.size=l", "PrivilegedMark.need=perhaps"])
             assertEqual(ApiElements.warned.filter(warned => warned === key).length, 1, "warned about once: " + key);
         assert(!ApiElements.warned.some(key => /^(Dropdown|InputField|Pill)\.size=(s|m)$/.test(key) || /^PrivilegedMark\.need=(|yes|auth|no)$/.test(key)), "a word a control knows is not warned about");
 

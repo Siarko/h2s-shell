@@ -17,6 +17,10 @@ Singleton {
 
     // A public pill's size → Pill's internal size (the theme's three pill heights)
     readonly property var pillSizes: ({ s: "s", m: "m", l: "l" })
+    // (1.32) A public pill's text size → the theme's type size, by its name in Theme: always
+    // one of the theme's sizes, never pixels
+    readonly property var pillTextSizes: ({ small: "fontSizeSmall", body: "fontSizeBody" })
+    readonly property string pillTextSizeDefault: "small"
 
     // What a public mark is told (polkit's answer) → PrivilegedMark's internal need. One
     // it does not know is the lock: a control that may ask is never shown as one that
@@ -82,6 +86,10 @@ Singleton {
 
     function pillSize(size) {
         return pick(pillSizes, size, sizeDefault);
+    }
+
+    function pillTextSize(size) {
+        return pick(pillTextSizes, size, pillTextSizeDefault);
     }
 
     function markNeed(need) {

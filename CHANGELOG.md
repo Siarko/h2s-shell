@@ -19,7 +19,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   element there is as tall as the name's line, all of them a quarter of the row at most, the
   name cut first. Context `{ networkId, name, kind, active }` as the cards give it; a Wi-Fi
   network not saved has `networkId` `""` and its SSID as `name`, the wired row with no
-  profile up `networkId` and `name` `""`.
+  profile up `networkId` and `name` `""`. The public `Pill` takes a `textSize`: `"small"`
+  (the default, as before) or `"body"`, the theme's type sizes.
 - 1.31: two public elements — `ProgressBar` (`value` 0 to 1, below 0 a run of unknown
   length; `kind` `normal`, `success`, `warning`, `danger`) and `HoverTip` (a plain-text
   tooltip over its `target`, by default the item it is written in, taking no room); the

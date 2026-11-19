@@ -457,7 +457,8 @@ import qs.singletons.network
 //                          editingFinished(), revealToggled()
 //   Pill                   (1.5) label, picked (the owner sets it), tooltip;
 //                          size: "s" | "m" | "l" — the theme's three pill heights;
-//                          clicked()
+//                          (1.32) textSize: "small" (the default) | "body" — the theme's
+//                          type sizes, never pixels; clicked()
 //   Checkbox               (1.5) label, checked (the owner flips it); toggled()
 //   ToggleSwitch           (1.5) checked (the owner changes it), and every item's
 //                          `enabled`; toggled()

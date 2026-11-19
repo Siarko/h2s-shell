@@ -847,7 +847,7 @@ The button is `SmallButton` (`api/SmallButton.qml`): `kind` is `primary`, `secon
 first click ask, the second act — `clicked()` is "do it" either way. `qs.components` has
 a `SmallButton` of its own: in a file that imports both, the import written last gives the
 name. The other controls are `Dropdown`, `InputField` (each with `size` `xs`, `s` or `m`),
-`Pill` (`size` `s`, `m` or `l`: the theme's three pill heights), `Checkbox`, `ToggleSwitch`
+`Pill` (`size` `s`, `m` or `l`: the theme's three pill heights; `textSize` `small` or `body`: the theme's type sizes, API 1.32), `Checkbox`, `ToggleSwitch`
 and `PrivilegedMark`, whose `need` is polkit's answer (`auth`, `no`, `yes` or none; one it
 does not know shows the lock); their names are `qs.components`' too, and the same holds
 for a file that imports both. Rows and texts: `SettingsRow` (a label, a hint under it, a
