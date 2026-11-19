@@ -28,6 +28,11 @@ import qs.singletons
 //
 // The General page as the settings window's page loader holds it: where its rows stand — the
 // headings, the hint and each setting at the page's margin, as far apart as they always were.
+// Then the shell's own host with a fixture module (tests/fixtures/modules/anchors-general)
+// at settings.general, append, and through the old slot read as it: the elements 16 under
+// the last setting, their context; the settings window's General page with them, every place
+// in the table live and nothing else; another page and back, the window closed and opened,
+// over and over.
 TestCase {
     id: suite
     suiteName: "Anchors"
