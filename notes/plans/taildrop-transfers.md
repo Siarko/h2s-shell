@@ -241,7 +241,7 @@ device. Example: you send 10 files from the popup; file 4 stalls.
   nothing makes you open the settings window to act).
 - (b) The full list in the popup too (a scrolling part under the devices).
 - (c) The list on the page only; the popup shows "No progress" and a link to the page.
-What changes: `TaildropSendRow.qml` and the popup's received part (slice 6); (b) adds a
+What changes: `TaildropSendRow.qml` and the popup's received part (slice 5); (b) adds a
 list there.
 
 **Q4. Progress notifications for transfers** (after the notification plan).
