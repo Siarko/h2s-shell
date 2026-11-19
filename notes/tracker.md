@@ -848,3 +848,9 @@ For the owner, from the autonomous run (2026-11-18 on):
   confirm: the dialog is whichever the platform theme gives (not forced to Qt's own); an
   empty title shows Qt's default (put the module's name there?); a lock closing it reads
   as `cancelled`, so a module cannot tell it from the user cancelling.
+- **Dependencies between modules** (P1, the agent's choices): a malformed `exports` or
+  `uses` fails the whole module (not "drop the entry, keep loading", which would let it run
+  without something it requires); a function a dependent hands its provider may still be
+  called after the dependent is off — QML cannot stop it, `Api.qml` makes it the
+  dependent's job; a provider whose main failed stays failed until turned off and on (its
+  dependents `missing-module` meanwhile).
