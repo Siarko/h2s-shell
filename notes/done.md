@@ -2265,3 +2265,6 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   so; late answers (account change, stop) do nothing; a notification's "Save in…" acts as
   offered (`saveInOffer`); refused up front when the list is not read. Reviewed, fixed; module
   suites and stand-ins on both machines, the module's lock bed on NixOS.
+- **Taildrop views, docs (M7, the docs part)** — on the module's `main` 2026-11-20. features,
+  architecture, ipc, limitations, README; the Unreleased CHANGELOG merged into short lines
+  ("Needs … 1.34" kept, no version bump). Read by the lead; module suites on both machines.
