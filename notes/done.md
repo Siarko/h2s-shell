@@ -2282,3 +2282,12 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   public `StatusPill` (icon, label, kind, parts with tips and lines, `expanded`, `toggled`).
   Reviewed (the wave's per-frame cost and hidden-window runs fixed); `tests/run-all.sh` passed
   on both machines.
+- **Status pills, nine statuses, the wave in the module (M10, M11)** — on the module's `main`
+  2026-11-20 (manifest `api` 1.35). M10: the nine statuses (icon, kind, words; failed danger,
+  stalled warning), `fileStatus` (one status per file), `statusPills` (Sending X/Y, Receiving
+  X/Y, parts with tips and lines; Sent N/N, Sent X/Y · ✕n, Off · n in inbox, "No transfers";
+  inbox files of running saves only excluded), the notification body "name · i of n" (the
+  running file) with "Skip" only. M11: the page's summary as `StatusPill`s (expand on click),
+  `TaildropStatusIcon` before the state in capsules and popup lines, `ProgressBar.wave` on
+  moving bars. Reviewed (M10: an inbox file counted nowhere fixed); module suites and stand-ins
+  on both machines, the module's lock bed on NixOS.
