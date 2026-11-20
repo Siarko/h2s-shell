@@ -2248,3 +2248,12 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   everywhere (tooltip login.tailscale.com); the "Web interface" switch → "Share this computer's
   settings". Reviewed (M4: a silently lost drop fixed); M6 read by the lead; module suites and
   stand-ins on both machines, the module's lock bed on NixOS.
+- **Taildrop off (M5)** — on the module's `main` 2026-11-20. Setting `mod.tailscale.taildrop`
+  (on by default), its switch in the "Taildrop" heading; `TaildropRules.offState`: off → no
+  sending (page, popup, IPC), no arrival notifications, no auto-save, no new progress
+  notifications; files already running finish, every send file not started stops ("Stopped:
+  Taildrop off", `offStop`); the page says Tailscale still accepts files into its inbox; Save by
+  hand works (the popup keeps Save and the count, the bar badge goes). Turning on again announces
+  what came meanwhile once (Save) and does not auto-save it. Soft only (no daemon setting, the
+  owner's answer). Reviewed (queued sends after off and a silent save on re-enable fixed);
+  module suites and stand-ins on both machines, the module's lock bed on NixOS.
