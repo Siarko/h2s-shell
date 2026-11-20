@@ -887,6 +887,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- With the notification centre open, the toasts that stay (critical, staying) and their
+  badges were drawn over its cards: on the centre's screen they now stand left of it, and
+  slide back when it closes.
+- A queue's "+N" badge opened the centre on the other monitor, and with the centre open
+  moved it from monitor to monitor: it now opens the centre on its own screen, and closes it
+  there when open, as the bell does.
 - Toasts sat lower than meant under a top bar — by the bar's reserved space — and the shell's
   own message at the bottom touched the screen's edge: the toasts' window now covers the
   whole screen, and nothing it shows — toasts, a moved toast, the volume and the shell's

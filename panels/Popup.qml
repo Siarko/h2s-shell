@@ -462,7 +462,10 @@ LazyLoader {
             // position and whether it had settled was changed by its own evaluation (the
             // change handler below runs inside it), a binding loop
             property real position: 0
-            Component.onCompleted: position = Math.round(_exact)
+            Component.onCompleted: {
+                position = Math.round(_exact);
+                Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", _centreArea);
+            }
             on_ExactChanged: {
                 position = _exact;
                 _settle.restart();
@@ -509,6 +512,20 @@ LazyLoader {
             width: _placed.width
             height: _placed.height
             clip: true
+
+            // The notification centre open here: where it stands on the screen, out in full
+            // rather than mid-slide, for the toasts to keep clear of (Notifications.centreArea)
+            readonly property var _centreArea: {
+                if (!popupLoader.active || popupLoader.closing || popupLoader.contentType !== "notifications")
+                    return null;
+                const full = BarGeometry.fromBarFrame(popup.edge,
+                    { along: position, across: 0, alongLength: popup.shownLength, acrossLength: across },
+                    popup.width, popup.height);
+                return { x: full.x + popup._screenOffset.x, y: full.y + popup._screenOffset.y,
+                         width: full.width, height: full.height };
+            }
+            on_CentreAreaChanged: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", _centreArea)
+            Component.onDestruction: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", null)
 
             Behavior on _start {
                 enabled: popup.showPopup

@@ -510,6 +510,40 @@ Singleton {
                  y: inside(y, height, inset("top"), (Number(screenHeight) || 0) - inset("bottom")) };
     }
 
+    // The edge the toasts' column rests against on one screen, in its coordinates. `args`:
+    // { screenWidth, insets (the bar's, as clampToScreen), centre (the notification centre's
+    // rectangle { x, y, width, height } while it is open on this screen, else null), reach
+    // (the column's width: a toast and its badge), gap }. Normally the screen's right edge
+    // off the bar, the badges flush against it (free false). With the centre open across the
+    // column, the centre's left edge less `gap`, the column then standing free (free true):
+    // the toasts' overlay is above the centre and would cover its cards. Never so far left
+    // that the column leaves the screen. → { right, free }
+    function stackEdge(args): var {
+        const inset = side => Math.max(0, Number(args?.insets?.[side]) || 0);
+        const edge = (Number(args?.screenWidth) || 0) - inset("right");
+        const centre = args?.centre;
+        const reach = Math.max(0, Number(args?.reach) || 0);
+        const left = Number(centre?.x);
+        const width = Number(centre?.width);
+        if (!Number.isFinite(left) || !Number.isFinite(width) || width <= 0)
+            return { right: edge, free: false };
+        // Beside the column (a bar at the left, its centre there), or past the screen's edge
+        if (left + width <= edge - reach || left >= edge)
+            return { right: edge, free: false };
+        const right = Math.round(left - Math.max(0, Number(args?.gap) || 0));
+        return { right: Math.min(edge, Math.max(inset("left") + reach, right)), free: true };
+    }
+
+    // A click on a queue's badge, as one bar sees it: the centre opens on the badge's own
+    // screen — the one its toasts are on — and closes there when it is open already, as the
+    // bell does. → "open", "close", or "none" for another screen's bar (its popup closes as
+    // the badge's screen's opens) and for a badge whose screen is not known
+    function badgeClick(badgeScreen, barScreen, centreOpenHere): string {
+        if (typeof badgeScreen !== "string" || badgeScreen === "" || badgeScreen !== barScreen)
+            return "none";
+        return centreOpenHere === true ? "close" : "open";
+    }
+
     // A notification announced again (a job started, stalled or ended). `args`: { toastsOn,
     // hasScreen, centreOpen, fullscreenHidden, alive, queue (the one it belongs to now) }
     // → "restart" (on screen: its time starts again), "queue" (back like a new one), "none"

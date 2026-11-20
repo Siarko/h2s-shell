@@ -155,7 +155,8 @@ Singleton {
     }
 
     signal dismissAllRequested
-    signal openPanelRequested
+    // A queue's badge clicked on `screen` (its name): the centre opens or closes there
+    signal openPanelRequested(string screen)
 
     // For the shell's own sender (Notifier's progress handles), which learns a click and a
     // dismissal here, in-process, rather than from a process waiting on the bus: a tracked
@@ -432,6 +433,24 @@ Singleton {
     }
 
     property bool hudPanelOpen: false
+    // Where the open notification centre is: { screen, x, y, width, height } in its screen's
+    // coordinates, null while it is closed — the toasts on that screen move left of it
+    // (ToastRules.stackEdge); the toasts' overlay is above it and would cover its cards
+    property var centreArea: null
+
+    // Told by each bar's popup: `area` while the centre is open in it, null when it closes or
+    // shows another panel — which clears only that screen's, so another bar's popup, which
+    // never showed the centre, cannot clear the one open elsewhere
+    function setCentreArea(screen, area) {
+        if (area === null || area === undefined) {
+            if (centreArea !== null && centreArea.screen === screen)
+                centreArea = null;
+            return;
+        }
+        const next = { screen: screen, x: area.x, y: area.y, width: area.width, height: area.height };
+        if (centreArea === null || JSON.stringify(centreArea) !== JSON.stringify(next))
+            centreArea = next;
+    }
 
     signal hudQueueCleared
 

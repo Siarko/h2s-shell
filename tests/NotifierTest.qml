@@ -657,6 +657,28 @@ TestCase {
         assert(criticalBadge.y === placeOf(criticals[0]) && stayingBadge.y === placeOf(stayings[0]) && badge("ordinary").y === placeOf(ordinaries[0]),
                "each badge beside its queue's lowest toast");
         assertEqual(stack.restX, 800 - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8, "a badge showing: the toasts rest beside the badges");
+
+        // --- the centre open on this screen: the column, badges and all, left of it ---
+        const stayingShown = stack.toastFor(stayings[0].id);
+        const badgeClicks = [];
+        const onBadgeClick = screen => badgeClicks.push(screen);
+        Notifications.openPanelRequested.connect(onBadgeClick);
+        _find(stayingBadge, item => item instanceof MouseArea).clicked(null);
+        Notifications.openPanelRequested.disconnect(onBadgeClick);
+        assertEqual(JSON.stringify(badgeClicks), JSON.stringify(["queue-screen"]), "a badge clicked: the centre asked for on the badge's own screen");
+        Notifications.setCentreArea("other-screen", { x: 300, y: 40, width: 480, height: 600 });
+        assert(stack.centre === null && stack.rightEdge === 800 && !stack.free, "the centre open on another screen: the column stays at the edge");
+        Notifications.setCentreArea("queue-screen", { x: 500, y: 40, width: 280, height: 600 });
+        assert(stack.centre !== null && stack.rightEdge === 500 - Theme.osdToast.screenGap && stack.free,
+               "the centre open here: the column's edge left of it, by the gap (" + stack.rightEdge + ")");
+        assertEqual(stack.restX, 500 - Theme.osdToast.screenGap - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8, "… the toasts rest there, beside their badges");
+        assert(stayingShown.slides === false && stayingShown.resources.some(resource => resource.property === "x" && resource.to === stack.restX && resource.running),
+               "… a toast on screen moves over (nudged), and comes and goes in place meanwhile");
+        Notifications.setCentreArea("other-screen", null);
+        assert(stack.free, "another screen's popup closing: this screen's centre stays");
+        Notifications.setCentreArea("queue-screen", null);
+        assert(stack.centre === null && stack.rightEdge === 800 && !stack.free && stack.restX === 800 - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8
+               && stayingShown.slides, "the centre closed: the column back at the edge");
         assertEqual(Notifications.hudQueue.map(notification => notification.id).join(","), [criticals[1].id, stayings[1].id, stayings[2].id, ordinaries[1].id].join(","),
                     "hudQueue: every queue's waiting, oldest first");
         settings({ "notifications.criticalToastLimit": 2, "notifications.stayingToastLimit": 3 });

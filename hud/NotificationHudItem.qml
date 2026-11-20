@@ -29,6 +29,9 @@ Item {
     property bool present: false
     // Where it rests, from the stack: left of the badges while any shows
     property real restX: screenWidth - cardWidth - Theme.osdToast.screenGap
+    // Comes in from the screen's edge and goes back there; false (the column by the open
+    // centre, which it would cross): fades in and out where it rests
+    property bool slides: true
     // Its place in the stack, from the stack; null once it is leaving, when it stays where
     // it was
     property var stackY: null
@@ -160,6 +163,12 @@ Item {
             _takeModalPlace();
             return;
         }
+        if (!slides) {
+            x = restX;
+            opacity = 0;
+            fadeIn.restart();
+            return;
+        }
         opacity = 1;
         slideIn.start();
     }
@@ -171,7 +180,7 @@ Item {
         toPlace.stop();
         dragging = false;
         // A modal fades where it is; a toast in the stack slides out to the right
-        if (_wasModal || x < restX - 1)
+        if (_wasModal || !slides || x < restX - 1)
             fadeOut.start();
         else
             slideOut.start();

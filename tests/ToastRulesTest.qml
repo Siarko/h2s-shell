@@ -362,6 +362,27 @@ TestCase {
         same(R.clampToScreen(NaN, NaN, 300, 100, 1920, 1080, topBar), { x: 0, y: 40 }, "clamp: not numbers: the corner off the bar");
         same(R.pinSpot(Object.assign({}, spotArgs, { top: 1050, insets: { top: 0, bottom: 40, left: 0, right: 0 } })).y, 940, "pin spot: off a bottom bar");
 
+        // --- the toasts' column beside the open centre ---
+        const edgeArgs = change => Object.assign({ screenWidth: 1920, insets: topBar, centre: null, reach: 432, gap: 16 }, change);
+        same(R.stackEdge(edgeArgs()), { right: 1920, free: false }, "stack edge: centre closed: the screen's edge");
+        same(R.stackEdge(edgeArgs({ insets: { top: 0, bottom: 0, left: 0, right: 48 } })), { right: 1872, free: false }, "stack edge: a right bar: off it");
+        same(R.stackEdge(edgeArgs({ centre: { x: 1440, y: 40, width: 470, height: 700 } })), { right: 1424, free: true }, "stack edge: centre open at the right: left of it, by the gap");
+        same(R.stackEdge(edgeArgs({ centre: { x: 1440.6, y: 40, width: 470, height: 700 } })).right, 1425, "stack edge: on whole pixels");
+        same(R.stackEdge(edgeArgs({ centre: { x: 1200, y: 40, width: 470, height: 700 } })), { right: 1184, free: true }, "stack edge: centre reaching into the column: left of it");
+        same(R.stackEdge(edgeArgs({ centre: { x: 60, y: 0, width: 470, height: 700 } })), { right: 1920, free: false }, "stack edge: centre away from the column (a left bar): where it was");
+        same(R.stackEdge(edgeArgs({ centre: { x: 1488, y: 0, width: 0, height: 0 } })), { right: 1920, free: false }, "stack edge: a centre of no width: where it was");
+        same(R.stackEdge(edgeArgs({ centre: { x: 100, y: 0, width: 1800, height: 700 } })), { right: 432, free: true }, "stack edge: a centre as wide as the screen: the column stays on it");
+        same(R.stackEdge(edgeArgs({ centre: { x: "x", width: 470 } })), { right: 1920, free: false }, "stack edge: not numbers: where it was");
+        same(R.stackEdge(undefined), { right: 0, free: false }, "stack edge: nothing known");
+
+        // --- a click on a badge ---
+        assertEqual(R.badgeClick("DP-1", "DP-1", false), "open", "badge click: its screen's bar, centre closed: opens there");
+        assertEqual(R.badgeClick("DP-1", "DP-1", true), "close", "badge click: its screen's bar, centre open there: closes");
+        assertEqual(R.badgeClick("DP-1", "eDP-1", false), "none", "badge click: another screen's bar: nothing (not the other monitor)");
+        assertEqual(R.badgeClick("DP-1", "eDP-1", true), "none", "badge click: centre open on another screen: that bar leaves it, the badge's opens and closes it");
+        assertEqual(R.badgeClick("", "", false), "none", "badge click: the screen not known: nothing");
+        assertEqual(R.badgeClick(undefined, undefined, false), "none", "badge click: nothing known: nothing");
+
         // --- a notification announced again ---
         const announce = (id, change) => R.announceEffect(screen, id, Object.assign({ toastsOn: true, hasScreen: true, alive: true, centreOpen: false, queue: "ordinary" }, change));
         assertEqual(announce(5), "restart", "announce: shown: its time starts again");

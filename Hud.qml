@@ -159,6 +159,25 @@ PanelWindow {
                                     settled: toast.settled });
         }
 
+        // A queue's badge ("critical", "staying", "ordinary") on this screen: its rectangle
+        // the same way, and whether it shows — "{}" when it is not shown
+        function badgeRect(queue: string): string {
+            const badge = toastStack.badgeFor(queue);
+            if (!badge || !badge.visible)
+                return "{}";
+            const topLeft = badge.mapToItem(null, 0, 0);
+            return JSON.stringify({ x: Math.round(topLeft.x), y: Math.round(topLeft.y), width: Math.round(badge.width),
+                                    height: Math.round(badge.height), settled: badge.settled });
+        }
+
+        // The open notification centre's place (Notifications.centreArea): { screen, x, y,
+        // width, height } on its screen, "{}" while it is closed; with the toasts' column's
+        // right edge on this screen (stackRight) and whether it stands free of the screen's edge
+        function centreArea(): string {
+            const area = Notifications.centreArea;
+            return JSON.stringify(Object.assign({}, area ?? {}, { stackRight: toastStack.rightEdge, free: toastStack.free }));
+        }
+
         // The shell's own message (the pill at the bottom): its rectangle, the same way, and
         // whether it rests on screen showing one
         function shellPillRect(): string {
@@ -169,15 +188,15 @@ PanelWindow {
         }
     }
 
-    // Where the toasts are, for the input mask: the toasts' strip at the right edge, as
-    // tall as the visible toasts and badges
+    // Where the toasts are, for the input mask: the toasts' strip at the right edge — or
+    // left of the open centre, so the centre's own clicks stay its — as tall as the visible
+    // toasts and badges
     Item {
         id: toastArea
-        // The toast and, at most, the badge beside it
-        readonly property int _reach: Theme.osdToast.width + Math.max(Theme.osdToast.screenGap, Theme.osdToast.badgeWidth + 8)
-        x: hud.implicitWidth - hud._barInsets.right - _reach
+        objectName: "toastArea"
+        x: toastStack.rightEdge - width
         y: toastStack.y
-        width: _reach
+        width: toastStack.reach
         height: toastStack.contentHeight
     }
 

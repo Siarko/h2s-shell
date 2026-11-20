@@ -24,7 +24,20 @@ Item {
     // The bar's reserved space at each edge (BarGeometry.reservedInsets): toasts, badges and
     // drops keep clear of it
     property var barInsets: ({ top: 0, bottom: 0, left: 0, right: 0 })
-    readonly property int _rightEdge: screenWidth - (barInsets?.right ?? 0)
+    // The notification centre open on this screen ({ x, y, width, height }), else null: the
+    // column stands left of it (ToastRules.stackEdge) — this overlay is above the centre
+    readonly property var centre: {
+        const area = Notifications.centreArea;
+        return area !== null && screenName !== "" && area.screen === screenName ? area : null;
+    }
+    // The toast and, at most, the badge beside it
+    readonly property int reach: Theme.osdToast.width + Math.max(Theme.osdToast.screenGap, Theme.osdToast.badgeWidth + 8)
+    readonly property var _edge: ToastRules.stackEdge({ screenWidth: screenWidth, insets: barInsets, centre: centre,
+                                                        reach: reach, gap: Theme.osdToast.screenGap })
+    // What the column rests against: the screen's edge, or by the open centre (free: then
+    // nothing is flush against it — the gap is already kept)
+    readonly property int rightEdge: _edge.right
+    readonly property bool free: _edge.free
     required property var screenModelData
     readonly property string screenName: screenModelData?.name ?? ""
 
@@ -99,7 +112,7 @@ Item {
                 height: toastFor(entry.id)?.height ?? 0,
                 screenWidth: dropWidth,
                 screenHeight: dropHeight,
-                column: root._rightEdge - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8,
+                column: root.rightEdge - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8,
                 insets: root.barInsets,
                 top: root.y,
                 gap: Theme.osdToast.screenGap
@@ -129,8 +142,8 @@ Item {
     // The waiting counts, on the toasts' screen only
     readonly property var _badges: _toastScreen ? Notifications.toastBadges : ({ critical: 0, staying: 0, ordinary: 0 })
     readonly property bool _anyBadge: _badges.critical > 0 || _badges.staying > 0 || _badges.ordinary > 0
-    readonly property real restX: _rightEdge - Theme.osdToast.width
-        - (_anyBadge ? Theme.osdToast.badgeWidth + 8 : Theme.osdToast.screenGap)
+    readonly property real restX: rightEdge - Theme.osdToast.width
+        - (_anyBadge ? Theme.osdToast.badgeWidth + 8 : free ? 0 : Theme.osdToast.screenGap)
 
     // The toast of notification `id`, or null
     function toastFor(id) {
@@ -140,6 +153,11 @@ Item {
                 return toast;
         }
         return null;
+    }
+
+    // A queue's badge
+    function badgeFor(queue) {
+        return queue === "critical" ? criticalBadge : queue === "staying" ? stayingBadge : queue === "ordinary" ? ordinaryBadge : null;
     }
 
     // Where each toast on screen goes and where each queue's badge sits: { places: { id: y },
@@ -213,6 +231,9 @@ Item {
             toastId: Number(modelData)
             present: root._presentKeys.includes(modelData)
             restX: root.restX
+            // By the open centre a toast comes and goes where it is: sliding from the screen's
+            // edge it would cross the centre
+            slides: !root.free
             stackY: root.layout.places[toastId] ?? null
             originY: root.y
             modal: root.modalPlaces[toastId] !== undefined
@@ -229,24 +250,32 @@ Item {
         readonly property var beside: root.layout.badges[queue] ?? null
         readonly property bool critical: look.border === "error"
         objectName: queue + "Badge"
-        x: root._rightEdge - width
+        x: root.rightEdge - width
         y: beside?.y ?? 0
         width: Theme.osdToast.badgeWidth
         // As tall as the toast beside it; a sensible size without one
         height: Math.max(36, beside?.height ?? 36)
-        // Shares the toast's rounding
+        // Shares the toast's rounding; standing free (by the open centre), on every corner
         topLeftRadius: Theme.osdToast.radius
         bottomLeftRadius: Theme.osdToast.radius
+        topRightRadius: root.free ? Theme.osdToast.radius : 0
+        bottomRightRadius: root.free ? Theme.osdToast.radius : 0
         color: Theme.surface
         border.width: critical ? Math.max(Theme.osdToast.borderWidth, Theme.border.selectedWidth) : Theme.osdToast.borderWidth
         border.color: critical ? Theme.error : Theme.osdToastBorder
         opacity: look.shown && beside !== null ? 1.0 : 0.0
         visible: opacity > 0
+        // Not moving (for tests from outside)
+        readonly property bool settled: !xMove.running && !yMove.running && (opacity === 0 || opacity === 1)
         Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
         // Moves with its toast; one coming into view appears in place
+        Behavior on x {
+            enabled: badge.visible
+            NumberAnimation { id: xMove; duration: Theme.duration("move"); easing: Theme.curve("move") }
+        }
         Behavior on y {
             enabled: badge.visible
-            NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") }
+            NumberAnimation { id: yMove; duration: Theme.duration("move"); easing: Theme.curve("move") }
         }
 
         Text {
@@ -262,7 +291,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: Notifications.openPanelRequested()
+            onClicked: Notifications.openPanelRequested(root.screenName)
         }
     }
 

@@ -337,10 +337,14 @@ PanelWindow {
 
     Connections {
         target: Notifications
-        function onOpenPanelRequested() {
-            if (notifWidget && (!popupLoader.active || popupLoader.contentType !== "notifications")) {
+        // A badge opens the centre on its own screen, or closes it there (ToastRules.badgeClick)
+        function onOpenPanelRequested(screen) {
+            const effect = ToastRules.badgeClick(screen, bar.modelData?.name ?? "",
+                popupLoader.active && !popupLoader.closing && popupLoader.contentType === "notifications");
+            if (effect === "close")
+                popupLoader.close();
+            else if (effect === "open" && notifWidget)
                 popupLoader.open(notifWidget, true, "notifications");
-            }
         }
     }
 
