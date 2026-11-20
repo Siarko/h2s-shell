@@ -2239,3 +2239,12 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   `ModuleTestKit.pageFrame`. Wi-Fi's own drawer untouched (C2 optional). Reviewed (a panel
   sliding on window resize and content outliving its page fixed); `tests/run-all.sh` passed on
   both machines.
+- **The side panel on the page; "Web console" (M4, M6)** — on the module's `main` 2026-11-20
+  (manifest `api` 1.34). M4: the page's Taildrop part keeps a heading, a summary row
+  (`pageSummary`, warning tone) with "Files…" opening a `SidePanel` (`TaildropPanel.qml`: pills,
+  files, Send / asking "×", waiting files with Save / Open folder, incoming capsules, the shared
+  `TaildropFileList`); the four settings as `SettingsRow`s, controls at the row ends; a drop on
+  the row only when the files can be added (`canAddFiles`). M6: "Admin console" → "Web console"
+  everywhere (tooltip login.tailscale.com); the "Web interface" switch → "Share this computer's
+  settings". Reviewed (M4: a silently lost drop fixed); M6 read by the lead; module suites and
+  stand-ins on both machines, the module's lock bed on NixOS.
