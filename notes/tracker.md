@@ -77,9 +77,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   under the Save / Open folder row, incoming files first; titles bold; the state text cut at
   half the section's width; incoming files "Receiving · 40 %"; an ended save keeps the title
   "Saving N files".
-- **Several devices from the page** (D8, agent's choice stands): a device row's "Send file…"
-  makes that device the only one picked (not added to the choice); a picked device that drops
-  out stays out when it comes back; "Send to N devices".
 - **How the progress handle talks to the server** (N2, the lead's choice, for the owner's
   eyes): `notify-send` closes a notification itself after a click (and `--action` always
   waits), so the plan's waiter could not keep actions after a click. The handle instead sends
@@ -92,8 +89,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   "Failed"; save reasons "Bad name", "Not fetched", "No free name"; a one-file title
   "To laptop · 1 file". A file held back because the same name is already going to that
   device waits while the files behind it may start (the plan says only "in order").
-- **Progress on a card** (N1, agent's choice stands): an action on a resident notification
-  keeps its entry for the default action and the inline reply too, not only the buttons.
 - **Toasts and the sender's time, choices not in the plan** (N5, agent's choice stands): with
   the limit of staying toasts reached, a staying toast at the head of the queue waits and later
   ordinary toasts may show past it; in "One at a time" a toast with the app's own time takes the
@@ -261,6 +256,12 @@ oneself is allowed now).
 ## Decisions
 
 All by the owner, 2026-11-17.
+
+- Taildrop's settings page (2026-11-20): one way to send — files, devices (the pills), Send or
+  Cancel; no per-device "Send file…" on the page (the popup keeps its own).
+- Notifications, resident (2026-11-20): as the spec says — a resident notification stays after
+  any action (the default one and an inline reply included); the rest of the flow goes into the
+  notification flow analysis.
 
 - The module API is ours: a module never works around a gap; the API is extended first.
 - Larger work goes analysis → plan (owner approves) → implementation.
