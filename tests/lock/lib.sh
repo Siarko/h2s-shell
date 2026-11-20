@@ -189,7 +189,8 @@ check_within() {
 #                                    activation) for the shell instead of none, so its
 #                                    notification server registers and notify() can send
 # --window                           a stand-in desktop window (input/ltwindow.py: solid
-#                                    magenta) before the shell starts
+#                                    magenta) before the shell starts; it logs each pointer
+#                                    press it receives to window.log ("press <x> <y>")
 # --no-lock-restore                  the nested Hyprland runs with misc:allow_session_lock_restore
 #                                    off (Hyprland's default, and the owner's config today): a
 #                                    lock client that died cannot be replaced

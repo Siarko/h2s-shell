@@ -195,6 +195,7 @@ TestCase {
                "resident: the action runs, no dismissal asked, the toast told to leave (" + JSON.stringify(resident) + ")");
 
         _toastTimes();
+        _modals();
         _announces();
         _progress();
     }
@@ -901,6 +902,107 @@ TestCase {
         assert(lateSwipe.dismissCalls === 1 && !lateSwipe.tracked, "its time ran out during the swipe: the notification is dismissed all the same");
         clear();
 
+        Notifications.screensOverride = null;
+        Config.globals = savedGlobals;
+        for (const object of made)
+            object.destroy();
+    }
+
+    // Modals in the queues' state (Notifications): pinned from the centre, kept through the
+    // centre opening, toasts off and a fullscreen window ("Don't show": hidden, then back), a
+    // pinned toast that counted down kept until its job stays and ends, a modal whose screen
+    // went back in its queue — or gone when that queue takes nothing now. Dragging under real
+    // input events: ToastDragTest.
+    function _modals() {
+        const savedGlobals = Config.globals;
+        const settings = change => {
+            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
+        };
+        settings({});
+        Notifications.clearHudQueue();
+        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+        const made = [];
+        let nextId = 9301;
+        const standIn = (expire, change) => {
+            const standing = _standIn.createObject(suite, Object.assign({ id: nextId++, expireTimeout: expire, summary: "Toast" }, change ?? {}));
+            made.push(standing);
+            return standing;
+        };
+        const place = notification => {
+            const at = Notifications.toastPlace(notification.id);
+            return at.place + (at.queue ? " " + at.queue : "");
+        };
+
+        // --- pinned from the centre: no toast before, a modal on the toasts' screen ---
+        const mail = standIn(-1);
+        assert(Notifications.pinToast(mail) && place(mail) === "moved ordinary" && Notifications.toastScreens[mail.id] === "modal-screen",
+               "pinned with no toast: a modal on the toasts' screen");
+        assert(!Notifications.countingToasts.includes(mail.id) && Notifications.toastDurations[mail.id] === 5000,
+               "pinned while it would count down: it stays (its time kept for later)");
+        assert(Notifications.pinToast(mail) && place(mail) === "moved ordinary", "pinned again: it stays as it is");
+        Notifications.unpinToast(mail.id);
+        assert(place(mail) === "none" && mail.tracked && mail.dismissCalls === 0, "unpinned: the modal ends, the entry stays");
+        const gone = standIn(-1);
+        gone.tracked = false;
+        assert(!Notifications.pinToast(gone) && place(gone) === "none", "an entry gone: not pinned");
+        Notifications.screensOverride = [];
+        assert(!Notifications.pinToast(mail) && place(mail) === "none", "no screen for toasts: not pinned");
+        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+
+        // --- a pinned job: kept while it would count, by its kind once it stays, then counts when it ends ---
+        const job = standIn(5000);
+        Notifications.pinToast(job);
+        assert(!Notifications.countingToasts.includes(job.id), "a job pinned while it counted: it stays");
+        job.expireTimeout = 0;
+        Notifications._retime(job.id, job);
+        assert(place(job) === "moved ordinary" && !Notifications.countingToasts.includes(job.id), "it runs again (stays): still a modal, no countdown");
+        job.expireTimeout = 3000;
+        Notifications._retime(job.id, job);
+        assert(Notifications.countingToasts.includes(job.id), "it ends: the modal counts down where it is");
+        Notifications.toastGone(job.id);
+
+        // --- the centre, toasts off and a fullscreen window leave modals in the state ---
+        const pinned = standIn(0);
+        Notifications.pinToast(pinned);
+        Notifications.setHudPanelOpen(true);
+        assert(place(pinned) === "moved staying", "the centre opened: the modal stays");
+        const whileOpen = standIn(-1);
+        assert(Notifications.pinToast(whileOpen) && place(whileOpen) === "moved ordinary", "pinned while the centre is open: a modal at once");
+        Notifications.setHudPanelOpen(false);
+        settings({ "notifications.toasts": false });
+        assert(place(pinned) === "moved staying", "toasts off: the modal stays");
+        settings({ "notifications.toastFullscreen": "hide" });
+        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: true, workspace: 1 }];
+        const hidden = ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden);
+        assert(place(pinned) === "moved staying" && hidden.modals.length === 0, "a fullscreen window, \"Don't show\": kept, not shown");
+        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+        assert(ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden).modals.some(entry => entry.id === pinned.id),
+               "… back when the fullscreen window goes");
+        settings({});
+
+        // --- its screen gone: back in its queue, or gone when that queue takes nothing now ---
+        Notifications.modalScreenGone(pinned.id);
+        assert(place(pinned) === "waiting staying", "its screen gone: it waits in its queue again");
+        Notifications.pinToast(pinned);
+        Notifications.setHudPanelOpen(true);
+        Notifications.modalScreenGone(whileOpen.id);
+        assert(place(whileOpen) === "none", "its screen gone while the centre is open: an ordinary one goes (the centre shows it)");
+        Notifications.setHudPanelOpen(false);
+        Notifications.modalScreenGone(mail.id);
+        assert(place(mail) === "none", "not a modal: nothing");
+
+        // --- the movable option and the rules' answer ---
+        assert(Notifications.movableToasts && Notifications.canMoveToast(pinned.id), "movable by default: a modal can be dragged");
+        settings({ "notifications.movableToasts": false });
+        assert(!Notifications.canMoveToast(pinned.id), "the option off: no drag");
+        Notifications.moveToast(pinned.id, 10, 10);
+        assert(Notifications.toastState.moved.find(entry => entry.id === pinned.id).x !== 10, "… and a move asked for is refused");
+        settings({});
+        Notifications.placeModal(pinned.id, 30, 40);
+        const placed = Notifications.toastState.moved.find(entry => entry.id === pinned.id);
+        assert(placed.x === 30 && placed.y === 40, "a pinned modal given its place");
+
+        Notifications.clearHudQueue();
         Notifications.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)

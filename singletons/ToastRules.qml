@@ -94,7 +94,9 @@ Singleton {
     // State, plain data (ids grow with arrival, so "oldest" is the smallest id):
     // { waiting: { critical, staying, ordinary: [ids oldest first] },
     //   shown:   { critical, staying, ordinary: [ids oldest first] },
-    //   moved:   [{ id, queue, x, y }] }   the modals; x, y null: not placed yet
+    //   moved:   [{ id, queue, x, y, keep? }] }   the modals; x, y null: not placed yet; keep:
+    //            pinned while it counted down — it stays all the same, until its kind
+    //            changes to one that stays (a job: it then counts when the job ends)
     // Every function returns a new state; the one given is never changed.
 
     readonly property var queues: ["critical", "staying", "ordinary"]
@@ -107,7 +109,12 @@ Singleton {
         const lists = group => ({ critical: (group?.critical ?? []).slice(), staying: (group?.staying ?? []).slice(),
                                   ordinary: (group?.ordinary ?? []).slice() });
         return { waiting: lists(state?.waiting), shown: lists(state?.shown),
-                 moved: (state?.moved ?? []).map(entry => ({ id: entry.id, queue: entry.queue, x: entry.x, y: entry.y })) };
+                 moved: (state?.moved ?? []).map(entry => {
+                     const copy = { id: entry.id, queue: entry.queue, x: entry.x, y: entry.y };
+                     if (entry.keep === true)
+                         copy.keep = true;
+                     return copy;
+                 }) };
     }
 
     function _clamp(value, low, high, fallback): var {
@@ -313,7 +320,8 @@ Singleton {
     // Which toasts count down now. `kinds`: { id: timing kind }. In the ordinary queue the
     // sender's time ("own") counts at once, the user's ("default") one at a time, the oldest
     // first. Elsewhere (a job that ended while shown in critical or staying, or a modal)
-    // anything that no longer stays counts at once, where it is. → [ids]
+    // anything that no longer stays counts at once, where it is — but not a modal pinned
+    // while it counted (keep): pinned, it stays. → [ids]
     function counting(state, kinds): var {
         const kindOf = id => kinds?.[id] ?? "stays";
         const ids = [];
@@ -328,7 +336,7 @@ Singleton {
             }
         }
         const others = (state?.shown?.critical ?? []).concat(state?.shown?.staying ?? [],
-                                                             (state?.moved ?? []).map(entry => entry.id));
+                                                             (state?.moved ?? []).filter(entry => entry.keep !== true).map(entry => entry.id));
         for (const id of others) {
             if (kindOf(id) !== "stays")
                 ids.push(id);
@@ -376,14 +384,72 @@ Singleton {
 
     // Pinned from the centre: a modal, not placed yet (x, y null), whichever queue it is
     // in — or none (`queue`: the one it belongs to); shown or waiting, it leaves that queue.
-    // A modal already stays as it is.
-    function pin(state, id, queue): var {
+    // `kind`: its timing kind now — one that counts down is kept on screen all the same
+    // (keep) until its kind changes to one that stays (modalRetimed). A modal already stays
+    // as it is.
+    function pin(state, id, queue, kind): var {
         const at = where(state, id);
         if (at.place === "moved" || (at.place === "none" && !queues.includes(queue)))
             return state;
         const next = remove(state, id);
-        next.moved.push({ id: id, queue: at.place === "none" ? queue : at.queue, x: null, y: null });
+        const entry = { id: id, queue: at.place === "none" ? queue : at.queue, x: null, y: null };
+        if (kind !== undefined && kind !== "stays")
+            entry.keep = true;
+        next.moved.push(entry);
         return next;
+    }
+
+    // A modal's timing kind changed: one that now stays is kept by its kind, no longer by
+    // its pin — so when it stops staying (a job ended) it counts down and goes
+    function modalRetimed(state, id, kind): var {
+        const entry = (state?.moved ?? []).find(candidate => candidate.id === id);
+        if (!entry || entry.keep !== true || kind !== "stays")
+            return state;
+        const next = _copy(state);
+        delete next.moved.find(candidate => candidate.id === id).keep;
+        return next;
+    }
+
+    // A modal placed (a pinned one given its first place, or one whose screen changed size);
+    // not a modal: nothing
+    function placeModal(state, id, x, y): var {
+        if (!(state?.moved ?? []).some(entry => entry.id === id))
+            return state;
+        const next = _copy(state);
+        const entry = next.moved.find(candidate => candidate.id === id);
+        entry.x = x;
+        entry.y = y;
+        return next;
+    }
+
+    // Where a pinned modal first goes: beside the toasts' column, to its left, from `top`
+    // down in steps of `step`, at the first spot no other modal holds (within half a step) —
+    // so pinning several fans them out with each title line in sight. `args`: { modals
+    // ([{ x, y }]), width (the toast's), screenWidth, screenHeight, height (the toast's),
+    // column (the toasts' column's left edge), top, step, gap }. → { x, y }, inside the screen
+    function pinSpot(args): var {
+        const width = Number(args?.width) || 0;
+        // A title line and a little more: each one under the next stays in sight
+        const step = Math.max(1, Number(args?.step) || 48);
+        const gap = Number(args?.gap) || 0;
+        const top = Number(args?.top) || 0;
+        const x = (Number(args?.column) || 0) - gap - width;
+        const taken = (args?.modals ?? []).filter(modal => modal && modal.x !== null && modal.y !== null);
+        let y = top;
+        for (let tries = 0; tries < 50; tries++) {
+            if (!taken.some(modal => Math.abs(modal.x - x) < step / 2 && Math.abs(modal.y - y) < step / 2))
+                break;
+            y += step;
+        }
+        return clampToScreen(x, y, width, args?.height, args?.screenWidth, args?.screenHeight);
+    }
+
+    // The pin control on an entry in the centre, from whether its notification is a modal:
+    // its glyph, its tooltip and what a click does — one decision. → { glyph, tip, action:
+    // "pin" | "unpin" }
+    function pinLook(modal): var {
+        return modal === true ? { glyph: "󰐄", tip: "Unpin from the screen", action: "unpin" }
+                              : { glyph: "󰐃", tip: "Pin on the screen", action: "pin" };
     }
 
     // Its screen gone: a modal waits again in its queue, by age

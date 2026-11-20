@@ -138,6 +138,7 @@ Item {
                     notification: delegateRoot.modelData
                     timestamp: Notifications.timestamps[delegateRoot.modelData.id] ?? ""
                     compactDismiss: false
+                    pinnable: true
                     imageMaxHeight: 160
                     replyBackground: Theme.popupBackground
                     onDismissRequested: {

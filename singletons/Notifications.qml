@@ -400,6 +400,12 @@ Singleton {
         _setToastTiming(id, timing);
         const queue = toastQueue(notification, timing);
         const before = ToastRules.where(toastState, id);
+        // A modal pinned while it counted down, now staying (a job started again): kept by its
+        // kind from now on, so it counts when that ends
+        if (before.place === "moved") {
+            _applyToasts(ToastRules.modalRetimed(toastState, id, timing.kind));
+            return;
+        }
         // One that no queue takes now leaves the state, and the maps with it
         if (queue !== before.queue)
             _applyToasts(ToastRules.requeue(toastState, id, queue, _toastConditions(), toastLimits));
@@ -500,6 +506,86 @@ Singleton {
         toastState = ToastRules.remove(toastState, id);
         _pruneToasts();
         _logQueues();
+    }
+
+    // ---- Modals: toasts dragged out of their queue, notifications pinned from the centre ----
+    // A modal is out of the queues: its slot is free for the next, and it stays at its place
+    // on its screen until "×" (dismissed), unpinning, its sender closing it, or — a job that
+    // ended — its countdown. The centre opening and toasts switched off leave it; a
+    // fullscreen window with "Don't show" hides it until it goes. Positions are not kept over
+    // a restart: what the server hands over again goes through its queue.
+
+    // Dragging toasts by their title line (notifications.movableToasts): off, the ones moved
+    // out stay where they are, and no new drag starts
+    readonly property bool movableToasts: Profiles.value("notifications.movableToasts") !== false
+
+    // Whether notification `id`'s toast can be dragged now (ToastRules.canMove)
+    function canMoveToast(id): bool {
+        return ToastRules.canMove(toastState, id, movableToasts);
+    }
+
+    // Whether notification `id` is a modal now
+    function isModal(id): bool {
+        return ToastRules.isModal(toastState, id);
+    }
+
+    // A toast dropped at (x, y) of its screen, already inside it (ToastRules.clampToScreen):
+    // a modal there, its queue's slot free for the next
+    function moveToast(id, x, y) {
+        _applyToasts(ToastRules.moveOut(toastState, id, x, y, movableToasts));
+    }
+
+    // A pinned modal given its first place (the stack of its screen: ToastRules.pinSpot)
+    function placeModal(id, x, y) {
+        _applyToasts(ToastRules.placeModal(toastState, id, x, y));
+    }
+
+    // The centre's pin: the notification becomes a modal on the toasts' screen, whether its
+    // toast is shown, waiting or long gone. Not without a screen for toasts; one that is a
+    // modal already stays as it is. → whether it is a modal now
+    function pinToast(notification): bool {
+        if (!_waitingAlive(notification))
+            return false;
+        const id = notification.id;
+        if (ToastRules.isModal(toastState, id))
+            return true;
+        if (criticalToastScreen === "")
+            return false;
+        const timing = toastTiming(notification);
+        const next = ToastRules.pin(toastState, id, toastQueue(notification, timing), timing.kind);
+        if (next === toastState)
+            return false;
+        _watchToast(notification);
+        const objects = Object.assign({}, _toastObjects);
+        objects[id] = notification;
+        _toastObjects = objects;
+        _setToastTiming(id, timing);
+        // A shown one stays on its screen; another goes to the toasts' screen
+        if (ToastRules.where(toastState, id).place !== "shown") {
+            const screens = Object.assign({}, toastScreens);
+            screens[id] = criticalToastScreen;
+            toastScreens = screens;
+        }
+        _applyToasts(next);
+        return true;
+    }
+
+    // The centre's unpin: the modal ends (its entry stays in the centre)
+    function unpinToast(id) {
+        if (ToastRules.isModal(toastState, id))
+            toastGone(id);
+    }
+
+    // A modal's screen went (its HUD destroyed): it waits in its queue again, by age — or,
+    // when that queue takes nothing now, it goes
+    function modalScreenGone(id) {
+        const at = ToastRules.where(toastState, id);
+        if (at.place !== "moved")
+            return;
+        if (ToastRules.accepts(at.queue, _toastConditions()))
+            _applyToasts(ToastRules.returnToQueue(toastState, id));
+        else
+            toastGone(id);
     }
 
     // "critical 1/1 shown, 1 wait; …", logged when it changes

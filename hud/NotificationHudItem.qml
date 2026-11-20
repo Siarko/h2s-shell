@@ -8,10 +8,18 @@ import qs.components
 // from the stack), whether it counts down (Notifications.countingToasts) and for how long
 // (Notifications.toastDurations). The toast only slides, counts and reports its end
 // (Notifications.toastGone) — it holds nothing another toast waits for.
+// A critical or staying toast — or a modal — can be dragged by its title line (the grip) when
+// the option is on (Notifications.canMoveToast); dropped, it is a modal at that place, inside
+// its screen (ToastRules.clampToScreen, Notifications.moveToast). A modal has the accent
+// outline and fades in and out where it is instead of sliding.
 Item {
     id: root
 
     required property int screenWidth
+    // Where a dropped toast is kept, from the window's top left (its part on the screen); a
+    // height of 0: the window's
+    property int dropWidth: screenWidth
+    property int dropHeight: 0
     required property var screenModelData
     // The notification's id, -1 for a card shown alone (no queue behind it)
     property int toastId: -1
@@ -24,12 +32,66 @@ Item {
     property var stackY: null
     property real _lastY: 0
     onStackYChanged: if (stackY !== null) _lastY = stackY
+    // Where the stack is in the window: a modal's place is kept in the window's coordinates
+    property real originY: 0
+    // A modal (out of its queue: dragged out or pinned), and its place in the stack's
+    // coordinates — null while a pinned one waits for its first place
+    property bool modal: false
+    property var modalPlace: null
+    onModalPlaceChanged: _takeModalPlace()
+    // Once a modal, it looks and leaves as one: its place in the queues goes before it has
+    // faded out
+    property bool _wasModal: false
+    onModalChanged: if (modal) _wasModal = true
     // Moves to a new place smoothly — except when it first appears, which is at its place
     property bool _placing: true
-    y: _lastY
+    y: dragging ? _dragY : _lastY
     Behavior on y {
-        enabled: !root._placing
+        enabled: !root._placing && !root.dragging
         NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") }
+    }
+    // Over the stack while a modal, over everything while dragged
+    z: dragging ? 2 : _wasModal ? 1 : 0
+
+    // ---- Dragged by its title line ----
+    // Allowed by the rules (an option; critical, staying or a modal) while it is on screen
+    readonly property bool movable: present && toastId >= 0 && Notifications.canMoveToast(toastId)
+    property bool dragging: false
+    // Not moving: no slide, nudge, move to a place or fade running (for tests from outside)
+    readonly property bool settled: !slideIn.running && !nudge.running && !toPlace.running && !fadeIn.running
+        && !slideOut.running && !fadeOut.running && !dragging
+    property real _dragY: 0
+    property real _dragStartX: 0
+    property real _dragStartY: 0
+
+    // Its new place as a modal: from the stack a moment after it was dropped or pinned. One
+    // already on screen moves there; one that waited for it appears there.
+    function _takeModalPlace() {
+        if (modalPlace === null || dragging)
+            return;
+        slideIn.stop();
+        nudge.stop();
+        if (opacity > 0 && x < screenWidth && !_placing) {
+            toPlace.to = modalPlace.x;
+            toPlace.restart();
+            _lastY = modalPlace.y;
+            return;
+        }
+        _placing = true;
+        x = modalPlace.x;
+        _lastY = modalPlace.y;
+        fadeIn.restart();
+        Qt.callLater(() => root._placing = false);
+    }
+
+    // Let go: inside the screen (ToastRules.clampToScreen), then a modal there
+    function _drop() {
+        const windowHeight = dropHeight > 0 ? dropHeight : (Window.window?.height ?? 0);
+        const place = ToastRules.clampToScreen(x, y + originY, width, height, dropWidth, windowHeight);
+        _lastY = place.y - originY;
+        x = place.x;
+        dragging = false;
+        Notifications.moveToast(toastId, place.x, place.y);
     }
 
     // Slid out: the stack may destroy it
@@ -42,7 +104,7 @@ Item {
     readonly property bool wantsKeyboard: currentNotif !== null && notifCard.wantsKeyboard
     // Held: under a resting pointer, or with a reply being written — no countdown either way,
     // so a toast does not slide away mid-reply when the pointer wanders off
-    readonly property bool _held: cardHover.hovered || notifCard.replying || notifCard.swiping
+    readonly property bool _held: cardHover.hovered || notifCard.replying || notifCard.swiping || dragging
     on_HeldChanged: {
         if (_held)
             countdown.pause();
@@ -76,8 +138,16 @@ Item {
         if (toastId >= 0)
             currentNotif = Notifications.toastObject(toastId) ?? currentNotif;
         slideOut.stop();
+        fadeOut.stop();
         remaining = 1.0;
         _generation++;
+        // A modal appears where it is put (a pinned one once it has a place)
+        if (modal) {
+            opacity = 0;
+            _takeModalPlace();
+            return;
+        }
+        opacity = 1;
         slideIn.start();
     }
 
@@ -85,7 +155,13 @@ Item {
         countdown.stop();
         slideIn.stop();
         nudge.stop();
-        slideOut.start();
+        toPlace.stop();
+        dragging = false;
+        // A modal fades where it is; a toast in the stack slides out to the right
+        if (_wasModal || x < restX - 1)
+            fadeOut.start();
+        else
+            slideOut.start();
     }
 
     // Its end: out of its queue — the stack then takes it off screen (present false)
@@ -97,13 +173,18 @@ Item {
 
     // Gone while still in its queue — its screen's HUD destroyed: out of the queue too, or the
     // toasts after it would wait for it to count down, for ever
+    // A modal whose screen went waits in its queue again (Notifications.modalScreenGone)
     Component.onDestruction: {
-        if (toastId >= 0 && present)
+        if (toastId < 0 || !present)
+            return;
+        if (modal)
+            Notifications.modalScreenGone(toastId);
+        else
             Notifications.toastGone(toastId);
     }
 
     onRestXChanged: {
-        if (present && !slideIn.running && !slideOut.running)
+        if (present && !modal && !dragging && !slideIn.running && !slideOut.running)
             nudge.restart();
     }
 
@@ -167,6 +248,38 @@ Item {
         }
     }
 
+    // A modal comes in and goes where it is
+    NumberAnimation {
+        id: fadeIn
+        target: root
+        property: "opacity"
+        to: 1
+        duration: Theme.duration("enter")
+        easing: Theme.curve("enter")
+    }
+
+    NumberAnimation {
+        id: fadeOut
+        target: root
+        property: "opacity"
+        to: 0
+        duration: Theme.duration("exit")
+        easing: Theme.curve("exit")
+        onStopped: {
+            if (!root.present)
+                root.slidOut();
+        }
+    }
+
+    // A toast on screen pinned: over to its place
+    NumberAnimation {
+        id: toPlace
+        target: root
+        property: "x"
+        duration: Theme.duration("move")
+        easing: Theme.curve("move")
+    }
+
     // Nudge the resting toast when a badge appears/disappears mid-show.
     NumberAnimation {
         id: nudge
@@ -204,8 +317,9 @@ Item {
         bodyMaxLines: 6
         contentPadding: Theme.osdToast.padding
         cornerRadius: Theme.osdToast.radius
-        borderWidth: Theme.osdToast.borderWidth
-        borderColor: Theme.osdToastBorder
+        // A modal: the accent outline (a critical one keeps the critical outline)
+        borderWidth: root._wasModal ? Math.max(Theme.osdToast.borderWidth, Theme.border.width) : Theme.osdToast.borderWidth
+        borderColor: root._wasModal ? Theme.accent : Theme.osdToastBorder
         replyBackground: Theme.surfaceSunken
         width: root.cardWidth
         // "×" or a swipe dismisses the notification itself (its entry leaves the centre; a
@@ -224,6 +338,61 @@ Item {
 
         HoverHandler {
             id: cardHover
+        }
+    }
+
+    // The grip at the top: this toast can be dragged by its title line
+    Rectangle {
+        objectName: "toastGrip"
+        visible: root.movable || root.dragging
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 3
+        width: 36
+        height: 3
+        radius: height / 2
+        color: Theme.textMuted
+        opacity: dragHover.hovered || root.dragging ? 0.9 : 0.45
+    }
+
+    // The title line, less the "×": grabbed here. A press that does not move goes on to the
+    // card beneath (its default action); one that moves past the threshold is a drag. The
+    // toast follows the pointer in the window's coordinates: this zone moves with the toast,
+    // so a translation in its own would feed back.
+    Item {
+        id: dragZone
+        objectName: "toastDragZone"
+        width: root.cardWidth - Theme.osdToast.padding - Theme.target.minSize
+        height: Theme.osdToast.padding + Theme.fontSizeSection + 8
+
+        HoverHandler {
+            id: dragHover
+            enabled: root.movable
+            cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        }
+
+        DragHandler {
+            id: dragHandler
+            target: null
+            enabled: root.movable || root.dragging
+            onActiveChanged: {
+                if (active) {
+                    nudge.stop();
+                    slideIn.stop();
+                    toPlace.stop();
+                    root._dragStartX = root.x;
+                    root._dragStartY = root.y;
+                    root._dragY = root.y;
+                    root.dragging = true;
+                } else if (root.dragging) {
+                    root._drop();
+                }
+            }
+            onCentroidChanged: {
+                if (!root.dragging)
+                    return;
+                root.x = root._dragStartX + centroid.scenePosition.x - centroid.scenePressPosition.x;
+                root._dragY = root._dragStartY + centroid.scenePosition.y - centroid.scenePressPosition.y;
+            }
         }
     }
 }

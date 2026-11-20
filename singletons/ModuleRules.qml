@@ -470,7 +470,7 @@ Singleton {
         "wallpapers", "widget", "widgets", "window", "workspaces",
         // IPC targets of the core (a module's IpcHandler targets are <id> or <id>.<name>),
         // including the test seams' and the VPN branch's fake provider's
-        "tablet", "locktest", "shelltest", "fakevpn",
+        "tablet", "locktest", "shelltest", "toasttest", "fakevpn",
         // Settings page ids and popup keys of the core that are module-id shaped
         "bar_appearance", "controls", "popups", "network_ethernet", "network_overview", "network_vpn",
         "network_wifi", "notifications_appearance", "other_appearance", "widgets_appearance", "tray-menu"

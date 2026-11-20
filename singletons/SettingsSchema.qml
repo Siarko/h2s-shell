@@ -278,6 +278,10 @@ Singleton {
         // (ToastRules.timing)
         { key: "notifications.residentHide", label: "Resident notification hide", group: "notifications",
           type: "bool", default: false },
+        // A critical or staying toast can be dragged out by its title line and dropped anywhere
+        // on its screen (a modal); off, the ones out stay where they are and no new drag starts
+        { key: "notifications.movableToasts", label: "Move toasts by their title", group: "notifications",
+          type: "bool", default: true },
         // Where toasts show, and what a fullscreen window on that screen changes (ToastRules).
         // The shell's own messages follow them. Screens by port ("DP-2").
         { key: "notifications.toastScreen", label: "Show toasts on", group: "notifications",

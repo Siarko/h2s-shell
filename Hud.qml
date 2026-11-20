@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
 import qs.components
@@ -45,8 +46,11 @@ PanelWindow {
     // mask only while one is shown. In the mask while hidden, the launch warning took every
     // click in a 640 px band under the bar's middle, over the popups there (the calendar's
     // top half).
+    // The modals (toasts dragged out or pinned) stand anywhere on the screen: each adds its
+    // own rectangle, following it as it moves; the set changes as modals come and go.
     mask: Region {
         Region { item: toastArea }
+        Region { regions: modalRegions.instances }
         Region { item: volumeOsd }
         Region { item: shellNotifItem }
         Region { item: startupWarnings.height > 0 ? startupWarnings : null }
@@ -114,7 +118,42 @@ PanelWindow {
         width: hud.implicitWidth
         height: contentHeight
         screenWidth: hud.implicitWidth
+        screenHeight: hud.implicitHeight
+        // Where a dropped toast is kept: the window keeps out of the bar's reserved space, so
+        // as much of it as that space is past the screen's edge
+        dropWidth: hud.implicitWidth - (BarLayout.vertical ? Theme.bar.reservedSpace : 0)
+        dropHeight: hud.implicitHeight - (BarLayout.vertical ? 0 : Theme.bar.reservedSpace)
         screenModelData: hud.modelData
+    }
+
+    // A region per modal's toast, for the input mask
+    Variants {
+        id: modalRegions
+        model: toastStack.modalToasts
+        Region {
+            required property var modelData
+            item: modelData
+        }
+    }
+
+    // For tests driving the shell from outside (the lock test bed): where a toast is on
+    // this screen, in the window's logical pixels (the window starts below the bar's reserved
+    // space), whether it is a modal, can be dragged and has stopped moving — "{}" when it has
+    // none here. The first screen's HUD answers.
+    //   qs ipc call toasttest toastRect 7
+    IpcHandler {
+        target: "toasttest"
+        enabled: hud.modelData === Quickshell.screens[0]
+
+        function toastRect(id: int): string {
+            const toast = toastStack.toastFor(id);
+            if (!toast || !toast.visible)
+                return "{}";
+            const topLeft = toast.mapToItem(null, 0, 0);
+            return JSON.stringify({ x: Math.round(topLeft.x), y: Math.round(topLeft.y), width: Math.round(toast.width),
+                                    height: Math.round(toast.height), modal: toast.modal, movable: toast.movable,
+                                    settled: toast.settled });
+        }
     }
 
     // Where the toasts are, for the input mask: the toasts' strip at the right edge, as

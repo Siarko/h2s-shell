@@ -291,6 +291,32 @@ TestCase {
         same(R.nextWaiting(pinned, "ordinary", one), 6, "pin: the next takes the slot");
         same(R.pin(moved, 3, "staying"), moved, "pin: a modal already stays as it is");
         same(R.pin(empty, 9, "other"), empty, "pin: no queue known: nothing");
+        same(R.pin(empty, 9, "ordinary", "default").moved, [{ id: 9, queue: "ordinary", x: null, y: null, keep: true }],
+             "pin: one that counts down is kept on screen (keep)");
+        same(R.pin(empty, 9, "staying", "stays").moved, [{ id: 9, queue: "staying", x: null, y: null }], "pin: one that stays: kept by its kind");
+        const kept = R.pin(screen, 5, "ordinary", "default");
+        same(R.counting(kept, { 5: "default" }), [], "counting: a pinned one kept: no countdown");
+        same(R.counting(R.moveOut(screen, 3, 1, 1, true), { 1: "stays", 3: "own" }), [3], "counting: a modal dragged out whose job ended counts");
+        const running = R.modalRetimed(kept, 5, "stays");
+        same(running.moved, [{ id: 5, queue: "ordinary", x: null, y: null }], "retimed: a kept modal that now stays is kept by its kind");
+        same(R.counting(running, { 5: "own" }), [5], "… so when it stops staying it counts");
+        same(R.modalRetimed(kept, 5, "own"), kept, "retimed: still counting: still kept");
+        same(R.modalRetimed(screen, 3, "stays"), screen, "retimed: not a modal: nothing");
+        same(R.dropWaiting(kept).state.moved, kept.moved, "toasts off: keep survives a copy");
+
+        // --- modals: placed ---
+        same(R.placeModal(kept, 5, 40, 60).moved, [{ id: 5, queue: "ordinary", x: 40, y: 60, keep: true }], "place: a pinned modal at its first place");
+        same(R.placeModal(screen, 3, 1, 1), screen, "place: not a modal: nothing");
+        const spotArgs = { modals: [], width: 360, height: 100, screenWidth: 1920, screenHeight: 1080, column: 1520, top: 56, gap: 16 };
+        same(R.pinSpot(spotArgs), { x: 1144, y: 56 }, "pin spot: left of the toasts' column, at the top");
+        same(R.pinSpot(Object.assign({}, spotArgs, { modals: [{ x: 1144, y: 56 }, { x: 1144, y: 104 }, { x: 10, y: 152 }, { x: null, y: null }] })),
+             { x: 1144, y: 152 }, "pin spot: below the ones there (a step each), others and unplaced ones ignored");
+        same(R.pinSpot(Object.assign({}, spotArgs, { top: 1050 })), { x: 1144, y: 980 }, "pin spot: inside the screen");
+        same(R.pinSpot(Object.assign({}, spotArgs, { column: 100 })).x, 0, "pin spot: a narrow screen: at its left");
+
+        // --- the centre's pin control: label and effect together ---
+        same(R.pinLook(false), { glyph: "󰐃", tip: "Pin on the screen", action: "pin" }, "pin control: not a modal: pins");
+        same(R.pinLook(true), { glyph: "󰐄", tip: "Unpin from the screen", action: "unpin" }, "pin control: a modal: unpins");
 
         // --- modals: their screen gone ---
         same(R.returnToQueue(moved, 3).waiting.staying, [3, 4], "screen gone: a modal waits again, by age");

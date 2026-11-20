@@ -30,6 +30,8 @@ always exactly the one asked for. Commands, one per line, are written to <fifo>:
   move <dx> <dy>       relative motion
   abs <x> <y> <w> <h>  absolute motion in a w*h extent
   click [left|right|middle]
+  press [left|right|middle]    held down (a drag: press, moves, release)
+  release [left|right|middle]
   sleep <seconds>
   quit
 
@@ -255,6 +257,9 @@ def main():
                     display.roundtrip()
                     time.sleep(0.02)
                     pointer.button(milliseconds(), button, 0)
+                    pointer.frame()
+                elif command in ("press", "release"):
+                    pointer.button(milliseconds(), BUTTONS[argument or "left"], 1 if command == "press" else 0)
                     pointer.frame()
                 elif command == "sleep":
                     time.sleep(float(argument))

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the unit suites (tests.qml) in a private, headless compositor, so that nothing shows
-# on the screen: PointerInputTest, ButtonKindsTest, LockViewTest, ApiElementsTest,
+# on the screen: PointerInputTest, ToastDragTest, ButtonKindsTest, LockViewTest, ApiElementsTest,
 # ModuleIconTest and AuthPromptViewTest open a small window, FileChooserTest a file dialog, and in the real
 # session they would appear there, under your pointer.
 #

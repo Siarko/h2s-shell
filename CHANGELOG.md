@@ -420,6 +420,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Toasts can be moved: a critical or staying toast dragged by its title line (the grip at its
+  top) can be dropped anywhere on its screen, where it stays with an accent outline until its
+  "×", and its place in the queue goes to the next one; a job's toast moved out counts down
+  and goes when the job ends. Every notification in the panel has a pin that puts it on
+  screen the same way, beside the toasts, until it is unpinned. The panel opening and toasts
+  switched off leave moved toasts where they are; a fullscreen window with "Don't show"
+  hides them until it goes; their screen gone, they wait in their queue again. On by default
+  (Settings key `notifications.movableToasts`; off, no new drag starts).
 - Toasts now show as long as the app asks (an app asking for 0 stays until closed);
   Settings → Notifications → Apps choose how long, off, keeps every toast at your time.
   Toasts that stay — those, and critical ones — no longer hold the others back: they stack

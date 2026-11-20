@@ -9,10 +9,18 @@ import qs.singletons
 // when it shows and destroyed after it slid out; a toast that leaves is kept until then.
 // On the toasts' screen (Notifications.criticalToastScreen) the stack takes what fits whenever the
 // queues change (Notifications.fillToasts).
+// Modals — toasts dragged out of their queue, notifications pinned from the centre — are the
+// same toasts, out of the stack at their own place on this screen (ToastRules.onScreen's
+// modals); a pinned one is given its first place here (ToastRules.pinSpot). Hud adds each
+// modal's rectangle to its window's input mask (`modalToasts`).
 Item {
     id: root
 
     required property int screenWidth
+    property int screenHeight: 0
+    // The part of this window on the screen, where a dropped or pinned toast is kept
+    property int dropWidth: screenWidth
+    property int dropHeight: screenHeight
     required property var screenModelData
     readonly property string screenName: screenModelData?.name ?? ""
 
@@ -29,7 +37,7 @@ Item {
         let bottom = 0;
         for (let i = 0; i < toastRepeater.count; i++) {
             const toast = toastRepeater.itemAt(i);
-            if (toast && toast.visible)
+            if (toast && toast.visible && !toast.modal && !toast.dragging)
                 bottom = Math.max(bottom, toast.y + toast.height);
         }
         for (const badge of [criticalBadge, stayingBadge, ordinaryBadge]) {
@@ -43,9 +51,57 @@ Item {
     // fullscreen window hides all but the critical ones there
     readonly property bool _toastScreen: screenName !== "" && Notifications.criticalToastScreen === screenName
     // The toasts in their queues on this screen, top to bottom: [{ id, queue }]
-    readonly property var stack: ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden).stack
-        .filter(entry => Notifications.toastScreens[entry.id] === screenName)
-    readonly property var _presentKeys: stack.map(entry => String(entry.id))
+    readonly property var _onScreen: ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden)
+    readonly property var stack: _onScreen.stack.filter(entry => Notifications.toastScreens[entry.id] === screenName)
+    // The modals on this screen: [{ id, queue, x, y }], x and y in the window (null: not
+    // placed yet)
+    readonly property var modals: _onScreen.modals.filter(entry => Notifications.toastScreens[entry.id] === screenName)
+    readonly property var _presentKeys: stack.map(entry => String(entry.id)).concat(modals.map(entry => String(entry.id)))
+    // Where each modal goes in the stack's own coordinates, by id; null: not placed yet
+    readonly property var modalPlaces: {
+        const places = {};
+        for (const entry of modals)
+            places[entry.id] = entry.x === null || entry.y === null ? null : { x: entry.x, y: entry.y - root.y };
+        return places;
+    }
+    // The modals' toasts on screen, for the window's input mask: a toast made or let go
+    // changes the list (_itemsChanged)
+    property int _itemsChanged: 0
+    readonly property var modalToasts: {
+        _itemsChanged;
+        const toasts = [];
+        for (const entry of modals) {
+            const toast = toastFor(entry.id);
+            if (toast !== null)
+                toasts.push(toast);
+        }
+        return toasts;
+    }
+
+    // A pinned modal not placed yet gets its first place beside the toasts' column
+    // (ToastRules.pinSpot): after the change that pinned it, when its toast exists
+    onModalsChanged: {
+        if (modals.some(entry => entry.x === null || entry.y === null))
+            Qt.callLater(root._placeModals);
+    }
+    function _placeModals() {
+        for (const entry of modals) {
+            if (entry.x !== null && entry.y !== null)
+                continue;
+            const spot = ToastRules.pinSpot({
+                modals: ToastRules.onScreen(Notifications.toastState).modals
+                    .filter(other => Notifications.toastScreens[other.id] === screenName),
+                width: Theme.osdToast.width,
+                height: toastFor(entry.id)?.height ?? 0,
+                screenWidth: dropWidth,
+                screenHeight: dropHeight,
+                column: screenWidth - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8,
+                top: root.y,
+                gap: Theme.osdToast.screenGap
+            });
+            Notifications.placeModal(entry.id, spot.x, spot.y);
+        }
+    }
     // Toasts sliding out, by key: kept until they finish
     property var _leaving: []
     property var _shownBefore: []
@@ -138,15 +194,23 @@ Item {
         id: toastRepeater
         model: toastKeys.model
 
+        onItemAdded: root._itemsChanged++
+        onItemRemoved: root._itemsChanged++
+
         NotificationHudItem {
             id: toast
             required property string modelData
             screenWidth: root.screenWidth
+            dropWidth: root.dropWidth
+            dropHeight: root.dropHeight
             screenModelData: root.screenModelData
             toastId: Number(modelData)
             present: root._presentKeys.includes(modelData)
             restX: root.restX
             stackY: root.layout.places[toastId] ?? null
+            originY: root.y
+            modal: root.modalPlaces[toastId] !== undefined
+            modalPlace: root.modalPlaces[toastId] ?? null
             onSlidOut: root._left(modelData)
         }
     }

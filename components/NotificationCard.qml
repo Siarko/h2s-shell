@@ -13,6 +13,11 @@ Rectangle {
     required property var notification
     property string timestamp: ""
     property bool compactDismiss: false
+    // A pin in the header (the centre's entries): pinned, the notification stays on screen as
+    // a modal (Notifications.pinToast) until unpinned or dismissed
+    property bool pinnable: false
+    // The pin's glyph, tooltip and effect, from whether it is a modal now (ToastRules.pinLook)
+    readonly property var pinLook: ToastRules.pinLook(notification !== null && Notifications.isModal(notification.id))
     property int imageMaxHeight: 120
     // From the theme: a card in the panel by default; a toast sets its own
     property int contentPadding: Theme.notificationCard.padding
@@ -82,6 +87,16 @@ Rectangle {
         else
             actionInvoked();
     }
+    // The pin's click, as its look says: pinned on screen, or unpinned
+    function togglePin() {
+        if (!notification)
+            return;
+        if (pinLook.action === "pin")
+            Notifications.pinToast(notification);
+        else
+            Notifications.unpinToast(notification.id);
+    }
+
     // The header's dismiss control sits inside a tappable area: its press marks the tap
     // that follows as its own
     property bool _dismissPressed: false
@@ -302,6 +317,31 @@ Rectangle {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textMuted
+            }
+
+            Text {
+                id: _pinButton
+                objectName: "pinButton"
+                visible: notifCard.pinnable
+                text: notifCard.pinLook.glyph
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: _pinArea.lit || notifCard.pinLook.action === "unpin" ? Theme.accent : Theme.textMuted
+
+                PointerArea {
+                    id: _pinArea
+                    cursorShape: Qt.PointingHandCursor
+                    onPressed: notifCard._dismissPressed = true
+                    onReleased: Qt.callLater(() => notifCard._dismissPressed = false)
+                    onClicked: notifCard.togglePin()
+                }
+
+                HoverTip {
+                    target: _pinButton
+                    shown: _pinArea.containsMouse
+                    text: notifCard.pinLook.tip
+                }
             }
 
             Text {

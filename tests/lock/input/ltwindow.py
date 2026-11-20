@@ -7,6 +7,10 @@ Something visible behind the lock screen, in a colour nothing of the shell uses,
 screenshot shows at once whether any of the desktop is visible through the lock (a lock
 surface fades in from transparent). Hyprland tiles it over the whole output. It redraws at
 whatever size it is configured to, and runs until it is killed.
+
+Every pointer press it receives is printed as "press <x> <y>" (surface coordinates, where the
+pointer last was): a test sees from window.log whether a click went past the shell's
+surfaces to the window beneath (their input masks).
 """
 import mmap
 import os
@@ -15,7 +19,7 @@ import sys
 sys.path.insert(0, sys.argv[1])
 
 from pywayland.client import Display  # noqa: E402
-from ltproto.wayland import WlCompositor, WlShm  # noqa: E402
+from ltproto.wayland import WlCompositor, WlSeat, WlShm  # noqa: E402
 from ltproto.xdg_shell import XdgWmBase  # noqa: E402
 
 MAGENTA = bytes((255, 0, 255, 255))  # B, G, R, A of WL_SHM_FORMAT_ARGB8888 (little endian)
@@ -33,6 +37,8 @@ def main():
             found["shm"] = registry.bind(name, WlShm, 1)
         elif interface == "xdg_wm_base":
             found["wm_base"] = registry.bind(name, XdgWmBase, 1)
+        elif interface == "wl_seat" and "seat" not in found:
+            found["seat"] = registry.bind(name, WlSeat, 1)
 
     registry = display.get_registry()
     registry.dispatcher["global"] = on_global
@@ -76,6 +82,31 @@ def main():
     def on_surface_configure(xdg_surface, serial):
         xdg_surface.ack_configure(serial)
         draw()
+
+    pointer_at = {"x": 0.0, "y": 0.0}
+    pointers = []
+
+    def on_seat_capabilities(seat, capabilities):
+        if capabilities & WlSeat.capability.pointer.value and not pointers:
+            pointer = seat.get_pointer()
+
+            def on_enter(pointer, serial, surface, x, y):
+                pointer_at["x"], pointer_at["y"] = x, y
+
+            def on_motion(pointer, time, x, y):
+                pointer_at["x"], pointer_at["y"] = x, y
+
+            def on_button(pointer, serial, time, button, state):
+                if state == 1:
+                    print("press %d %d" % (pointer_at["x"], pointer_at["y"]), flush=True)
+
+            pointer.dispatcher["enter"] = on_enter
+            pointer.dispatcher["motion"] = on_motion
+            pointer.dispatcher["button"] = on_button
+            pointers.append(pointer)
+
+    if "seat" in found:
+        found["seat"].dispatcher["capabilities"] = on_seat_capabilities
 
     toplevel.dispatcher["configure"] = on_toplevel_configure
     toplevel.dispatcher["close"] = lambda toplevel: None

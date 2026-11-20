@@ -138,7 +138,14 @@ at once"), the ordinary ones one at a time or the column — and the rest wait, 
 queue's badge "+N" beside its lowest toast (the critical badge outlined in red). Ordinary
 toasts with the user's time count down one at a time, the oldest first; one with its app's
 own time counts by itself. A job whose toast stays and that ends while waiting moves to the
-ordinary queue; one that ends on screen counts down where it is. Arrival timestamps are recorded, and
+ordinary queue; one that ends on screen counts down where it is. A critical or staying toast
+can be dragged by its title line (the grip at its top) and dropped anywhere on its screen: it
+stays there with an accent outline until its "×", and its place in the queue goes to the next
+one; a job's toast moved out counts down and goes when the job ends. Each notification in the
+panel has a pin that puts it on screen the same way, beside the toasts, until it is unpinned.
+Moved toasts stay when the panel opens or toasts are switched off, hide under a fullscreen
+window with "Don't show" until it goes, and wait in their queue again when their screen goes
+(Settings key `notifications.movableToasts`, on by default). Arrival timestamps are recorded, and
 configured regex patterns extract codes from the summary and body so a verification code
 can be copied without opening the sending app.
 
