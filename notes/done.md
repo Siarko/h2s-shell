@@ -2302,3 +2302,21 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   12 %"; a "Receiving" header over incoming files; the save group "Saving to Downloads · N
   files" right after them. Read by the lead; core `tests/run-all.sh` and module suites on both
   machines.
+
+## The notification flow (2026-11-20 on)
+
+Plan and analysis: [plans/notification-flow.md](plans/notification-flow.md), approved on the
+interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
+
+- **Three toast queues; "×" dismisses; the centre and fullscreen (slices 1–3)** — on `master`
+  2026-11-20. `ToastRules`: the queue of a notification (critical / staying / ordinary; resident
+  stays unless `notifications.residentHide`; the shell's jobs keep their own time; "Apps choose
+  how long" off turns an app's "stay" into counting but not critical, resident or jobs), per-queue
+  limits (`criticalToastLimit` 1, `stayingToastLimit` 1, ordinary as the layout), badges (the
+  critical one outlined), requeue on a change of timing, modal data for slice 4, announce
+  effects. `Notifications.qml` drives one state through them; `hud/ToastStack.qml` shows the
+  three stacks. The toast's "×" / swipe dismisses; an action on a resident toast keeps it;
+  opening the centre hides only ordinary toasts; "Show toasts" off drops what waits; fullscreen
+  "Don't show" keeps only critical toasts; lock / screensaver never pause (lock bed).
+  `maxStayingToasts` removed (unset on both machines, no migration). Reviewed (each slice; two
+  medium in slices 1 and 3 fixed); `tests/run-all.sh` passed on both machines.
