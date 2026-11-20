@@ -955,7 +955,7 @@ TestCase {
         assert(!Notifications.countingToasts.includes(job.id), "a job pinned while it counted: it stays");
         job.expireTimeout = 0;
         Notifications._retime(job.id, job);
-        assert(place(job) === "moved ordinary" && !Notifications.countingToasts.includes(job.id), "it runs again (stays): still a modal, no countdown");
+        assert(place(job) === "moved staying" && !Notifications.countingToasts.includes(job.id), "it runs again (stays): still a modal (its queue now staying), no countdown");
         job.expireTimeout = 3000;
         Notifications._retime(job.id, job);
         assert(Notifications.countingToasts.includes(job.id), "it ends: the modal counts down where it is");

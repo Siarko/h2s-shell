@@ -202,6 +202,17 @@ TestCase {
         settle();
         assert(Math.abs(backupToast.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1, "… and the toast there");
 
+        // --- the option turned off during a drag: refused at the release, back in the stack ---
+        const nextStackToast = stack.toastFor(next.id);
+        settle();
+        const restingX = nextStackToast.x;
+        const restingY = nextStackToast.y;
+        _drag(nextStackToast, -300, 200, 10, () => settings({ "notifications.movableToasts": false }));
+        settings({});
+        assert(_place(next) === "shown staying", "refused at the release: still in its queue");
+        assert(_until(() => Math.abs(nextStackToast.x - restingX) < 1 && Math.abs(nextStackToast.y - restingY) < 1),
+               "… and back at its place in the stack (inside the input mask)");
+
         // --- what does not drag: an ordinary toast; any toast with the option off ---
         const ordinary = standIn(-1);
         const ordinaryToast = show(ordinary);

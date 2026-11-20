@@ -400,10 +400,11 @@ Singleton {
         _setToastTiming(id, timing);
         const queue = toastQueue(notification, timing);
         const before = ToastRules.where(toastState, id);
-        // A modal pinned while it counted down, now staying (a job started again): kept by its
-        // kind from now on, so it counts when that ends
+        // A modal: its queue follows (where it waits again if its screen goes); one pinned
+        // while it counted down, now staying (a job started again), is kept by its kind from
+        // now on, so it counts when that ends
         if (before.place === "moved") {
-            _applyToasts(ToastRules.modalRetimed(toastState, id, timing.kind));
+            _applyToasts(ToastRules.modalRetimed(toastState, id, timing.kind, queue));
             return;
         }
         // One that no queue takes now leaves the state, and the maps with it

@@ -302,6 +302,14 @@ TestCase {
         same(R.counting(running, { 5: "own" }), [5], "… so when it stops staying it counts");
         same(R.modalRetimed(kept, 5, "own"), kept, "retimed: still counting: still kept");
         same(R.modalRetimed(screen, 3, "stays"), screen, "retimed: not a modal: nothing");
+        const draggedPinned = R.moveOut(R.placeModal(kept, 5, 40, 60), 5, 300, 400, true);
+        same(draggedPinned.moved, [{ id: 5, queue: "ordinary", x: 300, y: 400, keep: true }], "move: a pinned modal dragged keeps its keep");
+        same(R.counting(draggedPinned, { 5: "default" }), [], "… and still does not count down");
+        same(R.modalRetimed(kept, 5, "stays", "staying").moved, [{ id: 5, queue: "staying", x: null, y: null }],
+             "retimed: its queue follows the new kind");
+        same(R.returnToQueue(R.modalRetimed(kept, 5, "default", "staying"), 5).waiting.staying, [4, 5],
+             "… so its screen gone, it waits in its new queue");
+        same(R.modalRetimed(kept, 5, "default", "ordinary"), kept, "retimed: same queue, still counting: nothing");
         same(R.dropWaiting(kept).state.moved, kept.moved, "toasts off: keep survives a copy");
 
         // --- modals: placed ---

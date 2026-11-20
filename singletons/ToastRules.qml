@@ -374,7 +374,10 @@ Singleton {
         const at = where(state, id);
         const next = _copy(state);
         if (at.place === "moved") {
-            next.moved = next.moved.map(entry => entry.id === id ? { id: id, queue: entry.queue, x: x, y: y } : entry);
+            // Only its place changes: a pinned one stays kept (keep)
+            const entry = next.moved.find(candidate => candidate.id === id);
+            entry.x = x;
+            entry.y = y;
             return next;
         }
         next.shown[at.queue] = next.shown[at.queue].filter(entry => entry !== id);
@@ -399,14 +402,24 @@ Singleton {
         return next;
     }
 
-    // A modal's timing kind changed: one that now stays is kept by its kind, no longer by
-    // its pin — so when it stops staying (a job ended) it counts down and goes
-    function modalRetimed(state, id, kind): var {
+    // A modal's timing changed: `queue` is the one it belongs to now (critical, staying,
+    // ordinary — where it waits again if its screen goes), `kind` its timing kind. One that
+    // now stays is kept by its kind, no longer by its pin — so when it stops staying (a job
+    // ended) it counts down and goes. Not a modal: nothing.
+    function modalRetimed(state, id, kind, queue): var {
         const entry = (state?.moved ?? []).find(candidate => candidate.id === id);
-        if (!entry || entry.keep !== true || kind !== "stays")
+        if (!entry)
+            return state;
+        const unkeep = entry.keep === true && kind === "stays";
+        const requeued = queues.includes(queue) && queue !== entry.queue;
+        if (!unkeep && !requeued)
             return state;
         const next = _copy(state);
-        delete next.moved.find(candidate => candidate.id === id).keep;
+        const copy = next.moved.find(candidate => candidate.id === id);
+        if (unkeep)
+            delete copy.keep;
+        if (requeued)
+            copy.queue = queue;
         return next;
     }
 

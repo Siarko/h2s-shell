@@ -84,7 +84,10 @@ Item {
         Qt.callLater(() => root._placing = false);
     }
 
-    // Let go: inside the screen (ToastRules.clampToScreen), then a modal there
+    // Let go: inside the screen (ToastRules.clampToScreen), then a modal there. Refused at
+    // the release (the option turned off, or its queue changed, during the drag): back to its
+    // place in the stack — left where it was dropped it would be outside the window's input
+    // mask, unclickable.
     function _drop() {
         const windowHeight = dropHeight > 0 ? dropHeight : (Window.window?.height ?? 0);
         const place = ToastRules.clampToScreen(x, y + originY, width, height, dropWidth, windowHeight);
@@ -92,6 +95,10 @@ Item {
         x = place.x;
         dragging = false;
         Notifications.moveToast(toastId, place.x, place.y);
+        if (!Notifications.isModal(toastId) && present && stackY !== null) {
+            _lastY = stackY;
+            nudge.restart();
+        }
     }
 
     // Slid out: the stack may destroy it
