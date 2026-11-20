@@ -735,6 +735,20 @@ TestCase {
         return rows.sort((a, b) => a.y - b.y);
     }
 
+    // Whether the General page is laid out: the window has given the loader its width (until
+    // the surface is configured it is 0, while the rows already stand at their implicit
+    // width), every row has a size, and nothing moved since the last look (the columns place
+    // their children in their polish pass, after the sizes reach them)
+    property string _lastGeneralLayout: ""
+    function _generalLaidOut(loader) {
+        const rows = _generalRows(loader);
+        const described = loader.width + " " + rows.map(row => [row.name, row.x, row.y, row.width, row.height].join(" ")).join("|");
+        const steady = described === _lastGeneralLayout;
+        _lastGeneralLayout = described;
+        return steady && loader.width > 0 && rows.length > 3 && rows[rows.length - 1].y > rows[0].y
+            && rows.every(row => row.width > 0 && row.height > 0);
+    }
+
     // Whether the General page's column has placed the elements at its end: under the last
     // setting, given the page's width, and where they stood at the last look (a column places
     // its children in its polish pass, after they are built)
@@ -2427,10 +2441,7 @@ TestCase {
             _generalView = _generalViewComponent.createObject(suite);
             _views.push(_generalView);
         });
-        _then("the General page is laid out", () => {
-            const rows = _generalRows(_generalView.loader);
-            return rows.length > 3 && rows[rows.length - 1].y > rows[0].y && rows.every(row => row.height > 0);
-        }, () => {
+        _then("the General page is laid out", () => _generalLaidOut(_generalView.loader), () => {
             const rows = _generalRows(_generalView.loader);
             console.log("  INFO: the General page's rows (x y width height): "
                         + rows.map(row => row.name + " " + [row.x, row.y, row.width, row.height].map(Math.round).join(" ")).join(" · "));
