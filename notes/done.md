@@ -2336,3 +2336,13 @@ interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
   OSD, the shell pill (lock bed `toast-modal`, `hud-bar-bottom`). From the owner's live test: a
   pinned toast has no countdown bar; a pin from the centre lands on the centre's screen.
   Reviewed (the HUD over the bar fixed); `tests/run-all.sh` passed on both machines.
+- **Finished-job marks, action buttons, toasts beside the centre (slices 6–7 and live fixes)** —
+  on `master` 2026-11-21. A finished job shows ✓ / ✗ beside its summary and, on a toast that
+  counts down, no progress bar (`NotificationRules.progressView`); the centre and lock preview
+  keep the bar. Action buttons and the reply's Send are `SmallButton`s of the new `buttonLook`
+  kind "action". From the owner's live test: with the centre open, critical and staying toasts
+  stand left of it (`Notifications.centreArea`, `ToastRules.stackEdge`, reported once the panel
+  settles); a queue's badge opens or closes the centre on its own screen
+  (`ToastRules.badgeClick`; lock bed `toast-centre`, two outputs). `AnchorsTest` waits for the
+  General page's layout (the flake seen four times). Reviewed; `tests/run-all.sh` passed on
+  both machines.
