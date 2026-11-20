@@ -20,6 +20,10 @@ How the work on the shell and its modules is run. Read this with
 - Agents on strong models write code and review it. No weaker models for coding, not even
   for mechanical moves.
 - Larger work goes: analysis → plan → the owner approves → implementation.
+- A feature with views (the owner, 2026-11-20): a mockup comes first — a throwaway Quickshell
+  window on stand-in data, built from the theme and the real or planned elements, checked
+  headless, then opened on the owner's screen (with notice); the plan is refined on it before
+  any code. After implementation the same mockup is shown again on the real code.
 - Every change is reviewed by a second agent that gets the code, not the author's
   conclusions. Findings go back to the author. Recurring findings become a rule in
   `CLAUDE.md`.
