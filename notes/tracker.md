@@ -28,10 +28,10 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 Both plans are built and on `master` (core, module API 1.33) and `main` (module, manifest
 `api` 1.33); done slices in [done.md](done.md). Left, the owner's:
 
-- [ ] Taildrop's views reworked ([plans/taildrop-ui.md](plans/taildrop-ui.md), approved by the
-      owner 2026-11-20 on two mockups): C1 (core, API 1.34: `SidePanel`, controls in
-      `SectionTitle` / `Heading`), M1–M6, M8, M7; C2 optional. After it: the mockup again on
-      the real code.
+- Taildrop's views reworked ([plans/taildrop-ui.md](plans/taildrop-ui.md)) — built and live
+  2026-11-20 (core API 1.35, module manifest 1.35); done slices in done.md; the owner approved
+  the result on the mockup `~/src/h2s-mockups/taildrop-status-pills-implemented/`. C2 (the
+  Wi-Fi drawer on `SidePanel`) optional, not started.
 - [ ] Next, after the open questions: an analysis of the whole notification flow (the owner,
       2026-11-20) — every case and possibility, logically and visually, probably two separate
       queues (toasts that count down and toasts that stay or carry a job); whether a click on a
@@ -69,6 +69,31 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **The progress handle's details** (N2, agent's choice stands): a failed update is not
+  retried (the next change sends the whole content); test mode records every `update()` at
+  once without coalescing; handles are never destroyed (one small object each).
+- **Progress notifications for modules** (N3, agent's choice stands): a module gets a thin
+  wrapper (`open`, `state`, `update`, `close`), not the handle's id or content; while a module
+  is off, a progress `notify` shows nothing and returns `null`; a handle from `Api.notify`
+  belongs to no module (only its own `close()` closes it); `toast` without `progress` is
+  dropped.
+- **Transfer notifications, words not in the plan** (D7, agent's choice stands): a cancelled
+  transfer keeps its running summary with "Cancelled" / "Stopped: disconnected" as the body;
+  the body is empty at done and failed; a transfer with some files skipped and the rest sent
+  counts as done ("Sent to laptop").
+- **The side panel (C1, API 1.34), choices not in the plan** (agent's choice stands): Escape is a
+  window-wide shortcut while the panel is open; the owner setting `open` false closes it without
+  `closed`; widths are fixed in `Theme.qml` (320/420/520, grown with the font), not theme tokens;
+  a panel does not open while the session is locked.
+- **"Share this computer's settings"** (M6, the agent's wording for the hint, for the owner to
+  approve): "Devices of the tailnet open them on port 5252 and, after logging in, change them";
+  the password prompt reads "Share this computer's settings" / "Stop sharing this computer's
+  settings"; "Web console" buttons carry the tooltip "login.tailscale.com".
+- **Taildrop off** (M5, the lead's choice after review): switching off lets running files finish
+  and stops every send file not yet started ("Stopped: Taildrop off"); turning on again does not
+  auto-save what arrived while off — it is announced once (one notification with Save), and
+  auto-save resumes for later arrivals; the popup keeps Save and the waiting count while off,
+  the bar badge goes.
 - **The progress handle's details** (N2, agent's choice stands): a failed update is not
   retried (the next change sends the whole content); test mode records every `update()` at
   once without coalescing; handles are never destroyed (one small object each).
@@ -191,6 +216,27 @@ Still work or a known risk; the detail is in [done.md](done.md).
   cross-module gap; Z removes `Api.module`). A plain `module.notify` still takes `appName`.
 - (Taildrop) One `TaildropLiveTest` run during D7 failed one check (not captured; another
   tree's tests ran at the same time); 14 reruns passed.
+
+- (tests) `AnchorsTest` failed once (5 checks) in a full run under load during N2; alone and in
+  the next full run it passed.
+- (notifications) The progress handle's run token travels as a `gdbus` argv word, readable in
+  `/proc/<pid>/cmdline` by the user's own processes (worst case: a toast shown again).
+  If `hintsChanged` fires before `expireTimeoutChanged`, a re-queued announced toast is taken
+  with its old timing and a column can briefly hold one toast too many.
+- (module API) `Api.module(id)` / `Api.moduleAt(url)` hand out other modules' handles, so a
+  module can send notifications, progress ones too, under another module's name (an older
+  cross-module gap; Z removes `Api.module`). A plain `module.notify` still takes `appName`.
+- (Taildrop) One `TaildropLiveTest` run during D7 failed one check (not captured; another
+  tree's tests ran at the same time); 14 reruns passed.
+- (Taildrop) `TaildropSendRow.qml:73` logs "Qt Quick Layouts: Detected recursive rearrange" on
+  every build (seen in the mockup).
+- (module test kit) Module suites can't send Escape to a `SidePanel` (no QtTest in modules) and
+  `ModuleTestKit.setSessionLocked` disturbs suites running alongside (seen with the live
+  suites' `needs-login`); a key helper or a per-frame lock would let modules test both.
+- (module test kit) `ModuleTestKit` presses actions of progress notifications only; the module's
+  suite presses a plain notification's "Save in…" through its own `ScenarioHandle` record.
+- (Taildrop) `TaildropLiveTest` "page-devices: both sent" timed out on several full runs under
+  load during the views rework; passes alone.
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
