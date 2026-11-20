@@ -523,3 +523,19 @@ three queues filled, a moved toast freeing its slot, `counting` across queues an
    moved-out toasts stay over the fullscreen window (only ordinary ones going, as when the
    centre opens), or should everything go, as today? For example, a battery-critical toast
    during a fullscreen game.
+
+### 8.10 The owner's answers (2026-11-20)
+
+1. An action on a resident toast leaves the toast on screen (the spec); only "×" takes it away,
+   and "×" dismisses.
+2. "Apps choose how long" off turns an app's "stay" into a counting toast; critical, resident
+   and the shell's jobs "on screen until done" keep staying. Added: every entry in the centre
+   gets a pin button; pinning makes that notification a modal on screen (a moved-out toast,
+   placed where the moved-out toasts go, draggable, "×" dismisses). "Modal" is a flag of the
+   notification, so any notification can be one — dragging a critical or staying toast out
+   sets it too; everything decided earlier for moved-out toasts holds. Unpinning (or "×") ends
+   it. The pin is part of the movable-toasts slice (4).
+3. Movable toasts on by default.
+4. A fullscreen window on the toasts' screen ("Don't show"): only critical toasts stay shown;
+   everything else goes as today (modals included — they come back when the fullscreen window
+   goes, as the plan's slice 4 decides).
