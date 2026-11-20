@@ -247,7 +247,9 @@ Still work or a known risk; the detail is in [done.md](done.md).
 
 What steps 3–6 must leave possible for 13–15: [plans/api-next/versioning.md](plans/api-next/versioning.md) §11.
 
-Later: Taildrop's history of sends with "send again" (a file no longer there handled; the
+Later: a mockup gallery (the owner, 2026-11-20) — mockups kept as code, a mode that opens a
+panel listing them and shows the one picked, useful for tests too (today's are kept outside the
+repositories in `~/src/h2s-mockups`); Taildrop's history of sends with "send again" (a file no longer there handled; the
 owner 2026-11-20); pttd (dictation) as its own module in its own repository (was 11.24; protocol in
 [pttd-protocol.md](pttd-protocol.md)); global default programs (the terminal among them);
 a NixOS option for modules (`programs.h2s-shell.modules`) and module signatures; a UI texts
