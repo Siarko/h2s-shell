@@ -2213,3 +2213,19 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   (files, device pills, Send / Cancel); the popup keeps its per-device button.
   `TaildropClient.chooseFor` became `chooseFiles`. Read by the lead; module suites on both
   machines, the module's lock bed on NixOS.
+
+## Taildrop's views reworked (2026-11-20 on)
+
+Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
+
+- **The rules, file capsules, the one-panel popup (M1–M3)** — on the module's `main` 2026-11-20.
+  M1: every Cancel / Skip an asking "×" (per file, per transfer, asking about the ids it
+  cancels); warning tone for stalled, failed and refused files; "Send now" / "Fetch now" on
+  every queued file (a forced start past the device's slot and the limit of 4, never beside a
+  same-named file to that device, then greyed with the reason); a stalled file offers only its
+  "×"; the notification's "Send now" for the device's first waiting file across its
+  transfers; `pageSummary`; Send turns into the asking "×" while the page's sends run. M2:
+  `TaildropFileCard` (name alone on line 1; state, buttons and bar inside) and one keyed
+  `TaildropFileList` with group headers and rules, used by the popup's files panel. M3: the
+  one-panel popup per the plan (stalled line, "b.txt · Queued [Send now]", Clear). Reviewed
+  (M1: two fixed), module suites and stand-ins on both machines, the module's lock bed on NixOS.
