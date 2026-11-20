@@ -1,14 +1,11 @@
 # Taildrop: the views reworked, a side panel for module pages, Taildrop off
 
-Status: a plan, for the owner's approval. Nothing here is built. It answers the owner's look
-at a mockup of today's views (2026-11-20: the page's Taildrop part unreadable, the popup's
-files panel with too many buttons and squeezed names, problems that do not stand out; the
-one-panel popup fine) and at the mockup of this plan's first version (same day: the four
-settings stay on the page; "Send now" moves to every waiting file; each file in a capsule,
-the same file list in the side panel and the popup's files panel; a way to turn Taildrop
-off on this computer). It reworks §3.6 of [taildrop-transfers.md](taildrop-transfers.md)
-(built). One core slice (module API 1.34: a side panel for a module's page), then module
-slices. Paths: core `api/…`, `panels/…`; module `module/…` (repository h2s-shell-tailscale).
+Status: approved by the owner (2026-11-20), with the answers in §8. Nothing here is built.
+It reworks §3.6 of [taildrop-transfers.md](taildrop-transfers.md) (built) after the owner's
+looks at two mockups: the page's Taildrop part unreadable; files squeezed and not set apart;
+problems not standing out; the one-panel popup fine. One core slice (module API 1.34: a side
+panel for a module's page, headings with controls), then module slices. Paths: core `api/…`,
+`panels/…`; module `module/…` (repository h2s-shell-tailscale).
 
 ## 1. What exists today
 
@@ -55,7 +52,18 @@ slices. Paths: core `api/…`, `panels/…`; module `module/…` (repository h2s
   switch "Web interface" (`SharingSection.qml:243`, port 5252).
 - **Receiving** today: tailscaled accepts every file a tailnet peer sends into its own inbox;
   the module shows the count, notifies per arrival (`TaildropClient.qml:834-845`) and
-  auto-saves when that is on (68–107, 514–561).
+  auto-saves when that is on (68–107, 514–561). With auto-save off the arrival notification
+  offers "Save" (`TaildropClient.qml:849`), as do the popup's received part
+  (`TailscalePopup.qml` "tailscalePopupSave") and the page (`TaildropSection.qml:331-336`);
+  each saves into the settings' folder. The module API's chooser has a folder mode
+  (`module.chooseFiles({ mode: "folder" })`, `api/Api.qml:869-872`, 1.17), already used by
+  "Save to … Choose…" (`TaildropClient.qml:342-350`).
+- **The page's layout:** the settings rows are the module's own `RowLayout`s, a label then
+  its control (a dropdown right after the label, `TaildropSection.qml:401-417, 434-450`). The
+  public `SettingsRow` (`api/SettingsRow.qml`) already puts its controls at the right end. The
+  public `SectionTitle` is a plain bold `Text` (`panels/settings/SectionTitle.qml`): nothing
+  can stand on its line. The Wi-Fi page's switch in its heading is that page's own code
+  (`NetworkWifiSettings.qml:106-125`).
 
 ## 2. Can this computer refuse incoming files? (read-only findings)
 
@@ -67,18 +75,11 @@ slices. Paths: core `api/…`, `panels/…`; module `module/…` (repository h2s
   `fixtures/status-exit-node.json:55,71`) — on or off for the whole tailnet, or per target
   through the tailnet policy. Not this computer's choice.
 - **The daemon's environment:** `tailscaled` 1.104.7 contains the knob `TS_DISABLE_TAILDROP`
-  (beside "Taildrop disabled; no storage directory" and "file sharing not enabled by
-  Tailscale admin"). Set in tailscaled's service environment it turns Taildrop off in the
-  daemon — assumed, from the name and the strings: that peers then see this device as no
-  target and a send to it fails is **not verified** (it needs a daemon restart; the owner or
-  the lead checks it on a real machine, slice M7). It is system configuration, root-owned:
-  NixOS `systemd.services.tailscaled.environment.TS_DISABLE_TAILDROP = "true";` (declarative,
-  nothing the module can write); Arch a systemd drop-in for `tailscaled.service` with
-  `Environment=TS_DISABLE_TAILDROP=true` and a restart of tailscaled.
+  (beside "Taildrop disabled; no storage directory"): set in tailscaled's service
+  environment (root, a daemon restart) it presumably turns Taildrop off there — not verified.
 - **So:** a real refusal exists only as a system setting of the daemon, not as a runtime
-  pref. The plan's option is honest and module-only (§4.1); the system setting is
-  documented in `docs/features.md` for both systems, and Q2 asks whether the module should
-  also offer it.
+  pref. The plan's option is honest and module-only (§4.1); the daemon setting is neither
+  written nor offered (§8.2).
 
 ## 3. Words and behaviour (all views)
 
@@ -96,18 +97,27 @@ slices. Paths: core `api/…`, `panels/…`; module `module/…` (repository h2s
   files to the phone — video.mp4 sends, song.ogg shows "Queued · Send now"; a click and both
   go. A stalled file offers only its "×" and its warning line ("No progress for 3 min"):
   going on beside it is "Send now" on a file behind it. With one file there is nothing
-  waiting, so no "Send now" appears. When the shell's limit of files at once (4) is reached,
-  the button shows unavailable with the tooltip "4 files are going already"; a file of the
-  same name already going to that device (Tailscale tells them apart by name) shows it
-  unavailable, "A file of this name is going".
+  waiting, so no "Send now" appears. The user's choice ignores the limit of 4 files at once.
+  The one exception: a file of the same name already going to that device (Tailscale tells
+  sends apart by peer and name, so the two would collide) — the button is greyed, tooltip
+  "A file of this name is going there".
+- **"Save" and "Save in…"** wherever received files are offered for saving — the arrival
+  notification's actions, the popup's received part, the side panel's waiting files — while
+  "Save incoming files automatically" is off: "Save" saves into the settings' folder as
+  today; "Save in…" opens the folder chooser (the API's, folder mode, title "Save received
+  files in") and saves this one batch there, the setting unchanged. A cancelled or blocked
+  chooser saves nothing (its note shows as for "Choose…"). The per-file save script takes the
+  folder of its transfer, with every safety step as today (absolute, not a link, the user's,
+  writable, a private staging folder, `mv -T`, `DELETE` after the rename). With auto-save on,
+  only "Save" (for what auto-save left).
 - **A file name is always visible:** first line of its capsule, nothing beside it. State,
   bar and buttons go under it.
 - **A problem** (stalled, failed, refused) → bar `kind: "warning"`, text `Api.theme.warning`;
   a device or saves line with such a file takes the warning bar and tone. Failed files move
   from "danger" to "warning".
 - **"Web console"** replaces "Admin console" / "Open the admin console" in the six places
-  and the hint ("…in the web console"); tooltip "login.tailscale.com" (Q1 on the switch
-  "Web interface").
+  and the hint ("…in the web console"); tooltip "login.tailscale.com"; the switch
+  "Web interface" is renamed (§8.1).
 - **Notifications** cannot ask first: their actions stay "Skip" on a stalled file and
   "Send now", which now starts the transfer's first waiting file (the same effect as
   before); their words belong to the pending notification flow analysis (tracker).
@@ -128,16 +138,17 @@ the side panel and the popup's files panel alike; full parity):
 `Rectangle`, `Api.theme.row.radius`, `Api.theme.surface`, inner margins from the small type
 (as the popup's device rows); a few pixels between capsules; text tones per §3.
 
-**The page** — summary row, the four settings (decided), the new switch:
+**The page** — the switch in the heading (as the Wi-Fi page's), the summary row, the four
+settings (decided); every control — button, switch, dropdown — at the right end of its row
+(public `SettingsRow`s):
 
 ```
-Taildrop
+Taildrop                                                     (o)   ← Taildrop on this computer
 2 sending · 1 file waiting                              [Files…]   ← drop files here too
-Taildrop on this computer                                    (o)
-Save to  /home/user/Downloads                  [Choose…] [Default]
-If the name is taken  [Keep both ▾]
+Save to /home/user/Downloads                   [Choose…] [Default]
+If the name is taken                                [Keep both ▾]
 Save incoming files automatically                            (o)
-Transfer notifications  [On screen until done ▾]
+Transfer notifications                     [On screen until done ▾]
 ```
 The summary is one rule (`pageSummary`): empty when nothing happens, else "2 sending",
 "Saving 1 of 3", "3 files waiting", joined by " · "; warning tone on a stall or a failure
@@ -154,7 +165,8 @@ on the row adds them to the send list and opens the panel. Off: §4.1.
 │                      │ notes.txt                                       × │
 │                      │ [Send to 2 devices]  (sends running, none chosen: × → "Cancel?")
 │                      │ ───────────────────────────────────────────────── │
-│                      │ 2 files waiting · f.bin, g.bin   [Save] [Open folder]
+│                      │ 2 files waiting · f.bin, g.bin                    │
+│                      │              [Save] [Save in…] [Open folder]      │
 │                      │ ╭ photo.jpg ╌ Receiving · 40 % ╌ bar ╮             │
 │                      │ ───────────────────────────────────────────────── │
 │                      │ To laptop · 3 files                             × │
@@ -195,7 +207,8 @@ to a device: its name alone, its text and "×" under it.
 ### 4.1 Taildrop off on this computer
 
 A module setting `mod.tailscale.taildrop` (manifest `settings`, bool, default true, global:
-it is about the computer, not a profile), the switch "Taildrop on this computer" on the page.
+it is about the computer, not a profile): the switch in the "Taildrop" heading (tooltip
+"Taildrop on this computer"; the switch shows the state, no extra row).
 Off:
 - no sending: the panel's send part, the popup's "Send file…" and its choices go; IPC
   `sendFile` answers "Taildrop is off" (running sends are not stopped by the switch; their
@@ -210,20 +223,25 @@ Off:
 - the popup's received part shows the waiting count without a Save button only when files
   wait (so they are not forgotten), else nothing; the bar widget's badge for waiting files
   goes.
-Rules: `TaildropRules.offState(enabled, waitingCount)` → `{ summary, tone, panelNote,
-canSend, notifyArrivals, autoSave }` (pure), read by the client and the views.
+Rules: `TaildropRules.offState(enabled, waitingCount)` → `{ summary, tone, panelNote, canSend, notifyArrivals, autoSave }`.
 
 ## 5. Rules (module, pure, with cases)
 
 `module/TaildropTransferRules.qml`:
-- `schedule` → a queued file with `forced: true` starts now whatever its pool's slots, still
-  within the limit across pools and never beside a file of the same name to the same device;
-  `extraSlot` (a slot borrowed by a stalled file) goes.
+- `schedule` → a queued file with `forced: true` starts now whatever its pool's slots and
+  the limit across pools (forced files count toward the limit for the others), never beside
+  a file of the same name to the same device; `extraSlot` (a slot borrowed by a stalled
+  file) goes.
 - `fileOffers` → `[{ action: "cancel" | "now", label, available, tooltip, confirm,
   confirmLabel }]`: `cancel` "×" / "Cancel?" on queued and active files; `now` "Send now" /
-  "Fetch now" on a queued file that `schedule` would not start this tick, `available` false
-  with its reason as tooltip when the limit or the same name holds it. Nothing extra on a
-  stalled file. The views render exactly these.
+  "Fetch now" on every queued file, `available` false only while a same-named file goes to
+  that device (tooltip "A file of this name is going there"). Nothing extra on a stalled
+  file. The views render exactly these.
+- `saveOffers(autoSave, waitingCount, operation)` (new; `saveOffer` folds into it) →
+  `[{ action: "save" | "saveIn", label, available }]`: "Save" and, with auto-save off,
+  "Save in…"; used by the notification, the popup and the panel alike.
+- `saveFileArgv` → the folder comes from the save transfer (`transfer.folder`: the settings'
+  folder, or the one chosen by "Save in…"), checked by the same `folderProblem`.
 - `fileRow` → adds `tone`; stalled and failed → bar `warning`; skipped → "Cancelled".
 - `transferOffers` → "×"/"Cancel?"/"Cancel all files" while running, "Clear" once ended.
 - `fileList(transfers, view)` (renamed from `popupPanel`, also for the panel) → keys and
@@ -235,7 +253,8 @@ canSend, notifyArrivals, autoSave }` (pure), read by the client and the views.
   targetIds, cancelIds }`: "×" asking while page sends run and nothing is chosen.
 - `notification` → "Skip" on the stalled file, "Send now" → the transfer's first waiting file.
 `module/TaildropRules.qml`: `_popupState` (asking "×", none when split, `nameLine`, "Clear");
-`offState` (§4.1). The client: `nowFile` sets `forced` on a queued file (IPC `nowFile` and
+`offState` (§4.1), `chosenFolder` reused for "Save in…". The client: `save(origin, folder)`
+(a folder only from the chooser);  `nowFile` sets `forced` on a queued file (IPC `nowFile` and
 `skipFile` keep their names; `docs/ipc.md` says what they do now).
 
 ## 6. Module API 1.34: `SidePanel` (core slice C1)
@@ -269,6 +288,12 @@ walking up its parents (no name a module could use); widths in `Theme`
 `ApiElementRules`; `ModuleRules.apiVersion` "1.34"; CHANGELOG `### Module API`;
 `docs/ARCHITECTURE.md` "Modules"; `tests/ApiElementsTest.qml` pins it.
 
+**A heading with controls (1.34, same slice):** the public `SectionTitle` and `Heading` take
+children — controls at the right end of the title's line (`controls`, as `SettingsRow`'s;
+none: as today). Reference line: `SectionTitle, Heading (1.34): the children written inside
+are controls at the right end of the title's line (a switch for the section, its buttons)`.
+Rows with a control at the end need nothing new: the public `SettingsRow` does it (M4).
+
 ## 7. Slices
 
 Core on a work branch (`tests/run-unit.sh <suites>` while iterating, `tests/run-all.sh`
@@ -279,18 +304,19 @@ the diff only.
 
 | # | Slice | Changes | Tests |
 |---|---|---|---|
-| C1 | **SidePanel, API 1.34** (core) | §6 | `ApiElementRulesTest` (widths per size and page width, unknown size → "m" logged once, close events); new `SidePanelTest` (headless): content built on open, destroyed after close; Close, click beside, Escape, a second panel → `closed("replaced")`, frame destroyed → "page", lock seam → "lock"; tall content scrolls, title stays; a Dropdown inside opens over it, Escape closes its list first; outside a page frame `open` returns false; `ApiElementsTest`; `VersionTest`/`ModuleRulesTest` 1.34; the kit's `pageFrame` in the fixture module `good` |
-| M1 | **The rules** | §5 | `TaildropTransferTest`: `schedule` with `forced` (starts beside a running file, not past the limit, not beside the same name, a stalled file borrows nothing); offers per state (queued: × + "Send now"; running: ×; stalled: × only; one file: no "now"; limit reached: "now" unavailable with its tooltip; save → "Fetch now"); `fileRow` tones; `transferOffers`; `fileList` rule flags; `pageSummary`; `sendButton`; `notification` actions. `TaildropTest`: `_popupState` cases; `TaildropLiveTest`: "Send now" on a queued file → both run on the stand-ins, the first untouched |
+| C1 | **SidePanel and headings with controls, API 1.34** (core) | §6 | `ApiElementRulesTest` (widths per size and page width, unknown size → "m" logged once, close events); new `SidePanelTest` (headless): content built on open, destroyed after close; Close, click beside, Escape, a second panel → `closed("replaced")`, frame destroyed → "page", lock seam → "lock"; tall content scrolls, title stays; a Dropdown inside opens over it, Escape closes its list first; outside a page frame `open` returns false; `SectionTitle`/`Heading` with a `ToggleSwitch` inside: at the right end, without children unchanged; `ApiElementsTest`; `VersionTest`/`ModuleRulesTest` 1.34; the kit's `pageFrame` in the fixture module `good` |
+| M1 | **The rules** | §5 | `TaildropTransferTest`: `schedule` with `forced` (starts beside a running file, past the limit of 4 too, never beside the same name; a stalled file borrows nothing); offers per state (queued: × + "Send now"; running: ×; stalled: × only; one file: no "now"; limit reached: "now" still available; same name going: greyed with its tooltip; save → "Fetch now"); `fileRow` tones; `transferOffers`; `fileList` rule flags; `pageSummary`; `sendButton`; `notification` actions. `TaildropTest`: `_popupState` cases; `TaildropLiveTest`: "Send now" on a queued file → both run on the stand-ins, the first untouched |
 | M2 | **Capsules and one file list** | `TaildropFileCard`, `TaildropFileList` (keyed, `_ready`), `TaildropFilesPanel` on it; split device rows without buttons, warning bars | UI suite (`TaildropListTest`/`TailscaleUiTest`): a 40-character name whole beside a stall; first "×" asks, nothing stopped; second stops only that file; the question's "×" takes it back; header "×" stops all; question dropped when the file ends; "Send now" on a queued capsule starts it; a rule between groups, none above the first; capsules keep identity as the list changes |
 | M3 | **The one-panel popup** | `TaildropPopupState` per §4 | `TailscaleUiTest`: one file → name alone; a stall → two warning lines, no "Send now" on it; a queued second file → its "Send now"; "×" asks then cancels; "Clear" clears |
-| M4 | **The side panel on the page** | manifest `api` 1.34; `TaildropPanel.qml` on `TaildropFileList`; `TaildropSection` → summary row, "Files…", drop, the settings | `TaildropListTest` in `ModuleTestKit.pageFrame`: "Files…" opens it; summary per state; a drop on the row adds and opens; Escape and lock close it; Send → "×" while running; the page itself has no file rows |
-| M5 | **Taildrop off** | setting `mod.tailscale.taildrop`, `offState`, the client (no arrival notification, no auto-save, no send, no new progress notifications), the views per §4.1; `docs/features.md` with the system setting for NixOS and Arch | `TaildropTest` (`offState`: on, off, off with files waiting); `TaildropLiveTest`: off → an arrival on the stand-in bus makes no notification (kit's record) and no save; `sendFile` refused with "Taildrop is off"; a running send goes on; on again → auto-save back as it was; UI: switch, summary text, panel note, no "Send file…" in the popup |
+| M4 | **The side panel on the page** | manifest `api` 1.34; `TaildropPanel.qml` on `TaildropFileList`; `TaildropSection` → summary row, "Files…", drop, the settings on public `SettingsRow`s (controls at the right end) | `TaildropListTest` in `ModuleTestKit.pageFrame`: "Files…" opens it; summary per state; a drop on the row adds and opens; Escape and lock close it; Send → "×" while running; the page itself has no file rows |
+| M5 | **Taildrop off** | setting `mod.tailscale.taildrop`, `offState`, the client (no arrival notification, no auto-save, no send, no new progress notifications), the views per §4.1, the switch in the `SectionTitle`; `docs/features.md` (what off does, that Tailscale still accepts files) | `TaildropTest` (`offState`: on, off, off with files waiting); `TaildropLiveTest`: off → an arrival on the stand-in bus makes no notification (kit's record) and no save; `sendFile` refused with "Taildrop is off"; a running send goes on; on again → auto-save back as it was; UI: the switch in the heading, summary text, panel note, no "Send file…" in the popup |
+| M8 | **"Save in…"** | `saveOffers`; `saveFileArgv` with the transfer's folder; client `save(origin, folder)` through the chooser (folder mode); the arrival notification's actions, the popup's received part, the panel | `TaildropTransferTest` (`saveOffers`: auto-save on/off, nothing waiting, account changing); `TaildropTest` (argv with another folder; a relative, linked or foreign folder refused as today); `TaildropLiveTest`: "Save in…" with the kit's chooser answering a folder → the files land there, the settings' folder unchanged; cancelled → nothing saved; the notification's "Save in…" action through the kit's record → the chooser asked; UI: both buttons with auto-save off, only "Save" with it on |
 | M6 | **"Web console"** | six labels, the hint, tooltip; `docs/features.md` | a `TailscaleUiTest` case: no "Admin console" text in page and popup objects |
-| M7 | **Docs and a look** | `docs/features.md`, CHANGELOG, release line | the owner or the lead on a screen: page, panel, both popups, light/dark, a small screen; on a real tailnet: `TS_DISABLE_TAILDROP` in tailscaled's environment — does a peer then fail to send here, and how does the module read it (§2) |
-| C2 | **Wi-Fi on the same drawer** (core, after M7) | `NetworkWifiSettings` on `components/SideDrawer.qml`: Escape, closing on lock | a `SidePanelTest` case on the internal drawer; the Wi-Fi page by hand |
+| M7 | **Docs and a look** | `docs/features.md`, CHANGELOG, release line | the owner or the lead on a screen: page, panel, both popups, light/dark, a small screen |
+| C2 | **Wi-Fi on the same drawer** (core, after M7) | `NetworkWifiSettings` on `components/SideDrawer.qml`: Escape, closing on lock; its heading on the internal heading with controls | a `SidePanelTest` case on the internal drawer; the Wi-Fi page by hand |
 
-Order: C1 → M1 → M2 → M3 → M4 → M5 → M6 → M7, C2 last. M1–M3, M5 and M6 need nothing new
-from the core; M4 needs C1 merged. One agent at a time on the module (M2 and M3 share
+Order: C1 → M1 → M2 → M3 → M4 → M5 → M6 → M8 → M7, C2 last. M1–M3, M6 and M8 need nothing
+new from the core; M4 and M5 (the heading's switch) need C1 merged. One agent at a time on the module (M2 and M3 share
 `TaildropPopupState.qml`; M2 and M4 the file list).
 
 ## 8. The owner's answers (2026-11-20)

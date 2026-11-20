@@ -28,6 +28,10 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 Both plans are built and on `master` (core, module API 1.33) and `main` (module, manifest
 `api` 1.33); done slices in [done.md](done.md). Left, the owner's:
 
+- [ ] Taildrop's views reworked ([plans/taildrop-ui.md](plans/taildrop-ui.md), approved by the
+      owner 2026-11-20 on two mockups): C1 (core, API 1.34: `SidePanel`, controls in
+      `SectionTitle` / `Heading`), M1–M6, M8, M7; C2 optional. After it: the mockup again on
+      the real code.
 - [ ] Next, after the open questions: an analysis of the whole notification flow (the owner,
       2026-11-20) — every case and possibility, logically and visually, probably two separate
       queues (toasts that count down and toasts that stay or carry a job); whether a click on a
