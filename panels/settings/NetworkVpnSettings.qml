@@ -269,7 +269,8 @@ Item {
                         forgetLabel: "Delete"
                         forgetAction: "Deleting"
                         editTooltip: "Its name, addresses, DNS and the rest"
-                        external: _provided
+                        editable: !_provided
+                        deletable: !_provided
                         busy: VpnManager.busyFor(vpn)
                         need: VpnManager.needFor(vpn)
                         // Needing the user: no Connect, its action (if any) beside the notice
@@ -277,10 +278,26 @@ Item {
                         notice: [_attention?.reason ?? "", _lockdownNote].filter(line => line !== "").join("\n")
                         noticeAction: _attention?.action ?? ""
                         onToggleRequested: root._open = open ? "" : vpn.uuid
-                        onForgotten: root._open = ""
+                        onForgetRequested: what => {
+                            root._open = "";
+                            NetworkProfiles.forget([vpn.uuid], what);
+                        }
                         onEditRequested: root._editing = vpn.uuid
-                        onUseRequested: VpnManager.connect(vpn.uuid)
-                        onStopRequested: VpnManager.disconnect(vpn.uuid)
+                        // A provider's through VpnManager; NetworkManager's as the other
+                        // pages' profiles
+                        onUseRequested: {
+                            if (_provided)
+                                VpnManager.connect(vpn.uuid);
+                            else
+                                NetworkProfiles.use(profile, useDevice);
+                        }
+                        onStopRequested: what => {
+                            if (_provided)
+                                VpnManager.disconnect(vpn.uuid);
+                            else
+                                NetworkProfiles.stop(profile, stopsProfile, what);
+                        }
+                        onAutoconnectRequested: on => NetworkProfiles.setAutoconnect(profile.uuid, on)
                         onNoticeActionRequested: VpnManager.attend(vpn.uuid)
                         // A provider's page: "Settings…", after the card's primary button
                         hasSettings: _settingsPage !== "" || _pageUrl !== ""

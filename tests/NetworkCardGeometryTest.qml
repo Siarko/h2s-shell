@@ -117,7 +117,8 @@ TestCase {
                 stopsProfile: true
                 showAutoconnect: false
                 showPriority: false
-                external: true
+                editable: false
+                deletable: false
                 hasSettings: true
                 need: "auth"
                 notice: "Log in to continue"

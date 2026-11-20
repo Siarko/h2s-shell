@@ -690,7 +690,7 @@ TestCase {
             suite._fakeOne.setAttention("one", "Log in to continue", "Log in");
             suite._fakeOne.setStatus("one", "Via exit-1");
             suite._section = suite._make("../panels/network/VpnSection.qml", { width: 300 });
-            suite._card = suite._make("../panels/settings/NetworkProfileCard.qml", { width: 300, external: true, editable: false,
+            suite._card = suite._make("../panels/settings/NetworkProfileCard.qml", { width: 300, editable: false,
                 deletable: false, profile: suite._vpn("vpt:two"), notice: "A note", noticeAction: "Do it", need: "auth" });
             // In a holder, as on the VPN page (anchored in an item)
             suite._holder = Qt.createQmlObject("import QtQuick; Item { width: 300; height: 400 }", suite);
@@ -785,6 +785,22 @@ TestCase {
                    && ownGroups.indexOf(own.actionsRegion.appendHost) < ownGroups.indexOf(own.lastButtonGroup)
                    && (forget.Layout.alignment & Qt.AlignVCenter),
                    "card: a NetworkManager profile, closed — Edit, the modules' buttons, then Forget, in the row after the primary");
+            // It does nothing itself: each button a request with the words for a failure
+            const asked = [];
+            own.useRequested.connect(() => asked.push("use"));
+            own.stopRequested.connect(what => asked.push("stop " + what));
+            own.forgetRequested.connect(what => asked.push("forget " + what));
+            own.autoconnectRequested.connect(on => asked.push("autoconnect " + on));
+            own.priorityRequested.connect(priority => asked.push("priority " + priority));
+            own.useDevice = "eth9";
+            suite._named(own, "profilePrimary").clicked();
+            own.profile = Object.assign({}, own.profile, { active: true, device: "eth9" });
+            suite._named(own, "profilePrimary").clicked();
+            own.stopsProfile = true;
+            suite._named(own, "profilePrimary").clicked();
+            forget.confirmed();
+            assertEqual(asked.join("; "), "use; stop Disconnecting Home; stop Disconnect Home; forget Forgetting Home",
+                        "card: Connect, Disconnect (the device, the profile) and Forget emitted as requests for the page");
             own.destroy();
             suite._rowOne = suite._row("vpt:one");
             suite._extrasOne = suite._extrasOf(suite._rowOne);

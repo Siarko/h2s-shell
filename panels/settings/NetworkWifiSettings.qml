@@ -205,8 +205,15 @@ Item {
                         autoconnectHint: "When in range"
                         priorityHint: "Higher wins when several are in range"
                         onToggleRequested: root._open = open ? "" : network.uuid
-                        onForgotten: root._open = ""
+                        onForgetRequested: what => {
+                            root._open = "";
+                            NetworkProfiles.forget([network.uuid], what);
+                        }
                         onEditRequested: root._editing = network.uuid
+                        onUseRequested: NetworkProfiles.use(profile, useDevice)
+                        onStopRequested: what => NetworkProfiles.stop(profile, stopsProfile, what)
+                        onAutoconnectRequested: on => NetworkProfiles.setAutoconnect(profile.uuid, on)
+                        onPriorityRequested: priority => NetworkProfiles.setPriority(profile.uuid, priority)
 
                         // The password: shown for a while, or changed
                         ColumnLayout {
@@ -336,8 +343,14 @@ Item {
                         showPriority: false
                         editTooltip: "Name, password, band, and the addresses handed out"
                         onToggleRequested: root._open = open ? "" : hotspot.uuid
-                        onForgotten: root._open = ""
+                        onForgetRequested: what => {
+                            root._open = "";
+                            NetworkProfiles.forget([hotspot.uuid], what);
+                        }
                         onEditRequested: root._editing = hotspot.uuid
+                        onUseRequested: NetworkProfiles.use(profile, useDevice)
+                        onStopRequested: what => NetworkProfiles.stop(profile, stopsProfile, what)
+                        onAutoconnectRequested: on => NetworkProfiles.setAutoconnect(profile.uuid, on)
 
                         // The password, to tell those who join
                         RowLayout {

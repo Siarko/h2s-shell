@@ -9,10 +9,12 @@ import qs.singletons.network
 // in one row; opened, connect automatically and priority — plus what the page adds (its
 // children, the card's `content` after its own rows: the Wi-Fi password). The page's rows are
 // the card's rows, not a column of their own: with none, or none shown, nothing is left under
-// the card's own. Shared, so the pages stay alike. Connecting uses `useDevice`, the device the
-// page offers ("" when there is none: out of range, no cable); disconnecting takes the
-// device down, not only the profile (NetworkProfiles.disconnectDevice). A VPN provider's
-// entry (VpnManager) uses it too, as `external`: the page connects it, no editor, no delete.
+// the card's own. Shared, so the pages stay alike. It does nothing itself: each button
+// emits a request and the page acts on it (NetworkProfiles.use, stop, forget, setAutoconnect,
+// setPriority; a VPN's through VpnManager). Connecting is offered with `useDevice`, the
+// device the page offers ("" when there is none: out of range, no cable); disconnecting
+// takes the device down, not only the profile, unless `stopsProfile`. A VPN provider's entry
+// (VpnManager) uses it too: no editor, no delete (`editable`, `deletable`).
 // Built on SettingsCard: the frame, the header, the notice line and the two regions are
 // its; this card gives them a profile's buttons and rows — "Forget" as the last button, after
 // what modules add to the card's `actions`.
@@ -40,12 +42,9 @@ SettingsCard {
     property bool showPriority: true
     property string priorityHint: "Higher wins when several could connect"
     property string editTooltip: "Addresses, DNS, and the rest"
-    // Not a NetworkManager profile (a VPN provider's, VpnManager): connecting and
-    // disconnecting are the page's — useRequested / stopRequested — and there is no editor
-    // and no delete unless the page says so
-    property bool external: false
-    property bool editable: !external
-    property bool deletable: !external
+    // An editor and a delete (not for a VPN provider's entry)
+    property bool editable: true
+    property bool deletable: true
     // Its own settings elsewhere (a VPN provider's page): "Settings…" after the primary
     // button, emitting settingsRequested
     property bool hasSettings: false
@@ -56,11 +55,17 @@ SettingsCard {
     property string need: ""
     // Offer to connect at all (false: something else must be done first — `noticeAction`)
     property bool canUse: true
-    signal forgotten()
+    // The requests, acted on by the page. `what` names the change in a failure's message
+    // ("Forgetting Home", "Disconnecting Home")
+    signal forgetRequested(string what)
     // Its addresses, DNS and the rest: the page opens NetworkConnectionEditor
     signal editRequested()
+    // Connect, on `useDevice`
     signal useRequested()
-    signal stopRequested()
+    // Disconnect: the profile down when `stopsProfile`, else its device
+    signal stopRequested(string what)
+    signal autoconnectRequested(bool on)
+    signal priorityRequested(int priority)
     signal settingsRequested()
 
     title: profile.name ?? ""
@@ -82,16 +87,10 @@ SettingsCard {
             kind: root.profile.active ? "delete" : "save"
             available: !root.busy
             onClicked: {
-                if (root.external && root.profile.active)
-                    root.stopRequested();
-                else if (root.external)
+                if (!root.profile.active)
                     root.useRequested();
-                else if (!root.profile.active)
-                    NetworkProfiles.activate(root.profile.uuid, root.useDevice);
-                else if (root.stopsProfile)
-                    NetworkProfiles.deactivate(root.profile.uuid, root.stopLabel + " " + root.title);
                 else
-                    NetworkProfiles.disconnectDevice(root.profile.device, "Disconnecting " + root.title);
+                    root.stopRequested(root.stopsProfile ? root.stopLabel + " " + root.title : "Disconnecting " + root.title);
             }
         },
         DeleteButton {
@@ -107,12 +106,7 @@ SettingsCard {
             maximumWidth: Math.floor(root.primaryRoom - (_mark.visible ? Math.ceil(_mark.implicitWidth) + 10 : 0))
             wraps: true
             available: !root.busy
-            onConfirmed: {
-                if (root.external)
-                    root.useRequested();
-                else
-                    NetworkProfiles.activate(root.profile.uuid, root.useDevice);
-            }
+            onConfirmed: root.useRequested()
         }
     ]
 
@@ -144,10 +138,7 @@ SettingsCard {
             label: root.forgetLabel
             confirmLabel: root.forgetLabel + "?"
             cancelTip: "Keep it"
-            onConfirmed: {
-                root.forgotten();
-                NetworkProfiles.forget([root.profile.uuid], root.forgetAction + " " + root.title);
-            }
+            onConfirmed: root.forgetRequested(root.forgetAction + " " + root.title)
         }
     ]
 
@@ -162,7 +153,7 @@ SettingsCard {
             label: root.autoconnectLabel
             hint: root.autoconnectHint
             checked: root.profile.autoconnect
-            onToggled: NetworkProfiles.setAutoconnect(root.profile.uuid, !checked)
+            onToggled: root.autoconnectRequested(!checked)
         },
 
         // Which profile wins when several could connect
@@ -191,7 +182,7 @@ SettingsCard {
             SmallButton {
                 label: "−"
                 available: !NetworkProfiles.busy && root.profile.priority > -999
-                onClicked: NetworkProfiles.setPriority(root.profile.uuid, root.profile.priority - 1)
+                onClicked: root.priorityRequested(root.profile.priority - 1)
             }
             Text {
                 Layout.preferredWidth: 32
@@ -204,7 +195,7 @@ SettingsCard {
             SmallButton {
                 label: "+"
                 available: !NetworkProfiles.busy && root.profile.priority < 999
-                onClicked: NetworkProfiles.setPriority(root.profile.uuid, root.profile.priority + 1)
+                onClicked: root.priorityRequested(root.profile.priority + 1)
             }
         }
     ]

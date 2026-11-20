@@ -139,8 +139,15 @@ Item {
                         useLabel: "Use"
                         autoconnectHint: "When a cable is plugged in"
                         onToggleRequested: root._open = open ? "" : ethernetProfile.uuid
-                        onForgotten: root._open = ""
+                        onForgetRequested: what => {
+                            root._open = "";
+                            NetworkProfiles.forget([ethernetProfile.uuid], what);
+                        }
                         onEditRequested: root._editing = ethernetProfile.uuid
+                        onUseRequested: NetworkProfiles.use(profile, useDevice)
+                        onStopRequested: what => NetworkProfiles.stop(profile, stopsProfile, what)
+                        onAutoconnectRequested: on => NetworkProfiles.setAutoconnect(profile.uuid, on)
+                        onPriorityRequested: priority => NetworkProfiles.setPriority(profile.uuid, priority)
                     }
                 }
             }

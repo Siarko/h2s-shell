@@ -161,6 +161,21 @@ Singleton {
         _change(what, ["nmcli", "device", "disconnect", device], null, _connectAction);
     }
 
+    // A saved profile's card (NetworkProfileCard's useRequested, stopRequested, acted on by
+    // its page): `use` brings `profile` up on `device` ("" any); `stop` takes it down — the
+    // profile itself when `byProfile` (a hotspot: the saved network comes back on the Wi-Fi
+    // after it; a VPN), else its device (disconnectDevice) — `what` naming it in a failure
+    function use(profile, device: string): void {
+        activate(profile.uuid, device);
+    }
+
+    function stop(profile, byProfile: bool, what: string): void {
+        if (byProfile)
+            deactivate(profile.uuid, what);
+        else
+            disconnectDevice(profile.device, what);
+    }
+
     function setAutoconnect(uuid: string, on: bool): void {
         _change("Changing " + nameOf(uuid), ["nmcli", "connection", "modify", "uuid", uuid, "connection.autoconnect", on ? "yes" : "no"]);
     }
