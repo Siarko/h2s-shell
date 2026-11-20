@@ -295,3 +295,11 @@ Seen while reading (not yet in the tracker):
 - **Opening the centre** hides only the ordinary toasts; critical, staying and moved-out ones stay.
 - **Lock screen and screensaver do not pause** countdowns or queues (notifications would be stale
   after unlocking).
+- **"×" on a toast dismisses** the notification (its entry leaves the centre too; a job goes on).
+- **Confirmed on the mockup** (`~/src/h2s-mockups/notification-queues-planned/`): new critical and
+  staying toasts show while the centre is open; "Show toasts" off drops what waits in all three
+  queues; a moved-out toast has an accent outline and a grip; a job that ends while waiting in
+  the staying queue shows its result in the ordinary queue.
+- **Resident notifications stay** (staying queue) by default; a Notifications setting "Resident
+  notification hide" (off by default) makes them count down like ordinary ones, with an info icon
+  and a tooltip explaining what "resident" means.
