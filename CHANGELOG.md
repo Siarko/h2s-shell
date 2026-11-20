@@ -760,6 +760,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A notification's action buttons and its reply's Send are drawn like the shell's other
+  buttons: the accent, with the label in the theme's "On accent" colour (readable on a
+  light accent too), lighter under the pointer or a finger. Send is dimmed while there is
+  nothing to send.
 - A finished job's notification shows how it ended beside its title: a green ✓ when done,
   a red ✗ when it failed, a muted ✗ when cancelled. Its toast, which then counts down, no
   longer draws the full progress bar above the countdown: the countdown is the only bar.

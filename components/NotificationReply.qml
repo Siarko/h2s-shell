@@ -83,24 +83,13 @@ RowLayout {
         }
     }
 
-    Rectangle {
-        implicitWidth: 48
-        implicitHeight: 28
-        radius: Theme.notificationCard.controlRadius
-        color: _replyInput.text.length > 0 ? Theme.accent : Theme.surfaceHover
-
-        Text {
-            anchors.centerIn: parent
-            text: "Send"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textPrimary
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root._send()
-        }
+    // Sends what is written; nothing to send, it is dimmed and takes no click
+    SmallButton {
+        Layout.alignment: Qt.AlignVCenter
+        kind: "action"
+        label: "Send"
+        fontSize: Theme.fontSizeSmall
+        available: _replyInput.text.length > 0
+        onClicked: root._send()
     }
 }

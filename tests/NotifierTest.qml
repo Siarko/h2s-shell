@@ -196,6 +196,9 @@ TestCase {
             if (button)
                 button.clicked(null);
             result.found = button !== null;
+            // The action's button is a SmallButton of the "action" kind (ThemeRules.buttonLook)
+            result.look = button !== null && button.parent.kind === "action" && button.parent.label === "Skip"
+                && Qt.colorEqual(button.parent.color, Theme.accent);
             result.invoked = action.invoked;
             card.destroy();
             action.destroy();
@@ -203,11 +206,45 @@ TestCase {
         };
         const notResident = pressAction(false);
         assert(notResident.found, "the action's button is on the card");
+        assert(notResident.look, "… a button of the \"action\" kind: its label, the accent");
         assert(notResident.invoked === 1 && notResident.dismissals === 1 && notResident.actionsInvoked === 0,
                "not resident: the action runs and the entry is asked to go (" + JSON.stringify(notResident) + ")");
         const resident = pressAction(true);
         assert(resident.invoked === 1 && resident.dismissals === 0 && resident.actionsInvoked === 1,
                "resident: the action runs, no dismissal asked, the toast told to leave (" + JSON.stringify(resident) + ")");
+
+        // --- the inline reply: Send is an "action" button, there only with something to send ---
+        const replyTo = resident => {
+            const sentReplies = [];
+            const card = _card.createObject(suite, { notification: Object.assign({}, notification, { resident: resident, hasInlineReply: true,
+                sendInlineReply: text => sentReplies.push(text) }) });
+            const result = { dismissals: 0, actionsInvoked: 0 };
+            card.dismissRequested.connect(() => result.dismissals++);
+            card.actionInvoked.connect(() => result.actionsInvoked++);
+            const send = _find(card, item => item.kind === "action" && item.label === "Send");
+            const field = _find(card, item => item instanceof TextInput);
+            result.found = send !== null && field !== null;
+            if (result.found) {
+                const area = _find(send, item => item instanceof MouseArea);
+                result.emptyAvailable = send.available;
+                area.clicked(null);
+                result.sentEmpty = sentReplies.length;
+                field.text = "On my way";
+                result.available = send.available;
+                area.clicked(null);
+                result.sent = sentReplies.join("|");
+                result.cleared = field.text === "";
+            }
+            card.destroy();
+            return result;
+        };
+        const reply = replyTo(false);
+        assert(reply.found && !reply.emptyAvailable && reply.sentEmpty === 0, "the reply's Send: an \"action\" button, not available with nothing written (" + JSON.stringify(reply) + ")");
+        assert(reply.available && reply.sent === "On my way" && reply.cleared && reply.dismissals === 1 && reply.actionsInvoked === 0,
+               "written, Send sends the reply, clears the field, and the entry is asked to go (" + JSON.stringify(reply) + ")");
+        const residentReply = replyTo(true);
+        assert(residentReply.sent === "On my way" && residentReply.dismissals === 0 && residentReply.actionsInvoked === 1,
+               "resident: the reply is sent, the entry stays (" + JSON.stringify(residentReply) + ")");
 
         _toastTimes();
         _modals();

@@ -59,12 +59,14 @@ Singleton {
     //
     // Three kinds have a tone and wear it as a border, filled with it while hot: "delete"
     // (stops or removes), "warning" (goes on, but think), "success" (a good outcome).
-    // "save" and "saveChange" are filled; "normal", "cancel" and any other word are plain.
-    // Asking, every kind is plain, with its label and a border in the kind's colour.
+    // "save" and "saveChange" are filled; "action" (an app's own action on its notification)
+    // is filled with the accent, its label in `onAccent`; "normal", "cancel" and any other
+    // word are plain. Asking, every kind is plain, with its label and a border in the kind's
+    // colour.
     function buttonLook(kind, state) {
         const hot = state?.hot === true;
         const tone = ({ "delete": "error", "warning": "warning", "success": "success" })[kind] ?? "";
-        const filled = ({ "save": "confirm", "saveChange": "confirmSecondary" })[kind] ?? "";
+        const filled = ({ "save": "confirm", "saveChange": "confirmSecondary", "action": "accent" })[kind] ?? "";
         const group = ({ "save": "saveButton", "saveChange": "saveButton", "cancel": "cancelButton", "delete": "deleteButton",
             "warning": "warningButton", "success": "successButton" })[kind] ?? "button";
         const plain = hot ? "surfaceHover" : "surface";
@@ -75,7 +77,7 @@ Singleton {
         if (tone !== "")
             return { group: group, fill: hot ? tone : "surface", label: hot ? "textPrimary" : "textSecondary", border: tone };
         if (filled !== "")
-            return { group: group, fill: hot ? filled + "Hover" : filled, label: "textPrimary", border: "" };
+            return { group: group, fill: hot ? filled + "Hover" : filled, label: kind === "action" ? "onAccent" : "textPrimary", border: "" };
         if (state?.checked === true)
             return { group: group, fill: hot ? "accentHover" : "accent", label: "onAccent", border: "" };
         return { group: group, fill: plain, label: "textSecondary", border: "" };

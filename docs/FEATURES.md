@@ -121,7 +121,9 @@ input through except where a card is actually visible.
 ## Notifications
 
 The shell *is* the notification server (`org.freedesktop.Notifications`), with support
-for body markup, hyperlinks, images, action buttons, action icons and inline replies.
+for body markup, hyperlinks, images, action buttons, action icons and inline replies. An
+app's action buttons and the reply's Send are filled with the theme's accent, their labels
+in its "On accent" colour, and lighten under the pointer.
 Notifications stay in the panel until dismissed. A toast shows as long as its app asks (the
 spec's expire timeout): an app asking for 0 keeps its toast up until it is closed, one
 asking for 30 s gets 30 s, and one leaving it to the shell (most do) gets "Show each toast

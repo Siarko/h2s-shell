@@ -665,30 +665,16 @@ Rectangle {
                 model: ScriptModel {
                     values: notifCard._regularActions
                 }
-                delegate: Rectangle {
+                delegate: SmallButton {
                     required property var modelData
-                    implicitWidth: _actionLabel.implicitWidth + 16
-                    height: 24
-                    radius: Theme.notificationCard.controlRadius
-                    color: Theme.accent
-
-                    Text {
-                        id: _actionLabel
-                        anchors.centerIn: parent
-                        text: modelData.text
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeSmall
-                        color: Theme.textPrimary
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Notifications.invokeAction(notifCard.notification, modelData);
-                            notifCard._afterAction();
-                        }
+                    kind: "action"
+                    // The app's label, plain and on one line; one wider than the card ends in "…"
+                    label: modelData.text
+                    width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                    fontSize: Theme.fontSizeSmall
+                    onClicked: {
+                        Notifications.invokeAction(notifCard.notification, modelData);
+                        notifCard._afterAction();
                     }
                 }
             }

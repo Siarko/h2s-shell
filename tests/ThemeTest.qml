@@ -130,6 +130,11 @@ TestCase {
         assertEqual(look("warning", hot), "warningButton warning textPrimary warning", "… filled with it under the pointer");
         assertEqual(look("success", {}), "successButton surface textSecondary success", "a good outcome: a border in the success colour");
         assertEqual(look("success", hot), "successButton success textPrimary success", "… filled with it under the pointer");
+        assertEqual(look("action", {}), "button accent onAccent -", "an app's action: filled with the accent, its label in the colour on it, no border");
+        assertEqual(look("action", hot), "button accentHover onAccent -", "… the accent's hover colour under the pointer");
+        assertEqual(look("action", { checked: true }), "button accent onAccent -", "… checked changes nothing");
+        assertEqual(look("action", asking), "button surface accent accent", "asking, an action: plain, the question and a border in the accent");
+        assertEqual(look("action", { asking: true, hot: true }), "button surfaceHover accent accent", "… lighter under the pointer, never filled");
         assertEqual(look("normal", { checked: true }), "button accent onAccent -", "a toggle that is on: the accent");
         assertEqual(look("normal", { checked: true, hot: true }), "button accentHover onAccent -", "… its hover colour under the pointer");
         assertEqual(look("delete", { checked: true }), "deleteButton surface textSecondary error", "a kind with a tone keeps its look when checked");
@@ -141,7 +146,7 @@ TestCase {
         assertEqual(look("success", asking), "successButton surface success success", "asking, a good outcome: in the success colour");
         assertEqual(look("save", asking), "saveButton surface confirm confirm", "asking before turning something on: in the confirm colour");
         assertEqual(look("normal", asking), "button surface textPrimary outline", "asking, a plain button: bright text, the ordinary outline");
-        for (const kind of ["normal", "cancel", "save", "saveChange", "delete", "warning", "success"])
+        for (const kind of ["normal", "cancel", "save", "saveChange", "delete", "warning", "success", "action"])
             for (const state of [{}, hot, asking, { checked: true }, { checked: true, hot: true }, { asking: true, hot: true }]) {
                 const found = ThemeRules.buttonLook(kind, state);
                 assert(ThemeRules.shapeGroups.includes(found.group) && Theme[found.group].radius >= 0

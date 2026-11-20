@@ -3,7 +3,8 @@ import qs.singletons
 
 // A compact button with a label. `kind` is what it does — "normal", "save" (confirms:
 // the confirm colour), "saveChange" (confirms a change to something that exists: the
-// second confirm colour), "cancel", and three with a tone, worn as a border and filled
+// second confirm colour), "action" (an app's action on its notification: the accent),
+// "cancel", and three with a tone, worn as a border and filled
 // under the pointer: "delete" (stops or removes: red), "warning" (goes on, but think),
 // "success" (a good outcome) — so each kind can be styled on its own
 // (notes/plans/themes-stage7.md). The look of each is ThemeRules.buttonLook. `checked`

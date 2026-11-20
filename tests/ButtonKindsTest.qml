@@ -24,12 +24,13 @@ TestCase {
         { kind: "save", fill: "confirm", label: "textPrimary", border: "", hotFill: "confirmHover", hotLabel: "textPrimary", asking: "confirm", askingBorder: "confirm" },
         { kind: "delete", fill: "surface", label: "textSecondary", border: "error", hotFill: "error", hotLabel: "textPrimary", asking: "error", askingBorder: "error" },
         { kind: "warning", fill: "surface", label: "textSecondary", border: "warning", hotFill: "warning", hotLabel: "textPrimary", asking: "warning", askingBorder: "warning" },
-        { kind: "success", fill: "surface", label: "textSecondary", border: "success", hotFill: "success", hotLabel: "textPrimary", asking: "success", askingBorder: "success" }
+        { kind: "success", fill: "surface", label: "textSecondary", border: "success", hotFill: "success", hotLabel: "textPrimary", asking: "success", askingBorder: "success" },
+        { kind: "action", fill: "accent", label: "onAccent", border: "", hotFill: "accentHover", hotLabel: "onAccent", asking: "accent", askingBorder: "accent" }
     ]
 
     property var _window: PanelWindow {
         anchors { top: true; left: true }
-        implicitWidth: 700
+        implicitWidth: 1000
         implicitHeight: 200
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -40,7 +41,7 @@ TestCase {
         // Somewhere for the mouse to go that is no button
         Item {
             id: away
-            x: 640; y: 150
+            x: 940; y: 150
             width: 40; height: 40
         }
 
@@ -131,8 +132,11 @@ TestCase {
         return condition();
     }
 
+    // By the channels: Qt.colorEqual tells the theme's `onAccent` and a label drawn in it
+    // apart, though their channels are the same
     function _is(colour, name) {
-        return Qt.colorEqual(colour, Theme[name]);
+        const wanted = Theme[name];
+        return ["r", "g", "b", "a"].every(channel => Math.abs(colour[channel] - wanted[channel]) < 0.5 / 255);
     }
 
     function _child(item, typeName, nth = 0) {
