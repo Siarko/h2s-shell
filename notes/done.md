@@ -7,6 +7,22 @@ done items of stage 11 in number order, then
 the sections added later, each dated. User-visible changes are in
 [CHANGELOG.md](../CHANGELOG.md).
 
+## Contents
+
+- Host verification — 1.1 (2026-10-28)
+- Stages 1–10 of the old TODO list (2026-10-28 to 2026-10-31): freezing, groundwork,
+  scaling, touch, idle cost, architecture, security, correctness, hygiene, requested features
+- Stage 11 — done items in number order (2026-10-30 to 2026-11-17)
+- From next-steps.md (2026-11-17)
+- Test split — tracker step 10 (2026-11-17); found during the test split (2026-11-17)
+- API plan and the work around it (2026-11-17 to 2026-11-19)
+- Small items done (2026-11-19)
+- The tracker's open sections as worded before 2026-11-19 (archive)
+- Notifications with a progress bar and Taildrop's list of transfers (2026-11-19 to 2026-11-20)
+- Taildrop's views reworked (2026-11-20)
+- The notification flow (2026-11-20 to 2026-11-21)
+- Tracker housekeeping (2026-11-21): items moved out of the tracker
+
 ---
 
 
@@ -2350,3 +2366,38 @@ interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
   rewritten (toasts, moving and pinning, progress, the shell's own notifications);
   docs/ARCHITECTURE.md "Notifications and toasts"; the Unreleased CHANGELOG merged. The
   notification flow plan is complete.
+
+## Tracker housekeeping (2026-11-21)
+
+Moved out of the tracker as done; checked against the code and the sections above.
+
+- **Order of work, step 4: UI anchors replace today's slots** (U4a–U7b) — done 2026-11-19 (see
+  "API plan and the work around it").
+- **Order of work, step 6: the Tailscale module's migration** (M1–M11: every workaround
+  removed, the exit node per network on the cards, the manual "for now" override) — done
+  2026-11-19; only the closing slice (Z) is left, kept in the tracker.
+- **Taildrop's views reworked** — built and live 2026-11-20 (core API 1.35, manifest 1.35); the
+  owner approved the result on the mockup of the implemented pills. C2 (the Wi-Fi drawer on
+  `SidePanel`) stays in the tracker, optional.
+- **Open points answered by the owner**: Taildrop's words (D1) kept, the held-back file rule
+  confirmed (2026-11-20) — now under the tracker's Decisions; the release holding the
+  sender's-time toasts is a minor (2026-11-20).
+- **Left open by done work, since fixed**:
+  - the HUD's overlay started below the bar (toasts 40 px low) — notification flow slice 5
+    (`BarGeometry.reservedInsets`);
+  - `AnchorsTest`'s General page rows read -28 wide under load — the test waits for the
+    page's layout (notification flow slices 6–7);
+  - the popup showed only the newest popup send per device — D5 (a second send shows on the
+    device's line, Cancel stops both);
+  - a save stopped after its rename showed "Skipped" — `outputAfterCancel` (API 1.33) wired by
+    the module;
+  - unlimited runs (sends, saves) not ended with the shell — `endWithShell` (API 1.33), taken
+    by Taildrop's runs;
+  - `PrivilegedMark` `visible: need !== ""` showing the lock for `need: "yes"` — the marks now
+    bind `need` (M10);
+  - certificates in `h2s-shell/tailscale/certs` — in the module's data directory (M5).
+- **Duplicates dropped**: the open points on the progress handle (N2) and progress
+  notifications for modules (N3) stood twice; four leftovers (`AnchorsTest` under load during
+  N2, the run token in `gdbus`'s argv, `Api.module` handing out handles, a `TaildropLiveTest`
+  check during D7) stood twice.
+- **"Running a session cheaply"** (the owner's advice) moved to `notes/workflow.md`.
