@@ -68,8 +68,17 @@ only their own temporary files.
 
 - The running shell uses one checkout per repository. Writing a file there reloads the
   running shell, so nobody edits it; it only receives fast-forward merges.
-- Agents work in separate working trees (`git worktree add`), one per agent when they run
-  in parallel. A module is tested against a core tree nobody is editing at that moment.
+- Agents work in separate working trees, one per agent when they run in parallel: the lead
+  makes each with `git worktree add ~/wt/<name> -b <branch> master` (`main` in the module
+  repository) and names it in the brief as the only place the agent writes. Each agent's
+  tests run in its own tree; the runners give every run its own compositor, runtime and
+  config directories, so trees side by side share nothing but the processor (and the lock
+  bed's machine-wide lock).
+- A module is tested against a pinned core tree nobody is editing: a detached worktree of
+  the core repository, `~/src/core-pin` (`git worktree add --detach ~/src/core-pin <commit>`),
+  handed to the module's runners as `H2S_SHELL_DIR=~/src/core-pin`. The lead moves it to a
+  new commit (`git -C ~/src/core-pin checkout --detach <commit>`) only between agents' runs,
+  when a module change needs a newer core; agents never write there.
 - Development is on the Arch machine. The NixOS machine is reached over SSH: a branch goes
   there as a `git bundle` (copied over, fetched into a working tree there), and the tests
   run there through the same runners.
