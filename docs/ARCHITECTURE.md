@@ -66,7 +66,7 @@ shell.qml                 process root — one Bar, one Hud, one ScreensaverSurf
 │   ├── widgets/          bar cells (clock, network, …) — thin, read singletons
 │   └── panels/Popup.qml  the single popup window, lazily loaded, hosts one panel at a time
 │       └── panels/       popup content (NetworkPanel, MusicPanel, Calendar, …)
-├── Hud.qml               click-through overlay: toasts, volume OSD, queue badge
+├── Hud.qml               click-through overlay: toasts and their badges, volume OSD, the shell's pill
 │   └── hud/
 ├── screensaver/          screensaver surface + the lock surface and prompt (views of Lockscreen)
 ├── pam/                  the lock screen's own PAM configs, one per way of unlocking
@@ -378,6 +378,85 @@ sources — per card.
 Calendar client. It predates and substitutes for native async/await in this QML runtime.
 There is no blocking `await`: QML is single-threaded, so waiting in a loop for a promise
 would freeze the whole shell. Chain with `then`.
+
+### Notifications and toasts
+
+`singletons/Notifications.qml` is the notification server (`NotificationServer`, every
+capability on: markup, links, images, actions, action icons, inline replies). It tracks
+each notification it receives, records its arrival time and extracted codes, and keeps the
+toasts' state. Every decision is in two pure singletons with their suites:
+`singletons/NotificationRules.qml` (a card's progress view and the wave, whether an action
+also dismisses — not on a resident notification —, the shell's own sender's hints and
+announces, orphans after a reload) and `singletons/ToastRules.qml` (which screen, how
+long, which queue, and every change of the queues).
+
+**The toast state** is one plain object of notification ids, `Notifications.toastState`
+(`ToastRules.emptyState`'s shape): `waiting` and `shown`, each with the three queues
+`critical`, `staying` and `ordinary` (ids oldest first — ids grow with arrival), and
+`moved`, the modals (`{ id, queue, x, y, keep? }`: dragged out or pinned, x and y `null`
+until placed). It changes only through the rules, each of which returns a new state, and
+is always replaced, never mutated: a toast is on screen only while the state says so, so
+no stale slot can show or hold one, and an answer from before a change cannot bring one
+back. Beside it, by id: the notification objects, each toast's timing kind and time
+(`toastKinds`, `toastDurations`) and the screen it went to (`toastScreens`). Derived from
+it: `countingToasts` (`ToastRules.counting` — in the ordinary queue the sender's time at
+once and the user's one at a time, the oldest first; elsewhere whatever no longer stays),
+`toastBadges` and `hudQueue` (the waiting notification objects, oldest first). The flow:
+
+- `ToastRules.timing` gives a notification's kind — `"default"` (the user's time), `"own"`
+  (the sender's) or `"stays"` — from its expire timeout, urgency, the resident hint and
+  the settings; the shell's own progress handles (hint `x-qs-progress-run`) are resident by
+  make and are not taken as resident there. `queueFor` puts critical ones in `critical`,
+  ones that stay in `staying`, the rest in `ordinary`; `limits` reads the three limits.
+- `enqueue` lets a queue take a new toast when it can (`accepts`: toasts on, a screen for
+  it, not an ordinary one while the centre is open, only critical ones under a fullscreen
+  window with "Don't show"). Each screen's `ToastStack` pulls (`Notifications.takeToast`,
+  `ToastRules.nextWaiting`/`show`): a queue with room shows its oldest waiting toast;
+  queues never overtake each other.
+- The notification changing (a job ending, a new time or urgency, a timing setting) runs
+  `requeue`: a waiting toast moves to its new queue by age, a shown ordinary one that now
+  stays goes up to its queue, a shown critical or staying one or a modal counts where it
+  is. The centre opening runs `centreOpened` (only the ordinary queue goes), a fullscreen
+  window with "Don't show" `fullscreenHid`, "Show toasts" off `dropWaiting`.
+- A toast ends through `Notifications.toastGone` (its time ran out, an action, its
+  notification closed) or `dismissToast` ("×" and the swipe: `notification.dismiss()`, so
+  a job's handle learns it as from the centre).
+- An announce from the shell's own sender (`NotificationRules.announced`) goes through
+  `ToastRules.announceEffect`: on screen its time starts again, gone it queues like a new
+  one.
+
+**The HUD** (`Hud.qml`, one per screen) is a layer-shell overlay window over the whole
+screen, the bar's reserved space too, and keeps everything it shows clear of the bar
+(`BarGeometry.reservedInsets`). It takes no keyboard except while a toast's reply is
+hovered or written. Its input mask is a `Region` per visible part: the toasts' strip
+(`ToastStack`, as tall as its toasts and badges, left of the open centre when that stands
+level with it — `ToastRules.stackEdge`, from the centre's rectangle each popup reports to
+`Notifications.setCentreArea`), a `Region` per modal's toast (a `Variants` over
+`ToastStack.modalToasts`, so the set follows modals as they come, go and move), the volume
+OSD, the shell's pill and a startup warning while one shows. Everywhere else clicks pass
+through.
+
+`hud/ToastStack.qml` makes one `hud/NotificationHudItem.qml` per toast on its screen, from
+a `KeyedModel` of ids: made when the toast shows, destroyed after it slid out (the leaving
+ones are kept until then), so a toast keeps its countdown, its reply text and its swipe
+while it changes place or becomes a modal. It places the three stacks (`onScreen`) and each
+queue's badge (`badgeLook`; each bar answers a click by `badgeClick`: the centre opens
+or closes on the badge's screen), and
+gives a pinned modal its first place (`pinSpot`). A toast drags by its title line with a
+`DragHandler` while `canMove` allows it; on release it is clamped inside its screen, off
+the bar (`clampToScreen`), and becomes a modal (`moveOut`). A modal whose screen goes
+waits in its queue again (`returnToQueue`); places are not kept over a restart. The card
+itself is `components/NotificationCard.qml`, shared with the centre
+(`panels/NotificationPanel.qml`), which adds the pin (`pinToast`/`unpinToast`,
+`ToastRules.pinLook`); a toast's countdown is an animation that pauses while held and
+drives the card's timer bar (`ToastRules.showsTimer`). Nothing pauses under the lock
+screen or the screensaver.
+
+Notifications with category `x-qs-shell` are the shell's own short messages: not tracked,
+they go to `Notifications.shellQueue` and `hud/ShellNotificationHudItem.qml` shows each
+summary for 2.5 s in a pill at the bottom of the toasts' screen. `singletons/Notifier.qml`
+sends the shell's notifications: a plain one with one `notify-send`, a progress one
+through a handle (below, "Progress notifications").
 
 ### Lock screen
 

@@ -94,8 +94,9 @@ Opened from their bar widget, rendered in the single popup below the bar.
   entry, saved-profile management, plus live throughput (click it for a
   download/upload history graph), IP and DNS per link.
 - **Notifications** — the list of unread notifications with per-item dismiss, dismiss
-  all, and codes (one-time passwords and similar) extracted by the regexes in
-  Settings → Notifications. A card swiped sideways by finger is dismissed.
+  all, a pin that keeps a notification on the screen beside the toasts, and codes
+  (one-time passwords and similar) extracted by the regexes in Settings → Notifications.
+  A card swiped sideways by finger is dismissed.
 - **Hardware** — every sensor source with its current value, a history graph and a
   progress bar.
 - **Power** — shutdown, restart, logout.
@@ -106,78 +107,116 @@ Opened from their bar widget, rendered in the single popup below the bar.
 A click-through overlay above everything, one per monitor. It is transparent and passes
 input through except where a card is actually visible.
 
-- **Notification toasts** slide in from the right as notifications arrive. When several
-  queue up, a badge on the right screen edge shows how many are waiting; clicking it
-  opens the notification panel. While the notification panel is open only critical and
-  staying toasts show. They show on the screen with the focused workspace, or on a chosen
-  screen; when that screen has a fullscreen window they show anyway, not at all but the
-  critical ones (the notification in the panel only), or on another screen — a chosen one,
-  or any without a fullscreen window. The shell's own messages follow the same rules (Settings → Notifications). A finger swipe sideways dismisses a toast (past a third of its width, or flung);
-  its countdown pauses while it is being dragged.
+- **Notification toasts** slide in from the right as notifications arrive, under the bar,
+  in three stacks — critical, staying and ordinary — each queue's badge "+N" beside its
+  lowest toast counting what waits there (see [Notifications](#notifications)).
 - **Volume OSD** appears on volume or mute changes.
-- **Shell toasts** — a bottom pill for the shell's own messages (notifications sent with
-  category `x-qs-shell`), kept separate from application notifications.
+- **Shell toasts** — a pill at the bottom centre for the shell's own messages
+  (notifications sent with category `x-qs-shell`): its title for 2.5 s, one after another,
+  on the toasts' screen. They are kept apart from application notifications: never in the
+  panel, not held back by "Show toasts" off, not shown where a fullscreen window with
+  "Don't show" leaves no screen for toasts.
 
 ## Notifications
 
 The shell *is* the notification server (`org.freedesktop.Notifications`), with support
-for body markup, hyperlinks, images, action buttons, action icons and inline replies. An
-app's action buttons and the reply's Send are filled with the theme's accent, their labels
-in its "On accent" colour, and lighten under the pointer.
-Notifications stay in the panel until dismissed. A toast shows as long as its app asks (the
-spec's expire timeout): an app asking for 0 keeps its toast up until it is closed, one
-asking for 30 s gets 30 s, and one leaving it to the shell (most do) gets "Show each toast
-for". Settings → Notifications → "Apps choose how long", off, gives every toast that time.
-A critical notification is outlined in red and its toast stays too, and so does a resident
-one (its app keeps it until dismissed, such as a music player's controls) unless "Resident
-notification hide" is on. A toast that stays
-has no timer bar and is always taken away by its "×" or a swipe. The time is only the
-toast's — the entry stays in the panel; a toast's "×" or swipe dismisses the notification,
-its entry too. Toasts stack in three queues, top to bottom:
-critical, staying, ordinary, with a wider gap between two queues. Each shows at most its
-limit — one critical and one staying by default ("Critical toasts shown, at most", "Toasts
-that stay, at most"), the ordinary ones one at a time or the column — and the rest wait, counted on the
-queue's badge "+N" beside its lowest toast (the critical badge outlined in red). Ordinary
-toasts with the user's time count down one at a time, the oldest first; one with its app's
-own time counts by itself. A job whose toast stays and that ends while waiting moves to the
-ordinary queue; one that ends on screen counts down where it is. A critical or staying toast
-can be dragged by its title line (the grip at its top) and dropped anywhere on its screen: it
-stays there with an accent outline until its "×", and its place in the queue goes to the next
-one; a job's toast moved out counts down and goes when the job ends. Each notification in the
-panel has a pin that puts it on the panel's screen the same way, beside the toasts, with no
-countdown, until it is unpinned. Nothing of the toasts lands over the bar, at any edge.
-Moved toasts stay when the panel opens or toasts are switched off, hide under a fullscreen
-window with "Don't show" until it goes, and wait in their queue again when their screen goes
-("Move toasts by dragging", on by default). Arrival timestamps are recorded, and
-configured regex patterns extract codes from the summary and body so a verification code
-can be copied without opening the sending app.
+for body markup, hyperlinks, images, action buttons, action icons and inline replies.
+Arrival times are recorded, and the regex patterns in Settings → Notifications extract
+codes from the summary and body, so a verification code can be copied without opening the
+sending app. A notification stays in the panel until it is dismissed; a critical one is
+outlined in red, in its toast and in the panel. An app's action buttons and the reply's
+Send are filled with the theme's accent, their labels in its "On accent" colour, lighter
+under the pointer or a finger. Running an action takes the toast away — except on a
+resident notification (one its app keeps until dismissed, such as a music player's
+controls), which stays in the panel and keeps its toast on screen, as the spec asks.
+
+### Toasts
+
+How long a toast shows is the app's to say (the spec's expire timeout): an app asking for
+0 keeps its toast up until it is taken away, one asking for 30 s gets 30 s, and one leaving
+it to the shell (most do) gets "Show each toast for". With "Apps choose how long" off, every
+app's time, 0 included, gives way to that time. A toast stays, whatever the app asks or
+the setting says, when it is critical, and when it is resident unless "Resident
+notification hide" is on (then it counts down like any other). The time is only the
+toast's: the entry stays in the panel. The countdown waits while the pointer rests on the
+toast, while a reply is being written, and while a finger drags it.
+
+Toasts stack in three queues, top to bottom, with a wider gap between two queues:
+
+- **critical** — at most "Critical toasts shown, at most" (1–3, 1 by default);
+- **staying** — the toasts that stay until taken away, at most "Toasts that stay, at most"
+  (1–5, 1 by default);
+- **ordinary** — the toasts that count down: one at a time ("One at a time, the rest
+  counted") or a column of "Toasts in the column" (2–10).
+
+What does not fit waits in its queue, oldest first, and that queue's badge "+N" beside its
+lowest toast counts it (the critical badge outlined in red; a queue with nothing on screen
+has its badge below the stack). A click on a badge opens the notification panel on that
+screen, or closes it there. Queues never overtake each other. Ordinary toasts with the
+user's time count down one at a time, the oldest first; one with its app's own time counts
+by itself. A toast that stays has no timer bar. A job whose toast stays and that ends while
+waiting moves to the ordinary queue; one that ends on screen counts down where it is.
+
+A toast's "×", or a finger swipe sideways (past a third of its width, or flung), dismisses
+the notification: its entry leaves the panel too. For a job, "×" says so in its tooltip
+("Dismiss. The job goes on."): the job is not stopped.
+
+Toasts show on the screen with the focused workspace, or on a chosen one. When that screen
+has a fullscreen window they show anyway, show only the critical ones ("Don't show": the
+others go to the panel only), or show on another screen — a chosen one, or any without a
+fullscreen window. Nothing of the toasts lands over the bar, at any edge. With the panel
+open, the ordinary toasts leave — shown and waiting, the panel lists them — and new ones
+are not queued; critical and staying toasts stay and new ones still show, standing left of
+the panel where they would be level with it. "Show toasts" off drops what waits in every
+queue; toasts on screen end as they would. The lock screen and the screensaver pause
+nothing: toasts keep counting down and the queues keep moving under them.
+
+### Moving and pinning
+
+A critical or staying toast can be dragged by its title line (the grip at its top) and
+dropped anywhere on its screen, kept inside it and off the bar ("Move toasts by dragging",
+on by default; off, toasts moved out stay where they are and no new drag starts). Moved
+out, it has an accent outline (a critical one keeps the red), stays where it was put, and
+its queue's place goes to the next toast. Each entry in the panel has a pin that puts its
+notification on the panel's screen the same way, beside the toasts, with no countdown,
+until it is unpinned. A moved or pinned toast ends with its "×", its unpinning, its app
+closing it, or — a job's, once the job has ended — its countdown. It stays when the panel
+opens or toasts are switched off, hides under a fullscreen window with "Don't show" until
+that window goes, and waits in its queue again when its screen goes. Places are not kept
+over a restart of the shell.
+
+### Progress
 
 A notification that carries a progress value (the spec's `value` hint, 0–100) shows a bar
 under its text — in the toast, the panel, and on the screensaver and lock screen where
 they show a notification's text. An app updating the same notification (by its id) moves
 the bar in place: no new entry, no new toast, and the bell rings only for a changed
-title or text. While the job is moving (the value grew in the last 10 seconds) a wave of
-light passes through the bar's filled part; it stops when the value stands still or the
-job ends, and with reduced motion. A job that ended shows how beside its title — ✓ in the
-success colour when done, ✗ in the error colour when it failed, a muted ✗ when cancelled;
-its toast, counting down then, draws no progress bar, so the countdown is the only bar,
-while the panel, the screensaver and the lock screen keep the full coloured bar. Running an action on a notification marked resident (it stays after an
-action, by the spec) leaves it in the panel, and its toast on screen.
+title or text. While the job is moving (the value grew in the last 10 seconds) bands of
+light pass through the bar's filled part ("Progress wave" and "Progress wave: travel" in
+Settings → Appearance → Animations); they stop when the value stands still or the job ends, and with reduced
+motion. A job that ended shows how beside its title — ✓ in the success colour when done,
+✗ in the error colour when it failed, a muted ✗ when cancelled. Its toast, counting down
+then, draws no progress bar, so the countdown is the only bar; the panel, the screensaver
+and the lock screen keep the full coloured bar.
 
-`singletons/Notifier.qml` is the outbound side: the shell can send its own
-notifications, with actions and dismiss callbacks (no inline reply: notify-send cannot
-ask for one).
+Modules can show a long job (a transfer, a backup) this way, its bar moving as the job
+goes. Its toast either shows for "Show each toast for" and leaves the entry with its moving
+bar in the panel, or stays on screen while the job runs (in the staying queue) and counts
+down once it ends. When the job's status changes in a way worth seeing — it started,
+stalled, finished or failed — the module can bring the toast back once (not with toasts
+off, nor an ordinary toast while the panel is open). Its buttons ("Cancel") stay after a
+click. Dismissing it, in the panel or by its toast's "×", takes it away for good; the job
+goes on. Turning a module off takes its progress notifications away; one left from before
+a reload of the shell, whose sender is gone, is dismissed.
 
-Modules can show a long job (a transfer, a backup) as a notification with a progress bar
-that moves as the job goes. Its toast either shows for "Show each toast for" and leaves the
-entry with its moving bar in the panel, or stays on screen while the job runs (until taken
-away by its "×" or a swipe) and shows the end for the usual time. When the job's status
-changes in a way worth seeing — it started, stalled, finished or failed — the module can
-bring the toast back once (not with toasts off, nor an ordinary toast while the panel is
-open). Its buttons ("Cancel") stay after a click. Dismissing it in the panel or by its
-toast's "×" takes it away for good; the job goes on.
-Turning a module off takes its progress notifications away; one left from before a reload
-of the shell, whose sender is gone, is dismissed.
+### The shell's own notifications
+
+`singletons/Notifier.qml` is the outbound side: the shell sends its own notifications,
+with actions and dismiss callbacks (no inline reply: notify-send cannot ask for one), and
+they go through the same toasts as any app's. One with a progress bar (a module's job) is
+sent with `gdbus` and replaced in place by its id; a click on its button or its dismissal
+reaches the shell inside the process, from its own notification server. Short messages
+about the shell itself go to the pill at the bottom of the screen (see [HUD](#hud)).
 
 ## Dictation
 
@@ -441,7 +480,7 @@ Behaviour pages:
 | **Calendar** | enabling Google Calendar, the account connection, which calendars are enabled, debug |
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
-| **Notifications** | code-extraction regex patterns |
+| **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
 | **Lockscreen** | screensaver and lock timeouts, fade durations, notification visibility, screensaver commands |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |

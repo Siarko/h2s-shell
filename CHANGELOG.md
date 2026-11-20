@@ -420,36 +420,38 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
-- Toasts can be moved: a critical or staying toast dragged by its title line (the grip at its
-  top) can be dropped anywhere on its screen, where it stays with an accent outline until its
-  "×", and its place in the queue goes to the next one; a job's toast moved out counts down
-  and goes when the job ends. Every notification in the panel has a pin that puts it on
-  the panel's screen the same way, beside the toasts, without a countdown, until it is
-  unpinned. The panel opening and toasts
-  switched off leave moved toasts where they are; a fullscreen window with "Don't show"
-  hides them until it goes; their screen gone, they wait in their queue again. On by default
-  (Settings key `notifications.movableToasts`; off, no new drag starts).
-- Settings → Notifications has rows for the toast queues: "Critical toasts shown, at most"
-  (1–3), "Toasts that stay, at most" (1–5), "Move toasts by dragging" and "Resident
-  notification hide", with an info icon saying what a resident notification is.
-- Toasts now show as long as the app asks (an app asking for 0 stays until closed);
-  Settings → Notifications → Apps choose how long, off, keeps every toast at your time.
-  Toasts that stay and critical ones no longer hold the others back: each has its own queue
-  above the toasts that count down (see the toast queues above).
+- Toasts stack in three queues, top to bottom: critical, staying (until taken away) and
+  ordinary (they count down), each showing at most its own number and counting what waits
+  on its own "+N" badge beside its lowest toast (the critical badge outlined in red); a
+  badge opens the notification centre on its screen. Settings → Notifications: "Critical
+  toasts shown, at most" (1–3, one by default) and "Toasts that stay, at most" (1–5, one).
+- Toasts show as long as the app asks (an app asking for 0 stays until closed); "Apps
+  choose how long", off, gives every toast your time. Critical toasts stay until dismissed
+  or answered, as the notification spec asks, and are outlined in red, in the toast and in
+  the centre; the authentication agent's warnings are critical. A resident notification
+  (one its app keeps, such as a music player's controls) stays on screen too, unless
+  "Resident notification hide" is on (an info icon says what resident means); pressing one
+  of its buttons leaves its entry in the centre and its toast on screen.
+- Toasts can be moved: a critical or staying toast dragged by its title line (the grip at
+  its top) stays where it is dropped, with an accent outline, until its "×", and its place
+  in the queue goes to the next one. A pin on each notification in the centre keeps it on
+  the screen the same way, beside the toasts, until it is unpinned. Moved toasts stay when
+  the centre opens or toasts are switched off. "Move toasts by dragging", on by default.
 - Notifications show an app's progress: a bar under the text when the app sends one (the
   notification spec's `value` hint), moving as the app updates the same notification — in
   the toast, the notification panel, and on the screensaver and lock screen where they show
-  a notification's text. An action on a notification that asks to stay (resident) no
-  longer takes it out of the panel.
+  a notification's text. A finished job shows how it ended beside its title: a green ✓
+  when done, a red ✗ when it failed, a muted ✗ when cancelled; its toast, which then counts
+  down, shows the countdown as its only bar.
 - Modules can show a job's progress in a notification: its bar moves as the job goes, its
   toast can stay on screen while the job runs, and comes back when the job's status changes
   (started, stalled, done); turning a module off takes its progress notifications away.
 - Settings → Appearance → Controls: "Progress bars", their thickness and corner radius; the
   hardware popup's bars follow them.
-- A notification's progress bar shows a wave of light through its filled part while the
-  app's job is moving (its value grew in the last 10 seconds); it stops when the job stands
-  still or ends, and with reduced motion. Its speed is "Progress wave" in Settings →
-  Appearance → Animations.
+- A notification's progress bar shows bands of light passing through its filled part while
+  the app's job is moving (its value grew in the last 10 seconds); they stop when the job
+  stands still or ends, and with reduced motion. Their pace is "Progress wave" and
+  "Progress wave: travel" in Settings → Appearance → Animations.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the
   network popup), or saves the new password, as Save does (a saved network's card in
   Settings) — only when that button could be pressed and the network's row is open: never
@@ -586,10 +588,6 @@ The interface modules are written against (`qs.api`), versioned on its own
   otherwise puts the old ones back — what really changed, a manual profile's addresses
   too; the countdown carries on when the editor is left, and shows on the Wi-Fi and
   Ethernet pages as well.
-- Critical notifications' toasts stay until dismissed or answered, as the notification
-  spec asks — no countdown, no timer bar — and the toasts after them count down meanwhile.
-  Their cards, toast or in the panel, are outlined in the error colour.
-  The authentication agent's warnings are critical.
 - The shell can be the session's authentication agent (polkit): a themed prompt for an
   administrator's password when a program needs one — what asks, the account, PAM's
   messages, a wrong password asked again. Decided at the first start: off when another
@@ -764,30 +762,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   buttons: the accent, with the label in the theme's "On accent" colour (readable on a
   light accent too), lighter under the pointer or a finger. Send is dimmed while there is
   nothing to send.
-- A finished job's notification shows how it ended beside its title: a green ✓ when done,
-  a red ✗ when it failed, a muted ✗ when cancelled. Its toast, which then counts down, no
-  longer draws the full progress bar above the countdown: the countdown is the only bar.
-  The panel, and the screensaver and lock screen where they show a notification's text,
-  keep the full coloured bar beside the mark.
-- A moving progress bar's wave is calmer: several bands of light are on the bar at once, a
-  new one every 300 ms, each crossing the bar in 1.2 s (Settings → Appearance → Animations:
-  "Progress wave" and "Progress wave: travel"). The same in a notification's progress bar.
-- A critical notification's toast no longer holds the layout's place (in "One at a time" it
-  held back every later toast until dismissed): it stacks above the toasts that count down,
-  in both layouts, with the other toasts that stay.
-- Toasts stack in three queues, top to bottom: critical, staying (until taken away), and the
-  ordinary ones that count down, with a gap between them. Each queue shows at most its own
-  number — one critical and one staying toast by default (Settings keys
-  `notifications.criticalToastLimit`, 1–3, and `notifications.stayingToastLimit`, 1–5, which
-  replaces "Toasts that stay, at most", 3) — and counts what waits on its own badge "+N"
-  beside its lowest toast; the critical badge has the red outline. A resident notification's
-  toast stays (`notifications.residentHide` makes it count down); a job that ends while
-  waiting in the staying queue shows its result in the ordinary queue.
-- A toast's "×" (and its swipe) dismisses the notification: its entry leaves the panel too;
-  a job goes on. An action on a resident notification leaves its toast on screen. Opening
-  the panel hides only the ordinary toasts: critical and staying ones stay, and new ones of
-  those still show. "Show toasts" off drops what waits in every queue. A fullscreen window
-  on the toasts' screen with "Don't show" leaves the critical toasts on screen.
+- A toast's "×" (and its swipe) dismisses the notification: its entry leaves the centre
+  too; a job goes on. Opening the centre hides only the ordinary toasts: critical and
+  staying ones stay, beside it. A fullscreen window with "Don't show" on the toasts' screen
+  leaves the critical toasts on screen.
 - Settings → System → Network → Wi-Fi: the Wi-Fi switch is on the page's heading; the
   "Wi-Fi" row under it is gone.
 - Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand
@@ -887,12 +865,6 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
-- With the notification centre open, the toasts that stay (critical, staying) and their
-  badges were drawn over its cards: on the centre's screen they now stand left of it, and
-  slide back when it closes.
-- A queue's "+N" badge opened the centre on the other monitor, and with the centre open
-  moved it from monitor to monitor: it now opens the centre on its own screen, and closes it
-  there when open, as the bell does.
 - Toasts sat lower than meant under a top bar — by the bar's reserved space — and the shell's
   own message at the bottom touched the screen's edge: the toasts' window now covers the
   whole screen, and nothing it shows — toasts, a moved toast, the volume and the shell's
