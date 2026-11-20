@@ -373,6 +373,7 @@ PanelWindow {
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
     //   qs ipc call shelltest notificationState
+    //   qs ipc call shelltest toastBadges
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
     IpcHandler {
@@ -397,14 +398,25 @@ PanelWindow {
 
         // The notifications the server holds, in its order: each one's id, summary,
         // progress as its card shows it (NotificationRules.progress), and its toast —
-        // whether it is on screen and for how long, in ms (0: it stays; ToastRules.timing)
+        // whether it is on screen, where ("waiting", "shown", "moved" or "none") in which
+        // queue ("critical", "staying", "ordinary"), and for how long, in ms (0: it stays;
+        // ToastRules.timing)
         function notificationState(): string {
-            return JSON.stringify(Notifications.notifications.values.map(notification => ({
-                id: notification.id, summary: notification.summary, body: notification.body,
-                progress: NotificationRules.progress(notification.hints),
-                toast: { shown: Notifications.shownToasts.includes(notification.id),
-                         duration: Notifications.toastDurations[notification.id] ?? null }
-            })));
+            return JSON.stringify(Notifications.notifications.values.map(notification => {
+                const place = Notifications.toastPlace(notification.id);
+                return {
+                    id: notification.id, summary: notification.summary, body: notification.body,
+                    progress: NotificationRules.progress(notification.hints),
+                    toast: { shown: place.place === "shown" || place.place === "moved", place: place.place, queue: place.queue,
+                             duration: Notifications.toastDurations[notification.id] ?? null }
+                };
+            }));
+        }
+
+        // How many toasts wait in each queue, as the badges count them: { critical, staying,
+        // ordinary }
+        function toastBadges(): string {
+            return JSON.stringify(Notifications.toastBadges);
         }
 
         // A notification's action run as its card runs it (Notifications.invokeAction), and

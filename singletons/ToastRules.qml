@@ -85,47 +85,6 @@ Singleton {
         return timing(args).ms;
     }
 
-    // Room for toasts on screen. The layout's slots are for toasts that count down: 1 for
-    // "One at a time" (layout "queue"), the column's size (2–10) for "A column". Toasts that
-    // stay take none of them: they stack above, at most `maxStaying` (1–5); more wait in the
-    // queue. `staying`: how many that stay are on screen now (a toast whose time changed
-    // while shown may put it past the limit).
-    // → { counting, maxStaying, stayingRoom (how many more that stay may show), total (the
-    //     slots that may be in use at once) }
-    function slots(layout, columnSize, staying, maxStaying): var {
-        const clamp = (value, low, high, fallback) => {
-            const number = Math.round(Number(value));
-            return Number.isFinite(number) ? Math.min(high, Math.max(low, number)) : fallback;
-        };
-        const counting = layout === "column" ? clamp(columnSize, 2, 10, 3) : 1;
-        const limit = clamp(maxStaying, 1, 5, 3);
-        const shown = Math.max(0, Math.round(Number(staying)) || 0);
-        return { counting: counting, maxStaying: limit, stayingRoom: Math.max(0, limit - shown), total: counting + limit };
-    }
-
-    // Which queued toast a free slot takes: the oldest that has room — one that stays while
-    // fewer than the limit stay, any other while the layout's slots are not all taken by
-    // toasts that count down. `kinds`: the queue's kinds (timing().kind), oldest first;
-    // `countingShown`: the toasts on screen that do not stay; `room`: slots().
-    // → its index in the queue, or -1: none fits, they wait
-    function nextToast(kinds, countingShown, room): int {
-        const list = kinds ?? [];
-        for (let i = 0; i < list.length; i++) {
-            if (list[i] === "stays" ? room.stayingRoom > 0 : countingShown < room.counting)
-                return i;
-        }
-        return -1;
-    }
-
-    // The order of the toasts on screen, top to bottom: those that stay above the others,
-    // each group newest first. `shown`: ids oldest first; `staying`: the ids among them
-    // that stay.
-    function stackOrder(shown, staying): var {
-        const newestFirst = (shown ?? []).slice().reverse();
-        const stays = id => (staying ?? []).includes(id);
-        return newestFirst.filter(stays).concat(newestFirst.filter(id => !stays(id)));
-    }
-
     // ---- The three queues (notes/plans/notification-flow.md §8.2) ----
     // Toasts stack in three queues, top to bottom: critical, staying (they stay until taken
     // away), ordinary (they count down). Each shows up to its limit; the rest wait, oldest

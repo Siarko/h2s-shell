@@ -39,7 +39,7 @@ module_job_is() { [ "$(shell_ipc good progressState)" = "$1" ]; }
 check "good progress: a handle" test "$(shell_ipc good progress)" != none
 check_within 5 "the module's notification is on the private bus, its bar at 30" \
     job_is 'n is not None and n["progress"]["shown"] and n["progress"]["value"] == 0.3 and n["progress"]["state"] == "running"'
-check_within 5 "… its toast stays (whileRunning)" job_is 'n["toast"] == {"shown": True, "duration": 0}'
+check_within 5 "… its toast stays (whileRunning)" job_is '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
 check_within 5 "… the module's handle runs" module_job_is running
 id=$(shell_ipc shelltest notificationState | python3 -I -c '
 import json, sys

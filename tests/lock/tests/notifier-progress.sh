@@ -62,15 +62,17 @@ check_within 5 "shown: the handle has an id and runs" handle_is 'h["id"] > 0 and
 id=$(handle_field id)
 check "the summary and the body arrived exactly as sent" texts_are "$id"
 check "one entry, its bar at 0" entry_is "$id" 'n["progress"]["shown"] and n["progress"]["value"] == 0 and n["progress"]["state"] == "running"'
-check_within 5 "whileRunning: its toast is up and stays (no time)" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 0}'
+check_within 5 "whileRunning: its toast is up and stays (no time), in the staying queue" entry_is "$id" \
+    '(n["toast"]["shown"] and n["toast"]["duration"] == 0) and n["toast"]["queue"] == "staying"'
 
 usual=$(DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
     --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
     --method org.freedesktop.Notifications.Notify "Messages" 0 "" "Beside" "" '[]' '{}' "int32 -1" \
     | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p')
-check_within 5 "an ordinary toast beside it counts the user's 2 s" entry_is "$usual" 'n["toast"]["shown"] and n["toast"]["duration"] == 2000'
+check_within 5 "an ordinary toast beside it counts the user's 2 s, in the ordinary queue" entry_is "$usual" \
+    'n["toast"]["shown"] and n["toast"]["duration"] == 2000 and n["toast"]["queue"] == "ordinary"'
 check_within 6 "… and goes" entry_is "$usual" 'not n["toast"]["shown"]'
-check "the progress toast is still up, past the user's time" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 0}'
+check "the progress toast is still up, past the user's time" entry_is "$id" '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
 
 calls_before=$(handle_field calls)
 for value in 10 20 30 40 50 60 70 80 90 95; do
@@ -89,7 +91,8 @@ check "… and the entry stays (resident)" entry_is "$id" 'n is not None'
 
 progress update '{"state": "done", "progress": 100, "summary": "Sent"}' > /dev/null
 check_within 5 "done: the bar full, the summary changed" entry_is "$id" 'n["summary"] == "Sent" and n["progress"]["value"] == 1 and n["progress"]["state"] == "done"'
-check_within 5 "done: the toast takes the user's 2 s" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 2000}'
+check_within 5 "done: the toast takes the user's 2 s, where it is (the staying queue)" entry_is "$id" \
+    '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["toast"]["queue"] == "staying"'
 check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
 check "the entry stays in the centre" entry_is "$id" 'n is not None and n["progress"]["state"] == "done"'
 check "after done no update is taken" handle_is 'h["state"] == "done"'
@@ -99,13 +102,14 @@ done_id=$id
 progress send '{"summary": "Announced", "progress": 10}' > /dev/null
 check_within 5 "a brief handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
 id=$(handle_field id)
-check_within 5 "brief: its toast counts the user's 2 s" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 2000}'
+check_within 5 "brief: its toast counts the user's 2 s, in the ordinary queue (resident, but the shell's own)" entry_is "$id" \
+    '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["toast"]["queue"] == "ordinary"'
 check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 40}' > /dev/null
 check_within 5 "a plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.4'
 check "… and brings no toast back" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 50, "announce": true}' > /dev/null
-check_within 5 "an announced update brings the toast back" entry_is "$id" 'n["toast"] == {"shown": True, "duration": 2000} and n["progress"]["value"] == 0.5'
+check_within 5 "an announced update brings the toast back" entry_is "$id" '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["progress"]["value"] == 0.5'
 check_within 6 "… for the user's time, then it goes" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 60}' > /dev/null
 check_within 5 "a later plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.6'

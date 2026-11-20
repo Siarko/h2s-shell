@@ -755,6 +755,14 @@ The interface modules are written against (`qs.api`), versioned on its own
 - A critical notification's toast no longer holds the layout's place (in "One at a time" it
   held back every later toast until dismissed): it stacks above the toasts that count down,
   in both layouts, with the other toasts that stay.
+- Toasts stack in three queues, top to bottom: critical, staying (until taken away), and the
+  ordinary ones that count down, with a gap between them. Each queue shows at most its own
+  number — one critical and one staying toast by default (Settings keys
+  `notifications.criticalToastLimit`, 1–3, and `notifications.stayingToastLimit`, 1–5, which
+  replaces "Toasts that stay, at most", 3) — and counts what waits on its own badge "+N"
+  beside its lowest toast; the critical badge has the red outline. A resident notification's
+  toast stays (`notifications.residentHide` makes it count down); a job that ends while
+  waiting in the staying queue shows its result in the ordinary queue.
 - Settings → System → Network → Wi-Fi: the Wi-Fi switch is on the page's heading; the
   "Wi-Fi" row under it is gone.
 - Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand

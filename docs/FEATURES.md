@@ -126,13 +126,18 @@ Notifications stay in the panel until dismissed. A toast shows as long as its ap
 spec's expire timeout): an app asking for 0 keeps its toast up until it is closed, one
 asking for 30 s gets 30 s, and one leaving it to the shell (most do) gets "Show each toast
 for". Settings → Notifications → "Apps choose how long", off, gives every toast that time.
-A critical notification is outlined in red and its toast stays too. A toast that stays
+A critical notification is outlined in red and its toast stays too, and so does a resident
+one (its app keeps it until dismissed, such as a music player's controls) unless "Resident
+notification hide" is on. A toast that stays
 has no timer bar and is always taken away by its "×" or a swipe; the time is only the
-toast's — the entry stays in the panel. Toasts with the user's time count down one at a
-time, the oldest first; one with its app's own time counts by itself, and one that stays
-holds none up. Toasts that stay take none of the layout's places (one at a time, or the
-column): they stack above them, at most "Toasts that stay, at most" (3 by default); more
-wait in the queue, counted on the badge. Arrival timestamps are recorded, and
+toast's — the entry stays in the panel. Toasts stack in three queues, top to bottom:
+critical, staying, ordinary, with a wider gap between two queues. Each shows at most its
+limit — one critical and one staying by default ("Critical toasts at once", "Staying toasts
+at once"), the ordinary ones one at a time or the column — and the rest wait, counted on the
+queue's badge "+N" beside its lowest toast (the critical badge outlined in red). Ordinary
+toasts with the user's time count down one at a time, the oldest first; one with its app's
+own time counts by itself. A job whose toast stays and that ends while waiting moves to the
+ordinary queue; one that ends on screen counts down where it is. Arrival timestamps are recorded, and
 configured regex patterns extract codes from the summary and body so a verification code
 can be copied without opening the sending app.
 

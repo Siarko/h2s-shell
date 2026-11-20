@@ -26,13 +26,7 @@ PanelWindow {
         if (!_wantsKeyboard)
             _touchTyping = false;
     }
-    readonly property bool _wantsKeyboard: {
-        for (let i = 0; i < toastSlots.count; i++) {
-            if (toastSlots.itemAt(i)?.wantsKeyboard)
-                return true;
-        }
-        return false;
-    }
+    readonly property bool _wantsKeyboard: toastStack.wantsKeyboard
     WlrLayershell.namespace: "hud"
 
     anchors {
@@ -53,7 +47,6 @@ PanelWindow {
     // top half).
     mask: Region {
         Region { item: toastArea }
-        Region { item: queueBadge }
         Region { item: volumeOsd }
         Region { item: shellNotifItem }
         Region { item: startupWarnings.height > 0 ? startupWarnings : null }
@@ -113,75 +106,19 @@ PanelWindow {
     }
 
     // ---- Toasts ----
-    // The layout's slots, for toasts that count down: one shows notifications one at a
-    // time (the rest counted on the badge), more show a column of them; toasts that stay
-    // take none of them and stack above, up to their own limit (Notifications.toastRoom,
-    // ToastRules.slots). The slots always exist — the settings only enable them — so
-    // changing one never destroys a toast on screen. Each toast's place comes from
-    // ToastRules.stackOrder: those that stay on top, then the others newest first, so a
-    // new toast pushes the older ones down and the oldest, at the bottom, is the one
-    // counting down.
-    readonly property int _toastTop: Theme.bar.reservedSpace + Theme.osdToast.screenGap
-    readonly property int _toastSlots: Notifications.toastRoom.total
-    // The largest column (10) and the most toasts that stay (5)
-    readonly property int _maxToastSlots: 15
-    readonly property int _toastSpacing: Theme.osdToast.spacing
-
-    // The toast on screen showing notification `id`
-    function _slotFor(id) {
-        for (let i = 0; i < toastSlots.count; i++) {
-            const slot = toastSlots.itemAt(i);
-            if (slot && slot.currentNotif !== null && slot.currentNotif.id === id)
-                return slot;
-        }
-        return null;
-    }
-
-    // Distance from the top of the stack for the toast showing `id`: the heights of the
-    // toasts above it. null for a toast not in the list (leaving, or empty).
-    function _toastY(id) {
-        const order = ToastRules.stackOrder(Notifications.shownToasts, Notifications.stayingToasts);
-        const index = order.indexOf(id);
-        if (index < 0)
-            return null;
-        let y = 0;
-        for (let i = 0; i < index; i++)
-            y += (_slotFor(order[i])?.height ?? 0) + _toastSpacing;
-        return y;
-    }
-
-    Item {
+    // Three stacks under the bar at the right edge — critical, staying, ordinary — each
+    // queue's badge beside its lowest toast (ToastStack, Notifications' queues)
+    ToastStack {
         id: toastStack
-        y: hud._toastTop
+        y: Theme.bar.reservedSpace + Theme.osdToast.screenGap
         width: hud.implicitWidth
-        // Down to the lowest visible toast, for the input mask
-        height: {
-            let bottom = 0;
-            for (let i = 0; i < toastSlots.count; i++) {
-                const slot = toastSlots.itemAt(i);
-                if (slot && slot.visible)
-                    bottom = Math.max(bottom, slot.y + slot.height);
-            }
-            return bottom;
-        }
-
-        Repeater {
-            id: toastSlots
-            // A count, not an array: the slots never change
-            model: hud._maxToastSlots
-
-            NotificationHudItem {
-                required property int index
-                screenWidth: hud.implicitWidth
-                screenModelData: hud.modelData
-                slotEnabled: index < hud._toastSlots
-                stackY: hud._toastY(currentNotif?.id ?? -1)
-            }
-        }
+        height: contentHeight
+        screenWidth: hud.implicitWidth
+        screenModelData: hud.modelData
     }
 
     // Where the toasts are, for the input mask: the toasts' strip at the right edge, as
-    // tall as the visible ones
+    // tall as the visible toasts and badges
     Item {
         id: toastArea
         // The toast and, at most, the badge beside it
@@ -189,7 +126,7 @@ PanelWindow {
         x: hud.implicitWidth - _reach
         y: toastStack.y
         width: _reach
-        height: toastStack.height
+        height: toastStack.contentHeight
     }
 
     VolumeOsdItem {
@@ -203,42 +140,5 @@ PanelWindow {
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
         screenModelData: hud.modelData
-    }
-
-    // Badge showing how many notifications are waiting in the queue.
-    // Positioned flush to the right screen edge, just below the bar.
-    Rectangle {
-        id: queueBadge
-        x: visible ? hud.implicitWidth - width : hud.implicitWidth
-        y: hud._toastTop
-        width: Theme.osdToast.badgeWidth
-        // As tall as the first toast; a sensible size before there is one
-        height: Math.max(36, toastSlots.count > 0 ? (toastSlots.itemAt(0)?.height ?? 36) : 36)
-        // Shares the toast's rounding
-        topLeftRadius: Theme.osdToast.radius
-        bottomLeftRadius: Theme.osdToast.radius
-        color: Theme.surface
-        border.width: Theme.osdToast.borderWidth
-        border.color: Theme.osdToastBorder
-
-        // On the toasts' screen only
-        opacity: Notifications.hudQueue.length > 0 && Notifications.toastScreen === hud.modelData.name ? 1.0 : 0.0
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
-
-        Text {
-            anchors.centerIn: parent
-            text: Notifications.hudQueue.length
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBodyLarge
-            font.bold: true
-            color: Theme.textPrimary
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: Notifications.openPanelRequested()
-        }
     }
 }

@@ -266,10 +266,18 @@ Singleton {
         { key: "notifications.toastColumnSize", label: "Toasts in the column", group: "notifications",
           type: "number", min: 2, max: 10, default: 3,
           hint: "More wait in the queue, counted beside the column." },
-        // Toasts that stay until taken away (an app asking for it, critical ones) stack above
-        // the layout's slots, at most this many (ToastRules.slots)
-        { key: "notifications.maxStayingToasts", label: "Toasts that stay, at most", group: "notifications",
-          type: "number", min: 1, max: 5, default: 3 },
+        // Toasts stack in three queues (ToastRules.limits): critical ones on top, then those
+        // that stay until taken away, then the ordinary ones of the layout above. Each shows
+        // at most this many; more wait, counted beside the queue.
+        { key: "notifications.criticalToastLimit", label: "Critical toasts at once", group: "notifications",
+          type: "number", min: 1, max: 3, default: 1 },
+        { key: "notifications.stayingToastLimit", label: "Staying toasts at once", group: "notifications",
+          type: "number", min: 1, max: 5, default: 1 },
+        // A resident notification (the spec's hint: its app keeps it until dismissed, such as a
+        // music player's controls) stays on screen; on, it counts down like any other
+        // (ToastRules.timing)
+        { key: "notifications.residentHide", label: "Resident notification hide", group: "notifications",
+          type: "bool", default: false },
         // Where toasts show, and what a fullscreen window on that screen changes (ToastRules).
         // The shell's own messages follow them. Screens by port ("DP-2").
         { key: "notifications.toastScreen", label: "Show toasts on", group: "notifications",

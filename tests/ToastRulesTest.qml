@@ -106,39 +106,6 @@ TestCase {
         said({ expireTimeout: 0, followSender: false }, { ms: 5000, kind: "default" },
              "\"Apps choose how long\" off: an app's stay counts down");
 
-        // --- room on screen: the layout's slots for toasts that count down, those that stay above ---
-        for (const layout of ["queue", "column"]) {
-            for (const limit of [1, 3, 5]) {
-                for (let staying = 0; staying <= 6; staying++) {
-                    const room = ToastRules.slots(layout, 4, staying, limit);
-                    const counting = layout === "column" ? 4 : 1;
-                    assertEqual(JSON.stringify(room), JSON.stringify({ counting: counting, maxStaying: limit,
-                        stayingRoom: Math.max(0, limit - staying), total: counting + limit }),
-                        "slots: " + layout + ", " + staying + " staying, at most " + limit);
-                }
-            }
-        }
-        assertEqual(ToastRules.slots("column", 25, 0, 9).counting + " " + ToastRules.slots("column", 25, 0, 9).maxStaying, "10 5",
-                    "slots: the column at most 10, those that stay at most 5");
-        assertEqual(ToastRules.slots("column", undefined, 0, undefined).counting + " " + ToastRules.slots("queue", 5, 0, 0).maxStaying, "3 1",
-                    "slots: no column size: 3; a limit below 1: 1");
-
-        // --- which waiting toast a free slot takes ---
-        const one = ToastRules.slots("queue", 3, 0, 3);
-        assertEqual(ToastRules.nextToast(["default", "own"], 0, one), 0, "next: the oldest");
-        assertEqual(ToastRules.nextToast(["default"], 1, one), -1, "next: the layout's slot taken, the next waits");
-        assertEqual(ToastRules.nextToast(["own", "stays"], 1, one), 1, "next: the slot taken, one that stays still shows");
-        assertEqual(ToastRules.nextToast(["stays", "default"], 0, ToastRules.slots("queue", 3, 3, 3)), 1,
-                    "next: the limit of those that stay reached, it waits and a later one takes the slot");
-        assertEqual(ToastRules.nextToast(["stays"], 0, ToastRules.slots("queue", 3, 4, 3)), -1,
-                    "next: past the limit (a time changed while shown), none that stays");
-        assertEqual(ToastRules.nextToast([], 0, one), -1, "next: nothing waiting");
-
-        // --- the order on screen, top to bottom ---
-        assertEqual(JSON.stringify(ToastRules.stackOrder([1, 2, 3, 4], [2, 4])), "[4,2,3,1]",
-                    "stack: those that stay on top, each group newest first");
-        assertEqual(JSON.stringify(ToastRules.stackOrder([1, 2], [])), "[2,1]", "stack: none that stays, newest first");
-
         _queues();
     }
 

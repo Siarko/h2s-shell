@@ -3,39 +3,41 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.components
 
-// One notification toast slot. Manages its own queue consumption, slide-in/out
-// animations, and auto-dismiss timer. Hud stacks several of them: those that count down
-// newest on top, as many as the layout has slots ("notifications.toastLayout"), and the
-// toasts that stay above them; every free slot takes the next notification that has room
-// from the shared queue (Notifications.takeHudNotification), and Hud works out its
-// place (stackY).
+// One notification's toast, made by ToastStack for a toast on its screen and destroyed after
+// it slid out. Notifications holds the queues: whether the toast is on screen (`present`,
+// from the stack), whether it counts down (Notifications.countingToasts) and for how long
+// (Notifications.toastDurations). The toast only slides, counts and reports its end
+// (Notifications.toastGone) — it holds nothing another toast waits for.
 Item {
     id: root
 
     required property int screenWidth
     required property var screenModelData
-    // Slots past the column's current size stay idle: they finish what they show, but
-    // take nothing new
-    property bool slotEnabled: true
-    // Its place in the stack, from Hud; null once it is leaving, when it stays where it was
+    // The notification's id, -1 for a card shown alone (no queue behind it)
+    property int toastId: -1
+    // In its queue on screen; false once it leaves: it slides out and the stack lets it go
+    property bool present: false
+    // Where it rests, from the stack: left of the badges while any shows
+    property real restX: screenWidth - cardWidth - Theme.osdToast.screenGap
+    // Its place in the stack, from the stack; null once it is leaving, when it stays where
+    // it was
     property var stackY: null
     property real _lastY: 0
     onStackYChanged: if (stackY !== null) _lastY = stackY
     // Moves to a new place smoothly — except when it first appears, which is at its place
-    property bool _placing: false
+    property bool _placing: true
     y: _lastY
     Behavior on y {
         enabled: !root._placing
         NumberAnimation { duration: Theme.duration("move"); easing: Theme.curve("move") }
     }
 
+    // Slid out: the stack may destroy it
+    signal slidOut()
+
     property var currentNotif: null
-    // The id this slot put on the list of shown toasts, -1 while none: taken off by that,
-    // even when the notification object is gone by then
-    property int _shownId: -1
-    // Counts the toasts this slot showed, so one shown after another counts afresh
+    // Counts the times this toast came on screen and was announced, so each counts afresh
     property int _generation: 0
-    property bool _taking: false
     // A reply hovered or being written: Hud gives its window the keyboard
     readonly property bool wantsKeyboard: currentNotif !== null && notifCard.wantsKeyboard
     // Held: under a resting pointer, or with a reply being written — no countdown either way,
@@ -49,122 +51,80 @@ Item {
     }
     readonly property int cardWidth: Theme.osdToast.width
 
-    // Resting x: the gap from the screen edge, or, while the queue badge shows, the badge
-    // and a gap of 8 beside it, so the toast doesn't overlap it
-    readonly property int restX: screenWidth - cardWidth
-        - (Notifications.hudQueue.length > 0 ? Theme.osdToast.badgeWidth + 8 : Theme.osdToast.screenGap)
-
     // Start off-screen to the right; animations move it in and out
     x: screenWidth
     width: cardWidth
     height: notifCard.implicitHeight
     visible: currentNotif !== null || slideIn.running || slideOut.running
 
-    // Consume the next item from the shared queue and start the slide-in
-    function showNext() {
-        // Taking one changes the queue, which asks every free slot — this one too — to take
-        // one: this slot is busy with the first (Notifications counts it as shown already)
-        if (_taking)
-            return;
-        // Still holding a toast's place (its notification freed without a word): let it go
-        _leave();
-        if (Notifications.hudPanelOpen || !slotEnabled) {
-            currentNotif = null;
-            return;
-        }
-        _taking = true;
-        let notif = null;
-        try {
-            notif = Notifications.takeHudNotification();
-        } finally {
-            _taking = false;
-        }
-        if (!notif) {
-            currentNotif = null;
-            return;
-        }
-        _placing = true;
-        currentNotif = notif;
-        remaining = 1.0;
-        _shownId = notif.id;
-        _generation++;
+    Component.onCompleted: {
+        if (present)
+            _enter();
         Qt.callLater(() => root._placing = false);
+    }
+
+    onPresentChanged: {
+        if (present)
+            _enter();
+        else
+            _exit();
+    }
+
+    function _enter() {
+        // Its notification, read when it shows: the queues forget it once it left, and the
+        // card still shows it while it slides out
+        if (toastId >= 0)
+            currentNotif = Notifications.toastObject(toastId) ?? currentNotif;
+        slideOut.stop();
+        remaining = 1.0;
+        _generation++;
         slideIn.start();
     }
 
-    // Room on screen came (a toast left, changed its time, a setting): a free slot on the
-    // toasts' screen takes what waits
-    function _retry() {
-        if (currentNotif === null && !slideOut.running && Notifications.toastScreen === screenModelData.name)
-            showNext();
-    }
-
-    function dismiss() {
+    function _exit() {
         countdown.stop();
-        _leave();
+        slideIn.stop();
+        nudge.stop();
         slideOut.start();
     }
 
-    // Off the list of shown toasts as soon as it starts leaving, so the next one in line
-    // starts counting down at once
-    function _leave() {
-        if (_shownId < 0)
-            return;
-        const id = _shownId;
-        _shownId = -1;
-        Notifications.toastGone(id);
+    // Its end: out of its queue — the stack then takes it off screen (present false)
+    function dismiss() {
+        countdown.stop();
+        if (toastId >= 0)
+            Notifications.toastGone(toastId);
     }
 
-    // Left without a notification while shown: off the list too, or a toast waiting behind
-    // it would never count down
-    onCurrentNotifChanged: {
-        if (currentNotif === null)
-            _leave();
+    // Gone while still in its queue — its screen's HUD destroyed: out of the queue too, or the
+    // toasts after it would wait for it to count down, for ever
+    Component.onDestruction: {
+        if (toastId >= 0 && present)
+            Notifications.toastGone(toastId);
     }
 
-    // Its notification closed while shown (its sender closed it, or it was dismissed in the
-    // centre): Quickshell then frees the object, and a var holding it reads null with no
-    // change signal — so the toast goes now, or one waiting behind it would never count
-    Connections {
-        target: root.currentNotif?.closed !== undefined ? root.currentNotif : null
-        ignoreUnknownSignals: true
-
-        function onClosed() {
-            if (root._shownId >= 0)
-                root.dismiss();
-        }
+    onRestXChanged: {
+        if (present && !slideIn.running && !slideOut.running)
+            nudge.restart();
     }
 
-    // Gone without leaving — a reload rebuilding the HUD — it must still come off the list,
-    // or the toasts after it wait for it to count down, for ever
-    Component.onDestruction: _leave()
-
-    // How long it shows (Notifications.toastTiming, ToastRules.timing): the sender's time,
-    // the user's, or 0 — it stays until taken away ("×", a swipe), no countdown. Read again
-    // when the sender replaces the notification with another time.
-    readonly property var _timing: currentNotif !== null ? Notifications.toastTiming(currentNotif) : ({ ms: 0, kind: "stays" })
-    readonly property string _timingKey: _timing.kind + ":" + _timing.ms
-    on_TimingKeyChanged: {
-        if (_shownId >= 0)
-            Notifications.toastTimed(_shownId, _timing);
-    }
-    readonly property bool _staying: currentNotif !== null && _timing.kind === "stays"
-    // Whether this toast counts down now: one with the sender's time at once, one with the
-    // user's time when it is the oldest of those on screen; one that stays never
-    readonly property bool _counting: _shownId >= 0 && currentNotif !== null && !_staying
-        && (_timing.kind === "own" || Notifications.countingToast === _shownId)
-    // What it counts: a new toast, or a new time, counts from full
-    readonly property string _countKey: _counting ? _generation + ":" + _timing.ms : ""
+    // How long it shows (Notifications.toastDurations, ToastRules.timing): the sender's time,
+    // the user's, or 0 — it stays until taken away ("×", a swipe), no countdown
+    readonly property int _ms: toastId >= 0 ? (Notifications.toastDurations[toastId] ?? 0) : 0
+    readonly property bool _staying: toastId < 0 || (Notifications.toastKinds[toastId] ?? "stays") === "stays"
+    // Whether this toast counts down now (Notifications.countingToasts)
+    readonly property bool _counting: present && toastId >= 0 && Notifications.countingToasts.includes(toastId)
+    // What it counts: a new showing, an announce, or a new time counts from full
+    readonly property string _countKey: _counting ? _generation + ":" + _ms : ""
 
     on_CountKeyChanged: {
         if (_countKey === "") {
             countdown.stop();
             // Waiting its turn again, or staying: full; leaving, its bar stays as it was
-            if (_shownId >= 0)
+            if (present)
                 remaining = 1.0;
             return;
         }
-        countdown.duration = Math.max(1000, _timing.ms);
+        countdown.duration = Math.max(1000, _ms);
         countdown.restart();
         // A held toast does not count down either
         if (_held)
@@ -174,44 +134,11 @@ Item {
     Connections {
         target: Notifications
 
-        function onHudQueueChanged() {
-            // Only the toasts' screen shows them (Notifications.toastScreen)
-            if (Notifications.toastScreen !== root.screenModelData.name) return;
-            if (root.currentNotif !== null) {
-                // Toast already visible — nudge its x to account for badge appearing/disappearing
-                if (!slideIn.running && !slideOut.running) {
-                    nudge.restart();
-                }
-                return;
-            }
-            // Don't interrupt an ongoing slide-out
-            if (slideOut.running) return;
-            root.showNext();
-        }
-
-        // Toasts moved here (focus, a fullscreen window elsewhere): those waiting show
-        function onToastScreenChanged() {
-            if (Notifications.toastScreen === root.screenModelData.name && root.currentNotif === null && !slideOut.running)
-                root.showNext();
-        }
-
-        function onRoomForToasts() {
-            Qt.callLater(root._retry);
-        }
-
         // Announced again while on screen: counting, it counts its time from full (a new
         // count key); waiting its turn or staying, it is full already
         function onToastRestartRequested(id) {
-            if (id === root._shownId && root._shownId >= 0)
+            if (id === root.toastId && root.present)
                 root._generation++;
-        }
-
-        function onHudQueueCleared() {
-            countdown.stop();
-            if (root.currentNotif !== null) {
-                root._leave();
-                slideOut.start();
-            }
         }
     }
 
@@ -223,9 +150,7 @@ Item {
         to: root.restX
         duration: Theme.duration("enter")
         easing: Theme.curve("enter")
-        // The target is taken when the slide starts. A notification queued meanwhile
-        // brings the badge and moves restX, and the nudge is skipped while sliding — so
-        // the first toast of a burst stopped against the badge. Catch up afterwards.
+        // The target is taken when the slide starts; a badge coming meanwhile moves restX
         onFinished: if (root.x !== root.restX) nudge.restart()
     }
 
@@ -236,10 +161,13 @@ Item {
         to: root.screenWidth
         duration: Theme.duration("exit")
         easing: Theme.curve("exit")
-        onStopped: root.showNext()
+        onStopped: {
+            if (!root.present)
+                root.slidOut();
+        }
     }
 
-    // Nudge the resting toast when the badge appears/disappears mid-show.
+    // Nudge the resting toast when a badge appears/disappears mid-show.
     NumberAnimation {
         id: nudge
         target: root

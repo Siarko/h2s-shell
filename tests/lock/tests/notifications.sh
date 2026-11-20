@@ -8,7 +8,9 @@
 #
 # Then the toasts' display time, as each sender asks for it (the spec's expire timeout):
 # 0 stays, 2000 ms shows 2 s, -1 the user's time (5 s by default). Read from the shell's
-# state over the shelltest IPC: whether each toast is on screen, and for how long.
+# state over the shelltest IPC: whether each toast is on screen, and for how long. Then the
+# three queues: two critical ones — one shown, one waiting on the critical badge — beside
+# the staying toast and an ordinary one.
 
 stack_start --session-bus --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 3,
     "lockscreen.lockscreenEnabled": false}'
@@ -90,3 +92,40 @@ usual=$(notify_for "The usual" -1)
 check_within 5 "expire -1: its toast is up for the user's time, 5000 ms" toast_is "$usual" true 5000
 check_within 8 "… and gone after it" toast_is "$usual" false
 check "the one that stays is still up, past the user's time" toast_is "$staying" true 0
+
+# The three queues: critical toasts stay in their own queue, one at a time by default; a
+# second waits there, counted on the critical badge, while toasts of the other queues
+# still show beside it
+notify_critical() {
+    DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
+        --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.Notify "Power" 0 "" "$1" "" '[]' '{"urgency": <byte 2>}' "int32 -1" \
+        | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p'
+}
+
+# toast_at <id> <place> <queue>: where that notification's toast is
+toast_at() {
+    shell_ipc shelltest notificationState | python3 -I -c '
+import json, sys
+toast = next((n["toast"] for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
+sys.exit(0 if toast is not None and toast.get("place") == sys.argv[2] and toast.get("queue") == sys.argv[3] else 1)' "$@"
+}
+
+# badges_are <critical> <staying> <ordinary>: the waiting counts the badges show
+badges_are() {
+    shell_ipc shelltest toastBadges | python3 -I -c '
+import json, sys
+badges = json.load(sys.stdin)
+sys.exit(0 if [badges.get(queue) for queue in ("critical", "staying", "ordinary")] == [int(arg) for arg in sys.argv[1:4]] else 1)' "$@"
+}
+
+first_critical=$(notify_critical "Battery at 4 %")
+check_within 5 "urgency critical: its toast shows in the critical queue" toast_at "$first_critical" shown critical
+second_critical=$(notify_critical "Battery at 3 %")
+check_within 5 "a second critical one waits in the critical queue (one at a time)" toast_at "$second_critical" waiting critical
+check "… counted on the critical badge" badges_are 1 0 0
+check "the staying toast is still shown beside them" toast_at "$staying" shown staying
+beside=$(notify_for "Beside the critical ones" -1)
+check_within 5 "an ordinary toast shows beside them, in the ordinary queue" toast_at "$beside" shown ordinary
+check_within 8 "… and goes after its time" toast_at "$beside" none ""
+check "the critical one still waits, the first still shown" toast_at "$second_critical" waiting critical
