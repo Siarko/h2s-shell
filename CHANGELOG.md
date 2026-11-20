@@ -1,9 +1,14 @@
 # Changelog
 
 Notable changes to the shell, newest first. Versions follow semantic versioning:
-**major** for changes that need a config migration or change behaviour people rely on,
-**minor** for features, **patch** for fixes. The number lives in
-`singletons/Version.qml`; each release is tagged `v<number>` in git.
+**major** for changes to behaviour people rely on, **minor** for features, **patch** for
+fixes; a settings migration may ship in a minor release, never in a patch. The number lives
+in `singletons/Version.qml`; each release is tagged `v<number>` in git.
+
+The module API has its own number (`Api.version`, in each section's "Module API"): until the
+first release announced as open to module authors, its minor version may tighten or remove
+things; from then a removal comes only with a major, after being listed as deprecated for at
+least one release.
 
 Add an entry under **Unreleased** with each user-visible change; a release renames that
 section to the new version and date.

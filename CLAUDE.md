@@ -129,7 +129,10 @@ mockup the owner sees before any code (`notes/workflow.md`).
   "Modules" in `docs/ARCHITECTURE.md`.)
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for changes
   to behaviour people rely on, minor for features, patch for fixes; a settings migration
-  may ship in a minor release, never in a patch). With every
+  may ship in a minor release, never in a patch). The module API has its own number
+  (`Api.version`): until the first release announced as open to module authors, its minor
+  version may tighten or remove things; from then a removal comes only with a major, after
+  being listed as deprecated for at least one release. With every
   user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves
   them to a new section, bumps the number and tags `v<number>`. `tests/VersionTest.qml`
   checks the two agree.

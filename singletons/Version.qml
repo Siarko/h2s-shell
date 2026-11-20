@@ -5,9 +5,12 @@ import Quickshell.Io
 import QtQuick
 
 // The shell's version — the one place the number lives. Semantic versioning:
-//   MAJOR  a change that needs a config migration or changes behaviour people rely on
-//   MINOR  a new feature
+//   MAJOR  a change to behaviour people rely on
+//   MINOR  a new feature; a settings migration may ship here, never in a patch
 //   PATCH  fixes
+// The module API has its own number (Api.version): until the first release announced as
+// open to module authors, its minor version may tighten or remove things; from then a
+// removal comes only with a major, after being listed as deprecated for at least one release.
 // Every release gets a CHANGELOG.md section with this number and a git tag `v<number>`;
 // tests/VersionTest.qml checks the changelog agrees.
 Singleton {
