@@ -434,9 +434,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   notification hide", with an info icon saying what a resident notification is.
 - Toasts now show as long as the app asks (an app asking for 0 stays until closed);
   Settings → Notifications → Apps choose how long, off, keeps every toast at your time.
-  Toasts that stay — those, and critical ones — no longer hold the others back: they stack
-  above the toasts that count down, at most "Toasts that stay, at most" (3 by default), more
-  waiting in the queue.
+  Toasts that stay and critical ones no longer hold the others back: each has its own queue
+  above the toasts that count down (see the toast queues above).
 - Notifications show an app's progress: a bar under the text when the app sends one (the
   notification spec's `value` hint), moving as the app updates the same notification — in
   the toast, the notification panel, and on the screensaver and lock screen where they show

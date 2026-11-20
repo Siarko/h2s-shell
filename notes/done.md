@@ -2328,3 +2328,11 @@ interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
   bed `toast-modal`: clicks beside it reach the window below). `notifications.movableToasts` on
   by default. Reviewed twice (a dragged pinned toast vanishing, a refused drop off the mask —
   fixed); `tests/run-all.sh` passed on both machines.
+- **Settings rows; the HUD off the bar; pinned toast fixes (slice 5)** — on `master` 2026-11-20.
+  Settings → Notifications: "Critical toasts shown, at most", "Toasts that stay, at most", "Move
+  toasts by dragging", "Resident notification hide" (schema field `info`: an info icon with a
+  tip, tap-readable). The HUD overlay ignores exclusive zones and keeps everything clear of the
+  bar on any edge (`BarGeometry.reservedInsets`): toasts, badges, drops, pin spots, the volume
+  OSD, the shell pill (lock bed `toast-modal`, `hud-bar-bottom`). From the owner's live test: a
+  pinned toast has no countdown bar; a pin from the centre lands on the centre's screen.
+  Reviewed (the HUD over the bar fixed); `tests/run-all.sh` passed on both machines.
