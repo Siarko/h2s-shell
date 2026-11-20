@@ -540,3 +540,7 @@ three queues filled, a moved toast freeing its slot, `counting` across queues an
 4. A fullscreen window on the toasts' screen ("Don't show"): only critical toasts stay shown;
    everything else goes as today (modals included — they come back when the fullscreen window
    goes, as the plan's slice 4 decides).
+- **Resident stays (confirmed 2026-11-20 on a live case):** KDE Connect marks phone
+  notifications resident; they stay on screen until dismissed here or on the phone (a dismissal
+  on the phone closes them here). The owner keeps the rule; "Resident notification hide" is the
+  way out. Per-app properties come later as notification rules (tracker, "Later").
