@@ -23,7 +23,7 @@ import qs.api
 //                          (1.33) A progress notification (notify with `progress`) records
 //                          each show, update and close instead: { kind "show" | "update" |
 //                          "close", handle (its number, the same in all its records),
-//                          summary, body, progress, state, toast, expireTime (0: its toast
+//                          appName, summary, body, progress, state, toast, expireTime (0: its toast
 //                          stays, -1: the user's time), announce (how many so far), actions
 //                          (the labels), format }; its handle acts as if the server answered
 //                          at once

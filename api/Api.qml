@@ -232,7 +232,10 @@ import qs.singletons.network
 //                          dropped: a module's notification never looks like the shell's;
 //                          (1.33) so is every hint whose key starts with "x-qs-" (case and
 //                          white space in front ignored, judged as the server receives it).
-//                          → null, or, (1.33) with options.progress, a handle (below).
+//                          → null, or, (1.33) with options.progress on module.notify, a
+//                          handle (below); Api.notify refuses a progress (null, nothing
+//                          shown, a warning in the log): it has no module to close it when
+//                          the module goes.
 //                          (1.33) options.expireTime (ms; 0 stays until closed; absent: the
 //                          user's time) is followed by the shell's toasts, unless the user
 //                          turned that off (Settings → Notifications, "Apps choose how long")
@@ -240,8 +243,9 @@ import qs.singletons.network
 //                          panel until dismissed, as every notification's does.
 //                          Progress (1.33): options.progress, a number 0–100 (-1: a run of
 //                          unknown length; anything not a finite number: a plain
-//                          notification, null), makes a notification with a bar, and notify
-//                          returns its handle:
+//                          notification, null), on the module's own handle, makes a
+//                          notification with a bar, and module.notify returns its handle, a
+//                          frozen plain object of these four and nothing else:
 //                            open      bool: shown or being shown, not closed
 //                            state     "starting" (until the server answered) | "running" |
 //                                      "done" | "failed" | "cancelled" | "closed" | "unknown"
@@ -269,11 +273,12 @@ import qs.singletons.network
 //                          options.actions stay after a click (the notification is resident);
 //                          options.onDismissed runs once when the user closes it (the job
 //                          goes on; send no more updates: none would be shown). Its own
-//                          expireTime and x-qs- hints are not used. Not for critical urgency.
-//                          A module's own handle's notify keeps its open handles and closes
+//                          expireTime and x-qs- hints are not used; urgency "critical" is
+//                          taken as "normal"; it carries the module's name whatever
+//                          options.appName says (a plain notification takes options.appName,
+//                          as before). The module's handle keeps its open handles and closes
 //                          them when the module is turned off; while it is off a progress
-//                          notify shows nothing and returns null. Api.notify's handle
-//                          belongs to no module: nothing closes it but close(). Example:
+//                          notify shows nothing and returns null. Example:
 //                            let job = module.notify("Sending photo.jpg", { body: "to laptop",
 //                                format: "plain", progress: 0, toast: "whileRunning",
 //                                actions: [{ id: "cancel", label: "Cancel", onTriggered: cancelSend }],
@@ -1105,30 +1110,42 @@ Singleton {
     }
 
     function notify(summary, options) {
-        return _notification(Notifier.send(String(summary), ModuleRules.moduleNotifyOptions(options)));
-    }
-
-    // What a module gets of Notifier's progress handle (io/NotificationHandle.qml): its
-    // state, update() and close() — nothing of how it is sent (its id, its runner, its
-    // content). Made without a parent: the module's reference keeps it. null for null
-    function _notification(handle) {
-        return handle ? _notificationComponent.createObject(null, { _handle: handle }) : null;
-    }
-
-    property Component _notificationComponent: Component {
-        QtObject {
-            property var _handle: null
-            readonly property bool open: _handle?.open === true
-            readonly property string state: _handle ? _handle.state : "closed"
-
-            function update(changes) {
-                return _handle ? _handle.update(changes) === true : false;
+        const checked = ModuleRules.moduleNotifyOptions(options);
+        if (checked.progress !== undefined) {
+            // A progress notification needs an owner that closes it when the module goes:
+            // the module's own handle (module.notify)
+            if (!_progressRefusedLogged) {
+                _progressRefusedLogged = true;
+                console.warn("[Api] notify with a progress is module.notify's: refused, nothing shown");
             }
-
-            function close() {
-                _handle?.close();
-            }
+            return null;
         }
+        Notifier.send(String(summary), checked);
+        return null;
+    }
+
+    property bool _progressRefusedLogged: false
+
+    // What a module gets of Notifier's progress handle (io/NotificationHandle.qml): a frozen
+    // plain object whose getters and functions close over the handle — open, state,
+    // update(), close() and nothing else, so nothing of how it is sent (the handle, its
+    // runner, the server, the run token) is reachable from it. The getters read the
+    // handle's properties, so a binding on `job.state` follows it. null for null
+    function _notification(handle) {
+        if (!handle)
+            return null;
+        return Object.freeze({
+            get open() {
+                return handle.open === true;
+            },
+            get state() {
+                return String(handle.state);
+            },
+            update: changes => handle.update(changes) === true,
+            close: () => {
+                handle.close();
+            }
+        });
     }
 
     // A link, given to xdg-open as one argument (no shell). Only with a scheme, and only

@@ -75,6 +75,9 @@ TestCase {
     // A progress notification left open when the module is turned off (API 1.33)
     property var _leftOpen: null
     property var _leftOpenNumber: 0
+    // A progress handle watched by a binding
+    property var _watched: null
+    readonly property string _watchedState: _watched ? _watched.state : ""
     property var _busy: null
 
     // The store is read by a process (API 1.2): everything starts once it has answered
@@ -184,18 +187,38 @@ TestCase {
         let pressed = 0;
         let dismissed = 0;
         const job = module.notify("Copying a.txt", {
-            body: "to <backup>", format: "plain", progress: 0, toast: "whileRunning", expireTime: 3000,
+            body: "to <backup>", format: "plain", progress: 0, toast: "whileRunning", expireTime: 3000, appName: "H2S Shell", urgency: "critical",
             hints: { "x-qs-announce": "7" },
             actions: [{ id: "stop", label: "Stop", onTriggered: () => pressed++ }], onDismissed: () => dismissed++
         });
         assertEqual(module.notify("Plain", { body: "no progress" }), null, "notify without progress: null");
         assert(job !== null && job.open && job.state === "running", "notify with progress: a handle, open, running (the server answers at once in test mode)");
-        assertEqual(job.id + "|" + job.wanted + "|" + job.runner, "undefined|undefined|undefined", "… nothing of how it is sent");
+        // Nothing of how it is sent is reachable: its own properties are the four, none an
+        // object (no handle, runner, server or run token), and it cannot be changed
+        assertEqual(Object.getOwnPropertyNames(job).sort().join(","), "close,open,state,update", "the handle: open, state, update, close — nothing else");
+        const reached = [];
+        for (const key of Object.getOwnPropertyNames(job)) {
+            const value = job[key];
+            if (value !== null && typeof value === "object")
+                reached.push(key);
+        }
+        for (const key in job)
+            reached.push(Object.getOwnPropertyNames(job).includes(key) ? "" : key);
+        assertEqual(reached.filter(key => key !== "").join(","), "", "… none of them an object, nothing inherited enumerable");
+        assert(Object.isFrozen(job) && Object.getPrototypeOf(job) === Object.prototype, "… a frozen plain object");
+        assertEqual([job._handle, job.runner, job.server, job.wanted, job.id, job.callbacks].filter(value => value !== undefined).length, 0,
+                    "… no handle, runner, server, content, id or callbacks");
+        const kept = module._notifications;
+        assert(Object.isFrozen(kept) && Object.getOwnPropertyNames(kept).every(name => typeof kept[name] === "function"),
+               "… nor from the module's handle: its open handles are behind functions");
+        _watched = job;
         const jobNumber = lastShown();
         const shown = handleRecords(jobNumber)[0];
         assertEqual(JSON.stringify([shown?.kind, shown?.summary, shown?.body, shown?.progress, shown?.state, shown?.toast, shown?.expireTime, shown?.announce, shown?.actions]),
                     JSON.stringify(["show", "Copying a.txt", "to &lt;backup&gt;", 0, "running", "whileRunning", 0, 0, ["Stop"]]),
                     "its show recorded: plain texts, whileRunning (its toast stays: 0, the module's expireTime not used), its action, no announce (the module's x-qs-announce dropped)");
+        assertEqual(shown?.appName, "Good fixture", "… under the module's name, whatever options.appName says");
+        assertEqual(_watchedState, "running", "a binding on job.state reads it");
         assert(job.update({ progress: 40 }), "update(): taken");
         assert(job.update({ summary: "Copying b.txt", announce: true }), "update() with announce: taken");
         const updates = handleRecords(jobNumber).filter(entry => entry.kind === "update");
@@ -209,6 +232,7 @@ TestCase {
         assertEqual([job.state, job.open, ended?.state, ended?.expireTime, ended?.announce, ended?.actions.length].join("|"), "done|true|done|-1|2|0",
                     "done: still open, its toast takes the user's time (-1), announced");
         assert(!job.update({ progress: 50 }), "after an end state update() is refused");
+        assertEqual(_watchedState, "done", "… and follows it");
         job.close();
         assertEqual([job.state, job.open, dismissed, handleRecords(jobNumber).slice(-1)[0]?.kind].join("|"), "closed|false|0|close",
                     "close(): closed, recorded, no onDismissed");
@@ -225,10 +249,10 @@ TestCase {
         assert(!second.update({ progress: 10 }), "… a later update refused");
         assertEqual(ModuleTestKit.notified.length, afterDismissal, "… and nothing recorded");
         assert(ModuleTestKit.dismissNotification(9999999) !== "" && ModuleTestKit.pressNotificationAction("x", "stop") !== "", "the kit: no such notification, refused");
-        // Through Api.notify too (no module: not closed with one)
-        const fromApi = Api.notify("From the API", { progress: 5 });
-        assert(fromApi !== null && fromApi.open, "Api.notify with progress: a handle");
-        fromApi.close();
+        // Api.notify has no module to close it when the module goes: refused there
+        const recordsBefore = ModuleTestKit.notified.length;
+        assertEqual(Api.notify("From the API", { progress: 5 }), null, "Api.notify with a progress: refused (module.notify's), null");
+        assertEqual(ModuleTestKit.notified.length, recordsBefore, "… nothing shown");
         // Left open: closed when the module is turned off (below)
         _leftOpen = module.notify("Left open", { progress: 1 });
         _leftOpenNumber = lastShown();

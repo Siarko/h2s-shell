@@ -50,7 +50,7 @@ Singleton {
     // { summary, body, appName, urgency, actions (the labels), format ("plain" or ""),
     // command (notify-send's argv) } — summary and body as sent (plain: made plain); a
     // progress notification's show, update and close: { kind "show" | "update" | "close",
-    // handle (its number), summary, body, progress, state, toast, expireTime, announce,
+    // handle (its number), appName, summary, body, progress, state, toast, expireTime, announce,
     // actions (the labels), format }
     property var recorded: []
     readonly property int maxRecorded: 200
@@ -329,7 +329,7 @@ Singleton {
     // A handle's show, update or close in test mode, as recorded
     function _recordHandle(kind, number, content) {
         _record({
-            kind: kind, handle: number, summary: content.summary, body: content.body, progress: content.progress,
+            kind: kind, handle: number, appName: content.appName, summary: content.summary, body: content.body, progress: content.progress,
             state: content.state, toast: content.toast, expireTime: NotificationRules.expireTime(content.toast, content.state),
             announce: content.announce, actions: Object.freeze(content.actions.map(action => action.label)), format: content.format
         });

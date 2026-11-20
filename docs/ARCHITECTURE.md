@@ -953,12 +953,14 @@ any hint whose key starts with `x-qs-` (the shell's own sender's: the progress s
 announce count), judged as the server would receive the key
 (`ModuleRules.moduleNotifyOptions`).
 
-**Progress notifications** (API 1.33): `notify` with `options.progress` (0–100, -1 for a
-run of unknown length) returns a handle — `open`, `state`, `update({ summary, body,
+**Progress notifications** (API 1.33): `module.notify` with `options.progress` (0–100, -1
+for a run of unknown length; `Api.notify` refuses one, having no module to close it) returns
+a handle — `open`, `state`, `update({ summary, body,
 progress, actions, state, announce })`, `close()` — for any long job (a transfer, a backup,
-a sync), else `null`. It is a thin object over Notifier's own handle
+a sync), else `null`. It is a frozen plain object whose getters and functions close over
+Notifier's own handle, so nothing of how it is sent is reachable from it
 (`singletons/io/NotificationHandle.qml`, made by `Notifier.send`; what a module gets:
-`Api._notification`), which sends with one-shot `gdbus` calls to the notification server,
+`Api._notification`). That handle sends with one-shot `gdbus` calls to the notification server,
 replaces the notification in place by its id, coalesces updates, retries, and learns a
 click or a dismissal from the shell's own server in-process; every decision is in
 `NotificationRules`. `options.toast` chooses how long its toast shows: `"brief"` (the

@@ -2127,5 +2127,8 @@ TestCase {
             assertEqual(JSON.stringify(plain), "{\"body\":\"b\"}", "moduleNotifyOptions: progress " + String(bad) + " is not a number: dropped, and its toast");
         }
         assertEqual(JSON.stringify(rules.moduleNotifyOptions({ toast: "whileRunning" })), "{}", "… a toast without progress dropped");
+        assertEqual(rules.moduleNotifyOptions({ progress: 10, urgency: "critical" }).urgency, "normal", "moduleNotifyOptions: a progress notification is never critical");
+        assertEqual(rules.moduleNotifyOptions({ progress: 10, urgency: "low" }).urgency, "low", "… another urgency kept");
+        assertEqual(rules.moduleNotifyOptions({ urgency: "critical" }).urgency, "critical", "… a plain notification may be critical");
     }
 }

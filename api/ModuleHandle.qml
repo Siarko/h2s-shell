@@ -172,7 +172,7 @@ QtObject {
         if (!active) {
             _logWritten.clear();
             FileChooser.ownerGone(root);
-            _closeNotifications();
+            _notifications.closeAll();
         }
     }
 
@@ -303,31 +303,62 @@ QtObject {
     // A notification under the module's name (Notifier.send's options; API 1.12: format
     // "plain" for text from outside, Api.qml says what it does). (1.33) With a `progress`
     // (a number) → a handle (Api._notification: open, state, update(), close()), else null.
-    // The open handles are kept here and closed when the module is turned off; while it is
-    // off a progress notification is not shown (null)
+    // A progress notification carries the module's name whatever options.appName says (a
+    // plain one takes options.appName, as Notifier's options always allowed). The open
+    // handles are kept here and closed when the module is turned off; while it is off a
+    // progress notification is not shown (null)
     function notify(summary, options) {
         const checked = ModuleRules.moduleNotifyOptions(options);
-        if (checked.progress !== undefined && !active)
+        const ownName = name || moduleId;
+        if (checked.progress === undefined) {
+            Notifier.send(String(summary), Object.assign({ appName: ownName }, checked));
             return null;
-        const handle = Notifier.send(String(summary), Object.assign({ appName: name || moduleId }, checked));
+        }
+        if (!active)
+            return null;
+        const handle = Notifier.send(String(summary), Object.assign({}, checked, { appName: ownName }));
         if (!handle)
             return null;
-        if (handle.open) {
-            _notifications = _notifications.concat([handle]);
-            handle.finished.connect(() => root._notifications = root._notifications.filter(live => live !== handle));
-        }
+        _notifications.add(handle);
         return Api._notification(handle);
     }
 
-    // Its progress notifications not yet ended (Notifier's handles)
-    property var _notifications: []
+    // Its progress notifications not yet ended (Notifier's handles), behind functions: the
+    // handles themselves are reachable from no property of the module's handle
+    readonly property var _notifications: (() => {
+        const open = new Map();         // handle → its `finished` connection
+        const forget = handle => {
+            const connection = open.get(handle);
+            if (connection === undefined)
+                return;
+            open.delete(handle);
+            handle.finished.disconnect(connection);
+        };
+        return Object.freeze({
+            add: handle => {
+                if (!handle.open || open.has(handle))
+                    return;
+                const connection = () => forget(handle);
+                open.set(handle, connection);
+                handle.finished.connect(connection);
+            },
+            // Turned off: each closed
+            closeAll: () => {
+                for (const handle of Array.from(open.keys())) {
+                    forget(handle);
+                    handle.close();
+                }
+            },
+            // This handle going (the shell's end): let go of them, nothing sent
+            forgetAll: () => {
+                for (const handle of Array.from(open.keys()))
+                    forget(handle);
+            },
+            count: () => open.size
+        });
+    })()
 
-    function _closeNotifications() {
-        const open = _notifications;
-        _notifications = [];
-        for (const handle of open)
-            handle.close();
-    }
+    Component.onDestruction: _notifications.forgetAll()
 
     // (API 1.12) A line in the shell's log, "[<id>] <text>": level "debug" (written only
     // with the shell's debug setting on), "info", "warn" or "error" (another word: "info");
