@@ -2291,3 +2291,7 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   `TaildropStatusIcon` before the state in capsules and popup lines, `ProgressBar.wave` on
   moving bars. Reviewed (M10: an inbox file counted nowhere fixed); module suites and stand-ins
   on both machines, the module's lock bed on NixOS.
+- **Status pills, docs and a fix (M12)** — on the module's `main` 2026-11-20. A pill whose
+  parts drop to none folds for good (`pillExpanded`); docs and CHANGELOG for the pills, the nine
+  statuses, the wave and the notification. Module suites on both machines. Mockup on the real
+  code: `~/src/h2s-mockups/taildrop-status-pills-implemented/`.
