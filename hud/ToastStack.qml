@@ -43,7 +43,7 @@ Item {
     // fullscreen window hides all but the critical ones there
     readonly property bool _toastScreen: screenName !== "" && Notifications.criticalToastScreen === screenName
     // The toasts in their queues on this screen, top to bottom: [{ id, queue }]
-    readonly property var stack: ToastRules.onScreen(Notifications.toastState, false).stack
+    readonly property var stack: ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden).stack
         .filter(entry => Notifications.toastScreens[entry.id] === screenName)
     readonly property var _presentKeys: stack.map(entry => String(entry.id))
     // Toasts sliding out, by key: kept until they finish

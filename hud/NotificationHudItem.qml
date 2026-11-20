@@ -212,7 +212,7 @@ Item {
         // job goes on); the toast then leaves as its notification does
         onCloseClicked: {
             if (root.toastId >= 0)
-                Notifications.dismissToast(root.toastId);
+                Notifications.dismissToast(root.toastId, root.currentNotif);
         }
         // Also after an action on a notification that does not stay after it
         onDismissRequested: root.dismiss()

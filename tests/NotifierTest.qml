@@ -867,8 +867,38 @@ TestCase {
         assert(place(fullNew[0]) === "none" && place(fullNew[1]) === "none" && place(fullCritical[1]) === "shown critical"
                && place(fullNew[2]) === "waiting critical",
                "fullscreen: a new staying or ordinary one is not queued; critical ones still show in turn");
+        // A staying toast still in the state while hidden (as a modal will be): not in the stack
+        Notifications.toastState = { waiting: { critical: [], staying: [], ordinary: [] },
+                                     shown: { critical: Notifications.toastState.shown.critical, staying: [fullStaying.id], ordinary: [] },
+                                     moved: [] };
+        assertEqual(JSON.stringify(stack.stack.map(entry => entry.queue)), JSON.stringify(["critical"]),
+                    "fullscreen: the stack shows the critical toasts only");
+        Notifications.toastGone(fullStaying.id);
+        // "Another screen" with none free: no screen for critical toasts either — they go too
+        show(fullNew[2]);
+        settings({ "notifications.toastFullscreen": "elsewhere" });
+        assert(Notifications.criticalToastScreen === "" && place(fullCritical[1]) === "none" && place(fullNew[2]) === "none"
+               && Notifications.hudQueue.length === 0 && !stack.toastFor(fullCritical[1].id).present,
+               "fullscreen, then \"Another screen\" with none free: the critical toasts go, shown and waiting");
+        // Both screens gone at once (the only output went): everything goes, not only the
+        // ones that are not critical
+        settings({ "notifications.toastFullscreen": "hide" });
+        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        const goneCritical = [standIn(-1, critical), standIn(-1, critical)];
+        goneCritical.forEach(show);
+        Notifications.screensOverride = [];
+        assert(place(goneCritical[0]) === "none" && place(goneCritical[1]) === "none" && Notifications.hudQueue.length === 0,
+               "no screen at all: the critical toasts go too, shown and waiting");
         Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         settings({});
+        clear();
+
+        // --- a toast swiped away just as its time ran out: still the notification dismissed ---
+        const lateSwipe = standIn(-1);
+        const lateSwipeToast = show(lateSwipe);
+        Notifications.toastGone(lateSwipe.id);
+        cardOf(lateSwipeToast).closeClicked();
+        assert(lateSwipe.dismissCalls === 1 && !lateSwipe.tracked, "its time ran out during the swipe: the notification is dismissed all the same");
         clear();
 
         Notifications.screensOverride = null;

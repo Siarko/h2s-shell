@@ -11,30 +11,39 @@ Singleton {
     // The screen toasts show on — notifications' and the shell's messages — by port, or ""
     // for none: a fullscreen window there, by the settings (ToastRules). None: a toast is
     // not shown at all, the notification only in the panel; those waiting are dropped.
-    readonly property var _toastScreenSettings: ({
-        screen: Profiles.value("notifications.toastScreen") ?? "",
-        fullscreen: Profiles.value("notifications.toastFullscreen") ?? "show",
-        fullscreenScreen: Profiles.value("notifications.toastFullscreenScreen") ?? ""
-    })
-    readonly property string toastScreen: ToastRules.screenFor(_toastScreenSettings, screensOverride ?? Workspaces.screens)
+    function _toastScreenSettings() {
+        return {
+            screen: Profiles.value("notifications.toastScreen") ?? "",
+            fullscreen: Profiles.value("notifications.toastFullscreen") ?? "show",
+            fullscreenScreen: Profiles.value("notifications.toastFullscreenScreen") ?? ""
+        };
+    }
+    readonly property string toastScreen: ToastRules.screenFor(_toastScreenSettings(), screensOverride ?? Workspaces.screens)
     // The screen critical toasts show on: the same, except that "Don't show" over a
     // fullscreen window leaves them there
-    readonly property string criticalToastScreen: ToastRules.screenFor(_toastScreenSettings, screensOverride ?? Workspaces.screens, true)
+    readonly property string criticalToastScreen: ToastRules.screenFor(_toastScreenSettings(), screensOverride ?? Workspaces.screens, true)
     // A fullscreen window on the toasts' screen hides all but the critical toasts
-    readonly property bool _fullscreenHidden: toastScreen === "" && criticalToastScreen !== ""
+    readonly property bool fullscreenHidden: toastScreen === "" && criticalToastScreen !== ""
     // The screens a suite stands in for the compositor's (Workspaces.screens' shape), so a
     // toast has a screen to go to there; null: the compositor's
     property var screensOverride: null
-    onToastScreenChanged: {
-        if (toastScreen !== "")
-            return;
-        // Over a fullscreen window ("Don't show") only the critical toasts stay; with no
-        // screen at all everything goes
-        if (criticalToastScreen !== "")
-            _applyToasts(ToastRules.fullscreenHid(toastState).state);
-        else
+    onToastScreenChanged: _toastScreensChanged()
+    onCriticalToastScreenChanged: _toastScreensChanged()
+    // Either screen changed: both read afresh from the settings and the screens, not from
+    // the two bindings — one of them may not have been brought up to date yet. No screen
+    // for critical toasts (none for the others either): every toast goes; one for critical
+    // toasts only (a fullscreen window, "Don't show"): only they stay.
+    function _toastScreensChanged() {
+        const settings = _toastScreenSettings();
+        const screens = screensOverride ?? Workspaces.screens;
+        const ordinary = ToastRules.screenFor(settings, screens);
+        const critical = ToastRules.screenFor(settings, screens, true);
+        if (critical === "")
             clearHudQueue();
-        clearShellQueue();
+        else if (ordinary === "")
+            _applyToasts(ToastRules.fullscreenHid(toastState).state);
+        if (ordinary === "")
+            clearShellQueue();
     }
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
@@ -295,7 +304,7 @@ Singleton {
     // What the queues take now (ToastRules.accepts)
     function _toastConditions() {
         return { toastsOn: _toastsOn, hasScreen: criticalToastScreen !== "", centreOpen: hudPanelOpen,
-                 fullscreenHidden: _fullscreenHidden };
+                 fullscreenHidden: fullscreenHidden };
     }
 
     // The queues as `next` says, the maps kept to what is still in them
@@ -474,8 +483,10 @@ Singleton {
 
     // "×" on a toast (or its swipe): the notification is dismissed — its entry leaves the
     // centre, and a job's handle learns it as from the centre (onDismissed); the job goes on
-    function dismissToast(id) {
-        const notification = _toastObjects[id] ?? null;
+    // `notification`: the toast's own, for one whose place in the queues is gone already
+    // (its time ran out while it slid away)
+    function dismissToast(id, notification) {
+        notification = _toastObjects[id] ?? notification ?? null;
         if (_waitingAlive(notification))
             notification.dismiss();
         toastGone(id);
