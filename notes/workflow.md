@@ -110,6 +110,11 @@ Releases, tags and pushing stay the owner's.
    Hyprland: `hyprctl dispatch 'hl.dsp.exec_cmd("h2s-shell --restart")'`.
 5. Check: `h2s-shell ipc call modules list` (no safe mode, modules loaded, no errors) and
    `h2s-shell ipc call tailscale state`.
+6. A few minutes later, `tests/device/deploy-check.sh` from any core tree: the same two reads
+   checked against the real Tailscale daemon (module loaded without errors, daemon running
+   and read, no failed action), and no line of the running shell's log more than 5 times in
+   10 minutes (`--repeats`, `--minutes`). Read-only: no `tailscale` command, no IPC call
+   that changes anything. Status 1 names what failed; it goes to the tracker.
 
 When the shell runs from a checkout instead of an installed package, every `h2s-shell`
 command needs `H2S_SHELL_DIR=<live checkout>` in front, in step 4 too. After changing anything

@@ -1390,7 +1390,7 @@ if-chain.
 ## Testing
 
 `tests/run-all.sh` runs everything there is to run before a commit, the quick parts first:
-the runners' own self-tests, `install.sh` under stand-ins, the unit suites, a module's
+the runners' own self-tests and the deploy check's, `install.sh` under stand-ins, the unit suites, a module's
 suites on the fixture module, the checks of the system the machine runs, and the lock
 screen end to end — about four minutes, nearly all of it the lock test bed; `--quick`
 leaves that out. It stops at the first part that fails (`--keep-going` goes on) and ends
@@ -1398,7 +1398,11 @@ with a summary naming every part as PASS, FAIL or NOT RUN with the reason: a mis
 (named with its use), a system without a set, a part left out or not reached. A part that
 did not run is never counted as passed; the exit status is 0 only when every part ran and
 passed, 1 when one failed, 2 when one could not be set up. `tests/run-all-selftest.sh`
-checks that verdict against made-up parts. Each part runs alone too, and takes names for
+checks that verdict against made-up parts. The deploy check, `tests/device/deploy-check.sh`,
+is run by hand against a running shell after it was updated: it reads the module host's
+and the Tailscale module's state over the shell's IPC (reads only; no `tailscale` command)
+and fails on a line repeated in the shell's log; `tests/deploy-check-selftest.sh` checks it
+on canned answers. Each part runs alone too, and takes names for
 a part of it; the rest of this section describes them.
 
 The tests are in two kinds of set. The **general** set gives the same verdict on every

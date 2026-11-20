@@ -66,7 +66,7 @@ tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
-tests/*-selftest.sh        # the runners' own verdicts (run-unit, resolve, launcher, run-system, run-all)
+tests/*-selftest.sh        # self-tests: the runners' own verdicts, the deploy check's
 ```
 
 Never run `quickshell -p tests.qml` directly: five suites open a small window.

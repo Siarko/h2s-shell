@@ -20,6 +20,7 @@
 #                                                       one queue)
 #   tests/resolve-selftest.sh                           where the runners take their tools
 #   tests/launcher-selftest.sh                          the supervisor in scripts/launch.sh
+#   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
@@ -60,6 +61,7 @@ parts=(
     "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged"
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
+    "deploy check self-test|tests/deploy-check-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"

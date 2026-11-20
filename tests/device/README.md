@@ -11,6 +11,11 @@ input method and layer stacking never come into it.
 - `keyboard-popup.sh` — the calendar popup by touch: the keyboard shows for a text field
   and hides after, a tap on the keyboard keeps the popup, a tap outside closes it.
 
+- `deploy-check.sh` — not a touch test: after a deploy, a read-only check of the running
+  shell (the module host, the Tailscale module's state against the real daemon, lines
+  repeated in the shell's log); `--help` says what it checks. Its self-test is
+  `tests/deploy-check-selftest.sh`.
+
 They find what to tap through the shell's `shelltest` IPC (`Bar.qml`): a bar cell's
 place, a popup item's place by `objectName`, the popup's state.
 
