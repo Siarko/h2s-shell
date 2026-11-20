@@ -2208,3 +2208,8 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   their notifications read "Stopped"; an ended transfer's notification stays in the centre
   after a clear; handles close when the client goes. Reviewed, fixed; module suites and
   stand-ins on both machines against the final core, the module's lock bed on NixOS.
+- **Taildrop's page sends one way** — on the module's `main` 2026-11-20 (the owner's decision).
+  The page's device rows lost "Send file…"; the page sends only from its Taildrop section
+  (files, device pills, Send / Cancel); the popup keeps its per-device button.
+  `TaildropClient.chooseFor` became `chooseFiles`. Read by the lead; module suites on both
+  machines, the module's lock bed on NixOS.
