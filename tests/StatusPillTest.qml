@@ -134,6 +134,17 @@ TestCase {
         _wave();
         _pill();
         _card();
+        _hiddenWindow();
+    }
+
+    // Last: a hidden window stops the wave
+    function _hiddenWindow() {
+        const inner = waveBar.children[0];
+        waveBar.value = 0.5;
+        waveBar.wave = true;
+        assert(_until(() => inner.waving), "the wave runs in a shown window");
+        _window.visible = false;
+        assert(_until(() => !inner.waving), "the window hidden: no wave");
     }
 
     // --- the bar's wave ---
@@ -177,7 +188,7 @@ TestCase {
         assert(!inner.waving && !band.parent.visible && !animation.running && inner._wavePhase === 0, "reduced motion: no band, nothing running");
         inner.reduceMotion = false;
 
-        for (const [value, what] of [[1, "full"], [-1, "of unknown length"], [NaN, "not a number"]]) {
+        for (const [value, what] of [[1, "full"], [-1, "of unknown length"], [NaN, "not a number"], [0, "empty (nothing to run through)"]]) {
             waveBar.value = value;
             assert(!inner.waving && !band.parent.visible, "a bar " + what + ": no wave");
         }
@@ -262,6 +273,9 @@ TestCase {
         assert(_until(() => _find(mistyped.children[0], child => child.objectName === "part").length === rules.statusPartCap), "past " + rules.statusPartCap + " parts the rest dropped");
         mistyped.parts = Array.from({ length: 15 }, (_, i) => ({ text: String(i) }));
         assertEqual(ApiElements.warned.filter(key => key === "StatusPill.parts>" + rules.statusPartCap).length, 1, "… logged once");
+        mistyped.parts = [{ key: "1", text: "a" }, { key: "0", text: "b" }];
+        const keyed = Array.from(mistyped.children[0].data).find(child => "keyProp" in child);
+        assertEqual(JSON.stringify(keyed?.keys), JSON.stringify(["0", "1"]), "parts keyed by their place, whatever `key` they carry");
     }
 
     // --- the notification card's wave ---
@@ -273,7 +287,7 @@ TestCase {
         bar.reduceMotion = false;
         assert(!card.progressWave && !bar.wave, "a value seen once: not moving yet, no wave");
         notification.hints = { value: 50, "x-qs-progress-state": "running" };
-        assert(card.progressWave && bar.wave && bar.waving, "the value grew while running: the bar waves");
+        assert(card.progressWave && bar.wave && _until(() => bar.waving), "the value grew while running: the bar waves (" + card.progressWave + " " + bar.wave + " " + bar.width + ")");
         assert(_until(() => !bar.wave, 2000), "the value standing still past the window: the wave stops");
         notification.hints = { value: 50 };
         assert(!bar.wave, "the same value again: none");
@@ -281,8 +295,12 @@ TestCase {
         assert(bar.wave, "grown again: the wave again");
         notification.hints = { value: 60, "x-qs-progress-state": "done" };
         assert(!bar.wave, "done: no wave");
+        notification.hints = { value: 70 };
+        notification.hints = { value: 80 };
+        assert(bar.wave, "running again, grown: the wave");
         const next = _standIn.createObject(suite, { hints: { value: 30 } });
         card.notification = next;
+        assert(!bar.wave && card._grewAt === 0, "another notification in the card: its growth forgotten at once");
         next.hints = { value: 20 };
         assert(!bar.wave, "another notification in the card, its value going down: no wave");
         card.destroy();

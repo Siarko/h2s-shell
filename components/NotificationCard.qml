@@ -218,6 +218,11 @@ Rectangle {
     // A new notification in the card: no question about the last one's link, an empty
     // reply; and, after a swipe (a toast's next one), back in place
     onNotificationChanged: {
+        // Its first value is no growth, whichever of this and its hints comes first
+        _waveFor = notification;
+        _grewAt = 0;
+        _lastValue = NaN;
+        _waveEnd.stop();
         _pendingLink = "";
         _reply.clear();
         _swipeBack.stop();

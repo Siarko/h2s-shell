@@ -49,7 +49,7 @@ Rectangle {
     // objects: they are made anew with each change)
     KeyedModel {
         id: _keyed
-        values: (root.parts ?? []).map((part, index) => Object.assign({ key: String(index) }, part))
+        values: (root.parts ?? []).map((part, index) => Object.assign({}, part, { key: String(index) }))
         keyProp: "key"
     }
 

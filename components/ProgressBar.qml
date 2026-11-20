@@ -27,7 +27,9 @@ Item {
     // The sliding piece's share of the track while the length is unknown
     readonly property real _pieceShare: 0.3
     property real _slide: 0.5
+    // Only where it is seen: shown, in a shown window, with something filled to run through
     readonly property bool waving: ApiElementRules.progressWaves(wave, value, reduceMotion) && visible
+                                   && (Window.window?.visible ?? false) && width * _done > 0
     // 0 → 1 as the band crosses the fill
     property real _wavePhase: 0
 
@@ -53,7 +55,8 @@ Item {
             NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") }
         }
 
-        // The wave: a band of light, clipped to the fill, fading as it goes
+        // The wave: a band of light, clipped to the fill, fading as it goes. Drawn once; a
+        // frame only moves it and changes its opacity
         Item {
             id: _waveClip
             anchors.fill: parent
@@ -67,10 +70,11 @@ Item {
                 x: -2 * _waveClip.halfWidth + (_waveClip.width + 2 * _waveClip.halfWidth) * root._wavePhase
                 width: 2 * _waveClip.halfWidth
                 height: parent.height
+                opacity: 1 - 0.6 * root._wavePhase
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: Qt.alpha(_waveClip.light, 0) }
-                    GradientStop { position: 0.5; color: Qt.alpha(_waveClip.light, 0.95 * (1 - 0.6 * root._wavePhase)) }
+                    GradientStop { position: 0.5; color: Qt.alpha(_waveClip.light, 0.95) }
                     GradientStop { position: 1.0; color: Qt.alpha(_waveClip.light, 0) }
                 }
             }
