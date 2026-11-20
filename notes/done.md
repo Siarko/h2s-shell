@@ -2186,3 +2186,16 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   toast's time, or sends a toast no longer shown or queued back through the normal queue once;
   toasts off, no toast screen, the centre open → nothing. `Notifications.screensOverride` (null;
   for suites). Reviewed (nothing medium or higher); `tests/run-all.sh` passed on both machines.
+- **`notify` returns the handle (N3, module API 1.33)** — on `master` 2026-11-20.
+  `module.notify(summary, { progress, toast: "brief" | "whileRunning", actions, onDismissed })`
+  returns a frozen plain object (`open`, `state`, `update({…, announce})`, `close()`) closing over
+  the shell's handle — nothing on it leads to the handle, its runner, the server or the run
+  token; `Api.notify` refuses `progress` (no owner to close it). Notifier keeps each module's
+  open handles (`own`, `closeOwned`, `forgetOwned`), closed when the module is turned off. A
+  module's notifications lose every `x-qs-` hint key (normalised, any case); a progress one is
+  never critical (urgency hints dropped, the shell's own urgency byte) and always carries the
+  module's name. `ModuleTestKit.dismissNotification` / `pressNotificationAction`; the good
+  fixture's `progress` IPC; lock-bed scenario `modules-notify` (seam
+  `H2S_SHELL_TEST_MODULE_NOTIFY`). Reviewed twice (a high: the raw handle reachable through
+  `_handle`), fixed; `tests/run-all.sh` passed on both machines (`AnchorsTest` failed once in a
+  NixOS run, passed alone three times and in the rerun).
