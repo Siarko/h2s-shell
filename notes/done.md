@@ -2257,3 +2257,11 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   what came meanwhile once (Save) and does not auto-save it. Soft only (no daemon setting, the
   owner's answer). Reviewed (queued sends after off and a silent save on re-enable fixed);
   module suites and stand-ins on both machines, the module's lock bed on NixOS.
+- **"Save in…" (M8)** — on the module's `main` 2026-11-20. While auto-save or Taildrop is off,
+  every place offering to save received files (arrival and re-enable notifications, the popup,
+  the side panel) offers "Save" and "Save in…" (`saveOffers`): a folder chooser, then the files
+  waiting when pressed are saved there for that one save through the same per-file script and
+  folder checks; the settings folder unchanged. A cancel saves nothing; "blocked: locked" says
+  so; late answers (account change, stop) do nothing; a notification's "Save in…" acts as
+  offered (`saveInOffer`); refused up front when the list is not read. Reviewed, fixed; module
+  suites and stand-ins on both machines, the module's lock bed on NixOS.
