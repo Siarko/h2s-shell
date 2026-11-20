@@ -752,6 +752,7 @@ TestCase {
         assertEqual(JSON.stringify(_names(sidePanel)), JSON.stringify(pinned.SidePanel), "SidePanel's public properties and signals are the pinned ones");
         assertEqual(JSON.stringify([sidePanel.open, sidePanel.size, sidePanel.title, sidePanel.content, sidePanel.width, sidePanel.height, sidePanel.visible]),
                     JSON.stringify([false, "m", "", null, 0, 0, false]), "… its defaults: closed, size m, no title, no content, taking no room");
+        assertEqual(sidePanel.data.length + " " + sidePanel.resources.length, "0 0", "… nothing of the frame reachable through it: no objects inside");
         sidePanel.destroy();
 
         // --- beside qs.components, which has a SmallButton too ---

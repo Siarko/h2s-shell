@@ -24,8 +24,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   once), `closed(reason)` — `"close"` (its Close button), `"outside"` (a click on the dimmed
   page), `"escape"` (Escape closes a dropdown's list open inside it first), `"replaced"`
   (another SidePanel opened), `"page"` (the page changed, the window closed, the module
-  went away), `"lock"` (the session locked); the owner setting `open` false closes it
-  without a reason. Its one child is its content, built when it opens, destroyed once it
+  went away; run while the page is torn down, other items of it may be gone), `"lock"`
+  (the session locked); the owner setting `open` false closes it without a reason. Its one child is its content, built when it opens, destroyed once it
   has closed, laid out at the panel's inner width and scrolled below a fixed title line.
   One is open per page; outside a module's settings page, or while the session is locked,
   it does not open (`open` goes back to false, logged once); it takes no room where it is

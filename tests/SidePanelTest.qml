@@ -137,6 +137,19 @@ TestCase {
 
     readonly property Component _frameComp: Component { ModulePageFrame {} }
 
+    // A frame and a page with a panel open from the start, built in one pass
+    readonly property Component _openFromStart: Component {
+        ModulePageFrame {
+            ColumnLayout {
+                Public.SidePanel {
+                    open: true
+                    title: "From the start"
+                    Text { objectName: "startContent"; text: "Here" }
+                }
+            }
+        }
+    }
+
     function _drawer() {
         return _frame.sidePanelHost.drawer;
     }
@@ -144,7 +157,7 @@ TestCase {
     function _settled() {
         const drawer = _drawer();
         const panel = drawer.panel;
-        return drawer.open ? Math.abs(panel.x - (drawer.width - panel.width)) < 0.5 : !panel.visible;
+        return drawer.open ? drawer._shift === 1 && panel.x === drawer.width - panel.width : !panel.visible;
     }
 
     function _lastReason() {
@@ -345,6 +358,38 @@ TestCase {
         assert(_until(() => _lastReason() === "first:page"), "its page destroyed: closed(\"page\")");
         assert(_until(() => !_drawer().open && _drawer().contentItem === null && destroyed === builtThen), "… the panel closed, its content gone at once");
         _frame.destroy();
+
+        // --- the area changing size moves the panel, never slides it ---
+        _makeFrame();
+        const resized = _drawer();
+        assert(_until(_settled), "a new frame, the panel closed");
+        _frame.width = 500;
+        driver.wait(20);
+        _frame.width = 600;
+        let shownWhileClosed = false;
+        for (let i = 0; i < 30; i++) {
+            shownWhileClosed = shownWhileClosed || resized.panel.visible;
+            driver.wait(10);
+        }
+        assertEqual(shownWhileClosed, false, "the area widened while closed: nothing of the panel shows");
+        assert(_openFirst(), "opened");
+        _frame.width = 550;
+        assertEqual(resized.panel.x, resized.width - resized.panel.width, "the area narrowed while open: the panel at its edge at once");
+
+        // --- a page destroyed while its closed panel still slides out ---
+        driver.mouseClick(Array.from(resized.panel.children).find(child => child.toString().startsWith("QQuickRowLayout")).children[1], 5, 5);
+        assertEqual(_page.first.open, false, "Close");
+        const sliding = resized.panel.visible && resized.contentItem !== null;
+        const builtSliding = built;
+        _page.destroy();
+        assert(_until(() => resized.contentItem === null && destroyed === builtSliding), "its page destroyed while it slid out" + (sliding ? "" : " (it had slid out)") + ": the content gone at once");
+        assert(_until(() => !resized.panel.visible), "… the panel out of sight");
+        _frame.destroy();
+
+        // --- open from the start, built with its frame ---
+        const started = _openFromStart.createObject(area, { width: 600, height: 400 });
+        assert(_until(() => _find(started.sidePanelHost.drawer.contentItem, "startContent") !== null), "a panel open in a page built with its frame: it opens");
+        started.destroy();
 
         // --- headings with controls ---
         headings.visible = true;

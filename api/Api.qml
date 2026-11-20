@@ -573,7 +573,9 @@ import qs.singletons.network
 //                          next), "replaced" (another SidePanel opened), "page" (the page
 //                          changed, the window closed, the module went away), "lock" (the
 //                          session locked). The owner setting open false closes it without
-//                          a reason. Its one child is its content (`content`, a Component):
+//                          a reason. closed("page") for the page or the module going runs
+//                          while the page is torn down: other items of the page may already
+//                          be gone, so its handler sets only the module's own state. Its one child is its content (`content`, a Component):
 //                          built when it opens, destroyed when it has closed, laid out at
 //                          the panel's inner width; the panel scrolls it below a fixed
 //                          title line — the content must not scroll itself. One open per

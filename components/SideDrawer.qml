@@ -112,14 +112,18 @@ Item {
         onActivated: root._escape()
     }
 
+    // How far the panel is in, 0 (out of sight) to 1: only opening and closing move it, so the
+    // area changing size moves the panel with its edge at once, never slides it
+    property real _shift: open ? 1 : 0
+    Behavior on _shift { NumberAnimation { duration: Theme.duration("slide"); easing: Theme.curve("slide") } }
+    on_ShiftChanged: if (_shift <= 0 && !open) _shown = null
+
     FocusScope {
         id: _panel
         width: root.panelWidth
         height: root.height
-        x: root.open ? root.width - width : root.width
-        visible: x < root.width
-        onVisibleChanged: if (!visible && !root.open) root._shown = null
-        Behavior on x { NumberAnimation { duration: Theme.duration("slide"); easing: Theme.curve("slide") } }
+        x: root.width - width * root._shift
+        visible: root._shift > 0
 
         Rectangle {
             anchors.fill: parent

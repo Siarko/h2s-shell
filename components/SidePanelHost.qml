@@ -6,8 +6,8 @@ import qs.singletons
 // a time: another opening closes the first ("replaced"). It closes the open one when the
 // session locks ("lock"), when its window hides or the frame goes ("page"), and when the
 // user closes it (Close, a click beside it, Escape). The panel open is told why with its
-// closer, handed over with it; a panel destroyed while open (its page or module gone) is let go with
-// `release`, its content taken away at once.
+// closer, handed over with it; a panel destroyed (its page or module gone) is let go with
+// `release`, its content taken away at once, even while it slides out.
 Item {
     id: root
 
@@ -59,13 +59,17 @@ Item {
         current = null;
     }
 
-    // `panel` is being destroyed: closed now, nothing of its content kept
+    // `panel` is being destroyed: closed now, nothing of its content kept — also when it is
+    // closed already and its content is still sliding out
     function release(panel) {
-        if (current !== panel)
+        if (current !== panel && _shown !== panel)
             return;
         _drawer.dropContent();
-        _closer = null;
-        current = null;
+        if (current === panel) {
+            _closer = null;
+            current = null;
+        }
+        _shown = null;
     }
 
     // The panel shown last, kept while it slides out (null once destroyed)
