@@ -60,6 +60,11 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 - **The public settings row and expanding row** (F3): value right-aligned, at most 220 px;
   no hover on the opening line; content not indented.
 
+**To decide**
+
+- **Revised plans' questions** (2026-11-21): [plans/documentation.md](plans/documentation.md)
+  ends with 4, [plans/architecture-cleanup.md](plans/architecture-cleanup.md) with 2.
+
 **To decide: choices made by agents, for the owner to glance at**
 
 - **"Share this computer's settings"** (M6; the rename is the owner's, the words are the
