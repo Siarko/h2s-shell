@@ -428,6 +428,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   switched off leave moved toasts where they are; a fullscreen window with "Don't show"
   hides them until it goes; their screen gone, they wait in their queue again. On by default
   (Settings key `notifications.movableToasts`; off, no new drag starts).
+- Settings → Notifications has rows for the toast queues: "Critical toasts shown, at most"
+  (1–3), "Toasts that stay, at most" (1–5), "Move toasts by dragging" and "Resident
+  notification hide", with an info icon saying what a resident notification is.
 - Toasts now show as long as the app asks (an app asking for 0 stays until closed);
   Settings → Notifications → Apps choose how long, off, keeps every toast at your time.
   Toasts that stay — those, and critical ones — no longer hold the others back: they stack
@@ -875,6 +878,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Toasts sat lower than meant under a top bar — by the bar's reserved space — and the shell's
+  own message at the bottom touched the screen's edge: the toasts' window now covers the
+  whole screen and places them below the bar.
 - The network popup's Connect is not available while the password typed is too short for
   the network (WPA: 8 to 63 characters), and says so, as connecting to a hidden network does.
 - A network's card in Settings is no longer highlighted while the pointer rests in a gap

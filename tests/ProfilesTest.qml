@@ -13,7 +13,11 @@ TestCase {
             // Options worked out at runtime (optionsFrom, the icon themes) have no default to check
             if (entry.type === "enum" && entry.options)
                 assert(entry.options.some(option => option.value === entry.default), entry.key + " default is one of its options");
+            // An info icon with nothing to say would be an empty tooltip
+            if ("info" in entry)
+                assert(typeof entry.info === "string" && entry.info.trim() !== "", entry.key + " info is a text");
         }
+        assert(SettingsSchema.entries.some(entry => entry.info !== undefined), "an entry has an info text (the resident hide)");
 
         // --- the system profile is the shell's behaviour before profiles ---
         // Temperatures were 5 s (CPU) and 2 s (GPU); one rate since profiles, at 2 s.

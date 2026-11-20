@@ -21,6 +21,14 @@ Singleton {
         return edge === "left" || edge === "right";
     }
 
+    // The bar's reserved space at each screen edge, for a window over the whole screen that
+    // keeps its content clear of the bar: { top, bottom, left, right }, 0 but at the bar's edge
+    function reservedInsets(edge, reservedSpace) {
+        const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+        insets[root.edges.includes(edge) ? edge : "top"] = reservedSpace ?? 0;
+        return insets;
+    }
+
     // A corner token (percent of half the bar's thickness) in pixels
     function radius(percent, barHeight) {
         return (percent ?? 0) / 100 * ((barHeight ?? 0) / 2);

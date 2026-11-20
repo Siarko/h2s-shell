@@ -405,13 +405,17 @@ Singleton {
     // A modal's timing changed: `queue` is the one it belongs to now (critical, staying,
     // ordinary — where it waits again if its screen goes), `kind` its timing kind. One that
     // now stays is kept by its kind, no longer by its pin — so when it stops staying (a job
-    // ended) it counts down and goes. Not a modal: nothing.
+    // ended) it counts down and goes. A `queue` that is none of the three (left out): the one
+    // its kind gives (queueFor) — a critical one stays critical, as that is not its timing.
+    // Not a modal: nothing.
     function modalRetimed(state, id, kind, queue): var {
         const entry = (state?.moved ?? []).find(candidate => candidate.id === id);
         if (!entry)
             return state;
+        const target = queues.includes(queue) ? queue
+            : entry.queue === "critical" ? "critical" : queueFor({ timingKind: kind });
         const unkeep = entry.keep === true && kind === "stays";
-        const requeued = queues.includes(queue) && queue !== entry.queue;
+        const requeued = target !== entry.queue;
         if (!unkeep && !requeued)
             return state;
         const next = _copy(state);
@@ -419,7 +423,7 @@ Singleton {
         if (unkeep)
             delete copy.keep;
         if (requeued)
-            copy.queue = queue;
+            copy.queue = target;
         return next;
     }
 

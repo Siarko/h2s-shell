@@ -86,8 +86,8 @@ Item {
 
     // Let go: inside the screen (ToastRules.clampToScreen), then a modal there. Refused at
     // the release (the option turned off, or its queue changed, during the drag): back to its
-    // place in the stack — left where it was dropped it would be outside the window's input
-    // mask, unclickable.
+    // place — in the stack, or a modal's (it was one already, or was pinned meanwhile) — left
+    // where it was dropped it would be outside the window's input mask, unclickable.
     function _drop() {
         const windowHeight = dropHeight > 0 ? dropHeight : (Window.window?.height ?? 0);
         const place = ToastRules.clampToScreen(x, y + originY, width, height, dropWidth, windowHeight);
@@ -95,7 +95,11 @@ Item {
         x = place.x;
         dragging = false;
         Notifications.moveToast(toastId, place.x, place.y);
-        if (!Notifications.isModal(toastId) && present && stackY !== null) {
+        if (Notifications.isModal(toastId)) {
+            // Taken, the modal's place is where it was dropped and this changes nothing;
+            // refused, it is the old one. Not placed yet (pinned meanwhile): the stack places it.
+            _takeModalPlace();
+        } else if (present && stackY !== null) {
             _lastY = stackY;
             nudge.restart();
         }

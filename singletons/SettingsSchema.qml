@@ -24,6 +24,8 @@ import QtQuick
 //   neutral  — for slider: the resting value inside the range, which its fill starts from
 //              (0 on a speed that can go either way); unset, the fill starts at min
 //   hint     — a short explanation shown under the setting
+//   info     — a longer explanation behind an info icon after the label, shown on hover:
+//              for a word the label needs but cannot explain ("resident")
 //   options  — for enum: [{ value, label }]
 //   optionsFrom — for enum: where the options come from at run time instead
 //              ("iconThemes": the installed icon themes, IconThemes; "screens": the
@@ -269,18 +271,19 @@ Singleton {
         // Toasts stack in three queues (ToastRules.limits): critical ones on top, then those
         // that stay until taken away, then the ordinary ones of the layout above. Each shows
         // at most this many; more wait, counted beside the queue.
-        { key: "notifications.criticalToastLimit", label: "Critical toasts at once", group: "notifications",
+        { key: "notifications.criticalToastLimit", label: "Critical toasts shown, at most", group: "notifications",
           type: "number", min: 1, max: 3, default: 1 },
-        { key: "notifications.stayingToastLimit", label: "Staying toasts at once", group: "notifications",
+        { key: "notifications.stayingToastLimit", label: "Toasts that stay, at most", group: "notifications",
           type: "number", min: 1, max: 5, default: 1 },
         // A resident notification (the spec's hint: its app keeps it until dismissed, such as a
         // music player's controls) stays on screen; on, it counts down like any other
         // (ToastRules.timing)
         { key: "notifications.residentHide", label: "Resident notification hide", group: "notifications",
-          type: "bool", default: false },
+          type: "bool", default: false,
+          info: "A resident notification stays after you press one of its buttons, like a music player's. On, its toast counts down like any other; off, it stays on screen." },
         // A critical or staying toast can be dragged out by its title line and dropped anywhere
         // on its screen (a modal); off, the ones out stay where they are and no new drag starts
-        { key: "notifications.movableToasts", label: "Move toasts by their title", group: "notifications",
+        { key: "notifications.movableToasts", label: "Move toasts by dragging", group: "notifications",
           type: "bool", default: true },
         // Where toasts show, and what a fullscreen window on that screen changes (ToastRules).
         // The shell's own messages follow them. Screens by port ("DP-2").

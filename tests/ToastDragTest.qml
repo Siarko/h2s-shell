@@ -10,7 +10,7 @@ import qs.singletons
 // Modals under real input events: a staying toast dragged by its title line (the grip) in a
 // ToastStack as Hud makes it — it follows the pointer, dropped it is a modal there (inside
 // the screen) and its slot in the queue takes the next; an ordinary toast and the option off
-// do not drag; a modal's look (accent outline, grip); the centre's pin button on a card
+// do not drag, and a drop refused at the release goes back to its place; a modal's look (accent outline, grip); the centre's pin button on a card
 // pins and unpins; a pinned toast that counted down stays; a modal job that ends counts
 // down and goes; "×" on a modal dismisses; its HUD destroyed, a modal waits again. The
 // rules alone: ToastRulesTest. That clicks beside a modal reach the window beneath (the
@@ -201,6 +201,14 @@ TestCase {
         assert(corner.x === 0 && corner.y === 600 - backupToast.height, "dropped past the bottom left: inside the screen, whole");
         settle();
         assert(Math.abs(backupToast.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1, "… and the toast there");
+
+        // --- a modal dragged with the option turned off meanwhile: back to its place ---
+        _drag(backupToast, 300, -250, 10, () => settings({ "notifications.movableToasts": false }));
+        settings({});
+        const kept = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        assert(kept.x === corner.x && kept.y === corner.y, "refused at the release: the modal keeps its place");
+        assert(_until(() => backupToast.settled && Math.abs(backupToast.x - corner.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1),
+               "… and goes back there (inside the input mask)");
 
         // --- the option turned off during a drag: refused at the release, back in the stack ---
         const nextStackToast = stack.toastFor(next.id);

@@ -161,8 +161,38 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
+                // As wide as it needs, so the info icon stands right after it; elided when short of room
                 Layout.fillWidth: true
+                Layout.maximumWidth: implicitWidth
                 elide: Text.ElideRight
+            }
+
+            // The schema's `info`: an icon after the label, its explanation on hover
+            Text {
+                id: _info
+                objectName: "info"
+                visible: (root.entry?.info ?? "") !== ""
+                text: "󰋽"
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBodyLarge
+                color: _infoHover.hovered ? Theme.textPrimary : Theme.textSecondary
+                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+                HoverHandler {
+                    id: _infoHover
+                }
+
+                HoverTip {
+                    objectName: "infoTip"
+                    target: _info
+                    shown: _infoHover.hovered
+                    text: root.entry?.info ?? ""
+                }
+            }
+
+            // Keeps the controls at the row's end
+            Item {
+                Layout.fillWidth: true
             }
 
             Text {

@@ -298,7 +298,7 @@ TestCase {
         same(R.counting(kept, { 5: "default" }), [], "counting: a pinned one kept: no countdown");
         same(R.counting(R.moveOut(screen, 3, 1, 1, true), { 1: "stays", 3: "own" }), [3], "counting: a modal dragged out whose job ended counts");
         const running = R.modalRetimed(kept, 5, "stays");
-        same(running.moved, [{ id: 5, queue: "ordinary", x: null, y: null }], "retimed: a kept modal that now stays is kept by its kind");
+        same(running.moved, [{ id: 5, queue: "staying", x: null, y: null }], "retimed: a kept modal that now stays is kept by its kind");
         same(R.counting(running, { 5: "own" }), [5], "… so when it stops staying it counts");
         same(R.modalRetimed(kept, 5, "own"), kept, "retimed: still counting: still kept");
         same(R.modalRetimed(screen, 3, "stays"), screen, "retimed: not a modal: nothing");
@@ -310,6 +310,14 @@ TestCase {
         same(R.returnToQueue(R.modalRetimed(kept, 5, "default", "staying"), 5).waiting.staying, [4, 5],
              "… so its screen gone, it waits in its new queue");
         same(R.modalRetimed(kept, 5, "default", "ordinary"), kept, "retimed: same queue, still counting: nothing");
+        same(R.modalRetimed(kept, 5, "default", "none").moved, kept.moved, "retimed: no valid queue, still counting: the ordinary one its kind gives");
+        same(R.modalRetimed(kept, 5, "stays", undefined).moved, [{ id: 5, queue: "staying", x: null, y: null }],
+             "retimed: no valid queue, now staying: the staying queue");
+        const criticalModal = { waiting: { critical: [], staying: [], ordinary: [] }, shown: { critical: [], staying: [], ordinary: [] },
+                                moved: [{ id: 8, queue: "critical", x: 10, y: 20 }] };
+        same(R.modalRetimed(criticalModal, 8, "default", ""), criticalModal, "retimed: no valid queue, a critical one stays critical");
+        same(R.modalRetimed(R.modalRetimed(kept, 5, "stays", "staying"), 5, "default", "bogus").moved, [{ id: 5, queue: "ordinary", x: null, y: null }],
+             "retimed: a staying modal whose job ended, no valid queue: back to ordinary");
         same(R.dropWaiting(kept).state.moved, kept.moved, "toasts off: keep survives a copy");
 
         // --- modals: placed ---

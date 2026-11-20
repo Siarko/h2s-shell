@@ -1,9 +1,10 @@
 import QtQuick
+import qs.singletons
 
 // The settings window and every page and control under panels/settings must compile, and
 // what loads only when opened (the popup frame, the calendar's event form). A
 // page is only loaded when its sidebar entry is clicked, so a broken one otherwise goes
-// unnoticed until then.
+// unnoticed until then. The notifications page's toast rows are checked built.
 TestCase {
     suiteName: "SettingsPages"
 
@@ -190,5 +191,62 @@ TestCase {
             else
                 fail(file + " does not compile: " + component.errorString().trim());
         }
+        _notificationsPage();
+    }
+
+    // The notifications page: the toast queues' rows after the column's size, in order, and
+    // greyed out with toasts off; the resident hide's info icon carries the schema's text
+    function _notificationsPage() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/NotificationsSettings.qml"));
+        const page = component.createObject(null, { editIndex: 0 });
+        if (page === null)
+            return fail("the notifications page builds: " + component.errorString().trim());
+        const savedGlobals = Config.globals;
+        const editors = () => Array.from(page.children).filter(child => typeof child.key === "string" && child.entry !== undefined);
+        const editorOf = key => editors().find(editor => editor.key === key);
+        const queueKeys = ["notifications.criticalToastLimit", "notifications.stayingToastLimit",
+                           "notifications.movableToasts", "notifications.residentHide"];
+        try {
+            const keys = editors().map(editor => editor.key);
+            const after = keys.indexOf("notifications.toastColumnSize");
+            assertEqual(JSON.stringify(keys.slice(after + 1, after + 5)), JSON.stringify(queueKeys),
+                        "the two limits, moving and resident hide follow the column's size");
+            assertEqual(queueKeys.map(key => editorOf(key)?.entry?.label).join(" | "),
+                        "Critical toasts shown, at most | Toasts that stay, at most | Move toasts by dragging | Resident notification hide",
+                        "with their labels");
+            assertEqual(JSON.stringify([editorOf(queueKeys[0]).entry.min, editorOf(queueKeys[0]).entry.max,
+                                        editorOf(queueKeys[1]).entry.min, editorOf(queueKeys[1]).entry.max]), "[1,3,1,5]",
+                        "critical 1 to 3, staying 1 to 5");
+
+            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": true }));
+            assert(queueKeys.every(key => editorOf(key).available), "available with toasts on");
+            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": false }));
+            assert(queueKeys.every(key => !editorOf(key).available), "greyed out with toasts off");
+
+            const infoOf = editor => _find(editor, item => item.objectName === "info");
+            const residentInfo = infoOf(editorOf("notifications.residentHide"));
+            assert(residentInfo !== null && residentInfo.visible, "the resident hide has an info icon");
+            const tip = residentInfo === null ? null : _find(residentInfo, item => item.objectName === "infoTip", true);
+            assert(tip !== null && tip.text === SettingsSchema.entry("notifications.residentHide").info && /resident/i.test(tip.text),
+                   "its tooltip says what resident means");
+            assert(!infoOf(editorOf("notifications.movableToasts")).visible, "a row without info shows no icon");
+        } finally {
+            Config.globals = savedGlobals;
+            page.destroy();
+        }
+    }
+
+    // The first item under `item` that `matches`; `withResources` also looks at its
+    // non-visual children (a HoverTip moves its visual parent to the window)
+    function _find(item, matches, withResources) {
+        const children = Array.from(item.children ?? []).concat(withResources ? Array.from(item.resources ?? []) : []);
+        for (const child of children) {
+            if (matches(child))
+                return child;
+            const found = _find(child, matches, withResources);
+            if (found !== null)
+                return found;
+        }
+        return null;
     }
 }

@@ -5,7 +5,9 @@
 # through the compositor and a stand-in window beneath (input/ltwindow.py logs each press it
 # receives): a click beside a modal reaches the window, a click on it does not; the drag is
 # followed while the button is held (one surface: the pointer stays with it); the dropped
-# toast frees its slot in the staying queue for the next one.
+# toast frees its slot in the staying queue for the next one. And where things stand: the
+# HUD's window covers the whole screen, over the bar's reserved space (it ignores exclusive
+# zones), the toasts start below the bar, the shell's own message rests whole on the screen.
 
 stack_start --session-bus --window
 
@@ -28,8 +30,7 @@ sys.exit(0 if toast is not None and toast.get("place") == sys.argv[2] and toast.
 }
 
 # The HUD's window on the screen, from the compositor: the toasts' coordinates are the
-# window's, and it starts below the bar's reserved space (it keeps out of other exclusive
-# zones)
+# window's
 hud_origin() {
     hyprctl -j layers | python3 -I -c '
 import json, sys
@@ -107,6 +108,19 @@ drag_held() {
 wait_until 5 hud_origin || abort "the compositor lists no HUD layer"
 read -r HUD_X HUD_Y < <(hud_origin)
 log "the HUD's window on the screen at ($HUD_X, $HUD_Y)"
+# The space the bar keeps at the screen's top, from the compositor (the bar is at the top by
+# default): what the toasts must stay below
+reserved_top() {
+    hyprctl -j monitors | python3 -I -c '
+import json, sys
+print(json.load(sys.stdin)[0]["reserved"][1])'
+}
+bar_reserves() { [ "$(reserved_top)" -gt 0 ]; }
+wait_until 5 bar_reserves || true
+RESERVED_TOP=$(reserved_top)
+log "the bar keeps ${RESERVED_TOP} px at the top"
+check "the bar keeps space at the screen's top (else the checks below would prove nothing)" test "$RESERVED_TOP" -gt 0
+check "the HUD's window covers the whole screen, over the bar's space" test "$HUD_X $HUD_Y" = "0 0"
 
 backup=$(notify_staying "Backup running")
 check_within 5 "a staying toast shows" toast_at "$backup" shown staying
@@ -114,6 +128,26 @@ next=$(notify_staying "Second backup")
 check_within 5 "a second one waits in the staying queue (one at a time)" toast_at "$next" waiting staying
 toast_rests_movable() { toast_rect_is "$1" movable true && toast_rect_is "$1" settled true; }
 check_within 5 "the toast rests on the first screen, movable (the default)" toast_rests_movable "$backup"
+# Below the bar by the toasts' gap to the screen's edges (the theme's osdToast.screenGap, 16)
+check "its top is below the bar's space, by the gap ($(toast_rect "$backup" y))" toast_rect_is "$backup" y $((RESERVED_TOP + 16))
+
+# The shell's own message: the pill at the bottom's middle rests whole on the screen
+DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
+    --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
+    --method org.freedesktop.Notifications.Notify "Shell" 0 "" "Saved" "" '[]' '{"category": <"x-qs-shell">}' "int32 -1" > /dev/null
+pill_field() {
+    shell_ipc toasttest shellPillRect | python3 -I -c '
+import json, sys
+value = json.load(sys.stdin)[sys.argv[1]]
+print(str(value).lower() if isinstance(value, bool) else value)' "$1"
+}
+pill_resting() { [ "$(pill_field resting)" = true ]; }
+check_within 3 "the shell's message shows and rests" pill_resting
+pill_top=$(pill_field y) pill_height=$(pill_field height)
+log "the shell's message at y $((HUD_Y + pill_top)), ${pill_height} px tall, on a ${OUTPUT_HEIGHT} px screen"
+screenshot toast-geometry
+check "… whole on the screen, its clearance from the bottom edge kept (40 px)" \
+    test $((HUD_Y + pill_top)) -ge 0 -a $((HUD_Y + pill_top + pill_height)) -eq $((OUTPUT_HEIGHT - 40))
 
 # Before: a click away from the toasts reaches the window beneath
 click_at 400 600
@@ -156,7 +190,6 @@ clicks_pass_beside $((modal_x + 300 + 120)) $((modal_y - 120 + modal_height / 2)
     "the modal at its new place (beside it: its old place)"
 
 # Dropped half off the screen: back inside it, whole
-# (the window reaches past the screen's bottom by the bar's reserved space: kept on the screen)
 drag_held $((modal_x + 360)) $((modal_y - 106)) -1600 1000 8
 send_input "release left"
 check_within 3 "dropped past the bottom left corner: inside the screen, whole" \

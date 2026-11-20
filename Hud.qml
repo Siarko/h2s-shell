@@ -30,6 +30,10 @@ PanelWindow {
     readonly property bool _wantsKeyboard: toastStack.wantsKeyboard
     WlrLayershell.namespace: "hud"
 
+    // The whole screen, over the bar's reserved space too: kept out of it, the window would
+    // start below a top bar (or right of a left one) and hang past the screen's far edge by
+    // as much. What stands under the bar is placed clear of it (_barInsets).
+    exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true
         left: true
@@ -38,6 +42,9 @@ PanelWindow {
     implicitHeight: hud.screen.height
     margins { top: 0; left: 0 }
     color: "transparent"
+
+    // The bar's reserved space at each screen edge, in this window
+    readonly property var _barInsets: BarGeometry.reservedInsets(BarLayout.edge, Theme.bar.reservedSpace)
 
     // Input passthrough: only forward clicks to visible HUD card areas. The toast area is
     // as tall as the visible toasts, so it covers nothing while there are none. A Region
@@ -61,7 +68,7 @@ PanelWindow {
     Column {
         id: startupWarnings
         x: (hud.implicitWidth - width) / 2
-        y: Theme.bar.reservedSpace + Theme.osdToast.screenGap
+        y: hud._barInsets.top + Theme.osdToast.screenGap
         width: Math.min(640, hud.implicitWidth - 2 * Theme.osdToast.screenGap)
         spacing: Theme.osdToast.screenGap
 
@@ -114,15 +121,11 @@ PanelWindow {
     // queue's badge beside its lowest toast (ToastStack, Notifications' queues)
     ToastStack {
         id: toastStack
-        y: Theme.bar.reservedSpace + Theme.osdToast.screenGap
+        y: hud._barInsets.top + Theme.osdToast.screenGap
         width: hud.implicitWidth
         height: contentHeight
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
-        // Where a dropped toast is kept: the window keeps out of the bar's reserved space, so
-        // as much of it as that space is past the screen's edge
-        dropWidth: hud.implicitWidth - (BarLayout.vertical ? Theme.bar.reservedSpace : 0)
-        dropHeight: hud.implicitHeight - (BarLayout.vertical ? 0 : Theme.bar.reservedSpace)
         screenModelData: hud.modelData
     }
 
@@ -137,8 +140,8 @@ PanelWindow {
     }
 
     // For tests driving the shell from outside (the lock test bed): where a toast is on
-    // this screen, in the window's logical pixels (the window starts below the bar's reserved
-    // space), whether it is a modal, can be dragged and has stopped moving — "{}" when it has
+    // this screen, in the window's logical pixels (the window covers the whole screen),
+    // whether it is a modal, can be dragged and has stopped moving — "{}" when it has
     // none here. The first screen's HUD answers.
     //   qs ipc call toasttest toastRect 7
     IpcHandler {
@@ -153,6 +156,15 @@ PanelWindow {
             return JSON.stringify({ x: Math.round(topLeft.x), y: Math.round(topLeft.y), width: Math.round(toast.width),
                                     height: Math.round(toast.height), modal: toast.modal, movable: toast.movable,
                                     settled: toast.settled });
+        }
+
+        // The shell's own message (the pill at the bottom): its rectangle, the same way, and
+        // whether it rests on screen showing one
+        function shellPillRect(): string {
+            const topLeft = shellNotifItem.mapToItem(null, 0, 0);
+            return JSON.stringify({ x: Math.round(topLeft.x), y: Math.round(topLeft.y), width: Math.round(shellNotifItem.width),
+                                    height: Math.round(shellNotifItem.height),
+                                    resting: shellNotifItem.currentNotif !== null && shellNotifItem.y === shellNotifItem.restY });
         }
     }
 

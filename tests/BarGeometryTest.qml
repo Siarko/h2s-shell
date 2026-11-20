@@ -25,6 +25,13 @@ TestCase {
         assert(!BarGeometry.isVertical("top") && !BarGeometry.isVertical("bottom"), "top and bottom are horizontal");
         assert(BarGeometry.isVertical("left") && BarGeometry.isVertical("right"), "left and right are vertical");
 
+        assertEqual(JSON.stringify(BarGeometry.reservedInsets("top", 40)), JSON.stringify({ top: 40, bottom: 0, left: 0, right: 0 }),
+            "a top bar's space is above a full-screen window's content");
+        assertEqual(JSON.stringify(BarGeometry.reservedInsets("bottom", 40)), JSON.stringify({ top: 0, bottom: 40, left: 0, right: 0 }),
+            "a bottom bar's below it: nothing kept at the top");
+        assertEqual(BarGeometry.reservedInsets("left", 30).left + BarGeometry.reservedInsets("right", 30).right, 60, "a side bar's at its side");
+        assertEqual(BarGeometry.reservedInsets("nonsense", 40).top, 40, "an unknown edge is the top's");
+
         assert(BarGeometry.radius(50, 40) === 10, "a corner is percent of half the thickness");
         assert(BarGeometry.radius(undefined, 40) === 0, "no corner token is square");
 

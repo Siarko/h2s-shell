@@ -37,6 +37,10 @@ ColumnLayout {
         editIndex: root.editIndex
         available: root._toastsOn && root._column
     }
+    SchemaSettingEditor { key: "notifications.criticalToastLimit"; editIndex: root.editIndex; available: root._toastsOn }
+    SchemaSettingEditor { key: "notifications.stayingToastLimit"; editIndex: root.editIndex; available: root._toastsOn }
+    SchemaSettingEditor { key: "notifications.movableToasts"; editIndex: root.editIndex; available: root._toastsOn }
+    SchemaSettingEditor { key: "notifications.residentHide"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastScreen"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor { key: "notifications.toastFullscreen"; editIndex: root.editIndex; available: root._toastsOn }
     SchemaSettingEditor {
