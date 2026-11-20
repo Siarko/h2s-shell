@@ -2229,3 +2229,13 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   `TaildropFileList` with group headers and rules, used by the popup's files panel. M3: the
   one-panel popup per the plan (stalled line, "b.txt · Queued [Send now]", Clear). Reviewed
   (M1: two fixed), module suites and stand-ins on both machines, the module's lock bed on NixOS.
+- **The side panel and headings with controls (C1, module API 1.34)** — on `master` 2026-11-20.
+  Public `SidePanel { open; title; size: "s"|"m"|"l"; content; onClosed(reason) }` (close,
+  outside, escape, replaced, page, lock; content built on open, destroyed after sliding out;
+  widths `Theme.sidePanelWidths` 320/420/520 grown with the font, at most 90 % of the page;
+  refused outside a module page or while locked); its state kept in `ApiElements`, nothing
+  reachable through the element. Module pages render in `components/ModulePageFrame.qml`
+  (scrolling + the panel layer). `SectionTitle` / `Heading` take controls at the right end.
+  `ModuleTestKit.pageFrame`. Wi-Fi's own drawer untouched (C2 optional). Reviewed (a panel
+  sliding on window resize and content outliving its page fixed); `tests/run-all.sh` passed on
+  both machines.
