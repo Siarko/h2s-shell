@@ -9,11 +9,46 @@ container. Items marked **confirmed** were verified by reading the code plus, wh
 logic is pure JavaScript, by running it in isolation. Items marked **likely** are
 reasoned from the code and still need a check on the machine.
 
-Context for the ordering: the shell is about to be installed on a Framework 12 with a
+Context for the ordering (October 2026): the shell is about to be installed on a Framework 12 with a
 touchscreen, so the touch and HiDPI section is not "nice to have" — it is the next
 feature's prerequisite.
 
 ---
+
+## Open
+
+Still open after the stages in [done.md](done.md) (2026-11-21). Everything fixed, decided or
+judged not a problem is under "Archive" below, as written then.
+
+### 11. JSON strings inside the config — **what is left**
+
+Settings are read through `Profiles.value(key)` (shell profiles, 2026-10-29), so the
+hand-parsing across the shell is gone. Still JSON strings inside the config, each parsed in
+one place: `profiles`, `globals`, `widgetPresets` and `audio.appVolumes`. The October finding
+is in the archive (P2).
+
+### 42. Rapid month switching can overlap calendar fetches — **likely**
+
+`GoogleCalendar.fetchMonthEvents()` only sets `_fetchedMonths[monthKey]` once the whole
+fetch completes, so clicking through months faster than the requests return starts several
+overlapping fetches for different months. `Qt.callLater` in `panels/Calendar.qml:43` only
+deduplicates within one event-loop tick. Pre-existing; the #1 fix widens the window by one
+tick, since the enabled-calendar list is now resolved asynchronously. Fix: mark the month
+as in-flight when the fetch starts, not when it finishes.
+
+### Files that are too big
+
+The October list (archived below) is mostly split (done.md stage 6). Sizes on 2026-11-21:
+`components/NotificationCard.qml` 799 lines (it grew with the notification flow),
+`panels/calendar/EventForm.qml` 374, `singletons/googlecalendar/GoogleCalendar.qml` 410,
+`singletons/network/WifiManager.qml` 362, `panels/calendar/EventCard.qml` 339. The card is
+the one worth splitting next; the architecture clean-up plan (tracker step 7) covers splits.
+
+---
+
+# Archive
+
+Fixed, decided or not a problem; each heading says which and where it is recorded.
 
 ## P0 — Can take the whole shell down
 
@@ -63,7 +98,7 @@ have. The dead `fetchDayEvents()` path — the other `await` call site — was d
 with its only consumer `fetchCalendarEvents()`, 80 lines in total. Awaiting host
 verification.
 
-### 2. `Fetch._printf()` substitutes the string `undefined` into URLs — **confirmed**
+### 2. `Fetch._printf()` substitutes the string `undefined` into URLs — **FIXED (done.md 1.2)**
 
 `singletons/network/Fetch.qml:86`
 
@@ -84,7 +119,7 @@ Any endpoint template called with too few params silently requests a URL contain
 
 Fix: `typeof args[num] !== "undefined"`, or simply `args[num] !== undefined`.
 
-### 3. HTTP requests have no timeout, and a hung request wedges its id forever — **confirmed**
+### 3. HTTP requests have no timeout, and a hung request wedges its id forever — **FIXED (done.md 1.3)**
 
 `singletons/network/Fetch.qml:20-82`
 
@@ -188,7 +223,7 @@ The rest of the project already does this correctly —
 
 Fix: `Quickshell.shellDir + "/" + modelData.script`.
 
-### 9. The power popup closes on pointer-out even when opened by click — **confirmed**
+### 9. The power popup closes on pointer-out even when opened by click — **FIXED (done.md 8.6)**
 
 `widgets/PowerWidget.qml:18` passes `persistent: false` on the *click* path, where every
 other widget passes `true`. Click the power widget, move the mouse, and the menu
@@ -196,7 +231,7 @@ vanishes before it can be used.
 
 Fix: `popup.open(this, true, "power")` on click.
 
-### 10. Lockscreen mirrors config imperatively instead of binding — **likely**
+### 10. Lockscreen mirrors config imperatively instead of binding — **FIXED (done.md 8.7)**
 
 `singletons/Lockscreen.qml:24-52`
 
@@ -214,7 +249,7 @@ the initial state in `Component.onCompleted` and document why `callLater` is nee
 
 ## P2 — Architecture
 
-### 11. Config stores JSON inside JSON, and 23 files parse it by hand — **LARGELY FIXED**
+### 11. Config stores JSON inside JSON, and 23 files parse it by hand — **LARGELY FIXED** (the rest under "Open")
 
 `widgetProfiles`, `audio.appVolumes` and the bar's `leftProfiles`/`centerProfiles`/
 `rightProfiles` are `string` properties holding serialised JSON. Consequences:
@@ -234,14 +269,14 @@ that parses once and exposes a cached object, invalidated on `Config.saved`; (b)
 the storage to real `JsonObject` structures, with profiles keyed by name instead of
 positional arrays.
 
-
 **Largely fixed (2026-10-29)** by shell profiles (notes/plans/global-profiles.md): every
 setting is read through `Profiles.value(key)`, so the hand-parsing of settings across the
 shell is gone, and the bar's parallel `leftProfiles`/… arrays became one list per section.
 What remains as JSON strings inside the config: `profiles`, `globals`, `widgetPresets`
 and `audio.appVolumes` — each parsed in one place (Profiles, `WidgetPresets` once TODO
 10.7 adds it, Audio).
-### 12. The same widget type string keys four parallel registries
+
+### 12. The same widget type string keys four parallel registries — **FIXED (done.md 2.2)**
 
 Adding one bar widget means editing: `Bar.qml` (a `Component` plus `_widgetMap`),
 `panels/BarSectionList.qml` (`displayName()` plus the picker list),
@@ -256,7 +291,7 @@ Fix: one declarative registry (`singletons/WidgetRegistry.qml`) listing per type
 component, display name, popup panel, settings pane and default popup mode; have all the
 call sites read from it.
 
-### 13. Popup wiring is copy-pasted into seven widgets
+### 13. Popup wiring is copy-pasted into seven widgets — **FIXED (done.md 2.1)**
 
 Each of `PowerWidget`, `ClockWidget`, `MusicWidget`, `SoundWidget`, `BluetoothWidget`,
 `NetworkWidget`, `HardwareWidget` carries the identical 15 lines:
@@ -280,7 +315,7 @@ Fix: a `components/PopupWidget.qml` extending `BarWidget` that takes `widgetType
 change instead of a seven-file change — worth doing *before* the touch support, not
 after.
 
-### 14. `NetworkPanel` reverse-engineers the popup's private geometry
+### 14. `NetworkPanel` reverse-engineers the popup's private geometry — **FIXED (done.md 6.2)**
 
 `panels/NetworkPanel.qml:496-506`
 
@@ -307,7 +342,7 @@ has neither `widgetType` nor `popup`.
 
 Fix: make the contract real (see #12/#13) and bring the four stragglers onto it.
 
-### 16. Scroll-notch accumulation implemented twice
+### 16. Scroll-notch accumulation implemented twice — **FIXED (done.md 9.5)**
 
 `components/BarWidget.qml:67-80` and `components/CustomMouseArea.qml:17-28` contain the
 same algorithm, down to the `event.angleDelta.y * (1 / 8) / 14` constant, differing only
@@ -316,7 +351,7 @@ both.
 
 Fix: one implementation, named constants, used by both.
 
-### 17. `GoogleCalendar.qml` is a 683-line module with seven hand-rolled caches
+### 17. `GoogleCalendar.qml` is a 683-line module with seven hand-rolled caches — **FIXED (done.md 6.5)**
 
 `events`, `eventsByCalendar`, `eventsLoading`, `calendars`, `_colorMapEvents`,
 `_colorMapCalendars`, `_busyRequests`, `_fetchedMonths` — eight `var` maps with manual
@@ -337,7 +372,7 @@ button's `#1e3a5f`/`#2d4a6d`), `screensaver/LockPrompt.qml` (2).
 The palette cannot be changed without hunting through panels. Fix: move them into
 `Theme.qml` under semantic names.
 
-### 19. Three byte/rate formatters
+### 19. Three byte/rate formatters — **FIXED (done.md 9.3)**
 
 `Hardware.formatBytes()`, `NetworkManager.formatSpeed()` and a third `formatBytes` inside
 `singletons/hardware/GpuSource.qml`. Same job, three implementations, inconsistent
@@ -345,7 +380,7 @@ rounding.
 
 Fix: one formatting helper.
 
-### 20. `singletons/Tray.qml` stores view animation state globally
+### 20. `singletons/Tray.qml` stores view animation state globally — **FIXED (done.md 9.6)**
 
 `menuHandle`, `lastItemIndex`, `slideDirection` and `calculateDirection()` are a
 17-line singleton whose entire purpose is remembering which way the tray menu should
@@ -356,33 +391,9 @@ Fix: move it into the tray menu component.
 
 ---
 
-## P3 — Files that are too big
-
-Current worst offenders:
-
-| File | Lines | Problem |
-|---|---|---|
-| `panels/calendar/EventForm.qml` | 1033 | one `Column` of giant anonymous blocks; lines 611–979 are a single 368-line `Item` |
-| `panels/NetworkPanel.qml` | 928 | VPN + ethernet + wifi header + info + speeds + disconnect + network list + hidden-network entry, all inline |
-| `singletons/googlecalendar/GoogleCalendar.qml` | 683 | see #17 |
-| `panels/MusicPanel.qml` | 481 | player UI + visualiser + cava parsing |
-| `panels/BarSectionList.qml` | 425 | list editing + drag/drop + the type picker |
-| `panels/widget_settings/WorkspacesWidgetSettings.qml` | 394 | 9 `JSON.parse` call sites |
-| `panels/calendar/EventCard.qml` | 385 | |
-| `panels/HardwareSourceList.qml` | 378 | |
-| `singletons/network/WifiManager.qml` | 359 | radio polling + scanning + saved profiles + connect/disconnect + speed |
-| `components/NotificationCard.qml` | 359 | |
-
-`EventForm` is the clearest win: the recurrence-rule editor, the colour picker, the
-calendar picker and the all-day/time row are four independent components sharing nothing
-but the form's properties. `NetworkPanel` splits cleanly along the section comments that
-are already in the file.
-
----
-
 ## P4 — Cost while idle (matters on a laptop)
 
-### 21. The shell spawns roughly 250 subprocesses per minute at rest
+### 21. The shell spawns roughly 250 subprocesses per minute at rest — **FIXED (done.md 5.1–5.3)**
 
 Steady-state polling, all unconditional (`running: true`):
 
@@ -411,7 +422,7 @@ Three independent fixes, in order of payoff:
   temperatures and `LinkSpeed` are all plain file reads. Removes ~180 spawns/min.
 - **Gate polling on visibility.** Nothing currently stops when the popup is closed.
 
-### 22. All six hardware sources poll even when one sensor is displayed
+### 22. All six hardware sources poll even when one sensor is displayed — **FIXED (done.md 5.3)**
 
 `HardwareWidget` shows `["cpu"]` by default, but touching `singletons/Hardware.qml`
 instantiates all six sources and every one starts its timer. Fix: start a source's timer
@@ -462,7 +473,7 @@ Clock, sound and bluetooth default to `_popupMode: "hover"`. On a touch-only ses
 those three widgets become unusable. Fix: detect the input type, or force click mode when
 the primary input is touch — one place once #13 is done.
 
-### 26. 64 hover-only visual states give no touch feedback
+### 26. 64 hover-only visual states give no touch feedback — **FIXED (done.md 11.11)**
 
 Buttons, list rows, cards and sliders change appearance only via `containsMouse`. Under
 touch they either never highlight, or highlight and stay stuck after the finger lifts.
@@ -565,7 +576,7 @@ workspaces.
 
 ## P7 — Hygiene
 
-### 34. `CLAUDE.md` describes a shell that no longer exists
+### 34. `CLAUDE.md` describes a shell that no longer exists — **FIXED (CLAUDE.md rewritten; docs/ holds the rest)**
 
 It documents four panels and three singletons. The project now has 12 widget types,
 9 popup panels, 7 settings pages, ~30 singletons, a HUD layer, a screensaver and lock
@@ -573,20 +584,20 @@ screen, Google Calendar integration and a dictation client. It also claims testi
 manual, though `tests.qml` exists. Superseded by this `docs/` directory — `CLAUDE.md`
 should shrink to conventions plus pointers.
 
-### 35. `console.log` bypasses `Logger`
+### 35. `console.log` bypasses `Logger` — **FIXED (done.md 9.1)**
 
 `singletons/Config.qml:132` ("[CONFIG] Saved" on every write),
 `singletons/Notifications.qml:33` (`console.log("Icon", …)` — leftover debugging),
 `singletons/Lockscreen.qml:58`. All unconditional, none respecting a debug switch.
 
-### 36. Stale comments
+### 36. Stale comments — **FIXED (done.md 9.2)**
 
 `panels/Popup.qml:23` says `contentType` is `"calendar" or "power"` — there are nine.
 `singletons/Shell.qml:8` lists category indices 0–4 — there are seven, and they are
 magic numbers matched against a hardcoded if-chain in `panels/SettingsWindow.qml:110-116`.
 `singletons/Music.qml:74` says "Interpolated position" for what is a 1 s poll.
 
-### 37. Leftovers
+### 37. Leftovers — **FIXED (done.md 9.7, 9.8)**
 
 - `assets/` is empty.
 - `panels/settings/LockscreenSettings.qml` has no trailing newline.
@@ -596,7 +607,7 @@ magic numbers matched against a hardcoded if-chain in `panels/SettingsWindow.qml
   and in the settings UI, but nothing executes them — the feature is a stub that looks
   finished to the user.
 
-### 38. Test coverage is one suite
+### 38. Test coverage is one suite — **FIXED (done.md 1.4; many suites now)**
 
 `tests/PromisesTest.qml` covers `Promises`; nothing else is tested. The parsing functions
 are the obvious candidates — they are pure and were the source of several bugs found
@@ -624,7 +635,7 @@ empty — exactly the state that used to freeze the shell.
 Fixed by attaching `status` (and the full `body`) to the rejection, so the existing check
 in `GoogleCalendarAuth` works unchanged.
 
-### 40. `Promises.allSettled` does not preserve argument order, and its test hides that — **confirmed**
+### 40. `Promises.allSettled` does not preserve argument order, and its test hides that — **FIXED (done.md 1.4)**
 
 `singletons/Promises.qml:136` pushes each result as it settles:
 
@@ -641,7 +652,7 @@ Nothing in production depends on it today: all three production `allSettled` cal
 do `.then(() => …)` and ignore the results. Fix: either preserve order by index, or
 document that the result order is arbitrary and change the test to stop implying otherwise.
 
-### 41. The hand-rolled `Promises` library may be replaceable — **open question**
+### 41. The hand-rolled `Promises` library may be replaceable — **DECIDED: keep (done.md 1.5)**
 
 Native `Promise` would make `singletons/Promises.qml` (182 lines) and
 `tests/PromisesTest.qml` (231 lines) redundant. The surface is small: three production
@@ -658,16 +669,7 @@ gone, nothing depends on inline settling any more.
 
 Filed as TODO 1.5, which starts with a probe script rather than a migration.
 
-### 42. Rapid month switching can overlap calendar fetches — **likely**
-
-`GoogleCalendar.fetchMonthEvents()` only sets `_fetchedMonths[monthKey]` once the whole
-fetch completes, so clicking through months faster than the requests return starts several
-overlapping fetches for different months. `Qt.callLater` in `panels/Calendar.qml:43` only
-deduplicates within one event-loop tick. Pre-existing; the #1 fix widens the window by one
-tick, since the enabled-calendar list is now resolved asynchronously. Fix: mark the month
-as in-flight when the fetch starts, not when it finishes.
-
-### 43. Live arrays still bound straight to `Repeater.model` — **confirmed**
+### 43. Live arrays still bound straight to `Repeater.model` — **FIXED (done.md 8.9)**
 
 Found 2026-10-28 while starting the widget registry. The rule in
 [ARCHITECTURE.md](../docs/ARCHITECTURE.md#the-repeater-crash) is broken in these places, each
@@ -701,3 +703,27 @@ Given the Framework 12 install:
 6. **#11** — the config/JSON rework. Big, and everything else gets easier after it.
 7. **P3 file splits**, opportunistically, when touching a file anyway.
 8. **P6**, before the account is set up again on the new machine.
+
+## P3 — Files that are too big (October 2026, mostly split)
+
+Current worst offenders:
+
+| File | Lines | Problem |
+|---|---|---|
+| `panels/calendar/EventForm.qml` | 1033 | one `Column` of giant anonymous blocks; lines 611–979 are a single 368-line `Item` |
+| `panels/NetworkPanel.qml` | 928 | VPN + ethernet + wifi header + info + speeds + disconnect + network list + hidden-network entry, all inline |
+| `singletons/googlecalendar/GoogleCalendar.qml` | 683 | see #17 |
+| `panels/MusicPanel.qml` | 481 | player UI + visualiser + cava parsing |
+| `panels/BarSectionList.qml` | 425 | list editing + drag/drop + the type picker |
+| `panels/widget_settings/WorkspacesWidgetSettings.qml` | 394 | 9 `JSON.parse` call sites |
+| `panels/calendar/EventCard.qml` | 385 | |
+| `panels/HardwareSourceList.qml` | 378 | |
+| `singletons/network/WifiManager.qml` | 359 | radio polling + scanning + saved profiles + connect/disconnect + speed |
+| `components/NotificationCard.qml` | 359 | |
+
+`EventForm` is the clearest win: the recurrence-rule editor, the colour picker, the
+calendar picker and the all-day/time row are four independent components sharing nothing
+but the form's properties. `NetworkPanel` splits cleanly along the section comments that
+are already in the file.
+
+---
