@@ -2295,3 +2295,10 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   parts drop to none folds for good (`pillExpanded`); docs and CHANGELOG for the pills, the nine
   statuses, the wave and the notification. Module suites on both machines. Mockup on the real
   code: `~/src/h2s-mockups/taildrop-status-pills-implemented/`.
+- **Several slower waves; the capsules' words and the save group (C4, M13)** — 2026-11-20 (the
+  owner's notes on the mockup). Core: `ProgressBar` keeps a pool of 6 bands; a new one every
+  `progressWave` (300 ms), each crossing in `progressWaveTravel` (1200 ms), about four at once
+  (`ApiElementRules.progressWaveSchedule`). Module: capsules read "Sending · 67 %" / "Saving ·
+  12 %"; a "Receiving" header over incoming files; the save group "Saving to Downloads · N
+  files" right after them. Read by the lead; core `tests/run-all.sh` and module suites on both
+  machines.
