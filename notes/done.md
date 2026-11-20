@@ -2268,3 +2268,10 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
 - **Taildrop views, docs (M7, the docs part)** — on the module's `main` 2026-11-20. features,
   architecture, ipc, limitations, README; the Unreleased CHANGELOG merged into short lines
   ("Needs … 1.34" kept, no version bump). Read by the lead; module suites on both machines.
+- **Taildrop views after the mockup on the real code** — on the module's `main` 2026-11-20 (the
+  owner's notes). The device group's cancel is "Cancel all" asking "Cancel all?"
+  (`groupCancelOffer`); no greyed Save with auto-save on and nothing waiting; a device's files
+  oldest send first; "Send now" / "Fetch now" with a visible face (`ConfirmButton.outlined`);
+  the page summary in parts, warning only on problems; the two-panel popup's device row says
+  "No progress" / "N failed". Read by the lead; module suites and stand-ins on both machines,
+  the module's lock bed on NixOS.
