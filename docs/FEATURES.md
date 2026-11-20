@@ -142,7 +142,8 @@ ordinary queue; one that ends on screen counts down where it is. A critical or s
 can be dragged by its title line (the grip at its top) and dropped anywhere on its screen: it
 stays there with an accent outline until its "×", and its place in the queue goes to the next
 one; a job's toast moved out counts down and goes when the job ends. Each notification in the
-panel has a pin that puts it on screen the same way, beside the toasts, until it is unpinned.
+panel has a pin that puts it on the panel's screen the same way, beside the toasts, with no
+countdown, until it is unpinned. Nothing of the toasts lands over the bar, at any edge.
 Moved toasts stay when the panel opens or toasts are switched off, hide under a fullscreen
 window with "Don't show" until it goes, and wait in their queue again when their screen goes
 ("Move toasts by dragging", on by default). Arrival timestamps are recorded, and

@@ -22,7 +22,9 @@ Item {
         text: "888%"
     }
     readonly property int cardHeight: 280
-    readonly property int restX: screenWidth - cardWidth
+    // The bar's reserved space at the right edge: it rests left of a bar there
+    property int rightInset: 0
+    readonly property int restX: screenWidth - rightInset - cardWidth
 
     x: screenWidth
     y: (screenHeight - cardHeight) / 2

@@ -945,6 +945,18 @@ TestCase {
         const gone = standIn(-1);
         gone.tracked = false;
         assert(!Notifications.pinToast(gone) && place(gone) === "none", "an entry gone: not pinned");
+        // From a centre open on another screen: on that one
+        const fromCentre = standIn(-1);
+        assert(Notifications.pinToast(fromCentre, "centre-screen") && Notifications.toastScreens[fromCentre.id] === "centre-screen",
+               "pinned from a centre on another screen: a modal on the centre's screen");
+        Notifications.unpinToast(fromCentre.id);
+        const shownThere = standIn(0);
+        Notifications.enqueueHudNotification(shownThere);
+        Notifications.fillToasts("modal-screen");
+        assert(place(shownThere) === "shown staying" && Notifications.toastScreens[shownThere.id] === "modal-screen", "a toast shown on the toasts' screen");
+        assert(Notifications.pinToast(shownThere, "centre-screen") && place(shownThere) === "moved staying"
+               && Notifications.toastScreens[shownThere.id] === "centre-screen", "… pinned from the other screen's centre: it goes there");
+        Notifications.toastGone(shownThere.id);
         Notifications.screensOverride = [];
         assert(!Notifications.pinToast(mail) && place(mail) === "none", "no screen for toasts: not pinned");
         Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];

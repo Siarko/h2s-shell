@@ -331,6 +331,15 @@ TestCase {
         same(R.pinSpot(Object.assign({}, spotArgs, { column: 100 })).x, 0, "pin spot: a narrow screen: at its left");
 
         // --- the centre's pin control: label and effect together ---
+        assertEqual(R.pinScreen("DP-2", "HDMI-A-1"), "DP-2", "pinned from the centre: the centre's screen");
+        assertEqual(R.pinScreen("", "HDMI-A-1"), "HDMI-A-1", "… not known: the toasts' screen");
+        assertEqual(R.pinScreen(undefined, ""), "", "… neither: nowhere");
+        assertEqual(R.showsTimer({ staying: true, modal: false, counting: false }), false, "timer bar: a staying toast has none");
+        assertEqual(R.showsTimer({ staying: false, modal: false, counting: false }), true, "timer bar: an ordinary one waiting its turn shows it full");
+        assertEqual(R.showsTimer({ staying: false, modal: false, counting: true }), true, "timer bar: counting: shown");
+        assertEqual(R.showsTimer({ staying: false, modal: true, counting: false }), false, "timer bar: a pinned (kept) modal not counting: none");
+        assertEqual(R.showsTimer({ staying: false, modal: true, counting: true }), true, "timer bar: a modal counting (its job ended): shown");
+        assertEqual(R.showsTimer({ staying: true, modal: true, counting: false }), false, "timer bar: a staying modal: none");
         same(R.pinLook(false), { glyph: "󰐃", tip: "Pin on the screen", action: "pin" }, "pin control: not a modal: pins");
         same(R.pinLook(true), { glyph: "󰐄", tip: "Unpin from the screen", action: "unpin" }, "pin control: a modal: unpins");
 
@@ -345,6 +354,13 @@ TestCase {
         same(R.clampToScreen(-150, -20, 300, 100, 1920, 1080), { x: 0, y: 0 }, "clamp: past the left and top: inside");
         same(R.clampToScreen(10, 10, 2000, 100, 1920, 1080), { x: 0, y: 10 }, "clamp: wider than the screen: at its left");
         same(R.clampToScreen(NaN, "x", 300, 100, 1920, 1080), { x: 0, y: 0 }, "clamp: not numbers: the corner");
+        const topBar = { top: 40, bottom: 0, left: 0, right: 0 };
+        same(R.clampToScreen(100, 10, 300, 100, 1920, 1080, topBar), { x: 100, y: 40 }, "clamp: onto a top bar: below it");
+        same(R.clampToScreen(100, 1000, 300, 100, 1920, 1080, { top: 0, bottom: 40, left: 0, right: 0 }), { x: 100, y: 940 }, "clamp: onto a bottom bar: above it");
+        same(R.clampToScreen(-50, 500, 300, 100, 1920, 1080, { top: 0, bottom: 0, left: 48, right: 0 }), { x: 48, y: 500 }, "clamp: onto a left bar: right of it");
+        same(R.clampToScreen(1800, 500, 300, 100, 1920, 1080, { top: 0, bottom: 0, left: 0, right: 48 }), { x: 1572, y: 500 }, "clamp: onto a right bar: left of it");
+        same(R.clampToScreen(NaN, NaN, 300, 100, 1920, 1080, topBar), { x: 0, y: 40 }, "clamp: not numbers: the corner off the bar");
+        same(R.pinSpot(Object.assign({}, spotArgs, { top: 1050, insets: { top: 0, bottom: 40, left: 0, right: 0 } })).y, 940, "pin spot: off a bottom bar");
 
         // --- a notification announced again ---
         const announce = (id, change) => R.announceEffect(screen, id, Object.assign({ toastsOn: true, hasScreen: true, alive: true, centreOpen: false, queue: "ordinary" }, change));

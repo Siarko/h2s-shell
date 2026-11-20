@@ -541,16 +541,18 @@ Singleton {
         _applyToasts(ToastRules.placeModal(toastState, id, x, y));
     }
 
-    // The centre's pin: the notification becomes a modal on the toasts' screen, whether its
-    // toast is shown, waiting or long gone. Not without a screen for toasts; one that is a
+    // The centre's pin: the notification becomes a modal on `centreScreen` — the screen of
+    // the centre it was pinned from (ToastRules.pinScreen; unknown: the toasts' screen) —
+    // whether its toast is shown, waiting or long gone. Not without a screen; one that is a
     // modal already stays as it is. → whether it is a modal now
-    function pinToast(notification): bool {
+    function pinToast(notification, centreScreen): bool {
         if (!_waitingAlive(notification))
             return false;
         const id = notification.id;
         if (ToastRules.isModal(toastState, id))
             return true;
-        if (criticalToastScreen === "")
+        const screen = ToastRules.pinScreen(centreScreen, criticalToastScreen);
+        if (screen === "")
             return false;
         const timing = toastTiming(notification);
         const next = ToastRules.pin(toastState, id, toastQueue(notification, timing), timing.kind);
@@ -561,12 +563,11 @@ Singleton {
         objects[id] = notification;
         _toastObjects = objects;
         _setToastTiming(id, timing);
-        // A shown one stays on its screen; another goes to the toasts' screen
-        if (ToastRules.where(toastState, id).place !== "shown") {
-            const screens = Object.assign({}, toastScreens);
-            screens[id] = criticalToastScreen;
-            toastScreens = screens;
-        }
+        // On the centre's screen, where the click was — a toast shown on another screen
+        // leaves it for that one
+        const screens = Object.assign({}, toastScreens);
+        screens[id] = screen;
+        toastScreens = screens;
         _applyToasts(next);
         return true;
     }

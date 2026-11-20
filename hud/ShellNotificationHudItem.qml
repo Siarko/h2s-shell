@@ -13,7 +13,9 @@ Item {
     readonly property int pillWidth: 260
     readonly property int pillHeight: 40
     readonly property int bottomMargin: 40   // clearance from screen bottom edge
-    readonly property int restY: screenHeight - pillHeight - bottomMargin
+    // The bar's reserved space at the bottom edge: it rests above a bar there
+    property int bottomInset: 0
+    readonly property int restY: screenHeight - bottomInset - pillHeight - bottomMargin
 
     x: (screenWidth - pillWidth) / 2
     y: screenHeight   // start off-screen below

@@ -424,7 +424,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   top) can be dropped anywhere on its screen, where it stays with an accent outline until its
   "×", and its place in the queue goes to the next one; a job's toast moved out counts down
   and goes when the job ends. Every notification in the panel has a pin that puts it on
-  screen the same way, beside the toasts, until it is unpinned. The panel opening and toasts
+  the panel's screen the same way, beside the toasts, without a countdown, until it is
+  unpinned. The panel opening and toasts
   switched off leave moved toasts where they are; a fullscreen window with "Don't show"
   hides them until it goes; their screen gone, they wait in their queue again. On by default
   (Settings key `notifications.movableToasts`; off, no new drag starts).
@@ -880,7 +881,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - Toasts sat lower than meant under a top bar — by the bar's reserved space — and the shell's
   own message at the bottom touched the screen's edge: the toasts' window now covers the
-  whole screen and places them below the bar.
+  whole screen, and nothing it shows — toasts, a moved toast, the volume and the shell's
+  messages — lands over the bar, at any edge.
 - The network popup's Connect is not available while the password typed is too short for
   the network (WPA: 8 to 63 characters), and says so, as connecting to a hidden network does.
 - A network's card in Settings is no longer highlighted while the pointer rests in a gap

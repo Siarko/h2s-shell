@@ -229,6 +229,9 @@ TestCase {
             const tip = residentInfo === null ? null : _find(residentInfo, item => item.objectName === "infoTip", true);
             assert(tip !== null && tip.text === SettingsSchema.entry("notifications.residentHide").info && /resident/i.test(tip.text),
                    "its tooltip says what resident means");
+            const infoArea = residentInfo === null ? null : _find(residentInfo, item => item.objectName === "infoArea");
+            assert(infoArea !== null && infoArea.lit !== undefined && tip.shown === infoArea.lit,
+                   "the tip follows the icon's pointer area (lit: a tap shows it too)");
             assert(!infoOf(editorOf("notifications.movableToasts")).visible, "a row without info shows no icon");
         } finally {
             Config.globals = savedGlobals;

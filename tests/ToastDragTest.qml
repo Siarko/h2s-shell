@@ -197,10 +197,19 @@ TestCase {
 
         // --- dragged again: it just changes place; past the screen's edge: back inside ---
         _drag(backupToast, -1000, 1000, 10);
-        const corner = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        let corner = Notifications.toastState.moved.find(entry => entry.id === backup.id);
         assert(corner.x === 0 && corner.y === 600 - backupToast.height, "dropped past the bottom left: inside the screen, whole");
         settle();
         assert(Math.abs(backupToast.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1, "… and the toast there");
+
+        // --- a bar at the bottom and the left: a drop stays off it, and the toasts' column is not moved ---
+        stack.barInsets = { top: 0, bottom: 50, left: 30, right: 0 };
+        _drag(backupToast, -100, 100, 6);
+        const offBar = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        assert(offBar.x === 30 && offBar.y === 600 - 50 - backupToast.height, "dropped onto the bars: beside them (" + offBar.x + ", " + offBar.y + ")");
+        settle();
+        stack.barInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+        corner = offBar;
 
         // --- a modal dragged with the option turned off meanwhile: back to its place ---
         _drag(backupToast, 300, -250, 10, () => settings({ "notifications.movableToasts": false }));
@@ -239,6 +248,7 @@ TestCase {
         backup.expireTimeout = 2000;
         Notifications._retime(backup.id, backup);
         assert(Notifications.countingToasts.includes(backup.id) && backupToast._counting, "its job ended: the modal counts down");
+        assert(_find(backupToast, item => item.bodyMaxLines !== undefined).timerVisible, "… and shows its countdown bar");
         backupToast.resources.find(resource => resource.property === "remaining")?.complete();
         assert(_place(backup) === "none" && _until(() => stack.toastFor(backup.id) === null), "… and goes, fading where it is");
 
@@ -253,6 +263,10 @@ TestCase {
         const mail = standIn(-1, { summary: "Mail from Ann" });
         const entry = _card.createObject(cardHost, { notification: mail });
         made.push(entry);
+        assert(entry.screenName !== "" && entry.screenName === (_window.screen?.name ?? ""),
+               "an entry's pin goes to its window's screen (" + entry.screenName + ")");
+        // The stack here stands for that screen's
+        entry.screenName = "drag-screen";
         const pinButton = _find(entry, item => item.objectName === "pinButton");
         assert(pinButton !== null && pinButton.visible && entry.pinLook.action === "pin", "an entry in the centre: a pin");
         driver.mouseClick(pinButton, pinButton.width / 2, pinButton.height / 2);
@@ -264,6 +278,8 @@ TestCase {
                "… beside the toasts' column (" + pinned.x + ", " + pinned.y + ")");
         assert(!Notifications.countingToasts.includes(mail.id), "pinned while it would count down: it stays");
         assert(_until(() => mailToast.opacity > 0.99 && Math.abs(mailToast.x - pinned.x) < 1), "… shown there");
+        const mailCard = _find(mailToast, item => item.bodyMaxLines !== undefined);
+        assert(!mailCard.timerVisible, "… with no countdown bar: it does not count down");
         driver.mouseClick(pinButton, pinButton.width / 2, pinButton.height / 2);
         assert(_place(mail) === "none" && mail.tracked && entry.pinLook.action === "pin", "unpinned: the modal ends, the entry stays");
 

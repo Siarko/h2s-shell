@@ -443,7 +443,8 @@ Singleton {
     // down in steps of `step`, at the first spot no other modal holds (within half a step) —
     // so pinning several fans them out with each title line in sight. `args`: { modals
     // ([{ x, y }]), width (the toast's), screenWidth, screenHeight, height (the toast's),
-    // column (the toasts' column's left edge), top, step, gap }. → { x, y }, inside the screen
+    // column (the toasts' column's left edge), top, step, gap, insets (the bar's, as
+    // clampToScreen) }. → { x, y }, inside the screen, off the bar
     function pinSpot(args): var {
         const width = Number(args?.width) || 0;
         // A title line and a little more: each one under the next stays in sight
@@ -458,7 +459,23 @@ Singleton {
                 break;
             y += step;
         }
-        return clampToScreen(x, y, width, args?.height, args?.screenWidth, args?.screenHeight);
+        return clampToScreen(x, y, width, args?.height, args?.screenWidth, args?.screenHeight, args?.insets);
+    }
+
+    // The screen a notification pinned from the centre goes to: the centre's own, where the
+    // click was; not known (""), the toasts' screen. "": nowhere to show it.
+    function pinScreen(centreScreen, toastScreen): string {
+        return typeof centreScreen === "string" && centreScreen !== "" ? centreScreen : (toastScreen ?? "");
+    }
+
+    // Whether a toast draws its countdown bar. `args`: { staying (its kind stays), modal,
+    // counting (it counts down now) }. One that stays has none; a modal only while it
+    // counts — pinned, it is kept and does not count, and a full bar would say it will go.
+    // An ordinary one in the stack shows it full while it waits its turn to count.
+    function showsTimer(args): bool {
+        if (args?.staying === true)
+            return false;
+        return args?.modal !== true || args?.counting === true;
     }
 
     // The pin control on an entry in the centre, from whether its notification is a modal:
@@ -479,14 +496,18 @@ Singleton {
         return next;
     }
 
-    // A toast dropped partly off its screen comes back inside it, whole where it fits
-    function clampToScreen(x, y, width, height, screenWidth, screenHeight): var {
-        const inside = (value, size, room) => {
+    // A toast dropped partly off its screen comes back inside it, whole where it fits.
+    // `insets` ({ top, bottom, left, right }, optional): what the bar keeps at the screen's
+    // edges — a toast left over the bar would take its clicks
+    function clampToScreen(x, y, width, height, screenWidth, screenHeight, insets): var {
+        const inset = side => Math.max(0, Number(insets?.[side]) || 0);
+        const inside = (value, size, low, room) => {
             const number = Number(value);
-            const high = Math.max(0, (Number(room) || 0) - (Number(size) || 0));
-            return Number.isFinite(number) ? Math.min(high, Math.max(0, Math.round(number))) : 0;
+            const high = Math.max(low, (Number(room) || 0) - (Number(size) || 0));
+            return Number.isFinite(number) ? Math.min(high, Math.max(low, Math.round(number))) : low;
         };
-        return { x: inside(x, width, screenWidth), y: inside(y, height, screenHeight) };
+        return { x: inside(x, width, inset("left"), (Number(screenWidth) || 0) - inset("right")),
+                 y: inside(y, height, inset("top"), (Number(screenHeight) || 0) - inset("bottom")) };
     }
 
     // A notification announced again (a job started, stalled or ended). `args`: { toastsOn,

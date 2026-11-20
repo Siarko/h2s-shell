@@ -20,6 +20,8 @@ Item {
     // height of 0: the window's
     property int dropWidth: screenWidth
     property int dropHeight: 0
+    // What the bar keeps at the screen's edges: a drop stays off it (ToastRules.clampToScreen)
+    property var dropInsets: null
     required property var screenModelData
     // The notification's id, -1 for a card shown alone (no queue behind it)
     property int toastId: -1
@@ -90,7 +92,7 @@ Item {
     // where it was dropped it would be outside the window's input mask, unclickable.
     function _drop() {
         const windowHeight = dropHeight > 0 ? dropHeight : (Window.window?.height ?? 0);
-        const place = ToastRules.clampToScreen(x, y + originY, width, height, dropWidth, windowHeight);
+        const place = ToastRules.clampToScreen(x, y + originY, width, height, dropWidth, windowHeight, dropInsets);
         _lastY = place.y - originY;
         x = place.x;
         dragging = false;
@@ -343,8 +345,8 @@ Item {
         onDismissRequested: root.dismiss()
         // An action on a resident notification leaves its toast on screen (the spec: it
         // stays after an action); only "×" takes it away
-        // No bar on a toast that stays
-        timerVisible: !root._staying
+        // No bar on a toast that stays, nor on a modal that does not count (a pinned one)
+        timerVisible: ToastRules.showsTimer({ staying: root._staying, modal: root.modal, counting: root._counting })
         timerProgress: root.remaining
 
         HoverHandler {

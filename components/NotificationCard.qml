@@ -16,6 +16,8 @@ Rectangle {
     // A pin in the header (the centre's entries): pinned, the notification stays on screen as
     // a modal (Notifications.pinToast) until unpinned or dismissed
     property bool pinnable: false
+    // The screen a pin puts the notification on: the card's own (the centre's), "" unknown
+    property string screenName: QsWindow.window?.screen?.name ?? ""
     // The pin's glyph, tooltip and effect, from whether it is a modal now (ToastRules.pinLook)
     readonly property var pinLook: ToastRules.pinLook(notification !== null && Notifications.isModal(notification.id))
     property int imageMaxHeight: 120
@@ -92,7 +94,7 @@ Rectangle {
         if (!notification)
             return;
         if (pinLook.action === "pin")
-            Notifications.pinToast(notification);
+            Notifications.pinToast(notification, screenName);
         else
             Notifications.unpinToast(notification.id);
     }

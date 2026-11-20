@@ -175,17 +175,21 @@ Item {
                 text: "󰋽"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBodyLarge
-                color: _infoHover.hovered ? Theme.textPrimary : Theme.textSecondary
+                color: _infoArea.lit ? Theme.textPrimary : Theme.textSecondary
                 Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                HoverHandler {
-                    id: _infoHover
+                PointerArea {
+                    id: _infoArea
+                    objectName: "infoArea"
+                    // A finger's tap keeps it lit long enough to read the tip; a mouse's
+                    // pointer is over it while it reads
+                    onPressed: mouse => linger = PointerRules.pressIsTouch(mouse.source) ? 5000 : 200
                 }
 
                 HoverTip {
                     objectName: "infoTip"
                     target: _info
-                    shown: _infoHover.hovered
+                    shown: _infoArea.lit
                     text: root.entry?.info ?? ""
                 }
             }

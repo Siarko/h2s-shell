@@ -32,7 +32,7 @@ PanelWindow {
 
     // The whole screen, over the bar's reserved space too: kept out of it, the window would
     // start below a top bar (or right of a left one) and hang past the screen's far edge by
-    // as much. What stands under the bar is placed clear of it (_barInsets).
+    // as much. Everything it shows keeps clear of the bar, at any edge (_barInsets).
     exclusionMode: ExclusionMode.Ignore
     anchors {
         top: true
@@ -126,6 +126,7 @@ PanelWindow {
         height: contentHeight
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
+        barInsets: hud._barInsets
         screenModelData: hud.modelData
     }
 
@@ -174,7 +175,7 @@ PanelWindow {
         id: toastArea
         // The toast and, at most, the badge beside it
         readonly property int _reach: Theme.osdToast.width + Math.max(Theme.osdToast.screenGap, Theme.osdToast.badgeWidth + 8)
-        x: hud.implicitWidth - _reach
+        x: hud.implicitWidth - hud._barInsets.right - _reach
         y: toastStack.y
         width: _reach
         height: toastStack.contentHeight
@@ -184,12 +185,14 @@ PanelWindow {
         id: volumeOsd
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
+        rightInset: hud._barInsets.right
     }
 
     ShellNotificationHudItem {
         id: shellNotifItem
         screenWidth: hud.implicitWidth
         screenHeight: hud.implicitHeight
+        bottomInset: hud._barInsets.bottom
         screenModelData: hud.modelData
     }
 }

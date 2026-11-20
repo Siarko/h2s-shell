@@ -21,6 +21,10 @@ Item {
     // The part of this window on the screen, where a dropped or pinned toast is kept
     property int dropWidth: screenWidth
     property int dropHeight: screenHeight
+    // The bar's reserved space at each edge (BarGeometry.reservedInsets): toasts, badges and
+    // drops keep clear of it
+    property var barInsets: ({ top: 0, bottom: 0, left: 0, right: 0 })
+    readonly property int _rightEdge: screenWidth - (barInsets?.right ?? 0)
     required property var screenModelData
     readonly property string screenName: screenModelData?.name ?? ""
 
@@ -95,7 +99,8 @@ Item {
                 height: toastFor(entry.id)?.height ?? 0,
                 screenWidth: dropWidth,
                 screenHeight: dropHeight,
-                column: screenWidth - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8,
+                column: root._rightEdge - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8,
+                insets: root.barInsets,
                 top: root.y,
                 gap: Theme.osdToast.screenGap
             });
@@ -124,7 +129,7 @@ Item {
     // The waiting counts, on the toasts' screen only
     readonly property var _badges: _toastScreen ? Notifications.toastBadges : ({ critical: 0, staying: 0, ordinary: 0 })
     readonly property bool _anyBadge: _badges.critical > 0 || _badges.staying > 0 || _badges.ordinary > 0
-    readonly property real restX: screenWidth - Theme.osdToast.width
+    readonly property real restX: _rightEdge - Theme.osdToast.width
         - (_anyBadge ? Theme.osdToast.badgeWidth + 8 : Theme.osdToast.screenGap)
 
     // The toast of notification `id`, or null
@@ -203,6 +208,7 @@ Item {
             screenWidth: root.screenWidth
             dropWidth: root.dropWidth
             dropHeight: root.dropHeight
+            dropInsets: root.barInsets
             screenModelData: root.screenModelData
             toastId: Number(modelData)
             present: root._presentKeys.includes(modelData)
@@ -223,7 +229,7 @@ Item {
         readonly property var beside: root.layout.badges[queue] ?? null
         readonly property bool critical: look.border === "error"
         objectName: queue + "Badge"
-        x: root.screenWidth - width
+        x: root._rightEdge - width
         y: beside?.y ?? 0
         width: Theme.osdToast.badgeWidth
         // As tall as the toast beside it; a sensible size without one
