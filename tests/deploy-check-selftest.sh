@@ -51,21 +51,30 @@ stand_in h2s-shell \
     '[ "$1 $2" = "ipc call" ] || exit 64' \
     'cat "$CASE/$3.json" 2> /dev/null' \
     'exit "$(cat "$CASE/$3.status" 2> /dev/null || echo 0)"'
-# qs: `list` prints the case's instances, `log <file>` the case's log for that instance
+# qs: `list -p <dir>` prints the case's instances of that directory's shell.qml (as Quickshell
+# filters them), `log <file>` the case's log for that instance
 stand_in qs \
     'echo "$*" >> "$CASE/qs-calls"' \
     'case "$1" in' \
-    '    list) cat "$CASE/instances" ;;' \
+    '    list) [ "$2" = -p ] || exit 64; awk -v want="$3/shell.qml" '"'"'/^Instance /{ if (block != "" && keep) printf "%s", block; block = ""; keep = 0 } { block = block $0 "\n" } /Config path:/ { keep = ($3 == want) } END { if (keep) printf "%s", block }'"'"' "$CASE/instances" ;;' \
     '    log) id=$(basename "$(dirname "$2")"); cat "$CASE/log-$id" 2> /dev/null || { echo "no log $2" >&2; exit 1; } ;;' \
     '    *) exit 64 ;;' \
     'esac'
 stand_in tailscale 'echo "$*" >> "$CASE/tailscale-calls"' 'exit 0'
 ln -s "$(type -P basename)" "$work/bin/basename"
-# A launch.sh for H2S_SHELL_DIR without an h2s-shell command: the same answers
-mkdir -p "$work/checkout/scripts" "$work/other/scripts"
-cp "$work/standins/h2s-shell" "$work/checkout/scripts/launch.sh"
-cp "$work/standins/h2s-shell" "$work/other/scripts/launch.sh"
-touch "$work/checkout/shell.qml" "$work/other/shell.qml"
+# The packaged shell beside the h2s-shell command (<prefix>/share/h2s-shell); a checkout's
+# launch.sh for H2S_SHELL_DIR without an h2s-shell command, the same answers; another copy
+# (a test bed's) that must never be read
+mkdir -p "$work/share/h2s-shell/scripts" "$work/checkout/scripts" "$work/other/scripts"
+for copy in share/h2s-shell checkout other; do
+    cp "$work/standins/h2s-shell" "$work/$copy/scripts/launch.sh"
+    touch "$work/$copy/shell.qml"
+done
+packaged=$(cd "$work/share/h2s-shell" && pwd -P)
+checkout=$(cd "$work/checkout" && pwd -P)
+# An h2s-shell with no packaged shell beside it
+mkdir -p "$work/bare/bin"
+cp "$work/standins/h2s-shell" "$work/bare/bin/h2s-shell"
 
 # ---- Canned answers ---------------------------------------------------------------------------
 good_modules='{"api":"1.35","safeMode":false,"safeModeReason":"","hostError":"","testMode":false,"modules":[{"id":"tailscale","name":"Tailscale","version":"0.6.0","directory":"/m/tailscale","state":"loaded","enabled":true,"errors":[],"warnings":["a warning"],"deprecations":[]}]}'
@@ -78,7 +87,10 @@ new_case() {
     mkdir -p "$CASE"
     printf '%s\n' "$good_modules" > "$CASE/modules.json"
     printf '%s\n' "$good_state" > "$CASE/tailscale.json"
-    printf 'Instance abc123:\n  Process ID: 1\n  Config path: %s/checkout/shell.qml\n' "$work" > "$CASE/instances"
+    {
+        printf 'Instance bed999:\n  Process ID: 2\n  Config path: %s/other/shell.qml\n  Launch time: 2026-01-01 08:00:00 (running)\n' "$work"
+        printf 'Instance abc123:\n  Process ID: 1\n  Config path: %s/shell.qml\n  Launch time: 2026-01-02 09:00:00 (running)\n' "$packaged"
+    } > "$CASE/instances"
     {
         echo "$(stamp 60)  INFO: Configuration Loaded"
         echo "  a continuation line without a timestamp"
@@ -87,11 +99,12 @@ new_case() {
 }
 
 # run [VAR=value…] [-- options…]: OUTPUT and STATUS of the check, with the stand-ins first
+# (PATH_FIRST, set by the caller, goes before them)
 run() {
     local -a assignments=()
     while [ $# -gt 0 ] && [ "$1" != -- ]; do assignments+=("$1"); shift; done
     [ "${1:-}" = -- ] && shift
-    OUTPUT=$(env -i HOME="$work" XDG_RUNTIME_DIR="$work/run" CASE="$CASE" PATH="$work/standins:$work/bin" \
+    OUTPUT=$(env -i HOME="$work" XDG_RUNTIME_DIR="$work/run" CASE="$CASE" PATH="${PATH_FIRST:-}$work/standins:$work/bin" \
         "${assignments[@]}" "$bash_path" "$SCRIPT" "$@" 2>&1)
     STATUS=$?
 }
@@ -115,8 +128,8 @@ check "the counts are printed" says "devices 7, exitNodes 2, warnings 0, streamU
 check "a line as often as the limit passes; continuation lines are left out" says "PASS  log: instance abc123: no line more than 5 times in the last 10 minutes (6 lines)"
 check "only the two reads went over the IPC" calls_were "$reads_only"
 check "no tailscale command ran" no_tailscale
-check "qs listed the running instances and read that instance's log" \
-    test "$(cat "$CASE/qs-calls")" = "list --all --no-color"$'\n'"log $work/run/quickshell/by-id/abc123/log.qslog --log-times --no-color"
+check "qs listed the packaged shell's instances and read only that instance's log, not another copy's" \
+    test "$(cat "$CASE/qs-calls")" = "list -p $packaged --no-color"$'\n'"log $work/run/quickshell/by-id/abc123/log.qslog --log-times --no-color"
 
 echo "== A line repeated"
 new_case repeated
@@ -165,23 +178,34 @@ check "… without its control characters" test "$(printf '%s' "$OUTPUT" | tr -d
 
 echo "== Which shell"
 new_case dir
-printf 'Instance abc123:\n  Config path: %s/other/shell.qml\nInstance def456:\n  Config path: %s/checkout/shell.qml\nInstance ghi789:\n  Config path: /nowhere/shell.qml\n' "$work" "$work" > "$CASE/instances"
+{
+    cat "$CASE/instances"
+    printf 'Instance new456:\n  Config path: %s/shell.qml\n  Launch time: 2026-01-03 10:00:00 (running)\n' "$checkout"
+    printf 'Instance def456:\n  Config path: %s/shell.qml\n  Launch time: 2026-01-02 10:00:00 (running)\n' "$checkout"
+} > "$CASE/instances.new"
+mv "$CASE/instances.new" "$CASE/instances"
 cp "$CASE/log-abc123" "$CASE/log-def456"
+cp "$CASE/log-abc123" "$CASE/log-new456"
 mv "$work/standins/h2s-shell" "$work/h2s-shell.away"
 run H2S_SHELL_DIR="$work/checkout"
 check "without h2s-shell, H2S_SHELL_DIR's launch.sh takes the calls" says "via $work/checkout/scripts/launch.sh"
 check "… only the reads" calls_were "$reads_only"
-check "only the log of the instance from H2S_SHELL_DIR is read" \
+check "only the log of H2S_SHELL_DIR's instance the IPC takes (the oldest) is read" \
     test "$(grep '^log' "$CASE/qs-calls")" = "log $work/run/quickshell/by-id/def456/log.qslog --log-times --no-color"
 run
 check "neither h2s-shell nor H2S_SHELL_DIR: exit 2" status_is 2
 check "… saying why" says "no h2s-shell command on PATH and no H2S_SHELL_DIR"
 mv "$work/h2s-shell.away" "$work/standins/h2s-shell"
+new_case bare
+PATH_FIRST="$work/bare/bin:" run
+check "an h2s-shell with no packaged shell beside it, no H2S_SHELL_DIR: exit 2" status_is 2
+check "… saying why" says "cannot tell which shell the IPC reaches"
+check "… before any call" test ! -e "$CASE/calls"
 new_case none
-printf 'Instance zzz:\n  Config path: /nowhere/shell.qml\n' > "$CASE/instances"
+printf 'Instance bed999:\n  Config path: %s/other/shell.qml\n  Launch time: 2026-01-01 08:00:00 (running)\n' "$work" > "$CASE/instances"
 run
-check "no running h2s-shell instance: exit 1" status_is 1
-check "… named" says "FAIL  log: no running h2s-shell instance found"
+check "no running instance of the shell the IPC reaches (only another copy): exit 1" status_is 1
+check "… named" says "FAIL  log: no running instance of $packaged"
 run -- --frobnicate
 check "a wrong option: exit 2" status_is 2
 run -- --minutes 0

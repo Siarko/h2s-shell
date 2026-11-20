@@ -23,9 +23,11 @@
 #
 # The IPC goes through `h2s-shell ipc call` (H2S_SHELL_DIR, when set, is passed on), or
 # without an `h2s-shell` command through "$H2S_SHELL_DIR/scripts/launch.sh ipc call". The log
-# is that of the running Quickshell instance whose config has scripts/launch.sh beside it
-# (the one in H2S_SHELL_DIR, when set), read with the `qs` on PATH or beside the running
-# Quickshell. Needs bash, coreutils (timeout), awk and python3.
+# read is that of the instance the IPC reaches: of the shell in H2S_SHELL_DIR, else of the
+# packaged one beside the `h2s-shell` command (<prefix>/share/h2s-shell), the one Quickshell
+# picks for `qs -p <that directory>` (`qs list -p`: same display; the oldest, as `qs ipc`
+# takes) — never another copy's (a test bed's, a working tree's). Read with the `qs` on PATH
+# or beside the running Quickshell. Needs bash, coreutils (timeout), awk and python3.
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up
 # (no launcher, no qs, no python3, a wrong option).
@@ -72,6 +74,19 @@ if [ -z "$qs" ]; then
     done
 fi
 [ -n "$qs" ] || { echo "deploy-check.sh: Quickshell's qs not found (not on PATH, no Quickshell running): cannot read the shell's log" >&2; exit 2; }
+
+# The shell directory the IPC reaches: the launcher runs "${H2S_SHELL_DIR:-<its own>}/scripts/launch.sh",
+# which talks to `qs -p <that directory>`
+if [ -n "$shell_dir" ]; then
+    reached_dir=$shell_dir
+else
+    reached_dir=$(dirname "$(readlink -f "$(command -v h2s-shell)")")/../share/h2s-shell
+fi
+if [ ! -f "$reached_dir/shell.qml" ]; then
+    echo "deploy-check.sh: cannot tell which shell the IPC reaches (no $reached_dir/shell.qml): set H2S_SHELL_DIR to the shell's directory" >&2
+    exit 2
+fi
+reached_dir=$(cd "$reached_dir" && pwd -P)
 
 failures=0
 pass() { echo "  PASS  $1"; }
@@ -198,25 +213,15 @@ while IFS=$'\t' read -r kind text; do
 done < "$work/verdicts"
 
 # ---- The running shell's log ---------------------------------------------------------------
-# Running instances (qs list, without the dead) whose config has scripts/launch.sh beside it
-want_config=""
-[ -n "$shell_dir" ] && want_config=$(readlink -f "$shell_dir/shell.qml" 2> /dev/null || echo "$shell_dir/shell.qml")
-"$qs" list --all --no-color > "$work/instances" 2> /dev/null
-mapfile -t instances < <(awk '
-    /^Instance / { id = $2; sub(/:$/, "", id) }
-    /^ *Config path:/ { print id "\t" $3 }' "$work/instances")
+# The instance the IPC reached: of those Quickshell lists for that directory, the oldest
+"$qs" list -p "$reached_dir" --no-color > "$work/instances" 2> /dev/null
 logs=()
-for line in "${instances[@]}"; do
-    id=${line%%$'\t'*}
-    config=${line#*$'\t'}
-    [ -f "$(dirname "$config")/scripts/launch.sh" ] || continue
-    if [ -n "$want_config" ] && [ "$(readlink -f "$config" 2> /dev/null || echo "$config")" != "$want_config" ]; then
-        continue
-    fi
-    logs+=("$id")
-done
+reached=$(awk '
+    /^Instance / { id = $2; sub(/:$/, "", id) }
+    /^ *Launch time:/ { print $3 " " $4 "\t" id }' "$work/instances" | sort | head -n 1 | cut -f2)
+[ -n "$reached" ] && logs+=("$reached")
 if [ "${#logs[@]}" = 0 ]; then
-    fail "log: no running h2s-shell instance found (qs list --all)${want_config:+ for $want_config}"
+    fail "log: no running instance of $reached_dir (qs list -p)"
 fi
 since=$(date -d "-$minutes min" '+%F %T')
 for id in "${logs[@]}"; do
