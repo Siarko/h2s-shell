@@ -303,3 +303,223 @@ Seen while reading (not yet in the tracker):
 - **Resident notifications stay** (staying queue) by default; a Notifications setting "Resident
   notification hide" (off by default) makes them count down like ordinary ones, with an info icon
   and a tooltip explaining what "resident" means.
+
+## 8. Plan
+
+Implements §7 as confirmed on the mockup. The queue logic is the mockup's `PlannedRules.js`
+(`~/src/h2s-mockups/notification-queues-planned/`), ported into `ToastRules.qml`. The pill,
+the centre's list, the bell, the lock screen's cards and the progress actions (§6.2–6.10)
+stay as they are.
+
+### 8.1 The views
+
+```
+ bar ────────────────────────────────────────────────┐
+                              ┌──────────────────┐┌──┐
+  critical (red outline)      │ ! Battery 3 %    ││+1│ ← red-outlined badge, red "+1"
+                              └──────────────────┘└──┘
+                              ┌──────────────────┐┌──┐
+  staying                     │ Sending 3 files  ││+2│ ← beside the queue's lowest toast
+                              │ ▓▓▓▓▓▓░░░░        │└──┘
+                              └──────────────────┘
+                              ┌──────────────────┐
+  ordinary (1, or the column) │ Mail from Ann     │      no badge: nothing waits there
+                              │▔▔▔▔▔▔▔▔▔ countdown│
+                              └──────────────────┘
+     ┏━━━━━━━━━━━━━━━━━━━┓                         a queue that waits with nothing shown:
+     ┃  ═══ (grip)    ×  ┃  moved out: accent       its badge below the stack (36 px)
+     ┃ Backup running    ┃  outline, grip; its
+     ┃ ▓▓▓▓░░░░░░        ┃  slot above is free
+     ┗━━━━━━━━━━━━━━━━━━━┛
+```
+- Order top to bottom: critical, staying, ordinary, each newest first, a wider gap between
+  queues (`stackOrder`). All toasts rest left of the badge column when any badge shows (as
+  today). A badge reads "+N", a click opens the centre.
+- Countdown: ordinary as today (sender's time at once, the user's time one at a time, oldest
+  first); a critical/staying/moved toast that no longer stays (a job ended) counts at once,
+  where it is. Hover still holds the countdown.
+- A finished job's toast shows no progress bar, only the countdown and a result mark (§8.6).
+
+### 8.2 Rules (`ToastRules.qml`, pure, `tests/ToastRulesTest.qml`)
+
+Port of `PlannedRules.js` over a plain state `{ waiting, shown: {critical, staying,
+ordinary: [ids oldest first]}, moved: [{id, queue, x, y}] }`; ids grow with arrival.
+- `queueFor({ critical, timingKind })` — critical first; else `"stays"` → staying, else
+  ordinary.
+- `timing(args)` grows `resident`, `residentHide`, `shellJob`: a resident notification with
+  expire -1 stays unless `residentHide`. **Not** for the shell's own progress handles
+  (`shellJob`: hint `x-qs-progress-run` present — Notifier makes every handle resident,
+  `Notifier.qml:279`, and modules cannot send `x-qs-` hints), or every "brief" job and every
+  finished job would stay. Their time stays what the handle sends (0 while running with
+  `whileRunning`, -1 otherwise). Expire 0 and positive times as today.
+- `limits({ critical 1–3 (1), staying 1–5 (1), layout, columnSize })` — replaces `slots`.
+- `enqueue`, `where`, `remove`, `requeue` (a waiting toast whose kind changed moves queue by
+  age — a job ending while it waits in staying goes to ordinary; shown and moved keep their
+  place), `dropWaiting` (toasts off: every queue's waiting dropped, shown and moved stay).
+- `nextToast(state, queue, limits)` → the oldest waiting id of that queue while it has room,
+  -1 otherwise, and `show(state, id)` — the pull form of `fill`, for the slot that takes it.
+  No overtaking between queues any more: `nextToast(kinds, …)` and the old `stackOrder` go.
+- `centreOpened(state)` → `{ state, hidden, dropped }`: only the ordinary queue, shown and
+  waiting. While the centre is open, `enqueue` still takes critical and staying ones; an
+  ordinary one is not queued (seen in the centre).
+- `counting(state, kinds)`, `stackOrder(state)`, `badges(state)` → `{ critical, staying,
+  ordinary }` waiting counts, and `badgeLook(queue)` → `{ border: "error"|"outline", label }`
+  (the critical badge's outline: `Theme.error`, `Theme.border.selectedWidth`).
+- `canMove(state, id, movable)`, `moveOut(state, id, x, y, movable)` (a moved one just changes
+  place), `clampToScreen(x, y, w, h, screenW, screenH)` (dropped half off screen → inside).
+- `announceEffect(state, id, { toastsOn, centreOpen, alive, queue })` moves here from
+  `NotificationRules.announceEffect` (its cases move with it): shown or moved → "restart";
+  waiting → "none"; centre open and ordinary → "none"; else "queue".
+- `describe` for the log ("1/1 shown, 2 wait"), logged on a change only. Cases: every function on empty/one/full queues, limits clamped (0, 4, NaN, strings),
+critical never in staying, resident with/without hide, a shell job resident and brief →
+ordinary, a job ending waiting → ordinary / shown → counts in place, centre opened with all
+three queues filled, a moved toast freeing its slot, `counting` across queues and moved.
+
+### 8.3 State and the HUD
+
+- `Notifications.qml`: one `toastState` (the rules' shape) replaces `shownToasts`,
+  `ownTimeToasts`, `stayingToasts`, `toastRoom`; `hudQueue` stays as a derived list of the
+  waiting notification objects (oldest first) so `NotifierTest` keeps its entry point;
+  `toastScreens` (id → screen name at show) and `toastDurations` stay. `takeToast(queue)`
+  replaces `takeHudNotification`. Late answers lose: a toast is only ever shown from
+  `toastState`, never from a stale slot.
+- `Hud.qml`: fixed 15 slots → one delegate per toast on this screen (shown, moved, leaving),
+  `KeyedModel` of ids (string keys, `byKey` lookup — the ScriptModel rule; a moved toast
+  keeps its delegate, so countdown, reply text and swipe state stay). A delegate is created
+  at show and destroyed after its slide-out; the leaving ones are kept in a `leaving` list
+  until then. Three badges from `badges`/`badgeLook`, each beside its queue's lowest toast.
+- Lock and screensaver never pause: nothing pauses today (the HUD keeps counting under the
+  lock surface); the plan keeps it so and the lock bed checks it.
+
+### 8.4 "×" and the centre
+
+- "×" (and the touch swipe, its twin) on a toast **dismisses**: `notification.dismiss()`,
+  the entry leaves the centre; a job goes on, its handle learns the close (as from the
+  centre's "dismiss"). A job's "×" gets a `HoverTip`: "Dismiss. The job goes on."
+- An action: unchanged — the toast leaves, a resident entry stays (but see question 1).
+- Opening the centre runs `centreOpened`: ordinary toasts slide out and their waiting ones
+  drop; critical, staying and moved stay, and new critical/staying ones still show.
+
+### 8.5 Moved-out toasts
+
+- **Where they live.** Proposed: in the HUD's own full-screen overlay window of their
+  screen (`Hud.qml`, `WlrLayer.Overlay`), as the same delegate placed at its `moved` x/y,
+  with its rectangle added to the window's input mask. One window per screen already
+  covers the screen, a drag stays inside one surface (Wayland's implicit pointer grab
+  goes to the surface pressed — a small window moved by its own margins under the
+  pointer would compute its position from coordinates that shift with each configure),
+  and the delegate is not rebuilt, so nothing must be handed over. **First step of the
+  slice**: a spike that the mask takes a changing set of regions (`Region { regions:
+  <Variants over moved ids>.instances }`). If not, fall back to one small layer-shell
+  window per moved toast (top-left anchored on its screen, margins = x/y, keyboard on
+  demand), handed over on drop, re-dragged by margins from `margin + scene point`.
+- **Drag** by the title line (header row less the "×"), `DragHandler { target: null }`,
+  only when `canMove` (option on; critical or staying, shown or moved). On drop:
+  `clampToScreen`, then `moveOut` — its queue's slot is free, the next waiting shows.
+  Grip: 36×3 bar at the top, `Theme.textMuted`; moved: accent outline (`Theme.accent`,
+  `Theme.border.width`). No limit on how many.
+- **Ends**: "×" dismisses; an action, its sender closing it, or a finished job's countdown
+  (counts at once) removes it. The centre opening and "Show toasts" off leave it.
+- **Screen change / restart.** A moved toast stays on its screen while that screen exists;
+  new toasts follow `toastScreen` as today. Its screen gone (its HUD destroyed) → back
+  into its queue as waiting, by age (`requeue`-like `returnToQueue`, a case). A reload of
+  the shell loses positions (not kept in `Config`): what the server hands over again goes
+  through its queue like the rest, as today.
+- Turning "Movable" off leaves moved ones where they are; it only stops new drags.
+
+### 8.6 Card problems
+
+- **Doubled bar.** On a toast that counts down and whose job ended (done/failed), the
+  progress bar is not drawn; the summary gets a result mark before it — "✓" in
+  `Theme.success` or "✗" in `Theme.error` (Nerd Font glyphs, the theme's tokens) — and the
+  countdown is the only bar. The centre (no countdown) keeps the full toned bar. Rule:
+  `NotificationRules.progressView(progress, counting)` → `{ bar, mark }`, cases for each
+  state × counting.
+- **Action buttons.** Through `SmallButton` with a new kind `"action"` in
+  `ThemeRules.buttonLook`: fill `accent` (`accentHover` when hot), label `onAccent`, no
+  border; `PointerArea` comes with it. Cases in the theme suite; the card's hand-made
+  `Rectangle` + `MouseArea` go.
+
+### 8.7 Settings
+
+| Key | Label | Type, default |
+|---|---|---|
+| `notifications.criticalToastLimit` | Critical toasts at once | number 1–3, 1 |
+| `notifications.stayingToastLimit` | Staying toasts at once | number 1–5, 1 |
+| `notifications.movableToasts` | Move toasts by their title | bool, true (mockup; question 3) |
+| `notifications.residentHide` | Resident notification hide | bool, false; info icon |
+
+- `notifications.maxStayingToasts` goes. **Migration**: none if unused — this machine's
+  `config.json` sets only `codePatterns` (checked 2026-11-20); check the Framework before
+  slice 2 (read its config over the deploy path, no change). Unset on both → no migration.
+  Set → ask the owner. The default falls from 3 to 1, as §7 asks.
+- The info icon: a schema field `info` (generic, any entry) that `SchemaSettingEditor`
+  shows as a glyph after the label with a `HoverTip`. Text: "A resident notification is one
+  its app keeps until you dismiss it, such as a music player's controls. Off, its toast
+  stays on screen; on, it counts down like any other."
+- `followSenderTime` stays ("Apps choose how long"). Proposed meaning with the queues: off
+  → an outside app's time, 0 included, is replaced by the user's time (ordinary queue);
+  critical, resident (by its own setting) and the shell's own jobs (`whileRunning` is the
+  user's own choice in the module) are not apps' times and keep their queue (question 2).
+- Page: the two limits after "Toasts in the column", then movable, then resident hide; all
+  `available: _toastsOn`.
+
+### 8.8 Slices, in order
+
+1. **Queue rules.** §8.2 into `ToastRules.qml` beside the old functions (unused yet).
+   Tests: `ToastRulesTest` cases above. No screen.
+2. **Three stacks and badges.** §8.3; schema keys for the two limits and resident hide
+   (no page yet); resident/shell-job timing; requeue on a change of kind; old `slots`,
+   `nextToast`, `stackOrder` and `maxStayingToasts` removed; `shelltest.notificationState`
+   gains `toast: { place, queue, duration }` and `badges`. Tests: `NotifierTest` through
+   `hudQueue` — 2 critical with limit 1 → one shown, critical badge 1; staying and ordinary
+   fill independently; a job waiting in staying ends → ordinary; a resident outside one
+   stays, with hide counts; a shell job (resident) "brief" → ordinary. Lock bed
+   `notifications.sh` grown: urgency 2 twice → one shown, the other waiting in critical;
+   expire 0 + -1 → staying and ordinary both shown. **Owner's eyes**: the stacks, gaps,
+   badges, the critical badge's outline. CHANGELOG line.
+3. **"×" dismisses, the centre hides only ordinary, announces.** §8.4; `announceEffect`
+   moved. Tests: `NotifierTest` — "×" → `tracked` false; centre open → ordinary gone,
+   critical/staying shown, a new staying one shows; an announced ordinary while open → none.
+   Lock bed: a 2000 ms toast sent, the session locked → its toast gone while locked (waited
+   on state), queue moves on; `notificationDismiss`-style "×" over shelltest leaves no entry.
+   CHANGELOG line.
+4. **Movable toasts.** Spike, then §8.5. Tests: `ToastRulesTest` (`moveOut`, `clampToScreen`,
+   `returnToQueue`); `NotifierTest` drags a staying toast by its title (QtTest
+   `mousePress/Move/Release` in the suite's window) → moved, its slot takes the next; a
+   finished job moved out counts down and leaves; "×" on it dismisses; the HUD destroyed →
+   it waits again. **Owner's eyes**: grip, outline, dragging, the input mask (clicks pass
+   beside a moved toast). CHANGELOG line.
+5. **Settings page.** §8.7: page rows, `movableToasts`, the `info` field and its icon.
+   Tests: `SettingsPagesTest` (rows present, availability with toasts off), a schema case
+   for `info`. **Owner's eyes**: the page and the tooltip.
+6. **Finished job: one bar.** §8.6 first item. Tests: `NotificationRulesTest`
+   (`progressView`), `NotifierTest` (a done job's toast has no visible "progress" item, the
+   centre's has). **Owner's eyes**.
+7. **Action buttons' contrast.** §8.6 second item. Tests: theme suite `buttonLook("action")`
+   cases; `NotifierTest` clicks an action through the button. **Owner's eyes** (light and
+   dark themes).
+8. **Docs.** `docs/FEATURES.md` "Notifications" (three queues, badges, moving, "×", the
+   settings), `docs/ARCHITECTURE.md` (the toast state, keyed toasts, the mask), both
+   systems alike; CHANGELOG lines checked; minor version on release.
+
+### 8.9 Open questions for the owner
+
+1. A resident notification now stays on screen in the staying queue, but running one of its
+   actions still takes the toast away (the entry stays). A music player's "Pause" on its
+   staying toast would then make the toast vanish, though the notification is still there
+   and the next track change does not bring it back. Should an action on a resident toast
+   leave the toast on screen (it goes only with "×", which dismisses it), or take it away
+   as today?
+2. "Apps choose how long" off today makes every toast use your time, also an app's "stay
+   until dismissed". With the queues, should it still turn an app's "stay" into a counting
+   toast, while critical ones, resident ones and the shell's own jobs set to "on screen until
+   done" keep staying? For example, with it off a backup app asking to stay would count down
+   in 5 s, but a Taildrop transfer would still stay until it ends.
+3. Moving toasts is an option: should it be on or off when the shell starts fresh? The
+   mockup had it on; off, nobody sees the grip until they find the setting.
+4. "Fullscreen window there: Don't show" today slides every toast away and drops what waits
+   when a fullscreen window appears on the toasts' screen. Should critical, staying and
+   moved-out toasts stay over the fullscreen window (only ordinary ones going, as when the
+   centre opens), or should everything go, as today? For example, a battery-critical toast
+   during a fullscreen game.
