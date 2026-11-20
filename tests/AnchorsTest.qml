@@ -1934,6 +1934,13 @@ TestCase {
     property var _popupCellA: null
     property var _popupCellB: null
     property int _popupCycles: 0
+    // The centre's places told to the toasts (Notifications.centreArea), open ones only
+    property var _centreReports: []
+    function _countCentreReport() {
+        const area = Notifications.centreArea;
+        if (area !== null)
+            _centreReports = _centreReports.concat([{ x: area.x, y: area.y, width: area.width, height: area.height }]);
+    }
 
     function _makePopup() {
         _popupBar = Qt.createQmlObject("import QtQuick; import Quickshell; import Quickshell.Wayland; PanelWindow {"
@@ -2641,15 +2648,34 @@ TestCase {
                 assertEqual(_names(_inPopup("popup.network.connections").appendHost), "anchors-popups:Element,anchors-popups:Slot",
                             "the network popup on screen: the module's elements at the connections' end (" + number + ")");
                 assertEqual(_popupLiveProblems("popup.network").join("; "), "", "… its places live (" + number + ")");
-                // Another cell's panel while it is open: the popup moves to it
+                // Another cell's panel while it is open: the popup moves to it. The first time,
+                // what it tells the toasts on the way (Notifications.centreArea) is counted
+                if (number === 1) {
+                    _centreReports = [];
+                    Notifications.centreAreaChanged.connect(_countCentreReport);
+                }
                 _realPopup.open(_popupCellB, false, "notifications", null, number % 2 === 0);
             });
             _then("moved to the notifications popup (" + number + ")", () => _popupShown() && _live("popup.network") === ""
                   && _ready(_inPopup("popup.notifications")?.prependHost ?? { items: [] }, 2), () => {
                 assertEqual(_names(_inPopup("popup.notifications").prependHost), "anchors-popups:Element,anchors-popups:Slot",
                             "… moved to the notifications popup: its elements under the header, the network popup's blocks gone (" + number + ")");
-                _realPopup.close();
+                if (number === 1)
+                    _waitUntil = Date.now() + 500;
+                else
+                    _realPopup.close();
             });
+            if (number === 1) {
+                _then("the centre settled", () => Date.now() >= _waitUntil && !_realPopup.item._contentAnimating, () => {
+                    Notifications.centreAreaChanged.disconnect(_countCentreReport);
+                    const body = _realPopup.item.contentItem.children.find(child => child.objectName === "popupBody") ?? null;
+                    const area = body?._centreArea ?? null;
+                    assert(area !== null && _centreReports.length === 1 && JSON.stringify(_centreReports[0]) === JSON.stringify(area),
+                           "moving over to the centre and resizing: its place told the toasts once, as it settled ("
+                           + JSON.stringify(_centreReports) + " vs " + JSON.stringify(area) + ")");
+                    _realPopup.close();
+                });
+            }
             _then("the popup closed (" + number + ")", () => !_realPopup.active && _live("popup") === "", () => {
                 _popupCycles++;
                 _realPopup.open(number % 2 === 0 ? _popupCellA : _popupCellB, false, "network", null, number % 3 === 0);

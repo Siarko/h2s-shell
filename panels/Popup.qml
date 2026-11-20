@@ -464,7 +464,7 @@ LazyLoader {
             property real position: 0
             Component.onCompleted: {
                 position = Math.round(_exact);
-                Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", _centreArea);
+                _reportCentreArea();
             }
             on_ExactChanged: {
                 position = _exact;
@@ -514,17 +514,33 @@ LazyLoader {
             clip: true
 
             // The notification centre open here: where it stands on the screen, out in full
-            // rather than mid-slide, for the toasts to keep clear of (Notifications.centreArea)
+            // rather than mid-slide, for the toasts to keep clear of (Notifications.centreArea).
+            // Told once it has settled: moving over from another panel or resizing, it changes
+            // every frame, and each change sets the toasts moving afresh — they trailed it.
             readonly property var _centreArea: {
                 if (!popupLoader.active || popupLoader.closing || popupLoader.contentType !== "notifications")
                     return null;
                 const full = BarGeometry.fromBarFrame(popup.edge,
                     { along: position, across: 0, alongLength: popup.shownLength, acrossLength: across },
                     popup.width, popup.height);
-                return { x: full.x + popup._screenOffset.x, y: full.y + popup._screenOffset.y,
-                         width: full.width, height: full.height };
+                return { x: Math.round(full.x + popup._screenOffset.x), y: Math.round(full.y + popup._screenOffset.y),
+                         width: Math.round(full.width), height: Math.round(full.height) };
             }
-            on_CentreAreaChanged: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", _centreArea)
+            on_CentreAreaChanged: _reportCentreArea()
+            // Closed (or another panel) at once; open, when it has stopped changing
+            function _reportCentreArea() {
+                if (_centreArea === null) {
+                    _centreSettle.stop();
+                    Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", null);
+                } else {
+                    _centreSettle.restart();
+                }
+            }
+            Timer {
+                id: _centreSettle
+                interval: 80
+                onTriggered: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", clipWrapper._centreArea)
+            }
             Component.onDestruction: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", null)
 
             Behavior on _start {

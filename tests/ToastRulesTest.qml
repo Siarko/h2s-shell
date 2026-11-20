@@ -374,6 +374,16 @@ TestCase {
         same(R.stackEdge(edgeArgs({ centre: { x: 100, y: 0, width: 1800, height: 700 } })), { right: 432, free: true }, "stack edge: a centre as wide as the screen: the column stays on it");
         same(R.stackEdge(edgeArgs({ centre: { x: "x", width: 470 } })), { right: 1920, free: false }, "stack edge: not numbers: where it was");
         same(R.stackEdge(undefined), { right: 0, free: false }, "stack edge: nothing known");
+        same(R.stackEdge(edgeArgs({ top: 56, height: 200, centre: { x: 1440, y: 500, width: 470, height: 540 } })), { right: 1920, free: false },
+             "stack edge: a bottom bar's centre below the column: where it was");
+        same(R.stackEdge(edgeArgs({ top: 56, height: 600, centre: { x: 1440, y: 500, width: 470, height: 540 } })), { right: 1424, free: true },
+             "stack edge: a column reaching down beside the centre: left of it");
+        same(R.stackEdge(edgeArgs({ top: 56, height: 200, centre: { x: 1440, y: 40, width: 470, height: 700 } })), { right: 1424, free: true },
+             "stack edge: a top bar's centre level with the column: left of it");
+        same(R.stackEdge(edgeArgs({ top: 300, height: 100, centre: { x: 1440, y: 40, width: 470, height: 200 } })), { right: 1920, free: false },
+             "stack edge: a short centre above the column: where it was");
+        same(R.stackEdge(edgeArgs({ top: 56, height: 0, centre: { x: 1440, y: 500, width: 470, height: 540 } })), { right: 1920, free: false },
+             "stack edge: no toasts (height 0) away from the centre: where it was");
 
         // --- a click on a badge ---
         assertEqual(R.badgeClick("DP-1", "DP-1", false), "open", "badge click: its screen's bar, centre closed: opens there");

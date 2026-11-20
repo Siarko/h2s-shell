@@ -73,9 +73,11 @@ log "the toast's right edge at $right_before, the badge's at $badge_before"
 click_badge
 centre_open() { [ "$(popup_field open)" = true ] && [ "$(popup_field content)" = notifications ]; }
 check_within 3 "a click on the badge opens the centre" centre_open
+centre_placed() { [ -n "$(centre_field screen)" ]; }
+check_within 3 "… its place told to the toasts" centre_placed
 screen_a=$(centre_field screen)
 log "the centre open on $screen_a at x $(centre_field x), $(centre_field width) px wide"
-check "… on the badge's screen (the first)" test -n "$screen_a"
+check "… on the badge's screen (the first)" test "$screen_a" = WAYLAND-1
 check "the centre reaches into the toasts' column (else the next checks prove nothing)" \
     test "$(centre_field x)" -lt "$badge_before"
 check_within 3 "the toast and its badge move left of the centre, by the gap" column_left_of_centre "$updates"

@@ -513,9 +513,11 @@ Singleton {
     // The edge the toasts' column rests against on one screen, in its coordinates. `args`:
     // { screenWidth, insets (the bar's, as clampToScreen), centre (the notification centre's
     // rectangle { x, y, width, height } while it is open on this screen, else null), reach
-    // (the column's width: a toast and its badge), gap }. Normally the screen's right edge
-    // off the bar, the badges flush against it (free false). With the centre open across the
-    // column, the centre's left edge less `gap`, the column then standing free (free true):
+    // (the column's width: a toast and its badge), top and height (the column's, down to its
+    // lowest toast or badge; height left out: as tall as the screen), gap }. Normally the
+    // screen's right edge off the bar, the badges flush against it (free false). With the
+    // centre open across the column — side by side and level with it (a bottom bar's centre
+    // under the toasts leaves them) — the centre's left edge less `gap`, the column then standing free (free true):
     // the toasts' overlay is above the centre and would cover its cards. Never so far left
     // that the column leaves the screen. → { right, free }
     function stackEdge(args): var {
@@ -529,6 +531,14 @@ Singleton {
             return { right: edge, free: false };
         // Beside the column (a bar at the left, its centre there), or past the screen's edge
         if (left + width <= edge - reach || left >= edge)
+            return { right: edge, free: false };
+        // Above or below the column
+        const top = Number(args?.top) || 0;
+        const height = Number(args?.height);
+        const centreTop = Number(centre?.y) || 0;
+        const centreHeight = Number(centre?.height);
+        if (Number.isFinite(height) && Number.isFinite(centreHeight)
+                && (centreTop >= top + height || centreTop + centreHeight <= top))
             return { right: edge, free: false };
         const right = Math.round(left - Math.max(0, Number(args?.gap) || 0));
         return { right: Math.min(edge, Math.max(inset("left") + reach, right)), free: true };

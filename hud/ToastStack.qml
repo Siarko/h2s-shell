@@ -33,7 +33,8 @@ Item {
     // The toast and, at most, the badge beside it
     readonly property int reach: Theme.osdToast.width + Math.max(Theme.osdToast.screenGap, Theme.osdToast.badgeWidth + 8)
     readonly property var _edge: ToastRules.stackEdge({ screenWidth: screenWidth, insets: barInsets, centre: centre,
-                                                        reach: reach, gap: Theme.osdToast.screenGap })
+                                                        reach: reach, top: y, height: contentHeight,
+                                                        gap: Theme.osdToast.screenGap })
     // What the column rests against: the screen's edge, or by the open centre (free: then
     // nothing is flush against it — the gap is already kept)
     readonly property int rightEdge: _edge.right
