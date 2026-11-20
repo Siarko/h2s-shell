@@ -2275,3 +2275,10 @@ Plan: [plans/taildrop-ui.md](plans/taildrop-ui.md), approved on two mockups.
   the page summary in parts, warning only on problems; the two-panel popup's device row says
   "No progress" / "N failed". Read by the lead; module suites and stand-ins on both machines,
   the module's lock bed on NixOS.
+- **The bar wave and the status pill (C3, module API 1.35)** — on `master` 2026-11-20. Public
+  `ProgressBar.wave` (a band through the fill every `Theme.duration("progressWave")` 300 ms; a
+  fixed gradient, only moved; only in a shown window with something filled; none with reduce
+  motion); the notification card's bar waves while the job runs and grew in the last 10 s. New
+  public `StatusPill` (icon, label, kind, parts with tips and lines, `expanded`, `toggled`).
+  Reviewed (the wave's per-frame cost and hidden-window runs fixed); `tests/run-all.sh` passed
+  on both machines.
