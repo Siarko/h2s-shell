@@ -161,8 +161,23 @@ TestCase {
                "value 40: the bar at 0.4, the accent (" + progressBar.visible + ", " + progressBar.value + ", " + progressBar.tone + ")");
         progressCard.notification = withHints({ value: 40, "x-qs-progress-state": "failed" });
         assert(progressBar.visible && progressBar.value === 1 && progressBar.tone === "error", "failed: full, the error colour");
+        // A finished job: its mark beside the summary; on a card counting down (a toast) no
+        // bar of its own, the countdown the only bar (NotificationRules.progressView)
+        const progressMark = _find(progressCard, item => item.objectName === "progressMark");
+        assert(progressMark !== null && progressMark.visible && progressMark.text === "\uf00d", "failed, not counting (the centre): its ✗ beside the summary");
+        progressCard.notification = withHints({ value: 40, "x-qs-progress-state": "running" });
+        progressCard.timerVisible = true;
+        assert(progressBar.visible && !progressMark.visible, "running, counting down: the bar, no mark");
+        progressCard.notification = withHints({ value: 40, "x-qs-progress-state": "done" });
+        assert(!progressBar.visible && progressMark.visible && progressMark.text === "\uf00c" && Qt.colorEqual(progressMark.color, Theme.success),
+               "done, counting down: no progress bar, a ✓ in the success colour (" + progressBar.visible + ", " + progressMark.visible + ")");
+        progressCard.notification = withHints({ value: 40, "x-qs-progress-state": "failed" });
+        assert(!progressBar.visible && progressMark.visible && progressMark.text === "\uf00d" && Qt.colorEqual(progressMark.color, Theme.error),
+               "failed, counting down: no progress bar, a ✗ in the error colour");
+        progressCard.timerVisible = false;
+        assert(progressBar.visible && progressBar.tone === "error" && progressMark.visible, "failed, not counting (the centre): the toned bar and the ✗");
         progressCard.notification = withHints({});
-        assert(!progressBar.visible, "no value: no bar");
+        assert(!progressBar.visible && !progressMark.visible, "no value: no bar, no mark");
         progressCard.notification = Object.assign({}, notification, { body: "photo.jpg" });
         assert(!progressBar.visible, "no hints at all: no bar");
         progressCard.destroy();

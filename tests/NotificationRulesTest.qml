@@ -32,6 +32,25 @@ TestCase {
         assertEqual(bar({ value: 40, "x-qs-progress-state": 3 }), "true 0.4 running accent", "a state not a string: running");
         assertEqual(bar({ "x-qs-progress-state": "done" }), "false 0 done success", "done without a value: no bar");
 
+        // --- what a card draws: the bar, and a finished job's mark ---
+        const view = (hints, counting) => {
+            const result = NotificationRules.progressView(progress(hints), counting);
+            return [result.bar, result.mark === "" ? "check" : result.mark === "" ? "cross" : "-", result.tone === "" ? "-" : result.tone].join(" ");
+        };
+        const ofState = state => ({ value: 40, "x-qs-progress-state": state });
+        assertEqual(view(ofState("running"), false), "true - -", "running, not counting: the bar, no mark");
+        assertEqual(view(ofState("running"), true), "true - -", "running, counting: still the bar, no mark");
+        assertEqual(view(ofState("done"), false), "true check success", "done, not counting (the centre): the full bar and a ✓ in success");
+        assertEqual(view(ofState("done"), true), "false check success", "done, counting (a toast): no bar, the countdown alone; the ✓");
+        assertEqual(view(ofState("failed"), false), "true cross error", "failed, not counting: the bar and a ✗ in error");
+        assertEqual(view(ofState("failed"), true), "false cross error", "failed, counting: no bar; the ✗");
+        assertEqual(view(ofState("cancelled"), false), "false cross textMuted", "cancelled, not counting: no bar (never one), a muted ✗");
+        assertEqual(view(ofState("cancelled"), true), "false cross textMuted", "cancelled, counting: the same");
+        assertEqual(view({}, false) + " / " + view({}, true), "false - - / false - -", "no progress at all: nothing, counting or not");
+        assertEqual(view({ "x-qs-progress-state": "done" }, true), "false check success", "done without a value: the mark alone");
+        assertEqual(JSON.stringify(NotificationRules.progressView(undefined, true)), JSON.stringify({ bar: false, mark: "", tone: "" }), "no progress given: nothing");
+        assertEqual(view(ofState("done"), undefined), "true check success", "counting not given: not counting");
+
         // --- the bar's wave: running, and its value grown lately ---
         const now = 100000;
         const wave = (state, grewAt) => NotificationRules.progressWave(state, grewAt, now);

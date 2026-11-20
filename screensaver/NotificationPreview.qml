@@ -4,7 +4,8 @@ import qs.singletons
 
 // A notification as the screensaver and the lock screen show it, with as much detail as
 // their privacy setting allows:
-//   "full"  — app, title and text, and the sender's progress bar
+//   "full"  — app, title and text, and the sender's progress bar (a finished job's mark
+//             before the title)
 //   "title" — app and title
 //   "app"   — the app alone, when even the title (a sender, say) gives too much away
 // Anything else counts as "app": a value this does not know shows the least.
@@ -21,6 +22,7 @@ Rectangle {
     readonly property bool _showTitle: detail === "full" || detail === "title"
     readonly property bool _showBody: detail === "full"
     readonly property var _progress: NotificationRules.progress(modelData?.hints)
+    readonly property var _progressView: NotificationRules.progressView(_progress, false)
 
     width: 360
     radius: Theme.notificationCard.radius
@@ -48,17 +50,35 @@ Rectangle {
             elide: Text.ElideRight
         }
 
-        Text {
-            objectName: "title"
-            visible: root._showTitle && text !== ""
-            text: root._showTitle ? (root.modelData?.summary ?? "") : ""
-            textFormat: Text.PlainText
-            color: Theme.textPrimary
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBodyLarge
-            font.bold: true
+        // The title, after a finished job's mark (as much as the progress says: only where
+        // the body shows). Nothing here counts down, so the bar below stays with the mark.
+        Row {
             width: parent.width
-            elide: Text.ElideRight
+            spacing: 6
+
+            Text {
+                id: _mark
+                objectName: "progressMark"
+                visible: root._showBody && text !== ""
+                text: root._showBody ? root._progressView.mark : ""
+                color: root._progressView.tone !== "" ? Theme[root._progressView.tone] : Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBodyLarge
+                font.bold: true
+            }
+
+            Text {
+                objectName: "title"
+                visible: root._showTitle && text !== ""
+                text: root._showTitle ? (root.modelData?.summary ?? "") : ""
+                textFormat: Text.PlainText
+                color: Theme.textPrimary
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeBodyLarge
+                font.bold: true
+                width: parent.width - (_mark.visible ? _mark.width + parent.spacing : 0)
+                elide: Text.ElideRight
+            }
         }
 
         Text {
@@ -81,7 +101,7 @@ Rectangle {
         Item {
             width: parent.width
             height: _progressBar.implicitHeight + 6
-            visible: root._showBody && root._progress.shown
+            visible: root._showBody && root._progressView.bar
 
             ProgressBar {
                 id: _progressBar

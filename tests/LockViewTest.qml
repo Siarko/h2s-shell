@@ -227,8 +227,17 @@ TestCase {
         assert(!progressShown(), "title: no progress bar");
         card.detail = "full";
         assert(progressShown() && Math.abs(cardProgress.value - 0.4) < 1e-9, "full: the bar, at 0.4 (" + cardProgress.value + ")");
+        const cardMark = _find(card, "progressMark");
+        assert(!cardMark.visible, "full, running: no mark beside the title");
         card.modelData.hints = { value: 40, "x-qs-progress-state": "done" };
         assert(progressShown() && cardProgress.value === 1 && cardProgress.tone === "success", "full, done: full, the success colour");
+        assert(cardMark.visible && cardMark.text === "\uf00c" && Qt.colorEqual(cardMark.color, Theme.success),
+               "full, done: a ✓ in the success colour beside the title (nothing counts down here: the bar stays)");
+        card.detail = "title";
+        assert(!cardMark.visible && cardMark.text === "", "title, done: no mark, as no progress");
+        card.detail = "full";
+        card.modelData.hints = { value: 40, "x-qs-progress-state": "failed" };
+        assert(cardMark.visible && cardMark.text === "\uf00d" && Qt.colorEqual(cardMark.color, Theme.error), "full, failed: a ✗ in the error colour");
         card.modelData.hints = { value: 40, "x-qs-progress-state": "cancelled" };
         assert(!progressShown(), "full, cancelled: no bar");
         card.modelData.hints = {};

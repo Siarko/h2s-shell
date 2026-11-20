@@ -760,6 +760,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A finished job's notification shows how it ended beside its title: a green ✓ when done,
+  a red ✗ when it failed, a muted ✗ when cancelled. Its toast, which then counts down, no
+  longer draws the full progress bar above the countdown: the countdown is the only bar.
+  The panel, and the screensaver and lock screen where they show a notification's text,
+  keep the full coloured bar beside the mark.
 - A moving progress bar's wave is calmer: several bands of light are on the bar at once, a
   new one every 300 ms, each crossing the bar in 1.2 s (Settings → Appearance → Animations:
   "Progress wave" and "Progress wave: travel"). The same in a notification's progress bar.

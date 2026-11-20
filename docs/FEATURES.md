@@ -156,7 +156,10 @@ they show a notification's text. An app updating the same notification (by its i
 the bar in place: no new entry, no new toast, and the bell rings only for a changed
 title or text. While the job is moving (the value grew in the last 10 seconds) a wave of
 light passes through the bar's filled part; it stops when the value stands still or the
-job ends, and with reduced motion. Running an action on a notification marked resident (it stays after an
+job ends, and with reduced motion. A job that ended shows how beside its title — ✓ in the
+success colour when done, ✗ in the error colour when it failed, a muted ✗ when cancelled;
+its toast, counting down then, draws no progress bar, so the countdown is the only bar,
+while the panel, the screensaver and the lock screen keep the full coloured bar. Running an action on a notification marked resident (it stays after an
 action, by the spec) leaves it in the panel, and its toast on screen.
 
 `singletons/Notifier.qml` is the outbound side: the shell can send its own

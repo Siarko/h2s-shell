@@ -32,6 +32,22 @@ Singleton {
         return { shown: true, value: value, state: state, tone: tone };
     }
 
+    // What a card draws of a `progress` (as progress() gives it): `bar` whether the progress
+    // bar shows, `mark` the result glyph beside the summary ("" none) and `tone` its colour
+    // in Theme. A job that ended gets its mark — done ✓ in the success colour, failed ✗ in
+    // the error colour, cancelled ✗ muted. On a card `counting` down (its countdown bar
+    // drawn) an ended job draws no progress bar, so the countdown is the only bar; one that
+    // does not count keeps the full, toned bar beside the mark.
+    function progressView(progress, counting) {
+        const state = progress?.state;
+        const result = state === "done" ? { mark: "", tone: "success" }
+            : state === "failed" ? { mark: "", tone: "error" }
+            : state === "cancelled" ? { mark: "", tone: "textMuted" }
+            : { mark: "", tone: "" };
+        const ended = result.mark !== "";
+        return { bar: progress?.shown === true && !(ended && counting === true), mark: result.mark, tone: result.tone };
+    }
+
     // How long a progress bar's wave runs after its value last grew (ms)
     readonly property int progressWaveMs: 10000
 

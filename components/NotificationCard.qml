@@ -152,6 +152,9 @@ Rectangle {
 
     // How far the sender's job has gone, from its hints: a bar under the text
     readonly property var progress: NotificationRules.progress(_hints)
+    // What of it shows: a job that ended has a mark beside the summary, and on a card that
+    // counts down no bar of its own — the countdown is the only bar (NotificationRules.progressView)
+    readonly property var progressView: NotificationRules.progressView(progress, timerVisible)
 
     // The bar's wave: while the job runs and its value grew lately
     // (NotificationRules.progressWave). A sender updates the same notification as its job
@@ -401,43 +404,59 @@ Rectangle {
                 Layout.alignment: Qt.AlignTop
                 spacing: 4
 
-                // Summary
-                TextEdit {
-                    id: _summaryEdit
-                    selectionColor: Theme.selection
-                    selectedTextColor: Theme.selectedText
-                    text: notifCard._summary
-                    textFormat: TextEdit.PlainText
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.bold: true
-                    color: Theme.textPrimary
+                // Summary, after a finished job's mark
+                RowLayout {
                     Layout.fillWidth: true
-                    wrapMode: TextEdit.WordWrap
-                    readOnly: true
-                    selectByMouse: true
-                    onSelectedTextChanged: {
-                        if (selectedText !== "")
-                            notifCard._activeEdit = _summaryEdit;
-                        else if (notifCard._activeEdit === _summaryEdit)
-                            notifCard._selectionClearedAt = Date.now();
+                    spacing: 6
+
+                    Text {
+                        objectName: "progressMark"
+                        visible: notifCard.progressView.mark !== ""
+                        Layout.alignment: Qt.AlignTop
+                        text: notifCard.progressView.mark
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                        color: notifCard.progressView.tone !== "" ? Theme[notifCard.progressView.tone] : Theme.textPrimary
                     }
 
-                    // Text stays selectable by dragging, but on a card that is clicked
-                    // the pointer is the card's hand, not a text cursor
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: notifCard._defaultAction !== null
-                        acceptedButtons: Qt.NoButton
-                        cursorShape: Qt.PointingHandCursor
-                    }
+                    TextEdit {
+                        id: _summaryEdit
+                        selectionColor: Theme.selection
+                        selectedTextColor: Theme.selectedText
+                        text: notifCard._summary
+                        textFormat: TextEdit.PlainText
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeMedium
+                        font.bold: true
+                        color: Theme.textPrimary
+                        Layout.fillWidth: true
+                        wrapMode: TextEdit.WordWrap
+                        readOnly: true
+                        selectByMouse: true
+                        onSelectedTextChanged: {
+                            if (selectedText !== "")
+                                notifCard._activeEdit = _summaryEdit;
+                            else if (notifCard._activeEdit === _summaryEdit)
+                                notifCard._selectionClearedAt = Date.now();
+                        }
 
-                    // On the text itself: the text takes the press for selecting, so a
-                    // handler further up never sees the click. A handler of the same item
-                    // sees it first, and a drag (a selection) is no tap.
-                    TapHandler {
-                        enabled: notifCard._defaultAction !== null
-                        onTapped: notifCard._activateDefault()
+                        // Text stays selectable by dragging, but on a card that is clicked
+                        // the pointer is the card's hand, not a text cursor
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: notifCard._defaultAction !== null
+                            acceptedButtons: Qt.NoButton
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        // On the text itself: the text takes the press for selecting, so a
+                        // handler further up never sees the click. A handler of the same item
+                        // sees it first, and a drag (a selection) is no tap.
+                        TapHandler {
+                            enabled: notifCard._defaultAction !== null
+                            onTapped: notifCard._activateDefault()
+                        }
                     }
                 }
 
@@ -544,7 +563,7 @@ Rectangle {
                 // animation smooths a sender that updates fast
                 ProgressBar {
                     objectName: "progress"
-                    visible: notifCard.progress.shown
+                    visible: notifCard.progressView.bar
                     Layout.fillWidth: true
                     Layout.topMargin: 4
                     value: notifCard.progress.value
