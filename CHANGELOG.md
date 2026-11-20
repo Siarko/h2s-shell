@@ -10,9 +10,11 @@ section to the new version and date.
 
 ## [Unreleased]
 
-A minor release, though toasts now follow the display time an app asks for, which changes
-how long some toasts show: apps that leave it to the shell (most) see no change, and
-Settings → Notifications → "Apps choose how long", off, keeps the old behaviour.
+A minor release, though it changes two things people rely on: toasts now follow the
+display time an app asks for, which changes how long some toasts show (apps that leave it to
+the shell, most, see no change, and Settings → Notifications → "Apps choose how long", off,
+keeps the old behaviour); and the screen no longer locks before the computer sleeps unless
+Settings → Lockscreen → "Lock before the computer sleeps" is on (below, under Changed).
 
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
@@ -758,6 +760,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- "Lock before the computer sleeps" (Settings → Lockscreen) is off by default: a change of
+  behaviour people rely on. A configuration that holds no value for it — a new one, or one
+  made before the setting came — no longer locks the screen before sleep; turn it on to keep
+  that. A configuration that already holds a value keeps it.
 - A notification's action buttons and its reply's Send are drawn like the shell's other
   buttons: the accent, with the label in the theme's "On accent" colour (readable on a
   light accent too), lighter under the pointer or a finger. Send is dimmed while there is

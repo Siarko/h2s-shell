@@ -326,7 +326,7 @@ Two independent stages, both driven by Wayland idle notifications:
   written in its folder while locked does not reload it (the edit takes effect at the next
   file change after the unlock). A reload asked for while locked keeps the lock (a new
   authentication is needed); a lid closed while the shell reloads still locks before sleep
-  as long as the lock is up within a few seconds.
+  (with lock before sleep on) as long as the lock is up within a few seconds.
   A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
   `h2s-shell --restart` — is started again by the launcher (`h2s-shell`, which stays as its
   supervisor, one per session; 5 quick restarts in 2 minutes, then once a minute for as long
@@ -342,7 +342,8 @@ Two independent stages, both driven by Wayland idle notifications:
   unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a
   showing one, emptying the field (as the prompt's time-out does); a held Escape's repeats
   count for nothing. (Escape at a showing prompt unlocked until 2026-11-15.)
-- **Sleep** — the screen locks before the computer sleeps (`lockscreen.lockOnSleep`), the
+- **Sleep** — with Settings → Lockscreen → "Lock before the computer sleeps" on
+  (`lockscreen.lockOnSleep`, off by default), the screen locks before the computer sleeps, the
   shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
   key conversations stop for the sleep and start again after it, with the methods looked
@@ -481,7 +482,7 @@ Behaviour pages:
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
-| **Lockscreen** | screensaver and lock timeouts, fade durations, notification visibility, screensaver commands |
+| **Lockscreen** | screensaver and lock timeouts, fade durations, lock before sleep (off by default), notification visibility, screensaver commands |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
 

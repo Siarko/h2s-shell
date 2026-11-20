@@ -18,8 +18,9 @@
 #     refuses new inhibitors once the sleep is under way — would sleep only after the
 #     compositor locked: the last inhibitor held when the signal came is let go after the
 #     lock, and the lock comes within logind's 5 s maximum delay of the signal.
+# Lock before sleep is off by default: switched on here.
 
-stack_start --logind
+stack_start --logind --settings '{"lockscreen.lockOnSleep": true}'
 
 wait_until 5 logind_monitor_running || abort "the logind monitor did not start"
 wait_until 5 inhibitor_held || abort "the inhibitor is not held"

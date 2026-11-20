@@ -152,7 +152,7 @@ Singleton {
     // Public API
     // ------------------------------------------------------------------------------------
 
-    // `settings`: { lockOnSleep (default true), passwordFallback: { directory, config } —
+    // `settings`: { lockOnSleep (default false), passwordFallback: { directory, config } —
     // the password config used when detection names none or fails, or when the detected one
     // could not be used (null: none), timings: overrides of `timings` (non-negative numbers;
     // anything else keeps the default) }. Copied: the caller's objects are not kept.
@@ -1575,7 +1575,7 @@ Singleton {
             times[name] = typeof value === "number" && isFinite(value) && value >= 0 ? value : timings[name];
         }
         return {
-            lockOnSleep: typeof given.lockOnSleep === "boolean" ? given.lockOnSleep : true,
+            lockOnSleep: typeof given.lockOnSleep === "boolean" ? given.lockOnSleep : false,
             passwordFallback: _copyConfig(given.passwordFallback),
             timings: times
         };

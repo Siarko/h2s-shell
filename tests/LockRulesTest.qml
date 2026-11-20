@@ -1399,9 +1399,9 @@ TestCase {
 
     function _behaviour10Settings() {
         const defaults = LockRules.initial();
-        assert(defaults.settings.lockOnSleep === true && defaults.settings.passwordFallback === null
+        assert(defaults.settings.lockOnSleep === false && defaults.settings.passwordFallback === null
                && defaults.settings.timings.prompt === 10000,
-               "10: defaults: lock before sleep on, no fallback, the default timings");
+               "10: defaults: lock before sleep off, no fallback, the default timings");
         const custom = LockRules.initial({ lockOnSleep: false, timings: { prompt: 3000 } });
         assert(custom.settings.lockOnSleep === false && custom.settings.timings.prompt === 3000 && custom.settings.timings.detect === 5000,
                "10: settings and timing overrides are taken, the rest default");

@@ -4,8 +4,9 @@
 # PrepareForSleep locks before sleep with the inhibitor held until the compositor has
 # confirmed, no passive method runs while suspending and they start again after the wake.
 # Also: a monitor that dies is started again, an inhibitor that dies is taken again.
+# Lock before sleep is off by default: switched on here.
 
-stack_start --logind --methods "password fingerprint"
+stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true}'
 
 check_within 5 "the shell follows the test's logind session" state_is logind_session "$LOCKTEST_SESSION_PATH"
 check_within 5 "the logind monitor (stand-in) runs" logind_monitor_running

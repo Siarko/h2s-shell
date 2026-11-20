@@ -172,7 +172,7 @@ Singleton {
           type: "number", min: 5, max: 86400, suffix: "s", default: 300,
           legacy: ["lockscreen", "lockscreenTimeout"] },
         { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
-          group: "lockscreen", type: "bool", default: true },
+          group: "lockscreen", type: "bool", default: false },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           hint: "On every lock: idle, before sleep, a shortcut, another program locking the screen.",

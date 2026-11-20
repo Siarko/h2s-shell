@@ -104,7 +104,7 @@ Singleton {
     readonly property int screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout") ?? 300
     readonly property bool lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled") ?? false
     readonly property int lockscreenTimeout: Profiles.value("lockscreen.lockscreenTimeout") ?? 300
-    readonly property bool lockOnSleep: Profiles.value("lockscreen.lockOnSleep") ?? true
+    readonly property bool lockOnSleep: Profiles.value("lockscreen.lockOnSleep") ?? false
 
     // The driver reads the setting itself: nothing passed in can change it
     onLockOnSleepChanged: _api?.lockOnSleepChanged()
