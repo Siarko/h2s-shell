@@ -8,7 +8,7 @@ import qs.singletons.network
 // card instead. Its root item gets `context` (the VPN's, as the view's block gives it: {
 // vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }, with `extra` — { open } on the
 // card) when it declares that property — passed again only when it says something new
-// (NetworkRules.sameVpnContext), so a provider re-read that changed another entry does not
+// (VpnProviderRules.sameVpnContext), so a provider re-read that changed another entry does not
 // poke this one.
 Loader {
     id: root
@@ -40,7 +40,7 @@ Loader {
     onContextChanged: _pass()
 
     function _pass() {
-        if (item === null || NetworkRules.sameVpnContext(_passed, context))
+        if (item === null || VpnProviderRules.sameVpnContext(_passed, context))
             return;
         try {
             if ("context" in item) {

@@ -106,7 +106,7 @@ Flickable {
             }
             onContextChanged: _pass()
             function _pass() {
-                if (item === null || NetworkRules.sameVpnContext(_passed, context))
+                if (item === null || VpnProviderRules.sameVpnContext(_passed, context))
                     return;
                 try {
                     if ("context" in item) {

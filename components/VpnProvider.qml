@@ -19,8 +19,8 @@ import qs.singletons.network
 //     }
 //
 // It registers itself with VpnManager when made and leaves when destroyed (a module
-// disabled at run time). Everything it reports is checked (NetworkRules
-// .vpnProviderEntries): a wrong entry is dropped and logged, never shown.
+// disabled at run time). Everything it reports is checked
+// (VpnProviderRules.vpnProviderEntries): a wrong entry is dropped and logged, never shown.
 //
 // The core reads (bindings: keep them as properties, change them by assignment):
 //   providerId  string, constant — a lower-case letter, then up to 31 of a–z 0–9 - _ (no
@@ -45,7 +45,7 @@ import qs.singletons.network
 //                           offers the action in place of Connect while it is not active.
 //                           NEVER for a transient state ("starting", "reconnecting": that is
 //                           `state` and `status`). The core waits out attention within 20 s
-//                           of asking (NetworkRules.vpnAttentionGraceMs), but attention
+//                           of asking (VpnWithNetworkRules.vpnAttentionGraceMs), but attention
 //                           reached from up is held down at once.
 //                 detail    { server, servers [], iface, interfaceName, addresses [], dns [] }
 //                           — the shape of VpnManager.details for NetworkManager's VPNs (see

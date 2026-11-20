@@ -401,7 +401,7 @@ editor: interface, private key (Generate with `wg`, the public key shown to copy
 when wireguard-tools is missing, which a note says), listen port, MTU, the peers (public
 key, endpoint, allowed IPs with "All traffic", preshared key, keepalive). A Wi-Fi or wired
 profile's editor picks VPNs to "Connect a VPN with it" (`system.vpnWithNetworks`,
-VpnManager, `NetworkRules.vpnWithNetworkPlan`): wanted while a linked network is up, taken
+VpnManager, `VpnWithNetworkRules.vpnWithNetworkPlan`): wanted while a linked network is up, taken
 down when none is if the shell brought them up (remembered in Config), held down when
 taken down by hand — the shell's doing, from its start (shell.qml), as
 NetworkManager's connection.secondaries takes no WireGuard; the VPN's card lists them.

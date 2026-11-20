@@ -21,21 +21,21 @@ Singleton {
     readonly property var nmVpns: NetworkProfiles.profiles.filter(profile => profile.kind === "vpn")
         .sort((a, b) => (b.active - a.active) || (b.lastUsed - a.lastUsed))
     // [{ uuid, name, type ("wireguard" | "vpn" | "provider"), active, state, device, … }]:
-    // those up first, then the most recently used (NetworkRules.mergedVpns). A provider's
+    // those up first, then the most recently used (VpnProviderRules.mergedVpns). A provider's
     // has `uuid` "<provider>:<entry>", and provider, entryId, typeName, glyph, attention.
-    readonly property var vpns: _providers.length === 0 ? nmVpns : NetworkRules.mergedVpns(nmVpns, providerVpns)
+    readonly property var vpns: _providers.length === 0 ? nmVpns : VpnProviderRules.mergedVpns(nmVpns, providerVpns)
     readonly property var activeVpns: vpns.filter(vpn => vpn.state === "activated")
     // The kind the bar and the popup show a glyph for: WireGuard's when every VPN up is one
     readonly property string activeType: activeVpns.length === 0 ? ""
         : activeVpns.every(vpn => vpn.type === "wireguard") ? "wireguard" : "vpn"
-    // The glyph for them (NetworkRules.activeVpnGlyph): WireGuard's, a provider's own, the padlock
-    readonly property string activeGlyph: NetworkRules.activeVpnGlyph(activeVpns)
+    // The glyph for them (VpnProviderRules.activeVpnGlyph): WireGuard's, a provider's own, the padlock
+    readonly property string activeGlyph: VpnProviderRules.activeVpnGlyph(activeVpns)
 
     // NetworkManager's VPNs' { uuid: { service, server, servers, iface, interfaceName,
     // addresses, dns } } (NetworkRules.vpnDetails): read again with the profiles. The kill
     // switch takes its interfaces and servers from these alone (VpnLockdown).
     property var nmDetails: ({})
-    // Those and the providers' entries' (their `detail`, NetworkRules.vpnProviderDetail),
+    // Those and the providers' entries' (their `detail`, VpnProviderRules.vpnProviderDetail),
     // by VPN id: what the views read
     readonly property var details: {
         if (_providers.length === 0)
@@ -43,7 +43,7 @@ Singleton {
         const all = Object.assign({}, nmDetails);
         for (const read of _providerReads)
             for (const entry of read.entries)
-                all[NetworkRules.vpnId(read.providerId, entry.id)] = entry.detail;
+                all[VpnProviderRules.vpnId(read.providerId, entry.id)] = entry.detail;
         return all;
     }
     // The details read once (or none to read): what depends on them waits for it
@@ -58,7 +58,7 @@ Singleton {
 
     // A VPN's glyph: WireGuard's, its provider's own, else the padlock
     function glyphOf(vpn): string {
-        return NetworkRules.vpnGlyph(vpn);
+        return VpnProviderRules.vpnGlyph(vpn);
     }
 
     // Read again when the VPNs or their states change (an interface and addresses come
@@ -143,7 +143,7 @@ Singleton {
     }
 
     // ── VPN providers ── objects registered here (components/VpnProvider.qml registers
-    // itself), each read through NetworkRules.vpnProviderEntries: what is wrong is dropped
+    // itself), each read through VpnProviderRules.vpnProviderEntries: what is wrong is dropped
     // and logged, never shown. A provider destroyed while registered (a module disabled)
     // reads as gone and is dropped; a second one with a taken id is refused.
 
@@ -177,7 +177,7 @@ Singleton {
         } catch (error) {
             id = undefined;
         }
-        if (!NetworkRules.isVpnProviderId(id)) {
+        if (!VpnProviderRules.isVpnProviderId(id)) {
             console.warn("VpnManager: a VPN provider refused: its providerId " + JSON.stringify(String(id)).slice(0, 60)
                 + " is not a lower-case letter and up to 31 of a-z 0-9 - _");
             return false;
@@ -245,7 +245,7 @@ Singleton {
             const provider = entry.object;
             if (!_alive(entry))
                 return gone(entry.id + ": gone, or its providerId changed");
-            const checked = NetworkRules.vpnProviderEntries(entry.id, provider.entries);
+            const checked = VpnProviderRules.vpnProviderEntries(entry.id, provider.entries);
             const text = (value, most) => typeof value === "string" ? value.slice(0, most) : "";
             const component = value => value !== null && value !== undefined && typeof value.createObject === "function" ? value : null;
             return {
@@ -261,9 +261,9 @@ Singleton {
         }
     }
 
-    // The providers' entries as VPNs (NetworkRules.vpnProviderVpns), providers in the order
+    // The providers' entries as VPNs (VpnProviderRules.vpnProviderVpns), providers in the order
     // registered
-    readonly property var providerVpns: _providerReads.reduce((all, read) => all.concat(NetworkRules.vpnProviderVpns(read)), [])
+    readonly property var providerVpns: _providerReads.reduce((all, read) => all.concat(VpnProviderRules.vpnProviderVpns(read)), [])
 
     // { providerId: [problem…] }: what was dropped from each, logged when it changes
     readonly property var providerProblems: {
@@ -282,7 +282,7 @@ Singleton {
     // The provider's read for a VPN ({ provider } or its id), or null (NetworkManager's,
     // or its provider not there)
     function providerOf(vpnOrId) {
-        const parts = NetworkRules.vpnIdParts(typeof vpnOrId === "string" ? vpnOrId : (vpnOrId?.uuid ?? ""));
+        const parts = VpnProviderRules.vpnIdParts(typeof vpnOrId === "string" ? vpnOrId : (vpnOrId?.uuid ?? ""));
         if (parts === null || parts.provider === "")
             return null;
         return _providerReads.find(read => read.alive && read.providerId === parts.provider) ?? null;
@@ -374,9 +374,9 @@ Singleton {
     }
 
     // The provider VPNs in "VPN with a network" that are not among `vpns` now — not
-    // available, whatever the reason (NetworkRules.unavailableVpnIds, the one definition):
+    // available, whatever the reason (VpnWithNetworkRules.unavailableVpnIds, the one definition):
     // kept, shown as such in the network's editor, where the user can take them out
-    readonly property var unavailableVpnIds: NetworkRules.unavailableVpnIds(withNetworks, vpns)
+    readonly property var unavailableVpnIds: VpnWithNetworkRules.unavailableVpnIds(withNetworks, vpns)
 
     // A VPN by its id as a person reads it: its name, or for one not available its provider
     // and entry, said not to be available
@@ -384,7 +384,7 @@ Singleton {
         const vpn = vpns.find(entry => entry.uuid === id);
         if (vpn)
             return vpn.name;
-        const parts = NetworkRules.vpnIdParts(id);
+        const parts = VpnProviderRules.vpnIdParts(id);
         return parts !== null && parts.provider !== "" ? parts.provider + " · " + parts.entry + " (not available)" : id;
     }
 
@@ -395,7 +395,7 @@ Singleton {
     function providerKindsAmong(ids): var {
         const kinds = [];
         for (const id of ids ?? []) {
-            const parts = NetworkRules.vpnIdParts(id);
+            const parts = VpnProviderRules.vpnIdParts(id);
             if (parts === null || parts.provider === "")
                 continue;
             const vpn = vpns.find(entry => entry.uuid === id);
@@ -413,7 +413,7 @@ Singleton {
     }
 
     function _providerFailed(providerId, entryId, what, reason) {
-        _notify(NetworkRules.vpnFailureNotice(String(what ?? ""), String(reason ?? "")));
+        _notify(VpnProviderRules.vpnFailureNotice(String(what ?? ""), String(reason ?? "")));
     }
 
     // Who asked for a connect or disconnect, as handed to the provider: { origin } — "user"
@@ -428,7 +428,7 @@ Singleton {
     // only for an entry the provider reports; a throw is logged and said as a failure.
     // `request` (connect, disconnect) goes along as the second argument.
     function _callProvider(id, action, what, request) {
-        const parts = NetworkRules.vpnIdParts(id);
+        const parts = VpnProviderRules.vpnIdParts(id);
         const read = providerOf(id);
         if (parts === null || read === null) {
             console.warn("VpnManager: " + action + " " + id + ": no such VPN provider here");
@@ -449,7 +449,7 @@ Singleton {
             return true;
         } catch (error) {
             console.warn("VpnManager: VPN provider \"" + read.providerId + "\": " + action + " threw:", error);
-            _notify(NetworkRules.vpnFailureNotice(what + " " + entry.name, String(error)));
+            _notify(VpnProviderRules.vpnFailureNotice(what + " " + entry.name, String(error)));
             return false;
         }
     }
@@ -492,8 +492,8 @@ Singleton {
             : vpn.state === "activated" ? "Disconnect" : "Connect";
     }
 
-    // ── A VPN with a network ── wanted while a network it is linked to is up (NetworkRules
-    // .vpnWithNetworkPlan): brought up then, taken down when none is if the shell brought it
+    // ── A VPN with a network ── wanted while a network it is linked to is up
+    // (VpnWithNetworkRules.vpnWithNetworkPlan): brought up then, taken down when none is if the shell brought it
     // up — the shell's doing, as NetworkManager's connection.secondaries takes no WireGuard,
     // so only while the shell runs (started with it, shell.qml). A VPN that fails leaves the
     // network up (NetworkProfiles reports it). What the shell brought up is remembered in
@@ -549,8 +549,8 @@ Singleton {
             return;
         const profiles = NetworkProfiles.profiles;
         // Profiles that are gone leave the setting (none read yet: nothing is pruned); a
-        // provider's VPN is never pruned (NetworkRules.prunedVpnMapping)
-        const pruned = NetworkRules.prunedVpnMapping(withNetworks, profiles);
+        // provider's VPN is never pruned (VpnWithNetworkRules.prunedVpnMapping)
+        const pruned = VpnWithNetworkRules.prunedVpnMapping(withNetworks, profiles);
         if (JSON.stringify(pruned) !== _withNetworksText) {
             Profiles.setGlobal("system.vpnWithNetworks", pruned);
             return;
@@ -561,7 +561,7 @@ Singleton {
         } catch (error) {
             memory = {};
         }
-        const plan = NetworkRules.vpnWithNetworkPlan(profiles, withNetworks, memory, Date.now(), providerVpns);
+        const plan = VpnWithNetworkRules.vpnWithNetworkPlan(profiles, withNetworks, memory, Date.now(), providerVpns);
         const text = JSON.stringify(plan.memory);
         if (text !== Config.network.vpnMemory)
             Config.network.vpnMemory = text;
@@ -701,13 +701,13 @@ Singleton {
         NetworkProfiles.importFile(path, type);
     }
 
-    // By id (NetworkRules.vpnIdParts): a provider's ("<provider>:<entry>") through its
+    // By id (VpnProviderRules.vpnIdParts): a provider's ("<provider>:<entry>") through its
     // provider; anything else is NetworkManager's UUID, as before providers. An id that is
     // neither, or a provider VPN not here, does nothing; nor does connecting a VPN that needs
     // the user (canConnect). `request` { origin: "user" | "network" } says who asked
     // (default the user — a button); a provider gets it as connect's second argument.
     function connect(uuid: string, request): void {
-        const parts = NetworkRules.vpnIdParts(uuid);
+        const parts = VpnProviderRules.vpnIdParts(uuid);
         if (parts === null) {
             console.warn("VpnManager: connect " + uuid + ": not a VPN id");
             return;
@@ -725,7 +725,7 @@ Singleton {
     }
 
     function disconnect(uuid: string, request): void {
-        const parts = NetworkRules.vpnIdParts(uuid);
+        const parts = VpnProviderRules.vpnIdParts(uuid);
         if (parts === null) {
             console.warn("VpnManager: disconnect " + uuid + ": not a VPN id");
             return;

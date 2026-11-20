@@ -1253,7 +1253,7 @@ Singleton {
     //   setsDns     it brings DNS servers of its own while up
     //   routes      the networks it carries, canonical ("10.0.0.0/8", "0.0.0.0/0" for all);
     //               null when not known, or when there are more than maxRoutes
-    // A provider's VPN: the three its entry reported (NetworkRules.vpnProviderEntries).
+    // A provider's VPN: the three its entry reported (VpnProviderRules.vpnProviderEntries).
     // NetworkManager's, from its details (NetworkRules.vpnDetails):
     //   WireGuard by its profile: its peers' allowed-ips become its routes unless peer-routes
     //   is off (then the routes are not known from the profile, and it is a full tunnel only

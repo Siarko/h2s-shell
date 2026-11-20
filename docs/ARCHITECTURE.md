@@ -146,7 +146,7 @@ detail, active, status, busy }`, in NetworkManager's state words, `detail` in th
 `VpnManager.details`), `busy`, `canChange`, and performs `connect`/`disconnect` (told who
 asked: the user, or a network — then it must not prompt) and `attend`;
 failures come back through its `failed` signal as the same notification NetworkManager's
-get. Everything it reports is checked by `NetworkRules.vpnProviderEntries` (wrong entries
+get. Everything it reports is checked by `VpnProviderRules.vpnProviderEntries` (wrong entries
 dropped and logged, never shown). `VpnManager.vpns`, `details`, `interfaceOf` and the rest
 are the merged model the popup, the bar, the overview, the VPN page and the connection
 editor read; with no provider registered they are NetworkManager's lists themselves. The

@@ -3,10 +3,10 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.singletons.network
 
-// The VPN provider seam (notes/plans/tailscale.md §3): the pure rules in NetworkRules, and
-// VpnManager's registry driven with the stand-in provider (FakeVpnProvider.qml). Nothing
-// here reaches NetworkManager: only provider ids ("fake:…") are connected, and the unit
-// runner gives nmcli no bus. Asynchronous for the parts that need the event loop: a
+// The VPN provider seam (notes/plans/tailscale.md §3): the pure rules in VpnProviderRules
+// and VpnWithNetworkRules, and VpnManager's registry driven with the stand-in provider
+// (FakeVpnProvider.qml). Nothing here reaches NetworkManager: only provider ids ("fake:…")
+// are connected, and the unit runner gives nmcli no bus. Asynchronous for the parts that need the event loop: a
 // provider destroyed while registered, a slow operation finishing on its timer.
 //
 // The rule for every suite that registers providers: use provider ids no other suite uses
@@ -19,7 +19,6 @@ TestCase {
     suiteName: "VpnProviders"
     asynchronous: true
 
-    readonly property var rules: NetworkRules
     property var _fakeComponent: Qt.createComponent("FakeVpnProvider.qml")
 
     function _fake(properties) {
@@ -87,27 +86,27 @@ TestCase {
 
     function _pure() {
         // --- ids ---
-        assert(rules.isVpnProviderId("tailscale") && rules.isVpnProviderId("my-vpn_2"), "ids: a provider id");
-        assert(!rules.isVpnProviderId("Tail") && !rules.isVpnProviderId("a:b") && !rules.isVpnProviderId("") && !rules.isVpnProviderId(5)
-               && !rules.isVpnProviderId("__proto__") && !rules.isVpnProviderId("constructor") && !rules.isVpnProviderId("a".repeat(33))
-               && !rules.isVpnProviderId("1abc"), "ids: no capitals, colon, digits first, prototype names, too long");
-        assertEqual(JSON.stringify(rules.vpnIdParts("2f0c8d0e-1111-4222-8333-944455556666")),
+        assert(VpnProviderRules.isVpnProviderId("tailscale") && VpnProviderRules.isVpnProviderId("my-vpn_2"), "ids: a provider id");
+        assert(!VpnProviderRules.isVpnProviderId("Tail") && !VpnProviderRules.isVpnProviderId("a:b") && !VpnProviderRules.isVpnProviderId("") && !VpnProviderRules.isVpnProviderId(5)
+               && !VpnProviderRules.isVpnProviderId("__proto__") && !VpnProviderRules.isVpnProviderId("constructor") && !VpnProviderRules.isVpnProviderId("a".repeat(33))
+               && !VpnProviderRules.isVpnProviderId("1abc"), "ids: no capitals, colon, digits first, prototype names, too long");
+        assertEqual(JSON.stringify(VpnProviderRules.vpnIdParts("2f0c8d0e-1111-4222-8333-944455556666")),
                     JSON.stringify({ provider: "", entry: "2f0c8d0e-1111-4222-8333-944455556666" }), "ids: a NetworkManager UUID is its own");
-        assertEqual(JSON.stringify(rules.vpnIdParts("tailscale:default")), JSON.stringify({ provider: "tailscale", entry: "default" }),
+        assertEqual(JSON.stringify(VpnProviderRules.vpnIdParts("tailscale:default")), JSON.stringify({ provider: "tailscale", entry: "default" }),
                     "ids: <provider>:<entry>");
-        assert(rules.vpnIdParts("tailscale:a:b") === null && rules.vpnIdParts(":x") === null && rules.vpnIdParts("x:") === null
-               && rules.vpnIdParts("__proto__") === null && rules.vpnIdParts("tailscale:__proto__") === null && rules.vpnIdParts(7) === null
-               && rules.vpnIdParts("") === null, "ids: a second colon, empty halves, prototype names, not text — none");
-        assertEqual(rules.vpnId("fake", "one"), "fake:one", "ids: made from the two");
+        assert(VpnProviderRules.vpnIdParts("tailscale:a:b") === null && VpnProviderRules.vpnIdParts(":x") === null && VpnProviderRules.vpnIdParts("x:") === null
+               && VpnProviderRules.vpnIdParts("__proto__") === null && VpnProviderRules.vpnIdParts("tailscale:__proto__") === null && VpnProviderRules.vpnIdParts(7) === null
+               && VpnProviderRules.vpnIdParts("") === null, "ids: a second colon, empty halves, prototype names, not text — none");
+        assertEqual(VpnProviderRules.vpnId("fake", "one"), "fake:one", "ids: made from the two");
 
         // --- entries checked ---
-        const notList = rules.vpnProviderEntries("p", "nonsense");
+        const notList = VpnProviderRules.vpnProviderEntries("p", "nonsense");
         assert(notList.entries.length === 0 && notList.problems.length === 1, "entries: not a list — none, reported");
-        const none = rules.vpnProviderEntries("p", undefined);
+        const none = VpnProviderRules.vpnProviderEntries("p", undefined);
         assert(none.entries.length === 0 && none.problems.length === 0, "entries: none given — none, nothing to report");
         const throwing = { id: "t", state: "" };
         Object.defineProperty(throwing, "name", { get: () => { throw new Error("boom"); }, enumerable: true });
-        const hostile = rules.vpnProviderEntries("p", [
+        const hostile = VpnProviderRules.vpnProviderEntries("p", [
             null, 7, [], "text",
             { id: "a:b", name: "colon", state: "" },
             { id: "__proto__", name: "proto", state: "" },
@@ -142,81 +141,81 @@ TestCase {
                && byId("att5").attention.action === "", "entries: attention { reason, action }, the action optional");
         assert(byId("det").detail.servers.length === 0 && byId("det").detail.service === "" && byId("act").active === true
                && byId("act").name === "act", "entries: a wrong detail — empty; a wrong active — from the state; no name — its id");
-        const detail = rules.vpnProviderDetail({ server: "relay.example", iface: "tailscale0", addresses: ["100.64.0.1", 5],
+        const detail = VpnProviderRules.vpnProviderDetail({ server: "relay.example", iface: "tailscale0", addresses: ["100.64.0.1", 5],
             dns: "nope", interfaceName: "bad name!", extra: "dropped" });
         assertEqual(JSON.stringify(detail), JSON.stringify({ service: "", server: "relay.example", servers: ["relay.example"], iface: "tailscale0",
             interfaceName: "", addresses: ["100.64.0.1"], dns: [] }), "detail: the shape of NetworkManager's details, the rest dropped");
         const many = [];
         for (let i = 0; i < 70; i++)
             many.push({ id: "e" + i, name: "e", state: "" });
-        assertEqual(rules.vpnProviderEntries("p", many).entries.length, 64, "entries: at most 64");
+        assertEqual(VpnProviderRules.vpnProviderEntries("p", many).entries.length, 64, "entries: at most 64");
 
         // --- one list ---
         const read = { providerId: "fake", typeName: "Fake VPN", glyph: "G",
-            entries: rules.vpnProviderEntries("fake", [{ id: "a", name: "A", state: "" }, { id: "b", name: "B", state: "activated" }]).entries };
-        const providerVpns = rules.vpnProviderVpns(read);
+            entries: VpnProviderRules.vpnProviderEntries("fake", [{ id: "a", name: "A", state: "" }, { id: "b", name: "B", state: "activated" }]).entries };
+        const providerVpns = VpnProviderRules.vpnProviderVpns(read);
         assert(providerVpns[1].uuid === "fake:b" && providerVpns[1].type === "provider" && providerVpns[1].kind === "vpn"
                && providerVpns[1].provider === "fake" && providerVpns[1].entryId === "b" && providerVpns[1].typeName === "Fake VPN"
                && providerVpns[1].active && providerVpns[1].attention === null, "merged: a provider's entry as a VPN, by <provider>:<entry>");
         const nm = [{ uuid: "w", type: "wireguard", active: true, lastUsed: 5, state: "activated" },
                     { uuid: "o", type: "vpn", active: false, lastUsed: 9, state: "" }];
-        assertEqual(rules.mergedVpns(nm, providerVpns).map(vpn => vpn.uuid).join(" "), "w fake:b o fake:a",
+        assertEqual(VpnProviderRules.mergedVpns(nm, providerVpns).map(vpn => vpn.uuid).join(" "), "w fake:b o fake:a",
                     "merged: those up first, then the most recently used; ties keep NetworkManager's first");
-        assertEqual(rules.mergedVpns(nm, []).map(vpn => vpn.uuid).join(" "), "w o", "merged: no provider — NetworkManager's as they were");
-        assert(rules.activeVpnGlyph([]) === "󰒃" && rules.activeVpnGlyph([nm[0]]) === "󰒃" && rules.activeVpnGlyph([providerVpns[1]]) === "G"
-               && rules.activeVpnGlyph([nm[0], providerVpns[1]]) === "󰌾" && rules.activeVpnGlyph([{ type: "vpn" }]) === "󰌾"
-               && rules.activeVpnGlyph([Object.assign({}, providerVpns[1], { glyph: "" })]) === "󰌾",
+        assertEqual(VpnProviderRules.mergedVpns(nm, []).map(vpn => vpn.uuid).join(" "), "w o", "merged: no provider — NetworkManager's as they were");
+        assert(VpnProviderRules.activeVpnGlyph([]) === "󰒃" && VpnProviderRules.activeVpnGlyph([nm[0]]) === "󰒃" && VpnProviderRules.activeVpnGlyph([providerVpns[1]]) === "G"
+               && VpnProviderRules.activeVpnGlyph([nm[0], providerVpns[1]]) === "󰌾" && VpnProviderRules.activeVpnGlyph([{ type: "vpn" }]) === "󰌾"
+               && VpnProviderRules.activeVpnGlyph([Object.assign({}, providerVpns[1], { glyph: "" })]) === "󰌾",
                "merged: the bar's glyph — WireGuard's, the provider's own when only it is up, else the padlock");
-        assert(rules.vpnGlyph(nm[0]) === "󰒃" && rules.vpnGlyph(nm[1]) === "󰌾" && rules.vpnGlyph(providerVpns[0]) === "G", "merged: a row's glyph");
+        assert(VpnProviderRules.vpnGlyph(nm[0]) === "󰒃" && VpnProviderRules.vpnGlyph(nm[1]) === "󰌾" && VpnProviderRules.vpnGlyph(providerVpns[0]) === "G", "merged: a row's glyph");
 
         // --- failures ---
-        assertEqual(JSON.stringify(rules.vpnFailureNotice("Connecting Tailscale", "not logged in")),
+        assertEqual(JSON.stringify(VpnProviderRules.vpnFailureNotice("Connecting Tailscale", "not logged in")),
                     JSON.stringify({ title: "Connecting Tailscale failed", body: "not logged in" }), "failure: a notification with the reason");
-        assertEqual(JSON.stringify(rules.vpnFailureNotice("", 5)), JSON.stringify({ title: "A VPN action failed", body: "It did not say why." }),
+        assertEqual(JSON.stringify(VpnProviderRules.vpnFailureNotice("", 5)), JSON.stringify({ title: "A VPN action failed", body: "It did not say why." }),
                     "failure: nothing said — still a notification");
 
         // --- VPN with a network: provider ids are never pruned by the shell ---
         const profile = (uuid, kind, state) => ({ uuid: uuid, kind: kind, state: state });
         const profiles = [profile("wired", "ethernet", "activated"), profile("nmvpn", "vpn", "")];
         const mapping = { wired: ["nmvpn", "fake:one", "fake:gone", "away:x", "slow:y", "bad:a:b", "deleted"] };
-        assertEqual(JSON.stringify(rules.prunedVpnMapping(mapping, profiles)),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping(mapping, profiles)),
                     JSON.stringify({ wired: ["nmvpn", "fake:one", "fake:gone", "away:x", "slow:y"] }),
                     "pruning: every provider id kept — reported, missing from its provider, provider absent or not ready; garbage and deleted UUIDs removed");
         // The reviewer's probe P1: Tailscale logged out (or one read failed) — ready, nothing reported
-        assertEqual(JSON.stringify(rules.prunedVpnMapping({ wired: ["tailscale:default"] }, profiles, { tailscale: { ready: true, entries: [] } })),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping({ wired: ["tailscale:default"] }, profiles, { tailscale: { ready: true, entries: [] } })),
                     JSON.stringify({ wired: ["tailscale:default"] }), "pruning: a ready provider reporting no entry — the user's setting kept");
-        assertEqual(JSON.stringify(rules.prunedVpnMapping(mapping, [])), JSON.stringify(mapping), "pruning: nothing before the profiles are read");
-        assertEqual(JSON.stringify(rules.prunedVpnMapping({ wired: ["deleted", "bad:a:b"] }, profiles)), JSON.stringify({}),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping(mapping, [])), JSON.stringify(mapping), "pruning: nothing before the profiles are read");
+        assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping({ wired: ["deleted", "bad:a:b"] }, profiles)), JSON.stringify({}),
                     "pruning: a network left with no VPN leaves the setting");
 
         // --- "not available": one definition — a provider id not among the VPNs now ---
         const vpnsNow = [{ uuid: "nmvpn" }, { uuid: "fake:one" }];
-        assertEqual(JSON.stringify(rules.unavailableVpnIds(mapping, vpnsNow)), JSON.stringify(["fake:gone", "away:x", "slow:y"]),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.unavailableVpnIds(mapping, vpnsNow)), JSON.stringify(["fake:gone", "away:x", "slow:y"]),
                     "not available: whatever the reason — entry missing, provider absent, provider not ready");
         // Probe P1b: a provider registered but not ready reports nothing — its id is not available
-        assertEqual(JSON.stringify(rules.unavailableVpnIds(["tailscale:default", "nmvpn", "tailscale:default"], [])), JSON.stringify(["tailscale:default"]),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.unavailableVpnIds(["tailscale:default", "nmvpn", "tailscale:default"], [])), JSON.stringify(["tailscale:default"]),
                     "not available: from a list too, each once; NetworkManager's UUIDs never");
 
         // --- the network editor: what it starts from and what it writes ---
-        assertEqual(JSON.stringify(rules.editorVpnIds(["nmvpn", "deleted", "fake:one", "fake:gone", "bad:a:b", "fake:one"], vpnsNow)),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.editorVpnIds(["nmvpn", "deleted", "fake:one", "fake:gone", "bad:a:b", "fake:one"], vpnsNow)),
                     JSON.stringify(["nmvpn", "fake:one", "fake:gone"]),
                     "editor: starts with NetworkManager's VPNs there and EVERY provider id, available or not");
         const stored = ["nmvpn", "fake:gone"];
-        const original = rules.editorVpnIds(stored, vpnsNow);
-        assertEqual(JSON.stringify(rules.vpnsToWrite(stored, original, ["fake:gone", "other"])), JSON.stringify(["fake:gone", "other"]),
+        const original = VpnWithNetworkRules.editorVpnIds(stored, vpnsNow);
+        assertEqual(JSON.stringify(VpnWithNetworkRules.vpnsToWrite(stored, original, ["fake:gone", "other"])), JSON.stringify(["fake:gone", "other"]),
                     "editor saves: another pick changed — the not available id is still written");
-        assertEqual(JSON.stringify(rules.vpnsToWrite(stored, ["nmvpn"], ["other"])), JSON.stringify(["other", "fake:gone"]),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.vpnsToWrite(stored, ["nmvpn"], ["other"])), JSON.stringify(["other", "fake:gone"]),
                     "editor saves: a provider id the editor never showed is never lost");
-        assertEqual(JSON.stringify(rules.vpnsToWrite(stored, original, ["nmvpn"])), JSON.stringify(["nmvpn"]),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.vpnsToWrite(stored, original, ["nmvpn"])), JSON.stringify(["nmvpn"]),
                     "editor saves: the user took the not available id out — gone");
-        assertEqual(JSON.stringify(rules.vpnsToWrite(["nmvpn", "late:x"], ["nmvpn"], [])), JSON.stringify(["late:x"]),
+        assertEqual(JSON.stringify(VpnWithNetworkRules.vpnsToWrite(["nmvpn", "late:x"], ["nmvpn"], [])), JSON.stringify(["late:x"]),
                     "editor saves: a provider id stored after the editor opened is kept; NetworkManager's taken out");
 
         // --- VPN with a network: a provider's VPN through the same states ---
         const map = { wired: ["fake:one"] };
         const up = state => [profile("wired", "ethernet", state)];
         const entry = (state, attention) => [{ uuid: "fake:one", state: state, attention: attention ?? null }];
-        const plan = (networkState, entryList, memory, now) => rules.vpnWithNetworkPlan(up(networkState), map, memory, now, entryList);
+        const plan = (networkState, entryList, memory, now) => VpnWithNetworkRules.vpnWithNetworkPlan(up(networkState), map, memory, now, entryList);
         const start = plan("activated", entry(""), {}, 1000);
         assert(start.connect.join() === "fake:one" && start.memory.pending["fake:one"] === 1000 && start.memory.broughtUp["fake:one"],
                "plan: a network up brings the provider's VPN up, pending");
@@ -226,7 +225,7 @@ TestCase {
         assert(gone.disconnect.join() === "fake:one" && !gone.memory.broughtUp["fake:one"], "plan: the network gone — taken down");
         const failed = plan("activated", entry(""), start.memory, 100000);
         assert(failed.connect.length === 0 && failed.memory.heldDown["fake:one"] === "wired", "plan: still down after 90 s — failed, held down");
-        const grace = rules.vpnAttentionGraceMs;
+        const grace = VpnWithNetworkRules.vpnAttentionGraceMs;
         const passing = plan("activated", entry("", { reason: "Log in", action: "Log in" }), start.memory, 3000);
         assert(passing.connect.length === 0 && !("fake:one" in passing.memory.heldDown) && passing.memory.pending["fake:one"] === 1000,
                "plan: needing the user moments after being asked — waited out, still pending, not held down");
@@ -250,7 +249,7 @@ TestCase {
         assertEqual(asked, 0, "plan: needing the user from the start — never asked, however long");
         const cleared = plan("activated", entry(""), memory, 3000000);
         assertEqual(cleared.connect.join(), "fake:one", "plan: needing the user from the start, then not — asked once");
-        const notRead = rules.vpnWithNetworkPlan([], map, seen.memory, 5000, entry("activated"));
+        const notRead = VpnWithNetworkRules.vpnWithNetworkPlan([], map, seen.memory, 5000, entry("activated"));
         assert(notRead.disconnect.length === 0 && notRead.connect.length === 0 && notRead.memory.broughtUp["fake:one"],
                "plan: the profiles not read yet — the provider's VPN left alone");
         const late1 = plan("activated", [], {}, 1000);
@@ -267,18 +266,18 @@ TestCase {
 
         // --- the kill switch's note ---
         const providerUp = Object.assign({}, providerVpns[1]);
-        assert(rules.lockdownProviderNote(true, providerUp, "").indexOf("Fake VPN") === 0, "lockdown note: blocking, a provider VPN up — the shell's sentence");
-        assertEqual(rules.lockdownProviderNote(true, providerUp, "Tailscale cannot connect while traffic outside a VPN is blocked"),
+        assert(VpnProviderRules.lockdownProviderNote(true, providerUp, "").indexOf("Fake VPN") === 0, "lockdown note: blocking, a provider VPN up — the shell's sentence");
+        assertEqual(VpnProviderRules.lockdownProviderNote(true, providerUp, "Tailscale cannot connect while traffic outside a VPN is blocked"),
                     "Tailscale cannot connect while traffic outside a VPN is blocked", "lockdown note: the provider's wording");
-        assert(rules.lockdownProviderNote(true, Object.assign({}, providerUp, { state: "activating" }), "") !== "", "lockdown note: while connecting too");
-        assert(rules.lockdownProviderNote(false, providerUp, "x") === "" && rules.lockdownProviderNote(true, providerVpns[0], "x") === ""
-               && rules.lockdownProviderNote(true, nm[0], "x") === "", "lockdown note: none when not blocking, when off, for NetworkManager's");
-        assert(rules.lockdownProviderNote(true, providerVpns[0], "", true).indexOf("Fake VPN") === 0
-               && rules.lockdownProviderNote(false, providerVpns[0], "", true) === "" && rules.lockdownProviderNote(true, nm[1], "", true) === "",
+        assert(VpnProviderRules.lockdownProviderNote(true, Object.assign({}, providerUp, { state: "activating" }), "") !== "", "lockdown note: while connecting too");
+        assert(VpnProviderRules.lockdownProviderNote(false, providerUp, "x") === "" && VpnProviderRules.lockdownProviderNote(true, providerVpns[0], "x") === ""
+               && VpnProviderRules.lockdownProviderNote(true, nm[0], "x") === "", "lockdown note: none when not blocking, when off, for NetworkManager's");
+        assert(VpnProviderRules.lockdownProviderNote(true, providerVpns[0], "", true).indexOf("Fake VPN") === 0
+               && VpnProviderRules.lockdownProviderNote(false, providerVpns[0], "", true) === "" && VpnProviderRules.lockdownProviderNote(true, nm[1], "", true) === "",
                "lockdown note: on the VPN page's card whenever blocking is on, connected or not; never when not blocking, nor for NetworkManager's");
 
         // --- an entry's status line and busy ---
-        const extra = rules.vpnProviderEntries("p", [
+        const extra = VpnProviderRules.vpnProviderEntries("p", [
             { id: "s1", name: "a", state: "activated", status: "  Via exit-1  ", busy: true },
             { id: "s2", name: "b", state: "", status: 5, busy: "yes" },
             { id: "s3", name: "c", state: "", status: "x".repeat(200) },
@@ -290,11 +289,11 @@ TestCase {
                "entries: a status that is not text, a busy that is not a bool — defaults, reported");
         assert(extraById("s3").status.length === 80 && extraById("s4").status === "" && extraById("s4").busy === false,
                "entries: status at most 80; both optional");
-        const extraVpns = rules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: extra.entries });
+        const extraVpns = VpnProviderRules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: extra.entries });
         assert(extraVpns[0].status === "Via exit-1" && extraVpns[0].busy === true && extraVpns[3].status === "", "merged: status and busy carried");
 
         // --- an entry's routing (module API 1.16): absent or wrong is null, never false ---
-        const routed = rules.vpnProviderEntries("p", [
+        const routed = VpnProviderRules.vpnProviderEntries("p", [
             { id: "r1", name: "a", state: "activated", fullTunnel: false, setsDns: true, routes: ["100.64.0.0/10", "FD7A:115C:A1E0::/48"] },
             { id: "r2", name: "b", state: "activated" },
             { id: "r3", name: "c", state: "activated", fullTunnel: "no", setsDns: 0, routes: ["100.64.0.0/10", "nonsense"] },
@@ -308,18 +307,18 @@ TestCase {
         assertEqual(JSON.stringify([routedById("r3").fullTunnel, routedById("r3").setsDns, routedById("r3").routes, routedById("r4").routes]),
                     JSON.stringify([null, null, ["100.64.0.0/10"], null]), "entries: wrong ones null, a wrong route left out");
         assertEqual(routed.problems.length, 4, "entries: each wrong one reported: " + routed.problems.join("; "));
-        const routedVpns = rules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: routed.entries });
+        const routedVpns = VpnProviderRules.vpnProviderVpns({ providerId: "p", typeName: "P", glyph: "", entries: routed.entries });
         assert(routedVpns[0].fullTunnel === false && routedVpns[0].setsDns === true && routedVpns[0].routes.length === 2 && routedVpns[1].routes === null,
                "merged: the three carried");
 
         // --- slot contexts compared by value ---
         const owner = { providerId: "p" };
         const contextA = { slot: "network.vpn.row", vpnId: "p:a", entryId: "a", vpn: { uuid: "p:a", state: "" }, provider: owner, close: () => 1 };
-        assert(rules.sameVpnContext(contextA, Object.assign({}, contextA, { vpn: { uuid: "p:a", state: "" }, close: () => 2 })),
+        assert(VpnProviderRules.sameVpnContext(contextA, Object.assign({}, contextA, { vpn: { uuid: "p:a", state: "" }, close: () => 2 })),
                "context: a re-read saying the same — the same (functions alike, data by value)");
-        assert(!rules.sameVpnContext(contextA, Object.assign({}, contextA, { vpn: { uuid: "p:a", state: "activated" } }))
-               && !rules.sameVpnContext(contextA, Object.assign({}, contextA, { provider: { providerId: "p" } }))
-               && !rules.sameVpnContext(contextA, Object.assign({}, contextA, { open: true })) && !rules.sameVpnContext(null, contextA),
+        assert(!VpnProviderRules.sameVpnContext(contextA, Object.assign({}, contextA, { vpn: { uuid: "p:a", state: "activated" } }))
+               && !VpnProviderRules.sameVpnContext(contextA, Object.assign({}, contextA, { provider: { providerId: "p" } }))
+               && !VpnProviderRules.sameVpnContext(contextA, Object.assign({}, contextA, { open: true })) && !VpnProviderRules.sameVpnContext(null, contextA),
                "context: a changed entry, another provider object, a key more — different");
     }
 

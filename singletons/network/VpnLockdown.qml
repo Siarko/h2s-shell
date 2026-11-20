@@ -36,25 +36,25 @@ Singleton {
     readonly property bool allowLan: Profiles.value("system.vpnLockdownLan") ?? false
     // Servers of VPNs outside NetworkManager (wg-quick's…), by address: let through too
     readonly property string _extraText: JSON.stringify(Profiles.value("system.vpnLockdownServers") ?? [])
-    readonly property var extraServers: JSON.parse(_extraText).filter(address => NetworkRules.isLockdownAddress(address))
+    readonly property var extraServers: JSON.parse(_extraText).filter(address => VpnLockdownRules.isLockdownAddress(address))
     // Through its text: Profiles.value is a new object on every profile fact (battery…)
     readonly property string _networksText: JSON.stringify(Profiles.value("system.vpnLockdownNetworks") ?? [])
     readonly property var networks: JSON.parse(_networksText)
 
-    readonly property bool wanted: NetworkRules.lockdownWanted(NetworkProfiles.profiles, always, networks)
+    readonly property bool wanted: VpnLockdownRules.lockdownWanted(NetworkProfiles.profiles, always, networks)
 
     // Blocking is on, or about to be: what the provider VPNs' note goes by
     readonly property bool blocking: wanted || state === "on"
 
     // What to say on a provider VPN's row and card while blocking: the blocking does not let
-    // it through (NetworkRules.lockdownProviderNote; the provider's own lockdownNote if it
+    // it through (VpnProviderRules.lockdownProviderNote; the provider's own lockdownNote if it
     // has one). "" for NetworkManager's VPNs, and when there is nothing to say. The popup's
     // row: while the VPN is up or coming up; the VPN page's card (`whateverState` true):
     // whenever blocking is on, connected or not — the page states the limit (tailscale.md §8).
     function noteFor(vpn, whateverState): string {
         if (vpn?.type !== "provider")
             return "";
-        return NetworkRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "", whateverState === true);
+        return VpnProviderRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "", whateverState === true);
     }
 
     // ── The script ──
@@ -69,7 +69,7 @@ Singleton {
     readonly property string user: Quickshell.env("USER") ?? ""
     // Its text, shown in full on the page, and NixOS's module made from it
     readonly property string scriptText: _scriptFile.text()
-    readonly property string nixosModule: NetworkRules.lockdownNixosModule(scriptText, user)
+    readonly property string nixosModule: VpnLockdownRules.lockdownNixosModule(scriptText, user)
     FileView {
         id: _scriptFile
         path: root.scriptPath
@@ -109,7 +109,7 @@ Singleton {
     // The VPN servers' names and addresses as set (every peer's, every remote) — of
     // NetworkManager's VPNs only, as above
     readonly property var _hostList: Array.from(new Set(Object.values(VpnManager.nmDetails)
-        .reduce((all, detail) => all.concat(detail.servers ?? []), []).map(server => NetworkRules.serverHost(server))
+        .reduce((all, detail) => all.concat(detail.servers ?? []), []).map(server => VpnLockdownRules.serverHost(server))
         .filter(host => host !== ""))).sort()
     readonly property string _hosts: _hostList.join(" ")
     // { host: [addresses] } as last found; a host not found again keeps its addresses
@@ -119,8 +119,8 @@ Singleton {
 
     // The script's arguments as they would be now, and the status it would report
     // (not "arguments": inside a function that name is the function's own)
-    readonly property var switchArguments: NetworkRules.lockdownArguments({ vpnInterfaces: vpnInterfaces, servers: servers, allowLan: allowLan })
-    readonly property string expectedStatus: NetworkRules.lockdownStatusOf(switchArguments)
+    readonly property var switchArguments: VpnLockdownRules.lockdownArguments({ vpnInterfaces: vpnInterfaces, servers: servers, allowLan: allowLan })
+    readonly property string expectedStatus: VpnLockdownRules.lockdownStatusOf(switchArguments)
 
     property string _bootId: ""
     // The memory read once Config has loaded and the boot is known (read before, it would
@@ -277,11 +277,11 @@ Singleton {
     }
 
     function setExtraServers(addresses): void {
-        Profiles.setGlobal("system.vpnLockdownServers", addresses.filter(address => NetworkRules.isLockdownAddress(address)));
+        Profiles.setGlobal("system.vpnLockdownServers", addresses.filter(address => VpnLockdownRules.isLockdownAddress(address)));
     }
 
     // More servers' addresses than the script takes: the rest left out (said on the page)
-    readonly property bool tooManyServers: servers.filter(address => NetworkRules.isLockdownAddress(address)).length > NetworkRules.lockdownMostAddresses
+    readonly property bool tooManyServers: servers.filter(address => VpnLockdownRules.isLockdownAddress(address)).length > VpnLockdownRules.lockdownMostAddresses
 
     function isSetFor(networkUuid: string): bool {
         return networks.includes(networkUuid);
@@ -333,7 +333,7 @@ Singleton {
             return;
         _runScript(["status"], result => {
             if (result.ok) {
-                const reply = NetworkRules.lockdownStatusReply(result.lines);
+                const reply = VpnLockdownRules.lockdownStatusReply(result.lines);
                 root._status = reply.status;
                 root._rulesVersion = reply.rules;
                 root.state = root._status.startsWith("on") ? "on" : "off";
@@ -348,7 +348,7 @@ Singleton {
         _follow(true);
     }
 
-    // The decision is NetworkRules.lockdownNextStep's, from the state as it is now: nothing
+    // The decision is VpnLockdownRules.lockdownNextStep's, from the state as it is now: nothing
     // is used up by a call that has to wait (busy, not ready) — the next one decides again
     function _follow(force) {
         // The VPNs' interfaces and servers read first: arguments made without them would
@@ -357,7 +357,7 @@ Singleton {
         const busy = _action.busy || _resolve.running;
         if (ready && !busy && !_memoryRead)
             _readMemory();
-        const step = NetworkRules.lockdownNextStep({
+        const step = VpnLockdownRules.lockdownNextStep({
             ready: ready, busy: busy, passwordFree: passwordFree, askedAtStart: _askedAtStart, force: force === true,
             wanted: wanted, nftFound: nftFound, status: _status, rulesVersion: _rulesVersion,
             expectedStatus: expectedStatus, scriptVersion: scriptVersion, refused: _refused, hosts: _hosts
@@ -408,7 +408,7 @@ Singleton {
     CommandQuery {
         id: _resolve
         onDone: lines => {
-            const map = Object.assign({}, root._serverMap, NetworkRules.addressesByHost(lines));
+            const map = Object.assign({}, root._serverMap, VpnLockdownRules.addressesByHost(lines));
             if (JSON.stringify(map) !== JSON.stringify(root._serverMap))
                 root._serverMap = map;
             Qt.callLater(root._switchOn);
@@ -491,7 +491,7 @@ Singleton {
     // ── Installing and removing the script ── each once, with the password: the script
     // copied where root owns it, its polkit rule into polkit's rules (and a copy beside the
     // script, which anyone may read). NixOS keeps /etc itself: its module is shown instead.
-    readonly property string polkitRule: NetworkRules.lockdownPolkitRule(user, ['"' + installedPath + '"'])
+    readonly property string polkitRule: VpnLockdownRules.lockdownPolkitRule(user, ['"' + installedPath + '"'])
     property string installFailure: ""
 
     function install(): void {

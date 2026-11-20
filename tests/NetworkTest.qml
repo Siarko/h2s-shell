@@ -551,7 +551,7 @@ TestCase {
             // --- a VPN with a network ---
             const profile = (uuid, kind, state) => ({ uuid: uuid, kind: kind, state: state });
             const map = { wired: ["vpn"], wifi: ["vpn"], gone: ["vpn"] };
-            const plan = (profiles, memory, now) => rules.vpnWithNetworkPlan(profiles, map, memory, now ?? 1000);
+            const plan = (profiles, memory, now) => VpnWithNetworkRules.vpnWithNetworkPlan(profiles, map, memory, now ?? 1000);
             const start = plan([profile("wired", "ethernet", "activated"), profile("wifi", "wifi", ""), profile("vpn", "vpn", "")], {});
             assert(start.connect.join() === "vpn" && start.memory.broughtUp.vpn && start.memory.pending.vpn === 1000,
                    "vpn with a network: a network up brings its VPN up, pending until seen up");
@@ -582,82 +582,82 @@ TestCase {
             const notRead = plan([], seen.memory, 1000);
             assert(notRead.connect.length === 0 && notRead.disconnect.length === 0 && notRead.memory.broughtUp.vpn,
                    "vpn with a network: profiles not read yet — nothing done, nothing forgotten");
-            const pruned = rules.prunedVpnMapping({ wired: ["vpn", "deleted"], gone: ["vpn"] }, [profile("wired", "ethernet", ""), profile("vpn", "vpn", "")]);
+            const pruned = VpnWithNetworkRules.prunedVpnMapping({ wired: ["vpn", "deleted"], gone: ["vpn"] }, [profile("wired", "ethernet", ""), profile("vpn", "vpn", "")]);
             assertEqual(JSON.stringify(pruned), JSON.stringify({ wired: ["vpn"] }), "vpn with a network: profiles that are gone leave the mapping");
-            assertEqual(JSON.stringify(rules.prunedVpnMapping(map, [])), JSON.stringify(map), "vpn with a network: nothing pruned before the profiles are read");
+            assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping(map, [])), JSON.stringify(map), "vpn with a network: nothing pruned before the profiles are read");
             // --- only through the VPN ---
             const lockProfiles = [{ uuid: "cafe", state: "activated" }, { uuid: "home", state: "" }];
-            assert(rules.lockdownWanted(lockProfiles, true, []) && rules.lockdownWanted(lockProfiles, false, ["cafe"])
-                   && !rules.lockdownWanted(lockProfiles, false, ["home"]) && !rules.lockdownWanted([], false, ["cafe"]),
+            assert(VpnLockdownRules.lockdownWanted(lockProfiles, true, []) && VpnLockdownRules.lockdownWanted(lockProfiles, false, ["cafe"])
+                   && !VpnLockdownRules.lockdownWanted(lockProfiles, false, ["home"]) && !VpnLockdownRules.lockdownWanted([], false, ["cafe"]),
                    "lockdown: always, or while a network it is set for is up");
-            assert(rules.serverHost("vpn.example.com:51820") === "vpn.example.com" && rules.serverHost("[2001:db8::1]:51820") === "2001:db8::1"
-                   && rules.serverHost("2001:db8::1") === "2001:db8::1" && rules.serverHost("1.2.3.4") === "1.2.3.4", "lockdown: a server's host");
-            const lockArgs = rules.lockdownArguments({ vpnInterfaces: ["wg0", "ua", "evil\"; flush", "ua", "a.b"], servers: ["2001:DB8::1", "193.0.0.1", "junk", "::ffff:1.2.3.4"], allowLan: false });
+            assert(VpnLockdownRules.serverHost("vpn.example.com:51820") === "vpn.example.com" && VpnLockdownRules.serverHost("[2001:db8::1]:51820") === "2001:db8::1"
+                   && VpnLockdownRules.serverHost("2001:db8::1") === "2001:db8::1" && VpnLockdownRules.serverHost("1.2.3.4") === "1.2.3.4", "lockdown: a server's host");
+            const lockArgs = VpnLockdownRules.lockdownArguments({ vpnInterfaces: ["wg0", "ua", "evil\"; flush", "ua", "a.b"], servers: ["2001:DB8::1", "193.0.0.1", "junk", "::ffff:1.2.3.4"], allowLan: false });
             assertEqual(lockArgs.join(" "), "on 0 ua,wg0 193.0.0.1,2001:db8::1", "lockdown: the script's arguments, checked and sorted");
-            assertEqual(rules.lockdownArguments({}).join(" "), "on 0 - -", "lockdown: none — a dash");
-            assertEqual(rules.lockdownStatusOf(lockArgs), "on 0 ua,wg0 193.0.0.1,2001:db8::1", "lockdown: the status it reports");
+            assertEqual(VpnLockdownRules.lockdownArguments({}).join(" "), "on 0 - -", "lockdown: none — a dash");
+            assertEqual(VpnLockdownRules.lockdownStatusOf(lockArgs), "on 0 ua,wg0 193.0.0.1,2001:db8::1", "lockdown: the status it reports");
 
             // The script's status with the version of the rules loaded (4 on), none before
-            assertEqual(JSON.stringify(rules.lockdownStatusReply(["on 1 wg0 -", "rules 4"])), JSON.stringify({ status: "on 1 wg0 -", rules: 4 }),
+            assertEqual(JSON.stringify(VpnLockdownRules.lockdownStatusReply(["on 1 wg0 -", "rules 4"])), JSON.stringify({ status: "on 1 wg0 -", rules: 4 }),
                         "lockdown: status — the rules' version read");
-            assert(rules.lockdownStatusReply(["on 1 wg0 -"]).rules === 0 && rules.lockdownStatusReply(["off", "rules 4"]).rules === 0
-                   && rules.lockdownStatusReply([]).status === "off" && rules.lockdownStatusReply(["on 1 - -", "rules x"]).rules === 0,
+            assert(VpnLockdownRules.lockdownStatusReply(["on 1 wg0 -"]).rules === 0 && VpnLockdownRules.lockdownStatusReply(["off", "rules 4"]).rules === 0
+                   && VpnLockdownRules.lockdownStatusReply([]).status === "off" && VpnLockdownRules.lockdownStatusReply(["on 1 - -", "rules x"]).rules === 0,
                    "lockdown: status — rules from before version 4, off, nothing, garbage: version 0");
-            assert(rules.lockdownCurrent("on 1 - -", 4, "on 1 - -", 4) && rules.lockdownCurrent("on 1 - -", 5, "on 1 - -", 4)
-                   && !rules.lockdownCurrent("on 1 - -", 0, "on 1 - -", 4) && !rules.lockdownCurrent("on 0 - -", 4, "on 1 - -", 4),
+            assert(VpnLockdownRules.lockdownCurrent("on 1 - -", 4, "on 1 - -", 4) && VpnLockdownRules.lockdownCurrent("on 1 - -", 5, "on 1 - -", 4)
+                   && !VpnLockdownRules.lockdownCurrent("on 1 - -", 0, "on 1 - -", 4) && !VpnLockdownRules.lockdownCurrent("on 0 - -", 4, "on 1 - -", 4),
                    "lockdown: current — the same arguments from a script at least as new");
 
             // The upgrade: blocking on with rules of script 3, the installed script outdated
             const lockFacts = changes => Object.assign({ ready: true, busy: false, passwordFree: false, askedAtStart: false, force: false,
                 wanted: true, nftFound: true, status: "on 1 - -", rulesVersion: 0, expectedStatus: "on 1 - -", scriptVersion: 4,
                 refused: "", hosts: "" }, changes);
-            assertEqual(rules.lockdownNextStep(lockFacts({})), "keep", "lockdown upgrade: the old rules at the start, a password needed — kept, nothing asked");
-            assertEqual(rules.lockdownNextStep(lockFacts({ force: true })), "on", "lockdown upgrade: Apply again — switched on again");
-            assertEqual(rules.lockdownNextStep(lockFacts({ expectedStatus: "on 0 - -" })), "on", "lockdown upgrade: the arguments changed — switched, as before");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({})), "keep", "lockdown upgrade: the old rules at the start, a password needed — kept, nothing asked");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ force: true })), "on", "lockdown upgrade: Apply again — switched on again");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ expectedStatus: "on 0 - -" })), "on", "lockdown upgrade: the arguments changed — switched, as before");
             // Installed: password-free now, the first status ask reset
-            assertEqual(rules.lockdownNextStep(lockFacts({ passwordFree: true })), "ask", "lockdown upgrade: installed — its status asked first");
-            const afterInstall = lockFacts({ passwordFree: true, askedAtStart: true, rulesVersion: rules.lockdownStatusReply(["on 1 - -"]).rules });
-            assertEqual(rules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: installed, the status says old rules — switched on again");
-            assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { busy: true })), "wait", "lockdown upgrade: busy — waits");
-            assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { rulesVersion: 4 })), "keep", "lockdown upgrade: the new rules on — kept");
-            assertEqual(rules.lockdownNextStep(Object.assign({}, afterInstall, { refused: "on 1 - -" })), "refused",
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: true })), "ask", "lockdown upgrade: installed — its status asked first");
+            const afterInstall = lockFacts({ passwordFree: true, askedAtStart: true, rulesVersion: VpnLockdownRules.lockdownStatusReply(["on 1 - -"]).rules });
+            assertEqual(VpnLockdownRules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: installed, the status says old rules — switched on again");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { busy: true })), "wait", "lockdown upgrade: busy — waits");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { rulesVersion: 4 })), "keep", "lockdown upgrade: the new rules on — kept");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { refused: "on 1 - -" })), "refused",
                         "lockdown: a refusal still standing — not switched by itself");
-            assertEqual(rules.lockdownNextStep(lockFacts({ passwordFree: true, rulesVersion: 4, force: true })), "on",
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: true, rulesVersion: 4, force: true })), "on",
                         "lockdown: Apply again before the first status ask — switches, not only asks");
-            assert(rules.lockdownNextStep(lockFacts({ ready: false })) === "wait" && rules.lockdownNextStep(lockFacts({ nftFound: false })) === "no-nft"
-                   && rules.lockdownNextStep(lockFacts({ wanted: false })) === "off" && rules.lockdownNextStep(lockFacts({ wanted: false, refused: "off" })) === "keep"
-                   && rules.lockdownNextStep(lockFacts({ wanted: false, status: "off" })) === "idle",
+            assert(VpnLockdownRules.lockdownNextStep(lockFacts({ ready: false })) === "wait" && VpnLockdownRules.lockdownNextStep(lockFacts({ nftFound: false })) === "no-nft"
+                   && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false })) === "off" && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, refused: "off" })) === "keep"
+                   && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, status: "off" })) === "idle",
                    "lockdown: not ready, no nftables, not wanted while on (refused before), off");
-            assertEqual(rules.lockdownNextStep(lockFacts({ status: "off", rulesVersion: 0 })), "on", "lockdown: wanted and off, a password needed — switched on");
-            assertEqual(rules.lockdownNextStep(lockFacts({ status: "on 0 - -", rulesVersion: 4, refused: "on 1 - -" })), "refused",
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "off", rulesVersion: 0 })), "on", "lockdown: wanted and off, a password needed — switched on");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "on 0 - -", rulesVersion: 4, refused: "on 1 - -" })), "refused",
                         "lockdown: changed arguments refused before, a password needed — not asked again");
-            assertEqual(rules.lockdownNextStep(lockFacts({ wanted: false, refused: "off", force: true })), "off", "lockdown: Apply again while not wanted, off refused before — switched off");
-            const rule = rules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, refused: "off", force: true })), "off", "lockdown: Apply again while not wanted, off refused before — switched off");
+            const rule = VpnLockdownRules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);
             assert(rule.indexOf('subject.user == "h2s" && subject.local && subject.active') > 0
                    && rule.indexOf('action.lookup("program") == "/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"') > 0
-                   && rules.lockdownPolkitRule("h2s\"; evil", ["x"]).indexOf('subject.user == "h2sevil"') > 0, "lockdown: the polkit rule, for this user and this program only");
+                   && VpnLockdownRules.lockdownPolkitRule("h2s\"; evil", ["x"]).indexOf('subject.user == "h2sevil"') > 0, "lockdown: the polkit rule, for this user and this program only");
             const twoQuotes = "''";
-            const module = rules.lockdownNixosModule("echo ${1:-} " + twoQuotes + "x\n", "h2s");
+            const module = VpnLockdownRules.lockdownNixosModule("echo ${1:-} " + twoQuotes + "x\n", "h2s");
             assert(module.indexOf("echo " + twoQuotes + "${1:-} " + twoQuotes + "'x") > 0 && module.indexOf("writeShellScriptBin") > 0
                    && module.indexOf("pkgs.nftables") > 0 && module.indexOf('"${lockdown}/bin/h2s-vpn-lockdown"') > 0,
                    "lockdown: NixOS's module, the script escaped inside it");
-            assert(rules.serverHost("ovpn.example.org:1194:udp") === "ovpn.example.org" && rules.serverHost("1.2.3.4:443:tcp-client") === "1.2.3.4",
+            assert(VpnLockdownRules.serverHost("ovpn.example.org:1194:udp") === "ovpn.example.org" && VpnLockdownRules.serverHost("1.2.3.4:443:tcp-client") === "1.2.3.4",
                    "lockdown: OpenVPN's host:port:proto");
             const remotes = rules.vpnDetails([{ "connection.uuid": "o3", "vpn.service-type": "org.freedesktop.NetworkManager.openvpn",
                 "vpn.data": "ca = /a/ca.crt, remote = a.example:1194:udp, b.example:443:tcp, dev = tun" },
                 { "connection.uuid": "w3", "wireguard.peers": "K1= endpoint=a.example:51820, K2= endpoint=[2001:db8::1]:51820" }]);
             assert(remotes["o3"].servers.join(" ") === "a.example:1194:udp b.example:443:tcp" && remotes["o3"].server === "a.example:1194:udp"
                    && remotes["w3"].servers.length === 2, "lockdown: every remote, every peer's endpoint");
-            assertEqual(JSON.stringify(rules.addressesByHost(["a.example 1.2.3.4", "a.example 1.2.3.4", "a.example 2001:db8::5", "b.example junk"])),
+            assertEqual(JSON.stringify(VpnLockdownRules.addressesByHost(["a.example 1.2.3.4", "a.example 1.2.3.4", "a.example 2001:db8::5", "b.example junk"])),
                    JSON.stringify({ "a.example": ["1.2.3.4", "2001:db8::5"] }), "lockdown: addresses by host");
-            assert(rules.serverHost("https://vpn.corp.example/staff") === "vpn.corp.example" && rules.serverHost("vpn.example.com::udp") === "vpn.example.com"
-                   && rules.serverHost("https://user@[2001:db8::1]:443/x") === "2001:db8::1", "lockdown: a server's host from a URL, from host::udp");
-            assert(rules.isLockdownAddress("1.2.3.4") && !rules.isLockdownAddress("01.2.3.4") && !rules.isLockdownAddress("::ffff:1.2.3.4")
-                   && rules.isLockdownAddress("2001:db8::1"), "lockdown: addresses as the script takes them");
+            assert(VpnLockdownRules.serverHost("https://vpn.corp.example/staff") === "vpn.corp.example" && VpnLockdownRules.serverHost("vpn.example.com::udp") === "vpn.example.com"
+                   && VpnLockdownRules.serverHost("https://user@[2001:db8::1]:443/x") === "2001:db8::1", "lockdown: a server's host from a URL, from host::udp");
+            assert(VpnLockdownRules.isLockdownAddress("1.2.3.4") && !VpnLockdownRules.isLockdownAddress("01.2.3.4") && !VpnLockdownRules.isLockdownAddress("::ffff:1.2.3.4")
+                   && VpnLockdownRules.isLockdownAddress("2001:db8::1"), "lockdown: addresses as the script takes them");
             const many = [];
             for (let i = 0; i < 300; i++)
                 many.push("10." + Math.floor(i / 250) + "." + (i % 250) + ".1");
-            assertEqual(rules.lockdownArguments({ servers: many })[3].split(",").length, 256, "lockdown: no more addresses than the script takes");
+            assertEqual(VpnLockdownRules.lockdownArguments({ servers: many })[3].split(",").length, 256, "lockdown: no more addresses than the script takes");
             const wifiSettings = rules.settingsFrom({ "connection.id": "Home", "802-11-wireless.ssid": "Home", "802-11-wireless.band": "a",
                 "802-11-wireless.cloned-mac-address": "stable", "802-11-wireless.hidden": "no", "ipv6.ip6-privacy": "2 (enabled, prefer temporary IP)" });
             assert(wifiSettings.wifi.band === "a" && wifiSettings.wifi.mac === "stable" && wifiSettings.ethernet === null

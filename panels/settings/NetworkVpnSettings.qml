@@ -443,7 +443,7 @@ Item {
                     input.inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                     readonly property var _typed: text.split(/[\s,;]+/).filter(item => item !== "")
                     // As the script takes them: IPv4 without leading zeros, IPv6 without an IPv4 tail
-                    problem: _typed.some(item => !NetworkRules.isLockdownAddress(item))
+                    problem: _typed.some(item => !VpnLockdownRules.isLockdownAddress(item))
                     Component.onCompleted: text = VpnLockdown.extraServers.join(", ")
                     onEditingFinished: if (!problem) VpnLockdown.setExtraServers(_typed)
                 }
@@ -459,7 +459,7 @@ Item {
                 text: (_names.length > 0 ? "Also on " + _names.join(", ") + ": " : "Or only on some networks (set in a Wi-Fi or wired profile's editor): ")
                     + "there it starts a few seconds after the network is up and the password is given; only \"always\" leaves no gap. "
                     + "Name lookups (DNS) still go outside the VPN. "
-                    + (VpnLockdown.tooManyServers ? "Over " + NetworkRules.lockdownMostAddresses + " VPN server addresses: the rest are left out. " : "")
+                    + (VpnLockdown.tooManyServers ? "Over " + VpnLockdownRules.lockdownMostAddresses + " VPN server addresses: the rest are left out. " : "")
                     + "A network's sign-in page (a hotel's) cannot be used while blocking."
             }
 

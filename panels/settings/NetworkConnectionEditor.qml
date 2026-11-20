@@ -123,8 +123,8 @@ Item {
             root._edited = JSON.parse(JSON.stringify(settings));
             // NetworkManager's VPNs there still are (one deleted would stay picked, unseen and
             // unremovable) and EVERY provider VPN stored, available or not — a not available
-            // one shows as a removable pill (NetworkRules.editorVpnIds, unavailableVpnIds)
-            root._vpnsOriginal = NetworkRules.editorVpnIds(VpnManager.vpnsWith(root.uuid), VpnManager.vpns);
+            // one shows as a removable pill (VpnWithNetworkRules.editorVpnIds, unavailableVpnIds)
+            root._vpnsOriginal = VpnWithNetworkRules.editorVpnIds(VpnManager.vpnsWith(root.uuid), VpnManager.vpns);
             root._vpnsEdited = root._vpnsOriginal.slice();
             root._lockOriginal = VpnLockdown.isSetFor(root.uuid);
             root._lockEdited = root._lockOriginal;
@@ -162,8 +162,8 @@ Item {
     property var _vpnsToWrite: null
 
     function _save(reconnect) {
-        // Never a list missing a provider VPN the user did not take out (NetworkRules.vpnsToWrite)
-        _vpnsToWrite = _vpnsChanged ? NetworkRules.vpnsToWrite(VpnManager.vpnsWith(uuid), _vpnsOriginal, _vpnsEdited) : null;
+        // Never a list missing a provider VPN the user did not take out (VpnWithNetworkRules.vpnsToWrite)
+        _vpnsToWrite = _vpnsChanged ? VpnWithNetworkRules.vpnsToWrite(VpnManager.vpnsWith(uuid), _vpnsOriginal, _vpnsEdited) : null;
         _lockToWrite = _lockOriginal !== _lockEdited ? _lockEdited : null;
         if (_creating)
             _createToken = NetworkProfiles.create(_edited, "Making " + _edited.name);
@@ -845,12 +845,12 @@ Item {
                     }
                     // A provider's VPN picked for this network that is not available now
                     // (its provider away, not ready, logged out, the entry missing from a
-                    // read: NetworkRules.unavailableVpnIds): kept, and taken out here (a
+                    // read: VpnWithNetworkRules.unavailableVpnIds): kept, and taken out here (a
                     // click, then Save)
                     Repeater {
                         id: _unavailable
                         // The ids themselves: strings go into a ScriptModel as they are
-                        model: ScriptModel { values: NetworkRules.unavailableVpnIds(root._vpnsOriginal, VpnManager.vpns) }
+                        model: ScriptModel { values: VpnWithNetworkRules.unavailableVpnIds(root._vpnsOriginal, VpnManager.vpns) }
                         Pill {
                             required property string modelData
                             label: VpnManager.labelOf(modelData)
