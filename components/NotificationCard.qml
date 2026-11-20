@@ -133,6 +133,48 @@ Rectangle {
     // How far the sender's job has gone, from its hints: a bar under the text
     readonly property var progress: NotificationRules.progress(_hints)
 
+    // The bar's wave: while the job runs and its value grew lately
+    // (NotificationRules.progressWave). A sender updates the same notification as its job
+    // goes; a value that stands still (a stall) lets the wave stop on its own.
+    property int progressWaveMs: NotificationRules.progressWaveMs
+    readonly property bool progressWave: NotificationRules.progressWave(progress.state, _grewAt, _waveNow, progressWaveMs)
+    property double _grewAt: 0
+    property double _waveNow: 0
+    // Whose value the last one is: another notification in the card starts again
+    property var _waveFor: null
+    // The last value the bar showed; NaN while it showed none (the first value is no growth)
+    property real _lastValue: NaN
+    onProgressChanged: {
+        const value = progress.shown ? progress.value : NaN;
+        if (notification !== _waveFor) {
+            _waveFor = notification;
+            _grewAt = 0;
+            _waveEnd.stop();
+        } else if (progress.state === "running" && value > _lastValue) {
+            _grewAt = Date.now();
+            _waveNow = _grewAt;
+            _waveEnd.interval = progressWaveMs;
+            _waveEnd.restart();
+        }
+        _lastValue = value;
+    }
+    Component.onCompleted: {
+        _waveFor = notification;
+        _lastValue = progress.shown ? progress.value : NaN;
+    }
+    // When the window after the last growth has passed; a timer that fires early waits on
+    Timer {
+        id: _waveEnd
+        onTriggered: {
+            notifCard._waveNow = Date.now();
+            const left = notifCard._grewAt + notifCard.progressWaveMs - notifCard._waveNow;
+            if (left > 0) {
+                interval = left;
+                restart();
+            }
+        }
+    }
+
     readonly property string _appIconSource: _pictureSource(_appIcon)
     // The same picture as the icon is shown once, in the header
     readonly property string _imageSource: {
@@ -443,6 +485,7 @@ Rectangle {
                     Layout.topMargin: 4
                     value: notifCard.progress.value
                     tone: notifCard.progress.tone
+                    wave: notifCard.progressWave
                 }
             }
         }

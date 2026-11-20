@@ -34,9 +34,10 @@ TestCase {
         "SettingsRow": ["controls", "hint", "label", "value"],
         "ExpandingRow": ["content", "hint", "label", "open"],
         "Notice": ["kind", "text"],
-        "ProgressBar": ["kind", "value"],
+        "ProgressBar": ["kind", "value", "wave"],
         "HoverTip": ["target", "text"],
-        "SidePanel": ["closed", "content", "open", "size", "title"]
+        "SidePanel": ["closed", "content", "open", "size", "title"],
+        "StatusPill": ["expanded", "icon", "kind", "label", "parts", "toggled"]
     })
 
     // The base types: a module's object is the internal one itself, so only these names
@@ -754,6 +755,13 @@ TestCase {
                     JSON.stringify([false, "m", "", null, 0, 0, false]), "… its defaults: closed, size m, no title, no content, taking no room");
         assertEqual(sidePanel.data.length + " " + sidePanel.resources.length, "0 0", "… nothing of the frame reachable through it: no objects inside");
         sidePanel.destroy();
+        // (1.35) The status pill: its behaviour in tests/StatusPillTest.qml
+        const statusPill = Qt.createQmlObject("import qs.api\nStatusPill {}", bare, "PinnedStatusPill.qml");
+        assertEqual(JSON.stringify(_names(statusPill)), JSON.stringify(pinned.StatusPill), "StatusPill's public properties and signals are the pinned ones");
+        assertEqual(JSON.stringify([statusPill.icon, statusPill.label, statusPill.kind, statusPill.parts, statusPill.expanded]),
+                    JSON.stringify(["", "", "normal", [], false]), "… its defaults: no icon, no label, normal, no parts, folded");
+        statusPill.destroy();
+        _statusWords();
 
         // --- beside qs.components, which has a SmallButton too ---
         const publicLast = Qt.createQmlObject("import QtQuick\nimport qs.components\nimport qs.api\nSmallButton {}", bare, "PublicLast.qml");
@@ -1299,6 +1307,54 @@ TestCase {
     // The hover handlers on `item`
     function _handlersOn(item) {
         return Array.from(item.data).filter(child => child.toString().startsWith("QQuickHoverHandler")).length;
+    }
+
+    // (1.35) The words of the bar's wave and the status pill
+    function _statusWords() {
+        const rules = ApiElementRules;
+        // --- progressWaves(wave, value, reduceMotion) ---
+        assert(rules.progressWaves(true, 0.4, false) && rules.progressWaves(true, 0, false), "a wave asked for, a value from 0 below 1: it runs");
+        assert(!rules.progressWaves(false, 0.4, false), "not asked for: none");
+        assert(!rules.progressWaves(true, 1, false) && !rules.progressWaves(true, 1.5, false), "a full bar: none");
+        assert(!rules.progressWaves(true, -0.5, false) && !rules.progressWaves(true, -1, false), "a run of unknown length (below 0): none");
+        assert(!rules.progressWaves(true, NaN, false) && !rules.progressWaves(true, "0.4", false) && !rules.progressWaves(true, undefined, false), "not a number: none");
+        assert(!rules.progressWaves(true, 0.4, true), "reduced motion: none");
+        assert(!rules.progressWaves("yes", 0.4, false) && !rules.progressWaves(1, 0.4, false), "only true asks for it");
+
+        // --- statusKind ---
+        const statusKinds = { normal: ["accent", "textPrimary"], muted: ["textMuted", "textMuted"], success: ["success", "success"],
+            warning: ["warning", "warning"], danger: ["error", "error"] };
+        for (const kind in statusKinds)
+            assertEqual(JSON.stringify(rules.statusKind(kind)), JSON.stringify({ value: { icon: statusKinds[kind][0], text: statusKinds[kind][1] }, known: true }),
+                        "a status pill's kind " + kind + ": the icon in " + statusKinds[kind][0] + ", the text in " + statusKinds[kind][1]);
+        assertEqual(Object.keys(rules.statusKinds).sort().join(" "), Object.keys(statusKinds).sort().join(" "), "and those are all its kinds");
+        for (const word of ["error", "accent", "", "toString", undefined, 3])
+            assertEqual(JSON.stringify(rules.statusKind(word)), JSON.stringify({ value: { icon: "accent", text: "textPrimary" }, known: false }), "a kind " + JSON.stringify(word) + " is not one: normal");
+
+        // --- statusParts ---
+        const plain = rules.statusParts([{ icon: "\uf017", text: "3\n", kind: "muted", tip: "3 queued", line: "" },
+                                         { icon: "\uf071x", text: "<b>1</b>", kind: "warning", tip: "1 with\nno progress", line: "1 with no progress for 3 min" },
+                                         { icon: "\uf00c", text: "5", tip: "" },
+                                         { text: "y".repeat(100), kind: "blue" },
+                                         { kind: "pink" }, { kind: "blue" }, null, "text"]);
+        assertEqual(JSON.stringify(plain.parts[0]), JSON.stringify({ icon: "\uf017", text: "3 ", kind: "muted", tip: "3 queued", line: "3 queued" }),
+                    "a part made plain: its text on one line, a line left empty is the tip");
+        assertEqual(plain.parts[1].text + "|" + plain.parts[1].tip + "|" + plain.parts[1].line, "<b>1</b>|1 with no progress|1 with no progress for 3 min",
+                    "… markup kept as written (shown plain), a tip on one line, a line given kept");
+        assertEqual(Array.from(plain.parts[1].icon).length, rules.iconCap, "… an icon one glyph long at most (" + rules.iconCap + " characters), nothing added");
+        assertEqual(plain.parts[2].kind + " " + plain.parts[2].line, "normal 5", "no kind: normal, unlisted; no tip: the line is the text");
+        assert(Array.from(plain.parts[3].text).length === rules.textCap && plain.parts[3].text.endsWith("…") && plain.parts[3].kind === "normal",
+               "a long text cut at " + rules.textCap + "; a kind it does not know: normal");
+        assertEqual(plain.unknownKinds.join(" "), "blue pink", "… the unknown kinds listed once each, in order");
+        assertEqual(JSON.stringify(plain.parts[6]) + " " + JSON.stringify(plain.parts[7]), JSON.stringify(plain.parts[4]) + " " + JSON.stringify(plain.parts[4]),
+                    "a part that is not an object: an empty one");
+        assertEqual(JSON.stringify(plain.parts[4]), JSON.stringify({ icon: "", text: "", kind: "normal", tip: "", line: "" }), "… with nothing in it");
+        assertEqual(plain.dropped, 0, "eight parts: none dropped");
+        const many = rules.statusParts(Array.from({ length: 15 }, (_, i) => ({ text: String(i) })));
+        assertEqual(many.parts.length + " " + many.dropped + " " + many.parts[11].text, rules.statusPartCap + " 3 11", "past " + rules.statusPartCap + " parts the rest dropped, counted");
+        assertEqual(JSON.stringify(rules.statusParts(null)) + JSON.stringify(rules.statusParts("parts")), JSON.stringify({ parts: [], unknownKinds: [], dropped: 0 }).repeat(2),
+                    "not an array: no parts");
+        assertEqual(rules.iconText("\uf062\n") + "|" + rules.iconText(3) + "|" + rules.iconText({}), "\uf062 |3|", "an icon: one line, a number as written, anything else none");
     }
 
     // ProgressBar and HoverTip (1.31)

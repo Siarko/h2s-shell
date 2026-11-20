@@ -140,7 +140,9 @@ A notification that carries a progress value (the spec's `value` hint, 0–100) 
 under its text — in the toast, the panel, and on the screensaver and lock screen where
 they show a notification's text. An app updating the same notification (by its id) moves
 the bar in place: no new entry, no new toast, and the bell rings only for a changed
-title or text. Running an action on a notification marked resident (it stays after an
+title or text. While the job is moving (the value grew in the last 10 seconds) a wave of
+light passes through the bar's filled part; it stops when the value stands still or the
+job ends, and with reduced motion. Running an action on a notification marked resident (it stays after an
 action, by the spec) leaves it in the panel; a toast still slides away.
 
 `singletons/Notifier.qml` is the outbound side: the shell can send its own

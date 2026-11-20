@@ -117,7 +117,7 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.34", "Api.version");
+        assertEqual(Api.version, "1.35", "Api.version");
         // (1.26) Its icon, as the shell draws it
         assertEqual(JSON.stringify(module.icon), JSON.stringify({ kind: "svg", glyph: "", url: Qt.resolvedUrl("../icon.svg").toString(), colors: "theme" }),
                     "module.icon: its SVG, by its file's URL, painted in the theme's colour");

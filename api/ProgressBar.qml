@@ -14,6 +14,13 @@ import qs.singletons
 // does not know shows as the default and is logged once (ApiElements). Its thickness and
 // its ends are the theme's (Api.theme.progress).
 //
+// `wave` (1.35, false by default): the owner says the bar is moving now — a band of light
+// then passes through the filled part every Theme.duration("progressWave"); none while full,
+// of unknown length, hidden, or with reduced motion (ApiElementRules.progressWaves). The bar
+// does not judge that itself: a stalled job sets it false.
+//
+//   ProgressBar { value: sent / total; wave: sending && !stalled }
+//
 // A wrapper around the internal bar (components/ProgressBar.qml): what is declared here is
 // all a module can rely on. It fills the width a layout gives it.
 Item {
@@ -21,6 +28,7 @@ Item {
 
     property real value: 0
     property string kind: "normal"
+    property bool wave: false
 
     Layout.fillWidth: true
     implicitWidth: _inner.implicitWidth
@@ -36,6 +44,7 @@ Item {
         width: root.width
         height: root.height
         value: root.value
+        wave: root.wave
         tone: kindWord.value
     }
 }

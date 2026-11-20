@@ -235,6 +235,7 @@ Singleton {
         { role: "fade", label: "Fade", hint: "Appearing or disappearing in place", to: 1500, curves: ["fade"] },
         { role: "value", label: "Value", hint: "A bar or slider following its value", to: 2000, curves: ["value"] },
         { role: "heartbeat", label: "Heartbeat", hint: "The wave on graphs when a sample arrives", to: 2000, curves: ["heartbeat"] },
+        { role: "progressWave", label: "Progress wave", hint: "One pass of the wave through a moving bar's fill", to: 2000, curves: ["progressWave"] },
         { role: "pop", label: "Pop", hint: "A mark popping in, the bell; \"Clear all\" is timed from it", to: 2000, curves: ["pop"] },
         { role: "pulse", label: "Pulse", hint: "One breath of a pulsing indicator", to: 4000, curves: ["pulse"] },
         { role: "spin", label: "Spin", hint: "One turn of a spinner", to: 4000, curves: ["spin"] },

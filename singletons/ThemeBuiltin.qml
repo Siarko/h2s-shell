@@ -141,6 +141,7 @@ Singleton {
             "fade": 150,                     // appearing or disappearing in place
             "value": 400,                    // a value bar following its data
             "heartbeat": 350,                // the wave on graphs when a sample arrives
+            "progressWave": 300,             // one pass of the wave through a moving bar's fill
             "pop": 380,                      // a mark popping in; "Clear all" is timed from it
             "pulse": 1000,                   // one breath of a pulsing indicator
             "spin": 800,                     // one turn of a spinner
@@ -162,6 +163,7 @@ Singleton {
             "fade": "OutQuad",
             "value": "Linear",
             "heartbeat": "OutQuad",
+            "progressWave": "Linear",
             "pop": "OutBack",
             "pulse": "InOutQuad",
             "spin": "Linear",

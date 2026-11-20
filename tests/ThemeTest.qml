@@ -74,6 +74,9 @@ TestCase {
             JSON.stringify(Object.keys(Theme.builtin.curves).sort()), "and every curve token, with its role");
         for (const entry of ThemeRules.animationRoles)
             assert(Theme.builtin.durations[entry.role] <= entry.to, "the slider for " + entry.role + " reaches the built-in duration");
+        const waveRole = ThemeRules.animationRoles.find(entry => entry.role === "progressWave");
+        assert(waveRole !== undefined && waveRole.curves.join() === "progressWave", "the progress bars' wave is a role on the Animations page, with its curve");
+        assertEqual(Theme.builtin.durations.progressWave + " " + Theme.builtin.curves.progressWave, "300 Linear", "… one pass every 300 ms, at an even pace");
         for (const name of ThemeRules.qtCurveNames)
             assert(ThemeRules.isQtCurve(name), name + " is one of Qt's curves");
         for (const group of ThemeRules.shapeGroups)

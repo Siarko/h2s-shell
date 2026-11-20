@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.34" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.35" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -485,7 +485,8 @@ import qs.singletons.network
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
 //   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
 //                          (1.5), SettingsRow, ExpandingRow, Notice (1.6), ProgressBar,
-//                          HoverTip (1.31), SidePanel (1.34) — the public elements (below)
+//                          HoverTip (1.31), SidePanel (1.34), StatusPill (1.35) — the public
+//                          elements (below)
 //   PopupWidget, BarText, BarRow, PointerArea, VpnProvider (1.7) — the base types (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
@@ -557,7 +558,11 @@ import qs.singletons.network
 //                          of the fill slides along the track; kind: "normal" (the default,
 //                          the accent) | "success" | "warning" | "danger". As thick as the
 //                          theme's progress.thickness, its ends progress.radius (at most half
-//                          the thickness). Fills the width.
+//                          the thickness). Fills the width. (1.35) wave (false by default):
+//                          the owner says the bar moves now — a band of light passes through
+//                          the filled part every Theme duration "progressWave"; none while
+//                          full, of unknown length, hidden, or with reduced motion. The bar
+//                          does not judge it: a stalled job sets it false.
 //   HoverTip               (1.31) text, target (an Item; the item it is written inside unless
 //                          given) — a tooltip over the target after a moment's hover: plain
 //                          text, wrapped at the tooltip's width, line breaks as spaces, cut
@@ -587,6 +592,22 @@ import qs.singletons.network
 //                          closes it.
 //                          SidePanel { id: files; title: "Files"; size: "l"; ColumnLayout { … } }
 //                          SmallButton { label: "Files…"; onClicked: files.open = true }
+//   StatusPill             (1.35) a pill that sums up a state: icon (a glyph of the shell's
+//                          icon font; "" none), label (one line), kind: "normal" (the
+//                          default: icon accent, label text) | "muted" | "success" |
+//                          "warning" | "danger" — the icon's and label's colour; parts:
+//                          [{ icon, text, kind, tip, line }] — after the label, each an
+//                          icon and a short text (a count) in its kind's colour, its tip
+//                          over it on hover (HoverTip's rules); expanded (the owner may set
+//                          it; a click flips it while there are parts): the parts one per
+//                          line under a rule — icon and `line` ("" → the tip, or the text
+//                          without one) in the part's colour; toggled(expanded). Texts
+//                          plain, one line, cut past 80 (oneLine); unknown kinds →
+//                          "normal", logged once; past 12 parts the rest dropped, logged
+//                          once. Fills no width.
+//                          StatusPill { icon: ""; label: "Sending 1/6"
+//                                       parts: [{ icon: ""; text: "3"; kind: "muted";
+//                                                 tip: "3 queued" }] }
 //                          The settings blocks above (SectionTitle, Heading, Hint,
 //                          SwitchRow, a SettingEditor's label, hint and unit) and a
 //                          module's page name in the settings window show their texts as

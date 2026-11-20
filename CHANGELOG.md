@@ -17,6 +17,18 @@ Settings → Notifications → "Apps choose how long", off, keeps the old behavi
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and a
+  band of light passes through its filled part every theme duration `progressWave` (300 ms
+  by default); none while the bar is full, of unknown length or hidden, or with reduced
+  motion. `StatusPill`, a pill that sums up a state: `icon` (a glyph of the shell's icon
+  font), `label` (one line), `kind` `"normal"` (the default: the icon in the accent, the
+  label in the text colour), `"muted"`, `"success"`, `"warning"` or `"danger"`; `parts`
+  `[{ icon, text, kind, tip, line }]`, after the label, each an icon and a short text in its
+  kind's colour with its tip over it on hover; `expanded` (a click flips it while there are
+  parts, the owner may set it): the parts one per line under a rule, each its icon and
+  `line` (empty: the tip, or the text) in its colour; `toggled(expanded)`. Texts plain, one
+  line, cut past 80 characters; past 12 parts the rest are dropped and an unknown kind
+  shows as `"normal"`, each logged once. It fills no width.
 - 1.34: `SidePanel`, a panel sliding in from the right over a module's settings page, the
   page dimmed beside it: `open` (the owner sets it true; the panel sets it false when it
   closes itself), `title` (one line, plain), `size` `"s"`, `"m"` (the default) or `"l"`
@@ -423,6 +435,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   (started, stalled, done); turning a module off takes its progress notifications away.
 - Settings → Appearance → Controls: "Progress bars", their thickness and corner radius; the
   hardware popup's bars follow them.
+- A notification's progress bar shows a wave of light through its filled part while the
+  app's job is moving (its value grew in the last 10 seconds); it stops when the job stands
+  still or ends, and with reduced motion. Its speed is "Progress wave" in Settings →
+  Appearance → Animations.
 - Enter in a Wi-Fi network's password field connects, as Connect beside it does (the
   network popup), or saves the new password, as Save does (a saved network's card in
   Settings) — only when that button could be pressed and the network's row is open: never

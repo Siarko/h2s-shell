@@ -857,7 +857,9 @@ its child is held as a `Component`, so nothing of it exists while the row is clo
 `components/SettingsRow.qml` and `components/ExpandingRow.qml`. `ProgressBar` (API 1.31;
 `value` 0 to 1, below 0 a run of unknown length; `kind` `normal`, `success`, `warning` or
 `danger`; inside, `components/ProgressBar.qml`, as thick as the theme's
-`progress.thickness`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
+`progress.thickness`; `wave`, API 1.35: the owner says the bar moves, and a band of light
+passes through the fill every `Theme.duration("progressWave")` — whether it runs is
+`ApiElementRules.progressWaves`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
 it is written inside by default, taking no room; inside, `components/HoverTip.qml`).
 `SidePanel` (API 1.34) slides in from the right over a module's settings page: `open`,
 `title`, `size` (`s`, `m`, `l`: `Theme.sidePanelWidths`, at most 90 % of the page) and
@@ -870,7 +872,12 @@ The element finds that layer by walking up its parents to a frame `ApiElements` 
 identity, so nothing a module names makes a place a frame; elsewhere it does not open.
 Which reason a close gives, and the width, are `ApiElementRules`' (`sidePanelEvent`,
 `sidePanelWidth`). The settings blocks `SectionTitle` and `Heading` take controls as their
-children, at the right end of the line (1.34). The base types —
+children, at the right end of the line (1.34). `StatusPill` (API 1.35) sums up a state:
+`icon`, `label`, `kind` (`normal`, `muted`, `success`, `warning`, `danger`: the colours in
+`ApiElementRules.statusKinds`), `parts` (`[{ icon, text, kind, tip, line }]`, each with its
+tooltip; made plain and capped at 12 by `ApiElementRules.statusParts`), `expanded` (a click
+flips it while there are parts: one part per line under a rule) and `toggled(expanded)`;
+inside, `components/StatusPill.qml`, its parts in a `KeyedModel` keyed by place. The base types —
 `PopupWidget`, `BarText`, `BarRow`, `PointerArea`, `VpnProvider` — are the shell's own
 types under their public names, not wrappers: the bar, the pointer and `VpnManager` need
 the object itself, and only the names listed in `api/Api.qml` are promised. Every element's properties and signals are pinned in

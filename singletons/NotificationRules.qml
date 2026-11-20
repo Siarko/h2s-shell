@@ -32,6 +32,19 @@ Singleton {
         return { shown: true, value: value, state: state, tone: tone };
     }
 
+    // How long a progress bar's wave runs after its value last grew (ms)
+    readonly property int progressWaveMs: 10000
+
+    // Whether a card's progress bar waves: its job running and its value grown within
+    // `windowMs` (progressWaveMs unless given) before `now` — `grewAt` the time it last grew,
+    // 0 never. A sender that stalls stops moving its value, so the wave stops with it.
+    function progressWave(state, grewAt, now, windowMs) {
+        if (state !== "running" || typeof grewAt !== "number" || grewAt <= 0 || typeof now !== "number")
+            return false;
+        const window = typeof windowMs === "number" ? windowMs : progressWaveMs;
+        return now >= grewAt && now - grewAt < window;
+    }
+
     // Whether running one of a notification's actions also takes its entry away: not for
     // a resident one (the notification spec: it stays after an action)
     function dismissAfterAction(notification): bool {

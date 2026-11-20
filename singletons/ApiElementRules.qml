@@ -45,6 +45,23 @@ Singleton {
     readonly property var sidePanelReasons: ({ closeButton: "close", outsideClick: "outside", escape: "escape",
         otherOpened: "replaced", pageGone: "page", locked: "lock" })
 
+    // (1.35) A status pill's kind → the theme's colours it is drawn in, by their names in
+    // Theme: `icon` for the icon (and a part's short text), `text` for the label (and a
+    // part's line when expanded). Normal is the accent's icon beside the ordinary text.
+    readonly property var statusKinds: ({
+        normal: { icon: "accent", text: "textPrimary" },
+        muted: { icon: "textMuted", text: "textMuted" },
+        success: { icon: "success", text: "success" },
+        warning: { icon: "warning", text: "warning" },
+        danger: { icon: "error", text: "error" }
+    })
+    readonly property string statusKindDefault: "normal"
+    // (1.35) The most parts a status pill shows; the rest are dropped
+    readonly property int statusPartCap: 12
+    // (1.35) The most characters an icon keeps: one glyph, perhaps with a variation
+    // selector — never a text
+    readonly property int iconCap: 2
+
     // The longest a text a module hands a public element for one line may be, in
     // characters, before it is cut
     readonly property int textCap: 80
@@ -111,6 +128,54 @@ Singleton {
 
     function progressKind(kind) {
         return pick(progressKinds, kind, progressKindDefault);
+    }
+
+    // (1.35) Whether a progress bar's wave runs: asked for (`wave`, the owner says the bar
+    // moves), a value from 0 up to but not including 1 (not full, not a run of unknown
+    // length, a number), and motion not reduced
+    function progressWaves(wave, value, reduceMotion) {
+        return wave === true && typeof value === "number" && value >= 0 && value < 1 && reduceMotion !== true;
+    }
+
+    function statusKind(kind) {
+        return pick(statusKinds, kind, statusKindDefault);
+    }
+
+    // (1.35) An icon from a module: its first `iconCap` characters on one line, nothing cut
+    // with "…" (a glyph is not a text)
+    function iconText(icon) {
+        return PrivilegedRules.characters(oneLine(icon)).slice(0, iconCap).join("");
+    }
+
+    // (1.35) A status pill's parts as it draws them: { parts, unknownKinds, dropped }.
+    // Each part { icon, text, kind, tip, line }: icon one glyph (iconText), text and line on
+    // one line (oneLine), tip as a tooltip's (tipText), kind a word statusKinds has — one it
+    // does not know is the default and listed in `unknownKinds` (each once); none given is
+    // the default, unlisted. A line left empty is the tip, or the text without one. Past
+    // `statusPartCap` parts the rest are dropped, `dropped` says how many. Not an array:
+    // none; a part that is not an object: an empty one.
+    function statusParts(parts) {
+        if (!Array.isArray(parts))
+            return { parts: [], unknownKinds: [], dropped: 0 };
+        const unknownKinds = [];
+        const shown = parts.slice(0, statusPartCap).map(part => {
+            const given = part !== null && typeof part === "object" ? part : {};
+            const unset = given.kind === undefined || given.kind === null || given.kind === "";
+            const kindWord = statusKind(given.kind);
+            if (!unset && !kindWord.known && !unknownKinds.includes(String(given.kind)))
+                unknownKinds.push(String(given.kind));
+            const text = oneLine(given.text);
+            const tip = tipText(given.tip);
+            const line = oneLine(given.line);
+            return {
+                icon: iconText(given.icon),
+                text: text,
+                kind: kindWord.known ? given.kind : statusKindDefault,
+                tip: tip,
+                line: line !== "" ? line : (tip !== "" ? oneLine(tip) : text)
+            };
+        });
+        return { parts: shown, unknownKinds: unknownKinds, dropped: Math.max(0, parts.length - statusPartCap) };
     }
 
     function sidePanelSize(size) {

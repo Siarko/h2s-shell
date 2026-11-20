@@ -7,19 +7,29 @@ import qs.singletons
 // shows as nothing done.
 // Its thickness and its ends come from the theme's `progress` group; `tone` names the fill's
 // colour in Theme (the accent by default).
+// `wave`: the owner says the bar moves — a lighter band of the fill's colour then passes
+// through the filled part once every Theme.duration("progressWave"), as a graph's heartbeat
+// (HistoryChart). Whether it runs is ApiElementRules.progressWaves (not full, not of unknown
+// length, motion not reduced), and only while the bar is visible.
 //
-//   ProgressBar { width: parent.width; value: copied / total }
+//   ProgressBar { width: parent.width; value: copied / total; wave: copying }
 Item {
     id: root
 
     property real value: 0
     property string tone: "accent"
+    property bool wave: false
+    // The theme's; a test sets it to see both ways
+    property bool reduceMotion: Theme.reduceMotion
 
     readonly property bool indeterminate: value < 0
     readonly property real _done: isNaN(value) ? 0 : Math.max(0, Math.min(1, value))
     // The sliding piece's share of the track while the length is unknown
     readonly property real _pieceShare: 0.3
     property real _slide: 0.5
+    readonly property bool waving: ApiElementRules.progressWaves(wave, value, reduceMotion) && visible
+    // 0 → 1 as the band crosses the fill
+    property real _wavePhase: 0
 
     implicitHeight: Theme.progress.thickness
 
@@ -42,11 +52,46 @@ Item {
             enabled: !root.indeterminate
             NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") }
         }
+
+        // The wave: a band of light, clipped to the fill, fading as it goes
+        Item {
+            id: _waveClip
+            anchors.fill: parent
+            clip: true
+            visible: root.waving
+            readonly property real halfWidth: Math.max(Theme.progress.thickness * 3, width * 0.22)
+            readonly property color light: Qt.lighter(_fill.color, 1.6)
+
+            Rectangle {
+                objectName: "wave"
+                x: -2 * _waveClip.halfWidth + (_waveClip.width + 2 * _waveClip.halfWidth) * root._wavePhase
+                width: 2 * _waveClip.halfWidth
+                height: parent.height
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: Qt.alpha(_waveClip.light, 0) }
+                    GradientStop { position: 0.5; color: Qt.alpha(_waveClip.light, 0.95 * (1 - 0.6 * root._wavePhase)) }
+                    GradientStop { position: 1.0; color: Qt.alpha(_waveClip.light, 0) }
+                }
+            }
+        }
+    }
+
+    NumberAnimation {
+        target: root
+        property: "_wavePhase"
+        from: 0
+        to: 1
+        duration: Theme.duration("progressWave")
+        easing: Theme.curve("progressWave")
+        loops: Animation.Infinite
+        running: root.waving
+        onRunningChanged: if (!running) root._wavePhase = 0
     }
 
     // There and back along the track, while a run of unknown length shows
     SequentialAnimation {
-        running: root.indeterminate && root.visible && !Theme.reduceMotion
+        running: root.indeterminate && root.visible && !root.reduceMotion
         loops: Animation.Infinite
         onRunningChanged: if (!running) root._slide = 0.5
         NumberAnimation { target: root; property: "_slide"; from: 0; to: 1; duration: Theme.duration("pulse"); easing: Theme.curve("pulse") }

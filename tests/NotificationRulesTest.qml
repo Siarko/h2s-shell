@@ -32,6 +32,19 @@ TestCase {
         assertEqual(bar({ value: 40, "x-qs-progress-state": 3 }), "true 0.4 running accent", "a state not a string: running");
         assertEqual(bar({ "x-qs-progress-state": "done" }), "false 0 done success", "done without a value: no bar");
 
+        // --- the bar's wave: running, and its value grown lately ---
+        const now = 100000;
+        const wave = (state, grewAt) => NotificationRules.progressWave(state, grewAt, now);
+        assertEqual(NotificationRules.progressWaveMs, 10000, "the wave lasts 10 s after the value last grew");
+        assert(wave("running", now - 2000), "running, grown 2 s ago: waves");
+        assert(!wave("running", now - 11000), "running, grown 11 s ago: stands still, no wave");
+        assert(!wave("running", now - 10000), "… exactly 10 s ago: no wave");
+        assert(!wave("done", now - 2000) && !wave("failed", now - 2000) && !wave("cancelled", now - 2000), "done, failed, cancelled: no wave, however recent");
+        assert(!wave("running", 0), "never grown: no wave");
+        assert(!wave("running", now + 5000), "grown after now (a clock gone back): no wave");
+        assert(!wave("running", undefined) && !NotificationRules.progressWave("running", now - 2000, undefined), "a time that is not a number: no wave");
+        assert(NotificationRules.progressWave("running", now - 200, now, 300) && !NotificationRules.progressWave("running", now - 400, now, 300), "another window when given");
+
         // --- after an action ---
         assert(NotificationRules.dismissAfterAction({ resident: false }), "not resident: the entry goes");
         assert(NotificationRules.dismissAfterAction({}), "resident not said: the entry goes");
