@@ -293,18 +293,12 @@ Order: C1 → M1 → M2 → M3 → M4 → M5 → M6 → M7, C2 last. M1–M3, M5
 from the core; M4 needs C1 merged. One agent at a time on the module (M2 and M3 share
 `TaildropPopupState.qml`; M2 and M4 the file list).
 
-## 8. Open questions for the owner
+## 8. The owner's answers (2026-11-20)
 
-1. **"Web console" beside "Web interface"?** "Web console" opens Tailscale's site
-   (login.tailscale.com); the sharing section's switch "Web interface" serves this
-   computer's own Tailscale settings to the tailnet on port 5252. Example: on the page,
-   "Web console" under Serve and "Web interface" under Sharing read alike. Keep both names,
-   or rename the switch (e.g. "Settings over the tailnet")?
-2. **Should the module also turn Taildrop off in Tailscale itself?** The module's switch
-   (§4.1) stops sending, notifications and auto-save, but Tailscale still accepts files into
-   its inbox; only the daemon's environment setting `TS_DISABLE_TAILDROP` (§2, not yet
-   verified) makes it refuse them, and it needs root and a restart of tailscaled. Example: on
-   Arch the module could write a systemd drop-in and restart tailscaled behind a password
-   prompt on your click; on NixOS it can only show the line for your configuration. The plan
-   documents the setting and does not write it — should the module offer it on Arch (and
-   show the NixOS line), or stay with the documentation?
+1. **"Web interface" is renamed** to a name that says this computer's settings are shared in
+   the tailnet; "Web console" stays for the button that opens Tailscale's site. The words
+   (the owner's to approve): "Share this computer's settings" (switch), its hint naming the
+   port 5252. A module slice (with M6, "Web console") changes `SharingSection.qml:243`, the
+   docs and the IPC/docs that name it.
+2. **No daemon setting:** the module's soft switch is enough; `TS_DISABLE_TAILDROP` is not
+   written, offered or documented as an action (M7 drops its check).
