@@ -1581,6 +1581,13 @@ Singleton {
         };
     }
 
+    // "Lock before the computer sleeps" as the driver takes it: the profile's value when it is
+    // a boolean, else the schema's default (`schemaDefault`, SettingsSchema's) — so an unset
+    // value follows the schema, and anything but a boolean true there reads as off
+    function lockOnSleepSetting(value, schemaDefault) {
+        return typeof value === "boolean" ? value : schemaDefault === true;
+    }
+
     // The regions that live for one lock, as each lock starts them
     function _freshLockRegions() {
         const passive = {};

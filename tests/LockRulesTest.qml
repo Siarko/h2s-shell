@@ -1402,6 +1402,19 @@ TestCase {
         assert(defaults.settings.lockOnSleep === false && defaults.settings.passwordFallback === null
                && defaults.settings.timings.prompt === 10000,
                "10: defaults: lock before sleep off, no fallback, the default timings");
+        // The driver's reading of the setting (Lockscreen.lockOnSleep): a value set wins, an
+        // unset one follows the schema's default, which is off — as the rules' own default
+        const schemaDefault = SettingsSchema.coreDefaults["lockscreen.lockOnSleep"];
+        assert(schemaDefault === false, "10: the schema's default for lock before sleep is off");
+        assert(LockRules.lockOnSleepSetting(undefined, schemaDefault) === false && LockRules.lockOnSleepSetting(null, schemaDefault) === false,
+               "10: an unset lock before sleep follows the schema's default (off)");
+        assert(LockRules.lockOnSleepSetting(undefined, true) === true, "10: … whatever the schema says");
+        assert(LockRules.lockOnSleepSetting(true, schemaDefault) === true && LockRules.lockOnSleepSetting(false, true) === false,
+               "10: a value set wins over the default");
+        assert(LockRules.lockOnSleepSetting("yes", undefined) === false && LockRules.lockOnSleepSetting(undefined, "true") === false,
+               "10: neither a value nor a default that is not a boolean turns it on");
+        assert(LockRules.initial().settings.lockOnSleep === LockRules.lockOnSleepSetting(undefined, schemaDefault),
+               "10: the rules' default and the schema's agree");
         const custom = LockRules.initial({ lockOnSleep: false, timings: { prompt: 3000 } });
         assert(custom.settings.lockOnSleep === false && custom.settings.timings.prompt === 3000 && custom.settings.timings.detect === 5000,
                "10: settings and timing overrides are taken, the rest default");
