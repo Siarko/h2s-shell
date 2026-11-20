@@ -2320,3 +2320,11 @@ interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
   "Don't show" keeps only critical toasts; lock / screensaver never pause (lock bed).
   `maxStayingToasts` removed (unset on both machines, no migration). Reviewed (each slice; two
   medium in slices 1 and 3 fixed); `tests/run-all.sh` passed on both machines.
+- **Movable and pinned toasts (slice 4)** — on `master` 2026-11-20. Critical and staying toasts
+  drag out by their title line (grip) and become modals (accent outline, slot freed, kept on the
+  screen); every centre entry has a pin that puts it on screen as a modal (left of the toasts'
+  column, stacked); a pinned ordinary toast stays until unpinned (`keep`), a finished job counts
+  down; "×" dismisses. Kept in the HUD's overlay with one input-mask rectangle per modal (lock
+  bed `toast-modal`: clicks beside it reach the window below). `notifications.movableToasts` on
+  by default. Reviewed twice (a dragged pinned toast vanishing, a refused drop off the mask —
+  fixed); `tests/run-all.sh` passed on both machines.
