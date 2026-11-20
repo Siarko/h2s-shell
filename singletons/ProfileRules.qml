@@ -376,6 +376,36 @@ Singleton {
         return condition.fact !== undefined ? [condition.fact] : [];
     }
 
+    // Whether Config.profiles cannot be read as a list: "" is a config not seeded yet (fine);
+    // anything else that is not a JSON array is broken (Profiles then uses no profile)
+    function profilesBroken(json) {
+        if (json === "")
+            return false;
+        try {
+            return !Array.isArray(JSON.parse(json));
+        } catch (error) {
+            return true;
+        }
+    }
+
+    // Whether the config file could not be read: `loadError` is "" (read), "missing" (no file
+    // yet: the defaults stand, not a failure) or another word (permission, not a file, …);
+    // `text` what was read, which must be a JSON object (blank counts as an empty file)
+    function configReadFailed(loadError, text) {
+        if (loadError === "missing")
+            return false;
+        if (loadError !== "")
+            return true;
+        if (typeof text !== "string" || text.trim() === "")
+            return false;
+        try {
+            const parsed = JSON.parse(text);
+            return parsed === null || typeof parsed !== "object" || Array.isArray(parsed);
+        } catch (error) {
+            return true;
+        }
+    }
+
     // Why a profile cannot be saved, or "" if it can. A profile that sets the system
     // power profile while depending on it could switch itself on and off.
     function saveError(profile) {

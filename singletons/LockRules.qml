@@ -1581,10 +1581,14 @@ Singleton {
         };
     }
 
-    // "Lock before the computer sleeps" as the driver takes it: the profile's value when it is
-    // a boolean, else the schema's default (`schemaDefault`, SettingsSchema's) — so an unset
-    // value follows the schema, and anything but a boolean true there reads as off
-    function lockOnSleepSetting(value, schemaDefault) {
+    // "Lock before the computer sleeps" as the driver takes it: on when the user's settings
+    // could not be read (`configFailed`, Profiles.configFailed: the value is then the default,
+    // not the user's choice, and a lock nobody wanted is safer than a missing one); else the
+    // profile's value when it is a boolean, else the schema's default (`schemaDefault`) — so
+    // an unset value follows the schema, and anything but a boolean true there reads as off
+    function lockOnSleepSetting(value, schemaDefault, configFailed) {
+        if (configFailed === true)
+            return true;
         return typeof value === "boolean" ? value : schemaDefault === true;
     }
 

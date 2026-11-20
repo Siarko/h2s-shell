@@ -343,7 +343,8 @@ Two independent stages, both driven by Wayland idle notifications:
   showing one, emptying the field (as the prompt's time-out does); a held Escape's repeats
   count for nothing. (Escape at a showing prompt unlocked until 2026-11-15.)
 - **Sleep** — with Settings → Lockscreen → "Lock before the computer sleeps" on
-  (`lockscreen.lockOnSleep`, off by default), the screen locks before the computer sleeps, the
+  (`lockscreen.lockOnSleep`, off by default; on while the settings file cannot be read), the
+  screen locks before the computer sleeps, the
   shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
   key conversations stop for the sleep and start again after it, with the methods looked

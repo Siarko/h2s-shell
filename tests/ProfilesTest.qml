@@ -5,6 +5,19 @@ TestCase {
     suiteName: "Profiles"
 
     function run() {
+        // --- reading the config: a failure is told apart from a config not made yet ---
+        assert(!ProfileRules.profilesBroken("") && !ProfileRules.profilesBroken("[]") && !ProfileRules.profilesBroken("[{\"name\":\"Full\"}]"),
+               "profiles not seeded yet, or a list: not broken");
+        assert(ProfileRules.profilesBroken("{") && ProfileRules.profilesBroken("{}") && ProfileRules.profilesBroken("null") && ProfileRules.profilesBroken("3"),
+               "profiles that are not a JSON list: broken");
+        assert(!ProfileRules.configReadFailed("missing", "") && !ProfileRules.configReadFailed("", "") && !ProfileRules.configReadFailed("", "  \n"),
+               "no config file yet, or an empty one: not a failure (the defaults are the user's)");
+        assert(!ProfileRules.configReadFailed("", "{\"profiles\": \"[]\"}"), "a JSON object: read");
+        assert(ProfileRules.configReadFailed("error", "") && ProfileRules.configReadFailed("", "{\"profiles\": ")
+               && ProfileRules.configReadFailed("", "[]") && ProfileRules.configReadFailed("", "null") && ProfileRules.configReadFailed("", "\"x\""),
+               "a file that could not be read, or is not a JSON object: failed");
+        assertEqual(Profiles.configFailed, false, "the suites' config reads");
+
         // --- schema ---
         const keys = SettingsSchema.entries.map(entry => entry.key);
         assertEqual(new Set(keys).size, keys.length, "every setting key is listed once");

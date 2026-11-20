@@ -1413,6 +1413,10 @@ TestCase {
                "10: a value set wins over the default");
         assert(LockRules.lockOnSleepSetting("yes", undefined) === false && LockRules.lockOnSleepSetting(undefined, "true") === false,
                "10: neither a value nor a default that is not a boolean turns it on");
+        assert(LockRules.lockOnSleepSetting(false, schemaDefault, true) === true && LockRules.lockOnSleepSetting(undefined, schemaDefault, true) === true,
+               "10: settings that could not be read: lock before sleep is on (fail safe), whatever the value read");
+        assert(LockRules.lockOnSleepSetting(false, schemaDefault, false) === false && LockRules.lockOnSleepSetting(false, schemaDefault, "yes") === false,
+               "10: … only a real failure turns it on");
         assert(LockRules.initial().settings.lockOnSleep === LockRules.lockOnSleepSetting(undefined, schemaDefault),
                "10: the rules' default and the schema's agree");
         const custom = LockRules.initial({ lockOnSleep: false, timings: { prompt: 3000 } });

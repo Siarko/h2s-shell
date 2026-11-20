@@ -43,6 +43,10 @@ Singleton {
     // True once the file has been read (or found missing, so the defaults stand) —
     // before that every property still holds its default
     property bool ready: false
+    // The file is there but could not be read or is not a JSON object
+    // (ProfileRules.configReadFailed): the properties hold their defaults, which are then
+    // not what the user chose — settings where that matters fail safe on it
+    property bool loadFailed: false
     // Set by the test runner: the suites load the real config, and nothing they change
     // may reach the user's file
     property bool readOnly: false
@@ -78,8 +82,18 @@ Singleton {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         onAdapterUpdated: _saveTimer.restart()
-        onLoaded: root.ready = true
-        onLoadFailed: root.ready = true
+        onLoaded: {
+            root.loadFailed = ProfileRules.configReadFailed("", text());
+            if (root.loadFailed)
+                console.warn("[Config] " + path + " is not a JSON object: its settings are not used");
+            root.ready = true;
+        }
+        onLoadFailed: error => {
+            root.loadFailed = ProfileRules.configReadFailed(error === FileViewError.FileNotFound ? "missing" : "error", "");
+            if (root.loadFailed)
+                console.warn("[Config] could not read " + path + ": " + FileViewError.toString(error));
+            root.ready = true;
+        }
 
         adapter: JsonAdapter {
             id: _adapter

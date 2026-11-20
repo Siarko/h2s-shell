@@ -18,6 +18,9 @@ Singleton {
     id: root
 
     readonly property var profiles: _parse(Config.profiles)
+    // The user's settings could not be read (the file, or its profile list): what value()
+    // answers is then the defaults, not the user's choice
+    readonly property bool configFailed: Config.loadFailed || ProfileRules.profilesBroken(Config.profiles)
 
     // Seeded once the config has been read — before that, Config.profiles is "" for every
     // config, not just the ones without profiles. Not a binding: writing Config.profiles

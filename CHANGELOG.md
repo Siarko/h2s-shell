@@ -768,7 +768,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - "Lock before the computer sleeps" (Settings → Lockscreen) is off by default: a change of
   behaviour people rely on. A configuration that holds no value for it — a new one, or one
   made before the setting came — no longer locks the screen before sleep; turn it on to keep
-  that. A configuration that already holds a value keeps it.
+  that. A configuration that already holds a value keeps it. When the configuration file
+  cannot be read (or is not valid), the screen locks before sleep as if the setting were on.
 - A notification's action buttons and its reply's Send are drawn like the shell's other
   buttons: the accent, with the label in the theme's "On accent" colour (readable on a
   light accent too), lighter under the pointer or a finger. Send is dimmed while there is
