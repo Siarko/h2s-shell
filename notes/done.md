@@ -2346,3 +2346,7 @@ interactive mockup `~/src/h2s-mockups/notification-queues-planned/`.
   (`ToastRules.badgeClick`; lock bed `toast-centre`, two outputs). `AnchorsTest` waits for the
   General page's layout (the flake seen four times). Reviewed; `tests/run-all.sh` passed on
   both machines.
+- **Notification docs (slice 8)** — on `master` 2026-11-21. docs/FEATURES.md "Notifications"
+  rewritten (toasts, moving and pinning, progress, the shell's own notifications);
+  docs/ARCHITECTURE.md "Notifications and toasts"; the Unreleased CHANGELOG merged. The
+  notification flow plan is complete.

@@ -32,8 +32,6 @@ Both plans are built and on `master` (core, module API 1.33) and `main` (module,
   2026-11-20 (core API 1.35, module manifest 1.35); done slices in done.md; the owner approved
   the result on the mockup `~/src/h2s-mockups/taildrop-status-pills-implemented/`. C2 (the
   Wi-Fi drawer on `SidePanel`) optional, not started.
-- [ ] The notification flow ([plans/notification-flow.md](plans/notification-flow.md)):
-      slices 1–7 and the owner's live fixes are on `master`; left slice 8 (docs).
 - [ ] Taildrop on a real tailnet: the owner has used it for a while and it works; a failure and
       a stall are hard to see because files go at once.
 - [ ] Releases (the owner, 2026-11-21): not yet — first the order of work up to and including
@@ -241,6 +239,9 @@ Still work or a known risk; the detail is in [done.md](done.md).
 - (HUD) The HUD's overlay window does not ignore other panels' reserved space: it starts below the
   bar, so toasts sit 40 px lower than intended and the shell's bottom pill probably hangs partly
   off screen (found in notification flow slice 4; drops allow for it).
+
+- (notifications) The card's "dismiss" / "×" (`components/NotificationCard.qml` ~357) uses a
+  `MouseArea` with `containsMouse`, not `PointerArea`'s `lit` (the convention).
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
