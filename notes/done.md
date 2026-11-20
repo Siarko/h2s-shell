@@ -2199,3 +2199,12 @@ Plans: [plans/notification-progress.md](plans/notification-progress.md),
   `H2S_SHELL_TEST_MODULE_NOTIFY`). Reviewed twice (a high: the raw handle reachable through
   `_handle`), fixed; `tests/run-all.sh` passed on both machines (`AnchorsTest` failed once in a
   NixOS run, passed alone three times and in the rerun).
+- **Progress notifications for transfers (D7)** — on the module's `main` 2026-11-20 (manifest
+  `api` 1.33, unreleased). Setting `mod.tailscale.taildropNotifications` ("stay" default,
+  "brief"), a row on the page; `TaildropTransferRules.notification`: none before 3 s, one handle
+  per transfer, Skip / "Send now" / "Fetch now" on a stall (the page's rule), `whileRunning` for
+  "stay", an announce when a file first stalls and at done / failed / a stop with a message,
+  none on Skip, Cancel or moving again. When the Tailscale client stops, transfers end and
+  their notifications read "Stopped"; an ended transfer's notification stays in the centre
+  after a clear; handles close when the client goes. Reviewed, fixed; module suites and
+  stand-ins on both machines against the final core, the module's lock bed on NixOS.

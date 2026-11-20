@@ -23,21 +23,17 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 
 - [ ] the closing slice (Z), after the module is released
 
-### In progress: notifications with a progress bar, Taildrop's list of transfers
+### Notifications with a progress bar and Taildrop's list of transfers
 
-Done slices are in [done.md](done.md), "Notifications with a progress bar and Taildrop's
-list of transfers". Work branches: core `notif-progress`, module `taildrop-transfers`.
+Both plans are built and on `master` (core, module API 1.33) and `main` (module, manifest
+`api` 1.33); done slices in [done.md](done.md). Left, the owner's:
 
-- [ ] Notifications with a progress bar (core, module API 1.33 opened on `master`,
-      [plans/notification-progress.md](plans/notification-progress.md)): left the progress
-      handle (N2, in progress — its mechanism changed, see "Open points"), an announce brings
-      the toast back (N4), `notify` returns the handle (N3).
-- [ ] Taildrop's list of transfers (module,
-      [plans/taildrop-transfers.md](plans/taildrop-transfers.md)): all built but progress
-      notifications (D7, after N3). For the owner (D6): on a real tailnet — a real send, Skip
-      mid-file and what the peer keeps; two files in parallel to one device; one file to two
-      devices at once; a save of a large file; the bus's entry for a killed send; then the
-      module's 0.7.0 release.
+- [ ] On a real tailnet (D6): a real send, Skip mid-file and what the peer keeps; two files in
+      parallel to one device; one file to two devices at once; a save of a large file; the
+      bus's entry for a killed send; a transfer's progress notification, its Skip, "stay" and
+      "brief".
+- [ ] Releases: the core's minor (CHANGELOG Unreleased: progress notifications, toasts that
+      follow the sender's time, module API 1.33) and the module's 0.7.0.
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
       review of each area's first slices
@@ -65,6 +61,18 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **The progress handle's details** (N2, agent's choice stands): a failed update is not
+  retried (the next change sends the whole content); test mode records every `update()` at
+  once without coalescing; handles are never destroyed (one small object each).
+- **Progress notifications for modules** (N3, agent's choice stands): a module gets a thin
+  wrapper (`open`, `state`, `update`, `close`), not the handle's id or content; while a module
+  is off, a progress `notify` shows nothing and returns `null`; a handle from `Api.notify`
+  belongs to no module (only its own `close()` closes it); `toast` without `progress` is
+  dropped.
+- **Transfer notifications, words not in the plan** (D7, agent's choice stands): a cancelled
+  transfer keeps its running summary with "Cancelled" / "Stopped: disconnected" as the body;
+  the body is empty at done and failed; a transfer with some files skipped and the rest sent
+  counts as done ("Sent to laptop").
 - **Taildrop's list on the page, looks not in the plan** (D4, agent's choice stands): the list
   under the Save / Open folder row, incoming files first; titles bold; the state text cut at
   half the section's width; incoming files "Receiving · 40 %"; an ended save keeps the title
@@ -147,7 +155,7 @@ Still work or a known risk; the detail is in [done.md](done.md).
   `tests/run-modules.sh` fails on deprecations only from Z.
 
 **Tests and the lock bed**
-- Flaky: `CommandRunnerTest` (one check in ~20 runs); `restart-kill-locked` once on NixOS
+- Flaky: `AnchorsTest` (the General page's rows read -28 wide; three times in full runs on 2026-11-20, never alone); `restart-kill-locked` once on NixOS
   (keep `LOCKTEST_KEEP=1` artifacts); QtTest's `'windowShown' of null` once.
 - The test tree's by-hand recipe (`tests/lock/README.md`) never run; `TestSeamsShapeTest`
   finds literal names only; O6 (lock tools from the trusted lookup) not built.
@@ -179,6 +187,18 @@ Still work or a known risk; the detail is in [done.md](done.md).
   Incoming files are keyed by name only: two peers sending one name at once show one row.
 - (Taildrop) `fileOffers` runs `schedule` twice per file row on every tick of the popup's
   files panel; the cost grows with rows and transfers.
+
+- (tests) `AnchorsTest` failed once (5 checks) in a full run under load during N2; alone and in
+  the next full run it passed.
+- (notifications) The progress handle's run token travels as a `gdbus` argv word, readable in
+  `/proc/<pid>/cmdline` by the user's own processes (worst case: a toast shown again).
+  If `hintsChanged` fires before `expireTimeoutChanged`, a re-queued announced toast is taken
+  with its old timing and a column can briefly hold one toast too many.
+- (module API) `Api.module(id)` / `Api.moduleAt(url)` hand out other modules' handles, so a
+  module can send notifications, progress ones too, under another module's name (an older
+  cross-module gap; Z removes `Api.module`). A plain `module.notify` still takes `appName`.
+- (Taildrop) One `TaildropLiveTest` run during D7 failed one check (not captured; another
+  tree's tests ran at the same time); 14 reruns passed.
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
