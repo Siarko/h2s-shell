@@ -15,7 +15,7 @@ rewritten, see the tracker's step 12):
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — runtime model, directory layout,
   module resolution, the Process/SplitParser I/O idiom, the config system, the widget
-  contract, how to add a widget, testing.
+  contract, how to add a widget, testing and where the test tools come from.
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
 
@@ -25,15 +25,14 @@ from `docs/` or the README:
 - **[notes/tracker.md](notes/tracker.md)** — the one tracker for the shell and its
   modules: what is next, the order of work, the owner's decisions. **Start here when
   resuming work.**
-- **[notes/workflow.md](notes/workflow.md)** — how sessions work: roles, briefing agents, what
-  must not be touched, tests, deploying, git.
+- **[notes/workflow.md](notes/workflow.md)** — how sessions work: roles, mockups first,
+  review, briefs, what must not be touched, the two machines, deploying, git.
 - **[notes/done.md](notes/done.md)** — done items, numbers kept ("TODO 11.22" in a commit
   or comment), with their notes.
 - **[notes/cleanup.md](notes/cleanup.md)** — findings from a full read, with severities;
   check it before "fixing" something.
-- **`notes/plans/`** — designs and delivery plans per feature; **`notes/reviews/`**,
-  **`notes/upstream/`** (drafts of Quickshell issues), `notes/pttd-protocol.md` (the
-  dictation daemon's socket protocol).
+- **`notes/plans/`** (designs and plans per feature), **`notes/reviews/`**,
+  **`notes/upstream/`** (drafts of Quickshell issues), `notes/pttd-protocol.md` (dictation).
 
 The rules for `docs/`: English only; where NixOS and Arch differ, a "NixOS" and an "Arch"
 subsection — never one system without the other; nothing that names or relies on a
@@ -55,48 +54,36 @@ tests/run-all.sh --quick   # the same without the lock bed, under a minute
 **While iterating** run the named suites or scenarios the change touches (a suite is named
 by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lock/tests/`
 without `.sh`; a wrong name is an error, nothing runs). **Before committing** run
-`tests/run-all.sh`: the general set and this system's set, quick parts first. It stops at
-the first part that fails (`--keep-going` goes on) and ends with a summary that names every
-part as PASS, FAIL or NOT RUN with the reason — read it: a part that could not be set up is
-not a pass. The parts behind it, each of which runs alone too:
+`tests/run-all.sh` (the general set and this system's): it stops at the first failing part
+(`--keep-going` goes on) and ends with a summary naming every part PASS, FAIL or NOT RUN with
+the reason — read it: a part that could not be set up is not a pass. Its parts, each
+runnable alone:
 
 ```
-tests/run-unit.sh          # the unit suites (tests.qml)
+tests/run-unit.sh          # the unit suites, in a private headless compositor (--log <file>)
 tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name> for some)
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
-tests/run-unit-selftest.sh, tests/resolve-selftest.sh, tests/launcher-selftest.sh,
-tests/run-system-selftest.sh, tests/run-all-selftest.sh   # the runners' own verdicts
+tests/*-selftest.sh        # the runners' own verdicts (run-unit, resolve, launcher, run-system, run-all)
 ```
 
-Run the unit suites through `tests/run-unit.sh`, not `quickshell -p tests.qml` directly:
-five suites open a small window, and the runner puts them in a private headless compositor
-(nothing shows on your screen). `--log <file>`, before the names, also saves the output.
+Never run `quickshell -p tests.qml` directly: five suites open a small window.
 
-Every runner takes its tools — that compositor (labwc), and for the lock test bed Hyprland
-and the rest of its set — from the pinned `tests/lock/tools.nix` where there is a `nix`
+Every runner takes its tools from the pinned `tests/lock/tools.nix` where there is a `nix`
 command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` says which), and says which
 in its first lines; a missing tool ends the run with status 2 and its name
-(`tests/lock/resolve.sh`; `LOCKTEST_QS` names another Quickshell). The lock test bed starts
-the shell through a launcher: `LOCKTEST_LAUNCHER`, else `h2s-shell` on `PATH`, else its own
-`tests/lock/launcher.sh`.
+(`tests/lock/resolve.sh`). Only the lock bed needs the machine to itself (it takes
+`/tmp/h2s-locktest.flock`); the other runners run side by side, and a lock-bed failure seen
+while they ran is run again alone before it is believed.
 
-Only the lock test bed needs the machine to itself — its tests depend on timing, and a run
-starts as many at once as the machine keeps on schedule. `tests/lock/run.sh` takes the lock
-for that itself (`/tmp/h2s-locktest.flock`, for the length of the run) and says so when it
-waits for another run; wrapping it in `flock` on that file still works. The unit, module and
-self-test runners take no lock: they share nothing but the processor, and run side by side.
-The processor is what the lock bed's timing depends on, though: a lock-bed failure seen
-while other runners were going on a small machine is run again alone before it is believed.
-
-A running shell reloads itself when a file changes, but that reload is not enough after
-editing a singleton: it has been seen to rebuild the panels while keeping the old
-singleton, so new functions show up as `TypeError: ... is not a function`. Restart the
-shell fully after changing anything under `singletons/`.
+A running shell reloads itself when a file changes, but keeps the old singletons (new
+functions show up as `TypeError: ... is not a function`): restart it fully after changing
+anything under `singletons/`.
 
 Beyond the test suites, verification is manual: check that the bar renders, the clock
-ticks, cells respond to clicks, and popups toggle.
+ticks, cells respond to clicks, and popups toggle. A feature with views starts with a
+mockup the owner sees before any code (`notes/workflow.md`).
 
 ## Conventions
 
@@ -150,44 +137,26 @@ ticks, cells respond to clicks, and popups toggle.
 
 ## Environment
 
-The shell is developed and tested on NixOS and on Arch, by several sessions on different
-machines. Nothing about a session survives outside this repository: what is next, what was
-decided and why belongs in `notes/tracker.md`.
+Developed and tested on NixOS and on Arch, by sessions on different machines; nothing about
+a session survives outside this repository (what is next and why: `notes/tracker.md`). What differs between the two systems for
+development (the full list of test tools per runner: `docs/ARCHITECTURE.md`, "Where the
+test tools come from"):
 
-What differs between the two systems for development:
-
-- **Quickshell.** The test runners take `LOCKTEST_QS` when it is set, else the Quickshell
-  the `h2s-shell` launcher runs (`LOCKTEST_LAUNCHER` names another launcher), asking the
-  launcher itself, else `qs` or `quickshell` on `PATH` (`tests/lock/resolve.sh`).
+- **Quickshell.** The runners take `LOCKTEST_QS`, else the one the `h2s-shell` launcher
+  runs (`LOCKTEST_LAUNCHER` names another), else `qs` or `quickshell` on `PATH`.
   - NixOS: the launcher is this flake's package (`nix/package.nix`).
-  - Arch: `install.sh` installs Quickshell from pacman and puts no `h2s-shell` command on
-    `PATH`, so the unit and module suites run the `qs` on `PATH`. The lock test bed, which
-    starts the shell through a launcher, then takes its own `tests/lock/launcher.sh` (the
-    checkout's `scripts/launch.sh`, as the packaged launcher runs it with `H2S_SHELL_DIR`)
-    and says so in its output: what the package adds to `PATH` is not tested there.
-- **Test tools.** One source for a whole run (`tests/lock/resolve.sh`, used by
-  `tests/headless.sh` and `tests/lock/run.sh`): the pinned build of `tests/lock/tools.nix`
-  where there is a `nix` command, else the system's programs on `PATH`, un-pinned;
-  `H2S_TEST_TOOLS=nix` or `=system` chooses. Each run prints the source and the versions.
-  With `nix`, the store path it built is remembered in
-  `${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/` and taken at the next start without
-  asking nix, as long as `tools.nix` and the files it names are unchanged and the path still
-  holds the tools; `H2S_TEST_TOOLS_CACHE=0` asks nix anyway.
-  - The unit and module suites (`run-unit.sh`, `run-unit-selftest.sh`, `run-modules.sh`)
-    need labwc (the headless compositor), `setpriv` and `setsid` (util-linux) and `timeout`
-    (coreutils). NixOS: `nix` provides labwc and `setpriv`. Arch, without `nix`: labwc is a
-    package to have installed for development (`install.sh` does not install it).
-  - `tests/resolve-selftest.sh` needs none of them but `setsid`, `timeout` and `flock`
-    (util-linux; the lock test bed needs `flock` too).
-  - `tests/launcher-selftest.sh` needs `flock`, `timeout` and a `python3` or `perl`.
-  - The lock test bed (`tests/lock/run.sh`) needs labwc, Hyprland with hyprctl, grim,
-    wlr-randr, wl-copy and wl-paste, xkbcli, dbus-daemon, gdbus, `setpriv`, a `python3`
-    that imports pywayland, and the Python bindings of its input protocols and its
-    keymaps. NixOS: `nix` builds all of it. Arch, without `nix`: the programs are packages
-    to have installed for development (`docs/ARCHITECTURE.md`, "Where the test tools come
-    from", names them), and the bindings and keymaps are made at the start of each run,
-    which also takes `pkg-config`, the `wayland` and `wayland-protocols` packages' protocol
-    files and the two kept in `tests/lock/protocols/`.
+  - Arch: `install.sh` installs Quickshell from pacman and puts no `h2s-shell` on `PATH`,
+    so the suites run the `qs` on `PATH`, and the lock test bed takes its own
+    `tests/lock/launcher.sh` (the checkout's `scripts/launch.sh`) and says so: what the
+    package adds to `PATH` is not tested there.
+- **Test tools.** One source for a whole run: the pinned build of `tests/lock/tools.nix`
+  where there is a `nix` command (the built path cached in
+  `${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/` while `tools.nix` is unchanged;
+  `H2S_TEST_TOOLS_CACHE=0` asks nix anyway), else the system's programs, un-pinned.
+  - NixOS: `nix` builds everything, the lock bed's whole set included.
+  - Arch, without `nix`: labwc (the suites' headless compositor) and the lock bed's
+    programs are packages to have installed for development (`install.sh` installs
+    neither); the lock bed makes its Python bindings and keymaps at each start.
 - **Paths.** Scripts start with `#!/usr/bin/env bash`: NixOS has no `/bin/bash`.
   System files differ (NixOS: `/run/current-system/sw/bin`, `/etc/static`, a generated
   `/etc/pam.d`); code that reads them handles both systems.
@@ -210,9 +179,13 @@ new kind.
   (`LockRules.step`). — What is not pure is not tested.
 - **A button's label and its effect are one decision**, derived from the current state when
   the view is built. — Labels and actions drifted apart.
+- **A question an action asks is keyed to what it acts on**: an asking button, offer or
+  notification action carries the ids it will act on (its subject), and acts on those, not on
+  whatever is current when the answer comes. — Answers landed on items that had moved or changed.
 - **A failed read is "unknown/unsafe", never "fine".** — Silent failures showed as healthy.
-- **Late answers lose.** An answer from a process started before the state changed must not
-  overwrite newer state. — Stale reads overwrote fresh ones.
+- **Late answers lose.** An answer from a process started before the state changed — or
+  arriving after a cancel, a stop or an account switch — must not overwrite newer state or
+  act. — Stale reads overwrote fresh ones; answers after a cancel still acted.
 - **Log on a change of outcome, not on every attempt;** repeated work follows a backoff. —
   Logs filled with the same line every few seconds.
 - **Live tests wait on conditions, never on fixed sleeps;** a test that cannot fail is
@@ -231,6 +204,17 @@ new kind.
   substitute in a module. It covers capabilities (running things, system state,
   privileges, places in the shell's views), not looks: a module may build its own elements
   from the theme's tokens. — Workarounds in modules became the real API.
+- **Whatever a module can reach through an object it is handed is API.** A handle given to a
+  module is a frozen object of closures over the shell's internals, never properties holding
+  them (no `_handle`, runner, server or token reachable). — A raw handle was reachable through
+  a "private" property.
+- **Animations stop when nothing shows them**: a running animation or timer is gated on the
+  window and the item being visible (and on reduce motion). — Hidden windows kept animating
+  every frame.
+- **An overlay window's input mask covers only what it draws**, never other surfaces; an
+  overlay that ignores exclusive zones keeps clear of the bar with insets
+  (`BarGeometry.reservedInsets`). — Clicks beside a toast were swallowed; the HUD sat over the
+  bar.
 - **Nothing relies on one developer's environment;** NixOS and Arch are treated together. —
   Code and docs that worked on one machine only.
 - **Docs and comments describe the code as it is,** never how or when it was built.
