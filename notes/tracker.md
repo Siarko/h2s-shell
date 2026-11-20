@@ -32,16 +32,12 @@ Both plans are built and on `master` (core, module API 1.33) and `main` (module,
   2026-11-20 (core API 1.35, module manifest 1.35); done slices in done.md; the owner approved
   the result on the mockup `~/src/h2s-mockups/taildrop-status-pills-implemented/`. C2 (the
   Wi-Fi drawer on `SidePanel`) optional, not started.
-- [ ] Next, after the open questions: an analysis of the whole notification flow (the owner,
-      2026-11-20) — every case and possibility, logically and visually, probably two separate
-      queues (toasts that count down and toasts that stay or carry a job); whether a click on a
-      progress notification's button should close it (Cancel, Skip) or replace it ("Send now"
-      → a new one with progress only), and whether the `gdbus` path is then still needed. To be
-      discussed with the owner before a plan.
+- [ ] The notification flow ([plans/notification-flow.md](plans/notification-flow.md)):
+      slices 1–7 and the owner's live fixes are on `master`; left slice 8 (docs).
 - [ ] Taildrop on a real tailnet: the owner has used it for a while and it works; a failure and
       a stall are hard to see because files go at once.
-- [ ] Releases: the core's minor (CHANGELOG Unreleased: progress notifications, toasts that
-      follow the sender's time, module API 1.33) and the module's 0.7.0.
+- [ ] Releases (the owner, 2026-11-21): not yet — first the order of work up to and including
+      step 8 ("Modules closed for now"), then the release (core minor, module 0.7.0).
 - [ ] a short independent review of what changed in the plan after its last review
       (button kinds, icons, the password queue, a module's own elements), folded into the
       review of each area's first slices
@@ -69,6 +65,9 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **Pinned and moved toasts** (notification flow slice 4, agent's choice stands): a pinned
+  ordinary toast stays until unpinned (a pinned job counts down when it ends); a pinned toast is
+  placed left of the toasts' column, each new one 48 px lower.
 - **The progress handle's details** (N2, agent's choice stands): a failed update is not
   retried (the next change sends the whole content); test mode records every `update()` at
   once without coalescing; handles are never destroyed (one small object each).
@@ -237,6 +236,11 @@ Still work or a known risk; the detail is in [done.md](done.md).
   suite presses a plain notification's "Save in…" through its own `ScenarioHandle` record.
 - (Taildrop) `TaildropLiveTest` "page-devices: both sent" timed out on several full runs under
   load during the views rework; passes alone.
+
+- (tests) Lock bed `harness` "the shell's environment can be read" failed once in a NixOS full run (2026-11-20); passed alone.
+- (HUD) The HUD's overlay window does not ignore other panels' reserved space: it starts below the
+  bar, so toasts sit 40 px lower than intended and the shell's bottom pill probably hangs partly
+  off screen (found in notification flow slice 4; drops allow for it).
 
 **The Tailscale module**
 - `ModuleTestKit` should replace its `ScenarioHandle.qml` and `liveSuites.js`: per-suite
