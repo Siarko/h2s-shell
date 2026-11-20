@@ -172,7 +172,7 @@ QtObject {
         if (!active) {
             _logWritten.clear();
             FileChooser.ownerGone(root);
-            _notifications.closeAll();
+            Notifier.closeOwned(root);
         }
     }
 
@@ -319,46 +319,14 @@ QtObject {
         const handle = Notifier.send(String(summary), Object.assign({}, checked, { appName: ownName }));
         if (!handle)
             return null;
-        _notifications.add(handle);
+        Notifier.own(root, handle);
         return Api._notification(handle);
     }
 
-    // Its progress notifications not yet ended (Notifier's handles), behind functions: the
-    // handles themselves are reachable from no property of the module's handle
-    readonly property var _notifications: (() => {
-        const open = new Map();         // handle → its `finished` connection
-        const forget = handle => {
-            const connection = open.get(handle);
-            if (connection === undefined)
-                return;
-            open.delete(handle);
-            handle.finished.disconnect(connection);
-        };
-        return Object.freeze({
-            add: handle => {
-                if (!handle.open || open.has(handle))
-                    return;
-                const connection = () => forget(handle);
-                open.set(handle, connection);
-                handle.finished.connect(connection);
-            },
-            // Turned off: each closed
-            closeAll: () => {
-                for (const handle of Array.from(open.keys())) {
-                    forget(handle);
-                    handle.close();
-                }
-            },
-            // This handle going (the shell's end): let go of them, nothing sent
-            forgetAll: () => {
-                for (const handle of Array.from(open.keys()))
-                    forget(handle);
-            },
-            count: () => open.size
-        });
-    })()
-
-    Component.onDestruction: _notifications.forgetAll()
+    // Its progress notifications not yet ended are kept by Notifier, under this handle
+    // (Notifier.own): nothing of a module's handle reaches them, so no module can close
+    // or keep another's (Api.module hands out other modules' handles)
+    Component.onDestruction: Notifier.forgetOwned(root)
 
     // (API 1.12) A line in the shell's log, "[<id>] <text>": level "debug" (written only
     // with the shell's debug setting on), "info", "warn" or "error" (another word: "info");

@@ -2130,5 +2130,7 @@ TestCase {
         assertEqual(rules.moduleNotifyOptions({ progress: 10, urgency: "critical" }).urgency, "normal", "moduleNotifyOptions: a progress notification is never critical");
         assertEqual(rules.moduleNotifyOptions({ progress: 10, urgency: "low" }).urgency, "low", "… another urgency kept");
         assertEqual(rules.moduleNotifyOptions({ urgency: "critical" }).urgency, "critical", "… a plain notification may be critical");
+        assertEqual(JSON.stringify(rules.moduleNotifyOptions({ progress: 10, hints: { urgency: 2, " URGENCY": 2, "\u0000Urgency": 2, other: 1 } }).hints),
+                    "{\"other\":1}", "… nor by an urgency hint, however written");
     }
 }

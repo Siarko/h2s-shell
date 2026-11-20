@@ -239,9 +239,12 @@ TestCase {
         assert(crafted[16].includes("'value': <int32 -1>"), "-1: a run of unknown length");
         const forged = Notifier.progressCommand(Notifier.progressContent("s", { progress: 1,
             hints: { "\ud800x-qs-announce": "9", "\u0000x-qs-progress-state": "done", "\u0000value": 77 } }, "run1", "3"), 0);
-        assert(forged[16] === "@a{sv} {'resident': <true>, 'value': <int32 1>, 'x-qs-progress-state': <'running'>, 'x-qs-progress-run': <'run1'>, "
+        assert(forged[16] === "@a{sv} {'urgency': <byte 1>, 'resident': <true>, 'value': <int32 1>, 'x-qs-progress-state': <'running'>, 'x-qs-progress-run': <'run1'>, "
                + "'x-qs-progress-handle': <'3'>}", "x-qs- keys judged as the server receives them: a NUL or a lone surrogate in front does not pass; "
                + "a caller's value is replaced; the handle's mark sent (" + forged[16] + ")");
+        const urgent = Notifier.progressCommand(Notifier.progressContent("s", { progress: 1, hints: { urgency: 2 } }, "run1"), 0);
+        assert(urgent[16].includes("'urgency': <byte 1>") && !urgent[16].includes("int32 2"),
+               "a caller's urgency hint is replaced by the content's urgency, normal when none (" + urgent[16] + ")");
         assertEqual(JSON.stringify(Notifier.closeCommand(7).slice(8)), JSON.stringify(["org.freedesktop.Notifications.CloseNotification", "--", "uint32 7"]),
                     "close: CloseNotification with the id after \"--\"");
         assertEqual(JSON.stringify(Notifier.command("Hi")), "[\"notify-send\",\"--app-name=H2S Shell\",\"--\",\"Hi\"]", "plain send: notify-send's argv as before");
@@ -269,6 +272,27 @@ TestCase {
         assert(Notifier._liveHandles.includes(kept), "an open one is");
         kept.close();
         assert(!Notifier._liveHandles.includes(kept), "… until it ends");
+        // Handles kept for an owner (a module's handle), out of its reach
+        const owner = {};
+        const other = {};
+        const ownedFirst = Notifier.send("First", { progress: 0 });
+        const second = Notifier.send("Second", { progress: 0 });
+        const third = Notifier.send("Third", { progress: 0 });
+        Notifier.own(owner, ownedFirst);
+        Notifier.own(owner, second);
+        Notifier.own(owner, second);
+        Notifier.own(other, third);
+        assertEqual(Notifier.ownedCount(owner) + " " + Notifier.ownedCount(other), "2 1", "own(): kept per owner, once each");
+        second.close();
+        assertEqual(Notifier.ownedCount(owner), 1, "… one that ends by itself is let go");
+        Notifier.closeOwned(owner);
+        assert(!ownedFirst.open && ownedFirst.state === "closed" && third.open, "closeOwned(): the owner's closed, another owner's left");
+        assertEqual(Notifier.ownedCount(owner), 0, "… and let go");
+        Notifier.forgetOwned(other);
+        assert(third.open && Notifier.ownedCount(other) === 0, "forgetOwned(): let go, left open");
+        third.close();
+        Notifier.own(owner, third);
+        assertEqual(Notifier.ownedCount(owner), 0, "own(): an ended handle is not kept");
         Notifier.clearRecorded();
         Notifier.recordOnly = savedRecordOnly;
 

@@ -256,7 +256,7 @@ Singleton {
     // argument after "--" is one word of GVariant text (NotificationRules.gvariant*): the
     // spec's Notify(app_name, replaces_id, app_icon, summary, body, actions, hints,
     // expire_timeout). The caller's hints first, without "x-qs-…" keys; the shell's own
-    // after them, so they win: urgency, category, transient as given, resident true, the
+    // after them, so they win: urgency as given (normal when not), category, transient as given, resident true, the
     // value, the state, the run, the handle's mark, the announce count (from 1)
     function progressCommand(content, replaceId) {
         const urgencies = { low: 0, normal: 1, critical: 2 };
@@ -269,8 +269,9 @@ Singleton {
             const value = content.hints[key];
             entries.push({ key: key, type: NotificationRules.hintType(value), value: value });
         }
-        if (urgencies[content.urgency] !== undefined)
-            entries.push({ key: "urgency", type: "byte", value: urgencies[content.urgency] });
+        // Always its own urgency (normal unless given), so a caller's "urgency" hint, which
+        // the same key replaces, never makes it critical behind the option's back
+        entries.push({ key: "urgency", type: "byte", value: urgencies[content.urgency] ?? 1 });
         if (content.category !== "")
             entries.push({ key: "category", type: "string", value: content.category });
         if (content.transient)
@@ -324,6 +325,55 @@ Singleton {
     // Test mode: the open handle of that number (the `handle` of its records), or null
     function testHandle(number) {
         return recordOnly ? (_liveHandles.find(live => live.number === number && live.recordOnly) ?? null) : null;
+    }
+
+    // Progress handles kept for an owner (a module's handle) until they end: closed together
+    // when the owner goes (closeOwned: the module turned off), let go without a word when it
+    // is destroyed (forgetOwned). Kept here, out of the owner's reach: what a module can
+    // read of its handle (or of another module's) leads to none of them
+    property var _owned: new Map()      // owner → Map(handle → its `finished` connection)
+
+    function own(owner, handle) {
+        if (!owner || !handle?.open)
+            return;
+        let handles = _owned.get(owner);
+        if (!handles) {
+            handles = new Map();
+            _owned.set(owner, handles);
+        }
+        if (handles.has(handle))
+            return;
+        const connection = () => root._disown(owner, handle);
+        handles.set(handle, connection);
+        handle.finished.connect(connection);
+    }
+
+    function _disown(owner, handle) {
+        const handles = _owned.get(owner);
+        const connection = handles?.get(handle);
+        if (connection === undefined)
+            return;
+        handles.delete(handle);
+        if (handles.size === 0)
+            _owned.delete(owner);
+        handle.finished.disconnect(connection);
+    }
+
+    function closeOwned(owner) {
+        for (const handle of Array.from(_owned.get(owner)?.keys() ?? [])) {
+            _disown(owner, handle);
+            handle.close();
+        }
+    }
+
+    function forgetOwned(owner) {
+        for (const handle of Array.from(_owned.get(owner)?.keys() ?? []))
+            _disown(owner, handle);
+    }
+
+    // How many open handles an owner has (tests)
+    function ownedCount(owner) {
+        return _owned.get(owner)?.size ?? 0;
     }
 
     // A handle's show, update or close in test mode, as recorded

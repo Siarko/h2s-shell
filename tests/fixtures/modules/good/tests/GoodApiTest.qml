@@ -208,9 +208,7 @@ TestCase {
         assert(Object.isFrozen(job) && Object.getPrototypeOf(job) === Object.prototype, "… a frozen plain object");
         assertEqual([job._handle, job.runner, job.server, job.wanted, job.id, job.callbacks].filter(value => value !== undefined).length, 0,
                     "… no handle, runner, server, content, id or callbacks");
-        const kept = module._notifications;
-        assert(Object.isFrozen(kept) && Object.getOwnPropertyNames(kept).every(name => typeof kept[name] === "function"),
-               "… nor from the module's handle: its open handles are behind functions");
+        assertEqual(module._notifications, undefined, "… nor from the module's handle: its open handles are kept out of its reach");
         _watched = job;
         const jobNumber = lastShown();
         const shown = handleRecords(jobNumber)[0];

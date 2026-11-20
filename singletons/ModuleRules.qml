@@ -1740,8 +1740,8 @@ Singleton {
     // a NUL or a lone surrogate in front does not hide the prefix), white space in front and
     // case ignored. (1.33) `progress` is kept only as a finite number (else dropped: a plain
     // notification); with it `toast` is "brief" or "whileRunning" (anything else: "brief"),
-    // without it `toast` is dropped, and urgency "critical" is "normal" (a critical toast
-    // stays, outlined in red). Everything else as given; not an object: {}
+    // without it `toast` is dropped, and urgency "critical" is "normal" and an "urgency" hint
+    // dropped (a critical toast stays, outlined in red). Everything else as given; not an object: {}
     function moduleNotifyOptions(options) {
         if (options === null || typeof options !== "object")
             return {};
@@ -1763,9 +1763,18 @@ Singleton {
             delete result.toast;
         } else {
             result.toast = result.toast === "whileRunning" ? "whileRunning" : "brief";
-            // A critical toast stays and is outlined in red: not for a job's progress
+            // A critical toast stays and is outlined in red: not for a job's progress, by
+            // the option or by an "urgency" hint
             if (result.urgency === "critical")
                 result.urgency = "normal";
+            if (result.hints !== null && typeof result.hints === "object") {
+                const hints = {};
+                for (const key of Object.keys(result.hints)) {
+                    if (!/^\s*urgency\s*$/i.test(NotificationRules.gvariantText(key)))
+                        hints[key] = result.hints[key];
+                }
+                result.hints = hints;
+            }
         }
         return result;
     }

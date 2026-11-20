@@ -965,9 +965,12 @@ replaces the notification in place by its id, coalesces updates, retries, and le
 click or a dismissal from the shell's own server in-process; every decision is in
 `NotificationRules`. `options.toast` chooses how long its toast shows: `"brief"` (the
 user's time) or `"whileRunning"` (it stays while the job runs); `announce: true` brings the
-toast back once for a change of status. The module's handle (`api/ModuleHandle.qml`) keeps
-its open handles and closes them in its teardown, when the module is turned off — the same
-place its runs end; while it is off a progress notification is not shown. In module test
+toast back once for a change of status. Notifier keeps a module's open handles under its
+module handle (`Notifier.own`), out of reach of any module — `Api.module` hands out other
+modules' handles — and the module handle (`api/ModuleHandle.qml`) has them closed in its
+teardown, when the module is turned off, the same place its runs end
+(`Notifier.closeOwned`); a progress notification's urgency is never critical, by the option
+or a hint; while it is off a progress notification is not shown. In module test
 mode nothing is sent: each show, update and close is recorded (`ModuleTestKit.notified`),
 and a suite dismisses one or presses its action through `ModuleTestKit`. The lock bed's
 `modules-notify` scenario runs the real path with the `good` fixture, on its private bus.
