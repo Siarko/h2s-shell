@@ -207,19 +207,6 @@ Singleton {
         return count > 0 && count !== announceCount(previous);
     }
 
-    // What an announce does to a notification's toast (pure): "restart" — it is on screen,
-    // its time starts again; "queue" — it is not, it waits for a slot like a new one;
-    // "none" — toasts off, no toast screen, the centre open, it is gone, or it waits
-    // already. `state`: { toastsOn, toastScreen, centreOpen, alive, shown, waiting }
-    function announceEffect(state): string {
-        if (state?.toastsOn !== true || typeof state.toastScreen !== "string" || state.toastScreen === ""
-                || state.centreOpen !== false || state.alive !== true)
-            return "none";
-        if (state.shown === true)
-            return "restart";
-        return state.waiting === true ? "none" : "queue";
-    }
-
     // ---- GVariant text for gdbus (security-relevant: read line by line) ----
     // A handle's notification is sent with `gdbus call … --method …Notify -- <arguments>`:
     // each argument one argv word in the GVariant text format, which gdbus parses. Text

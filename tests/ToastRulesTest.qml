@@ -318,5 +318,7 @@ TestCase {
         assertEqual(announce(7, { hasScreen: false }), "none", "announce: no screen to show it on: not queued");
         assertEqual(announce(5, { hasScreen: false }), "none", "announce: no screen: nothing, as before");
         assertEqual(announce(7, { hasScreen: undefined }), "none", "announce: the screen not known: nothing");
+        assertEqual(announce(5, { centreOpen: true }), "restart", "announce: shown while the centre is open (one that stays there): its time starts again");
+        assertEqual(R.announceEffect(screen, 7, undefined), "none", "announce: nothing known: nothing");
     }
 }

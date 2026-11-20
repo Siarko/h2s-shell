@@ -7,7 +7,7 @@ import qs.singletons
 // "+N" beside its lowest toast, counting what waits there (the critical one with the critical
 // outline, ToastRules.badgeLook). One toast per notification on screen, keyed by its id, made
 // when it shows and destroyed after it slid out; a toast that leaves is kept until then.
-// On the toasts' screen (Notifications.toastScreen) the stack takes what fits whenever the
+// On the toasts' screen (Notifications.criticalToastScreen) the stack takes what fits whenever the
 // queues change (Notifications.fillToasts).
 Item {
     id: root
@@ -39,7 +39,9 @@ Item {
         return bottom;
     }
 
-    readonly property bool _toastScreen: screenName !== "" && Notifications.toastScreen === screenName
+    // The screen toasts go to — the critical ones' screen, which is the others' too unless a
+    // fullscreen window hides all but the critical ones there
+    readonly property bool _toastScreen: screenName !== "" && Notifications.criticalToastScreen === screenName
     // The toasts in their queues on this screen, top to bottom: [{ id, queue }]
     readonly property var stack: ToastRules.onScreen(Notifications.toastState, false).stack
         .filter(entry => Notifications.toastScreens[entry.id] === screenName)
@@ -127,6 +129,7 @@ Item {
         target: Notifications
         function onRoomForToasts() { root.fill(); }
         function onToastScreenChanged() { root.fill(); }
+        function onCriticalToastScreenChanged() { root.fill(); }
         function onHudPanelOpenChanged() { root.fill(); }
     }
     Component.onCompleted: fill()

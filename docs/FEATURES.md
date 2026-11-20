@@ -108,11 +108,11 @@ input through except where a card is actually visible.
 
 - **Notification toasts** slide in from the right as notifications arrive. When several
   queue up, a badge on the right screen edge shows how many are waiting; clicking it
-  opens the notification panel. Toasts are suppressed while the notification panel is
-  open. They show on the screen with the focused workspace, or on a chosen screen; when
-  that screen has a fullscreen window they show anyway, not at all (the notification in
-  the panel only), or on another screen — a chosen one, or any without a fullscreen
-  window. The shell's own messages follow the same rules (Settings → Notifications). A finger swipe sideways dismisses a toast (past a third of its width, or flung);
+  opens the notification panel. While the notification panel is open only critical and
+  staying toasts show. They show on the screen with the focused workspace, or on a chosen
+  screen; when that screen has a fullscreen window they show anyway, not at all but the
+  critical ones (the notification in the panel only), or on another screen — a chosen one,
+  or any without a fullscreen window. The shell's own messages follow the same rules (Settings → Notifications). A finger swipe sideways dismisses a toast (past a third of its width, or flung);
   its countdown pauses while it is being dragged.
 - **Volume OSD** appears on volume or mute changes.
 - **Shell toasts** — a bottom pill for the shell's own messages (notifications sent with
@@ -129,8 +129,9 @@ for". Settings → Notifications → "Apps choose how long", off, gives every to
 A critical notification is outlined in red and its toast stays too, and so does a resident
 one (its app keeps it until dismissed, such as a music player's controls) unless "Resident
 notification hide" is on. A toast that stays
-has no timer bar and is always taken away by its "×" or a swipe; the time is only the
-toast's — the entry stays in the panel. Toasts stack in three queues, top to bottom:
+has no timer bar and is always taken away by its "×" or a swipe. The time is only the
+toast's — the entry stays in the panel; a toast's "×" or swipe dismisses the notification,
+its entry too. Toasts stack in three queues, top to bottom:
 critical, staying, ordinary, with a wider gap between two queues. Each shows at most its
 limit — one critical and one staying by default ("Critical toasts at once", "Staying toasts
 at once"), the ordinary ones one at a time or the column — and the rest wait, counted on the
@@ -148,7 +149,7 @@ the bar in place: no new entry, no new toast, and the bell rings only for a chan
 title or text. While the job is moving (the value grew in the last 10 seconds) a wave of
 light passes through the bar's filled part; it stops when the value stands still or the
 job ends, and with reduced motion. Running an action on a notification marked resident (it stays after an
-action, by the spec) leaves it in the panel; a toast still slides away.
+action, by the spec) leaves it in the panel, and its toast on screen.
 
 `singletons/Notifier.qml` is the outbound side: the shell can send its own
 notifications, with actions and dismiss callbacks (no inline reply: notify-send cannot
@@ -159,8 +160,9 @@ that moves as the job goes. Its toast either shows for "Show each toast for" and
 entry with its moving bar in the panel, or stays on screen while the job runs (until taken
 away by its "×" or a swipe) and shows the end for the usual time. When the job's status
 changes in a way worth seeing — it started, stalled, finished or failed — the module can
-bring the toast back once (not with toasts off or the panel open). Its buttons ("Cancel")
-stay after a click. Dismissing it in the panel takes it away for good; the job goes on.
+bring the toast back once (not with toasts off, nor an ordinary toast while the panel is
+open). Its buttons ("Cancel") stay after a click. Dismissing it in the panel or by its
+toast's "×" takes it away for good; the job goes on.
 Turning a module off takes its progress notifications away; one left from before a reload
 of the shell, whose sender is gone, is dismissed.
 

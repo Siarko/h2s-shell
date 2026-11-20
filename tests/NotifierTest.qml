@@ -529,6 +529,7 @@ TestCase {
         };
         const countdownOf = toast => toast.resources.find(resource => resource.property === "remaining") ?? null;
         const cardOf = toast => _find(toast, item => item.bodyMaxLines !== undefined);
+        const closeButtonOf = toast => _find(toast, item => item instanceof MouseArea && item.parent?.text === "×");
         const counting = toast => toast !== null && toast._counting && countdownOf(toast).running;
         const badge = queue => _find(stack, item => item.objectName === queue + "Badge");
         const settings = change => {
@@ -575,9 +576,11 @@ TestCase {
         assert(!counting(urgentToast) && !cardOf(urgentToast).timerVisible && cardOf(urgentToast)._critical, "the critical one stays, outlined");
         assert(!badge("critical").look.shown && !badge("staying").look.shown && !badge("ordinary").look.shown && stack.restX === 800 - Theme.osdToast.width - Theme.osdToast.screenGap,
                "nothing waits: no badge, the toasts at the edge");
-        cardOf(staysToast).dismissRequested();
-        assert(place(stays) === "none" && !staysToast.present && stays.dismissCalls === 0 && stays.tracked,
-               "its \"×\": the toast goes, the entry stays");
+        closeButtonOf(staysToast).clicked(null);
+        assert(place(stays) === "none" && !staysToast.present && stays.dismissCalls === 1 && !stays.tracked,
+               "its \"×\": the notification dismissed — the toast goes, the entry too");
+        assert(Notifications._toastWatched[stays.id] === undefined && Notifications._toastWatched[ordinary.id] === ordinary,
+               "a notification gone: no longer followed; one still there is");
         clear();
         assert(presentToasts() === 0 && stack.stack.length === 0 && Notifications.hudQueue.length === 0
                && stack._leaving.length === 0, "cleared: nothing shown, waiting or sliding out");
@@ -752,6 +755,120 @@ TestCase {
         stack.toastFor(queued[0].id).dismiss();
         assert(place(queued[1]) === "none" && place(queued[2]) === "shown ordinary" && Notifications.hudQueue.length === 0,
                "the 2nd dismissed while it waits: the 3rd shows after the 1st, nothing left waiting");
+        clear();
+
+        // --- "×" on a job's toast: dismissed, its handle told as from the centre; the job goes on ---
+        const runner = _standInRunner.createObject(suite);
+        const server = _standInServer.createObject(suite);
+        made.push(runner, server);
+        const events = [];
+        const runningOn = standIn(0, { resident: true, hints: { "x-qs-progress-run": Notifier.progressRun } });
+        // As Notifications.onNotification says a tracked notification's closing, by id
+        runningOn.closed.connect(reason => server.notificationClosed(runningOn.id, reason));
+        const handle = _handle.createObject(suite, {
+            number: 1, runner: runner, server: server,
+            wanted: Notifier.progressContent("Sending", { progress: 0 }, "run1"),
+            callbacks: { actions: [], onDismissed: () => events.push("dismissed") }
+        });
+        made.push(handle);
+        server.tracked = [runningOn.id];
+        runner.answer(0, runningOn.id);
+        const jobToast = show(runningOn);
+        assert(handle.state === "running" && place(runningOn) === "shown staying", "the job runs, its toast stays");
+        closeButtonOf(jobToast).clicked(null);
+        assert(events.join(",") === "dismissed" && handle.state === "closed" && place(runningOn) === "none" && !runningOn.tracked,
+               "its \"×\": the notification dismissed, the handle's onDismissed once (" + events.join(",") + ", " + handle.state + ")");
+        clear();
+
+        // --- an action: a resident toast stays on screen, any other leaves as before ---
+        const pressOn = (notification, toast) => {
+            const action = _action.createObject(suite, { identifier: "next", text: "Next" });
+            made.push(action);
+            notification.actions = [action];
+            const button = _find(toast, item => item instanceof MouseArea && item.parent?.modelData === action);
+            button?.clicked(null);
+            return button !== null && action.invoked === 1;
+        };
+        const player = standIn(-1, { resident: true });
+        const playerToast = show(player);
+        assert(pressOn(player, playerToast) && place(player) === "shown staying" && playerToast.present && player.tracked && player.dismissCalls === 0,
+               "resident: the action runs, its toast stays on screen, the entry stays");
+        const mail = standIn(-1);
+        const mailToast = show(mail);
+        assert(pressOn(mail, mailToast) && place(mail) === "none" && !mailToast.present && mail.dismissCalls === 0,
+               "not resident: the action runs, the toast leaves, as before (the server ends the entry)");
+        clear();
+
+        // --- the centre opened: only the ordinary toasts go; critical and staying stay, and new ones show ---
+        settings({});
+        const openCritical = [standIn(-1, critical), standIn(-1, critical)];
+        const openStaying = standIn(0);
+        const openOrdinary = [standIn(-1), standIn(-1)];
+        openCritical.concat([openStaying], openOrdinary).forEach(show);
+        Notifications.setHudPanelOpen(true);
+        assert(place(openCritical[0]) === "shown critical" && place(openCritical[1]) === "waiting critical" && place(openStaying) === "shown staying"
+               && place(openOrdinary[0]) === "none" && place(openOrdinary[1]) === "none" && !stack.toastFor(openOrdinary[0].id).present,
+               "centre open: critical and staying stay (and wait), the ordinary ones go, shown and waiting");
+        const lateCritical = standIn(0, critical);
+        const lateOrdinary = standIn(-1);
+        show(lateOrdinary);
+        assert(place(lateOrdinary) === "none", "centre open: a new ordinary one is not queued (seen in the centre)");
+        Notifications.toastGone(openCritical[0].id);
+        assert(place(openCritical[1]) === "shown critical", "centre open: the next critical one shows in its turn");
+        const newStaying = standIn(0);
+        show(newStaying);
+        Notifications.toastGone(openStaying.id);
+        assert(place(newStaying) === "shown staying" && stack.toastFor(newStaying.id)?.present, "centre open: a new staying one shows");
+        show(lateCritical);
+        assert(place(lateCritical) === "waiting critical" && Notifications.toastBadges.critical === 1, "centre open: a new critical one queues, counted");
+        Notifications.toastGone(openCritical[1].id);
+        const newCritical = standIn(-1, critical);
+        show(newCritical);
+        assert(place(lateCritical) === "shown critical" && place(newCritical) === "waiting critical", "centre open: … and shows in its turn");
+        Notifications.toastGone(lateCritical.id);
+        assert(place(newCritical) === "shown critical" && stack.toastFor(newCritical.id)?.present, "centre open: a critical one arriving shows");
+        const endsWaiting = standIn(0, { resident: true, hints: { "x-qs-progress-run": Notifier.progressRun } });
+        show(endsWaiting);
+        endsWaiting.expireTimeout = -1;
+        assert(place(endsWaiting) === "none" && Notifications.toastKinds[endsWaiting.id] === undefined
+               && Notifications.toastDurations[endsWaiting.id] === undefined && Notifications.toastObject(endsWaiting.id) === null,
+               "centre open: a job ending while it waits in staying is no ordinary toast now: dropped, its maps pruned");
+        Notifications.setHudPanelOpen(false);
+        clear();
+
+        // --- "Show toasts" off: what waits goes, in every queue ---
+        [standIn(-1, critical), standIn(-1, critical), standIn(0), standIn(0), standIn(-1), standIn(-1)].forEach(show);
+        assertEqual(JSON.stringify(Notifications.toastBadges), JSON.stringify({ critical: 1, staying: 1, ordinary: 1 }), "one waits in each queue");
+        settings({ "notifications.toasts": false });
+        assert(Notifications.hudQueue.length === 0 && JSON.stringify(Notifications.toastBadges) === JSON.stringify({ critical: 0, staying: 0, ordinary: 0 })
+               && Object.keys(Notifications.toastKinds).length === 3,
+               "toasts off: nothing waits in any queue, the maps keep only the shown ones");
+        const whileOff = standIn(-1, critical);
+        show(whileOff);
+        assert(place(whileOff) === "none", "toasts off: a new one is not queued");
+        settings({});
+        clear();
+
+        // --- a fullscreen window there, "Don't show": only the critical toasts stay ---
+        settings({ "notifications.toastFullscreen": "hide" });
+        const fullCritical = [standIn(-1, critical), standIn(-1, critical)];
+        const fullStaying = standIn(0);
+        const fullOrdinary = [standIn(-1), standIn(-1)];
+        fullCritical.concat([fullStaying], fullOrdinary).forEach(show);
+        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: true, workspace: 1 }];
+        assert(Notifications.toastScreen === "" && Notifications.criticalToastScreen === "queue-screen"
+               && place(fullCritical[0]) === "shown critical" && place(fullCritical[1]) === "waiting critical"
+               && place(fullStaying) === "none" && place(fullOrdinary[0]) === "none" && place(fullOrdinary[1]) === "none"
+               && stack.toastFor(fullCritical[0].id)?.present && !stack.toastFor(fullStaying.id).present,
+               "fullscreen: the critical toasts stay (and wait); staying and ordinary go, shown and waiting");
+        const fullNew = [standIn(0), standIn(-1), standIn(-1, critical)];
+        fullNew.forEach(show);
+        Notifications.toastGone(fullCritical[0].id);
+        assert(place(fullNew[0]) === "none" && place(fullNew[1]) === "none" && place(fullCritical[1]) === "shown critical"
+               && place(fullNew[2]) === "waiting critical",
+               "fullscreen: a new staying or ordinary one is not queued; critical ones still show in turn");
+        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        settings({});
         clear();
 
         Notifications.screensOverride = null;
@@ -945,8 +1062,10 @@ TestCase {
             property bool tracked: true
             property int dismissCalls: 0
             signal closed(int reason)
+            // As Quickshell dismisses one: closed (Dismissed), no longer tracked
             function dismiss() {
                 dismissCalls++;
+                closed(NotificationCloseReason.Dismissed);
                 tracked = false;
             }
         }

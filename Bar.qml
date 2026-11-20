@@ -376,6 +376,7 @@ PanelWindow {
     //   qs ipc call shelltest toastBadges
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
+    //   qs ipc call shelltest toastDismiss 7
     IpcHandler {
         target: "shelltest"
         enabled: bar.modelData === Quickshell.screens[0]
@@ -436,6 +437,16 @@ PanelWindow {
             if (!notification)
                 return "not found";
             notification.tracked = false;
+            return "";
+        }
+
+        // "×" on a notification's toast, as its card's "×" does (Notifications.dismissToast);
+        // "" when done, "not shown" when it has no toast on screen
+        function toastDismiss(id: int): string {
+            const place = Notifications.toastPlace(id).place;
+            if (place !== "shown" && place !== "moved")
+                return "not shown";
+            Notifications.dismissToast(id);
             return "";
         }
 

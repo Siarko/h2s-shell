@@ -34,6 +34,9 @@ Rectangle {
     property real timerProgress: 1.0
 
     signal dismissRequested()
+    // The user's "×" or swipe, just before its dismissRequested — not an action's: a toast
+    // dismisses the notification on it, and only leaves after an action
+    signal closeClicked()
     // An action ran on a notification that stays after it (resident): its entry stays, so
     // no dismissal is asked — a toast still leaves
     signal actionInvoked()
@@ -308,12 +311,26 @@ Rectangle {
                 color: notifCard.compactDismiss ? Theme.textSecondary : Theme.textMuted
 
                 MouseArea {
+                    id: _dismissArea
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onPressed: notifCard._dismissPressed = true
                     // Whether or not the tap came, the mark ends with this click
                     onReleased: Qt.callLater(() => notifCard._dismissPressed = false)
-                    onClicked: notifCard.dismissRequested()
+                    onClicked: {
+                        notifCard.closeClicked();
+                        notifCard.dismissRequested();
+                    }
+                }
+
+                // On a toast, "×" dismisses the notification: for one of the shell's jobs,
+                // that it does not stop the job
+                HoverTip {
+                    target: parent
+                    shown: notifCard.compactDismiss && _dismissArea.containsMouse
+                        && typeof notifCard.notification?.hints?.["x-qs-progress-run"] === "string"
+                    text: "Dismiss. The job goes on."
                 }
             }
         }
@@ -728,6 +745,7 @@ Rectangle {
         NumberAnimation { target: notifCard; property: "opacity"; to: 0; duration: Theme.duration("exit"); easing: Theme.curve("exit") }
         onFinished: {
             notifCard.swipedAway = true;
+            notifCard.closeClicked();
             notifCard.dismissRequested();
         }
     }

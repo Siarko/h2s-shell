@@ -208,9 +208,16 @@ Item {
         borderColor: Theme.osdToastBorder
         replyBackground: Theme.surfaceSunken
         width: root.cardWidth
+        // "×" or a swipe dismisses the notification itself (its entry leaves the centre; a
+        // job goes on); the toast then leaves as its notification does
+        onCloseClicked: {
+            if (root.toastId >= 0)
+                Notifications.dismissToast(root.toastId);
+        }
+        // Also after an action on a notification that does not stay after it
         onDismissRequested: root.dismiss()
-        // An action on a resident notification: the toast leaves, the entry stays
-        onActionInvoked: root.dismiss()
+        // An action on a resident notification leaves its toast on screen (the spec: it
+        // stays after an action); only "×" takes it away
         // No bar on a toast that stays
         timerVisible: !root._staying
         timerProgress: root.remaining

@@ -145,16 +145,6 @@ TestCase {
                && !rules.announced(undefined, { "x-qs-announce": "1", "x-qs-progress-run": "" }, "")
                && !rules.announced(undefined, undefined, "now"),
                "announced: without this run's token (an outside app, another run) never believed");
-
-        // --- announceEffect: what an announce does to the toast ---
-        const effect = change => rules.announceEffect(Object.assign({ toastsOn: true, toastScreen: "DP-1", centreOpen: false,
-            alive: true, shown: false, waiting: false }, change));
-        assertEqual(effect({}), "queue", "announceEffect: not on screen, not waiting: queued like a new one");
-        assertEqual(effect({ shown: true }), "restart", "announceEffect: on screen: its time starts again");
-        assertEqual(effect({ waiting: true }), "none", "announceEffect: waiting already: not queued twice");
-        assertEqual([effect({ toastsOn: false }), effect({ toastScreen: "" }), effect({ centreOpen: true }), effect({ alive: false }),
-                     effect({ shown: true, centreOpen: true }), rules.announceEffect(undefined)].join(" "), "none none none none none none",
-                    "announceEffect: toasts off, no toast screen, the centre open, gone: nothing");
     }
 
     // GVariant text for gdbus: every string a single-quoted literal of printable ASCII

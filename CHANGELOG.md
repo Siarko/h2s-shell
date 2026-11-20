@@ -763,6 +763,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   beside its lowest toast; the critical badge has the red outline. A resident notification's
   toast stays (`notifications.residentHide` makes it count down); a job that ends while
   waiting in the staying queue shows its result in the ordinary queue.
+- A toast's "×" (and its swipe) dismisses the notification: its entry leaves the panel too;
+  a job goes on. An action on a resident notification leaves its toast on screen. Opening
+  the panel hides only the ordinary toasts: critical and staying ones stay, and new ones of
+  those still show. "Show toasts" off drops what waits in every queue. A fullscreen window
+  on the toasts' screen with "Don't show" leaves the critical toasts on screen.
 - Settings → System → Network → Wi-Fi: the Wi-Fi switch is on the page's heading; the
   "Wi-Fi" row under it is gone.
 - Network cards (saved Wi-Fi networks, hotspots, wired profiles, VPNs): their buttons stand
