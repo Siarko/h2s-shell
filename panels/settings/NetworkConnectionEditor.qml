@@ -11,7 +11,7 @@ import qs.singletons.network
 // changed, in one `nmcli connection modify` (NetworkRules.editorChanges); wrong fields
 // are marked and keep Save off (NetworkRules.editorErrors). An active profile's changes
 // apply when it connects again: "Save and reconnect" — then "Keep these settings?" for
-// 20 s (NetworkProfiles.saveAndReconnect: kept there, so leaving the page does not drop
+// 20 s (NetworkProfiles.saveConnection: kept there, so leaving the page does not drop
 // it), and without an answer the old settings go back. What NetworkProfiles answers comes
 // as signals (`saved`, `created`), never callbacks into this item, which may be gone.
 Item {
@@ -93,7 +93,6 @@ Item {
     // Blocking traffic outside a VPN on this network (VpnLockdown; the shell's setting)
     property bool _lockOriginal: false
     property bool _lockEdited: false
-    property var _lockToWrite: null
     readonly property bool _dirty: _changes.length > 0 || _vpnsChanged || _lockOriginal !== _lockEdited
 
     // "Keep these settings?": the changes to undo, seconds left
@@ -158,19 +157,20 @@ Item {
         return String(text).split(/[\s,;]+/).filter(item => item !== "");
     }
 
-    // The VPNs picked, written once the profile's own save went through (null: none to write)
-    property var _vpnsToWrite: null
-
+    // The save finishes in NetworkProfiles (saveConnection): the VPNs picked and the kill
+    // switch are written there once the profile's own save went through, also when this
+    // page is gone by then
     function _save(reconnect) {
-        // Never a list missing a provider VPN the user did not take out (VpnWithNetworkRules.vpnsToWrite)
-        _vpnsToWrite = _vpnsChanged ? VpnWithNetworkRules.vpnsToWrite(VpnManager.vpnsWith(uuid), _vpnsOriginal, _vpnsEdited) : null;
-        _lockToWrite = _lockOriginal !== _lockEdited ? _lockEdited : null;
-        if (_creating)
+        if (_creating) {
             _createToken = NetworkProfiles.create(_edited, "Making " + _edited.name);
-        else if (reconnect)
-            NetworkProfiles.saveAndReconnect(uuid, _changes, _original, "Saving " + _original.name);
-        else
-            NetworkProfiles.save(uuid, _changes, "Saving " + _original.name);
+            return;
+        }
+        NetworkProfiles.saveConnection({
+            uuid: uuid, changes: _changes, original: _original, reconnect: reconnect,
+            // Never a list missing a provider VPN the user did not take out (VpnWithNetworkRules.vpnsToWrite)
+            vpns: _vpnsChanged ? VpnWithNetworkRules.vpnsToWrite(VpnManager.vpnsWith(uuid), _vpnsOriginal, _vpnsEdited) : null,
+            lockdown: _lockOriginal !== _lockEdited ? _lockEdited : null
+        });
     }
 
     Connections {
@@ -178,12 +178,6 @@ Item {
         function onSaved(savedUuid, ok) {
             if (savedUuid !== root.uuid || root._creating)
                 return;
-            if (ok && root._vpnsToWrite !== null)
-                VpnManager.setVpnsWith(root.uuid, root._vpnsToWrite);
-            if (ok && root._lockToWrite !== null)
-                VpnLockdown.setFor(root.uuid, root._lockToWrite);
-            root._vpnsToWrite = null;
-            root._lockToWrite = null;
             // After a failure the form keeps what was typed
             if (ok)
                 root._load();

@@ -245,8 +245,26 @@ Singleton {
     // failure, keeps what was typed. Signals, not callbacks, here too.
     signal saved(string uuid, bool ok)
 
-    function save(uuid: string, changes, what: string): void {
-        modify(uuid, changes, what, ok => root.saved(uuid, ok));
+    // The editor's save, finished here so that a page closed meanwhile loses nothing:
+    // `request` { uuid, changes, original (the settings the editor read), reconnect ("Save
+    // and reconnect"), vpns (the VPNs to link to the network, VpnWithNetworkRules
+    // .vpnsToWrite; null: unchanged), lockdown (the kill switch for it, true or false; null:
+    // unchanged) }. The links and the kill-switch choice are written once the profile's own
+    // save went through, before `saved`.
+    function saveConnection(request): void {
+        const uuid = request.uuid;
+        const what = "Saving " + request.original.name;
+        const finish = ok => {
+            if (ok && request.vpns !== null && request.vpns !== undefined)
+                VpnManager.setVpnsWith(uuid, request.vpns);
+            if (ok && request.lockdown !== null && request.lockdown !== undefined)
+                VpnLockdown.setFor(uuid, request.lockdown);
+            root.saved(uuid, ok);
+        };
+        if (request.reconnect)
+            _saveAndReconnect(uuid, request.changes, request.original, what, finish);
+        else
+            modify(uuid, request.changes, what, finish);
     }
 
     // "Save and reconnect": the changes, the profile up again, then "Keep these settings?"
@@ -254,15 +272,15 @@ Singleton {
     // link does not leave the computer cut off. Kept here, not in the editor: leaving the
     // page during the countdown must not drop the way back. The undo comes from the
     // settings read after the change against `previous` (what the editor had read), so it
-    // writes back what really changed (a manual profile's addresses, say).
+    // writes back what really changed (a manual profile's addresses, say). `done(ok)`.
     // { uuid, name, changes } while the countdown runs, else null
     property var pendingUndo: null
     property int undoSecondsLeft: 0
 
-    function saveAndReconnect(uuid: string, changes, previous, what: string): void {
+    function _saveAndReconnect(uuid, changes, previous, what, done) {
         modify(uuid, changes, what, ok => {
             if (!ok) {
-                root.saved(uuid, false);
+                done(false);
                 return;
             }
             root.reconnect(uuid, () => root.readSettings(uuid, current => {
@@ -272,7 +290,7 @@ Singleton {
                     root.undoSecondsLeft = 20;
                     _undoCountdown.restart();
                 }
-                root.saved(uuid, true);
+                done(true);
             }));
         });
     }

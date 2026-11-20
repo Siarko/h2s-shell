@@ -5,7 +5,7 @@ import qs.singletons
 import qs.singletons.network
 
 // "Keep these settings?" after a profile was saved and reconnected (NetworkProfiles
-// .saveAndReconnect): the seconds left, Keep and Revert. Shown in the connection editor and
+// .saveConnection): the seconds left, Keep and Revert. Shown in the connection editor and
 // on the Wi-Fi and Ethernet pages, so leaving the editor during the countdown still shows
 // it; with no answer the old settings come back.
 Rectangle {

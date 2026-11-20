@@ -1,11 +1,16 @@
 import QtQuick
+import Quickshell
 import qs.singletons
 import qs.singletons.network
 
 // Parsers for nmcli output and sysfs counters. Loading these singletons starts their
 // usual nmcli polling; those results arrive after the synchronous assertions below.
+// Asynchronous for one case at the end: the connection editor's save finished after its
+// page is gone (the unit runner gives nmcli no bus, so every nmcli run there fails at once).
 TestCase {
+    id: suite
     suiteName: "Network"
+    asynchronous: true
 
     property var _link: LinkSpeed {
         intervalMs: 2000
@@ -669,5 +674,69 @@ TestCase {
                    && !rules.isConnectivityUri("http://x/a\nuri=evil") && !rules.isConnectivityUri("http://x/\"q"),
                    "connectivity URI: another scheme, a space, a newline, a quote");
         }
+    }
+
+    function runAsync() {
+        try {
+            run();
+        } catch (error) {
+            fail("threw: " + error);
+        }
+        _savedAfterPageGone();
+    }
+
+    // The editor's save, its page closed before NetworkProfiles answers: the VPN linked to
+    // the network and the kill-switch choice are still written. A network that is not there
+    // ("a4-…"): with "Save and reconnect" and no change to the profile itself the save runs
+    // `nmcli connection up` and reads the settings back — both fail here, the save counts
+    // (as NetworkProfiles.saveConnection does) — so the answer comes on the event loop.
+    // Notifications are recorded, not sent (the failed reconnect reports one).
+    readonly property string _goneNetwork: "a4-network-gone"
+    readonly property string _linkedVpn: "a4test:one"
+    property bool _savedRecordOnly: false
+    property double _saveStarted: 0
+    property Timer _saveWait: Timer {
+        interval: 25
+        repeat: true
+        onTriggered: suite._checkSaved()
+    }
+
+    function _savedAfterPageGone() {
+        const component = Qt.createComponent(Quickshell.shellDir + "/panels/settings/NetworkConnectionEditor.qml");
+        if (component.status !== Component.Ready) {
+            fail("NetworkConnectionEditor does not compile: " + component.errorString());
+            finish();
+            return;
+        }
+        _savedRecordOnly = Notifier.recordOnly;
+        Notifier.recordOnly = true;
+        const editor = component.createObject(null, { uuid: _goneNetwork });
+        const settings = NetworkRules.blankWifi();
+        settings.name = "A4";
+        editor._original = settings;
+        editor._edited = JSON.parse(JSON.stringify(settings));
+        editor._vpnsOriginal = [];
+        editor._vpnsEdited = [_linkedVpn];
+        editor._lockOriginal = false;
+        editor._lockEdited = true;
+        assertEqual(editor._changes.length, 0, "save after the page is gone: no change to the profile itself");
+        editor._save(true);
+        editor.destroy();
+        _saveStarted = Date.now();
+        _saveWait.start();
+    }
+
+    function _checkSaved() {
+        const linked = VpnManager.vpnsWith(_goneNetwork).includes(_linkedVpn);
+        const blocking = VpnLockdown.isSetFor(_goneNetwork);
+        if (!(linked && blocking) && Date.now() - _saveStarted < 15000)
+            return;
+        _saveWait.stop();
+        assert(linked, "save after the page is gone: the VPN linked to the network is written");
+        assert(blocking, "save after the page is gone: the kill-switch choice is written");
+        VpnManager.setVpnsWith(_goneNetwork, []);
+        VpnLockdown.setFor(_goneNetwork, false);
+        Notifier.recordOnly = _savedRecordOnly;
+        finish();
     }
 }
