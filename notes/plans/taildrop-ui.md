@@ -328,3 +328,113 @@ new from the core; M4 and M5 (the heading's switch) need C1 merged. One agent at
    docs and the IPC/docs that name it.
 2. **No daemon setting:** the module's soft switch is enough; `TS_DISABLE_TAILDROP` is not
    written, offered or documented as an action (M7 drops its check).
+
+## 9. Status pills, standard statuses, the bar wave (approved 2026-11-20)
+
+The spec is the approved mockup `h2s-mockups/taildrop-status-pills/` (`Mockup.qml`,
+`shots/full.png`): its pills, capsules and wave are drawn there from theme tokens and become
+real code here. Where §3–§8 say otherwise, this section wins.
+
+### 9.1 The nine statuses (module, one table)
+
+Every file is in exactly one status; each has one icon (a glyph of the shell's icon font)
+and one colour wherever it shows — pills, the capsule (icon before the state text), popup
+lines:
+
+| Status | Icon | Colour | Capsule text | Pill tip / line |
+|---|---|---|---|---|
+| sending | ↑ U+F062 | accent | "Sending · 40 %" | "1 sending" |
+| receiving | ↓ U+F063 | accent | "Receiving · 40 %" | "1 receiving" |
+| saving | download U+F019 | accent | "Saving · 70 %" | "1 saving to the folder" |
+| inbox | tray U+F01C | muted | "In inbox" | "2 in Tailscale's inbox" |
+| queued | clock U+F017 | muted | "Queued" | "3 queued" |
+| stalled | ⚠ U+F071 | warning | "No progress for 3 min" | "1 with no progress for 3 min" |
+| failed | ✕ circle U+F057 | **error (danger)** — was warning | the reason ("Not readable") | "1 failed · Not readable" |
+| cancelled | ⊘ U+F05E | muted | "Cancelled" | "1 cancelled" |
+| done | ✓ U+F00C | success | "Sent" / "Saved" | "5 done" |
+
+Taildrop off: ⏻ U+F011, muted. Accent statuses keep their capsule text secondary and the
+expanded line primary (the mockup); the others take their colour.
+
+### 9.2 The page's summary row
+
+Two pills, then "Files…" (top-aligned, so an expanded pill grows down beside it):
+- **"↑ Sending X/Y"** — X files sent of Y files in the sends that are still shown (not
+  cleared from the page); **"↓ Receiving X/Y"** — X saved of Y to save (receiving, in the
+  inbox, saving, saved). After the label, each status present as icon + number in its
+  colour, in the order sending, receiving, saving, inbox, queued, stalled, failed,
+  cancelled, done; each with a tooltip ("3 queued").
+- A click on a pill with statuses expands it: one status per line under a rule, icon and
+  line in its colour ("⚠ 1 with no progress for 3 min", "✕ 1 failed · Not readable" — the
+  reason when the failed files share one, else "2 failed"); a second click collapses it.
+- A pill with no transfers disappears; neither → muted "No transfers".
+- Finished: "✓ Sent 5/5" in success; with failures "Sent 4/5 ·" + its "✕ 1" part, lead icon
+  secondary. Receiving likewise ("✓ Saved 3/3").
+- Taildrop off: one muted pill "⏻ Off · 2 in inbox" ("Off" with none waiting), replacing
+  both; `offState.summary` gives its text. `statusPills` replaces `pageSummary` (§5).
+
+### 9.3 The wave on bars that move (core)
+
+A bar in progress gets a band of light passing through its filled part every 300 ms (the
+owner's number), as the core chart's heartbeat (`components/HistoryChart.qml`: a lighter
+band of the fill's colour, clipped to the fill). No wave on a stalled bar, a full or empty
+one, a run of unknown length, a hidden bar, or with `Theme.reduceMotion`.
+Decision: **opt-in** — `wave: bool` (false by default) on the internal
+`components/ProgressBar.qml` and on the public `ProgressBar` (module API 1.35). The bar
+does not judge "moving" itself: the owner says it (Taildrop: sending, receiving, saving;
+never stalled). Whether it runs is a rule, `ApiElementRules.progressWaves(wave, value,
+reduceMotion)` (true only for 0 ≤ value < 1). The period is a Theme duration role
+`progressWave` 300 (in ThemeRules' animation roles, editable; reduced motion removes it);
+the band crosses the fill once per period, its animation stopped while it does not run.
+**The notification card's bar** waves while its job is running and its value grew in the
+last 10 s (`NotificationRules.progressWave(state, grewAt, now)`) — a stalled sender's value
+stands still, so the wave stops without a new notification option. Its colour stays the
+normal one (notifications carry no colour).
+
+### 9.4 What the public API lacks for the pills (core, 1.35)
+
+- `Pill` (1.5) is one choice among several: label, picked, tooltip, size, textSize,
+  clicked. No icon, no colour, no inner parts with their own tooltips, no expanded state.
+  Not stretched: its meaning stays "a choice".
+- `HoverTip` (1.31) exists publicly; the new pill uses it per part, nothing to add.
+- So a new public element **`StatusPill`**, agnostic (any module summing up a state).
+  Reference text outline (`api/Api.qml`, public elements, after SidePanel):
+```
+//   StatusPill             (1.35) a pill that sums up a state: icon (a glyph of the shell's
+//                          icon font; "" none), label (one line), kind: "normal" (the
+//                          default: icon accent, label text) | "muted" | "success" |
+//                          "warning" | "danger" — the icon's and label's colour; parts:
+//                          [{ icon, text, kind, tip, line }] — after the label, each an
+//                          icon and a short text (a count) in its kind's colour, its tip
+//                          over it on hover (HoverTip's rules); expanded (the owner may set
+//                          it; a click flips it while there are parts): the parts one per
+//                          line under a rule — icon and `line` ("" → text and tip) in the
+//                          part's colour; toggled(expanded). Texts plain, one line, cut
+//                          past 80 (oneLine); unknown kinds → "normal", logged once; past
+//                          12 parts the rest dropped, logged once. Fills no width.
+//                          StatusPill { icon: ""; label: "Sending 1/6"
+//                                       parts: [{ icon: ""; text: "3"; kind: "muted";
+//                                                 tip: "3 queued" }] }
+```
+  Inside: `components/StatusPill.qml` (the mockup's StatusPill on Theme tokens, parts by a
+  `KeyedModel` keyed by index, `PointerArea` for hover and click); the part list made
+  plain and capped in `ApiElementRules.statusParts`.
+- A capsule draws its status icon itself from theme tokens: no public icon element.
+
+### 9.5 Progress notifications (module)
+
+Body "holiday-photos.zip · 2 of 3" — the file under way and its place among the transfer's
+files; a stall "video.mp4: No progress for 3 min". No "Send now" in notifications; a stall
+offers only "Skip" (supersedes §5 `notification`). The bar stays normal.
+
+### 9.6 Slices
+
+| # | Slice | Changes | Tests |
+|---|---|---|---|
+| C3 | **ProgressBar wave and StatusPill, API 1.35** (core) | §9.3, §9.4; `ModuleRules.apiVersion` "1.35"; CHANGELOG `### Module API` 1.35 and an Unreleased line for the card's wave; `docs/ARCHITECTURE.md` "Modules" | `ApiElementRulesTest`: `progressWaves` (off, value <0, 0, 1, NaN, reduced motion), `statusParts` (plain/one line, cap logged once, unknown kind); `NotificationRulesTest`: `progressWave` (grew 2 s / 11 s ago, done, failed, cancelled); `ThemeRulesTest` the new role; headless suite: the band moves within two periods with `wave`, none without, hidden or reduced; `StatusPill` parts in order with a tooltip each, click expands, second collapses, no parts → no expand; card bar waves while running, stops when the value stands; `ApiElementsTest` pins both; `VersionTest`/`ModuleRulesTest` 1.35 |
+| M10 | **Module rules** | `statuses` table (§9.1); `fileStatus(file, transfer, now, stallMs)` → one key; `statusPills(transfers, incoming, waitingCount, offState, now)` → `{ pills: [{ key, icon, label, kind, parts }], none }`; `fileRow` → `status`, `wave`, failed `danger`; popup lines → `status`; `notification` → body and "Skip" only; `pageSummary` removed | `TaildropTransferTest`: each file state → one status (stall by `progressAt` vs `stallMs`); counts add up to Y, no file twice; X/Y for sends and saves; finished, finished with a failure, shared/mixed reasons; a pill vanishes, "No transfers"; off with 0 and 2 waiting; `fileRow` wave per status; notification body "2 of 3", stall body, actions never "Send now" |
+| M11 | **Module views** | manifest `api` 1.35; summary row on `StatusPill`s; capsule icon before the state text in its colour; bars `kind` per status and `wave`; popup lines with icons; failed in danger | UI suites: pills per state in `ModuleTestKit.pageFrame`, a part's tooltip text, click expands/collapses, "Files…" on the first line; a capsule's icon and colour per status; stalled bar `wave` false, sending true; popup failed line in danger |
+| M12 | **Docs and the mockup on the real code** | `docs/features.md` (statuses, pills, wave), module CHANGELOG, release line; the mockup rebuilt on the real `StatusPill`, `ProgressBar.wave` and module rules, shots taken again | the owner or the lead compares the new shots with the approved ones: light/dark, a small screen |
+
+Order: C3 → M10 → M11 → M12. M10 needs nothing new from the core and may run beside C3's
+review; M11 needs C3 merged. Module: its next minor version.
