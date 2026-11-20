@@ -281,3 +281,17 @@ Seen while reading (not yet in the tracker):
     codes never shown there (keep)?
 11. **Looks**: action buttons through the shared button kinds (contrast), action icons, the
     toast's body cut (6 lines) vs the centre's whole body.
+
+## 7. The owner's direction (2026-11-20)
+
+- **Three toast queues, top to bottom:** critical (red outline), staying (expire 0 from apps and
+  jobs set to stay while running), ordinary counting-down toasts. Each queue has its own visible
+  limit — critical 1, staying 1 by default, ordinary as today (1 in "One at a time", the column's
+  size in "A column") — and its own badge counting what waits; the critical queue's badge has the
+  critical outline.
+- **Movable toasts (an option):** a staying or critical toast can be grabbed by its title line and
+  dropped anywhere on its screen; it then frees its place in its queue. No limit on how many are
+  moved out; each closes with its "×", a finished job counts down and goes as usual.
+- **Opening the centre** hides only the ordinary toasts; critical, staying and moved-out ones stay.
+- **Lock screen and screensaver do not pause** countdowns or queues (notifications would be stale
+  after unlocking).
