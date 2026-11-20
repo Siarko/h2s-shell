@@ -30,6 +30,12 @@ TestCase {
         return _fakeComponent.createObject(suite, Object.assign({ providerId: "vpt" }, properties ?? {}));
     }
 
+    // The last notification Notifier recorded (while recordOnly), or null
+    function _lastNotice() {
+        const recorded = Notifier.recorded;
+        return recorded.length > 0 ? recorded[recorded.length - 1] : null;
+    }
+
     function _vpn(id) {
         return VpnManager.vpns.find(vpn => vpn.uuid === id) ?? null;
     }
@@ -417,17 +423,21 @@ TestCase {
         assertEqual(_vpn("vpt:one").status, "Via exit-1", "status: an entry's line through the merged list");
         fake.setStatus("one", "");
 
-        // Failure → a notification with the reason
+        // Failure → a notification with the reason (recorded, never sent: this step runs in
+        // one go, so no other suite sees recordOnly set)
+        const savedRecordOnly = Notifier.recordOnly;
+        Notifier.recordOnly = true;
         fake.failNext = "the daemon is not running";
         VpnManager.connect("vpt:one");
-        assert(VpnManager.lastProviderNotice !== null && VpnManager.lastProviderNotice.title === "Connecting One failed"
-               && VpnManager.lastProviderNotice.body === "the daemon is not running", "failure: the provider's signal becomes a notification");
+        const failed = _lastNotice();
+        assert(failed !== null && failed.summary === "Connecting One failed"
+               && failed.body === "the daemon is not running", "failure: the provider's signal becomes a notification");
         fake.failNext = "<b>bad</b> & worse\nsecond line";
         VpnManager.connect("vpt:one");
-        const sent = VpnManager.lastProviderNotice?.options;
-        const shown = Notifier.prepared(VpnManager.lastProviderNotice?.title, sent);
-        assert(sent?.format === "plain" && JSON.stringify(shown.options.body) === JSON.stringify("&lt;b&gt;bad&lt;/b&gt; &amp; worse\nsecond line"),
-               "failure: the provider's texts sent as plain text, its markup shown as written — " + JSON.stringify(shown.options.body));
+        const shown = _lastNotice();
+        assert(shown?.format === "plain" && JSON.stringify(shown?.body) === JSON.stringify("&lt;b&gt;bad&lt;/b&gt; &amp; worse\nsecond line"),
+               "failure: the provider's texts sent as plain text, its markup shown as written — " + JSON.stringify(shown?.body));
+        Notifier.recordOnly = savedRecordOnly;
 
         // Attention: shown, its action dispatched, cleared by the provider
         fake.attentionOnConnect = { reason: "Log in to continue", action: "Log in" };
@@ -538,8 +548,12 @@ TestCase {
         VpnManager.unregisterProvider("vpt-thrower");
         const breaking = { providerId: "vpt-breaking", entries: [{ id: "b", name: "B", state: "" }], connect: () => { throw new Error("no"); } };
         VpnManager.registerProvider(breaking);
+        const savedRecording = Notifier.recordOnly;
+        Notifier.recordOnly = true;
         VpnManager.connect("vpt-breaking:b");
-        assert(VpnManager.lastProviderNotice.title === "Connecting B failed" && VpnManager.lastProviderNotice.body.indexOf("no") >= 0,
+        const thrown = _lastNotice();
+        Notifier.recordOnly = savedRecording;
+        assert(thrown?.summary === "Connecting B failed" && String(thrown?.body).indexOf("no") >= 0,
                "hostile: a connect that throws — logged and said as a failure");
         VpnManager.unregisterProvider("vpt-breaking");
         assert(_vpn("vpt-breaking:b") === null, "hostile: unregistered — gone");
