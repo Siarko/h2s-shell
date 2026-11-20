@@ -75,8 +75,12 @@ TestCase {
         for (const entry of ThemeRules.animationRoles)
             assert(Theme.builtin.durations[entry.role] <= entry.to, "the slider for " + entry.role + " reaches the built-in duration");
         const waveRole = ThemeRules.animationRoles.find(entry => entry.role === "progressWave");
-        assert(waveRole !== undefined && waveRole.curves.join() === "progressWave", "the progress bars' wave is a role on the Animations page, with its curve");
-        assertEqual(Theme.builtin.durations.progressWave + " " + Theme.builtin.curves.progressWave, "300 Linear", "… one pass every 300 ms, at an even pace");
+        const travelRole = ThemeRules.animationRoles.find(entry => entry.role === "progressWaveTravel");
+        assert(waveRole !== undefined && waveRole.curves.length === 0, "the time between the progress bars' waves is a role on the Animations page, without a curve");
+        assert(travelRole !== undefined && travelRole.curves.join() === "progressWave", "… and one wave's crossing, with the wave's curve");
+        assertEqual(Theme.builtin.durations.progressWave + " " + Theme.builtin.durations.progressWaveTravel + " " + Theme.builtin.curves.progressWave,
+                    "300 1200 Linear", "… a new wave every 300 ms, each crossing in 1200 ms at an even pace");
+        assertEqual(Theme.duration("progressWaveTravel"), Theme.builtin.durations.progressWaveTravel, "the theme hands out the crossing time");
         for (const name of ThemeRules.qtCurveNames)
             assert(ThemeRules.isQtCurve(name), name + " is one of Qt's curves");
         for (const group of ThemeRules.shapeGroups)

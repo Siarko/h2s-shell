@@ -559,8 +559,9 @@ import qs.singletons.network
 //                          the accent) | "success" | "warning" | "danger". As thick as the
 //                          theme's progress.thickness, its ends progress.radius (at most half
 //                          the thickness). Fills the width. (1.35) wave (false by default):
-//                          the owner says the bar moves now — a band of light passes through
-//                          the filled part every Theme duration "progressWave"; none while
+//                          the owner says the bar moves now — bands of light pass through
+//                          the filled part, a new one every Theme duration "progressWave",
+//                          each crossing in "progressWaveTravel"; none while
 //                          full, of unknown length, hidden, or with reduced motion. The bar
 //                          does not judge it: a stalled job sets it false.
 //   HoverTip               (1.31) text, target (an Item; the item it is written inside unless

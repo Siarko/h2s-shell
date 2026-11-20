@@ -150,52 +150,64 @@ TestCase {
     // --- the bar's wave ---
     function _wave() {
         const inner = waveBar.children[0];
-        const still = stillBar.children[0];
         // The user's profile may reduce motion; the bar is checked both ways
         inner.reduceMotion = false;
+        const still = stillBar.children[0];
         still.reduceMotion = false;
-        const band = _find(inner, child => child.objectName === "wave")[0];
-        assert(band !== undefined, "the bar has its band");
-        const animation = Array.from(inner.data).find(child => child.toString().startsWith("QQuickNumberAnimation") && child.property === "_wavePhase");
-        const period = Theme.duration("progressWave");
-        assert(animation !== undefined && animation.duration === period && animation.loops < 0,
-               "its period is the theme's progressWave (" + animation?.duration + " of " + period + " ms), again and again (loops " + animation?.loops + ")");
-        assert(inner.waving && band.parent.visible, "wave: true at half: the band shows");
+        const bands = _find(inner, child => child.objectName === "wave");
+        const stillBands = _find(still, child => child.objectName === "wave");
+        assertEqual(bands.length + " " + stillBands.length, inner._wavePool + " " + inner._wavePool, "each bar has its fixed pool of bands, made once");
+        const spawn = Theme.duration("progressWave");
+        const travel = Theme.duration("progressWaveTravel");
+        const schedule = inner._waveSchedule;
+        assertEqual(schedule.spacing + " " + schedule.travel, spawn + " " + travel,
+                    "a new wave every progressWave, each crossing in progressWaveTravel, from the theme");
+        const crossing = band => Array.from(band.data).find(child => child.toString().startsWith("QQuickSequentialAnimation"));
+        const firstRun = crossing(bands[0]);
+        const across = firstRun?.animations?.[1]?.animations?.[0];
+        assert(across?.duration === travel && firstRun.animations[1].loops < 0, "a band crosses in " + across?.duration + " ms, again and again");
+        assertEqual(crossing(bands[2]).animations[0].duration, 2 * spawn, "the third band starts two spawn intervals after the first");
+        const running = () => bands.filter(band => band.running).length;
+        assert(inner.waving && bands[0].parent.visible && running() === schedule.slots && schedule.slots >= 3,
+               "wave: true at half: " + running() + " bands run (" + schedule.slots + " in use)");
         const fill = inner.children[1];
-        assert(band.parent.parent === fill && band.parent.clip, "… clipped to the fill");
-        const firstPlace = band.x;
-        assert(_until(() => Math.abs(band.x - firstPlace) > 1, 2 * period), "… and moves within two periods");
+        assert(bands[0].parent.parent === fill && bands[0].parent.clip, "… clipped to the fill");
+        const onBar = () => bands.filter(band => band.x + band.width > 0 && band.x < band.parent.width).length;
+        let most = 0;
+        _until(() => (most = Math.max(most, onBar())) >= 3, 2 * travel);
+        assert(most >= 3, "several bands on the bar at once (" + most + ")");
+        const firstPlace = bands[0].x;
+        assert(_until(() => Math.abs(bands[0].x - firstPlace) > 1, travel), "… they move");
         let wrapped = false;
-        let last = band.x;
+        let last = bands[0].x;
         _until(() => {
-            wrapped = wrapped || band.x < last - 1;
-            last = band.x;
+            wrapped = wrapped || bands[0].x < last - 1;
+            last = bands[0].x;
             return wrapped;
-        }, 2 * period + 100);
+        }, schedule.cycle + travel + 200);
         assert(wrapped, "… crossing the fill and starting again");
 
-        assert(!still.waving && !_find(still, child => child.objectName === "wave")[0].parent.visible, "without wave: no band");
-        const stillPhase = still._wavePhase;
-        driver.wait(period);
-        assertEqual(still._wavePhase, stillPhase, "… nothing moves");
+        assert(!still.waving && !stillBands[0].parent.visible && stillBands.every(band => !band.running && band.phase === 0), "without wave: no band, none running");
+        driver.wait(spawn);
+        assert(stillBands.every(band => band.phase === 0), "… nothing moves");
 
         waveBar.visible = false;
-        assert(!inner.waving && !animation.running, "hidden: no wave, its animation stopped");
+        assert(!inner.waving && running() === 0, "hidden: no wave, its bands stopped");
         waveBar.visible = true;
-        assert(_until(() => inner.waving && animation.running), "shown again: the wave again");
+        assert(_until(() => inner.waving && running() === schedule.slots), "shown again: the wave again");
 
         inner.reduceMotion = true;
-        assert(!inner.waving && !band.parent.visible && !animation.running && inner._wavePhase === 0, "reduced motion: no band, nothing running");
+        assert(!inner.waving && !bands[0].parent.visible && running() === 0 && bands.every(band => band.phase === 0), "reduced motion: no band, nothing running");
         inner.reduceMotion = false;
 
         for (const [value, what] of [[1, "full"], [-1, "of unknown length"], [NaN, "not a number"], [0, "empty (nothing to run through)"]]) {
             waveBar.value = value;
-            assert(!inner.waving && !band.parent.visible, "a bar " + what + ": no wave");
+            assert(!inner.waving && !bands[0].parent.visible && running() === 0, "a bar " + what + ": no wave");
         }
         waveBar.value = 0.5;
         assert(inner.waving, "back at half: the wave");
         waveBar.wave = false;
-        assert(!inner.waving && !animation.running, "wave set false by the owner (a stall): it stops");
+        assert(!inner.waving && running() === 0, "wave set false by the owner (a stall): it stops");
     }
 
     // --- the status pill ---

@@ -137,6 +137,20 @@ Singleton {
         return wave === true && typeof value === "number" && value >= 0 && value < 1 && reduceMotion !== true;
     }
 
+    // When a progress bar's waves start: a new one every `spawnMs`, each crossing the fill in
+    // `travelMs`, from a pool of `pool` bands that are reused. Where the pool would run short
+    // the waves come further apart (travelMs / pool), never more bands. Returns `slots` (the
+    // bands in use), `spacing` (ms between two waves), `travel` and `cycle` (ms from a band's
+    // start to its next: slots × spacing, at least travel, so a band ends before it starts
+    // again). Durations below 1 ms count as 1
+    function progressWaveSchedule(spawnMs, travelMs, pool) {
+        const count = Math.max(1, Math.floor(Number(pool) || 1));
+        const travel = Math.max(1, Number(travelMs) || 0);
+        const spacing = Math.max(1, Number(spawnMs) || 0, travel / count);
+        const slots = Math.min(count, Math.ceil(travel / spacing));
+        return { slots: slots, spacing: spacing, travel: travel, cycle: Math.max(travel, slots * spacing) };
+    }
+
     function statusKind(kind) {
         return pick(statusKinds, kind, statusKindDefault);
     }

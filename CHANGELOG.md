@@ -17,10 +17,10 @@ Settings → Notifications → "Apps choose how long", off, keeps the old behavi
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
-- 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and a
-  band of light passes through its filled part every theme duration `progressWave` (300 ms
-  by default); none while the bar is full, of unknown length or hidden, or with reduced
-  motion. `StatusPill`, a pill that sums up a state: `icon` (a glyph of the shell's icon
+- 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and
+  bands of light pass through its filled part, a new one every theme duration
+  `progressWave` (300 ms by default), each crossing in `progressWaveTravel` (1200 ms); none
+  while the bar is full, of unknown length or hidden, or with reduced motion. `StatusPill`, a pill that sums up a state: `icon` (a glyph of the shell's icon
   font), `label` (one line), `kind` `"normal"` (the default: the icon in the accent, the
   label in the text colour), `"muted"`, `"success"`, `"warning"` or `"danger"`; `parts`
   `[{ icon, text, kind, tip, line }]`, after the label, each an icon and a short text in its
@@ -749,6 +749,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A moving progress bar's wave is calmer: several bands of light are on the bar at once, a
+  new one every 300 ms, each crossing the bar in 1.2 s (Settings → Appearance → Animations:
+  "Progress wave" and "Progress wave: travel"). The same in a notification's progress bar.
 - A critical notification's toast no longer holds the layout's place (in "One at a time" it
   held back every later toast until dismissed): it stacks above the toasts that count down,
   in both layouts, with the other toasts that stay.

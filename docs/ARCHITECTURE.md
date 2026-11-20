@@ -857,9 +857,10 @@ its child is held as a `Component`, so nothing of it exists while the row is clo
 `components/SettingsRow.qml` and `components/ExpandingRow.qml`. `ProgressBar` (API 1.31;
 `value` 0 to 1, below 0 a run of unknown length; `kind` `normal`, `success`, `warning` or
 `danger`; inside, `components/ProgressBar.qml`, as thick as the theme's
-`progress.thickness`; `wave`, API 1.35: the owner says the bar moves, and a band of light
-passes through the fill every `Theme.duration("progressWave")` — whether it runs is
-`ApiElementRules.progressWaves`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
+`progress.thickness`; `wave`, API 1.35: the owner says the bar moves, and bands of light
+pass through the fill, a new one every `Theme.duration("progressWave")`, each crossing in
+`Theme.duration("progressWaveTravel")` — a fixed pool of bands, reused, timed by
+`ApiElementRules.progressWaveSchedule`; whether they run is `ApiElementRules.progressWaves`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
 it is written inside by default, taking no room; inside, `components/HoverTip.qml`).
 `SidePanel` (API 1.34) slides in from the right over a module's settings page: `open`,
 `title`, `size` (`s`, `m`, `l`: `Theme.sidePanelWidths`, at most 90 % of the page) and

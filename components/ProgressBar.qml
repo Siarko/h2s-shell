@@ -7,10 +7,12 @@ import qs.singletons
 // shows as nothing done.
 // Its thickness and its ends come from the theme's `progress` group; `tone` names the fill's
 // colour in Theme (the accent by default).
-// `wave`: the owner says the bar moves — a lighter band of the fill's colour then passes
-// through the filled part once every Theme.duration("progressWave"), as a graph's heartbeat
-// (HistoryChart). Whether it runs is ApiElementRules.progressWaves (not full, not of unknown
-// length, motion not reduced), and only while the bar is visible.
+// `wave`: the owner says the bar moves — lighter bands of the fill's colour then pass through
+// the filled part, a new one every Theme.duration("progressWave"), each crossing it in
+// Theme.duration("progressWaveTravel"), so several are on the bar at once. The bands are a
+// fixed pool, reused (ApiElementRules.progressWaveSchedule). Whether they run is
+// ApiElementRules.progressWaves (not full, not of unknown length, motion not reduced), and
+// only while the bar is visible.
 //
 //   ProgressBar { width: parent.width; value: copied / total; wave: copying }
 Item {
@@ -30,8 +32,10 @@ Item {
     // Only where it is seen: shown, in a shown window, with something filled to run through
     readonly property bool waving: ApiElementRules.progressWaves(wave, value, reduceMotion) && visible
                                    && (Window.window?.visible ?? false) && width * _done > 0
-    // 0 → 1 as the band crosses the fill
-    property real _wavePhase: 0
+    // The bands there are: at most this many on the bar at once
+    readonly property int _wavePool: 6
+    readonly property var _waveSchedule: ApiElementRules.progressWaveSchedule(
+        Theme.duration("progressWave"), Theme.duration("progressWaveTravel"), _wavePool)
 
     implicitHeight: Theme.progress.thickness
 
@@ -55,8 +59,8 @@ Item {
             NumberAnimation { duration: Theme.duration("value"); easing: Theme.curve("value") }
         }
 
-        // The wave: a band of light, clipped to the fill, fading as it goes. Drawn once; a
-        // frame only moves it and changes its opacity
+        // The waves: bands of light, clipped to the fill, fading as they go. Each band is drawn
+        // once; a frame only moves it and changes its opacity
         Item {
             id: _waveClip
             anchors.fill: parent
@@ -65,32 +69,50 @@ Item {
             readonly property real halfWidth: Math.max(Theme.progress.thickness * 3, width * 0.22)
             readonly property color light: Qt.lighter(_fill.color, 1.6)
 
-            Rectangle {
-                objectName: "wave"
-                x: -2 * _waveClip.halfWidth + (_waveClip.width + 2 * _waveClip.halfWidth) * root._wavePhase
-                width: 2 * _waveClip.halfWidth
-                height: parent.height
-                opacity: 1 - 0.6 * root._wavePhase
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Qt.alpha(_waveClip.light, 0) }
-                    GradientStop { position: 0.5; color: Qt.alpha(_waveClip.light, 0.95) }
-                    GradientStop { position: 1.0; color: Qt.alpha(_waveClip.light, 0) }
+            Repeater {
+                model: root._wavePool
+
+                Rectangle {
+                    id: _band
+                    required property int index
+                    // 0 → 1 as the band crosses the fill; at 0 and 1 it is outside it
+                    property real phase: 0
+                    readonly property alias running: _bandRun.running
+                    objectName: "wave"
+                    x: -2 * _waveClip.halfWidth + (_waveClip.width + 2 * _waveClip.halfWidth) * phase
+                    width: 2 * _waveClip.halfWidth
+                    height: _waveClip.height
+                    opacity: 1 - 0.6 * phase
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: Qt.alpha(_waveClip.light, 0) }
+                        GradientStop { position: 0.5; color: Qt.alpha(_waveClip.light, 0.95) }
+                        GradientStop { position: 1.0; color: Qt.alpha(_waveClip.light, 0) }
+                    }
+
+                    // Waits for its turn once, then crosses and rests until its next turn. All
+                    // bands run on the one animation clock, so they keep their spacing
+                    SequentialAnimation {
+                        id: _bandRun
+                        running: root.waving && _band.index < root._waveSchedule.slots
+                        onRunningChanged: if (!running) _band.phase = 0
+                        PauseAnimation { duration: _band.index * root._waveSchedule.spacing }
+                        SequentialAnimation {
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                target: _band
+                                property: "phase"
+                                from: 0
+                                to: 1
+                                duration: root._waveSchedule.travel
+                                easing: Theme.curve("progressWave")
+                            }
+                            PauseAnimation { duration: root._waveSchedule.cycle - root._waveSchedule.travel }
+                        }
+                    }
                 }
             }
         }
-    }
-
-    NumberAnimation {
-        target: root
-        property: "_wavePhase"
-        from: 0
-        to: 1
-        duration: Theme.duration("progressWave")
-        easing: Theme.curve("progressWave")
-        loops: Animation.Infinite
-        running: root.waving
-        onRunningChanged: if (!running) root._wavePhase = 0
     }
 
     // There and back along the track, while a run of unknown length shows

@@ -1320,6 +1320,14 @@ TestCase {
         assert(!rules.progressWaves(true, NaN, false) && !rules.progressWaves(true, "0.4", false) && !rules.progressWaves(true, undefined, false), "not a number: none");
         assert(!rules.progressWaves(true, 0.4, true), "reduced motion: none");
         assert(!rules.progressWaves("yes", 0.4, false) && !rules.progressWaves(1, 0.4, false), "only true asks for it");
+        // --- progressWaveSchedule(spawnMs, travelMs, pool) ---
+        const schedule = (spawn, travel, pool) => JSON.stringify(rules.progressWaveSchedule(spawn, travel, pool));
+        assertEqual(schedule(300, 1200, 6), JSON.stringify({ slots: 4, spacing: 300, travel: 1200, cycle: 1200 }), "a wave every 300 ms crossing in 1200: four bands, each again after 1200 ms");
+        assertEqual(schedule(300, 1000, 6), JSON.stringify({ slots: 4, spacing: 300, travel: 1000, cycle: 1200 }), "a crossing not a whole number of spawns: a band rests until its turn");
+        assertEqual(schedule(500, 300, 6), JSON.stringify({ slots: 1, spacing: 500, travel: 300, cycle: 500 }), "a crossing shorter than the spawn: one band");
+        assertEqual(schedule(100, 1200, 6), JSON.stringify({ slots: 6, spacing: 200, travel: 1200, cycle: 1200 }), "the pool short: the waves come further apart, never more bands");
+        assertEqual(schedule(0, 0, 6), JSON.stringify({ slots: 1, spacing: 1, travel: 1, cycle: 1 }), "durations of 0: 1 ms");
+        assertEqual(schedule(300, 1200, 0), JSON.stringify({ slots: 1, spacing: 1200, travel: 1200, cycle: 1200 }), "no pool: one band");
 
         // --- statusKind ---
         const statusKinds = { normal: ["accent", "textPrimary"], muted: ["textMuted", "textMuted"], success: ["success", "success"],

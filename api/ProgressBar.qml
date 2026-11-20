@@ -14,8 +14,9 @@ import qs.singletons
 // does not know shows as the default and is logged once (ApiElements). Its thickness and
 // its ends are the theme's (Api.theme.progress).
 //
-// `wave` (1.35, false by default): the owner says the bar is moving now — a band of light
-// then passes through the filled part every Theme.duration("progressWave"); none while full,
+// `wave` (1.35, false by default): the owner says the bar is moving now — bands of light
+// then pass through the filled part, a new one every Theme.duration("progressWave"), each
+// crossing in Theme.duration("progressWaveTravel"); none while full,
 // of unknown length, hidden, or with reduced motion (ApiElementRules.progressWaves). The bar
 // does not judge that itself: a stalled job sets it false.
 //
