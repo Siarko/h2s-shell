@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.33" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.34" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -475,13 +475,17 @@ import qs.singletons.network
 //
 // And these types (files beside this one):
 //   SettingEditor, SectionTitle, Heading, Hint, DetailRow, SwitchRow — the settings window's
-//                          building blocks, so a module's page looks like the core's
+//                          building blocks, so a module's page looks like the core's.
+//                          SectionTitle, Heading (1.34): the children written inside are
+//                          controls at the right end of the title's line (a switch for the
+//                          section, its buttons); the title then fills the width a layout
+//                          gives it. Without children, as before
 //   CommandRunner (1.8) — running commands: any number at once, each with a time limit,
 //                          its output as it comes, one answer (below)
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way
 //   SmallButton (1.4), Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
 //                          (1.5), SettingsRow, ExpandingRow, Notice (1.6), ProgressBar,
-//                          HoverTip (1.31) — the public elements (below)
+//                          HoverTip (1.31), SidePanel (1.34) — the public elements (below)
 //   PopupWidget, BarText, BarRow, PointerArea, VpnProvider (1.7) — the base types (below)
 //   ThemeTokens, ModuleHandle, ModuleStore — what Api.theme, a handle and its store are
 //
@@ -559,6 +563,28 @@ import qs.singletons.network
 //                          text, wrapped at the tooltip's width, line breaks as spaces, cut
 //                          with "…" past 200 characters; empty, nothing shows. It takes no
 //                          room (in a layout, none) and leaves the target its clicks and hover.
+//   SidePanel              (1.34) a panel from the right over a module's settings page, the
+//                          page dimmed beside it: open (the owner sets true; the panel sets
+//                          it false when it closes itself), title (one line, plain), size:
+//                          "s" | "m" (the default) | "l" — the theme's widths, never wider
+//                          than 90 % of the page area; closed(reason) — "close" (its Close
+//                          button), "outside" (a click on the dimmed page), "escape" (Escape
+//                          closes a dropdown's list open inside it first, the panel at the
+//                          next), "replaced" (another SidePanel opened), "page" (the page
+//                          changed, the window closed, the module went away), "lock" (the
+//                          session locked). The owner setting open false closes it without
+//                          a reason. Its one child is its content (`content`, a Component):
+//                          built when it opens, destroyed when it has closed, laid out at
+//                          the panel's inner width; the panel scrolls it below a fixed
+//                          title line — the content must not scroll itself. One open per
+//                          page. Anywhere in a module's page tree; elsewhere (a popup
+//                          panel, an anchor, the bar) it does not open: `open` goes back to
+//                          false, logged once; while the session is locked neither. Takes
+//                          no room where written. In module test mode the test kit's page
+//                          frame hosts it (ModuleTestKit.pageFrame); setSessionLocked
+//                          closes it.
+//                          SidePanel { id: files; title: "Files"; size: "l"; ColumnLayout { … } }
+//                          SmallButton { label: "Files…"; onClicked: files.open = true }
 //                          The settings blocks above (SectionTitle, Heading, Hint,
 //                          SwitchRow, a SettingEditor's label, hint and unit) and a
 //                          module's page name in the settings window show their texts as

@@ -18,6 +18,8 @@ Rectangle {
     property real maximumHeight: 240
     default property alias content: _items.data
     signal closed
+    // What a side panel looks for to close an open list before itself (SideDrawer)
+    readonly property bool floatingList: true
 
     // Where it lives: the nearest overlay host above the anchor, else the window's top
     readonly property Item _host: {

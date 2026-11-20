@@ -90,6 +90,8 @@ QtObject {
             ModuleTestKit.setNetworks(null);
             // … nor a file chooser it left open, nor the chooser's lock it set
             FileChooser.testReset();
+            // … nor the side panels' lock (ModuleTestKit.setSessionLocked)
+            ApiElements.testLocked = false;
             let suite = null;
             try {
                 suite = component.createObject(root);

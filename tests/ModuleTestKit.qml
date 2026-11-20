@@ -4,6 +4,7 @@ import Quickshell
 import QtQuick
 import qs.singletons
 import qs.api
+import qs.components as Components
 
 // What a module's suites get of the shell in module test mode (module API 1.10–1.17; tests only:
 // `import qs.tests`, which a module may import in its tests alone). Under tests/run-modules.sh
@@ -105,8 +106,18 @@ import qs.api
 //                          words (PrivilegedRuns.announcementFor: PolkitRules.announcement's
 //                          { module, moduleName, moduleId, authorization, command,
 //                          commandShown, … }) or null
-//   setSessionLocked(on)   the session is locked, or not (for the runs as administrator
-//                          and the file chooser: a lock closes an open chooser, cancelled)
+//   setSessionLocked(on)   the session is locked, or not (for the runs as administrator,
+//                          the file chooser and (1.34) side panels: a lock closes an open
+//                          chooser, cancelled, and an open SidePanel, closed("lock"))
+//   pageFrame              (1.34) the settings window's frame for a module's page, as a
+//                          Component: a suite creates it in a window of its own and its page
+//                          in the frame's `body` (laid out at the frame's inner width,
+//                          scrolled by the frame), so the page's SidePanels open over it as
+//                          in the settings window:
+//                            const frame = ModuleTestKit.pageFrame.createObject(window.contentItem,
+//                                { width: 600, height: 400 });
+//                            const page = pageComponent.createObject(frame.body, { module: module });
+//                          Destroying the frame is the page going (closed("page"))
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
 //
@@ -254,7 +265,12 @@ Singleton {
         if (Modules.host.testMode) {
             PrivilegedRuns.testLocked = on === true;
             FileChooser.testLocked = on === true;
+            ApiElements.testLocked = on === true;
         }
+    }
+
+    readonly property Component pageFrame: Component {
+        Components.ModulePageFrame {}
     }
 
     // The links, notifications and chooser calls recorded, and the clock setNow set

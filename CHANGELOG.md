@@ -17,6 +17,23 @@ Settings → Notifications → "Apps choose how long", off, keeps the old behavi
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.34: `SidePanel`, a panel sliding in from the right over a module's settings page, the
+  page dimmed beside it: `open` (the owner sets it true; the panel sets it false when it
+  closes itself), `title` (one line, plain), `size` `"s"`, `"m"` (the default) or `"l"`
+  (the theme's widths, at most 90 % of the page area; another word shows as `"m"`, logged
+  once), `closed(reason)` — `"close"` (its Close button), `"outside"` (a click on the dimmed
+  page), `"escape"` (Escape closes a dropdown's list open inside it first), `"replaced"`
+  (another SidePanel opened), `"page"` (the page changed, the window closed, the module
+  went away), `"lock"` (the session locked); the owner setting `open` false closes it
+  without a reason. Its one child is its content, built when it opens, destroyed once it
+  has closed, laid out at the panel's inner width and scrolled below a fixed title line.
+  One is open per page; outside a module's settings page, or while the session is locked,
+  it does not open (`open` goes back to false, logged once); it takes no room where it is
+  written. In module test mode `ModuleTestKit.pageFrame` is the settings window's page
+  frame for a suite's own window, and `ModuleTestKit.setSessionLocked` closes an open
+  panel. `SectionTitle` and `Heading` take children: controls at the right end of the
+  title's line (a switch for the section, its buttons); without children they are as
+  before.
 - 1.33: two command runner run options. `endWithShell` (default false): the command ends
   with the shell (a crash, a restart) even without a time limit — started behind
   util-linux's `setpriv --pdeathsig KILL` where that was found, after the shell's look-up

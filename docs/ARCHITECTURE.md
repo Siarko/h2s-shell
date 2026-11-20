@@ -858,7 +858,19 @@ its child is held as a `Component`, so nothing of it exists while the row is clo
 `value` 0 to 1, below 0 a run of unknown length; `kind` `normal`, `success`, `warning` or
 `danger`; inside, `components/ProgressBar.qml`, as thick as the theme's
 `progress.thickness`) and `HoverTip` (1.31: a plain-text tooltip over its `target`, the item
-it is written inside by default, taking no room; inside, `components/HoverTip.qml`). The base types —
+it is written inside by default, taking no room; inside, `components/HoverTip.qml`).
+`SidePanel` (API 1.34) slides in from the right over a module's settings page: `open`,
+`title`, `size` (`s`, `m`, `l`: `Theme.sidePanelWidths`, at most 90 % of the page) and
+`closed(reason)` (`close`, `outside`, `escape`, `replaced`, `page`, `lock`); its child is
+held as a `Component`, built when it opens and destroyed once it has closed. It takes no
+room where it is written: the panel shows in the page frame (`components/ModulePageFrame.qml`,
+the settings window's frame for a module's page and the test kit's `pageFrame`), in its
+layer outside the page's scrolling (`components/SidePanelHost.qml`, one `components/SideDrawer.qml`).
+The element finds that layer by walking up its parents to a frame `ApiElements` knows by
+identity, so nothing a module names makes a place a frame; elsewhere it does not open.
+Which reason a close gives, and the width, are `ApiElementRules`' (`sidePanelEvent`,
+`sidePanelWidth`). The settings blocks `SectionTitle` and `Heading` take controls as their
+children, at the right end of the line (1.34). The base types —
 `PopupWidget`, `BarText`, `BarRow`, `PointerArea`, `VpnProvider` — are the shell's own
 types under their public names, not wrappers: the bar, the pointer and `VpnManager` need
 the object itself, and only the names listed in `api/Api.qml` are promised. Every element's properties and signals are pinned in
@@ -1222,7 +1234,9 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   `setPolkitAgent`, `setPolkitRequest` (`{ command }`: pkexec's request for those words,
   its message written by the kit from pkexec's algorithm, not the shell's),
   `pkexecMessage`, `polkitRequestOpen`, `polkitAnnouncement`, `setSessionLocked` (the file
-  chooser's lock too), `privilegedIdle`.
+  chooser's lock too, and side panels': an open one closes), `privilegedIdle`, and
+  `pageFrame` (the settings window's frame for a module's page, for a suite's own window:
+  the page's `SidePanel`s open in it).
 
 ### Logging
 

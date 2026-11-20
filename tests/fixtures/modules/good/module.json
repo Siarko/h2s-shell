@@ -2,7 +2,7 @@
     "id": "good",
     "name": "Good fixture",
     "version": "1.2.3",
-    "api": "1.33",
+    "api": "1.34",
     "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
     "icon": { "svg": "icon.svg" },
@@ -27,5 +27,5 @@
     ],
     "optionalPrograms": ["pkexec"],
     "testPrograms": "tests/programs",
-    "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml"]
+    "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml", "tests/GoodPanelTest.qml"]
 }

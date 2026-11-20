@@ -114,7 +114,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.33 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.34 Good fixture", "good: version, API, name");
             // (1.26) Its icon, an SVG painted in the theme's colour: on its handle as the shell draws it
             assertEqual(JSON.stringify(host.handle("good").icon),
                         JSON.stringify({ kind: "svg", glyph: "", url: "file://" + fixtures + "/good/icon.svg", colors: "theme" }),

@@ -548,24 +548,16 @@ FloatingWindow {
         }
     }
 
-    // A module's page (its manifest's settingsPages), in the core's frame: the page's margins
-    // and scrolling are the window's; the page is a plain Item (a ColumnLayout) laid out at
-    // the page's width and scrolled by its implicitHeight — it must not scroll itself. Built
-    // in a guard (ModuleContribution): it gets its module's handle as `module` and, when it
-    // declares it, `editIndex` (the profile picked), kept current.
+    // A module's page (its manifest's settingsPages), in the core's frame (ModulePageFrame):
+    // the page's margins and scrolling are the window's; the page is a plain Item (a
+    // ColumnLayout) laid out at the page's width and scrolled by its implicitHeight — it must
+    // not scroll itself —, and its SidePanels slide in over it. Built in a guard
+    // (ModuleContribution): it gets its module's handle as `module` and, when it declares it,
+    // `editIndex` (the profile picked), kept current.
     Component {
         id: _modulePageComp
-        Flickable {
-            contentWidth: width
-            contentHeight: _modulePage.implicitHeight + 2 * Theme.settings.pageMargin
-            flickableDirection: Flickable.VerticalFlick
-            boundsBehavior: Flickable.StopAtBounds
-            clip: true
+        ModulePageFrame {
             ModuleContribution {
-                id: _modulePage
-                x: Theme.settings.pageMargin
-                y: Theme.settings.pageMargin
-                width: parent.width - 2 * Theme.settings.pageMargin
                 moduleId: root._currentPage.module ?? ""
                 url: root._currentPage.url ?? ""
                 properties: ({ editIndex: root.editIndex })

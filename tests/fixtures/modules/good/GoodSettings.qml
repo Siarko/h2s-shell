@@ -24,6 +24,28 @@ ColumnLayout {
     SectionTitle {
         text: "Settings"
     }
+    // (API 1.34) A heading with a control at its end, and the panel it opens
+    SectionTitle {
+        text: "Details"
+        SmallButton {
+            objectName: "goodDetailsButton"
+            label: "Details…"
+            onClicked: details.open = true
+        }
+    }
+    SidePanel {
+        id: details
+        objectName: "goodDetailsPanel"
+        title: "Good details"
+        size: "s"
+        ColumnLayout {
+            objectName: "goodDetails"
+            Hint {
+                Layout.fillWidth: true
+                text: "Started " + String(page.module?.store.get("starts", 0) ?? 0) + " times"
+            }
+        }
+    }
     SettingEditor {
         Layout.fillWidth: true
         key: "mod.good.greeting"

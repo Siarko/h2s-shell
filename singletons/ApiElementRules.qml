@@ -36,6 +36,15 @@ Singleton {
     readonly property var progressKinds: ({ normal: "accent", success: "success", warning: "warning", danger: "error" })
     readonly property string progressKindDefault: "normal"
 
+    // (1.34) A side panel's sizes → its width at the built-in fonts, by its name in
+    // Theme.sidePanelWidths; never wider than `sidePanelShare` of the page area
+    readonly property var sidePanelSizes: ({ s: "s", m: "m", l: "l" })
+    readonly property real sidePanelShare: 0.9
+    // Why a side panel closed, by what happened (sidePanelEvent): its Close button, a click
+    // on the dimmed page, Escape, another one opening, the page or window going, a lock
+    readonly property var sidePanelReasons: ({ closeButton: "close", outsideClick: "outside", escape: "escape",
+        otherOpened: "replaced", pageGone: "page", locked: "lock" })
+
     // The longest a text a module hands a public element for one line may be, in
     // characters, before it is cut
     readonly property int textCap: 80
@@ -102,6 +111,41 @@ Singleton {
 
     function progressKind(kind) {
         return pick(progressKinds, kind, progressKindDefault);
+    }
+
+    function sidePanelSize(size) {
+        return pick(sidePanelSizes, size, sizeDefault);
+    }
+
+    // A side panel's width: its size's width (`widths`: Theme.sidePanelWidths, by size), at
+    // most `sidePanelShare` of the page area's width, never below 0
+    function sidePanelWidth(size, pageWidth, widths) {
+        const wanted = Number(widths?.[sidePanelSize(size).value]) || 0;
+        const room = Math.floor((Number(pageWidth) || 0) * sidePanelShare);
+        return Math.max(0, Math.min(wanted, room));
+    }
+
+    // What an open side panel does on `event` (a key of sidePanelReasons), `listOpen` when a
+    // dropdown's list inside it is open: { close, reason, closeList }. Escape closes that list
+    // first, the panel at the next one; every other event closes the panel. Closed already, or
+    // an event it does not know: nothing.
+    function sidePanelEvent(open, event, listOpen) {
+        const nothing = { close: false, reason: "", closeList: false };
+        if (open !== true || typeof event !== "string" || !Object.prototype.hasOwnProperty.call(sidePanelReasons, event))
+            return nothing;
+        if (event === "escape" && listOpen === true)
+            return { close: false, reason: "", closeList: true };
+        return { close: true, reason: sidePanelReasons[event], closeList: false };
+    }
+
+    // Whether a side panel asked to open may: "" when it may, else why not — no page frame
+    // above it (a popup panel, an anchor, the bar), or the session locked
+    function sidePanelRefusal(frameFound, locked) {
+        if (frameFound !== true)
+            return "not on a module's settings page";
+        if (locked === true)
+            return "the session is locked";
+        return "";
     }
 
     // Whether a mark with this need shows anything: the lock, or "not allowed"

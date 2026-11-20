@@ -517,6 +517,11 @@ Singleton {
         return Math.round(base * fontScale * (popupWidthScale.all ?? 100) / 100 * (popupWidthScale[name] ?? 100) / 100);
     }
 
+    // A side panel's width over a settings page (the public SidePanel), by its size: designed
+    // at the built-in fonts, grown with the text (ApiElementRules.sidePanelWidth caps it by
+    // the page)
+    readonly property var sidePanelWidths: ({ s: scaled(320), m: scaled(420), l: scaled(520) })
+
     // ---- Animation ----
     // The profile decides how much motion there is; the theme how it looks
     readonly property real animationSpeed: Math.max(0.1, (Profiles.value("animation.speed") ?? 100) / 100)

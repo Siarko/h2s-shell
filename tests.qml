@@ -61,6 +61,7 @@ QtObject {
     property var _buttonKinds: ButtonKindsTest {}
     property var _pillSizes: PillSizesTest {}
     property var _apiElements: ApiElementsTest {}
+    property var _sidePanel: SidePanelTest {}
     property var _lockView: LockViewTest {}
     property var _authPromptView: AuthPromptViewTest {}
     property var _moduleRules: ModuleRulesTest {}
@@ -80,7 +81,7 @@ QtObject {
     property var _anchors: AnchorsTest { after: _moduleRegistries }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _fileChooser]
+    readonly property var _asyncSuites: [_pointerInput, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _fileChooser]
     // How long the asynchronous suites may take, all together (then they fail as timed out)
     readonly property int _asyncLimitMs: 90000
     // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other

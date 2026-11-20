@@ -35,7 +35,8 @@ TestCase {
         "ExpandingRow": ["content", "hint", "label", "open"],
         "Notice": ["kind", "text"],
         "ProgressBar": ["kind", "value"],
-        "HoverTip": ["target", "text"]
+        "HoverTip": ["target", "text"],
+        "SidePanel": ["closed", "content", "open", "size", "title"]
     })
 
     // The base types: a module's object is the internal one itself, so only these names
@@ -746,6 +747,12 @@ TestCase {
         // --- the names ---
         assertEqual(JSON.stringify(_names(marked)), JSON.stringify(pinned.SmallButton), "SmallButton's public properties and signals are the pinned ones");
         assert(_names(_inside(plain)).includes("fontSize") && _names(_inside(plain)).includes("hovered"), "… the internal button's own are not among them (it has fontSize, hovered)");
+        // (1.34) The side panel: its behaviour in tests/SidePanelTest.qml
+        const sidePanel = Qt.createQmlObject("import qs.api\nSidePanel {}", bare, "PinnedSidePanel.qml");
+        assertEqual(JSON.stringify(_names(sidePanel)), JSON.stringify(pinned.SidePanel), "SidePanel's public properties and signals are the pinned ones");
+        assertEqual(JSON.stringify([sidePanel.open, sidePanel.size, sidePanel.title, sidePanel.content, sidePanel.width, sidePanel.height, sidePanel.visible]),
+                    JSON.stringify([false, "m", "", null, 0, 0, false]), "… its defaults: closed, size m, no title, no content, taking no room");
+        sidePanel.destroy();
 
         // --- beside qs.components, which has a SmallButton too ---
         const publicLast = Qt.createQmlObject("import QtQuick\nimport qs.components\nimport qs.api\nSmallButton {}", bare, "PublicLast.qml");
