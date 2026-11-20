@@ -28,10 +28,14 @@ Done slices are in [done.md](done.md), "API plan and the work around it". Left:
 Both plans are built and on `master` (core, module API 1.33) and `main` (module, manifest
 `api` 1.33); done slices in [done.md](done.md). Left, the owner's:
 
-- [ ] On a real tailnet (D6): a real send, Skip mid-file and what the peer keeps; two files in
-      parallel to one device; one file to two devices at once; a save of a large file; the
-      bus's entry for a killed send; a transfer's progress notification, its Skip, "stay" and
-      "brief".
+- [ ] Next, after the open questions: an analysis of the whole notification flow (the owner,
+      2026-11-20) — every case and possibility, logically and visually, probably two separate
+      queues (toasts that count down and toasts that stay or carry a job); whether a click on a
+      progress notification's button should close it (Cancel, Skip) or replace it ("Send now"
+      → a new one with progress only), and whether the `gdbus` path is then still needed. To be
+      discussed with the owner before a plan.
+- [ ] Taildrop on a real tailnet: the owner has used it for a while and it works; a failure and
+      a stall are hard to see because files go at once.
 - [ ] Releases: the core's minor (CHANGELOG Unreleased: progress notifications, toasts that
       follow the sender's time, module API 1.33) and the module's 0.7.0.
 - [ ] a short independent review of what changed in the plan after its last review
@@ -69,10 +73,6 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   is off, a progress `notify` shows nothing and returns `null`; a handle from `Api.notify`
   belongs to no module (only its own `close()` closes it); `toast` without `progress` is
   dropped.
-- **Transfer notifications, words not in the plan** (D7, agent's choice stands): a cancelled
-  transfer keeps its running summary with "Cancelled" / "Stopped: disconnected" as the body;
-  the body is empty at done and failed; a transfer with some files skipped and the rest sent
-  counts as done ("Sent to laptop").
 - **Taildrop's list on the page, looks not in the plan** (D4, agent's choice stands): the list
   under the Save / Open folder row, incoming files first; titles bold; the state text cut at
   half the section's width; incoming files "Receiving · 40 %"; an ended save keeps the title
@@ -87,26 +87,19 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   escaping rule with adversarial cases) and learns clicks and closing from the shell's own
   server objects by id; with another daemon owning the name the handle reads "unknown". Plain
   notifications still go through `notify-send` as before.
-- **Taildrop in the popup, choices not in the plan** (D5, agent's choice stands): "Send file…"
-  works while a send to that device runs; a new Send clears that device's last result in the
-  popup (the page keeps it); a save stays listed until both views clear it; "Saving 1 file",
-  "Saved X" / "Saved 3 files" / "Saved 2 of 3"; ended saves get a "×" in the popup.
-- **Taildrop words and choices not in the plan** (D1, agent's choice stands): a queued file
+- **Taildrop words** (D1; the owner 2026-11-20: kept for now, the held-back file rule confirmed): a queued file
   "Queued"; a running file of unknown size "Sending…" / "Saving…"; a failure without a reason
   "Failed"; save reasons "Bad name", "Not fetched", "No free name"; a one-file title
   "To laptop · 1 file". A file held back because the same name is already going to that
   device waits while the files behind it may start (the plan says only "in order").
 - **Progress on a card** (N1, agent's choice stands): an action on a resident notification
   keeps its entry for the default action and the inline reply too, not only the buttons.
-- **Taildrop sends, choices not in the plan** (D2, agent's choice stands): files the check
-  refuses become failed files with the reason ("Sent 2 of 6 to peer4"); request refusals
-  ("Needs the operator", "Device is offline") get their own line; the page's Cancel stops
-  every send and Clear removes all ended ones.
 - **Toasts and the sender's time, choices not in the plan** (N5, agent's choice stands): with
   the limit of staying toasts reached, a staying toast at the head of the queue waits and later
   ordinary toasts may show past it; in "One at a time" a toast with the app's own time takes the
   one slot (it waits behind a shown ordinary toast); changing "Show each toast for" while a
-  toast counts restarts its count from full; the release holding it is a minor.
+  toast counts restarts its count from full; the release holding it is a minor (the owner
+  2026-11-20: minor).
 
 ## Left open by done work
 
@@ -255,7 +248,8 @@ Still work or a known risk; the detail is in [done.md](done.md).
 
 What steps 3–6 must leave possible for 13–15: [plans/api-next/versioning.md](plans/api-next/versioning.md) §11.
 
-Later: pttd (dictation) as its own module in its own repository (was 11.24; protocol in
+Later: Taildrop's history of sends with "send again" (a file no longer there handled; the
+owner 2026-11-20); pttd (dictation) as its own module in its own repository (was 11.24; protocol in
 [pttd-protocol.md](pttd-protocol.md)); global default programs (the terminal among them);
 a NixOS option for modules (`programs.h2s-shell.modules`) and module signatures; a UI texts
 pass with translations, the owner reviewing the voice; documentation as a site with
