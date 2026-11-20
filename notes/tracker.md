@@ -7,6 +7,12 @@ go to [done.md](done.md) in full. Plans are in [plans/](plans/); how sessions wo
 
 ## Now
 
+**Overnight run 2026-11-21/22 (the owner's rules):** do everything without bigger interface
+changes first; for steps with views, prepare plans and mockups and stop there. Merging,
+restarting and testing are allowed also while the screen is locked (the machines are in a safe
+place; the PC has no lock screen). No computer should sleep (the laptop is plugged in), so
+`lockOnSleep` off by default needs no pinning on these machines. No usage limit set.
+
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
 and the notification flow (three toast queues, moving and pinning, the HUD clear of the bar)
