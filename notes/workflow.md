@@ -118,7 +118,8 @@ under `singletons/`, a full restart is needed; the automatic reload keeps the ol
 ## Notes
 
 - `notes/tracker.md` holds only what is open: the state, what remains, the owner's open
-  points, decisions and the backlog. A finished item moves to `notes/done.md` in full the
+  points and the backlog. The owner's decisions are in `notes/decisions.md` (new ones are
+  added there). A finished item moves to `notes/done.md` in full the
   moment it is done; no "done" lines stay in the tracker.
 - Plan slices are named by what they are; their code (C1, U2 …) only in brackets.
 - Decisions the plan does not cover (behaviour, security rules, user-visible wording or

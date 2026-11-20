@@ -23,8 +23,9 @@ Working notes live in **`notes/`** — not documentation, may be out of date, ne
 from `docs/` or the README:
 
 - **[notes/tracker.md](notes/tracker.md)** — the one tracker for the shell and its
-  modules: what is next, the order of work, the owner's decisions. **Start here when
-  resuming work.**
+  modules: what is next, the order of work, open points. **Start here when resuming work.**
+- **[notes/decisions.md](notes/decisions.md)** — the owner's decisions, by topic; read the
+  topic you work on.
 - **[notes/workflow.md](notes/workflow.md)** — how sessions work: roles, mockups first,
   review, briefs, what must not be touched, the two machines, deploying, git.
 - **[notes/done.md](notes/done.md)** — done items, numbers kept ("TODO 11.22" in a commit
