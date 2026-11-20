@@ -54,7 +54,7 @@ Singleton {
     function noteFor(vpn, whateverState): string {
         if (vpn?.type !== "provider")
             return "";
-        return VpnProviderRules.lockdownProviderNote(blocking, vpn, VpnManager.providerOf(vpn)?.lockdownNote ?? "", whateverState === true);
+        return VpnProviderRules.lockdownProviderNote(blocking, vpn, VpnProviders.providerOf(vpn)?.lockdownNote ?? "", whateverState === true);
     }
 
     // ── The script ──

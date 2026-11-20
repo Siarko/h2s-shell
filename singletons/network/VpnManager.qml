@@ -23,7 +23,7 @@ Singleton {
     // [{ uuid, name, type ("wireguard" | "vpn" | "provider"), active, state, device, … }]:
     // those up first, then the most recently used (VpnProviderRules.mergedVpns). A provider's
     // has `uuid` "<provider>:<entry>", and provider, entryId, typeName, glyph, attention.
-    readonly property var vpns: _providers.length === 0 ? nmVpns : VpnProviderRules.mergedVpns(nmVpns, providerVpns)
+    readonly property var vpns: !VpnProviders.hasProviders ? nmVpns : VpnProviderRules.mergedVpns(nmVpns, VpnProviders.providerVpns)
     readonly property var activeVpns: vpns.filter(vpn => vpn.state === "activated")
     // The kind the bar and the popup show a glyph for: WireGuard's when every VPN up is one
     readonly property string activeType: activeVpns.length === 0 ? ""
@@ -38,10 +38,10 @@ Singleton {
     // Those and the providers' entries' (their `detail`, VpnProviderRules.vpnProviderDetail),
     // by VPN id: what the views read
     readonly property var details: {
-        if (_providers.length === 0)
+        if (!VpnProviders.hasProviders)
             return nmDetails;
         const all = Object.assign({}, nmDetails);
-        for (const read of _providerReads)
+        for (const read of VpnProviders.reads)
             for (const entry of read.entries)
                 all[VpnProviderRules.vpnId(read.providerId, entry.id)] = entry.detail;
         return all;
@@ -142,158 +142,24 @@ Singleton {
         return details[vpn?.uuid]?.iface || (vpn?.type === "wireguard" ? vpn.device : "") || "";
     }
 
-    // ── VPN providers ── objects registered here (components/VpnProvider.qml registers
-    // itself), each read through VpnProviderRules.vpnProviderEntries: what is wrong is dropped
-    // and logged, never shown. A provider destroyed while registered (a module disabled)
-    // reads as gone and is dropped; a second one with a taken id is refused.
-
-    // [{ id, object, handler }] in the order registered
-    property var _providers: []
-
-    // Where a provider's contributions go. A module's provider (providerId = its module id)
-    // puts its elements under its VPNs' rows in the network popup and in their cards'
-    // opened part through the anchors popup.network.connections.vpn.row (after) and
-    // settings.network_vpn.vpns.card.settings (prepend), scope own-provider: the views give
-    // each VPN's block its provider's id (scopeId) and the VPN's context — { vpnId, entryId,
-    // vpn, provider, otherVpnsUp, otherVpns } (othersUp makes the last two) —, and the module
-    // host shows only that module's elements there. The module's old slots network.vpn.row
-    // and network.vpn.card are read as those anchors (ModuleRules.slotAliases). A provider
-    // that is no module's (the stand-in) hands its Components over itself: rowExtras and
-    // cardExtras (ownExtrasOf, built by components/VpnExtras.qml beside the anchor hosts),
-    // pageUrl. The page keeps its slot:
-    //   network.vpn.page — a page of the provider's own, opened over the VPN page from the
-    //                      card, in the settings pages' frame (title, Back, scrolling) — only
-    //                      when the provider has no settingsPage the settings window knows
-    //                      (settingsPageOf, pageOf); context { slot, vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns, close }
-    //   (contextFor makes it)
-    readonly property var slots: ({ page: "network.vpn.page" })
-
-    // Takes `provider` (a VpnProvider, or an object of its shape); false when refused: no
-    // valid providerId, or the id taken by another provider still there
-    function registerProvider(provider): bool {
-        let id;
-        try {
-            id = provider?.providerId;
-        } catch (error) {
-            id = undefined;
-        }
-        if (!VpnProviderRules.isVpnProviderId(id)) {
-            console.warn("VpnManager: a VPN provider refused: its providerId " + JSON.stringify(String(id)).slice(0, 60)
-                + " is not a lower-case letter and up to 31 of a-z 0-9 - _");
-            return false;
-        }
-        const live = _providers.filter(entry => _alive(entry));
-        if (live.some(entry => entry.object === provider))
-            return true;
-        if (live.some(entry => entry.id === id)) {
-            console.warn("VpnManager: a second VPN provider \"" + id + "\" refused: the id is taken");
-            return false;
-        }
-        for (const gone of _providers.filter(entry => !live.includes(entry)))
-            _disconnectHandler(gone);
-        const handler = (entryId, what, reason) => root._providerFailed(id, entryId, what, reason);
-        try {
-            if (typeof provider.failed?.connect === "function")
-                provider.failed.connect(handler);
-        } catch (error) {
-            console.warn("VpnManager: VPN provider \"" + id + "\": its failed signal cannot be connected:", error);
-        }
-        _providers = live.concat([{ id: id, object: provider, handler: handler }]);
-        return true;
-    }
-
-    // Lets the provider `id` go; with `provider` given, only if it is that object (a
-    // refused duplicate going away must not take the registered one with it)
-    function unregisterProvider(id: string, provider): void {
-        const leaving = _providers.filter(entry => entry.id === id && (provider === undefined || provider === null || entry.object === provider));
-        if (leaving.length === 0)
-            return;
-        leaving.forEach(entry => _disconnectHandler(entry));
-        _providers = _providers.filter(entry => !leaving.includes(entry));
-    }
-
-    function _disconnectHandler(entry) {
-        try {
-            if (typeof entry.object?.failed?.disconnect === "function")
-                entry.object.failed.disconnect(entry.handler);
-        } catch (error) {
-            // Destroyed: its connections went with it
-        }
-    }
-
-    // Still the object that registered under that id (a destroyed one reads no id)
-    function _alive(entry) {
-        try {
-            return entry.object !== null && entry.object !== undefined && entry.object.providerId === entry.id;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    // Each provider as read now: { providerId, alive, typeName, glyph, busy, canChange,
-    // ready, lockdownNote, rowExtras, cardExtras, settingsPage, pageUrl, entries, problems, object }
-    readonly property var _providerReads: _providers.map(entry => _readProvider(entry))
-    // A provider's `ready`: its entries were read successfully at least once. The core no
-    // longer judges anything by it (nothing is pruned); kept in the read for the views.
-
-    function _readProvider(entry) {
-        const gone = problem => ({
-            providerId: entry.id, alive: false, typeName: "", glyph: "", busy: false, canChange: true, ready: false,
-            lockdownNote: "", rowExtras: null, cardExtras: null, settingsPage: "", pageUrl: "", entries: [], problems: [problem], object: null
-        });
-        try {
-            const provider = entry.object;
-            if (!_alive(entry))
-                return gone(entry.id + ": gone, or its providerId changed");
-            const checked = VpnProviderRules.vpnProviderEntries(entry.id, provider.entries);
-            const text = (value, most) => typeof value === "string" ? value.slice(0, most) : "";
-            const component = value => value !== null && value !== undefined && typeof value.createObject === "function" ? value : null;
-            return {
-                providerId: entry.id, alive: true, typeName: text(provider.typeName, 60) || "VPN", glyph: text(provider.glyph, 8),
-                busy: provider.busy === true, canChange: provider.canChange !== false, ready: provider.ready === true,
-                lockdownNote: text(provider.lockdownNote, 300), rowExtras: component(provider.rowExtras),
-                cardExtras: component(provider.cardExtras), settingsPage: text(provider.settingsPage, 200),
-                pageUrl: text(provider.pageUrl, 1000),
-                entries: checked.entries, problems: checked.problems, object: provider
-            };
-        } catch (error) {
-            return gone(entry.id + ": reading it threw: " + error);
-        }
-    }
-
-    // The providers' entries as VPNs (VpnProviderRules.vpnProviderVpns), providers in the order
-    // registered
-    readonly property var providerVpns: _providerReads.reduce((all, read) => all.concat(VpnProviderRules.vpnProviderVpns(read)), [])
-
-    // { providerId: [problem…] }: what was dropped from each, logged when it changes
-    readonly property var providerProblems: {
-        const problems = {};
-        for (const read of _providerReads)
-            if (read.problems.length > 0)
-                problems[read.providerId] = read.problems;
-        return problems;
-    }
-    readonly property string _problemsText: JSON.stringify(providerProblems)
-    on_ProblemsTextChanged: {
-        for (const id in providerProblems)
-            console.warn("VpnManager: VPN provider \"" + id + "\": " + providerProblems[id].join("; "));
-    }
-
-    // The provider's read for a VPN ({ provider } or its id), or null (NetworkManager's,
-    // or its provider not there)
-    function providerOf(vpnOrId) {
-        const parts = VpnProviderRules.vpnIdParts(typeof vpnOrId === "string" ? vpnOrId : (vpnOrId?.uuid ?? ""));
-        if (parts === null || parts.provider === "")
-            return null;
-        return _providerReads.find(read => read.alive && read.providerId === parts.provider) ?? null;
-    }
+    // ── VPN providers ── their registry, reads, slots and pages are VpnProviders'; these
+    // forward to it for the views and components/VpnProvider.qml
+    readonly property var slots: VpnProviders.slots
+    function registerProvider(provider): bool { return VpnProviders.registerProvider(provider); }
+    function unregisterProvider(id: string, provider): void { VpnProviders.unregisterProvider(id, provider); }
+    function providerOf(vpnOrId) { return VpnProviders.providerOf(vpnOrId); }
+    function ownExtrasOf(place: string, vpn) { return VpnProviders.ownExtrasOf(place, vpn); }
+    function contextFor(slot: string, vpn, extra) { return VpnProviders.contextFor(slot, vpn, extra); }
+    function pageOf(vpn): string { return VpnProviders.pageOf(vpn); }
+    function settingsPageOf(vpn): string { return VpnProviders.settingsPageOf(vpn); }
+    function openSettingsPageOf(vpn): bool { return VpnProviders.openSettingsPageOf(vpn); }
 
     // An operation runs for this VPN: its buttons wait — NetworkManager's while any
     // connecting runs (a second click before the list says "activating" would bring the
     // tunnel down and up again), a provider's while it says it is busy or the entry does
     function busyFor(vpn): bool {
         if (vpn?.type === "provider") {
-            const read = providerOf(vpn);
+            const read = VpnProviders.providerOf(vpn);
             if (read === null)
                 return true;
             return read.busy || (read.entries.find(entry => entry.id === vpn.entryId)?.busy ?? false);
@@ -305,51 +171,8 @@ Singleton {
     // without an administrator "auth"; NetworkManager's "" (nothing marked, as before)
     function needFor(vpn): string {
         if (vpn?.type === "provider")
-            return (providerOf(vpn)?.canChange ?? true) ? "" : "auth";
+            return (VpnProviders.providerOf(vpn)?.canChange ?? true) ? "" : "auth";
         return "";
-    }
-
-    // A provider's own Component for under a VPN's row (`place` "row") or on its card
-    // ("card"): its rowExtras / cardExtras, null when it has none or the VPN is
-    // NetworkManager's. A module's elements come through the anchor hosts instead.
-    function ownExtrasOf(place: string, vpn) {
-        const read = providerOf(vpn);
-        if (read === null || (place !== "row" && place !== "card"))
-            return null;
-        return place === "row" ? read.rowExtras : read.cardExtras;
-    }
-
-    // Where a provider VPN's card's "Settings…" leads. One place for the provider's page: its
-    // own entry in the settings window's list when it has one (settingsPageOf: the window goes
-    // there, the list selects it), else the page in the frame over the VPN page (pageOf),
-    // else nowhere (no button).
-
-    // The provider's settingsPage when the settings window has that page now (Shell
-    // .settingsPageIds), else "" — a wrong id or a dropped page falls back to the frame
-    function settingsPageOf(vpn): string {
-        const page = providerOf(vpn)?.settingsPage ?? "";
-        return page !== "" && (Shell.settingsPageIds ?? []).includes(page) ? page : "";
-    }
-
-    // The framed page's URL of a provider's VPN ("" none) — slot network.vpn.page: the module
-    // host's (Modules.slotUrl), else the provider's own pageUrl; "" while settingsPageOf
-    // names a page (never two ways to the same content)
-    function pageOf(vpn): string {
-        const read = providerOf(vpn);
-        if (read === null || settingsPageOf(vpn) !== "")
-            return "";
-        return Modules.slotUrl(slots.page, read.providerId) || read.pageUrl || "";
-    }
-
-    // "Settings…" with a settings page to go to: opens the settings window there through the
-    // path Api.openSettings takes (Shell.openSettings) and answers true; false when there is
-    // none (the card opens pageOf's frame, if any)
-    function openSettingsPageOf(vpn): bool {
-        const page = settingsPageOf(vpn);
-        if (page === "")
-            return false;
-        Shell.openSettings(page);
-        return true;
     }
 
     // The other VPNs up beside `vpn`, as a VPN's context gives them: { names } (otherVpnsUp —
@@ -360,17 +183,6 @@ Singleton {
         const others = activeVpns.filter(other => other.uuid !== (vpn?.uuid ?? ""));
         return { names: others.map(other => other.name),
                  rows: ModuleRules.frozenRows(JSON.stringify(ModuleRules.apiVpnsUp(others, details))) };
-    }
-
-    // The context of a VPN's place for a provider's contributions: { slot, vpnId, entryId,
-    // vpn, provider, otherVpnsUp, otherVpns } and `extra` ({ close } on the page). `provider`
-    // is the provider object itself, so a contribution can call its functions and read its
-    // state. The views give the anchor blocks of a VPN's row and card the same keys, without
-    // `slot`.
-    function contextFor(slot: string, vpn, extra) {
-        const others = othersUp(vpn);
-        return Object.assign({ slot: slot, vpnId: vpn?.uuid ?? "", entryId: vpn?.entryId ?? "", vpn: vpn,
-            provider: providerOf(vpn)?.object ?? null, otherVpnsUp: others.names, otherVpns: others.rows }, extra ?? {});
     }
 
     // The provider VPNs in "VPN with a network" that are not among `vpns` now — not
@@ -406,16 +218,6 @@ Singleton {
         return kinds;
     }
 
-    // A provider's failure texts come from outside the shell (a module, its daemon's error):
-    // sent as plain text, never read as markup, so a provider need not clean them
-    function _notify(notice) {
-        Notifier.send(notice.title, { body: notice.body, format: "plain" });
-    }
-
-    function _providerFailed(providerId, entryId, what, reason) {
-        _notify(VpnProviderRules.vpnFailureNotice(String(what ?? ""), String(reason ?? "")));
-    }
-
     // Who asked for a connect or disconnect, as handed to the provider: { origin } — "user"
     // (a button: the provider may prompt, open a browser) or "network" ("VPN with a
     // network": it must never prompt nor open a browser — attention instead). Anything else
@@ -424,40 +226,10 @@ Singleton {
         return { origin: request?.origin === "network" ? "network" : "user" };
     }
 
-    // Calls `action` ("connect", "disconnect", "attend") of a provider VPN, inside a guard:
-    // only for an entry the provider reports; a throw is logged and said as a failure.
-    // `request` (connect, disconnect) goes along as the second argument.
-    function _callProvider(id, action, what, request) {
-        const parts = VpnProviderRules.vpnIdParts(id);
-        const read = providerOf(id);
-        if (parts === null || read === null) {
-            console.warn("VpnManager: " + action + " " + id + ": no such VPN provider here");
-            return false;
-        }
-        const entry = read.entries.find(item => item.id === parts.entry);
-        if (!entry) {
-            console.warn("VpnManager: " + action + " " + id + ": the provider reports no such VPN");
-            return false;
-        }
-        try {
-            if (typeof read.object[action] !== "function")
-                return false;
-            if (request === undefined)
-                read.object[action](parts.entry);
-            else
-                read.object[action](parts.entry, request);
-            return true;
-        } catch (error) {
-            console.warn("VpnManager: VPN provider \"" + read.providerId + "\": " + action + " threw:", error);
-            _notify(VpnProviderRules.vpnFailureNotice(what + " " + entry.name, String(error)));
-            return false;
-        }
-    }
-
     // The provider's action for a VPN that needs the user (its attention's action): always
     // the user's doing (a button), so it takes no request
     function attend(id: string): void {
-        _callProvider(id, "attend", "Attending to");
+        VpnProviders.call(id, "attend", "Attending to");
     }
 
     // ── Connect or the provider's action ── the core never connects an entry that needs the
@@ -506,8 +278,8 @@ Singleton {
     on_WithNetworksTextChanged: Qt.callLater(_followNetworks)
 
     // The providers' VPNs and states changed, one came or went: followed again
-    readonly property string _providerKey: _providerReads.map(read => read.providerId + (read.ready ? "+" : "-")).join(" ") + "|"
-        + providerVpns.map(vpn => vpn.uuid + ":" + vpn.state + (vpn.attention ? ":!" : "")).join(" ")
+    readonly property string _providerKey: VpnProviders.reads.map(read => read.providerId + (read.ready ? "+" : "-")).join(" ") + "|"
+        + VpnProviders.providerVpns.map(vpn => vpn.uuid + ":" + vpn.state + (vpn.attention ? ":!" : "")).join(" ")
     on_ProviderKeyChanged: Qt.callLater(_followNetworks)
 
     Connections {
@@ -535,7 +307,7 @@ Singleton {
             pending = {};
         }
         return Object.keys(pending).some(id => NetworkProfiles.profiles.some(profile => profile.uuid === id)
-            || providerVpns.some(vpn => vpn.uuid === id));
+            || VpnProviders.providerVpns.some(vpn => vpn.uuid === id));
     }
     Timer {
         interval: 30000
@@ -561,7 +333,7 @@ Singleton {
         } catch (error) {
             memory = {};
         }
-        const plan = VpnWithNetworkRules.vpnWithNetworkPlan(profiles, withNetworks, memory, Date.now(), providerVpns);
+        const plan = VpnWithNetworkRules.vpnWithNetworkPlan(profiles, withNetworks, memory, Date.now(), VpnProviders.providerVpns);
         const text = JSON.stringify(plan.memory);
         if (text !== Config.network.vpnMemory)
             Config.network.vpnMemory = text;
@@ -718,7 +490,7 @@ Singleton {
             return;
         }
         if (parts.provider !== "") {
-            _callProvider(uuid, "connect", "Connecting", _request(request));
+            VpnProviders.call(uuid, "connect", "Connecting", _request(request));
             return;
         }
         NetworkProfiles.activate(uuid, "");
@@ -731,7 +503,7 @@ Singleton {
             return;
         }
         if (parts.provider !== "") {
-            _callProvider(uuid, "disconnect", "Disconnecting", _request(request));
+            VpnProviders.call(uuid, "disconnect", "Disconnecting", _request(request));
             return;
         }
         NetworkProfiles.deactivate(uuid, "Disconnecting " + NetworkProfiles.nameOf(uuid));

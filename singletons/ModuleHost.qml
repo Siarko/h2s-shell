@@ -481,7 +481,7 @@ Scope {
     }
 
     // The URL of a module's contribution to a slot ("" for none): its first, by manifest
-    // order. For a slot the core loads by URL itself (VpnManager.pageOf after the merge).
+    // order. For a slot the core loads by URL itself (VpnProviders.pageOf after the merge).
     function slotUrl(slot, id) {
         return slotContributions(slot).find(entry => entry.module === id)?.component ?? "";
     }

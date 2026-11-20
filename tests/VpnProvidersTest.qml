@@ -334,7 +334,7 @@ TestCase {
             + "    providerId: \"vpt-api\"; typeName: \"Api VPN\"; ready: true\n"
             + "    entries: [{ id: \"one\", name: \"From the API\", state: \"\", attention: null, detail: {} }]\n"
             + "    function connect(entryId, request) { calls = calls.concat([\"connect \" + entryId + \" \" + request.origin]); }\n}", suite, "ApiVpnProvider.qml");
-        assert(made.registered && VpnManager.providerOf("vpt-api:one") !== null, "registry: a provider made from qs.api registers itself");
+        assert(made.registered && VpnProviders.providerOf("vpt-api:one") !== null, "registry: a provider made from qs.api registers itself");
         assertEqual(_vpn("vpt-api:one")?.name + " / " + VpnManager.typeName(_vpn("vpt-api:one")), "From the API / Api VPN", "… its entry among the VPNs, with its type name");
         VpnManager.connect("vpt-api:one", { origin: "user" });
         assertEqual(made.calls.join(), "connect one user", "… and connect reaches its function");
@@ -353,15 +353,15 @@ TestCase {
         assert(twin !== null && !twin.registered, "registry: a second provider with a taken id is refused");
         twin.add("three", "Three");
         assert(_vpn("vpt:three") === null, "registry: the refused one's entries are not shown");
-        assert(!VpnManager.registerProvider({ providerId: "Bad:Id" }) && !VpnManager.registerProvider(null)
-               && !VpnManager.registerProvider({}), "registry: no valid id — refused");
+        assert(!VpnProviders.registerProvider({ providerId: "Bad:Id" }) && !VpnProviders.registerProvider(null)
+               && !VpnProviders.registerProvider({}), "registry: no valid id — refused");
 
         // Garbage among the entries: dropped and reported, the rest shown
         fake.entries = fake.entries.concat([null, { id: "x:y", name: "colon", state: "" }, { id: "z", name: "z", state: "broken" }]);
-        assert(VpnManager.vpns.filter(vpn => vpn.provider === "vpt").length === 2 && (VpnManager.providerProblems["vpt"] ?? []).length === 3,
+        assert(VpnManager.vpns.filter(vpn => vpn.provider === "vpt").length === 2 && (VpnProviders.providerProblems["vpt"] ?? []).length === 3,
                "registry: wrong entries dropped and reported");
         fake.entries = fake.entries.filter(entry => entry !== null && entry.id !== "x:y" && entry.id !== "z");
-        assert(VpnManager.providerProblems["vpt"] === undefined, "registry: problems gone with the garbage");
+        assert(VpnProviders.providerProblems["vpt"] === undefined, "registry: problems gone with the garbage");
 
         // Dispatch by the id
         VpnManager.connect("vpt:one");
@@ -396,7 +396,7 @@ TestCase {
                "origin: asked by the user (an unknown origin is the core's \"user\"), it may prompt");
         fake.needsPrompt = false;
         VpnManager.disconnect("vpt:one");
-        assert(VpnManager.providerOf("vpt:one") !== null && VpnManager.providerOf("2f0c8d0e-1111-4222-8333-944455556666") === null,
+        assert(VpnProviders.providerOf("vpt:one") !== null && VpnProviders.providerOf("2f0c8d0e-1111-4222-8333-944455556666") === null,
                "dispatch: a UUID is NetworkManager's");
 
         // busy and canChange
@@ -478,19 +478,19 @@ TestCase {
         assertEqual(VpnManager.providerKindsAmong([]).length + VpnManager.providerKindsAmong(undefined).length, 0, "kinds: none picked — none");
 
         // A provider's own extras and the context of its places
-        assert(VpnManager.ownExtrasOf("row", _vpn("vpt:one")) === null, "own extras: none offered — none");
+        assert(VpnProviders.ownExtrasOf("row", _vpn("vpt:one")) === null, "own extras: none offered — none");
         fake.withExtras = true;
-        assert(VpnManager.ownExtrasOf("row", _vpn("vpt:one")) === fake.rowExtras && VpnManager.ownExtrasOf("card", _vpn("vpt:one")) === fake.cardExtras
-               && VpnManager.ownExtrasOf("page", _vpn("vpt:one")) === null, "own extras: the row's and the card's, nothing else");
-        assert(VpnManager.ownExtrasOf("row", { uuid: "u", type: "wireguard" }) === null, "own extras: none for NetworkManager's");
-        assertEqual(JSON.stringify(VpnManager.slots), JSON.stringify({ page: "network.vpn.page" }),
+        assert(VpnProviders.ownExtrasOf("row", _vpn("vpt:one")) === fake.rowExtras && VpnProviders.ownExtrasOf("card", _vpn("vpt:one")) === fake.cardExtras
+               && VpnProviders.ownExtrasOf("page", _vpn("vpt:one")) === null, "own extras: the row's and the card's, nothing else");
+        assert(VpnProviders.ownExtrasOf("row", { uuid: "u", type: "wireguard" }) === null, "own extras: none for NetworkManager's");
+        assertEqual(JSON.stringify(VpnProviders.slots), JSON.stringify({ page: "network.vpn.page" }),
                     "slots: only the page's (the row's and the card's are anchors, ModuleRules.slotAliases)");
-        const rowContext = VpnManager.contextFor("network.vpn.row", _vpn("vpt:one"));
-        const pageContext = VpnManager.contextFor(VpnManager.slots.page, _vpn("vpt:one"), { close: () => {} });
+        const rowContext = VpnProviders.contextFor("network.vpn.row", _vpn("vpt:one"));
+        const pageContext = VpnProviders.contextFor(VpnProviders.slots.page, _vpn("vpt:one"), { close: () => {} });
         assert(rowContext.provider === fake && rowContext.vpnId === "vpt:one" && rowContext.entryId === "one" && rowContext.slot === "network.vpn.row"
                && pageContext.provider === fake && typeof pageContext.close === "function",
                "slots: a contribution's context carries the provider object itself");
-        assert(VpnManager.contextFor("network.vpn.row", { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
+        assert(VpnProviders.contextFor("network.vpn.row", { uuid: "u", type: "wireguard" }).provider === null, "slots: no provider for NetworkManager's");
         assert(Object.isFrozen(rowContext.otherVpns) && JSON.stringify(rowContext.otherVpns.map(vpn => vpn.name)) === JSON.stringify(rowContext.otherVpnsUp)
                && rowContext.otherVpns.every(vpn => Object.isFrozen(vpn) && "fullTunnel" in vpn && "setsDns" in vpn && "routes" in vpn),
                "slots: otherVpns — the other VPNs up as Api.vpnsUp's rows, beside their names");
@@ -508,27 +508,33 @@ TestCase {
         const opened = [];
         const onOpen = pageId => opened.push(pageId);
         Shell.openSettings.connect(onOpen);
-        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")) === "",
+        assert(VpnProviders.settingsPageOf(_vpn("vpt:one")) === "" && VpnProviders.pageOf(_vpn("vpt:one")) === "",
                "settings page: neither declared — no settings page, no framed page (no button)");
         fake.withPage = true;
-        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
+        assert(VpnProviders.settingsPageOf(_vpn("vpt:one")) === "" && VpnProviders.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
                "settings page: a page but no settingsPage — the framed page");
-        assert(!VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 0, "… Settings… does not navigate (the card opens the frame)");
+        assert(!VpnProviders.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 0, "… Settings… does not navigate (the card opens the frame)");
         fake.settingsPage = "vpt-page";
-        assertEqual(VpnManager.settingsPageOf(_vpn("vpt:one")), "vpt-page", "settings page: declared and in the window's list — that page");
-        assertEqual(VpnManager.pageOf(_vpn("vpt:one")), "", "… and no framed copy of it");
-        assert(VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.join(",") === "vpt-page",
+        assertEqual(VpnProviders.settingsPageOf(_vpn("vpt:one")), "vpt-page", "settings page: declared and in the window's list — that page");
+        assertEqual(VpnProviders.pageOf(_vpn("vpt:one")), "", "… and no framed copy of it");
+        // VpnManager forwards these for the views and components/VpnProvider.qml
+        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "vpt-page" && VpnManager.pageOf(_vpn("vpt:one")) === ""
+               && VpnManager.providerOf("vpt:one") === VpnProviders.providerOf("vpt:one") && VpnManager.slots === VpnProviders.slots
+               && VpnManager.ownExtrasOf("row", _vpn("vpt:one")) === VpnProviders.ownExtrasOf("row", _vpn("vpt:one"))
+               && VpnManager.contextFor("x", _vpn("vpt:one")).provider === fake,
+               "forwarders: VpnManager answers as VpnProviders");
+        assert(VpnProviders.openSettingsPageOf(_vpn("vpt:one")) && opened.join(",") === "vpt-page",
                "… Settings… goes there through Shell.openSettings (Api.openSettings' path): " + opened.join(","));
         fake.settingsPage = "vpt-nowhere";
-        assert(VpnManager.settingsPageOf(_vpn("vpt:one")) === "" && VpnManager.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
+        assert(VpnProviders.settingsPageOf(_vpn("vpt:one")) === "" && VpnProviders.pageOf(_vpn("vpt:one")).endsWith("/tests/FakeVpnProviderPage.qml"),
                "settings page: an id the window does not have — falls back to the framed page");
-        assert(!VpnManager.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 1, "… and does not navigate");
+        assert(!VpnProviders.openSettingsPageOf(_vpn("vpt:one")) && opened.length === 1, "… and does not navigate");
         fake.withPage = false;
-        assertEqual(VpnManager.pageOf(_vpn("vpt:one")), "", "… nor a page: nothing");
+        assertEqual(VpnProviders.pageOf(_vpn("vpt:one")), "", "… nor a page: nothing");
         fake.settingsPage = "vpt-page";
         Shell.settingsPageIds = ["general"];
-        assertEqual(VpnManager.settingsPageOf(_vpn("vpt:one")), "", "settings page: the page left the window's list (its module off) — not offered");
-        assertEqual(VpnManager.settingsPageOf({ uuid: "u", type: "wireguard" }), "", "settings page: none for NetworkManager's");
+        assertEqual(VpnProviders.settingsPageOf(_vpn("vpt:one")), "", "settings page: the page left the window's list (its module off) — not offered");
+        assertEqual(VpnProviders.settingsPageOf({ uuid: "u", type: "wireguard" }), "", "settings page: none for NetworkManager's");
         Shell.openSettings.disconnect(onOpen);
         fake.settingsPage = "";
         Shell.settingsPageIds = savedPageIds;
@@ -541,12 +547,12 @@ TestCase {
         // Hostile providers: properties that throw, a connect that throws
         const thrower = { providerId: "vpt-thrower" };
         Object.defineProperty(thrower, "entries", { get: () => { throw new Error("boom"); } });
-        assert(VpnManager.registerProvider(thrower), "hostile: a plain object of the shape registers");
-        assert((VpnManager.providerProblems["vpt-thrower"] ?? []).join(" ").indexOf("threw") >= 0 && _vpn("vpt:one") !== null,
+        assert(VpnProviders.registerProvider(thrower), "hostile: a plain object of the shape registers");
+        assert((VpnProviders.providerProblems["vpt-thrower"] ?? []).join(" ").indexOf("threw") >= 0 && _vpn("vpt:one") !== null,
                "hostile: entries that throw — none of its shown, reported, the others unaffected");
-        VpnManager.unregisterProvider("vpt-thrower");
+        VpnProviders.unregisterProvider("vpt-thrower");
         const breaking = { providerId: "vpt-breaking", entries: [{ id: "b", name: "B", state: "" }], connect: () => { throw new Error("no"); } };
-        VpnManager.registerProvider(breaking);
+        VpnProviders.registerProvider(breaking);
         const savedRecording = Notifier.recordOnly;
         Notifier.recordOnly = true;
         VpnManager.connect("vpt-breaking:b");
@@ -554,7 +560,7 @@ TestCase {
         Notifier.recordOnly = savedRecording;
         assert(thrown?.summary === "Connecting B failed" && String(thrown?.body).indexOf("no") >= 0,
                "hostile: a connect that throws — logged and said as a failure");
-        VpnManager.unregisterProvider("vpt-breaking");
+        VpnProviders.unregisterProvider("vpt-breaking");
         assert(_vpn("vpt-breaking:b") === null, "hostile: unregistered — gone");
 
         // Unregistering while connected: its VPN leaves the list
@@ -563,7 +569,7 @@ TestCase {
         second.add("s", "S");
         second.setState("s", "activated");
         assert(_vpn("vpt-second:s") !== null, "unregister: registered");
-        VpnManager.unregisterProvider("vpt-second", second);
+        VpnProviders.unregisterProvider("vpt-second", second);
         assert(_vpn("vpt-second:s") === null && _vpn("vpt:two") !== null, "unregister: its VPN gone while connected, the others stay");
         second.destroy();
         twin.destroy();
@@ -576,7 +582,7 @@ TestCase {
         if (loaded !== null) {
             loaded.add("u", "U");
             assert(_vpn("vpt-byurl:u") !== null, "by URL: the same VpnManager sees its entries");
-            VpnManager.unregisterProvider("vpt-byurl", loaded);
+            VpnProviders.unregisterProvider("vpt-byurl", loaded);
             loaded.destroy();
         }
         assert(VpnManager._fakeProvider === null, "by URL: without H2S_FAKE_VPN_PROVIDER nothing is loaded by itself");
@@ -665,7 +671,7 @@ TestCase {
     // The parts that need the event loop: each step waits for its condition (`until`)
     property var _steps: [
         { until: () => suite._vpn("vpt-api:one") === null, run: () => {
-            assert(suite._vpn("vpt-api:one") === null && VpnManager.providerOf("vpt-api:one") === null, "destroyed: the provider made from qs.api left with its VPN");
+            assert(suite._vpn("vpt-api:one") === null && VpnProviders.providerOf("vpt-api:one") === null, "destroyed: the provider made from qs.api left with its VPN");
         } },
         { run: () => {
             assert(suite._vpn("vpt:one") !== null, "destroyed: the refused twin going away leaves the registered one");
@@ -825,7 +831,7 @@ TestCase {
             suite._fakeOne.destroy();
         } },
         { until: () => VpnManager.vpns.every(vpn => vpn.provider !== "vpt") && suite._row("vpt:one") === null && suite._row("vpt:two") === null, run: () => {
-            assert(VpnManager.vpns.every(vpn => vpn.provider !== "vpt") && VpnManager.providerVpns.length === 0,
+            assert(VpnManager.vpns.every(vpn => vpn.provider !== "vpt") && VpnProviders.providerVpns.length === 0,
                    "destroyed while registered (a module disabled): its VPNs gone, nothing else breaks");
             assert(VpnManager.vpns === VpnManager.nmVpns && VpnManager.details === VpnManager.nmDetails,
                    "destroyed: no provider left — NetworkManager's lists as they were");

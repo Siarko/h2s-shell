@@ -560,8 +560,8 @@ TestCase {
                    "the slot table offers network.vpn.row, .card and .page (since 1.1)");
             Modules.host.load([fixtures + "/vpn-slots", fixtures + "/vpn-page"], {});
         });
-        _then("vpn-slots and vpn-page settle, their providers registered", () => _settled() && VpnManager.providerOf("vpn-slots:one") !== null
-                                                                         && VpnManager.providerOf("vpn-page:one") !== null, () => {
+        _then("vpn-slots and vpn-page settle, their providers registered", () => _settled() && VpnProviders.providerOf("vpn-slots:one") !== null
+                                                                         && VpnProviders.providerOf("vpn-page:one") !== null, () => {
             const status = Modules.status("vpn-slots");
             assertEqual(status?.state, "loaded", "vpn-slots: loaded (api 1.1)");
             assertEqual(JSON.stringify(status?.warnings ?? null), "[]", "… no warning: its main extends VpnProvider from qs.components, its slots are offered");
@@ -587,34 +587,34 @@ TestCase {
             assertEqual(Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "vpn-page").length
                         + Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "").length, 0,
                         "… none on another provider's rows, none on NetworkManager's");
-            assertEqual(VpnManager.ownExtrasOf("row", vpn), null, "ownExtrasOf: none (its provider has no extras of its own)");
-            assertEqual(VpnManager.pageOf(vpn), "file://" + fixtures + "/vpn-slots/VpnPage.qml", "pageOf: the module's page (Modules.slotUrl)");
-            assertEqual(VpnManager.settingsPageOf(vpn), "", "settingsPageOf: none — vpn-slots names no settings page (the frame is its way)");
+            assertEqual(VpnProviders.ownExtrasOf("row", vpn), null, "ownExtrasOf: none (its provider has no extras of its own)");
+            assertEqual(VpnProviders.pageOf(vpn), "file://" + fixtures + "/vpn-slots/VpnPage.qml", "pageOf: the module's page (Modules.slotUrl)");
+            assertEqual(VpnProviders.settingsPageOf(vpn), "", "settingsPageOf: none — vpn-slots names no settings page (the frame is its way)");
             // A provider whose page is a regular settings page (settingsPage, no page slot):
             // "Settings…" goes there — the list selects it — and no framed copy is offered
             const paged = VpnManager.vpns.find(each => each.uuid === "vpn-page:one") ?? null;
             const listed = _window.pages.find(each => each.id === "vpn-page") ?? null;
             assertEqual(listed?.parent + " " + listed?.tab, "network system", "vpn-page's settings page: in the window's list under Network (System), beside VPN");
             assert(Shell.settingsPageIds.includes("vpn-page"), "… published to Shell.settingsPageIds by the window");
-            assertEqual(VpnManager.settingsPageOf(paged), "vpn-page", "settingsPageOf: the module's page, known to the window");
-            assertEqual(VpnManager.pageOf(paged), "", "pageOf: no framed copy");
+            assertEqual(VpnProviders.settingsPageOf(paged), "vpn-page", "settingsPageOf: the module's page, known to the window");
+            assertEqual(VpnProviders.pageOf(paged), "", "pageOf: no framed copy");
             // What shell.qml does with Shell.openSettings, on the suite's window
             const go = pageId => _window.selectedPage = pageId;
             Shell.openSettings.connect(go);
             _window.selectedPage = "network_vpn";
-            const navigated = VpnManager.openSettingsPageOf(paged);
+            const navigated = VpnProviders.openSettingsPageOf(paged);
             Shell.openSettings.disconnect(go);
             assert(navigated && _window.selectedPage === "vpn-page", "Settings… on its card: the window's selected page is the module's (" + _window.selectedPage + ")");
-            const context = VpnManager.contextFor(VpnManager.slots.page, vpn);
-            assert(context.provider === VpnManager.providerOf(vpn).object && Array.isArray(context.otherVpnsUp), "contextFor: the provider, otherVpnsUp");
+            const context = VpnProviders.contextFor(VpnProviders.slots.page, vpn);
+            assert(context.provider === VpnProviders.providerOf(vpn).object && Array.isArray(context.otherVpnsUp), "contextFor: the provider, otherVpnsUp");
             // A provider that is no module's: its own extras
             const fakeComponent = Qt.createComponent(Qt.resolvedUrl("FakeVpnProvider.qml"), Component.PreferSynchronous);
             const fake = fakeComponent.createObject(suite, { providerId: "vpt-own", withExtras: true, withPage: true });
             fake.add("x", "Own extras");
             const own = VpnManager.vpns.find(each => each.uuid === "vpt-own:x") ?? null;
-            assert(own !== null && VpnManager.ownExtrasOf("row", own) === fake.rowExtras
-                   && VpnManager.ownExtrasOf("card", own) === fake.cardExtras, "a provider that is no module's: its own rowExtras and cardExtras");
-            assert(VpnManager.pageOf(own).endsWith("/tests/FakeVpnProviderPage.qml"), "… and its own pageUrl");
+            assert(own !== null && VpnProviders.ownExtrasOf("row", own) === fake.rowExtras
+                   && VpnProviders.ownExtrasOf("card", own) === fake.cardExtras, "a provider that is no module's: its own rowExtras and cardExtras");
+            assert(VpnProviders.pageOf(own).endsWith("/tests/FakeVpnProviderPage.qml"), "… and its own pageUrl");
             fake.destroy();
             // The page in the core's frame, given its module's handle
             const frameComponent = Qt.createComponent(Qt.resolvedUrl("../panels/settings/VpnProviderPageFrame.qml"), Component.PreferSynchronous);
@@ -631,8 +631,8 @@ TestCase {
         _then("vpn-slots and vpn-page are off", () => Modules.status("vpn-slots")?.state === "disabled" && Modules.status("vpn-page")?.state === "disabled", () => {
             assertEqual(_window.selectedPage, "general", "vpn-page off while its page was open: the settings window falls back (General), as for any page that went");
             assert(!Shell.settingsPageIds.includes("vpn-page"), "… and its page left Shell.settingsPageIds");
-            assertEqual(VpnManager.providerOf("vpn-page:one"), null, "… its provider with it");
-            assertEqual(VpnManager.providerOf("vpn-slots:one"), null, "its provider left with its main");
+            assertEqual(VpnProviders.providerOf("vpn-page:one"), null, "… its provider with it");
+            assertEqual(VpnProviders.providerOf("vpn-slots:one"), null, "its provider left with its main");
             assertEqual(Modules.host.anchorContent("popup.network.connections.vpn.row", "after", "vpn-slots").length, 0, "… its elements with the module");
             Modules.setEnabled("vpn-slots", true);
             Modules.setEnabled("vpn-page", true);

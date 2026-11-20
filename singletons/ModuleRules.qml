@@ -77,7 +77,7 @@ Singleton {
         // provider, the one of the module whose id is the provider's providerId — a module's
         // provider uses its module id (`VpnProvider { providerId: module.moduleId }`). The row's
         // and the card's are read as their anchors since 1.23 (slotAliases: own-provider places);
-        // the page's is still a slot (VpnManager.pageOf asks here first). A provider that is no
+        // the page's is still a slot (VpnProviders.pageOf asks here first). A provider that is no
         // module's keeps its own rowExtras, cardExtras and pageUrl.
         { name: "network.vpn.row", since: "1.1",
           where: "the network popup's VPN section (panels/network/VpnSection.qml), under the row of each VPN of the module's provider",

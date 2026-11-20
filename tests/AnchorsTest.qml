@@ -2070,7 +2070,7 @@ TestCase {
         }, 80000);
         _then("the slot guard has read the shell's files", () => _slotUses !== null, () => {
             assertEqual(["network.popup.sections", "network.vpn.row", "network.vpn.card", "network.vpn.page"].map(slot => JSON.stringify(_slotUses[slot] ?? null)).join(" "),
-                        "null null null [\"singletons/network/VpnManager.qml\"]",
+                        "null null null [\"singletons/network/VpnProviders.qml\"]",
                         "the slot guard finds what still builds a slot (not comments, not the rules, not the tests): the page's, still a slot; not the popup's, the VPN row's or card's any more");
             assertEqual(ModuleRules.slotAliasProblems(ModuleRules.anchorTable, ModuleRules.slotAliases, _slotUses, _viewTextsOf(ModuleRules.anchorTable)).join("; "), "",
                         "every slot read as its anchor in this shell's table: no longer built as a slot, its view builds the block and gives what the slot gave");
@@ -2796,7 +2796,7 @@ TestCase {
                         "the element's context: the VPN as the old slot gave it, with anchor and placement");
             assertEqual([a1.context.anchor, a1.context.placement, a1.context.vpnId, a1.context.entryId, a1.context.vpn.name].join(" "),
                         "popup.network.connections.vpn.row after anchors-vpn-a:a1 a1 A one", "… its VPN, at the row's path");
-            assert(a1.context.provider === VpnManager.providerOf("anchors-vpn-a:a1").object && a1.context.provider === Modules.host.mainObject("anchors-vpn-a").provider,
+            assert(a1.context.provider === VpnProviders.providerOf("anchors-vpn-a:a1").object && a1.context.provider === Modules.host.mainObject("anchors-vpn-a").provider,
                    "… the provider object itself");
             assertEqual(JSON.stringify(a1.context.otherVpnsUp) + " " + JSON.stringify(a1.context.otherVpns), "[] []", "… no other VPN up");
             assertEqual(a1.module, Modules.handle("anchors-vpn-a"), "… its module's handle");
