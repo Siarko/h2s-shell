@@ -460,7 +460,8 @@ three queues filled, a moved toast freeing its slot, `counting` across queues an
 - `followSenderTime` stays ("Apps choose how long"). Proposed meaning with the queues: off
   → an outside app's time, 0 included, is replaced by the user's time (ordinary queue);
   critical, resident (by its own setting) and the shell's own jobs (`whileRunning` is the
-  user's own choice in the module) are not apps' times and keep their queue (question 2).
+  user's own choice in the module) are not apps' times and keep their queue (question 2);
+  a resident one with a time of its own keeps that time.
 - Page: the two limits after "Toasts in the column", then movable, then resident hide; all
   `available: _toastsOn`.
 

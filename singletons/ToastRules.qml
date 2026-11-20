@@ -58,8 +58,8 @@ Singleton {
     //     first), "own" (the sender's time: counts by itself, at once), "stays" }
     // "Apps choose how long" off replaces an outside app's time, 0 included, by the user's;
     // critical ones, resident ones and the shell's own jobs are not an app's time and keep
-    // theirs. A resident one the server times (-1) stays, unless the user hides resident
-    // ones: then it is like any other. Not for the shell's jobs: Notifier makes every handle
+    // theirs: a resident one with a time of its own keeps that time. A resident one the
+    // server times (-1) stays, unless the user hides resident ones: then it is like any other. Not for the shell's jobs: Notifier makes every handle
     // resident, so every brief or finished job would stay; theirs is what the handle sends
     // (0 while running when set so, -1 otherwise).
     function timing(args): var {
@@ -72,7 +72,7 @@ Singleton {
         const resident = !shellJob && args?.resident === true && args?.residentHide !== true;
         if (resident && (!given || asked <= 0))
             return { ms: 0, kind: "stays" };
-        if ((args?.followSender === false && !shellJob) || !given || asked < 0)
+        if ((args?.followSender === false && !shellJob && !resident) || !given || asked < 0)
             return { ms: defaultMs, kind: "default" };
         if (asked === 0)
             return { ms: 0, kind: "stays" };
@@ -184,11 +184,12 @@ Singleton {
         };
     }
 
-    // Whether a queue takes a new toast now. `conditions`: { toastsOn, centreOpen (an
-    // ordinary one is seen in the centre), fullscreenHidden (a fullscreen window on the
-    // toasts' screen, "Don't show": only critical ones) }
+    // Whether a queue takes a new toast now. `conditions`: { toastsOn, hasScreen (a screen to
+    // show it on: screenFor() for its kind is not ""), centreOpen (an ordinary one is seen in
+    // the centre), fullscreenHidden (a fullscreen window on the toasts' screen, "Don't show":
+    // only critical ones) }
     function accepts(queue, conditions): bool {
-        if (!queues.includes(queue) || conditions?.toastsOn === false)
+        if (!queues.includes(queue) || conditions?.toastsOn === false || conditions?.hasScreen === false)
             return false;
         if (conditions?.fullscreenHidden === true && queue !== "critical")
             return false;
@@ -269,13 +270,32 @@ Singleton {
         return next;
     }
 
-    // A waiting toast whose kind changed (a job ended, a sender changed its time) waits in
-    // its new queue, by its age — or, when that queue does not take it now (`conditions`, as
-    // accepts()), no longer waits. Shown and moved ones keep their place: they count down
-    // where they are (counting()).
-    function requeue(state, id, queue, conditions): var {
+    // A toast whose kind changed (a job ended, a sender changed its time, "Apps choose how
+    // long" turned back on):
+    // - waiting: it waits in its new queue, by its age — or, when that queue does not take
+    //   it now (`conditions`, as accepts()), no longer waits;
+    // - shown in ordinary and now staying (or critical): it would hold the ordinary slot
+    //   without counting down, so it goes to its new queue — shown there while it has room
+    //   (`limit`: limits(); none: the defaults), else waiting there by age — and the ordinary
+    //   slot is free; a queue that does not take it now leaves it where it is;
+    // - shown in critical or staying, or a modal: it keeps its place and counts down where
+    //   it is (counting()).
+    function requeue(state, id, queue, conditions, limit): var {
         const at = where(state, id);
-        if (at.place !== "waiting" || at.queue === queue || !queues.includes(queue))
+        if (at.queue === queue || !queues.includes(queue))
+            return state;
+        if (at.place === "shown" && at.queue === "ordinary") {
+            if (conditions !== undefined && !accepts(queue, conditions))
+                return state;
+            const moved = _copy(state);
+            moved.shown.ordinary = moved.shown.ordinary.filter(entry => entry !== id);
+            if (moved.shown[queue].length < (limit ?? limits({}))[queue])
+                moved.shown[queue].push(id);
+            else
+                moved.waiting[queue] = _insertByAge(moved.waiting[queue], id);
+            return moved;
+        }
+        if (at.place !== "waiting")
             return state;
         const next = _copy(state);
         next.waiting[at.queue] = next.waiting[at.queue].filter(entry => entry !== id);
@@ -428,10 +448,11 @@ Singleton {
     }
 
     // A notification announced again (a job started, stalled or ended). `args`: { toastsOn,
-    // centreOpen, fullscreenHidden, alive, queue (the one it belongs to now) }
+    // hasScreen, centreOpen, fullscreenHidden, alive, queue (the one it belongs to now) }
     // → "restart" (on screen: its time starts again), "queue" (back like a new one), "none"
+    // (also with no screen to show toasts on)
     function announceEffect(state, id, args): string {
-        if (args?.alive !== true || args?.toastsOn !== true)
+        if (args?.alive !== true || args?.toastsOn !== true || args?.hasScreen !== true)
             return "none";
         const at = where(state, id);
         if (at.place === "shown" || at.place === "moved")

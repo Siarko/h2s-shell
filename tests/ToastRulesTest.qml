@@ -99,6 +99,10 @@ TestCase {
              "\"Apps choose how long\" off: a shell job on screen while running still stays");
         said({ expireTimeout: -1, shellJob: true, followSender: false }, { ms: 5000, kind: "default" },
              "a brief shell job with the setting off: the user's time");
+        said({ expireTimeout: 4000, resident: true, followSender: false }, { ms: 4000, kind: "own" },
+             "\"Apps choose how long\" off: a resident one keeps its own time");
+        said({ expireTimeout: 4000, resident: true, residentHide: true, followSender: false }, { ms: 5000, kind: "default" },
+             "resident hidden, \"Apps choose how long\" off: the user's time");
         said({ expireTimeout: 0, followSender: false }, { ms: 5000, kind: "default" },
              "\"Apps choose how long\" off: an app's stay counts down");
 
@@ -191,6 +195,8 @@ TestCase {
         assert(!R.accepts("staying", { fullscreenHidden: true }) && !R.accepts("ordinary", { fullscreenHidden: true }),
                "accepts: fullscreen \"Don't show\", nothing else");
         assert(!R.accepts("other", {}), "accepts: no such queue");
+        assert(!R.accepts("critical", { hasScreen: false }), "accepts: no screen to show it on");
+        assert(R.accepts("critical", { hasScreen: true, fullscreenHidden: true }), "accepts: a screen for a critical one");
 
         // --- enqueue, where, nextWaiting, show, fill ---
         let current = R.enqueue(empty, 1, "ordinary");
@@ -243,6 +249,17 @@ TestCase {
         same(R.requeue(screen, 4, "staying"), screen, "requeue: the same queue: nothing");
         same(R.requeue(screen, 4, "ordinary", { centreOpen: true }).waiting, { critical: [2], staying: [], ordinary: [6] },
              "requeue: to ordinary while the centre is open: no longer waits");
+        const toStaying = R.requeue(screen, 5, "staying", {}, one);
+        same(toStaying, state({ critical: [1], staying: [3] }, { critical: [2], staying: [4, 5], ordinary: [6] }),
+             "requeue: a shown ordinary one that now stays leaves the ordinary slot, waits in staying (full), by age");
+        same(R.nextWaiting(toStaying, "ordinary", one), 6, "requeue: the ordinary slot is free for the next");
+        same(R.requeue(screen, 5, "staying", {}, R.limits({ staying: 2 })).shown, { critical: [1], staying: [3, 5], ordinary: [] },
+             "requeue: a shown ordinary one that now stays shows in staying when it has room");
+        same(R.requeue(screen, 5, "staying").waiting.staying, [4, 5], "requeue: no limits given: the defaults");
+        same(R.requeue(screen, 5, "staying", { fullscreenHidden: true }, one), screen,
+             "requeue: staying does not take it now: it stays where it is");
+        assert(R.canMove(R.requeue(screen, 5, "staying", {}, R.limits({ staying: 2 })), 5, true),
+               "requeue: in staying it can be moved");
         same(R.counting(screen, { 1: "stays", 3: "stays", 5: "default" }), [5],
              "counting: critical and staying stay, ordinary counts");
         same(R.counting(screen, { 1: "stays", 3: "default", 5: "own" }), [5, 3],
@@ -297,7 +314,7 @@ TestCase {
         same(R.onScreen(moved).modals, [{ id: 3, queue: "staying", x: 100, y: 200 }], "on screen: the modals apart from the stack");
         same(R.onScreen(moved).stack.map(entry => entry.id), [1, 5], "on screen: a modal is not in the stack");
         same(R.remove(moved, 3).moved, [], "remove: a modal ends (\"×\", unpinned, its time ran out)");
-        same(R.announceEffect(moved, 3, { toastsOn: true, alive: true, queue: "ordinary" }), "restart", "announce: a modal starts its time again");
+        same(R.announceEffect(moved, 3, { toastsOn: true, hasScreen: true, alive: true, queue: "ordinary" }), "restart", "announce: a modal starts its time again");
 
         // --- modals: pinned from the centre ---
         same(R.pin(empty, 9, "ordinary").moved, [{ id: 9, queue: "ordinary", x: null, y: null }], "pin: one in no queue, not placed yet");
@@ -321,7 +338,7 @@ TestCase {
         same(R.clampToScreen(NaN, "x", 300, 100, 1920, 1080), { x: 0, y: 0 }, "clamp: not numbers: the corner");
 
         // --- a notification announced again ---
-        const announce = (id, change) => R.announceEffect(screen, id, Object.assign({ toastsOn: true, alive: true, centreOpen: false, queue: "ordinary" }, change));
+        const announce = (id, change) => R.announceEffect(screen, id, Object.assign({ toastsOn: true, hasScreen: true, alive: true, centreOpen: false, queue: "ordinary" }, change));
         assertEqual(announce(5), "restart", "announce: shown: its time starts again");
         assertEqual(announce(6), "none", "announce: waiting already: nothing");
         assertEqual(announce(7), "queue", "announce: off screen: back like a new one");
@@ -331,5 +348,8 @@ TestCase {
         assertEqual(announce(7, { fullscreenHidden: true, queue: "critical" }), "queue", "announce: fullscreen \"Don't show\": critical still");
         assertEqual(announce(5, { toastsOn: false }), "none", "announce: toasts off: nothing");
         assertEqual(announce(5, { alive: false }), "none", "announce: its entry gone: nothing");
+        assertEqual(announce(7, { hasScreen: false }), "none", "announce: no screen to show it on: not queued");
+        assertEqual(announce(5, { hasScreen: false }), "none", "announce: no screen: nothing, as before");
+        assertEqual(announce(7, { hasScreen: undefined }), "none", "announce: the screen not known: nothing");
     }
 }
