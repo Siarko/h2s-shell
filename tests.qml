@@ -97,6 +97,8 @@ QtObject {
     property var _moduleInstaller: ModuleInstallerTest {}
     property var _moduleUpdater: ModuleUpdaterTest {}
     property var _moduleBackup: ModuleBackupTest {}
+    property var _idleRules: IdleRulesTest {}
+    property var _sleepNoticeRules: SleepNoticeRulesTest {}
     // A new suite: its one line above this comment
 
     // Every suite registered above, read from this object's own properties, and those of them
