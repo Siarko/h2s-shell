@@ -522,10 +522,44 @@ FloatingWindow {
 
                 // A new page fades in, rising a little. Its root takes its place's base from
                 // here (anchorBase, root._showPage)
+                // After "Later": a restart is pending for updated modules — over every page
+                // until the shell restarts (ModuleUpdateRules.restartBannerText)
+                Rectangle {
+                    id: _restartBanner
+                    objectName: "restartBanner"
+                    readonly property string text: Modules.updater.restartOffer === null ? ModuleUpdateRules.restartBannerText(Modules.restartNeeded) : ""
+                    visible: text !== ""
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
+                    height: visible ? _restartRow.implicitHeight + 16 : 0
+                    radius: Theme.settings.cardRadius
+                    color: Qt.alpha(Theme.warning, 0.10)
+                    border.width: Theme.border.width
+                    border.color: Theme.warning
+                    RowLayout {
+                        id: _restartRow
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
+                        spacing: 8
+                        Text {
+                            Layout.fillWidth: true
+                            text: _restartBanner.text
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSizeSmall
+                            color: Theme.warning
+                        }
+                        SmallButton {
+                            label: "Restart shell"
+                            kind: "warning"
+                            onClicked: Modules.restartShell()
+                        }
+                    }
+                }
+
                 Loader {
                     id: _page
                     property string anchorBase: ""
-                    anchors.fill: parent
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: _restartBanner.visible ? _restartBanner.bottom : parent.top }
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
                 }

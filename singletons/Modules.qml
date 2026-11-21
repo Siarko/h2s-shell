@@ -136,6 +136,25 @@ Singleton {
         return _host.status(id);
     }
 
+    // "Restart shell" (the update queue's offer, the Settings banner after "Later"): always the
+    // user's click — the launcher restarts the shell (scripts/launch.sh --restart), started
+    // detached so it outlives this process. Not in test mode, where nothing is started
+    function restartShell() {
+        if (_host.testMode)
+            return false;
+        Quickshell.execDetached(["bash", Quickshell.shellDir + "/scripts/launch.sh", "--restart"]);
+        return true;
+    }
+
+    // A notification of the updater clicked: Settings → Modules opens (the page shows what it
+    // asks for: the restart button or the changelogs)
+    Connections {
+        target: root._updater
+        function onOpenRequested(request) {
+            Shell.openSettings("modules");
+        }
+    }
+
     function setEnabled(id, enabled) {
         return _host.setEnabled(id, enabled);
     }

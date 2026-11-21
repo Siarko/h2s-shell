@@ -589,8 +589,11 @@ card shows the result under its name, and a downloaded update an "Update to …"
 "Add a module" installs one from a repository address or a folder: the downloads with their
 progress, then a preview — what it is and where it comes from, its programs, the modules it
 brings or needs, the statement for each module not part of h2s-shell, the changelog in the side
-panel — before anything moves in; "Cancel" deletes the downloads. Modules' own settings pages
-follow under the Modules group.
+panel — before anything moves in; "Cancel" deletes the downloads. Updates run in one queue
+shown on the page; an update that needs approval asks on its card ("Update" / "Keep"), "Switch
+version…" goes to a kept version or a tag, "Backups…" restores a module's settings, and when the
+queue ends the shell offers one restart ("Later" keeps a banner over Settings until then).
+Modules' own settings pages follow under the Modules group.
 
 ## External dependencies
 

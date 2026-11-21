@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.components
 import qs.hud
 import qs.singletons
@@ -61,6 +62,95 @@ Item {
     // … closed with the preview it belongs to
     readonly property bool _previewShown: _install.preview !== null
     on_PreviewShownChanged: if (!_previewShown) _panel = null
+
+    // What the installer recorded of the modules it installed (readInstalled's { ok, records,
+    // found }), read at the start and after each job — the versions kept, a refused one
+    property var _installed: ({ ok: false, records: { modules: {} }, found: {} })
+    function _readInstalled() {
+        installer?.readInstalled?.(read => root._installed = read);
+    }
+    Component.onCompleted: {
+        _readInstalled();
+        _followOpenRequest();
+    }
+    // A card's open part: "versions" or "backups" (by id), the list it shows
+    property var _shownList: ({})
+    function _toggleList(id, list) {
+        const next = Object.assign({}, _shownList);
+        next[id] = next[id] === list ? "" : list;
+        _shownList = next;
+        if (list === "backups")
+            installer?.refreshBackups?.(id);
+    }
+
+    // A notification of the updater clicked (updater.openRequest): the restart offer, or the
+    // changelogs of the modules it names in the side panel
+    Connections {
+        target: root.updater
+        function onOpenRequested(request) {
+            root._followOpenRequest();
+        }
+    }
+    function _followOpenRequest() {
+        const request = updater?.openRequest;
+        if (!request)
+            return;
+        updater.openRequest = null;
+        if (request.show === "changelog")
+            _showChangelogs((request.ids ?? []).filter(id => updater.changelogs?.[id]));
+        else if (request.show === "restart")
+            Qt.callLater(() => _queueView.restartButton.forceActiveFocus());
+    }
+    // The updater's changelogs of `ids` in the side panel
+    function _showChangelogs(ids) {
+        const sections = ids.map(id => {
+            const log = updater?.changelogs?.[id] ?? {};
+            return { key: id, title: ApiElementRules.oneLine(String(log.name || nameOf(id)), 60) + " " + (log.from ? log.from + " → " : "") + (log.to ?? ""),
+                     text: String(log.text ?? "No changelog") };
+        });
+        if (sections.length > 0)
+            _panel = { title: "What's new", sections: sections };
+    }
+
+    // Restore: asked in the modal, then said in an informing one
+    property var _restoring: null
+    function _askRestore(id, backup) {
+        const status = statusById[id];
+        if (!status || !modalHost)
+            return;
+        const subject = { id: id, directory: status.directory, backup: backup.name };
+        _ask(Object.assign(ModuleUpdateRules.restoreQuestion(nameOf(id), backup, status.version), { subject: subject }), answer => {
+            root._asked = null;
+            if (answer.cancelled || answer.button !== "restore" || !root._current(answer.subject))
+                return;
+            const refused = root.installer.restore(answer.subject.id, answer.subject.backup);
+            if (refused !== "")
+                root._setProblem(answer.subject.id, refused);
+            else
+                root._restoring = { job: root.installer.jobNumber, id: answer.subject.id, version: backup.version };
+        });
+    }
+    Connections {
+        target: root.installer
+        function onFinished(result) {
+            root._readInstalled();
+            if (!root._restoring || result?.job !== root._restoring.job)
+                return;
+            const restoring = root._restoring;
+            root._restoring = null;
+            if (result.ok)
+                root._ask(ModuleUpdateRules.restoredInfo(root.nameOf(restoring.id), restoring.version), () => root._asked = null);
+            else
+                root._setProblem(restoring.id, "Could not be restored: " + String(result.message ?? ""));
+        }
+    }
+
+    // The updates found and downloaded that are not queued or waiting: "Update all (n)"
+    readonly property var _updatable: _counted.filter(status => {
+        const check = updater?.checks?.[status.id];
+        return check?.outcome === "available" && check.downloading !== true && (check.downloadedDir ?? "") !== ""
+            && !updater?.approvals?.[status.id] && !_queued.includes(status.id);
+    }).map(status => status.id)
 
     // The card open, by module id
     property string openId: ""
@@ -300,10 +390,18 @@ Item {
             onJobChanged: root._installJob = job
         }
 
+        ModuleUpdateQueue {
+            id: _queueView
+            Layout.fillWidth: true
+            updater: root.updater
+            onRestartRequested: Modules.restartShell()
+            onReviewRequested: id => root.openId = id
+        }
+
         SettingsSection {
             anchor: "installed"
             title: "Installed"
-            topMargin: _install.visible ? 16 : 0
+            topMargin: _install.visible || _queueView.visible ? 16 : 0
             spacing: 6
             Layout.fillWidth: true
 
@@ -326,8 +424,26 @@ Item {
                     label: root.updater?.checking ? "Checking…" : "Check all"
                     available: !!root.updater && !root.updater.checking
                     onClicked: root._check("")
+                },
+                SmallButton {
+                    objectName: "updateAll"
+                    visible: root._updatable.length > 0 && !(root.updater?.automatic ?? false) && !(root.host?.safeMode ?? false)
+                    label: "Update all (" + root._updatable.length + ")"
+                    kind: "saveChange"
+                    onClicked: {
+                        const refused = root.updater.updateAll(root._updatable);
+                        root._checkAllRefusal = refused !== "" ? ApiElementRules.oneLine(refused, 200) : "";
+                    }
                 }
             ]
+
+            // How updates come: by hand, or by themselves once a day
+            SchemaSettingEditor {
+                objectName: "autoUpdateRow"
+                key: "modules.autoUpdate"
+                editIndex: 0
+                Layout.fillWidth: true
+            }
 
             Text {
                 visible: _cards.count === 0
@@ -371,6 +487,16 @@ Item {
                     // the consent box, which comes with updates)
                     readonly property var main: actions.row.find(action => action.effect === "enable" || action.effect === "disable") ?? null
                     readonly property var manifest: root.host?.manifestOf?.(status.directory ?? "") ?? null
+                    // The versions kept and on the server ("Switch version…"), the refused one
+                    readonly property var record: root._installed.records?.modules?.[modelData] ?? null
+                    readonly property var versions: record ? ModuleUpdateRules.versionList(record, root.updater?.listings?.[modelData]?.tags ?? [],
+                                                                                         root.updater?.listings?.[modelData]?.head ?? null)
+                                                           : ({ ok: false, kept: [], tags: [], more: 0, head: null })
+                    readonly property var refusedVersion: versions.kept.find(entry => entry.state === "notFinished") ?? null
+                    readonly property var consent: approval ? ModuleUpdateRules.consentBox(approval, root.nameOf(modelData), status.version) : null
+                    readonly property var changelog: root.updater?.changelogs?.[modelData] ?? null
+                    readonly property var backups: root.installer?.backupLists?.[modelData]?.backups ?? []
+                    readonly property string shownList: root._shownList[modelData] ?? ""
                     // What a question is about: when it changes, the question goes
                     readonly property string subjectKey: [status.directory, status.state, status.enabled, disabling.disabled.join(",")].join("|")
                     onSubjectKeyChanged: {
@@ -501,6 +627,134 @@ Item {
 
                     // ---- Opened ----
 
+                    // The consent box: the update waits for the user's approval, keyed to the
+                    // version directory it was asked about
+                    Rectangle {
+                        objectName: "consentBox"
+                        visible: card.consent !== null
+                        Layout.fillWidth: true
+                        implicitHeight: visible ? _consentColumn.implicitHeight + 24 : 0
+                        radius: Theme.settings.cardRadius
+                        color: Qt.alpha(Theme.warning, 0.10)
+                        border.width: Theme.border.width
+                        border.color: Theme.warning
+                        ColumnLayout {
+                            id: _consentColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+                            spacing: 6
+                            // Each reason's line, the first bold, and its detail under it
+                            KeyedModel {
+                                id: _consentLines
+                                values: [].concat(...(card.consent?.lines ?? []).map((line, index) =>
+                                    [{ key: index + "t", text: line.text, strong: index === 0 }].concat(line.detail ? [{ key: index + "d", text: line.detail, strong: false }] : [])))
+                                keyProp: "key"
+                            }
+                            Repeater {
+                                model: _consentLines.model
+                                Text {
+                                    required property string modelData
+                                    readonly property var line: _consentLines.byKey[modelData] ?? ({ text: "", strong: false })
+                                    objectName: "consentLine"
+                                    Layout.fillWidth: true
+                                    text: line.text
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: line.strong ? Theme.fontSizeBody : Theme.fontSizeSmall
+                                    font.bold: line.strong
+                                    color: line.strong ? Theme.textPrimary : Theme.textSecondary
+                                }
+                            }
+                            Text {
+                                visible: !!card.consent?.trust
+                                Layout.fillWidth: true
+                                text: card.consent?.trust ? card.consent.trust.title + " " + card.consent.trust.text : ""
+                                textFormat: Text.PlainText
+                                wrapMode: Text.Wrap
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                            }
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                SmallButton {
+                                    objectName: "consentUpdate"
+                                    label: card.consent?.updateLabel ?? ""
+                                    kind: "save"
+                                    onClicked: {
+                                        const refused = root.updater.approve(card.modelData, card.consent.subject.dir);
+                                        if (refused !== "")
+                                            root._setProblem(card.modelData, refused);
+                                    }
+                                }
+                                SmallButton {
+                                    objectName: "consentKeep"
+                                    label: card.consent?.keepLabel ?? ""
+                                    kind: "cancel"
+                                    onClicked: {
+                                        const refused = root.updater.refuse(card.modelData, card.consent.subject.dir);
+                                        if (refused !== "")
+                                            root._setProblem(card.modelData, refused);
+                                    }
+                                }
+                                SmallButton {
+                                    visible: card.changelog !== null
+                                    label: "What's new"
+                                    onClicked: root._showChangelogs([card.modelData])
+                                }
+                            }
+                        }
+                    }
+
+                    // A refused update: the old version runs; the new one can be deleted
+                    Rectangle {
+                        objectName: "notFinishedBox"
+                        visible: card.refusedVersion !== null && card.consent === null
+                        readonly property var words: ModuleUpdateRules.notFinishedText(card.refusedVersion?.version ?? "", card.status.version ?? "")
+                        Layout.fillWidth: true
+                        implicitHeight: visible ? _notFinishedColumn.implicitHeight + 24 : 0
+                        radius: Theme.settings.cardRadius
+                        color: Qt.alpha(Theme.warning, 0.10)
+                        border.width: Theme.border.width
+                        border.color: Theme.warning
+                        ColumnLayout {
+                            id: _notFinishedColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
+                            spacing: 6
+                            Text {
+                                objectName: "notFinishedTitle"
+                                Layout.fillWidth: true
+                                text: parent.parent.words.title
+                                textFormat: Text.PlainText
+                                wrapMode: Text.Wrap
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.warning
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: parent.parent.words.detail
+                                textFormat: Text.PlainText
+                                wrapMode: Text.Wrap
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textSecondary
+                            }
+                            DeleteButton {
+                                objectName: "deleteNewVersion"
+                                label: parent.parent.words.deleteLabel
+                                confirmLabel: parent.parent.words.deleteQuestion
+                                fontSize: Theme.fontSizeBody
+                                onConfirmed: {
+                                    const refused = root.installer.deleteVersion(card.modelData, card.refusedVersion.dir);
+                                    if (refused !== "")
+                                        root._setProblem(card.modelData, refused);
+                                }
+                            }
+                        }
+                    }
+
                     Text {
                         visible: text !== ""
                         Layout.fillWidth: true
@@ -596,14 +850,166 @@ Item {
                     }
 
                     // The opened card's buttons
+                    // Switch version: the kept versions (instant), the server's tags and branch
+                    // head (downloaded when chosen)
+                    Rectangle {
+                        objectName: "versionList"
+                        visible: card.shownList === "versions"
+                        Layout.fillWidth: true
+                        implicitHeight: visible ? _versionColumn.implicitHeight + 16 : 0
+                        radius: Theme.settings.cardRadius
+                        color: Theme.surfaceSunken
+                        KeyedModel {
+                            id: _versionRows
+                            values: card.versions.kept.concat(card.versions.tags, card.versions.head ? [card.versions.head] : [])
+                                .map(entry => Object.assign({ key: entry.kind + ":" + (entry.dir || entry.ref) }, entry))
+                            keyProp: "key"
+                        }
+                        ColumnLayout {
+                            id: _versionColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+                            spacing: 4
+                            Text {
+                                text: "Switch version — settings and data stay, backed up first"
+                                textFormat: Text.PlainText
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textMuted
+                            }
+                            Repeater {
+                                model: _versionRows.model
+                                RowLayout {
+                                    id: _versionRow
+                                    required property string modelData
+                                    readonly property var entry: _versionRows.byKey[modelData] ?? ({ kind: "", label: "", state: "" })
+                                    objectName: "versionRow"
+                                    Layout.fillWidth: true
+                                    spacing: 10
+                                    Text {
+                                        objectName: "versionLabel"
+                                        Layout.fillWidth: true
+                                        text: _versionRow.entry.label + (_versionRow.entry.kind === "kept" ? "" : " — from the server, downloaded when chosen")
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        font.bold: _versionRow.entry.state === "active"
+                                        color: _versionRow.entry.state === "active" ? Theme.textPrimary : Theme.textSecondary
+                                    }
+                                    SmallButton {
+                                        objectName: "versionButton"
+                                        visible: _versionRow.entry.state !== "active" && _versionRow.entry.state !== "notFinished"
+                                        label: _versionRow.entry.kind === "kept" ? "Switch" : "Download"
+                                        available: !(root.installer?.busy ?? true)
+                                        onClicked: {
+                                            const entry = _versionRow.entry;
+                                            const refused = entry.kind === "kept" ? root.installer.switchVersion(card.modelData, entry.dir)
+                                                                                  : root.installer.fetchUpdate(card.modelData, entry.ref);
+                                            if (refused !== "")
+                                                root._setProblem(card.modelData, refused);
+                                        }
+                                    }
+                                }
+                            }
+                            Text {
+                                visible: card.versions.more > 0
+                                text: card.versions.more + " older tags not listed"
+                                textFormat: Text.PlainText
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textMuted
+                            }
+                        }
+                    }
+
+                    // Configuration backups: one before every update or switch
+                    Rectangle {
+                        objectName: "backupList"
+                        visible: card.shownList === "backups"
+                        Layout.fillWidth: true
+                        implicitHeight: visible ? _backupColumn.implicitHeight + 16 : 0
+                        radius: Theme.settings.cardRadius
+                        color: Theme.surfaceSunken
+                        KeyedModel { id: _backupRows; values: card.backups; keyProp: "name" }
+                        ColumnLayout {
+                            id: _backupColumn
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+                            spacing: 4
+                            Text {
+                                text: card.backups.length > 0 ? "Settings backups — one before every update or switch" : "No backups yet"
+                                textFormat: Text.PlainText
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.textMuted
+                            }
+                            Repeater {
+                                model: _backupRows.model
+                                RowLayout {
+                                    id: _backupRow
+                                    required property string modelData
+                                    readonly property var backup: _backupRows.byKey[modelData] ?? ({ name: "", version: "" })
+                                    objectName: "backupRow"
+                                    Layout.fillWidth: true
+                                    spacing: 10
+                                    Text {
+                                        Layout.preferredWidth: 90
+                                        text: _backupRow.backup.version
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeBody
+                                        color: Theme.textPrimary
+                                    }
+                                    Text {
+                                        objectName: "backupText"
+                                        Layout.fillWidth: true
+                                        text: ModuleUpdateRules.backupRowText(_backupRow.backup)
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.textSecondary
+                                    }
+                                    SmallButton {
+                                        objectName: "restoreButton"
+                                        label: "Restore"
+                                        available: !(root.installer?.busy ?? true)
+                                        onClicked: root._askRestore(card.modelData, _backupRow.backup)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Flow {
-                        visible: card.checkAction !== null
+                        visible: card.checkAction !== null || card.changelog !== null || card.record !== null
                         Layout.fillWidth: true
                         Layout.topMargin: 4
                         spacing: 6
                         SmallButton {
+                            objectName: "whatsNewButton"
+                            visible: card.changelog !== null
+                            label: "What's new"
+                            onClicked: root._showChangelogs([card.modelData])
+                        }
+                        SmallButton {
+                            objectName: "switchVersionButton"
+                            visible: card.record !== null
+                            label: "Switch version…"
+                            checked: card.shownList === "versions"
+                            onClicked: root._toggleList(card.modelData, "versions")
+                        }
+                        SmallButton {
+                            objectName: "backupsButton"
+                            visible: card.record !== null
+                            label: "Backups…"
+                            checked: card.shownList === "backups"
+                            onClicked: root._toggleList(card.modelData, "backups")
+                        }
+                        SmallButton {
                             objectName: "checkButton"
                             label: root.updater?.checking === true && root.updater.checkingId === card.modelData ? "Checking…" : (card.checkAction?.label ?? "")
+                            visible: card.checkAction !== null
                             available: !!root.updater && !root.updater.checking
                             onClicked: root.act(card.checkAction, card.status)
                         }

@@ -468,6 +468,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   its data folder. "Enable" asks first for a module that is not part of h2s-shell; "Disable"
   asks on the button, or in a dialog listing the modules that need it and go off with it.
   The Modules group is always there; modules' own pages follow under it.
+- Settings → Modules: updates on the page. "Update all (n)" beside "Check all"; the update queue
+  with a row per module and its step (downloading with its bar and speed, verifying, backing
+  up, installing, done, approval required, not finished, failed); a module whose update needs
+  your approval shows why, with "Update" or "Keep" its running version; a refused update says
+  so and offers to delete the new version. "Switch version…" lists the kept versions and the
+  repository's tags; "Backups…" lists the settings backups, each restorable (it asks first and
+  says when it is done); "What's new" opens the changelog in the side panel; "Module updates"
+  (by hand / automatically) is on the page. When the queue ends, one offer to restart the
+  shell; "Later" leaves a banner over every Settings page until the restart, and clicking the
+  update notification opens Settings → Modules.
 - Settings → Modules: "Add a module" installs from a repository address or a folder ("Choose
   folder…" opens the system's folder dialog). Each download shows a bar with its percent and
   speed, then the preview says what the module is, where it comes from (the commit), whether

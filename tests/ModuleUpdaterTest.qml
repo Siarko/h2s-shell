@@ -330,6 +330,7 @@ TestCase {
             assertEqual(found.outcome + " " + found.version + " " + found.ref, "available 1.1.0 v1.1.0", "a check finds the newer tag");
             assert(/^1\.1\.0-[0-9a-f]{7}$/.test(found.downloadedDir), "… and downloads it in the background (" + found.downloadedDir + ")");
             assertEqual(ModuleInstallRules.checkResultText(found), "1.1.0 available", "… the card's line");
+            assert((updater.listings.wx?.tags ?? []).some(tag => tag.name === "v1.1.0"), "… what the server has kept for Switch version (" + JSON.stringify(updater.listings.wx) + ")");
             assertEqual(suite._checkingIds.join(",") + "|" + updater.checkingId, "wx|", "… checkingId named it while it ran, \"\" after");
             const log = updater.changelogs.wx;
             assert(log.text.includes("## 1.1.0") && !log.text.includes("## 1.0.0"), "… its changelog since the version running: " + JSON.stringify(log.text));

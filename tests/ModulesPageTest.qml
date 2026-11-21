@@ -90,6 +90,32 @@ TestCase {
             jobNumber++;
             return "";
         }
+        // What it recorded, backups, versions
+        property var installedRead: ({ ok: false, records: { ok: false, modules: {} }, found: {} })
+        property var backupLists: ({})
+        function readInstalled(done) {
+            Qt.callLater(() => done(installedRead));
+        }
+        function refreshBackups(id) {
+            calls = calls.concat(["refreshBackups " + id]);
+        }
+        function restore(id, name) {
+            calls = calls.concat(["restore " + id + " " + name]);
+            jobNumber++;
+            return "";
+        }
+        function switchVersion(id, dir) {
+            calls = calls.concat(["switchVersion " + id + " " + dir]);
+            return "";
+        }
+        function fetchUpdate(id, ref) {
+            calls = calls.concat(["fetchUpdate " + id + " " + ref]);
+            return "";
+        }
+        function deleteVersion(id, dir) {
+            calls = calls.concat(["deleteVersion " + id + " " + dir]);
+            return "";
+        }
         // Installing: the suite sets the job's state as the installer would
         property bool busy: false
         property string phase: ""
@@ -160,6 +186,27 @@ TestCase {
         function update(id, version) {
             calls = calls.concat(["update " + id + " " + version]);
             return "";
+        }
+        property var restartOffer: null
+        property var listings: ({})
+        property var changelogs: ({})
+        property var openRequest: null
+        signal openRequested(var request)
+        function updateAll(ids) {
+            calls = calls.concat(["updateAll " + ids.join(",")]);
+            return "";
+        }
+        function approve(id, dir) {
+            calls = calls.concat(["approve " + id + " " + dir]);
+            return "";
+        }
+        function refuse(id, dir) {
+            calls = calls.concat(["refuse " + id + " " + dir]);
+            return "";
+        }
+        function dismissRestartOffer() {
+            calls = calls.concat(["dismissRestartOffer"]);
+            restartOffer = null;
         }
     }
 
@@ -538,6 +585,7 @@ TestCase {
 
         _remove();
         _checks();
+        _updates();
         _installing();
         _safeModeBanner();
     }
@@ -694,6 +742,147 @@ TestCase {
         assertEqual(_host.calls[0], "loadWithoutSafeMode", "… to load without safe mode");
         _host.safeMode = false;
         assert(_until(() => _named(page, "safeModeBanner").length === 0), "out of safe mode: the banner gone");
+    }
+
+    // --- Updates: the queue, the consent box, a refused update, versions, backups, the restart ---
+    function _updates() {
+        _fixture();
+        _updater.queue = { rows: [], ended: true, offered: [], lastRun: 0 };
+        _updater.restartOffer = null;
+        _updater.listings = {};
+        _updater.changelogs = {};
+        const commit = letter => letter.repeat(40);
+        _installer.installedRead = { ok: true, found: {}, records: { ok: true, modules: { weather: {
+            kind: "repository", address: "https://codeberg.org/anna/weather", ref: "main", active: "1.2.0-aaaaaaa",
+            refused: { version: "1.3.0", commit: commit("b") },
+            versions: [{ dir: "1.2.0-aaaaaaa", version: "1.2.0", commit: commit("a"), fetchedAt: 2000 },
+                       { dir: "1.1.0-ccccccc", version: "1.1.0", commit: commit("c"), fetchedAt: 1000 },
+                       { dir: "1.3.0-bbbbbbb", version: "1.3.0", commit: commit("b"), fetchedAt: 3000 }] } } } };
+        // A fresh page reads it
+        pageLoader.active = false;
+        pageLoader.active = true;
+        assert(_until(() => page && _cards().length === 7), "the page again, the installer's record read");
+        assertEqual(_named(page, "autoUpdateRow").length, 1, "the automatic-updates setting on the page");
+
+        // The queue
+        _updater.queue = { ended: false, lastRun: 1, offered: [], rows: [
+            { id: "tailscale", name: "Tailscale", from: "0.6.0", to: "0.7.0", phase: "done" },
+            { id: "weather", name: "Weather", from: "1.2.0", to: "1.4.0", phase: "approval" },
+            { id: "exitmap", name: "Exit map", from: "0.2.1", to: "0.3.0", phase: "downloading", progress: { percent: 62, rate: 3250000 } }] };
+        const queueRows = () => _named(page, "queueRow").filter(row => row.visible);
+        assert(_until(() => queueRows().length === 3), "the queue: a row per module");
+        const queueSection = _all(page, child => child.kind === "section" && child.anchor === "queue")[0];
+        assertEqual(queueSection.title, "Updating · 2 of 3", "… its title line");
+        assertEqual(_named(page, "queueRowText").map(text => text.text).join("|"),
+                    "Tailscale 0.6.0 → 0.7.0 — Done|Weather 1.2.0 → 1.4.0 — Approval required|Exit map 0.2.1 → 0.3.0 — Downloading 62% · 3.1 MiB/s",
+                    "… each row's step");
+        const queueBars = _named(page, "queueBar").filter(bar => bar.visible);
+        assert(queueBars.length === 1 && queueBars[0].wave && Math.abs(queueBars[0].value - 0.62) < 0.001, "… a waving bar on the download");
+        assertEqual(_named(page, "closeQueue")[0].visible, false, "… no × while it runs");
+        const review = _named(page, "reviewButton").filter(button => button.visible);
+        assertEqual(review.length, 1, "… Review on the row waiting for approval");
+
+        // The consent box
+        _updater.approvals = { weather: { dir: "1.4.0-ddddddd", version: "1.4.0", reasons: [
+            { kind: "source", line: "Weather 1.4.0 comes from a different source.", detail: "From github.com/x/weather, was codeberg.org/anna/weather." }] } };
+        _click(review[0]);
+        assert(_until(() => _card("weather").open && _in(_card("weather"), "consentBox") !== null), "Review: the card opens on the consent box");
+        assertEqual(_named(_card("weather"), "consentLine").map(line => line.text + (line.font.bold ? "*" : "")).join("|"),
+                    "Weather 1.4.0 comes from a different source.*|From github.com/x/weather, was codeberg.org/anna/weather.", "… why it asks, the reason bold, its detail under it");
+        assertEqual(_in(_card("weather"), "consentKeep").label, "Keep 1.2.0", "… Keep the running version");
+        assertEqual(_in(_card("weather"), "notFinishedBox"), null, "… the consent box, not the refused one's, while it asks");
+        _show(_in(_card("weather"), "consentUpdate"));
+        _click(_in(_card("weather"), "consentUpdate"));
+        assertEqual(_updater.calls[_updater.calls.length - 1], "approve weather 1.4.0-ddddddd", "Update: approved, keyed to the version directory asked about");
+        _click(_in(_card("weather"), "consentKeep"));
+        assertEqual(_updater.calls[_updater.calls.length - 1], "refuse weather 1.4.0-ddddddd", "Keep: refused, keyed the same");
+        _updater.approvals = {};
+
+        // A refused update: the old version active, the new one can go
+        const notFinished = _in(_card("weather"), "notFinishedBox");
+        assert(_until(() => _in(_card("weather"), "notFinishedBox") !== null), "a refused version kept: said on the card");
+        assertEqual(_named(_card("weather"), "notFinishedTitle")[0].text, "Update to 1.3.0 not finished. 1.2.0 is active.", "… which is active");
+        const deleteNew = _in(_card("weather"), "deleteNewVersion");
+        _show(deleteNew);
+        _click(deleteNew);
+        assert(_until(() => deleteNew.asking), "Delete 1.3.0: asks on the button");
+        _click(deleteNew);
+        assertEqual(_installer.calls[_installer.calls.length - 1], "deleteVersion weather 1.3.0-bbbbbbb", "… then deletes that version directory");
+
+        // Switch version
+        _updater.listings = { weather: { tags: [{ name: "v1.4.0", version: "1.4.0", commit: commit("d") }], head: null } };
+        _show(_in(_card("weather"), "switchVersionButton"));
+        _click(_in(_card("weather"), "switchVersionButton"));
+        assert(_until(() => _in(_card("weather"), "versionList") !== null), "Switch version…: the list");
+        const versionRows = _named(_card("weather"), "versionRow");
+        assertEqual(versionRows.map(row => row.entry.label).join("|"), "1.3.0 — not finished|1.2.0 — active|1.1.0 — kept · older|v1.4.0",
+                    "… the kept versions, newest first, then the server's tags");
+        const versionButton = label => versionRows.find(row => row.entry.label === label)?.children.find(child => child.objectName === "versionButton");
+        assert(!versionButton("1.2.0 — active").visible && !versionButton("1.3.0 — not finished").visible, "… nothing to switch to for the active or the refused one");
+        _show(versionButton("1.1.0 — kept · older"));
+        _click(versionButton("1.1.0 — kept · older"));
+        assertEqual(_installer.calls[_installer.calls.length - 1], "switchVersion weather 1.1.0-ccccccc", "a kept one: switched to");
+        assertEqual(versionButton("v1.4.0").label, "Download", "a tag: downloaded when chosen");
+        _click(versionButton("v1.4.0"));
+        assertEqual(_installer.calls[_installer.calls.length - 1], "fetchUpdate weather v1.4.0", "… through the installer");
+
+        // Backups and Restore
+        const at = new Date(2026, 10, 19, 10, 12).getTime();
+        _installer.backupLists = { weather: { ok: true, unknown: [], backups: [{ name: "1.1.0-ccccccc-20261119", version: "1.1.0", takenAt: at, reason: "update", includesData: true }] } };
+        _show(_in(_card("weather"), "backupsButton"));
+        _click(_in(_card("weather"), "backupsButton"));
+        assert(_until(() => _in(_card("weather"), "backupList") !== null), "Backups…: the list");
+        assertEqual(_installer.calls[_installer.calls.length - 1], "refreshBackups weather", "… read again");
+        assertEqual(_named(_card("weather"), "backupText")[0].text, "19 Nov 10:12 · before an update · data included", "… each with when, why, what");
+        _show(_in(_card("weather"), "restoreButton"));
+        _click(_in(_card("weather"), "restoreButton"));
+        assert(_until(_modalReady), "Restore asks in the modal");
+        assertEqual(_named(modal.modal, "modalTitle")[0].text, "Restore Weather's settings from 1.1.0?", "… its title");
+        assertEqual(_modalLines()[2], "Taken with 1.1.0; 1.2.0 is active.", "… another version said");
+        _click(_modalButton("Restore"));
+        assert(_until(() => _installer.calls[_installer.calls.length - 1] === "restore weather 1.1.0-ccccccc-20261119"), "… restored, that backup");
+        _installer.finished({ ok: true, job: _installer.jobNumber, message: "restored", ids: ["weather"], details: {} });
+        assert(_until(() => modal.open && _named(modal.modal, "modalTitle")[0]?.text === "Settings restored"), "done: an informing modal");
+        assertEqual(modal.modal.buttonList.length, 1, "… one button");
+        _click(_named(modal.modal, "modalButton:0")[0]);
+        assert(_until(() => !modal.open), "… which closes it");
+
+        // What's new, and a notification's click
+        _updater.changelogs = { weather: { name: "Weather", from: "1.2.0", to: "1.4.0", text: "## 1.4.0\n- Hourly forecast." } };
+        _show(_in(_card("weather"), "whatsNewButton"));
+        _click(_in(_card("weather"), "whatsNewButton"));
+        const drawer = _named(page, "changelogPanel")[0];
+        assert(_until(() => drawer.open && _named(drawer, "changelogText")[0]?.text === "## 1.4.0\n- Hourly forecast."), "What's new: the changelog in the side panel");
+        drawer.requested("closeButton");
+        assert(_until(() => !drawer.open));
+        _updater.openRequest = { page: "modules", show: "changelog", ids: ["weather"] };
+        _updater.openRequested(_updater.openRequest);
+        assert(_until(() => drawer.open), "a notification clicked: its changelogs");
+        assertEqual(_updater.openRequest, null, "… the request taken");
+        drawer.requested("closeButton");
+        assert(_until(() => !drawer.open));
+
+        // Update all; the queue's end, its restart offer
+        _updater.checks = { tailscale: { outcome: "available", version: "0.7.0", downloading: false, downloadedDir: "0.7.0-1a2b3c4" } };
+        _updater.queue = { ended: true, lastRun: 1, offered: [], rows: [{ id: "weather", name: "Weather", from: "1.2.0", to: "1.4.0", phase: "done" }] };
+        _top();
+        const updateAll = _named(page, "updateAll")[0];
+        assert(_until(() => updateAll.visible && updateAll.label === "Update all (1)"), "Update all: the updates downloaded");
+        _click(updateAll);
+        assertEqual(_updater.calls[_updater.calls.length - 1], "updateAll tailscale", "… queued");
+        _updater.automatic = true;
+        assert(_until(() => !updateAll.visible), "… not with automatic updates");
+        _updater.automatic = false;
+        _updater.restartOffer = { text: "Restart the shell to load the new files of Weather.", ids: ["weather"] };
+        assert(_until(() => _named(page, "restartOffer")[0].visible), "the queue ended: one restart offer");
+        assert(_named(page, "closeQueue")[0].visible, "… and the × on the title line");
+        _click(_named(page, "restartLater")[0]);
+        assertEqual(_updater.calls[_updater.calls.length - 1], "dismissRestartOffer", "Later: the offer goes (Settings keeps its banner)");
+        _click(_named(page, "closeQueue")[0]);
+        assert(_until(() => !queueSection.visible), "× closes the list");
+        _updater.queue = { rows: [], ended: true, offered: [], lastRun: 0 };
+        _updater.checks = {};
+        page.openId = "";
     }
 
     function _top() {

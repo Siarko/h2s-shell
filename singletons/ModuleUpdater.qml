@@ -65,6 +65,10 @@ Scope {
     // What the last checks found, by id: { outcome "current" | "available" | "failed",
     // checkedAt, version, commit, ref, reason, refused, downloading, downloadedDir }
     property var checks: ({})
+    // What the last check of each module saw on its server, by id: { tags: [{ name, version,
+    // commit }], head: { branch, commit } | null } — the "Switch version…" list's
+    // (ModuleUpdateRules.versionList)
+    property var listings: ({})
     // A check runs: which one of how many ("Checking 2 of 4…")
     property bool checking: false
     property int checkingIndex: 0
@@ -213,6 +217,7 @@ Scope {
                     done({ id: id, outcome: "failed" });
                     return;
                 }
+                listings = Object.assign({}, listings, { [id]: { tags: found.tags, head: found.head } });
                 const offer = ModuleUpdateRules.offerFor(record, found);
                 const available = offer.offer === true;
                 // A module whose row of the queue has not ended is not downloaded again: the

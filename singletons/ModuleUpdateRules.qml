@@ -335,6 +335,88 @@ Singleton {
         return notes;
     }
 
+    // ---- On the page (Settings → Modules, §4, §6.4–§6.10) ----
+
+    // The consent box of a row waiting for approval (§6.4). `approval`: the updater's
+    // approvals[id] ({ dir, version, reasons: consentFor's }); `name`, `fromVersion` the
+    // running one's. → { lines: [{ text, detail }], trust: ModuleInstallRules.trustStatement
+    // for a module that is new or from another source, else null, updateLabel "Update",
+    // keepLabel "Keep 0.4.0", subject: { dir, version } — what the answer is about }
+    function consentBox(approval, name, fromVersion) {
+        const reasons = _list(approval?.reasons);
+        const shown = _plain(name, 60);
+        const trusting = reasons.some(reason => ["source", "author", "newModule"].includes(reason?.kind));
+        return {
+            lines: reasons.map(reason => ({ text: _plain(reason?.line, 200), detail: _plain(reason?.detail, 200) })).filter(line => line.text !== ""),
+            trust: trusting ? ModuleInstallRules.trustStatement([shown]) : null,
+            updateLabel: "Update",
+            keepLabel: "Keep" + (_version(fromVersion) !== "" ? " " + _version(fromVersion) : ""),
+            subject: { dir: String(approval?.dir ?? ""), version: _version(approval?.version) }
+        };
+    }
+
+    // A refused update on its card (§6.4): { title, detail, deleteLabel, deleteQuestion } —
+    // "Update to 0.5.0 not finished. 0.4.0 is active."
+    function notFinishedText(newVersion, activeVersion) {
+        const next = _version(newVersion);
+        const active = _version(activeVersion);
+        return { title: "Update to " + next + " not finished. " + active + " is active.",
+                 detail: next + " is kept but never starts, not even after a restart.",
+                 deleteLabel: "Delete " + next, deleteQuestion: "Delete " + next + "?" };
+    }
+
+    // A moment as "19 Nov 10:12" (local time); "" for none
+    function momentText(ms) {
+        const moment = new Date(Number(ms));
+        if (!Number.isFinite(moment.getTime()))
+            return "";
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const pad = number => (number < 10 ? "0" : "") + number;
+        return moment.getDate() + " " + months[moment.getMonth()] + " " + pad(moment.getHours()) + ":" + pad(moment.getMinutes());
+    }
+
+    // Why a backup was taken, in words
+    readonly property var _backupReasonWords: ({ update: "before an update", switch: "before a switch", rollback: "before going back",
+                                                 restore: "before a restore" })
+
+    // A backup's line in the list (§6.10): "19 Nov 10:12 · before an update · data included"
+    function backupRowText(backup) {
+        const parts = [momentText(backup?.takenAt), _backupReasonWords[backup?.reason] ?? "",
+                       backup?.includesData === true ? "data included" : "settings only"];
+        return parts.filter(part => part !== "").join(" · ");
+    }
+
+    // The question before Restore (§6.10), a warning modal's spec; the subject is the caller's
+    function restoreQuestion(name, backup, activeVersion) {
+        const shown = _plain(name, 60);
+        const version = _version(backup?.version);
+        const body = ["Taken " + momentText(backup?.takenAt) + ", " + (_backupReasonWords[backup?.reason] ?? "") + ".",
+                      "The current settings are backed up first. The module restarts."];
+        if (version !== "" && version !== _version(activeVersion))
+            body.push("Taken with " + version + "; " + _version(activeVersion) + " is active.");
+        return { kind: "warning", title: "Restore " + shown + "'s settings" + (version !== "" ? " from " + version : "") + "?", body: body,
+                 buttons: [{ id: "restore", label: "Restore", kind: "warning" }], cancelLabel: "Cancel" };
+    }
+
+    // After a restore (§6.10): an informing modal (one button)
+    function restoredInfo(name, version) {
+        const shown = _plain(name, 60);
+        const from = _version(version);
+        return { kind: "success", title: "Settings restored",
+                 body: [shown + "'s settings" + (from !== "" ? " from " + from : "") + " are back. The module restarted."],
+                 buttons: [], cancelLabel: "OK" };
+    }
+
+    // The Settings-wide banner after "Later" (§6.5): "Restart the shell to finish updating
+    // Weather and Notes."; "" for none
+    function restartBannerText(names) {
+        const shown = _list(names).map(each => _plain(each, 60)).filter(each => each !== "");
+        if (shown.length === 0)
+            return "";
+        const joined = shown.length === 1 ? shown[0] : shown.slice(0, -1).join(", ") + " and " + shown[shown.length - 1];
+        return "Restart the shell to finish updating " + joined + ".";
+    }
+
     // ---- The update queue (§6.5) ----
 
     // Row phases; the queue has ended when every row is in one of `_restingPhases`

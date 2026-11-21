@@ -72,6 +72,7 @@ TestCase {
         _restartReminder();
         _backupPlan();
         _backupKeepPlan();
+        _page();
     }
 
     function _versions() {
@@ -636,5 +637,36 @@ TestCase {
         assertEqual(plan.unknown.join(","), "broken,../outside,.incoming-1.4.0-20261121-100000",
                     "backup keep: unreadable ones and staging leftovers are left alone, never counted or deleted");
         assertEqual(ModuleUpdateRules.backupKeepPlan(null).delete.length, 0, "backup keep: no list, nothing deleted");
+    }
+
+    function _page() {
+        const rules = ModuleUpdateRules;
+        const box = rules.consentBox({ dir: "0.5.0-abcdef1", version: "0.5.0", reasons: [
+            { kind: "privileged", line: "Printers 0.5.0 asks for administrator rights.", detail: "For: Add and remove printers." }] }, "Printers", "0.4.0");
+        assertEqual(box.lines.map(line => line.text + "|" + line.detail).join(";"), "Printers 0.5.0 asks for administrator rights.|For: Add and remove printers.",
+                    "consent box: its lines");
+        assertEqual(box.keepLabel + "|" + box.updateLabel + "|" + box.subject.dir + "|" + box.trust, "Keep 0.4.0|Update|0.5.0-abcdef1|null",
+                    "… Keep the running version, Update; keyed to the version directory; no statement for a privileged one");
+        assertEqual(rules.consentBox({ reasons: [{ kind: "source", line: "x" }] }, "Weather", "1.0").trust?.title, "Weather is not part of h2s-shell.",
+                    "… another source: the statement");
+        const words = rules.notFinishedText("0.5.0", "0.4.0");
+        assertEqual(words.title + "|" + words.detail + "|" + words.deleteLabel + "|" + words.deleteQuestion,
+                    "Update to 0.5.0 not finished. 0.4.0 is active.|0.5.0 is kept but never starts, not even after a restart.|Delete 0.5.0|Delete 0.5.0?",
+                    "not finished: the words");
+        const at = new Date(2026, 10, 19, 10, 12).getTime();
+        assertEqual(rules.momentText(at) + "|" + rules.momentText("x"), "19 Nov 10:12|", "moment text");
+        assertEqual(rules.backupRowText({ takenAt: at, reason: "update", includesData: true }) + "|" + rules.backupRowText({ takenAt: at, reason: "switch" }),
+                    "19 Nov 10:12 · before an update · data included|19 Nov 10:12 · before a switch · settings only", "backup row");
+        const restore = rules.restoreQuestion("Tailscale", { version: "0.5.2", takenAt: at, reason: "update" }, "0.6.0");
+        assertEqual(restore.kind + "|" + restore.title + "|" + restore.body.join("|"),
+                    "warning|Restore Tailscale's settings from 0.5.2?|Taken 19 Nov 10:12, before an update.|The current settings are backed up first. The module restarts.|Taken with 0.5.2; 0.6.0 is active.",
+                    "restore question: what, when, that the current ones are backed up, another version");
+        assertEqual(rules.restoreQuestion("T", { version: "0.6.0", takenAt: at, reason: "switch" }, "0.6.0").body.length, 2, "… the same version: no third line");
+        assertEqual(restore.buttons.map(button => button.id + "/" + button.kind).join(","), "restore/warning", "… Restore, a warning");
+        const info = rules.restoredInfo("Tailscale", "0.5.2");
+        assertEqual(info.kind + "|" + info.title + "|" + info.body.join("") + "|" + info.buttons.length + "|" + info.cancelLabel,
+                    "success|Settings restored|Tailscale's settings from 0.5.2 are back. The module restarted.|0|OK", "restored: one button informs");
+        assertEqual(rules.restartBannerText(["Weather", "Notes"]) + "|" + rules.restartBannerText(["Weather"]) + "|" + rules.restartBannerText([]),
+                    "Restart the shell to finish updating Weather and Notes.|Restart the shell to finish updating Weather.|", "restart banner");
     }
 }
