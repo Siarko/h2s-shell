@@ -1162,8 +1162,8 @@ Scope {
         }
         const plans = [plan].concat(plan.also.filter(each => each.ok));
         const steps = [].concat(...plans.map(each => each.steps));
-        const fileSteps = steps.filter(step => step.op === "unlink" || step.op === "deleteTree")
-            .map(step => ({ op: step.op === "unlink" ? "unlink" : "tree", path: step.path }));
+        const fileSteps = steps.filter(step => step.op === "unlink" || step.op === "deleteTree" || step.op === "deleteFile")
+            .map(step => ({ op: step.op === "unlink" ? "unlink" : step.op === "deleteFile" ? "file" : "tree", path: step.path }));
         for (const step of steps)
             if (step.op === "disable")
                 host.setEnabled(step.id, false);
@@ -1268,8 +1268,8 @@ Scope {
 
     // ---- Files ----
 
-    // Deletes (`tree`: a directory, never through a link), unlinks (`unlink`: a link only) or
-    // removes when empty (`prune`) each path, where ModuleInstallRules.deletionTarget allows
+    // Deletes (`tree`: a directory, never through a link; `file`: a file, a link to one
+    // removed itself), unlinks (`unlink`: a link only) or removes when empty (`prune`) each path, where ModuleInstallRules.deletionTarget allows
     // it; nothing on the way below the shell's place may be a link. → done([problems])
     function _fileOps(job, ops, done) {
         const problems = [];
@@ -1292,6 +1292,9 @@ Scope {
         _run(["sh", "-c", "while [ $# -ge 3 ]; do op=$1; r=$2; rel=$3; shift 3; p=$r/$rel; "
               + "case $rel in */*) if [ -L \"$r/${rel%%/*}\" ]; then printf 'fail\\t%s\\tleads through a link\\n' \"$p\"; continue; fi ;; esac; "
               + "if [ \"$op\" = prune ]; then { [ -d \"$p\" ] && [ ! -L \"$p\" ] && rmdir -- \"$p\" 2>/dev/null; } || true; "
+              + "elif [ \"$op\" = file ]; then "
+              + "if [ -L \"$p\" ] || [ -f \"$p\" ]; then rm -f -- \"$p\" || { printf 'fail\\t%s\\tnot deleted\\n' \"$p\"; continue; }; "
+              + "elif [ -e \"$p\" ]; then printf 'fail\\t%s\\tnot a file\\n' \"$p\"; continue; fi; "
               + "elif [ \"$op\" = unlink ]; then "
               + "if [ -L \"$p\" ]; then rm -f -- \"$p\" || { printf 'fail\\t%s\\tnot removed\\n' \"$p\"; continue; }; "
               + "elif [ -e \"$p\" ]; then printf 'fail\\t%s\\tnot a link\\n' \"$p\"; continue; fi; "

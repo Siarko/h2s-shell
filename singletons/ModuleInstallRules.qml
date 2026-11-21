@@ -628,7 +628,8 @@ Singleton {
     // → { ok, reason, subject: { id, entry }, title, lines, steps, also }
     //   `steps` in order, each { op, … }: "disable" { id }; "unlink" { path } — removes the
     //   link itself, never its target; "deleteTree" { path } — a directory the shell owns,
-    //   never followed through a link at its top; "dropRecord" { id }; "dropAcknowledgement"
+    //   never followed through a link at its top; "deleteFile" { path } — the store's file
+    //   (<stores>/<id>.json; a link there removed itself); "dropRecord" { id }; "dropAcknowledgement"
     //   { id }; "deleteSettings" { prefix } (mod.<id>. in every profile).
     //   A link placed by hand: the link only. A folder placed by hand: that folder. Installed
     //   by the shell: its link and every kept version. With data: its data directory, store,
@@ -677,9 +678,13 @@ Singleton {
         }
         steps.push({ op: "dropAcknowledgement", id: id });
         if (options?.withData === true) {
-            for (const base of [places.data, places.stores, places.backups])
-                if (base !== "")
-                    steps.push({ op: "deleteTree", path: base + "/" + id });
+            if (places.data !== "")
+                steps.push({ op: "deleteTree", path: places.data + "/" + id });
+            // The store is one file (api/ModuleStore.qml)
+            if (places.stores !== "")
+                steps.push({ op: "deleteFile", path: places.stores + "/" + id + ".json" });
+            if (places.backups !== "")
+                steps.push({ op: "deleteTree", path: places.backups + "/" + id });
             steps.push({ op: "deleteSettings", prefix: "mod." + id + "." });
             lines.push("Its data and settings are deleted too.");
         }
@@ -1577,6 +1582,10 @@ Singleton {
         const user = _cleanPath(places?.user);
         if (user !== "" && parent === user)
             return _versionDirectory(name) ? { ok: true, problem: "", root: user, relative: name } : refused("not a plain name: " + _plain(name, 60));
+        // A store's file: "<id>.json"
+        const stores = _cleanPath(places?.stores);
+        if (stores !== "" && parent === stores && name.endsWith(".json") && ModuleManifestRules.validId(name.slice(0, -5)))
+            return { ok: true, problem: "", root: stores, relative: name };
         for (const place of ["data", "stores", "backups"]) {
             const base = _cleanPath(places?.[place]);
             if (base !== "" && parent === base)

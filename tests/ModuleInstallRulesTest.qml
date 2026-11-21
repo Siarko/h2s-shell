@@ -292,7 +292,7 @@ TestCase {
         assertEqual(JSON.stringify(plan.subject), JSON.stringify({ id: "weather", entry: places.user + "/weather" }), "… keyed to what it removes");
         plan = rules.removalPlan(repository, { id: "weather", name: "Weather", version: "1.2.0" }, records.modules.weather, Object.assign({ withData: true }, options));
         assertEqual(steps(plan).split("; ").slice(5).join("; "),
-                    "deleteTree ~/.local/share/h2s-shell/module-data/weather; deleteTree ~/.config/h2s_shell/modules/weather; deleteTree ~/.local/share/h2s-shell/module-backups/weather; deleteSettings mod.weather.",
+                    "deleteTree ~/.local/share/h2s-shell/module-data/weather; deleteFile ~/.config/h2s_shell/modules/weather.json; deleteTree ~/.local/share/h2s-shell/module-backups/weather; deleteSettings mod.weather.",
                     "with data: its data directory, store, backups and settings too");
         assertEqual(plan.lines[plan.lines.length - 1], "Its data and settings are deleted too.", "… said");
         const clipboard = _source(places.versions + "/clipboard/0.2.0-1a2b3c4",
@@ -886,6 +886,8 @@ TestCase {
         assertEqual(rules.deletionTarget(places.staging + "/install.Ab12Cd", places).ok, true, "… a staging directory");
         assertEqual(rules.deletionTarget(places.stores + "/weather", places).root + " " + rules.deletionTarget(places.data + "/weather", places).root,
                     places.stores + " " + places.data, "… a store, a data directory");
+        assertEqual(rules.deletionTarget(places.stores + "/weather.json", places).relative + " " + rules.deletionTarget(places.stores + "/../x.json", places).ok
+                    + " " + rules.deletionTarget(places.stores + "/We.ather.json", places).ok, "weather.json false false", "… a store's file, only <id>.json");
         assertEqual(rules.deletionTarget(places.user, places).ok || rules.deletionTarget(home, places).ok || rules.deletionTarget("/", places).ok
                     || rules.deletionTarget(places.user + "/../x", places).ok || rules.deletionTarget(places.user + "/a/b", places).ok
                     || rules.deletionTarget(places.versions + "/weather/..", places).ok || rules.deletionTarget(places.user + "/-x", places).ok
