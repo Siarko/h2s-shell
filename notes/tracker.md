@@ -7,16 +7,13 @@ go to [done.md](done.md) in full. Plans are in [plans/](plans/); how sessions wo
 
 ## Now
 
-**The overnight run 2026-11-21/22 is over** (done.md, "The overnight run"). Built and merged:
-order of work step 0 (worktrees, flaky module tests, the deploy check), step 2's first two items
-(`lockOnSleep` off by default, the versioning rule), step 9 whole (the supervisor's limit while
-locked, other lockers before sleep, the screensaver with the lock), architecture clean-up A1–A13,
-B1–B2, D1–D4, docs D0–D1, two flaky core tests. Waiting for the owner (nothing more can be done
-without them): the PAM plan (8 questions), the modules management plan and its mockup
-(`~/src/h2s-mockups/modules-settings-planned/`, 8 questions), the revised documentation and
-architecture plans (4 + 2 questions), the sleep-lock notices' wording and hypridle; the rest of
-the order of work (steps 8, 11, 12 …) depends on those answers, and clean-up groups C and E on
-step 8 and the module's release.
+**The owner's answers of 2026-11-21 are in.** The modules management, PAM, documentation and
+architecture clean-up plans are decided and approved (each plan's "Decided" section, the short
+form in [decisions.md](decisions.md)); implementation follows in steps 8 and 11 (and 12, 7).
+The overnight run's work (done.md, "The overnight run") is on `master`. Open with the owner:
+the idle and lock flow plan's questions ([plans/idle-lock-flow.md](plans/idle-lock-flow.md),
+being answered) and the password prompt on NixOS. Next: step 8 (Modules closed for now) from
+its plan, starting with the views on the mockup.
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
@@ -50,73 +47,22 @@ plans named in done.md).
 
 ## Open points
 
-For the owner. Until answered, the agent's choice stands. (`plans/architecture-cleanup.md`
-and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises them.)
+For the owner. Until answered, the agent's choice stands.
 
 **To look at on a screen**
 
-- **The file chooser for modules** (E1, both machines): opened from a module popup that is
-  then closed, the dialog stays, has the keyboard, opens where asked, returns the pick; a
-  lock closes it; with `QT_QPA_PLATFORMTHEME=xdgdesktopportal` "several files" returns
-  several. Not tried: Ctrl/Shift+click in Qt's own dialog; "Open" in the folder dialog
-  with nothing chosen.
-- **The password prompt on a real module run** (A5, M3): seen on Arch (`/usr/bin/true`,
-  polkit 128); not yet on NixOS, and a real Tailscale action through the queue on neither.
-- **The public settings row and expanding row** (F3): value right-aligned, at most 220 px;
-  no hover on the opening line; content not indented.
+- **The password prompt on NixOS** (A5, M3): a real module run seen on Arch (`/usr/bin/true`,
+  and a real Tailscale action through the queue); not yet on NixOS.
 
 **To decide**
 
-- **Modules management plan** ([plans/modules-management.md](plans/modules-management.md)):
-  8 open questions — among them: a module not shipped would start off until confirmed, and
-  Tailscale is in use on both machines (question 2).
-- **PAM plan** ([plans/pam-config.md](plans/pam-config.md)): 8 open questions; found while
-  reading: on Arch the polkit hint in Settings is always empty (the shell reads only /etc/pam.d
-  and doesn't follow includes; polkit's stack is /usr/lib/pam.d/polkit-1), and pam_faillock makes
-  "password first, Enter for the reader" risky.
-- **Revised plans' questions** (2026-11-21): [plans/documentation.md](plans/documentation.md)
-  ends with 4, [plans/architecture-cleanup.md](plans/architecture-cleanup.md) with 2.
-
-**To decide: choices made by agents, for the owner to glance at**
-
-- **"Share this computer's settings"** (M6; the rename is the owner's, the words are the
-  agent's, to approve): the hint "Devices of the tailnet open them on port 5252 and, after
-  logging in, change them"; the prompt reads "Share this computer's settings" / "Stop sharing
-  this computer's settings"; "Web console" carries the tooltip "login.tailscale.com".
-- **Taildrop** (D4, D7, M5): the page's list puts incoming files first, titles bold, state
-  text cut at half the width. A cancelled transfer's notification keeps its summary with
-  "Cancelled" / "Stopped: disconnected"; done and failed have no body; some files skipped and
-  the rest sent counts as done. Switching Taildrop off lets running files finish and stops
-  unstarted sends; turning it on announces what arrived meanwhile once (Save), without
-  auto-saving it; the popup keeps Save and the count while off, the bar badge goes.
-- **Progress notifications** (N2, N3): the handle talks to the server with one-shot
-  `gdbus call … Notify` (escaped GVariant text) and learns clicks and closing from the
-  shell's own server — `notify-send` closes a notification after a click, so it could not
-  keep actions; with another daemon owning the name the handle reads "unknown". Test mode
-  records every `update()` without coalescing; handles are never destroyed. A module gets a
-  thin wrapper (`open`, `state`, `update`, `close`); while a module is off a progress `notify`
-  returns `null`; `toast` without `progress` is dropped.
-- **Toasts** (N5, notification flow slice 4): with the limit of staying toasts reached, later
-  ordinary toasts may show past a waiting staying one; in "One at a time" a toast with the
-  app's own time waits behind a shown ordinary toast; changing "Show each toast for" restarts
-  a running count. A pinned ordinary toast stays until unpinned (a pinned job counts down when
-  it ends); pinned toasts stand left of the toasts' column, each new one 48 px lower.
-- **Lock before sleep, the notice** (step 9, the agent's words): "The screen stays unlocked
-  during sleep" / "Nothing locks it before the computer sleeps. Turn on "Lock before the
-  computer sleeps" in Settings → Lockscreen." and "Two programs lock the screen before sleep" /
-  "This shell locks it, and GNOME Shell does too. One lock is enough." (says what the two do,
-  never advises turning the shell's lock off). Both cases were built (the decision names
-  telling the user that something else locks; the default being off makes the unlocked
-  sleep the case that matters). Once per situation, remembered in the config. **hypridle
-  says nothing** (swayidle and xss-lock neither: they often run `loginctl lock-session`, which
-  the shell follows — no race): hypridle holds a sleep inhibitor whatever its `before_sleep_cmd` — on the Arch
-  machine it holds one with no `before_sleep_cmd`, so nothing locks there before sleep with
-  the setting off, and the shell cannot tell that from the inhibitor list (reading
-  hypridle's config would be one program's file format, on each system). To decide: say
-  "may stay unlocked" for hypridle too, or leave it silent.
-- **The side panel** (C1): Escape is window-wide while it is open; the owner setting `open`
-  false closes it without `closed`; widths 320/420/520 are fixed in `Theme.qml` (grown with
-  the font), not theme tokens; it does not open while the session is locked.
+- **Idle, screensaver, lock and screen-off** ([plans/idle-lock-flow.md](plans/idle-lock-flow.md),
+  §6, being answered): the plan replaces the open point "Lock before sleep, the notice"
+  (step 9's notices: the unlocked sleep, two lockers; hypridle says nothing). Its questions:
+  the sleep notice with hypridle (recommended: observe the outcome and say so after the
+  fact), who owns idle and screen-off, Super+L running hyprlock, `lockOnSleep` on for the Arch
+  machine, keys at the screensaver, telling the system about the shell's lock
+  (`SetLockedHint`), screen-off while locked, the Power save profile's `notify-send` commands.
 
 ## Left open by done work
 
@@ -222,14 +168,17 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
 
 0. Workflow:
 1. Planning, no code:
-   - [ ] PAM configuration from the shell: plan written ([plans/pam-config.md](plans/pam-config.md),
-         2026-11-22), waits for the owner's approval and its 8 questions
-   - [ ] Installing, updating and removing modules, Settings → Modules, the trust text, the
-         safe-mode banner: plan written ([plans/modules-management.md](plans/modules-management.md),
-         2026-11-22) with a mockup (`~/src/h2s-mockups/modules-settings-planned/`); waits for
-         the owner's approval and its 8 questions
-   - [ ] revise [plans/documentation.md](plans/documentation.md) and
-         [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
+   - PAM configuration from the shell: [plans/pam-config.md](plans/pam-config.md), decided
+     and approved 2026-11-21 (§7); implementation is step 11
+   - Installing, updating and removing modules, Settings → Modules, the trust text, the
+     safe-mode banner: [plans/modules-management.md](plans/modules-management.md), decided and
+     approved 2026-11-21 (§10), mockup `~/src/h2s-mockups/modules-settings-planned/`;
+     implementation is step 8
+   - [plans/documentation.md](plans/documentation.md) (§8) and
+     [plans/architecture-cleanup.md](plans/architecture-cleanup.md) (§5): decided and approved
+     2026-11-21; implementation in steps 12 and 7
+   - [ ] Idle, screensaver, lock and screen-off: [plans/idle-lock-flow.md](plans/idle-lock-flow.md),
+         its questions being answered (Open points)
 2. Before the release (cut after step 8, the owner 2026-11-21):
    - [ ] cut a minor release (today 2.0.0), the module's 0.7.0 with it
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
@@ -277,6 +226,16 @@ Later:
   things, both by module id until then).
 - Modules' own elements published (public styles a theme can set, so libraries of elements
   can exist; building one's own for oneself is allowed now).
+- A remembered polkit authorization (the owner, 2026-11-21): asked once, then quiet for a few
+  minutes, as sudo does; exit-node switching prompts most, and other places want it too. Being
+  Tailscale's operator stays the user's choice. Needs analysis (which actions prompt, polkit's
+  `auth_admin_keep` or temporary authorizations, their scope and safety, NixOS and Arch) and a
+  plan.
+- Disk-space management for the shell's files (module configuration backups, PAM backups …),
+  with a list of every place the shell writes files (the owner, 2026-11-21).
+- A login manager of the project's own (the owner, 2026-11-21): analysis and options first.
+- The PAM editor for the whole file, every phase, not only `auth`
+  ([plans/pam-config.md](plans/pam-config.md) §8).
 
 ## Decisions
 
@@ -296,6 +255,17 @@ before planning or briefing. New decisions are added there, not here.
       against the Repeater-crash rule
 
 Defects and risks:
+- [ ] The public `SettingsRow`: a long value cuts its label (Settings → Tailscale, "Save to"
+      with a long path); the label keeps its full width and the value elides (at most 220 px).
+      `ExpandingRow` has no user on screen yet: show it in the next mockup that needs one
+- [ ] The password prompt's layout (owner 2026-11-21, decisions.md "Privileged runs"): the
+      identity as the first row, "As user" / the name, normal size, above Module; for a
+      module's prompt polkit's own message (which repeats the whole command with the shell's
+      `timeout` wrapper) and the action id (`org.freedesktop.policykit.exec`) move under the
+      collapsed "Command". Prompts not from a module unchanged
+- [ ] The Tailscale popup: a device row with several chosen files shows only "N files" (the
+      names only in Send's tooltip); a click on "N files" is to open Taildrop's side panel
+      (left of the popup), whose list already shows each file with "×" (module)
 - [ ] `panels/Popup.qml` `contentLoader.onLoaded` sets `availableHeight` / `popupAnimating`
       on a panel unguarded: a readonly one throws and skips the rest (core and module panels)
 - [ ] `singletons/network/VpnLockdown.qml` without the installed script: a network coming up

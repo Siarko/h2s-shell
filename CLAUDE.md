@@ -111,12 +111,14 @@ mockup the owner sees before any code (`notes/workflow.md`).
 - **Never start a `Process` with a declarative `running: true`** — Quickshell writes
   `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
   `Timer`.
-- **Deleting from a click goes through `components/DeleteButton.qml`**: the first click
-  turns it into a red question ("Delete?") with a "×" attached that cancels, a second
-  click deletes. No time-outs. The owner resets `asking` when the item it deletes
-  changes. Don't hand-roll another confirm. A button that asks before something else
-  (turning a hotspot on) is the same component with its `kind` (`"save"`): the question
-  takes the kind's colour.
+- **A question is the button's or the Settings modal's, nothing else asks.** A one-word
+  question stays on the button, `components/DeleteButton.qml`: the first click turns it into
+  a red question ("Delete?") with a "×" attached that cancels, a second click acts. No
+  time-outs. The owner resets `asking` when the item it acts on changes. A button that asks
+  before something else (turning a hotspot on) is the same component with its `kind`
+  (`"save"`): the question takes the kind's colour. A question with a list, a choice or an
+  explanation opens the Settings modal (`notes/plans/modules-management.md` §4.1). Don't
+  hand-roll another confirm; not everything needs a modal.
 - **How a button looks is `ThemeRules.buttonLook(kind, state)`**: `SmallButton` and
   `DeleteButton` draw what it names. A new kind or state is added there, with its cases.
 - **A control's hover look comes from `components/PointerArea.qml`'s `lit`**, not a
@@ -221,6 +223,10 @@ new kind.
   bar.
 - **Nothing relies on one developer's environment;** NixOS and Arch are treated together. —
   Code and docs that worked on one machine only.
+- **Development never depends on an LLM.** Tests, checks and every key step (releasing,
+  generating docs) are plain scripts that run without one; LLM steps live at most in an
+  optional wrapper. — A project that needs an LLM to be tested or released cannot be worked on
+  without one.
 - **Docs and comments describe the code as it is,** never how or when it was built.
   User-visible strings are the few plain words a person would put on a control. — History
   in comments goes stale; long hints read as machine-written.

@@ -485,7 +485,7 @@ the agreed mockup.
 
 ## 7. Decided
 
-The owner, 2026-11-21 (`notes/decisions.md`, "Lock and PAM", to add with the first slice):
+The owner, 2026-11-21 (in short in `notes/decisions.md`, "Lock and PAM"):
 - Q1 Arch: the shell writes the PAM files — Apply with a backup, an owned block, Undo (§2.6).
 - Q2 NixOS: the page shows options of the shell's module, `programs.h2s-shell.pam.*` (§2.7).
 - Q3 Only sudo and polkit; login untouched. A login manager of the project's own is a later

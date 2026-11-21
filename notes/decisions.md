@@ -22,6 +22,10 @@ the later stands here.
   sense; never one system without the other; nothing refers to or relies on the developers'
   own environments; screenshots are the owner's; docs verified for consistency at each major
   release, not on every change; `docs/` never links into `notes/`.
+- Development never depends on an LLM (2026-11-21): tests and every key step run without
+  one; the project's flow is compatible with LLM sessions, nothing more. LLM steps at most in
+  an optional wrapper. So the docs' rules check and the API reference's generator are plain
+  scripts (`plans/documentation.md` §8).
 
 **Direction, modules and trust**
 - Direction: the shell becomes a fairly small framework that defines the structure and the
@@ -47,6 +51,17 @@ the later stands here.
   (a module runs in the shell's process, which also handles the lock screen's password and the
   polkit agent), Settings → Modules (enable, disable, reload, install, update, remove from a
   repository), the safe-mode banner. Later: NixOS option for modules, signatures.
+- Managing modules (2026-11-21, `plans/modules-management.md` §10): built-in modules
+  ("builtin", label "Built-in") live outside the shell's tree — NixOS in the package, Arch
+  `~/.local/share/h2s-shell/builtin/` (later `/usr/share/h2s-shell/builtin`), other packages'
+  modules `/usr/share/h2s-shell/modules`; built-in and system-installed modules count as
+  consented. Consent is asked only when the source changes or a module first declares
+  administrator actions; new programs and a major version are shown after the update. A module
+  keeps its state across updates; a refused update leaves the old version, remembered. Updates
+  form a queue; a shell restart (always the user's click) and other shell-wide actions are
+  offered once after the queue. Remove is offered for everything, in a modal, "Also delete its
+  data and settings" unchecked. A configuration backup before every version switch, without
+  the data directory unless the manifest names files in it.
 
 **Module API**
 - The module API is ours: a module never works around a gap; the API is extended first. It
@@ -118,6 +133,13 @@ the later stands here.
   again after unlocking. Only the password question is one at a time; with another polkit
   agent strictly one action at a time. A run with no password asked shows nothing; one log line
   names the module.
+- The password prompt's layout (2026-11-21): the identity is the first row, labelled "As
+  user", normal size, above Module. For a module's prompt (known module and purpose) polkit's
+  own message and the action id go under the collapsed "Command"; on top only the identity,
+  Module, Authorization and the password field. Prompts not from a module are unchanged.
+- Wanted (2026-11-21): a remembered polkit authorization — asked once, quiet for a few minutes
+  (exit-node switching prompts most). Being Tailscale's operator stays the user's choice.
+  Needs analysis and a plan (tracker "Later").
 
 **Lock and PAM**
 - `lockscreen.lockOnSleep` defaults to off. To investigate: detecting, independent of the
@@ -126,7 +148,16 @@ the later stands here.
   logs in on a TTY and starts the launcher by hand; the user is told what happened and how to
   look into it; documented.
 - PAM: the order of password and fingerprint is the system's PAM stack, not the prompt's.
-  Wanted: configuring PAM rules from the shell; needs its own analysis and plan.
+- PAM from the shell (2026-11-21, `plans/pam-config.md` §7): only sudo and polkit, login
+  untouched (a login manager of the project's own later, analysis first). A rule editor: per
+  service an ordered list of rows (pills: method and details) with PAM's own control words,
+  each explained; a fixed last row "Password (as the system)", removable only through a danger
+  modal; one list for sudo and polkit unless split; security keys in the first version; lines
+  it does not understand kept as raw rows. Apply always runs the trial first. Arch: the shell
+  writes the files, with backups in `/var/lib/h2s-shell/pam-backup` (all kept) and Undo. NixOS:
+  the page shows options of the shell's module (`programs.h2s-shell.pam.*`). Settings →
+  Lockscreen gets switches to not offer fingerprint or a security key on the lock; the password
+  always stays.
 
 **Views**
 - An opened card ends as far under its last line as its first line is under the top.
@@ -140,6 +171,16 @@ the later stands here.
   also while closed; order main, Edit, Forget. When the row does not fit, it moves to its own
   line under the name, right-aligned, a question getting the card's width.
 - No terminal setting of its own: a global "default programs" setting later.
+- Questions (2026-11-21): a one-word question stays on the button (`DeleteButton`, its
+  kinds); a question with a list, a choice or an explanation opens the Settings modal; nothing
+  else asks. Not everything needs a modal.
+- The Settings modal (2026-11-21) is a shared element of the Settings window: kinds (danger,
+  warning, success, info …), dims the window and blocks clicks through, always a cancel, "×"
+  acts as cancel, one button = an informing modal; fully themeable, its dimming a token of its
+  own (`plans/modules-management.md` §4.1).
+- The side panel (`components/SideDrawer.qml`, public `api/SidePanel.qml`) is the standard
+  element for anything sliding in beside a Settings page (2026-11-21); new uses take it,
+  never their own.
 
 **Notifications**
 - A plain notification's body keeps its line breaks (the title stays one line) (2026-11-19).
@@ -177,3 +218,6 @@ the later stands here.
   offered or documented (2026-11-20). "Web interface" is renamed to say this computer's
   settings are shared ("Share this computer's settings"); "Web console" stays for the button
   to Tailscale's site.
+- Taildrop's preferences (folder, name conflict, auto-save) move to the module's settings,
+  `mod.tailscale.taildrop*`, with profiles (2026-11-21); a migration only if they were changed
+  (unchanged on Arch; the NixOS machine checked first) (`plans/architecture-cleanup.md` §5).

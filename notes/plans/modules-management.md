@@ -287,7 +287,7 @@ of the core, not of this page.
 - **Views decision, for decisions.md** (to add with the slice): "A question that needs a list
   or a choice opens the Settings modal; a one-word question stays the button's own
   (`DeleteButton`)." The `CLAUDE.md` rule "Deleting from a click goes through DeleteButton"
-  then names the modal as the second form (§10b Q3).
+  then names the modal as the second form (§10, 22).
 
 ## 5. The confirmation (first enabled)
 
@@ -576,7 +576,7 @@ manifests' `uses.<id>.source` name.
 - **Unresolved or incompatible**: the preview says which and why, one line each ("Needs
   Clipboard 0.2 — not installed, no address given" / "Needs Weather 2.0 — the system's copy
   is 1.2"); the buttons become "Install anyway" (installs what resolves; the module stays
-  "Needs Clipboard" until it is there) and "Cancel" (§10b Q2). An update that would leave a
+  "Needs Clipboard" until it is there) and "Cancel" (§10, 21). An update that would leave a
   dependency unresolved stops at "Approval required" with that line.
 - **A failure halfway**: nothing moves in before every module of the chain is downloaded and
   verified; a failed download or check cancels the chain and deletes every staging directory.
@@ -603,9 +603,10 @@ manifests' `uses.<id>.source` name.
   automatic, "Switch version", the rollback after a failed start ("before rollback") — and
   before a restore.
 - **What**: the module's `mod.<id>.*` settings in every profile (`settings.json`, values as
-  stored), its store (`<configHome>/h2s_shell/modules/<id>`), and its data directory when it
-  is at most 10 MiB (else left out, said in the list: "data not included, 240 MiB") (§10b
-  Q1); `meta.json` `{ id, version, commit, takenAt, reason, includesData }`.
+  stored), its store (`<configHome>/h2s_shell/modules/<id>`), and never the data directory
+  (what the module fetched and can fetch again) — only the files or directories inside it
+  that the manifest names as belonging in a backup (§10, 20); `meta.json`
+  `{ id, version, commit, takenAt, reason, includesData }`.
 - **Where**: `<dataHome>/h2s-shell/module-backups/<id>/<version>-<YYYYMMDD-HHMMSS>/`, written
   in a staging directory and renamed in.
 - **How many**: the newest 5 per module (`ModuleUpdateRules.backupKeepPlan`); older ones
@@ -719,22 +720,12 @@ lines with M1c (API), M2 (behaviour: new modules start off), V1, M4, M5, M6.
 17. Progress bars are the shared `ProgressBar` with `wave`, as Taildrop's; checking shows "Checking…" and then its result.
 18. Errors say what happened and why, nothing more.
 19. "Updates finished" closes with an "×" on its title line (a pending restart then stays as the Settings banner); the restart notification has an "×" and goes away by itself once the shell has restarted.
+20. A backup never includes the module's data directory; a module may name in its manifest the
+    files or directories inside it that belong in a backup, and only those are added.
+21. A dependency the shell cannot get: installed only through an explicit "Install anyway" in
+    the preview naming what is missing; the module stays "Needs <X>"; an automatic update
+    never does it (it stops at "Approval required").
+22. Questions: a one-word question stays on the button (`DeleteButton`, its kinds); a question
+    with a list, a choice or an explanation opens the Settings modal; nothing else asks. Not
+    everything needs a modal. In `CLAUDE.md` and as a Views decision.
 
-## 10b. Open questions
-
-1. **Does a backup include the module's data directory?** Settings and the store are small;
-   a data directory can be a cache of hundreds of MiB (a map module's tiles), and five
-   backups would multiply it. Example: Exit map keeps 240 MiB of tiles; each update would
-   copy them. Recommendation (in this plan): include the data directory when it is at most
-   10 MiB, else leave it out and say so in the backup list.
-2. **A dependency the shell cannot get.** Notes needs Clipboard, but Notes' manifest gives no
-   address for it (or the only copy is a system one that is too old). Should the install be
-   refused, or allowed with the module left "Needs Clipboard" until you install it?
-   Recommendation: allowed, but only through an explicit "Install anyway" in the preview,
-   which names what is missing; an automatic update never does it (it stops at "Approval
-   required").
-3. **The rule for questions in `CLAUDE.md`.** Today: "Deleting from a click goes through
-   DeleteButton … Don't hand-roll another confirm." With the modal, a removal asks in the
-   modal (it has a list and a checkbox). Recommendation: the rule says "a one-word question
-   is the button's own (`DeleteButton`); a question with a list, a choice or an explanation
-   opens the Settings modal; nothing else asks" — and the same as a Views decision.

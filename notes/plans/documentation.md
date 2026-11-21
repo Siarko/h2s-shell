@@ -1,7 +1,7 @@
 # Documentation plan
 
-A plan for the owner to approve: the shell's user, developer and module-author documentation
-(tracker steps 12 and 13). Revised on 2026-11-21 for the owner's decisions of 2026-11-17 on
+The plan for the shell's user, developer and module-author documentation (tracker steps 12
+and 13). Approved by the owner on 2026-11-21 with the answers in §8. Revised on 2026-11-21 for the owner's decisions of 2026-11-17 on
 (`notes/decisions.md`, "Documentation", "Module API", "Direction") and for the code as it is
 (core 2.0.0 plus Unreleased, module API 1.35). The first version (2026-11-17) is in git
 (`git show 159d20b:notes/plans/documentation.md`); its voice sample and before/after example
@@ -20,7 +20,7 @@ From the decisions and `CLAUDE.md`; a page that breaks one is not done.
 4. **`docs/` never links into `notes/`.** Code comments may; documents may not.
 5. **About the code as it is.** No history: no stages, plan codes (M3, U2), "since",
    "no longer", "until <date>". An API version where it is a fact a module needs ("added in
-   API 1.20") only in the API reference (question 2).
+   API 1.20") only in the API reference, as its "Since API" column (§8, 2).
 6. **Plain short sentences**, one idea each; lists and tables for lists and tables. The
    README is short; details live in `docs/`.
 7. **Screenshots are the owner's.** A page that wants one carries a marked placeholder
@@ -82,7 +82,7 @@ first" are settled by the decisions or by what was done.
 
 ## 3. Target structure
 
-One topic per file; the README links to all. Three folders, by reader (question 3).
+One topic per file; the README links to all. Three folders, by reader (§8, 3).
 
 ```
 README.md                    what it is, a screenshot placeholder, quick start (NixOS, Arch), link table  ~70
@@ -118,11 +118,11 @@ docs/
 `themes.md` describes today's theme files and pages; the selectors are shelved (tracker
 11.6), so nothing waits for a stylesheet format.
 
-**The API reference and `api/Api.qml`.** Two hand-written references of one API drift.
-`docs/modules/api-reference.md` becomes the reference; the header of `api/Api.qml` shrinks to
-a pointer and a member list, and `CLAUDE.md`'s rule changes to "the reference in
-`docs/modules/api-reference.md`" (question 4). This edits a code file and `CLAUDE.md`, so it
-is the reference slice's last commit, reviewed with it.
+**The API reference and `api/Api.qml`.** Two hand-written references of one API drift, so
+there is one: the comments in `api/Api.qml` stay the reference (`CLAUDE.md`'s rule is
+unchanged), and `docs/modules/api-reference.md` is generated from them by a plain script
+(bash/awk, no LLM), with a "Since API" column per member. A test fails when the generated file
+differs from what the script makes of today's comments, so the page is never stale (§8, 4).
 
 **The module template** is a directory in the repository (`templates/module/`): a manifest,
 a main, a widget, a settings page, one suite, a `run.sh` that runs the suite against an
@@ -150,11 +150,11 @@ Each list a document repeats already exists in code or is pinned by a test:
 Two kinds, run at two times (the decision: consistency at each major release, not on every
 change).
 
-- **Rules lint, with every change** (`tests/docs-check.sh --rules`, in `tests/run-all.sh
-  --quick`, a second or two): relative links resolve; no link from `README.md` or `docs/`
+- **Rules lint, with every change** (`tests/docs-check.sh --rules`, a plain grep/bash script,
+  never an LLM, in `tests/run-all.sh --quick`, a second or two): relative links resolve; no link from `README.md` or `docs/`
   into `notes/`; no home path, user name or machine model (a short word list); no history
   words (`since`, `no longer`, `until 20`, plan codes outside code blocks). A lint, not
-  proof; review reads for the rest. These are rules, not consistency (question 1).
+  proof; review reads for the rest. These are rules, not consistency (§8, 1).
 - **Consistency, at a major release** (`tests/docs-check.sh --release` plus a QML suite
   `tests/DocsTest.qml`, outside `run-all.sh`; the release checklist in `dev/releasing.md`
   names them): every list of §4 against its source, both ways. A failure is fixed before the
@@ -194,7 +194,7 @@ M 150–400, L > 400.
 | D7 | `lock-screen.md`, `polkit.md`, `troubleshooting.md` | M | after step 9 (PAM parts after step 11) |
 | D8 | `dev/architecture.md`, `dev/widgets.md`, `dev/lock-screen.md`, `dev/network.md`, `dev/notifications.md`; the widget page walked through by an agent writing a throw-away widget in a test tree | L | area by area, after its clean-up slices |
 | D9 | `docs/modules/versioning.md`, `elements.md`, `anchors.md` | M | after Z |
-| D10 | `docs/modules/api-reference.md`; `api/Api.qml`'s header to a pointer; `CLAUDE.md`'s rule | L | after Z |
+| D10 | the generator script for `docs/modules/api-reference.md` from `api/Api.qml`'s comments (with "Since API"), the comments completed where it needs them, and the staleness test in `run-all.sh --quick` | L | after Z |
 | D11 | `docs/modules/guide.md` and the template with its loading case | L | after D10, with step 13 |
 | D12 | `tests/docs-check.sh --release`, `tests/DocsTest.qml`, `dev/releasing.md` with the checklist | S | after D3 and D10 |
 | D13 | `FEATURES.md` and `ARCHITECTURE.md` deleted once every part has a new home; final lint | S | last |
@@ -203,18 +203,18 @@ Old documents stay until the slice that replaces their content is done. D0 and D
 and independent: they can run any night. D2–D5 come with step 12, which the tracker puts
 after step 8 and the release.
 
-## 8. Open questions for the owner
+## 8. Decided
 
-1. The decision says documents are checked for consistency at each major release, not on
-   every change. Should the rules lint of §5 (no link into `notes/`, no developer paths, no
-   history words, links that resolve) still run with every change in `tests/run-all.sh
-   --quick`, as this plan proposes, or only at a major release too?
-2. Should the module API reference mark each member with the API version that added it (one
-   "API" column, so an author knows what to put in the manifest's `api`), even though every
-   other page keeps version history out?
-3. Is the split into three folders right — user pages in `docs/`, developer pages in
-   `docs/dev/`, module-author pages in `docs/modules/` — or would you rather have one flat
-   `docs/`, as the Tailscale module has?
-4. Should the module reference move from the comments of `api/Api.qml` into
-   `docs/modules/api-reference.md`, leaving only a member list in the code, so that there is
-   one reference instead of two that can drift apart?
+The owner, 2026-11-21.
+
+1. **The rules lint runs with every change**, in `tests/run-all.sh --quick` (no link into
+   `notes/`, no developer paths, no history words, links that resolve); the consistency check
+   stays at each major release. The checker is a plain script (grep/bash), never an LLM:
+   development never depends on one (`notes/decisions.md`, "Workflow").
+2. **The API reference has a "Since API" column**: the one version note the docs allow, so an
+   author knows what to put in the manifest's `api`.
+3. **Three folders**: `docs/` for users, `docs/dev/` for shell developers, `docs/modules/` for
+   module authors.
+4. **The reference stays in `api/Api.qml`'s comments**; `docs/modules/api-reference.md` is
+   generated from them by a plain script (no LLM), and a test fails when the generated file is
+   stale (§3, D10).

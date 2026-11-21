@@ -1,6 +1,7 @@
 # Architecture clean-up: the shell and the Tailscale module
 
-A plan for the owner to approve (tracker step 7). Revised on 2026-11-21 against `master` at
+The plan for the clean-up (tracker step 7), approved by the owner on 2026-11-21 with the
+answers in §5. Revised on 2026-11-21 against `master` at
 `159d20b` (module API 1.35) and the module's `main` at `1c1a322`, for the owner's decisions
 of 2026-11-17 on (`notes/decisions.md`) and the work since: the API plan's batches, the test
 tree, the notification flow, progress notifications, Taildrop's transfers and views. The
@@ -63,7 +64,7 @@ new, and in which order. Items keep their old keys (R4.1, T8.6, N1) for lookup.
 | R3.6 | `Bar.qml:157` | the last of four `owner !== "" ? Modules.initialProperties(url) : {}`; `Modules.initialProperties` returns `{}` for a core file (`Modules.qml:91–93`) |
 | R3.12 | `tests.qml:88` | one 90 s deadline for every async suite; `TestCase.timeLimitMs` honoured only by `tests-modules.qml:110–113` |
 | R4.1 | `singletons/network/VpnManager.qml` (745) | a hub: providers' registry and reads, slots and pages, provider calls, the connect rule, "VPN with a network", WireGuard and plugins. Test-only `lastProviderNotice` (`:411–417`, read by `tests/VpnProvidersTest.qml:423–427`); `Notifier.recorded` (`Notifier.qml:40–63`) now does that job |
-| R4.2 | `panels/network/VpnSection.qml:187`, `panels/settings/NetworkVpnSettings.qml:66, 277–278` | state words and notice twice; the attention's action shows on the row only while up, on the card always (question 1) |
+| R4.2 | `panels/network/VpnSection.qml:187`, `panels/settings/NetworkVpnSettings.qml:66, 277–278` | state words and notice twice. The attention's action shows always in both places, only placed differently (§5, 1) |
 | R4.6 | `panels/settings/NetworkProfileCard.qml:46–48, 85–114` | `external` mode; the card calls `NetworkProfiles` itself |
 | R4.7 | `singletons/network/NetworkRules.qml` (1397) | VPN with a network (824–1001), providers (1002–1250), the kill switch (1251–1397) and the editor in one file |
 | N1 | `panels/settings/NetworkConnectionEditor.qml:178–184` | the view writes `VpnManager.setVpnsWith` and `VpnLockdown.setFor` on `saved`: a page gone by then loses the VPN link and the **kill-switch choice** |
@@ -74,7 +75,7 @@ new, and in which order. Items keep their old keys (R4.1, T8.6, N1) for lookup.
 | T8.6 | module `ServeClient`, `TaildropClient`, `LockClient`, `CertClient`, `NetworkExitClient`; `TailscalePage.qml` → `client._loginElevated` | sub-clients and a view use the client's private members (`_run`, `_runChange`, `_tailscaleArgv`, `_limitMs`, `_finish`, `_opToken` …; ServeClient alone 14 uses) |
 | T8.7 | module `TailscaleRules.qml` 2869, `TailscaleClient.qml` 2058, `TailscalePage.qml` 825; `_isObject` in six Rules files | size; copied helpers |
 | T8.10 | module `TailscaleRules.qml:92` (`notifyMask` unused), `:99` (`watchMask` literals), `:133` (`_prototypeKeys`), `:2411, :2575` (`fileGet`); `LockClient.qml:52` writes its own argv; `Main.qml:369` an old-shell check | dead and mismatched code |
-| T8.12 | module `tests/run.sh:29` (default `../h2s-shell-wt`); `module/tests/ScenarioHandle.qml`, `liveSuites.js`; `TaildropClient.qml:65–69` (preferences in the store) | test scaffolding the shell's `ModuleTestKit` should replace (tracker, "Module test kit"); preferences outside the schema (question 2) |
+| T8.12 | module `tests/run.sh:29` (default `../h2s-shell-wt`); `module/tests/ScenarioHandle.qml`, `liveSuites.js`; `TaildropClient.qml:65–69` (preferences in the store) | test scaffolding the shell's `ModuleTestKit` should replace (tracker, "Module test kit"); preferences outside the schema (§5, 2: they move, T9) |
 | N4 | module `LockRules.qml` | the same name as the shell's lock-screen rules |
 
 ## 2. New since the first version
@@ -158,13 +159,15 @@ T4 `TailscaleRunner`: sub-clients and the page off private members (`client.logi
 · T5 `TailscaleClient` into clients · T6 `TailscalePage` sections (file) · T7 `tests/run.sh`
 requires `H2S_SHELL_DIR`; `ScenarioHandle` and `liveSuites.js` replaced by `ModuleTestKit`
 once the shell's kit can (tracker) · T8 `TaildropClient` / `TaildropTransferRules`, looked at
-once the Taildrop work settles. Order: T1, T3, T2, T4, then T5–T8. All **—** but T6.
+once the Taildrop work settles · T9 Taildrop's preferences (folder, name conflict, auto-save)
+from the module's store to `mod.tailscale.taildrop*` settings with profiles and rows on the
+module's page (§5, 2). Order: T1, T3, T2, T4, then T5–T9. All **—** but T6 and T9.
 
 ### F. On screen — wait for a mockup
 
 | Id | Slice | Depends |
 |---|---|---|
-| F1 | `VpnManager.presentation(vpn)`: one state text, notice and action for the row and the card | A3, question 1 |
+| F1 | `VpnManager.presentation(vpn)`: one state text and notice for the row and the card; the action keeps its two placements (§5, 1) | A3 |
 | F2 | The notification card's pin and "×" lit by `PointerArea` (tap feedback, larger target) | A8 |
 | F3 | `NetworkConnectionEditor` in sections — a pure move (**file**), listed here because the editor's look is due for the views' rework; do it with that rework or alone after A4 | A4 |
 
@@ -176,14 +179,16 @@ lane is free. D0 goes with step 2. C after step 8 and Z; D after step 9; E after
 release and Z; F with the mockups. The documentation plan's developer pages for an area
 follow that area's slices.
 
-## 5. Open questions for the owner
+## 5. Decided
 
-1. A VPN that needs you (for example Tailscale asking for a login) offers its action — "Log
-   in" — on its card in the settings at all times, but on its row in the network popup only
-   while the VPN is up. Should both show it always, both only while up, or should they stay
-   different on purpose? Until answered, F1 keeps both behaviours.
-2. Taildrop's preferences (the folder, what to do on a name conflict, auto-save) are kept in
-   the module's own store, not in its settings schema, so they have no profiles and no
-   settings-page rows of their own. Where they are set, moving them needs a migration (the
-   decision asks to check both machines first). Should they move to `mod.tailscale.taildrop*` settings with a one-time migration in
-   the module's next minor release, or stay in the store with a comment saying why?
+The owner, 2026-11-21.
+
+1. **The VPN's attention action: no behaviour change.** The question was mis-stated: the
+   network popup already offers the action ("Log in") at all times, like the card. While the
+   VPN is off it is the row's main button in place of Connect (`VpnManager.attendsInstead`);
+   while it is on, a small button beside the reason (`VpnSection.qml:187`). Only the place
+   differs, and that stays. F1 unifies the state words and notice, nothing more.
+2. **Taildrop's preferences move to the module's settings**, `mod.tailscale.taildrop*`, with
+   profiles (T9). A migration only if they were ever changed: on the Arch machine they are
+   unchanged, so none is needed there; the NixOS machine is checked before one is written.
+   Without changed values anywhere, no migration ships.

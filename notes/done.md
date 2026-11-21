@@ -2502,3 +2502,21 @@ Moved out of the tracker as done; checked against the code and the sections abov
   password-fallback probes on `LatestQuery` (`LockIoRules.probeRun`; a failure stays unknown).
   Reviewed (security: decisions identical); `tests/run-all.sh` passed on both machines (lock bed
   72/72).
+
+## The owner's answers (2026-11-21)
+
+- **Plans decided and approved**: the modules management plan (`plans/modules-management.md`
+  §10, five rounds with two mockups), the PAM plan (`plans/pam-config.md` §7, three rounds),
+  the revised documentation plan (§8) and architecture clean-up plan (§5) — step 1's
+  revision of the last two is done. The short form is in `decisions.md`.
+- **On-screen checks**: the file chooser for modules (E1, Arch, the portal through qt6ct) —
+  the dialog stays after the popup closes, keyboard, several files, cancel, a folder with
+  nothing chosen, a lock: all fine. The password prompt on a real Tailscale action through the
+  queue (A5, M3, Arch) — seen; its layout changes are a tracker defect; NixOS still open. The
+  public `SettingsRow` (F3) — a defect (a long value cuts the label), in the tracker.
+- **Agents' choices glanced at**: Taildrop off/on, toasts and the side panel approved (the side
+  panel is the standard element for anything sliding in beside a Settings page); the other
+  items of that list ("Share this computer's settings" words, progress notifications) cleared
+  with them. The open point "Lock before sleep,
+  the notice" became the idle and lock flow plan (`plans/idle-lock-flow.md`).
+
