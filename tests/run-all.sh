@@ -114,10 +114,8 @@ for part in "${parts[@]}"; do
     part_started=$SECONDS
     # Job control only to give the part its group; the subshell hands on the part's status
     set -m
-    # SIGHUP reset for the part: one started with it ignored (nohup) hands that on to the
-    # launchers under test, whose HUP trap then never fires
     # shellcheck disable=SC2086  # the command's words
-    ( (cd "$REPO" && exec env --default-signal=HUP $command) 2>&1 < /dev/null | tee "$log"; exit "${PIPESTATUS[0]}") &
+    ( (cd "$REPO" && exec $command) 2>&1 < /dev/null | tee "$log"; exit "${PIPESTATUS[0]}") &
     part_pid=$!
     set +m
     wait "$part_pid"

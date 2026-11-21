@@ -229,6 +229,11 @@ temp_base=${TMPDIR:-/tmp}
 LOCKTEST_NEED=lock
 source "$LOCKTEST_DIR/resolve.sh" {lock_fd}<&-
 
+# The launcher under test starts with SIGHUP reset (lib.sh: a run started with it ignored,
+# nohup, would hand that on, and bash cannot trap it): env's --default-signal, coreutils 8.31
+env --default-signal=HUP "$BASH" -c : {lock_fd}<&- 2> /dev/null \
+    || setup_error "env does not take --default-signal (coreutils 8.31 or later)"
+
 # PAM modules must belong to the libpam the process loads: taken from Quickshell's
 quickshell_binary=$(dirname "$LOCKTEST_QS")/.quickshell-wrapped
 [ -e "$quickshell_binary" ] || quickshell_binary=$LOCKTEST_QS

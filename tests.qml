@@ -102,8 +102,13 @@ QtObject {
     // for others (its `after`, FileChooserTest's `waitFor`), from when they are all done: a
     // chained suite gets its own budget, not what its predecessors left of a shared one.
     readonly property int _asyncLimitMs: 90000
-    // Whatever the chains: no suite runs past this, counted from the start of the suites
-    readonly property int _runLimitMs: 600000
+    // Whatever the chains: no suite runs past this, counted from the start of the suites. It
+    // stays under tests/headless.sh's limit on Quickshell (`timeout 480`, labwc's 540), so that
+    // a run that hangs ends here, naming its suites, not killed from outside. The chain's
+    // own budgets (Modules → ModuleRegistries → Anchors 90 s each, ModuleInstaller and
+    // ModuleUpdater 240 s each) add up to more: they are bounds for a hang, and the chain
+    // takes about 100 s in all.
+    readonly property int _runLimitMs: 420000
     function timeLimitOf(suite) {
         return suite.timeLimitMs > 0 ? suite.timeLimitMs : _asyncLimitMs;
     }

@@ -67,9 +67,10 @@ TestCase {
         }
     }
 
-    // `key` pressed until `answered()` holds, again every half second: a key sent before the
-    // dialog's window has the keyboard (the compositor hands it over a moment after mapping it)
-    // goes to the window that had it, and is lost
+    // `key` pressed until `answered()` holds, again every half second: a key sent before a
+    // just-shown dialog's window has the keyboard (the compositor hands it over a moment after
+    // mapping it) goes to the window that had it, and is lost. Only for a key nothing before
+    // it has shown reaching the dialog
     property real _lastPress: 0
     function _pressUntil(key, answered) {
         if (answered())
@@ -184,7 +185,9 @@ TestCase {
             _press(Qt.Key_Down);
             return false;
         }, () => {});
-        _then("chosen", () => _pressUntil(Qt.Key_Return, () => _answers.length === 1), () => {
+        // Once: Down moving the current file proved the dialog has the keyboard
+        _then("Return reaches it", () => _press(Qt.Key_Return), () => {});
+        _then("chosen", () => _answers.length === 1, () => {
             const answer = _answers[0];
             assert(!answer.cancelled && answer.blocked === "" && answer.error === "" && answer.paths.length === 1,
                    "accepted: one path, nothing else said: " + JSON.stringify(answer));

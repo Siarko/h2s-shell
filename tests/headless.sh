@@ -119,7 +119,7 @@ headless_setup() {
         DBUS_SYSTEM_BUS_ADDRESS="unix:path=$work/run/no-system-bus" LIBSEAT_BACKEND=disabled-for-test)
 
     "${isolated[@]}" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
-        "$SETPRIV" --no-new-privs setsid timeout 300 "$LOCKTEST_LABWC" -C "$work/labwc" > "$work/labwc.log" 2>&1 < /dev/null &
+        "$SETPRIV" --no-new-privs setsid timeout 540 "$LOCKTEST_LABWC" -C "$work/labwc" > "$work/labwc.log" 2>&1 < /dev/null &
     labwc_pid=$!
     for _ in $(seq 1 100); do [ -S "$work/run/wayland-0" ] && break; sleep 0.1; done
     [ -S "$work/run/wayland-0" ] || { cat "$work/labwc.log" >&2; setup_error "the headless compositor did not start"; }
@@ -130,8 +130,10 @@ headless_run() {
     shift 2
     HEADLESS_LOG=$work/unit.log
     headless_started=$SECONDS
+    # Above tests.qml's whole-run limit (_runLimitMs, 420 s), so that the runner names a
+    # suite that hangs before this ends it; labwc's (540 s, above) outlasts this
     "${isolated[@]}" "$@" WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
-        "$SETPRIV" --no-new-privs timeout 240 "$LOCKTEST_QS" -p "$root" > "$HEADLESS_LOG" 2>&1 < /dev/null &
+        "$SETPRIV" --no-new-privs timeout 480 "$LOCKTEST_QS" -p "$root" > "$HEADLESS_LOG" 2>&1 < /dev/null &
     # Waited for, not run in the foreground: bash runs a trap only when the foreground
     # command ends, so an interrupt would be held until Quickshell is done
     quickshell_pid=$!

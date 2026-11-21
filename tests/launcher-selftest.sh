@@ -32,6 +32,9 @@
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+# The launchers under test start with SIGHUP reset (start_launcher): env's --default-signal
+env --default-signal=HUP true 2> /dev/null \
+    || { echo "launcher-selftest.sh: env does not take --default-signal (coreutils 8.31 or later)" >&2; exit 2; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/launcher-self.XXXXXX") || exit 2
 bash_path=$(type -P bash)
 failures=0
