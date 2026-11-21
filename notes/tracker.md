@@ -208,6 +208,12 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
 
 What the API work must leave possible for 13–15: [plans/api-next/versioning.md](plans/api-next/versioning.md) §11.
 
+After step 8 (the owner, 2026-11-21):
+- Rework the development environment: a workspace outside the repository for the sessions'
+  notes and other documents that should not live in it (today's `notes/`: tracker, decisions,
+  plans, reviews, upstream drafts); the repository keeps code, tests and `docs/`. Plan it with
+  the owner first (what moves, how both machines and agents reach it).
+
 Later:
 - A status and logs section in Settings (the owner, 2026-11-21): everything happening in the
   shell in one place, where the user sees whether all is well or something needs fixing (the
