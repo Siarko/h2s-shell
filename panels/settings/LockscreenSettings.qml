@@ -139,10 +139,9 @@ Flickable {
         }
 
         SchemaSettingEditor {
-            key: "lockscreen.lockscreenTimeout"
+            key: "lockscreen.lockAfter"
             editIndex: root.editIndex
             available: root._lockOn
-            label: root._screensaverOn ? "Lock after screensaver" : "Lock after"
         }
 
         SchemaSettingEditor {

@@ -1,0 +1,228 @@
+pragma Singleton
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.singletons
+import qs.singletons.lock
+
+// Idleness, the screensaver and the idle lock: the I/O around IdleRules
+// (notes/plans/idle-lock-flow.md, §8 "Wiring"). It feeds the rules the facts — input idle
+// from two IdleMonitors, the lock from Lockscreen, sleep from SystemSleep, the profile's
+// settings — one event at a time, and carries out the actions they return: the
+// screensaver's picture (`saverShown`, which the screensaver's windows follow), the idle
+// lock (Lockscreen.lock("idle")), the start and end commands. One Timer runs to the rules'
+// next deadline; nothing here decides when.
+//
+// The two IdleMonitors are made once, with the rules' fixed base time, and never remade: a
+// new ext-idle notification counts from zero, so remaking one on a settings change ended an
+// idle period nobody had come back from. They report "no input for 5 s" — one with Wayland
+// idle inhibitors ignored (`inputIdle`), one with them respected (`awayIdle`) — and the
+// rules count every stage from the last input.
+//
+// The clock is monotonic (an ElapsedTimer): it stands still while the machine sleeps, and
+// the resume counts as input.
+Singleton {
+    id: root
+
+    // Some monitor shows the screensaver, locked or not
+    readonly property bool saverShown: _anySaver(_state)
+    // The screensaver shown and not locked: what the screensaver's windows follow. Both from
+    // the one state, so a window never reads a new lock beside an old picture (at an unlock
+    // it would map for a moment)
+    readonly property bool saverOnScreen: saverShown && !_state.locked
+
+    // Until monitors are told apart (ScreenPower), one picture for all of them
+    readonly property var _monitors: ["all"]
+
+    // The profile's values, by the rules' names. Screen-off and the lock screen's own
+    // screen-off are not wired yet: off
+    readonly property var _values: ({
+        screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled"),
+        screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout"),
+        screenOffEnabled: false,
+        lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled"),
+        lockAfter: Profiles.value("lockscreen.lockAfter"),
+        lockedScreenOffTimeout: 0,
+        screensaverCommands: Profiles.value("lockscreen.screensaverCommands")
+    })
+    // A profile switch changes several values in one pass: one config event after it
+    on_ValuesChanged: Qt.callLater(root._settingsChanged)
+
+    property ElapsedTimer _clock: ElapsedTimer {}
+    property var _state: IdleRules.initial(0)
+    property var _events: []
+    property bool _dispatching: false
+
+    function _now() {
+        return Number(_clock.elapsedMs());
+    }
+
+    function _config() {
+        return IdleRules.config(_values, _monitors, false);
+    }
+
+    function _anySaver(state) {
+        return Object.values(state.shown).some(shown => shown === "saver");
+    }
+
+    function _settingsChanged() {
+        _dispatch({ type: "config" });
+    }
+
+    // Events are taken one at a time, in order, also when an action leads to another (the
+    // idle lock sets Lockscreen.locked at once)
+    function _dispatch(event) {
+        _events.push(event);
+        if (_dispatching)
+            return;
+        _dispatching = true;
+        try {
+            while (_events.length > 0) {
+                const next = _events.shift();
+                const result = IdleRules.step(_state, next, _config(), _now());
+                if (result.ignored !== "") {
+                    _log("warning", "event " + JSON.stringify(next) + " ignored: " + result.ignored);
+                    continue;
+                }
+                _state = result.state;
+                for (const action of result.actions)
+                    _run(action);
+            }
+        } finally {
+            _dispatching = false;
+        }
+        _arm();
+    }
+
+    function _run(action) {
+        switch (action.type) {
+        case "showSaver":
+            _log("info", "the screensaver shows");
+            break;
+        case "hideSaver":
+            _log("info", "the screensaver goes");
+            break;
+        case "startCommand":
+            _runCommand("lockscreen.screensaverStartCommand");
+            break;
+        case "endCommand":
+            _runCommand("lockscreen.screensaverEndCommand");
+            break;
+        case "lock":
+            _log("info", "idle: locking");
+            Lockscreen.lock("idle");
+            break;
+        default:
+            // powerOn / powerOff (no power control yet), active (no screensaver interface
+            // yet), lockBlack (no lock screen screen-off yet): nothing to carry out
+            break;
+        }
+    }
+
+    function _runCommand(key) {
+        const command = Profiles.value(key) ?? "";
+        if (Profiles.value("lockscreen.screensaverCommands") === true && command.trim() !== "")
+            Quickshell.execDetached(["sh", "-c", command]);
+    }
+
+    function _arm() {
+        const now = _now();
+        const deadline = IdleRules.nextDeadline(_state, _config(), now);
+        if (deadline < 0) {
+            _deadline.stop();
+            return;
+        }
+        _deadline.interval = Math.max(0, deadline - now);
+        _deadline.restart();
+    }
+
+    function _log(level, message) {
+        const line = "[Idle] " + message;
+        if (level === "warning")
+            console.warn(line);
+        else
+            console.info(line);
+    }
+
+    Component.onCompleted: {
+        if (Lockscreen.locked)
+            _dispatch({ type: "locked" });
+        else
+            _arm();
+    }
+
+    IdleWatch {
+        id: _inputIdle
+        enabled: true
+        timeout: IdleRules.baseTime / 1000
+        respectInhibitors: false
+        onIsIdleChanged: root._dispatch({ type: "inputIdle", idle: isIdle })
+    }
+
+    IdleWatch {
+        id: _awayIdle
+        enabled: true
+        timeout: IdleRules.baseTime / 1000
+        respectInhibitors: true
+        onIsIdleChanged: root._dispatch({ type: "awayIdle", idle: isIdle })
+    }
+
+    Timer {
+        id: _deadline
+        repeat: false
+        // An early expiry is harmless: the step finds nothing due and arms again
+        onTriggered: root._dispatch({ type: "deadline" })
+    }
+
+    Connections {
+        target: Lockscreen
+        function onLockedChanged() {
+            root._dispatch({ type: Lockscreen.locked ? "locked" : "unlocked" });
+        }
+    }
+
+    Connections {
+        target: SystemSleep
+        function onGoingToSleep() {
+            _missedResume.restart();
+            root._dispatch({ type: "sleep" });
+        }
+        function onResumed() {
+            _missedResume.stop();
+            root._dispatch({ type: "resumed" });
+        }
+    }
+
+    // logind's PrepareForSleep(false) never came (its monitor died over the sleep): as
+    // Lockscreen does, the machine counts as awake this long after going down — a Qt timer
+    // stands still while it sleeps, so this counts from the wake
+    Timer {
+        id: _missedResume
+        interval: LockStepRules.timings.missedResume
+        repeat: false
+        onTriggered: {
+            root._log("warning", "no resume heard " + interval + " ms after going to sleep: taken as awake");
+            root._dispatch({ type: "resumed" });
+        }
+    }
+
+    // h2s-shell ipc call idle state   (JSON, for tests/lock/; Arch: launch.sh ipc call ...)
+    IpcHandler {
+        target: "idle"
+
+        function state(): string {
+            const now = root._now();
+            const config = root._config();
+            const deadline = IdleRules.nextDeadline(root._state, config, now);
+            return JSON.stringify({
+                state: root._state,
+                config: config,
+                saverShown: root.saverShown,
+                saverOnScreen: root.saverOnScreen,
+                idleFor: now - root._state.idleSince,
+                nextDeadlineIn: deadline < 0 ? -1 : deadline - now
+            });
+        }
+    }
+}

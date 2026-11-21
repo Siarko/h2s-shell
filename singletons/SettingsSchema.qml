@@ -168,9 +168,11 @@ Singleton {
           ] },
         { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
           type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
-        { key: "lockscreen.lockscreenTimeout", label: "Lock after", group: "lockscreen",
-          type: "number", min: 5, max: 86400, suffix: "s", default: 300,
-          legacy: ["lockscreen", "lockscreenTimeout"] },
+        // From the last input, whether the screensaver is on or not (it replaced
+        // `lockscreenTimeout`, which counted from the screensaver's start when it was on)
+        { key: "lockscreen.lockAfter", label: "Lock after", group: "lockscreen",
+          type: "number", min: 5, max: 86400, suffix: "s", default: 600,
+          hint: "Counted from your last input." },
         { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
           group: "lockscreen", type: "bool", default: false },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",

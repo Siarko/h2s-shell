@@ -10,13 +10,15 @@ import Quickshell.Wayland
 // updateNotification). Every monitor starts with the shell's default timeout and gets the
 // configured one a moment later, when the profiles are read: the screensaver and the idle
 // lock never came. A new monitor starts from no notification, so its first one is always a
-// change.
+// change. Idle makes its two with fixed parameters, so they are made once.
 Item {
     id: root
 
     property bool enabled: false
     // Seconds
     property int timeout: 300
+    // Wayland idle inhibitors (a video player's) hold idleness off
+    property bool respectInhibitors: true
     readonly property bool isIdle: _loader.item?.isIdle ?? false
     // The IdleMonitor in use, null while disabled (for tests/LockViewTest.qml)
     readonly property var monitor: _loader.item
@@ -24,19 +26,23 @@ Item {
     // The parameters the current monitor was made with
     property bool _madeEnabled: false
     property int _madeTimeout: 0
+    property bool _madeRespect: true
 
     function _remake() {
-        if (_loader.active && enabled === _madeEnabled && timeout === _madeTimeout)
+        if (_loader.active && enabled === _madeEnabled && timeout === _madeTimeout
+            && respectInhibitors === _madeRespect)
             return;
         _loader.active = false;
         _madeEnabled = enabled;
         _madeTimeout = timeout;
+        _madeRespect = respectInhibitors;
         _loader.active = enabled;
     }
 
-    // Both may change in one pass (a profile switch): remake once, after it
+    // Several may change in one pass: remake once, after it
     onEnabledChanged: Qt.callLater(_remake)
     onTimeoutChanged: Qt.callLater(_remake)
+    onRespectInhibitorsChanged: Qt.callLater(_remake)
     Component.onCompleted: _remake()
 
     Loader {
@@ -45,6 +51,7 @@ Item {
         sourceComponent: IdleMonitor {
             enabled: true
             timeout: root._madeTimeout
+            respectInhibitors: root._madeRespect
         }
     }
 }

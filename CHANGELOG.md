@@ -27,7 +27,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.37: module.json's `backup`, a list of paths inside the module's data directory
   (`["notes.db", "accounts"]`: relative, no `..`, at most 32) that belong in its
   configuration backups; the data directory itself never goes in one. A path that is not
-  such a path is dropped with a warning.
+  such a path is dropped with a warning. The id `idle` is reserved: it is the core's IPC
+  target for idleness and the screensaver.
 - 1.36: module.json's `privileged` block, `{ "why": "…", "programs": [names] }`: a module
   says what it runs as administrator and why (`why` plain text on one line, at most 200
   characters; `programs` names among its `requires.programs` and `optionalPrograms`); a
@@ -872,6 +873,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Settings → Lockscreen → "Lock after" now counts from your last input, whether the
+  screensaver is on or not (it counted from the screensaver's start when the screensaver was
+  on); its default is 10 minutes. A value set before is not carried over: set it again if
+  you had changed it. An unlock without input (`loginctl unlock-session`) counts as you
+  being back: the screensaver does not come back at once.
 - The password prompt names the account first, as an "As user" row above Module. For a
   module's request polkit's own message and action move under Command, where they show with
   the command; other requests keep them as their description.
@@ -1008,6 +1014,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A profile switch while the screensaver showed (unplugging the charger, a battery level)
+  took the screensaver down and ran its end command, as if you had come back; it now stays,
+  and a screensaver switched off by the profile goes without the end command. Waking the
+  computer ends a screensaver that was up when it went to sleep.
 - The launcher could lose the exit status of a shell that died just as the launcher got SIGHUP
   (its terminal closed), and take it for a crash: a shell that had quit was started again.
   SIGHUP is now ignored by the launcher (it no longer logs a line for it).

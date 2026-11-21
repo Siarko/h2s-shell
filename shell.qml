@@ -82,6 +82,7 @@ QtObject {
     }
 
     property var _lockscreen: Lockscreen
+    property var _idle: Idle
     property var _lockNotice: LockNotice
     property var _sleepLockNotice: SleepLockNotice
 

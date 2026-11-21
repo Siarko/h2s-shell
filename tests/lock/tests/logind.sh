@@ -3,10 +3,14 @@
 # the real bus stays cut off): Lock locks, Unlock unlocks (another session's does not),
 # PrepareForSleep locks before sleep with the inhibitor held until the compositor has
 # confirmed, no passive method runs while suspending and they start again after the wake.
-# Also: a monitor that dies is started again, an inhibitor that dies is taken again.
-# Lock before sleep is off by default: switched on here.
+# Also: a monitor that dies is started again, an inhibitor that dies is taken again, and
+# the resume ends a screensaver that was up when the machine went to sleep (it counts as
+# input). Lock before sleep is off by default: switched on here; the screensaver too.
 
-stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true}'
+stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true,
+    "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
+
+saver_shown() { [ "$(shell_ipc idle state | python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["saverShown"]))')" = true ]; }
 
 check_within "$GUARD" "the shell follows the test's logind session" state_is logind_session "$LOCKTEST_SESSION_PATH"
 check_within "$GUARD" "the logind monitor (stand-in) runs" logind_monitor_running
@@ -26,7 +30,8 @@ check_within "$GUARD" "logind's Unlock unlocks" compositor_unlocked
 check "the lock ended by logind" state_is last_end logind
 check_within "$GUARD" "no fingerprint conversation left" no_finger_waiters
 
-# ---- Lock before sleep, from unlocked ----
+# ---- Lock before sleep, from unlocked, the screensaver up ----
+check_within "$GUARD" "5 s without input: the screensaver shows" saver_shown
 holds_before=$(grep -c '^hold' "$WORK/logind/log")
 sleep_line=$(($(wc -l < "$WORK/shell.log") + 1))
 logind_signal sleep
@@ -46,7 +51,12 @@ sleep 1 # fixed sleep: a negative claim: no conversation starts while suspending
 check "no fingerprint conversation while suspending" no_finger_waiters
 check "the fingerprint is paused" state_is fingerprint_status paused
 
+check "asleep: the screensaver stays as it was" saver_shown
+wake_line=$(($(wc -l < "$WORK/shell.log") + 1))
 logind_signal wake
+# From the log, not the state: with still no input the screensaver comes again 5 s later
+saver_ended_after_wake() { tail -n +"$wake_line" "$WORK/shell.log" | grep -aq '\[Idle\] the screensaver goes'; }
+check_within "$GUARD" "the resume (PrepareForSleep(false)) ends the screensaver" saver_ended_after_wake
 check_within "$GUARD" "after the wake the inhibitor is taken again" lines_more_than "$holds_before" '^hold' "$WORK/logind/log"
 check_within "$GUARD" "after the wake a fingerprint conversation runs" _one_finger_waiter
 finger ok

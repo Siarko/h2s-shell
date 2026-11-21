@@ -17,7 +17,7 @@ import qs.screensaver
 // input through the surface functions below.
 //
 // What the rest of the shell gets: `view` (LockRules.view of the state), `locked`,
-// `screensaverVisible`, lock(), the surface functions (which take the LockSurface object
+// lock(), the surface functions (which take the LockSurface object
 // itself and act only for one registered by addSurface), and the read-only IPC `state`
 // (LockRules.describe). There is no unlock function, no dispatch function, and the state,
 // the event queue and the surface registry are not properties: they live in the closure
@@ -61,12 +61,6 @@ Singleton {
     // still look unlocked here (LockNotice waits for both)
     readonly property bool startChecked: _markerChecked
     readonly property bool restoring: _restoring
-    readonly property bool screensaverVisible: _screensaverMonitor.isIdle || locked
-    // The screensaver's idle time has passed (the user is away), locked or not. What the
-    // screensaver's window follows, with `locked`: from screensaverVisible, which changes
-    // with `locked` too, a binding could read the new `locked` beside the old
-    // screensaverVisible at an unlock and map the window for a moment
-    readonly property bool idle: _screensaverMonitor.isIdle
     // Whether Caps Lock is on, from the keyboards' LEDs (singletons/lock/CapsLockLed.qml):
     // true, false, or null while unknown (no LED, or none readable: no indicator). Read
     // when the prompt wakes and at each key on an awake prompt. Shown on the prompt; no
@@ -111,10 +105,6 @@ Singleton {
 
     // ---- Settings (notes/plans/global-profiles.md) ----
 
-    readonly property bool screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled") ?? false
-    readonly property int screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout") ?? 300
-    readonly property bool lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled") ?? false
-    readonly property int lockscreenTimeout: Profiles.value("lockscreen.lockscreenTimeout") ?? 300
     readonly property bool lockOnSleep: LockRules.lockOnSleepSetting(Profiles.value("lockscreen.lockOnSleep"),
                                                                      SettingsSchema.coreDefaults["lockscreen.lockOnSleep"],
                                                                      Profiles.configFailed)
@@ -677,11 +667,13 @@ Singleton {
             });
         });
         _logind.event.connect(dispatchFrom(root._logindEvents));
-        // The machine woke: told to the neutral SystemSleep too (whoever else cares — the
-        // module host, for module.resumed() — listens there, never here)
+        // The machine sleeps and wakes: told to the neutral SystemSleep too (whoever else
+        // cares — Idle, the module host for module.resumed() — listens there, never here)
         _logind.event.connect(event => {
             if (event?.type === "resumed")
                 Qt.callLater(SystemSleep.reportResumed);
+            else if (event?.type === "prepareForSleep")
+                Qt.callLater(SystemSleep.reportGoingToSleep);
         });
         // logind is already preparing for sleep when the monitor starts listening: its
         // PrepareForSleep came while no monitor of this shell could hear it — the shell
@@ -695,6 +687,7 @@ Singleton {
             log("warning", "logind is preparing for sleep and no PrepareForSleep was heard (it came while the shell was "
                 + "reloading or starting): acting on it now");
             dispatch({ type: "prepareForSleep" });
+            Qt.callLater(SystemSleep.reportGoingToSleep);
         });
 
         const registered = surface => surfaceIds.has(surface) ? surfaceIds.get(surface) : null;
@@ -749,7 +742,9 @@ Singleton {
                     secure: _sessionLock.secure,
                     sessionInForce: sessionInForce,
                     surfaces: surfaceIds.size,
-                    screensaverVisible: root.screensaverVisible,
+                    // The screensaver up (Idle), or locked: what the test bed reads as
+                    // "the screensaver"
+                    screensaverVisible: Idle.saverShown || root.locked,
                     inhibitorRunning: _inhibitor.running,
                     logindSession: _logind.sessionPath,
                     lockScope: scope !== null,
@@ -942,57 +937,6 @@ Singleton {
         _logind.start();
     }
 
-    // ---- Idle: the screensaver, and locking after it ----
-    // Through IdleWatch, which makes a new IdleMonitor whenever `enabled` or `timeout`
-    // change: changing them on a live IdleMonitor can leave its `isIdle` false for good in
-    // Quickshell 0.3.2 (see IdleWatch.qml) — the screensaver and the idle lock never came.
-
-    IdleWatch {
-        id: _screensaverMonitor
-        enabled: root.screensaverEnabled
-        timeout: root.screensaverTimeout
-        onIsIdleChanged: root._idleChanged(isIdle)
-    }
-
-    // Lock a while after the screensaver started
-    Timer {
-        interval: root.lockscreenTimeout * 1000
-        running: root.lockscreenEnabled && root.screensaverEnabled && _screensaverMonitor.isIdle && !root.locked
-        repeat: false
-        onTriggered: root.lock("idle")
-    }
-
-    // Lock without a screensaver
-    IdleWatch {
-        enabled: root.lockscreenEnabled && !root.screensaverEnabled
-        timeout: root.lockscreenTimeout
-        onIsIdleChanged: if (isIdle) root.lock("idle")
-    }
-
-    // ---- Screensaver commands ----
-    // Tied to idleness, not to the screensaver being on screen: when the screen locks
-    // during a screensaver, the screensaver hides under the lock screen while the user is
-    // still away, so "ended" there would be wrong. The end command runs when the user is
-    // back — activity, even at the lock prompt — and only after a start command, so a
-    // profile switching the screensaver off mid-idle does not fire an unpaired end.
-    property bool _idleSession: false
-
-    function _runCommand(key) {
-        const command = Profiles.value(key) ?? "";
-        if (Profiles.value("lockscreen.screensaverCommands") === true && command.trim() !== "")
-            Quickshell.execDetached(["sh", "-c", command]);
-    }
-
-    function _idleChanged(idle) {
-        if (idle && !_idleSession) {
-            _idleSession = true;
-            _runCommand("lockscreen.screensaverStartCommand");
-        } else if (!idle && _idleSession) {
-            _idleSession = false;
-            _runCommand("lockscreen.screensaverEndCommand");
-        }
-    }
-
     // ---- Requests from outside ----
     // h2s-shell ipc call lockscreen lock       (Arch: launch.sh ipc call ...)
     // h2s-shell ipc call lockscreen status
@@ -1017,7 +961,8 @@ Singleton {
         // (no secret, no typed text, nothing that times keystrokes), plus a few facts only
         // the driver knows — the compositor's `secure`, the session of the last
         // lockCompositor, the surface instances registered, whether the screensaver shows,
-        // the helpers running, file watching, whether the password fallback is known
+        // the helpers running, file watching, whether the password fallback is known (idle and
+        // the screensaver: `idle state`)
         function state(): string {
             return root._api?.describe() ?? "{}";
         }

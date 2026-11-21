@@ -485,18 +485,22 @@ launcher agree on the contract described under "Recovery" below):
   view that fails to publish cannot keep the lock from being set): the `WlSessionLock`,
   one single-shot `Timer` per timer name (tokens from the rules), `Profiles.screenLocked`
   and `Quickshell.watchFiles` (off while locked: a reload while locked would unlock), the
-  adapters. It exposes only `view`, `locked`, `screensaverVisible`, `idle` (what the
-  screensaver's window follows, with `locked`), `lock()`, the surface
+  adapters. It exposes only `view`, `locked`, `lock()`, the surface
   functions the views call (they take the `LockSurface` object and act only for a
   registered one), and the IPC (`lock`, `status`, `state` = `describe` plus a few driver
   facts). There is no unlock and no dispatch function: the state, queue and surface
   registry live in a closure (`_build()`), not in properties. Same-process QML is still no
   security boundary (it can emit its child objects' signals, or run `loginctl
   unlock-session`). It also owns
-  idle (two `IdleMonitor`s, each made anew by `singletons/lock/IdleWatch.qml` whenever its
-  settings change — a live one whose timeout changes can stop reporting idle, a Quickshell
-  0.3.2 bug), the screensaver and its commands,
-  and the password fallback (`LockIoRules.passwordFallback`, from a probe of the machine).
+  the password fallback (`LockIoRules.passwordFallback`, from a probe of the machine).
+- **Idle** — `singletons/Idle.qml` feeds the pure `singletons/IdleRules.qml` (input idle,
+  the lock, sleep from `SystemSleep`, the profile's settings) and carries out what it
+  returns: the screensaver's picture (`saverShown`, `saverOnScreen`, which the screensaver's
+  windows follow), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
+  Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
+  inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
+  never ends an idle period; every stage counts from the last input. One `Timer` runs to
+  the rules' next deadline. IPC: `idle state` (JSON).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
   Per lock (`LockScope.qml`, created when a lock begins and destroyed when it has ended,
   so destruction is the cleanup): `PamMethod.qml` (one `PamContext` per method,

@@ -264,18 +264,18 @@ shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
 
 ## Screensaver and lock screen
 
-Two independent stages, both driven by Wayland idle notifications:
+Two stages, both driven by Wayland idle notifications and both counted from the last input
+("Screensaver after", "Lock after"):
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. Commands can be configured to
   run when it activates and deactivates (on idleness: under a lock too, the end command
   when the user is back, at the prompt as well). A lock while it shows takes the screen
-  and the screensaver goes; an unlock without input (logind's Unlock) while the user is
-  still away brings it back. A
-  profile switch that changes the screensaver's timeout while it shows takes it down (and
-  starts the idle count again): a known limit.
+  and the screensaver goes; an unlock counts as the user being back, with or without input
+  (logind's Unlock). A profile switch while it shows keeps it (one that turns it off hides
+  it without the end command); waking from sleep ends it.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
-  reached either after the screensaver or on its own idle timer, and shows a password
+  reached on idle (`lockAfter`), and shows a password
   prompt and optionally the notification list — the app's name only by default, or the
   title, or everything (Settings → Lockscreen; it applies to every lock), always as plain
   text with nothing to click. It also locks on request: logind's Lock

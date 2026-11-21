@@ -463,7 +463,7 @@ Singleton {
         "animation", "animations", "api", "app", "appearance", "audio", "auth", "authentication", "bar", "battery",
         "bluetooth", "calendar", "clock", "colors", "components", "config", "constructor",
         "core", "curves", "debug", "dictation", "energy", "fonts", "gcal", "general", "graphs", "h2s",
-        "h2s-shell", "hardware", "hud", "input", "ipc", "launcher", "lock", "lockscreen",
+        "h2s-shell", "hardware", "hud", "idle", "input", "ipc", "launcher", "lock", "lockscreen",
         "media", "mod", "module", "modules", "music", "network", "notifications", "panel",
         "panels", "performance", "polkit", "polling", "power", "profile", "profiles", "prototype", "qs",
         "quickshell", "safe-mode", "screen", "screensaver", "settings", "shell", "singletons",
