@@ -15,7 +15,9 @@ plan ([plans/idle-lock-flow.md](plans/idle-lock-flow.md)) is decided too (option
 owns idle, screensaver, lock and per-monitor screen-off; a C++/Qt helper for the D-Bus
 ScreenSaver service); its one new question is under "Open points". Open with the owner: the
 password prompt on NixOS. Next (the owner, 2026-11-21): step 8 (Modules closed for now) from
-its plan, pure rules first (M1 under way); after it the owner chooses what follows (the idle
+its plan; done so far: the rules (M1, M1b, M1d), the Settings modal (V1), the privileged
+declaration (M1c, API 1.36), the host (M2) — next the packaging of built-in modules (M2b) and
+the installer (M3); after it the owner chooses what follows (the idle
 plan and PAM are ready).
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
@@ -92,6 +94,9 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
   required program does not stop a module; the NixOS cases are unit cases only.
 
 **Module host, dependencies and facts**
+- A downgrade round-trip re-runs the acknowledgement baseline: an older build saving the config
+  drops `acknowledgedModules` (its JsonAdapter does not know it) and keeps `writtenBy` below
+  2.1.0, so the next start acknowledges every module that is on again (M2 second review, low).
 - A dependent with only views is not waited for (one turn); a consumer's suites need the
   provider's directory; the reach scan misses a handle not named `module`.
 - `importsOf` misses a quoted import holding `{`; S0's tokenizer cases are not added; a floor
@@ -147,6 +152,8 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
 - With Qt's own dialog "send files" sends one file per pick.
 
 **Flaky tests** (each passed alone; rerun once alone before believing a failure)
+- Under load on NixOS (2026-11-21, M2): `launcher-selftest.sh` "SIGHUP to the supervisor: it
+  says so (not within 3 s)" and the lock bed's `supervisor`; `FileChooserTest` timed out (90 s).
 - `TaildropLiveTest`: "two-devices: both sent" and "page-devices: both sent" time out under
   load; one unnamed check failed once during D7.
 - `AnchorsTest`: the General page's -28-wide rows are fixed (it waits for layout); an earlier

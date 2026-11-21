@@ -2520,3 +2520,38 @@ Moved out of the tracker as done; checked against the code and the sections abov
   with them. The open point "Lock before sleep,
   the notice" became the idle and lock flow plan (`plans/idle-lock-flow.md`).
 
+## Modules closed for now, step 8 — first slices (2026-11-21)
+
+Each slice: an author, one diff review (a second when the first found something high), the
+full set on both machines before the merge (`plans/modules-management.md` §9).
+
+- **Where a module comes from (M1)**, `ModuleInstallRules`: sources (built-in, system,
+  repository, folder, user, developer; links), actions as label + effect, confirmation and its
+  baseline, removal plans, repository address checks, the git download argv and environment,
+  git progress, the install record, list order, marks, check texts; states `unconfirmed` and
+  `approval`. Review: git credential helpers and git-lfs could prompt or fetch outside the
+  allowed protocols (switched off for module downloads); the approval state was missing.
+- **The dependency chain (M1d)**, `ModuleDependencyRules`: plan, install order, rollback
+  (versions by directory, the record restored), dependents, the disable list, orphans (only
+  what the shell installed). Vocabulary aligned with M1.
+- **Updates as rules (M1b)**, `ModuleUpdateRules`: consent reasons, the queue (dependency
+  order, run tokens, one grouped restart offer after the queue), versions kept, version list,
+  changelog caps (UTF-8 bytes), refused versions never offered again (matched by commit), the
+  daily automatic run with backoff, backups (store and named files only, no links).
+- **The Settings modal (V1)**: `SettingsModal`, `SettingsModalHost`, `ThemeRules.modalLook`,
+  `ApiElementRules.modalButtons`, `Theme.modalDim`; Tab kept inside, touch does not take the
+  keyboard out, a page change cancels.
+- **The privileged declaration (M1c, module API 1.36)**: `privileged {why, programs}`,
+  `author`, `uses.<id>.source`; a module's run as administrator is refused before any prompt
+  when undeclared, unapproved, a program not declared or not trusted, a call from no module or
+  crossing modules; the legacy `PrivilegedAction` checked the same, its `elevate` only
+  `pkexec`; `Api.module`/`moduleAt` answer only for the caller; `host` gone from the handle.
+  Tailscale declares `tailscale` and its author (module repository). Two reviews found
+  bypasses (the legacy element, extra elevate words, another module's handle), all closed.
+- **The host (M2)**: acknowledgements saved in the config with a baseline (written only after
+  a successful launcher search with modules, only in a shell the launcher started — bound to
+  its pid), never saved while the config could not be read; sources, replaces, installedFor
+  in the status; IPC `modules confirm <id> <directory>`, `rediscover`, `loadWithoutSafeMode`;
+  the modules-on file; `restartNeeded`; system roots only when root-owned and not writable.
+  Deployed on the Arch machine 2026-11-21: Tailscale acknowledged by the baseline, loaded;
+  the config backed up as `config.json.bak-before-modules-host`.
