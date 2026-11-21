@@ -77,6 +77,7 @@ QtObject {
     property var _commandRules: CommandRulesTest {}
     property var _commandRunner: CommandRunnerTest {}
     property var _listKeyRules: ListKeyRulesTest {}
+    property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _keyedViews: KeyedViewsTest {}
     property var _settingsCard: SettingsCardTest {}
     property var _moduleContribution: ModuleContributionTest {}
