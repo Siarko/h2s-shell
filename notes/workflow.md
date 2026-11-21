@@ -96,8 +96,12 @@ The commands, what each part needs and where the tools come from are in `CLAUDE.
   `tests/run-all.sh` on both machines on the segment's branch, then fast-forwards `master` and
   deploys once. Its summary names every part as PASS, FAIL or NOT RUN with the reason, and a
   report quotes it, with the tool source and the launcher the run had.
-- Independent slices run side by side, each in its own working tree; a big slice is split
-  (one concern each) rather than reviewed in one piece.
+- Several agents may work at once, but never on the same code (the owner, 2026-11-21):
+  slices run side by side only when they touch disjoint files. Before starting one, the lead
+  lists the files it will touch and compares them with the running ones; an overlap waits.
+  Shared registries (`tests.qml`'s suite list, `CHANGELOG.md`, `api/Api.qml`'s reference, the
+  Settings page files) count as the same code: one running slice at a time may change each. A
+  big slice is split (one concern each) rather than reviewed in one piece.
 
 The module repository's own (not part of `tests/run-all.sh`):
 
