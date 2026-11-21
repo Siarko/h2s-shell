@@ -7,9 +7,20 @@
 # the log is. An unlock in between starts the count afresh (the shell overwrites the
 # launcher's record).
 #
-# The launcher's first pause is shortened (H2S_LAUNCHER_TEST_TIMINGS: 0.1 s).
+# The launcher's first pause is shortened (H2S_LAUNCHER_TEST_TIMINGS: 0.1 s). The shell's
+# hyprctl is a stand-in that passes on to the real one, and hangs while $WORK/hyprctl-hangs
+# exists: at the start by hand the shell's question to Hyprland (before it takes the lock
+# back) goes unanswered for a while — the session must count as locked meanwhile.
 
-stack_start --launcher-timings "first=0.1"
+real_hyprctl=$(command -v hyprctl) || abort "no hyprctl"
+mkdir -p "$WORK/hyprctl-bin"
+printf '#!%s
+[ -e %q ] && exec sleep 30
+exec %q "$@"
+' "$(command -v bash)" "$WORK/hyprctl-hangs" "$real_hyprctl" \
+    > "$WORK/hyprctl-bin/hyprctl"
+chmod +x "$WORK/hyprctl-bin/hyprctl"
+stack_start --launcher-timings "first=0.1" --shell-path "$WORK/hyprctl-bin"
 
 record=$RUN/h2s-shell-lock-restarts
 notice_file=$RUN/h2s-shell-lock-notice
@@ -42,7 +53,6 @@ check_within 5 "confirmed" state_is secure true
 start_lock_watch limit
 kill_locked 1
 check "the launcher recorded it" record_is 1
-sleep 1
 stop_lock_watch
 check "the compositor never reported unlocked across the restart" lock_watch_never_unlocked
 unlock_for_test || fail "the password did not unlock"
@@ -67,7 +77,6 @@ check_within 10 "… and not started again: the launcher ends" test ! -e "/proc/
 check "… it said why" grep -aq "after 3 restarts since the last unlock: not starting it again. The session stays locked." "$WORK/shell.log"
 check "no shell of this run is left" test -z "$(_find_shell_pid)"
 check "the launcher left its notice" test "$(cat "$notice_file" 2> /dev/null)" = 3
-sleep 2
 check "the compositor is still locked, with no client" compositor_locked
 check "the marker still says locked" marker_file_is locked
 stop_lock_watch
@@ -76,14 +85,20 @@ cp "$WORK/shell.log" "$WORK/shell-first-launcher.log"
 
 # ---- The launcher started by hand ----
 start_lock_watch by-hand
+touch "$WORK/hyprctl-hangs"
+log "the shell's hyprctl hangs from now on"
 start_launcher
 log "a launcher started by hand: pid $SUPERVISOR_PID, its shell $SHELL_PID"
-check_within 10 "its shell locks again (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
 check "the launcher took the notice" test ! -e "$notice_file"
 check "… and said so" grep -aq "the last launcher gave up on a shell that died while the screen was locked" "$WORK/shell.log"
 check "the shell was handed it" test "$(process_env "$SHELL_PID" H2S_SHELL_LOCK_NOTICE)" = 3
-sleep 4
+check_within 10 "the shell read the marker, and holds the notice for the unlock" \
+    grep -aq "\[LockNotice\] the launcher gave up while locked: said once the session is unlocked" "$WORK/shell.log"
+check "… not shown while its question to Hyprland is unanswered (the lock not yet taken back)" notices_are 0
+check_within 15 "Hyprland's silence is noticed" grep -aq "Hyprland did not answer (hyprctl, 2 s each): asking for the lock back anyway" "$WORK/shell.log"
+rm -f "$WORK/hyprctl-hangs"
+check_within 10 "its shell locks again (the marker)" state_is phase locked
+check_within 5 "confirmed" state_is secure true
 check "while locked, the notice is not shown (nobody would see it)" notices_are 0
 stop_lock_watch
 check "the compositor never reported unlocked before the owner's password" lock_watch_never_unlocked
@@ -95,6 +110,6 @@ check "… saying what happened and where the log is" grep -q \
 lock_by_ipc
 check_within 5 "locks again" compositor_locked
 unlock_for_test || fail "the password did not unlock"
-sleep 1
+check_within 3 "the marker says unlocked" marker_file_is unlocked
 check "… once: not at the next unlock" notices_are 1
 check "no protocol error in either log" no_protocol_errors

@@ -336,6 +336,32 @@ echo "exit 0" > "$at/mode"
 signal KILL "$(shell_pid)"
 within 5 "unlocked, a shell that quits ends the supervisor as before" gone "$launcher"
 
+# ---- (7) Deaths under the lock are not counted as deaths outside it ---
+# Three deaths while locked, an unlock, then three outside the lock within 2 minutes: six
+# deaths in all, but only three outside the lock — not the crash loop that ends the launcher
+echo "== deaths under the lock, then outside it"
+start_launcher mixed
+up
+marker=$at/run/h2s-shell-lock
+record=$at/run/h2s-shell-lock-restarts
+echo "locked selftest-key" > "$marker"
+kill_and_restart
+kill_and_restart
+kill_and_restart
+is "three restarts while locked" said "(restart 3 of 3 while locked)"
+echo unlocked > "$marker"
+echo "unlocked 1" > "$record"
+echo "    (unlocked: the marker says so, the record overwritten as the shell does)"
+kill_and_restart
+kill_and_restart
+kill_and_restart
+is "three deaths outside the lock after it: each started again" test "$(starts)" = 7
+is "… the launcher did not give up" test "$(said_times "not starting it again")" = 0
+is "… and still runs" test -e "/proc/$launcher"
+running=$(shell_pid)
+signal TERM "$launcher"
+within 5 "stopped" gone "$running"
+
 echo
 if [ "$failures" = 0 ]; then
     echo "launch.sh: every check passed"

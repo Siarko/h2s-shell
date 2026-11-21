@@ -55,6 +55,11 @@ Singleton {
     // below): the screen is locked whatever the rules' state says, so nothing may act as if
     // it were not (the idle lock, the screensaver)
     readonly property bool locked: _view.locked || _restorePending
+    // The start has read the lock marker (or there is none to read), and `restoring` says
+    // whether it is taking a lock back: until then a session the compositor holds locked may
+    // still look unlocked here (LockNotice waits for both)
+    readonly property bool startChecked: _markerChecked
+    readonly property bool restoring: _restoring
     readonly property bool screensaverVisible: _screensaverMonitor.isIdle || locked
     // Whether Caps Lock is on, from the keyboards' LEDs (singletons/lock/CapsLockLed.qml):
     // true, false, or null while unknown (no LED, or none readable: no indicator). Read
@@ -118,6 +123,11 @@ Singleton {
     // it take that lock back — Hyprland without misc:allow_session_lock_restore. Retried
     // with a growing pause; see the "Recovery" note above
     property bool _restorePending: false
+    // The start probe has answered; a lock is being taken back from the marker (from the
+    // marker's answer until the compositor confirms the lock or ends it) — `restoring` in
+    // the driver, mirrored
+    property bool _markerChecked: false
+    property bool _restoring: false
     // The operations of the driver, closures over its private state; null until built
     property var _api: null
 
@@ -611,6 +621,7 @@ Singleton {
                 return;
             }
             restoring = false;
+            root._restoring = false;
             root._restorePending = false;
             restoreDelay = 0;
             if (markerState === "locked") {
@@ -648,6 +659,7 @@ Singleton {
             if (restoring)
                 log("info", "the lock is back: the compositor confirmed it");
             restoring = false;
+            root._restoring = false;
             root._restorePending = false;
             restoreDelay = 0;
             _restoreRetry.stop();
@@ -657,6 +669,7 @@ Singleton {
             if (state.phase.status !== "unlocked")
                 return;
             restoring = true;
+            root._restoring = true;
             log("warning", why + ": locking again");
             tryRestore();
         }
@@ -864,10 +877,15 @@ Singleton {
         publish();
         dispatch({ type: "started" });
         probeFallback();
+        // Connected after the probe's own handler: true once its decision (a restore begun or
+        // not) is made
+        _markerProbe.answered.connect(() => root._markerChecked = true);
         if (root._markerPath !== "")
             _markerProbe.running = true;
-        else
+        else {
             log("warning", "XDG_RUNTIME_DIR is not set: no lock marker, a restarted shell cannot know it was locked");
+            root._markerChecked = true;
+        }
         return api;
     }
 

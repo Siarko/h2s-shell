@@ -572,8 +572,8 @@ session):
   there is an unlock; a new launcher starts at 0. Giving up, it leaves its count in
   `$XDG_RUNTIME_DIR/h2s-shell-lock-notice`; the next launcher removes that file and hands
   the count to its first shell only (`H2S_SHELL_LOCK_NOTICE`), where `LockNotice` sends one
-  notification (`LockIoRules.lockNotice`) once the session is unlocked. Otherwise (unlocked)
-  at most 5 restarts in 2 minutes. It kills what the dead shell left of
+  notification (`LockIoRules.lockNotice`) once the session is unlocked. Deaths outside the lock:
+  at most 5 restarts in 2 minutes (deaths under the lock not counted). It kills what the dead shell left of
   Quickshell's own binary in that group (PAM helpers, which would keep a fingerprint reader
   claimed; not the crash reporter). SIGHUP (its terminal closed) does not stop it. Quickshell's own crash handler restarts a crashed shell
   in the same process (unless it crashed within 10 s of starting): no second shell, and the

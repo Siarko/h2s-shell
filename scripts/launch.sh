@@ -607,8 +607,8 @@ locked_restarts_record() {
 # of starting, then it exits with 255), SIGKILL, the OOM killer — starts it again after a
 # pause: 1 s, doubling while it keeps dying within 30 s of starting. Died while the screen
 # was locked: at most $max_locked_restarts restarts while the session stays locked (above),
-# then given up, the session left locked. Otherwise more than 5 restarts in 2 minutes:
-# given up.
+# then given up, the session left locked. Otherwise more than 5 restarts in 2 minutes of
+# deaths outside the lock: given up.
 supervise() {
     prepare_environment
     export H2S_SHELL_SUPERVISOR=$$
@@ -693,8 +693,6 @@ supervise() {
         else
             quick_deaths=0
         fi
-        for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
-        recent=("${kept[@]}" "$now")
         local why=""
         if died_locked; then
             locked_restarts=$(locked_restarts_standing "$locked_restarts" "$(locked_restarts_record)" "$record_written")
@@ -717,6 +715,10 @@ supervise() {
             fi
             why=" while the screen was locked"
         else
+            # Only deaths outside the lock: those under it have their own limit, and must not
+            # make the first deaths after an unlock look like a crash loop
+            for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
+            recent=("${kept[@]}" "$now")
             if [ "${#recent[@]}" -gt 5 ]; then
                 say "the shell died $((${#recent[@]} - 1)) times in 2 minutes: not starting it again"
                 exit 1
