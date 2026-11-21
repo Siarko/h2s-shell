@@ -174,6 +174,10 @@ TestCase {
         assert(_place(backup) === "shown staying" && _place(next) === "waiting staying", "one staying toast shown, the next waits");
         const grip = _find(backupToast, item => item.objectName === "toastGrip");
         assert(backupToast.movable && grip !== null && grip.visible, "movable (the default): the grip shows");
+        // Its slide in is timed by the theme: under load it can outlast settle(), and a start
+        // read mid-slide would put the expected drop off by the rest of the slide
+        assert(_until(() => backupToast.settled && Math.abs(backupToast.x - backupToast.restX) < 1),
+               "shown at its place in the stack before the drag (" + backupToast.x + ")");
         const startX = backupToast.x;
         const startY = backupToast.y;
         let followed = false;
