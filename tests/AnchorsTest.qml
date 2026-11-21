@@ -572,26 +572,45 @@ TestCase {
         return item.mapToItem(_cards.page, 0, 0).x;
     }
 
-    // Whether the cards view stands still: every card and every element where it stood at the
-    // last look (a layout places its children in its polish pass, after they are built)
+    // Whether the cards view stands still: every card measured (not 0 wide or high), it and
+    // every element where it stood at the last look, with a frame drawn in between. A layout
+    // places its children in its polish pass, which runs before a frame: two looks with no frame
+    // between them can both see the places from before the layout ran. (An element may stand
+    // 0 wide and high: one its module hides collapses.)
     property string _lastCards: ""
+    property int _cardFrames: 0
+    property int _lastCardsFrame: 0
+    property Connections _cardFrameCount: Connections {
+        target: suite._cards ? suite._cards.page.Window.window : null
+        function onFrameSwapped() {
+            suite._cardFrames++;
+        }
+    }
     function _cardsSteady() {
         const parts = [];
         const add = item => parts.push(Math.round(_xIn(item) * 100) / 100 + "," + Math.round(_yIn(item) * 100) / 100 + ":"
                                        + Math.round(item.width * 100) / 100 + "x" + Math.round(item.height * 100) / 100);
+        let measured = true;
         const section = _cards.saved;
         for (const host of [section.beforeHost, section.prependHost, section.appendHost, section.afterHost])
             host.items.forEach(add);
         for (const card of _savedCardList().concat([_vpnCard(0), _vpnCard(1), _vpnCard(2)]).filter(card => card)) {
+            if (card.frame.width <= 0 || card.frame.height <= 0)
+                measured = false;
             add(card.frame);
             for (const host of [card.beforeHost, card.afterHost, card.settingsRegion.prependHost, card.settingsRegion.appendHost, card.actionsRegion.appendHost])
                 host.items.forEach(add);
             add(card.actionsRegion);
         }
-        const described = parts.join(" ");
-        const steady = described === _lastCards;
-        _lastCards = described;
-        return steady;
+        const described = measured ? parts.join(" ") : "";
+        if (described === "" || described !== _lastCards) {
+            _lastCards = described;
+            _lastCardsFrame = _cardFrames;
+            // A frame, so that a pending layout runs and the next look can tell
+            _cards.page.Window.window?.update();
+            return false;
+        }
+        return _cardFrames > _lastCardsFrame;
     }
 
     // The section's elements and every saved card's beside it built
