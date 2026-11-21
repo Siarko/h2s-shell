@@ -5,9 +5,11 @@
 #
 # First the screensaver (after 5 s idle) takes the keyboard: a key at it wakes the screen and
 # reaches no window — the stand-in desktop window, focused, records every key it gets — and
-# once it has gone, keys reach the window again.
+# the keyboard is given back at once: a key during its (long, 5 s) fade out reaches the
+# window while the screensaver's surface is still mapped.
 
-stack_start --window --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
+stack_start --window --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5,
+    "lockscreen.fadeOutDuration": 5000}'
 
 screensaver_layer() {
     hyprctl -j layers | python3 -I -c '
@@ -24,6 +26,7 @@ window_keys_stay() {
     local deadline=$((${EPOCHREALTIME/[.,]/} + $1 * 1000000))
     while [ "${EPOCHREALTIME/[.,]/}" -lt "$deadline" ]; do
         [ "$(window_keys)" -le "$2" ] || return 1
+        sleep 0.1 # fixed sleep: the poll's pause, not a wait for anything
     done
     return 0
 }
@@ -38,7 +41,8 @@ press_key a
 check_within "$GUARD" "a key at the screensaver wakes the screen" state_is screensaver false
 check "… and reaches no window" window_keys_stay 1 "$before"
 press_key a
-check_within "$GUARD" "the screensaver gone: keys reach the window again" window_keys_above "$before"
+check_within "$GUARD" "during the fade out: keys reach the window again" window_keys_above "$before"
+check "… while the screensaver's surface is still mapped (the keyboard given back before the fade out ends)" screensaver_layer
 
 lock_by_ipc
 check_within "$GUARD" "locked" compositor_locked

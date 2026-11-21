@@ -1635,8 +1635,10 @@ TestCase {
     // false when a confirmed lock ends; never for a lock that was not confirmed
     function _behaviour15LockedHint() {
         const hints = effects => of(effects, "reportLockedHint").map(effect => effect.locked).join(",");
+        assertEqual(hints(started().effects), "false",
+                    "15: started: reported unlocked, once (a hint left true by a crashed shell or a failed call)");
         const lock = locking();
-        assertEqual(hints(lock.all), "", "15: locking, not confirmed: nothing reported");
+        assertEqual(hints(lock.all), "false", "15: locking, not confirmed: nothing reported (only the start's false)");
         lock.send(confirmed());
         assertEqual(hints(lock.effects), "true", "15: the compositor confirms: LockedHint true, once");
         lock.send({ type: "lockRequested", source: "logind" });
@@ -1651,10 +1653,10 @@ TestCase {
         assertEqual(hints(ended.effects), "false", "15: a confirmed lock the compositor ends: LockedHint false");
 
         const refused = locking().send(finished());
-        assertEqual(hints(refused.all), "", "15: a lock the compositor refused: never reported, neither way");
+        assertEqual(hints(refused.all), "false", "15: a lock the compositor refused: never reported, neither way (only the start's false)");
 
         const early = locking().sendAll([{ type: "unlockRequested", source: "logind" }, confirmed()]);
-        assert(early.state.phase.status === "unlocked" && hints(early.all) === "",
+        assert(early.state.phase.status === "unlocked" && hints(early.all) === "false",
                "15: an unlock decided before the confirmation, carried out at it: never reported locked, so nothing to take back");
 
         assertEqual(hints(started().send({ type: "restored", secure: true }).effects), "true",
@@ -2128,7 +2130,7 @@ TestCase {
     }
 
     // What must hold after every step, whatever led there; "" or what is wrong
-    function _violation(before, state, effects) {
+    function _violation(before, state, effects, event) {
         const prompt = state.prompt;
         if (prompt.owner !== null && !prompt.surfaces.some(surface => surface.id === prompt.owner))
             return "the prompt's owner is not a known surface";
@@ -2238,8 +2240,9 @@ TestCase {
             return "reportLockedHint more than once in a step";
         if (hints.length === 1 && hints[0].locked === true && !(state.phase.status === "locked" && before.phase.status !== "locked"))
             return "reportLockedHint(true) other than on becoming locked";
-        if (hints.length === 1 && hints[0].locked === false && !(before.phase.status === "locked" && state.phase.status === "unlocked"))
-            return "reportLockedHint(false) other than on leaving a confirmed lock";
+        if (hints.length === 1 && hints[0].locked === false && !(before.phase.status === "locked" && state.phase.status === "unlocked")
+                && !(event?.type === "started" && state.phase.status === "unlocked"))
+            return "reportLockedHint(false) other than at the start or on leaving a confirmed lock";
         if (hints.length === 0 && before.phase.status === "locked" && state.phase.status === "unlocked")
             return "a confirmed lock left without reportLockedHint(false)";
         LockRules.view(state);
@@ -2402,7 +2405,7 @@ TestCase {
                     problem = _compositorRule(lock.confirmed, event, result);
                 _trackDues(lock.dues, event, result, now);
                 if (problem === "")
-                    problem = _violation(before, result.state, result.effects) || _effectLeak(result, context);
+                    problem = _violation(before, result.state, result.effects, event) || _effectLeak(result, context);
                 if (result.ignored !== "") {
                     ignoredSteps++;
                     count(ignoredReasons, result.ignored.replace(/: .*/, ""));

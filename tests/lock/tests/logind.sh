@@ -26,6 +26,8 @@ saver_shown() { [ "$(shell_ipc idle state | python3 -I -c 'import json, sys; pri
 
 check_within "$GUARD" "the shell follows the test's logind session" state_is logind_session "$LOCKTEST_SESSION_PATH"
 check_within "$GUARD" "the logind monitor (stand-in) runs" logind_monitor_running
+# A hint left true by a shell that crashed while locked (or a failed call) is cleared
+check_within "$GUARD" "started unlocked: SetLockedHint false, once" hints_are "$LOCKTEST_SESSION_PATH=false "
 check_within "$GUARD" "the sleep inhibitor is held while awake" inhibitor_held
 check "the rules hold it" state_is inhibitor held
 
@@ -34,7 +36,7 @@ logind_signal lock
 check_within "$GUARD" "logind's Lock locks" compositor_locked
 check_within "$GUARD" "confirmed" state_is secure true
 check_within "$GUARD" "the lock reported to logind: SetLockedHint true for the session" \
-    hints_are "$LOCKTEST_SESSION_PATH=true "
+    hints_are "$LOCKTEST_SESSION_PATH=false $LOCKTEST_SESSION_PATH=true "
 check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
 logind_signal unlock-other
 sleep 1 # fixed sleep: a negative claim: another session's Unlock does nothing
@@ -43,7 +45,7 @@ logind_signal unlock
 check_within "$GUARD" "logind's Unlock unlocks" compositor_unlocked
 check "the lock ended by logind" state_is last_end logind
 check_within "$GUARD" "the unlock reported: SetLockedHint false" \
-    hints_are "$LOCKTEST_SESSION_PATH=true $LOCKTEST_SESSION_PATH=false "
+    hints_are "$LOCKTEST_SESSION_PATH=false $LOCKTEST_SESSION_PATH=true $LOCKTEST_SESSION_PATH=false "
 check_within "$GUARD" "no fingerprint conversation left" no_finger_waiters
 
 # ---- Lock before sleep, from unlocked, the screensaver up ----

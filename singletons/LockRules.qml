@@ -183,9 +183,13 @@ Singleton {
 
     // ---- Phase ----
 
-    // Once, after initial(). It does nothing itself: being a taken event, it runs
-    // _reconcile, which takes the sleep inhibitor if the settings want it
+    // Once, after initial(). Being a taken event, it runs _reconcile, which takes the sleep
+    // inhibitor if the settings want it. It reports the session unlocked to logind: a hint
+    // left true by a shell that crashed or was stopped while locked, or by a call that
+    // failed, would otherwise stay so (a lock carried over a reload follows at once, as
+    // `restored`, and its true wins before anything is sent)
     function _started(transaction, event) {
+        LockStepRules.emit(transaction, "reportLockedHint", { locked: false });
     }
 
     // The compositor's lock is already held by this process: Quickshell reloaded the shell
