@@ -750,7 +750,9 @@ _quickshell_binary() {
 # after a test let the first one go (supervisor_release) and the shell end. The launcher
 # stays, as the shell's supervisor (scripts/launch.sh), and the shell runs as its child.
 start_launcher() {
-    spawn "$WORK/shell.log" env "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER"
+    # SIGHUP reset: a run started with it ignored (nohup, a detached ssh) would hand that on,
+    # and bash cannot trap a signal ignored at its start (the supervisor scenario sends it)
+    spawn "$WORK/shell.log" env --default-signal=HUP "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER"
     local timeout_pid=$SPAWNED_PID
     wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
     SUPERVISOR_PID=$(pgrep -P "$timeout_pid" | head -n 1)

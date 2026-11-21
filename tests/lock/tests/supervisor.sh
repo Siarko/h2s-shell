@@ -73,7 +73,7 @@ counter=$!
 signal_shell KILL
 wait_until 3 test ! -e "/proc/$dying"
 check_within 3 "the supervisor is in its pause" grep -aq "starting it again in 3 s" "$WORK/shell.log"
-spawn "$WORK/restart.log" env -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
+spawn "$WORK/restart.log" env --default-signal=HUP -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
 check_within 6 "the old supervisor was told and ended (during its pause)" test ! -e "/proc/$old_supervisor"
 new_supervisor() { local pid; for pid in $(launchers_of_run); do [ "$pid" != "$old_supervisor" ] && echo "$pid" && return 0; done; return 1; }
 check_within 10 "a new supervisor runs" new_supervisor

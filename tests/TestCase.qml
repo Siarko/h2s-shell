@@ -20,7 +20,8 @@ QtObject {
     }
     property bool done: !asynchronous || !selected
     // How long an asynchronous suite may take before its runner fails it as timed out, in ms —
-    // from the moment the suites start (they run side by side). 0 takes the runner's default:
+    // from the moment the suites start (they run side by side), or in tests.qml, for a suite that
+    // waits for others, from when they are done. 0 takes the runner's default:
     // tests.qml's 90 s, tests-modules.qml's 20 s, which it caps at 60 s. A suite with many
     // concurrent scenarios sets more than the default.
     property int timeLimitMs: 0

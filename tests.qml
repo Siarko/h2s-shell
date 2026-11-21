@@ -97,40 +97,68 @@ QtObject {
 
     // The suites that run on the event loop (TestCase.asynchronous)
     readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _modulesPage, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _moduleInstaller, _moduleUpdater, _moduleBackup, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
-    // How long an asynchronous suite may take, counted from the start of the suites, unless
-    // it sets its own (TestCase.timeLimitMs); then it fails as timed out
+    // How long an asynchronous suite may take, unless it sets its own (TestCase.timeLimitMs);
+    // then it fails as timed out. Counted from the start of the suites, or, for one that waits
+    // for others (its `after`, FileChooserTest's `waitFor`), from when they are all done: a
+    // chained suite gets its own budget, not what its predecessors left of a shared one.
     readonly property int _asyncLimitMs: 90000
+    // Whatever the chains: no suite runs past this, counted from the start of the suites
+    readonly property int _runLimitMs: 600000
     function timeLimitOf(suite) {
         return suite.timeLimitMs > 0 ? suite.timeLimitMs : _asyncLimitMs;
     }
+    function predecessorsOf(suite) {
+        if (suite.waitFor && suite.waitFor.length > 0)
+            return suite.waitFor;
+        return suite.after ? [suite.after] : [];
+    }
     // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other
     // asynchronous suites are done, so that no key they send reaches it, nor its keys them.
-    // It waits for them until the time it needs itself is all that is left of the limit, then
-    // fails without opening a dialog. ModuleInstallerTest, ModuleUpdaterTest and ModuleBackupTest are not waited for: they
-    // open no window and send no key, and run long after the module suites they wait for.
+    // Its own limit counts from when they are done; it waits for them until the time it needs
+    // itself is all that is left of the whole run's, then fails without opening a dialog (a
+    // suite that hangs is failed as timed out at its own limit first). ModuleInstallerTest,
+    // ModuleUpdaterTest and ModuleBackupTest are not waited for: they open no window and send
+    // no key, and run long after the module suites they wait for.
     readonly property bool _chooserLast: {
         _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser && suite !== _moduleInstaller && suite !== _moduleUpdater && suite !== _moduleBackup);
-        _fileChooser.waitLimitMs = timeLimitOf(_fileChooser) - _fileChooser.ownTimeMs;
+        _fileChooser.waitLimitMs = _runLimitMs - _fileChooser.ownTimeMs;
         return true;
     }
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
-    // asynchronous ones are done — each failed as timed out once past its own limit. A suite
-    // that was not selected is done from the start.
+    // asynchronous ones are done — each failed as timed out once past its own limit, counted
+    // from when its predecessors were done, or past the whole run's. A suite that was not
+    // selected is done from the start.
     property var _quit: Timer {
         interval: 50
         running: true
         repeat: true
         property int _waited: 0
+        // When each suite's predecessors were all done (ms since the start), by its index in
+        // _asyncSuites; replaced, not changed in place, so that the property holds it
+        property var _startedAt: []
         onTriggered: {
             _waited += interval;
-            const pending = _asyncSuites.filter(suite => !suite.done);
-            for (const suite of pending) {
-                if (_waited >= root.timeLimitOf(suite)) {
-                    suite.fail("timed out (" + Math.round(root.timeLimitOf(suite) / 1000) + " s)");
+            const startedAt = _startedAt.slice();
+            for (let i = 0; i < root._asyncSuites.length; i++) {
+                const suite = root._asyncSuites[i];
+                if (suite.done)
+                    continue;
+                const predecessors = root.predecessorsOf(suite);
+                if (typeof startedAt[i] !== "number" && predecessors.every(other => other.done))
+                    startedAt[i] = _waited;
+                const limit = root.timeLimitOf(suite);
+                if (typeof startedAt[i] === "number" && _waited - startedAt[i] >= limit) {
+                    suite.fail("timed out (" + Math.round(limit / 1000) + " s"
+                               + (predecessors.length > 0 ? " after " + predecessors.map(other => other.suiteName).join(", ") + " were done" : "") + ")");
+                    suite.finish();
+                } else if (_waited >= root._runLimitMs) {
+                    suite.fail("timed out (the whole run's " + Math.round(root._runLimitMs / 1000) + " s)");
                     suite.finish();
                 }
             }
+            _startedAt = startedAt;
+            const pending = _asyncSuites.filter(suite => !suite.done);
             if (pending.some(suite => !suite.done))
                 return;
             Qt.quit();

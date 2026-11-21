@@ -30,7 +30,7 @@ old_shell=$SHELL_PID
 old_supervisor=$SUPERVISOR_PID
 supervisor_environment "$old_supervisor"
 start_lock_watch restart
-spawn "$WORK/restart.log" env -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
+spawn "$WORK/restart.log" env --default-signal=HUP -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
 check_within 15 "the old shell is stopped" test ! -e "/proc/$old_shell"
 check_within 5 "its supervisor let it go and ended" test ! -e "/proc/$old_supervisor"
 check "it was not started again by the old supervisor" test "$(grep -ac 'starting it again' "$WORK/shell.log")" = 0
