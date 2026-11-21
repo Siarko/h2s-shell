@@ -10,6 +10,15 @@
 stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true,
     "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
 
+idle_sleeping() { [ "$(shell_ipc idle state | python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["state"]["sleeping"]))')" = true ]; }
+# saver_shown_for <seconds>: the screensaver counts as shown all along, polled for that long
+saver_shown_for() {
+    local deadline=$((${EPOCHREALTIME/[.,]/} + $1 * 1000000))
+    while [ "${EPOCHREALTIME/[.,]/}" -lt "$deadline" ]; do
+        saver_shown || return 1
+    done
+    return 0
+}
 saver_shown() { [ "$(shell_ipc idle state | python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["saverShown"]))')" = true ]; }
 
 check_within "$GUARD" "the shell follows the test's logind session" state_is logind_session "$LOCKTEST_SESSION_PATH"
@@ -51,7 +60,11 @@ sleep 1 # fixed sleep: a negative claim: no conversation starts while suspending
 check "no fingerprint conversation while suspending" no_finger_waiters
 check "the fingerprint is paused" state_is fingerprint_status paused
 
-check "asleep: the screensaver stays as it was" saver_shown
+check_within "$GUARD" "Idle knows the machine is going to sleep" idle_sleeping
+# The hand that closed the lid: input while going to sleep is no wake
+move_pointer 700 400
+move_pointer 720 410
+check "asleep, the pointer moved: the screensaver stays as it was until the wake" saver_shown_for 1
 wake_line=$(($(wc -l < "$WORK/shell.log") + 1))
 logind_signal wake
 # From the log, not the state: with still no input the screensaver comes again 5 s later

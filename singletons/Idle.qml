@@ -110,7 +110,12 @@ Singleton {
             _runCommand("lockscreen.screensaverEndCommand");
             break;
         case "lock":
-            _log("info", "idle: locking");
+            // The first ask, and the first ask again (refused, or no lock came); the
+            // further ones, after a growing pause, are not logged
+            if (action.attempt === 1)
+                _log("info", "idle: locking");
+            else if (action.attempt === 2)
+                _log("warning", "the idle lock was not taken: asking again while it is due, with a growing pause");
             Lockscreen.lock("idle");
             break;
         default:
@@ -145,7 +150,27 @@ Singleton {
             console.info(line);
     }
 
+    // "Lock after" replaced `lockscreenTimeout` (counted from the screensaver's start when it
+    // was on); the old key is not carried over (unused where it would apply). A profile that
+    // still holds it is told once per profile and shell run, naming the new one
+    property var _oldKeyTold: ({})
+    readonly property var _profilesWithOldKey: (Profiles.profiles ?? [])
+        .filter(profile => profile?.set && "lockscreen.lockscreenTimeout" in profile.set)
+        .map(profile => String(profile.name ?? ""))
+    on_ProfilesWithOldKeyChanged: _tellOldKey()
+
+    function _tellOldKey() {
+        for (const name of _profilesWithOldKey) {
+            if (_oldKeyTold[name])
+                continue;
+            _oldKeyTold[name] = true;
+            _log("warning", "profile \"" + name + "\" still sets lockscreen.lockscreenTimeout, which is no longer read: "
+                + "\"Lock after\" is lockscreen.lockAfter now, counted from the last input");
+        }
+    }
+
     Component.onCompleted: {
+        _tellOldKey();
         if (Lockscreen.locked)
             _dispatch({ type: "locked" });
         else

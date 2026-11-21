@@ -40,6 +40,9 @@ Singleton {
     // logind sends no signal when an idle block is released: while one holds, Idle reads
     // its inhibitors again this often
     readonly property int logindRecheck: 30000
+    // An idle lock asked for and not taken (no `locked` came: refused, the compositor busy)
+    // is asked again while it is due, after a growing pause (ms)
+    readonly property var lockRetry: ({ minimum: 5000, maximum: 300000 })
 
     // The ways a monitor goes dark at "Screensaver after"
     readonly property var ways: ["screensaver", "off", "slideshow"]
@@ -115,7 +118,11 @@ Singleton {
             lockedDark: false,       // the lock screen's own screen-off reached
             sleeping: false,
             forced: false,           // the screensaver asked for (IPC, SetActive(true))
-            lockedThisPeriod: false, // the idle lock asked once (or locked) in this idle period
+            lockedThisPeriod: false, // locked in this idle period: the idle lock is not asked again
+            lockAsks: 0,             // the idle lock asked this many times in this period, not taken
+            lockAskedAt: -1,         // monotonic ms of the last ask, -1 none
+            lockSince: null,         // a profile switch made the lock due: it counts from then (ms)
+            lockAfterSeen: null,     // the config's lockAfter at the last step (null: none yet)
             stage: 0,                // 0 none, 1 screensaver, 2 screens off: reached in this period
             commandStarted: false,   // the start command ran in this period
             active: false,           // reported as ActiveChanged
@@ -203,13 +210,35 @@ Singleton {
         return config.monitors.some(id => state.power[id] !== "off");
     }
 
-    // The idle lock is due: once per idle period, unlocked, not held, from the last input
-    function lockDue(state, config, now) {
-        if (state.sleeping || state.locked || state.lockedThisPeriod || config.lockAfter <= 0)
-            return false;
+    // Where the idle lock counts from: the last input, or a later profile switch that made it
+    // due (a switch never locks at once)
+    function _lockStart(state) {
+        return state.lockSince === null ? state.idleSince : Math.max(state.idleSince, state.lockSince);
+    }
+
+    // The pause before asking for the idle lock again after `asks` asks not taken
+    function lockRetryDelay(asks) {
+        if (asks <= 0)
+            return 0;
+        return Math.min(lockRetry.maximum, lockRetry.minimum * Math.pow(2, asks - 1));
+    }
+
+    // When the idle lock is next due (monotonic ms), or -1: from where it counts, and after an
+    // ask not taken, the retry pause
+    function _lockAt(state, lockAfter) {
+        if (state.sleeping || state.locked || state.lockedThisPeriod || lockAfter <= 0)
+            return -1;
         if (held(state) || !_counting(state))
-            return false;
-        return now - state.idleSince >= config.lockAfter * 1000;
+            return -1;
+        const due = _lockStart(state) + lockAfter * 1000;
+        return state.lockAskedAt < 0 ? due : Math.max(due, state.lockAskedAt + lockRetryDelay(state.lockAsks));
+    }
+
+    // The idle lock is due: unlocked, not locked yet in this idle period, not held, from the
+    // last input (or a profile switch that made it due), and asked again only after the pause
+    function lockDue(state, config, now) {
+        const at = _lockAt(state, config.lockAfter);
+        return at >= 0 && now >= at;
     }
 
     // → the next moment `wanted`, `lockDue` or `lockBlack` changes (monotonic ms, never
@@ -223,9 +252,10 @@ Singleton {
                 due.push(state.idleSince + config.saverAfter * 1000);
             if (config.screenOffAfter > 0 && state.stage < 2)
                 due.push(state.idleSince + config.screenOffAfter * 1000);
-            if (config.lockAfter > 0 && !state.locked && !state.lockedThisPeriod)
-                due.push(state.idleSince + config.lockAfter * 1000);
         }
+        const lockAt = _lockAt(state, config.lockAfter);
+        if (lockAt >= 0)
+            due.push(lockAt);
         if (state.locked && state.inputIdle && config.lockedScreenOffAfter > 0 && !state.lockedDark)
             due.push(state.lockQuietSince + config.lockedScreenOffAfter * 1000);
         if (!state.locked && state.logindIdleBlock === true)
@@ -248,6 +278,9 @@ Singleton {
         next.stage = 0;
         next.forced = false;
         next.lockedThisPeriod = next.locked;
+        next.lockAsks = 0;
+        next.lockAskedAt = -1;
+        next.lockSince = null;
         next.lockedDark = false;
         if (next.locked)
             next.lockQuietSince = now;
@@ -338,6 +371,8 @@ Singleton {
                 next.locked = true;
                 next.lockQuietSince = now;
                 next.lockedThisPeriod = true;
+                next.lockAsks = 0;
+                next.lockAskedAt = -1;
             }
             break;
         case "unlocked":
@@ -373,6 +408,15 @@ Singleton {
     }
 
     function _reconcile(next, config, now, actions) {
+        // A changed "Lock after" (a profile switch, the setting) that makes the idle lock due
+        // when it was not: it counts from the switch, never locks at once
+        if (next.lockAfterSeen !== null && next.lockAfterSeen !== config.lockAfter) {
+            const before = _lockAt(next, next.lockAfterSeen);
+            const after = _lockAt(next, config.lockAfter);
+            if (after >= 0 && after <= now && !(before >= 0 && before <= now))
+                next.lockSince = now;
+        }
+        next.lockAfterSeen = config.lockAfter;
         // Unplugged monitors leave without an action
         for (const id of Object.keys(next.shown)) {
             if (!config.monitors.includes(id))
@@ -420,8 +464,10 @@ Singleton {
             next.commandStarted = true;
         }
         if (lockDue(next, config, now)) {
-            actions.push({ type: "lock" });
-            next.lockedThisPeriod = true;
+            next.lockAsks++;
+            next.lockAskedAt = now;
+            // `attempt`: 1 the first ask, more for an ask again (Idle logs the first of those)
+            actions.push({ type: "lock", attempt: next.lockAsks });
         }
         const active = next.locked || config.monitors.some(id => want[id] !== "on");
         if (active !== next.active) {

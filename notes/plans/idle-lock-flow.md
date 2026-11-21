@@ -402,7 +402,7 @@ stage can be "left behind".
 | `locked`, `lockQuietSince` | the session lock (own, or a foreign one seen on Hyprland), and the later of the lock moment and the last input at the lock |
 | `sleeping` | between `PrepareForSleep(true)` and the resume |
 | `forcedSince` | the screensaver was asked for (IPC, D-Bus `SetActive(true)`) |
-| `lockedThisPeriod` | the idle lock was asked once in this idle period (no retry after a refusal) |
+| `lockedThisPeriod` | locked in this idle period (the idle lock is not asked again); `lockAsks`, `lockAskedAt` the asks not taken (the retry pause); `lockSince` a profile switch that made the lock due |
 | `shown` | per monitor id: `on`, `saver`, `off` — what is in place |
 
 `config = IdleRules.config(values, monitors, canPowerOff)` normalises the profile's values:
@@ -439,7 +439,8 @@ control and a way `slideshow` (not built yet) both fall back to `saver`.
 | idle reaches "Screensaver after", ways all `screensaver` | `showSaver(all)`, `startCommand`, `active(true)` |
 | the OLED's way is `off` | `powerOff(oled)` and `showSaver(others)` at the same deadline; the OLED gets a black surface too (it takes the keys, §12) |
 | "Turn screens off after" | `powerOff` of every monitor still on or in `saver` |
-| "Lock after" | `lock` once; refused → not again in this period |
+| "Lock after" | `lock`; not taken (no `locked` came) → asked again while due, after a growing pause (5 s doubling, at most 5 min; logged at the first ask again); `lockedThisPeriod` set only by `locked` |
+| a profile switch makes the lock due (turned on, or "Lock after" shortened below the time idle) | counted from the switch (`max(idleSince, switch)`), never at once, as the old code did |
 | input at any stage | `hideSaver`, `powerOn` of what the shell turned off, `endCommand` (only after a start), `active(false)` unless locked |
 | input at the lock screen | `powerOn`; the lock's quiet time starts again |
 | locked, no input for the lock screen's time | `powerOff(all)`; with no power control, the lock surface goes black instead |

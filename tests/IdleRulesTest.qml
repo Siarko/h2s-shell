@@ -192,11 +192,20 @@ TestCase {
         machine.idle(5000, 0).deadline();
         assertEqual(machine.next(), 400000, "Lock after counts from the last input, not from the screensaver");
         machine.deadline();
-        assertEqual(machine.actions, "lock", "Lock after: lock once");
-        assertEqual(machine.next(), -1, "refused (no lock came): no deadline for it again");
-        machine.at(900000, { type: "deadline" });
-        assertEqual(machine.actions, "", "… and not again in this idle period");
+        assertEqual(machine.actions, "lock", "Lock after: lock");
+        assertEqual(machine.state.lockAsks, 1, "… asked once");
+        assertEqual(machine.next(), 405000, "not taken (no lock came): asked again after the shortest pause");
+        machine.at(402000, { type: "deadline" });
+        assertEqual(machine.actions, "", "… not before it");
+        machine.deadline();
+        assertEqual(machine.actions, "lock", "… asked again");
+        assertEqual(machine.state.lockAsks, 2, "… the second ask");
+        assertEqual(machine.next(), 415000, "… the pause grows: 10 s");
+        machine.deadline();
+        assertEqual(machine.next(), 435000, "… 20 s");
+        assertEqual(IdleRules.lockRetryDelay(30), IdleRules.lockRetry.maximum, "… up to its longest");
         machine.input(1000000);
+        assertEqual(machine.state.lockAsks, 0, "input: a new idle period, no asks counted");
         machine.idle(1005000, 1000000);
         assertEqual(machine.next(), 1300000, "a new idle period: the stages again");
         machine.deadline();
@@ -206,6 +215,19 @@ TestCase {
         machine.at(1401000, { type: "locked" });
         assertEqual(machine.actions, "", "locked: active already, locking turns nothing on");
         assertEqual(machine.shown(), "lcd=saver", "… the screensaver stays under the lock");
+        assertEqual(machine.state.lockAsks, 0, "… the lock taken: no ask pending");
+        assertEqual(machine.next(), 1461000, "… nothing more to ask: next, only the lock screen's own screen-off");
+        machine.at(1500000, { type: "unlocked" });
+        machine.idle(1500000, 1500000);
+        assertEqual(machine.next(), 1800000, "unlocked: a new period, the stages again from there");
+
+        // Locked by something else in the period (Super+L) and unlocked without input: the
+        // unlock counts as input, nothing is asked twice
+        const taken = _machine(values, ["lcd"], true);
+        taken.idle(5000, 0);
+        taken.at(100000, { type: "locked" });
+        taken.at(500000, { type: "deadline" });
+        assertEqual(taken.actions.split(",").includes("lock"), false, "locked already: the idle lock is not asked");
 
         const alone = _machine({ lockscreenEnabled: true, lockAfter: 30 }, ["lcd"], true);
         alone.idle(5000, 0).deadline();
@@ -409,6 +431,28 @@ TestCase {
         off.deadline();
         off.reconfigure(700000, saver);
         assertEqual(off.actions, "powerOn:lcd", "screen-off switched off while off: back to the screensaver, not the desktop");
+
+        // A profile that turns the idle lock on (or shortens it) past the time already idle:
+        // it counts from the switch, never locks at once
+        const lockOn = _machine(saver, ["lcd"], true);
+        lockOn.idle(5000, 0).deadline();
+        lockOn.reconfigure(400000, _with(saver, { lockscreenEnabled: true, lockAfter: 60 }));
+        assertEqual(lockOn.actions, "", "the lock turned on 400 s into idle, 60 s: no lock at once");
+        assertEqual(lockOn.next(), 460000, "… it comes 60 s after the switch");
+        lockOn.deadline();
+        assertEqual(lockOn.actions, "lock", "… and then locks");
+        const shorter = _machine(_with(saver, { lockscreenEnabled: true, lockAfter: 600 }), ["lcd"], true);
+        shorter.idle(5000, 0).deadline();
+        shorter.reconfigure(400000, _with(saver, { lockscreenEnabled: true, lockAfter: 120 }));
+        assertEqual(shorter.actions, "", "Lock after shortened below the time idle: not at once");
+        assertEqual(shorter.next(), 520000, "… from the switch");
+        const notYet = _machine(_with(saver, { lockscreenEnabled: true, lockAfter: 600 }), ["lcd"], true);
+        notYet.idle(5000, 0).deadline();
+        notYet.reconfigure(400000, _with(saver, { lockscreenEnabled: true, lockAfter: 500 }));
+        assertEqual(notYet.next(), 500000, "shortened but not yet due: still from the last input");
+        notYet.input(410000);
+        notYet.idle(415000, 410000);
+        assertEqual(notYet.next(), 710000, "… input: a new period from the last input, the switch forgotten");
     }
 
     function _monitors() {
